@@ -14,7 +14,7 @@ public:
     explicit XZip(QIODevice *__pDevice);
     virtual bool isVaild();
     virtual quint64 getNumberOfRecords();
-    virtual QList<RECORD> getRecords();
+    virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 private:
     qint64 findECDOffset();
 signals:

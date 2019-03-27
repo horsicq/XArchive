@@ -143,3 +143,27 @@ QByteArray XArchive::decompress(XArchive::RECORD *pRecord)
 
     return result;
 }
+
+bool XArchive::decompressToFile(XArchive::RECORD *pRecord, QString sFileName)
+{
+    bool bResult=false;
+
+    QFile file;
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadWrite))
+    {
+        SubDevice sd(getDevice(),pRecord->nDataOffset,pRecord->nCompressedSize);
+
+        if(sd.open(QIODevice::ReadOnly))
+        {
+            bResult=(decompress(pRecord->compressMethod,&sd,&file)==COMPRESS_RESULT_OK);
+
+            sd.close();
+        }
+
+        file.close();
+    }
+
+    return bResult;
+}

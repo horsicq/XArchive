@@ -44,10 +44,12 @@ public:
 
     explicit XArchive(QIODevice *__pDevice);
     virtual quint64 getNumberOfRecords()=0;
-    virtual QList<RECORD> getRecords()=0;
+    virtual QList<RECORD> getRecords(qint32 nLimit=-1)=0;
 
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethos,QIODevice *pSourceDevice,QIODevice *pDestDevice);
     QByteArray decompress(RECORD *pRecord);
+    bool decompressToFile(RECORD *pRecord,QString sFileName);
+    bool dumpToFile(RECORD *pRecord,QString sFileName);
 signals:
 
 public slots:

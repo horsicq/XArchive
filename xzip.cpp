@@ -31,7 +31,7 @@ quint64 XZip::getNumberOfRecords()
     return nResult;
 }
 
-QList<XArchive::RECORD> XZip::getRecords()
+QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
 {
     QList<RECORD> listResult;
 
@@ -40,6 +40,12 @@ QList<XArchive::RECORD> XZip::getRecords()
     if(nECDOffset!=0)
     {
         int nNumberOfRecords=read_uint16(nECDOffset+10);
+
+        if(nLimit!=-1)
+        {
+            nNumberOfRecords=qMin(nNumberOfRecords,nLimit);
+        }
+
         qint64 nOffset=read_uint32(nECDOffset+16);
 
         for(int i=0; i<nNumberOfRecords; i++)
