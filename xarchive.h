@@ -4,6 +4,7 @@
 #include <QObject>
 #include "qbinary.h"
 #include "zlib.h"
+#include "bzlib.h"
 
 class XArchive : public QBinary
 {

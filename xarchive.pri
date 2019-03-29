@@ -18,3 +18,8 @@ SOURCES += \
     XCONFIG += zlib
     include(3rdparty/zlib/zlib.pri)
 }
+
+!contains(XCONFIG, bzip2) {
+    XCONFIG += bzip2
+    include(3rdparty/bzip2/bzip2.pri)
+}

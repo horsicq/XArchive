@@ -51,7 +51,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
         int ret=Z_OK;
 
-        if(inflateInit2(&strm,-8)==Z_OK) // -8 for raw data
+        if(inflateInit2(&strm,-MAX_WBITS)==Z_OK) // -MAX_WBITS for raw data
         {
             do
             {
@@ -68,8 +68,10 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 do
                 {
                     strm.avail_out=CHUNK;
+//                    strm.avail_out=1;
                     strm.next_out=out;
                     ret=inflate(&strm,Z_NO_FLUSH);
+//                    ret=inflate(&strm,Z_SYNC_FLUSH);
 
                     if((ret==Z_DATA_ERROR)||(ret==Z_MEM_ERROR)||(ret==Z_NEED_DICT))
                     {
@@ -83,7 +85,6 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                         ret=Z_ERRNO;
                         break;
                     }
-
                 }
                 while(strm.avail_out==0);
 
@@ -91,7 +92,6 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 {
                     break;
                 }
-
             }
             while(ret!=Z_STREAM_END);
 
@@ -117,6 +117,77 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             {
                 result=COMPRESS_RESULT_UNKNOWN;
             }
+        }
+    }
+    else if(compressMethos==COMPRESS_METHOD_BZIP2)
+    {
+        const int CHUNK=16384;
+
+        char in[CHUNK];
+        char out[CHUNK];
+
+        bz_stream strm= {0};
+        int ret=BZ_MEM_ERROR;
+
+        int rc=BZ2_bzDecompressInit(&strm,0,0);
+
+        if(rc==BZ_OK)
+        {
+            do
+            {
+                strm.avail_in=pSourceDevice->read((char *)in,CHUNK);
+
+                if(strm.avail_in==0)
+                {
+                    ret=BZ_MEM_ERROR;
+                    break;
+                }
+
+                strm.next_in=in;
+
+                do
+                {
+                    strm.avail_out=CHUNK;
+                    strm.next_out=out;
+                    ret=BZ2_bzDecompress(&strm);
+
+                    if((ret!=BZ_STREAM_END)&&(ret!=BZ_OK))
+                    {
+                        break;
+                    }
+
+                    int nTemp=CHUNK-strm.avail_out;
+
+                    if(pDestDevice->write((char *)out,nTemp)!=nTemp)
+                    {
+                        ret=BZ_MEM_ERROR;
+                        break;
+                    }
+                }
+                while(strm.avail_out==0);
+
+                if(ret!=BZ_OK)
+                {
+                    break;
+                }
+            }
+            while(ret!=BZ_STREAM_END);
+
+            BZ2_bzDecompressEnd(&strm);
+        }
+
+        // TODO more error codes
+        if((ret==BZ_OK)||(ret==BZ_STREAM_END))
+        {
+            result=COMPRESS_RESULT_OK;
+        }
+        else if(ret==BZ_MEM_ERROR)
+        {
+            result=COMPRESS_RESULT_DATAERROR;
+        }
+        else
+        {
+            result=COMPRESS_RESULT_UNKNOWN;
         }
     }
     return result;
