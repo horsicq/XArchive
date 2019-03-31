@@ -15,12 +15,12 @@ win32-msvc* {
 unix:!macx {
     BITSIZE = $$system(getconf LONG_BIT)
     if (contains(BITSIZE, 64)) {
-        LIBS +=  $$PWD/libs/lin64/zlib.a
+        LIBS +=  $$PWD/libs/lin64/libzlib.a
     }
     if (contains(BITSIZE, 32)) {
-        LIBS +=  $$PWD/libs/lin32/zlib.a
+        LIBS +=  $$PWD/libs/lin32/libzlib.a
     }
 }
 unix:macx {
-    LIBS +=  $$PWD/libs/mac/zlib.a
+    LIBS +=  $$PWD/libs/mac/libzlib.a
 }
