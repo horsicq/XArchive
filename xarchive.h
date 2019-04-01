@@ -5,6 +5,7 @@
 #include "qbinary.h"
 #include "zlib.h"
 #include "bzlib.h"
+#include "LzmaDec.h"
 
 class XArchive : public QBinary
 {

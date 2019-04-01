@@ -23,3 +23,8 @@ SOURCES += \
     XCONFIG += bzip2
     include(3rdparty/bzip2/bzip2.pri)
 }
+
+!contains(XCONFIG, lzma) {
+    XCONFIG += lzma
+    include(3rdparty/lzma/lzma.pri)
+}
