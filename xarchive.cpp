@@ -47,11 +47,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
         z_stream strm;
 
-        strm.zalloc=Z_NULL;
-        strm.zfree=Z_NULL;
-        strm.opaque=Z_NULL;
+        strm.zalloc=nullptr;
+        strm.zfree=nullptr;
+        strm.opaque=nullptr;
         strm.avail_in=0;
-        strm.next_in=Z_NULL;
+        strm.next_in=nullptr;
 
         int ret=Z_OK;
 
@@ -196,7 +196,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     }
     else if(compressMethos==COMPRESS_METHOD_LZMA_ZIP)
     {
-        // TODO more codes
+        // TODO more error codes
         int nPropSize=0;
         char header1[4]= {0};
         quint8 properties[32]= {0};
@@ -243,6 +243,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                                 SizeT outProcessed=CHUNK;
 
                                 ret=LzmaDec_DecodeToBuf(&state,(Byte *)out,&outProcessed,(Byte *)(in+nPos),&inProcessed,LZMA_FINISH_ANY,&status);
+
+                                // TODO Check ret
 
                                 nPos+=inProcessed;
 
