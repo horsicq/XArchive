@@ -21,7 +21,6 @@ public:
         COMPRESS_METHOD_LZMA_ZIP,
         COMPRESS_METHOD_PPMD
     };
-
     struct RECORD
     {
         QString sFileName;
@@ -31,7 +30,6 @@ public:
         qint64 nUncompressedSize;
         COMPRESS_METHOD compressMethod;
     };
-
     enum COMPRESS_RESULT
     {
         COMPRESS_RESULT_UNKNOWN=0,
@@ -43,7 +41,6 @@ public:
         COMPRESS_RESULT_READERROR,
         COMPRESS_RESULT_WRITEERROR
     };
-
     explicit XArchive(QIODevice *__pDevice);
     virtual quint64 getNumberOfRecords()=0;
     virtual QList<RECORD> getRecords(qint32 nLimit=-1)=0;
