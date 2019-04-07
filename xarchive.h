@@ -2,12 +2,12 @@
 #define XARCHIVE_H
 
 #include <QObject>
-#include "qbinary.h"
+#include "xbinary.h"
 #include "zlib.h"
 #include "bzlib.h"
 #include "LzmaDec.h"
 
-class XArchive : public QBinary
+class XArchive : public XBinary
 {
     Q_OBJECT
 public:
