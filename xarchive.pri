@@ -9,9 +9,9 @@ SOURCES += \
     $$PWD/xarchive.cpp \
     $$PWD/xzip.cpp
 
-!contains(XCONFIG, qbinary) {
-    XCONFIG += qbinary
-    include(../Formats/qbinary.pri)
+!contains(XCONFIG, xbinary) {
+    XCONFIG += xbinary
+    include(../Formats/xbinary.pri)
 }
 
 !contains(XCONFIG, zlib) {
