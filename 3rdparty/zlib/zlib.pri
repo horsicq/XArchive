@@ -10,7 +10,6 @@ win32-msvc* {
     } else {
         LIBS += $$PWD/libs/win32-msvc/zlib.lib
     }
-#    LIBS += Advapi32.lib
 }
 unix:!macx {
     BITSIZE = $$system(getconf LONG_BIT)
