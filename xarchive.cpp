@@ -212,12 +212,12 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
             SRes ret=LzmaProps_Decode(&state.prop,(Byte *)properties,nPropSize);
 
-            if(ret==S_OK)
+            if(ret==0) // S_OK
             {
                 LzmaDec_Construct(&state);
                 ret=LzmaDec_Allocate(&state,(Byte *)properties,nPropSize,&g_Alloc);
 
-                if(ret==S_OK)
+                if(ret==0) // S_OK
                 {
                     LzmaDec_Init(&state);
 

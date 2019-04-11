@@ -21,5 +21,5 @@ unix:!macx {
     }
 }
 unix:macx {
-    LIBS +=  $$PWD/libs/mac/libzlzma.a
+    LIBS +=  $$PWD/libs/mac/liblzma.a
 }
