@@ -49,9 +49,6 @@ public:
     QByteArray decompress(RECORD *pRecord);
     bool decompressToFile(RECORD *pRecord,QString sFileName);
     bool dumpToFile(RECORD *pRecord,QString sFileName);
-signals:
-
-public slots:
 };
 
 #endif // XARCHIVE_H
