@@ -78,7 +78,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
             }
             else if(nZipMethod==9)
             {
-                record.compressMethod=COMPRESS_METHOD_DEFLATE64;
+                record.compressMethod=COMPRESS_METHOD_DEFLATE64; // TODO
             }
             else if(nZipMethod==12)
             {
@@ -90,7 +90,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
             }
             else if(nZipMethod==98)
             {
-                record.compressMethod=COMPRESS_METHOD_PPMD;
+                record.compressMethod=COMPRESS_METHOD_PPMD; // TODO
             }
 
             record.sFileName=read_ansiString(nOffset+46,nFileNameSize);
