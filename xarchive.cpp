@@ -20,8 +20,14 @@
 //
 #include "xarchive.h"
 
-static void *SzAlloc(ISzAllocPtr, size_t size) { return malloc(size); }
-static void SzFree(ISzAllocPtr, void *address) { free(address); }
+static void *SzAlloc(ISzAllocPtr, size_t size)
+{
+    return malloc(size);
+}
+static void SzFree(ISzAllocPtr, void *address)
+{
+    free(address);
+}
 static ISzAlloc g_Alloc = { SzAlloc, SzFree };
 
 XArchive::XArchive(QIODevice *__pDevice): XBinary(__pDevice)
