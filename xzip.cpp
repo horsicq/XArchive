@@ -70,7 +70,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
 
         for(int i=0; i<nNumberOfRecords; i++)
         {
-            RECORD record={};
+            RECORD record= {};
 
             quint32 nSignature=read_uint32(nOffset+0);
 
@@ -88,6 +88,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
             record.nUncompressedSize=read_uint32(nOffset+24);
             record.compressMethod=COMPRESS_METHOD_UNKNOWN;
             quint32 nZipMethod=read_uint16(nOffset+10);
+
             if(nZipMethod==0)
             {
                 record.compressMethod=COMPRESS_METHOD_STORE;

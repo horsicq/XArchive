@@ -57,6 +57,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         qint64 nSize=pSourceDevice->size();
 
         result=COMPRESS_RESULT_OK;
+
         while(nSize>0)
         {
             qint64 nTemp=qMin((qint64)CHUNK,nSize);
@@ -66,6 +67,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 result=COMPRESS_RESULT_READERROR;
                 break;
             }
+
             if(pDestDevice->write(buffer,nTemp)!=nTemp)
             {
                 result=COMPRESS_RESULT_WRITEERROR;
@@ -109,10 +111,10 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 do
                 {
                     strm.avail_out=CHUNK;
-//                    strm.avail_out=1;
+                    //                    strm.avail_out=1;
                     strm.next_out=out;
                     ret=inflate(&strm,Z_NO_FLUSH);
-//                    ret=inflate(&strm,Z_SYNC_FLUSH);
+                    //                    ret=inflate(&strm,Z_SYNC_FLUSH);
 
                     if((ret==Z_DATA_ERROR)||(ret==Z_MEM_ERROR)||(ret==Z_NEED_DICT))
                     {
@@ -245,7 +247,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         {
             pSourceDevice->read((char *)properties,nPropSize);
 
-            CLzmaDec state={0};
+            CLzmaDec state= {0};
 
             SRes ret=LzmaProps_Decode(&state.prop,(Byte *)properties,nPropSize);
 
