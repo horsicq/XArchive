@@ -89,30 +89,16 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
             record.compressMethod=COMPRESS_METHOD_UNKNOWN;
             quint32 nZipMethod=read_uint16(nOffset+10);
 
-            if(nZipMethod==0)
+            switch(nZipMethod)
             {
-                record.compressMethod=COMPRESS_METHOD_STORE;
+                case 0:     record.compressMethod=COMPRESS_METHOD_STORE;        break;
+                case 8:     record.compressMethod=COMPRESS_METHOD_DEFLATE;      break;
+                case 9:     record.compressMethod=COMPRESS_METHOD_DEFLATE64;    break; // TODO
+                case 12:    record.compressMethod=COMPRESS_METHOD_BZIP2;        break;
+                case 14:    record.compressMethod=COMPRESS_METHOD_LZMA_ZIP;     break;
+                case 98:    record.compressMethod=COMPRESS_METHOD_PPMD;         break; // TODO
             }
-            else if(nZipMethod==8)
-            {
-                record.compressMethod=COMPRESS_METHOD_DEFLATE;
-            }
-            else if(nZipMethod==9)
-            {
-                record.compressMethod=COMPRESS_METHOD_DEFLATE64; // TODO
-            }
-            else if(nZipMethod==12)
-            {
-                record.compressMethod=COMPRESS_METHOD_BZIP2;
-            }
-            else if(nZipMethod==14)
-            {
-                record.compressMethod=COMPRESS_METHOD_LZMA_ZIP;
-            }
-            else if(nZipMethod==98)
-            {
-                record.compressMethod=COMPRESS_METHOD_PPMD; // TODO
-            }
+            // TODO more methods
 
             record.sFileName=read_ansiString(nOffset+46,nFileNameSize);
 
