@@ -26,20 +26,19 @@
 
 class XZip : public XArchive
 {
+    Q_OBJECT
     const quint32 ECD=0x06054B50;
     const quint32 CFD=0x02014b50;
     const quint32 LFD=0x04034b50;
-    Q_OBJECT
+
 public:
     explicit XZip(QIODevice *__pDevice);
     virtual bool isVaild();
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
+
 private:
     qint64 findECDOffset();
-signals:
-
-public slots:
 };
 
 #endif // XZIP_H
