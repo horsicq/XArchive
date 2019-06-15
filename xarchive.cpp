@@ -367,3 +367,9 @@ bool XArchive::decompressToFile(XArchive::RECORD *pRecord, QString sFileName)
 
     return bResult;
 }
+
+bool XArchive::dumpToFile(XArchive::RECORD *pRecord, QString sFileName)
+{
+    // TODO
+    return false;
+}
