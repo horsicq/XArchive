@@ -68,6 +68,9 @@ public:
     QByteArray decompress(RECORD *pRecord);
     bool decompressToFile(RECORD *pRecord,QString sFileName);
     bool dumpToFile(RECORD *pRecord,QString sFileName);
+
+    static RECORD getArchiveRecord(QString sFileName,QList<RECORD> *pListArchive);
+    static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
 };
 
 #endif // XARCHIVE_H

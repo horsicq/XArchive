@@ -373,3 +373,26 @@ bool XArchive::dumpToFile(XArchive::RECORD *pRecord, QString sFileName)
     // TODO
     return false;
 }
+
+XArchive::RECORD XArchive::getArchiveRecord(QString sFileName, QList<XArchive::RECORD> *pListArchive)
+{
+    RECORD result={};
+
+    int nCount=pListArchive->count();
+
+    for(int i=0;i<nCount;i++)
+    {
+        if(pListArchive->at(i).sFileName==sFileName)
+        {
+            result=pListArchive->at(i);
+            break;
+        }
+    }
+
+    return result;
+}
+
+bool XArchive::isArchiveRecordPresent(QString sFileName, QList<XArchive::RECORD> *pListArchive)
+{
+    return (!getArchiveRecord(sFileName,pListArchive).sFileName.isEmpty());
+}
