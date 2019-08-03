@@ -370,6 +370,8 @@ bool XArchive::decompressToFile(XArchive::RECORD *pRecord, QString sFileName)
 
 bool XArchive::dumpToFile(XArchive::RECORD *pRecord, QString sFileName)
 {
+    Q_UNUSED(pRecord)
+    Q_UNUSED(sFileName)
     // TODO
     return false;
 }
