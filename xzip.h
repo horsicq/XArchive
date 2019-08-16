@@ -27,6 +27,7 @@
 class XZip : public XArchive
 {
     Q_OBJECT
+
     const quint32 ECD=0x06054B50;
     const quint32 CFD=0x02014b50;
     const quint32 LFD=0x04034b50;

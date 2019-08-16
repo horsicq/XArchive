@@ -30,6 +30,7 @@
 class XArchive : public XBinary
 {
     Q_OBJECT
+
 public:
     enum COMPRESS_METHOD
     {
