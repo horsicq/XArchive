@@ -70,7 +70,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
 
         for(int i=0; i<nNumberOfRecords; i++)
         {
-            RECORD record= {};
+            RECORD record={};
 
             quint32 nSignature=read_uint32(nOffset+0);
 
