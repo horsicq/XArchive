@@ -20,6 +20,7 @@
 //
 #include "xarchive.h"
 
+#if defined(_MSC_VER)
 #if _MSC_VER > 1800
 #pragma comment(lib, "legacy_stdio_definitions.lib") // bzip2.lib(compress.obj) __imp__fprintf
 
@@ -30,6 +31,7 @@ extern "C" FILE * __cdecl __iob_func(void)
     return _iob;
 }
 #endif
+#endif
 
 static void *SzAlloc(ISzAllocPtr, size_t size)
 {
@@ -39,7 +41,7 @@ static void SzFree(ISzAllocPtr, void *address)
 {
     free(address);
 }
-static ISzAlloc g_Alloc = { SzAlloc, SzFree };
+static ISzAlloc g_Alloc={SzAlloc,SzFree};
 
 XArchive::XArchive(QIODevice *__pDevice): XBinary(__pDevice)
 {
@@ -169,7 +171,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         char in[CHUNK];
         char out[CHUNK];
 
-        bz_stream strm= {0};
+        bz_stream strm={0};
         int ret=BZ_MEM_ERROR;
 
         int rc=BZ2_bzDecompressInit(&strm,0,0);
@@ -237,8 +239,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     {
         // TODO more error codes
         int nPropSize=0;
-        char header1[4]= {0};
-        quint8 properties[32]= {0};
+        char header1[4]={0};
+        quint8 properties[32]={0};
 
         pSourceDevice->read(header1,sizeof(header1));
         nPropSize=header1[2]; // TODO Check
@@ -247,7 +249,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         {
             pSourceDevice->read((char *)properties,nPropSize);
 
-            CLzmaDec state= {0};
+            CLzmaDec state={0};
 
             SRes ret=LzmaProps_Decode(&state.prop,(Byte *)properties,nPropSize);
 
