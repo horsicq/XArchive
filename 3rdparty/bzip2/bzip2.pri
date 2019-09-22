@@ -2,7 +2,7 @@ INCLUDEPATH += $$PWD/include
 DEPENDPATH += $$PWD/include
 
 win32-g++ {
-    LIBS += $$PWD/libs/win32-g++/bzip2.lib
+    LIBS += $$PWD/libs/win32-g++/bzip2.lib  // TODO
 }
 win32-msvc* {
     contains(QMAKE_TARGET.arch, x86_64) {

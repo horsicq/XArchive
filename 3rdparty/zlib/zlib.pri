@@ -2,7 +2,7 @@ INCLUDEPATH += $$PWD/include
 DEPENDPATH += $$PWD/include
 
 win32-g++ {
-    LIBS += $$PWD/libs/win32-g++/zlib.lib
+    LIBS += $$PWD/libs/win32-g++/zlib.lib // TODO
 }
 win32-msvc* {
     contains(QMAKE_TARGET.arch, x86_64) {
@@ -11,6 +11,7 @@ win32-msvc* {
         LIBS += $$PWD/libs/win32-msvc/zlib.lib
     }
 }
+
 unix:!macx {
     BITSIZE = $$system(getconf LONG_BIT)
     if (contains(BITSIZE, 64)) {

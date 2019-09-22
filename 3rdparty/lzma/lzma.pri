@@ -2,7 +2,7 @@ INCLUDEPATH += $$PWD/include
 DEPENDPATH += $$PWD/include
 
 win32-g++ {
-    LIBS += $$PWD/libs/win32-g++/lzma.lib
+    LIBS += $$PWD/libs/win32-g++/lzma.lib  // TODO
 }
 win32-msvc* {
     contains(QMAKE_TARGET.arch, x86_64) {

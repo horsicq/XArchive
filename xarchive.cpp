@@ -289,7 +289,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
                                 nPos+=inProcessed;
 
-                                if(pDestDevice->write((char *)out,outProcessed)!=outProcessed)
+                                if(pDestDevice->write((char *)out,outProcessed)!=(qint64)outProcessed)
                                 {
                                     result=COMPRESS_RESULT_WRITEERROR;
                                     bRun=false;
