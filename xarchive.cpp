@@ -326,6 +326,140 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     return result;
 }
 
+XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethos, QIODevice *pSourceDevice, QIODevice *pDestDevice)
+{
+    COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
+
+    if(compressMethos==COMPRESS_METHOD_STORE)
+    {
+        const int CHUNK=4096;
+        char buffer[CHUNK];
+        qint64 nSize=pSourceDevice->size();
+
+        result=COMPRESS_RESULT_OK;
+
+        while(nSize>0)
+        {
+            qint64 nTemp=qMin((qint64)CHUNK,nSize);
+
+            if(pSourceDevice->read(buffer,nTemp)!=nTemp)
+            {
+                result=COMPRESS_RESULT_READERROR;
+                break;
+            }
+
+            if(pDestDevice->write(buffer,nTemp)!=nTemp)
+            {
+                result=COMPRESS_RESULT_WRITEERROR;
+                break;
+            }
+
+            nSize-=nTemp;
+        }
+    }
+    else if(compressMethos==COMPRESS_METHOD_DEFLATE)
+    {
+        result=compress_deflate(pSourceDevice,pDestDevice,Z_DEFAULT_COMPRESSION,Z_DEFLATED,-MAX_WBITS,8,Z_DEFAULT_STRATEGY); // -MAX_WBITS for raw data
+    }
+
+    return result;
+}
+
+XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, int nLevel, int nMethod, int nWindowsBits, int nMemLevel, int nStrategy)
+{
+    COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
+
+    const int CHUNK=16384;
+
+    unsigned char in[CHUNK];
+    unsigned char out[CHUNK];
+
+    z_stream strm;
+
+    strm.zalloc=nullptr;
+    strm.zfree=nullptr;
+    strm.opaque=nullptr;
+    strm.avail_in=0;
+    strm.next_in=nullptr;
+
+    int ret=Z_OK;
+
+    if(deflateInit2(&strm,nLevel,nMethod,nWindowsBits,nMemLevel,nStrategy)==Z_OK)
+    {
+        do
+        {
+            strm.avail_in=pSourceDevice->read((char *)in,CHUNK);
+
+            int nFlush=Z_NO_FLUSH;
+
+            if(strm.avail_in!=CHUNK)
+            {
+                nFlush=Z_FINISH;
+            }
+
+            if(strm.avail_in==0)
+            {
+                ret=Z_ERRNO;
+                break;
+            }
+
+            strm.next_in=in;
+
+            do
+            {
+                strm.avail_out=CHUNK;
+                strm.next_out=out;
+                ret=deflate(&strm,nFlush);
+
+                if((ret==Z_DATA_ERROR)||(ret==Z_MEM_ERROR)||(ret==Z_NEED_DICT))
+                {
+                    break;
+                }
+
+                int nTemp=CHUNK-strm.avail_out;
+
+                if(pDestDevice->write((char *)out,nTemp)!=nTemp)
+                {
+                    ret=Z_ERRNO;
+                    break;
+                }
+            }
+            while(strm.avail_out==0);
+
+            if(ret!=Z_OK)
+            {
+                break;
+            }
+        }
+        while(ret!=Z_STREAM_END);
+
+        deflateEnd(&strm);
+
+        if(ret==Z_OK)
+        {
+            result=COMPRESS_RESULT_OK;
+        }
+        else if(ret==Z_BUF_ERROR)
+        {
+            result=COMPRESS_RESULT_BUFFERERROR;
+        }
+        else if(ret==Z_MEM_ERROR)
+        {
+            result=COMPRESS_RESULT_MEMORYERROR;
+        }
+        else if(ret==Z_DATA_ERROR)
+        {
+            result=COMPRESS_RESULT_DATAERROR;
+        }
+        else
+        {
+            result=COMPRESS_RESULT_UNKNOWN;
+        }
+    }
+
+    return result;
+}
+
 QByteArray XArchive::decompress(XArchive::RECORD *pRecord)
 {
     QByteArray result;
