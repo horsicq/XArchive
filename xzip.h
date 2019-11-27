@@ -28,16 +28,126 @@ class XZip : public XArchive
 {
     Q_OBJECT
 
-    const quint32 ECD=0x06054B50;
-    const quint32 CFD=0x02014b50;
-    const quint32 LFD=0x04034b50;
-
 public:
+    enum SIGNATURE
+    {
+        SIGNATURE_ECD=0x06054B50,
+        SIGNATURE_CFD=0x02014b50,
+        SIGNATURE_LFD=0x04034b50
+    };
+
+//    0 - The file is stored (no compression)
+//    1 - The file is Shrunk
+//    2 - The file is Reduced with compression factor 1
+//    3 - The file is Reduced with compression factor 2
+//    4 - The file is Reduced with compression factor 3
+//    5 - The file is Reduced with compression factor 4
+//    6 - The file is Imploded
+//    7 - Reserved for Tokenizing compression algorithm
+//    8 - The file is Deflated
+//    9 - Enhanced Deflating using Deflate64(tm)
+//    10 - PKWARE Data Compression Library Imploding (old IBM TERSE)
+//    11 - Reserved by PKWARE
+//    12 - File is compressed using BZIP2 algorithm
+//    13 - Reserved by PKWARE
+//    14 - LZMA (EFS)
+//    15 - Reserved by PKWARE
+//    16 - Reserved by PKWARE
+//    17 - Reserved by PKWARE
+//    18 - File is compressed using IBM TERSE (new)
+//    19 - IBM LZ77 z Architecture (PFS)
+//    97 - WavPack compressed data
+//    98 - PPMd version I, Rev 1
+
+    enum METHOD
+    {
+        METHOD_STORE=0,
+        METHOD_DEFLATE=8,
+        METHOD_DEFLATE64=9,
+        METHOD_BZIP2=12,
+        METHOD_LZMA=14,
+        METHOD_PPMD=98,
+    };
+
+#pragma pack(push)
+#pragma pack(1)
+    struct LOCALFILEHEADER
+    {
+        quint32 nSignature; // SIGNATURE_LFD
+        quint16 nMinVersion;
+        quint16 nFlags;
+        quint16 nMethod;
+        quint16 nLastModTime;
+        quint16 nLastModDate;
+        quint32 nCRC32;
+        quint32 nCompressedSize;
+        quint32 nUncompressedSize;
+        quint16 nFileNameLength;
+        quint16 nExtraFieldLength;
+        // File name
+        // Extra field
+    };
+
+    struct ENDOFCENTRALDIRECTORYRECORD
+    {
+        quint32 nSignature; // SIGNATURE_ECD
+        quint16 nDiskNumber;
+        quint16 nStartDisk;
+        quint16 nDiskNumberOfRecords;
+        quint16 nTotalNumberOfRecords;
+        quint32 nSizeOfCentralDirectory;
+        quint32 nOffsetToCentralDirectory;
+        quint16 nCommentLength;
+        // Comment
+    };
+
+    struct CENTRALDIRECTORYFILEHEADER
+    {
+        quint32 nSignature; // SIGNATURE_CFD
+        quint16 nVersion;
+        quint16 nMinVersion;
+        quint16 nFlags;
+        quint16 nMethod;
+        quint16 nLastModTime;
+        quint16 nLastModDate;
+        quint32 nCRC32;
+        quint32 nCompressedSize;
+        quint32 nUncompressedSize;
+        quint16 nFileNameLength;
+        quint16 nExtraFieldLength;
+        quint16 nFileCommentLength;
+        quint16 nStartDisk;
+        quint16 nInternalFileAttributes;
+        quint32 nExternalFileAttributes;
+        quint32 nOffsetToLocalFileHeader;
+        // File name
+        // Extra field
+        // File Comment
+    };    
+#pragma pack(pop)
+
+    struct ZIPFILE_RECORD
+    {
+        QString sFileName;
+        quint16 nVersion;
+        quint16 nMinVersion;
+        quint16 nFlags;
+        METHOD method;
+        QDateTime dtTime;
+        quint32 nCRC32;
+        qint64 nCompressedSize;
+        qint64 nUncompressedSize;
+        qint64 nHeaderOffset;
+        qint64 nDataOffset;
+    };
+
     explicit XZip(QIODevice *__pDevice);
     virtual bool isVaild();
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
+    static bool addLocalFileRecord(QIODevice *pSource,QIODevice *pDest,ZIPFILE_RECORD *pZipFileRecord);
+    static bool addCentralDirectory(QIODevice *pDest,QList<ZIPFILE_RECORD> *pListZipFileRecords);
 private:
     qint64 findECDOffset();
 };

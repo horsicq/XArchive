@@ -45,7 +45,7 @@ public:
     struct RECORD
     {
         QString sFileName;
-        quint64 nCRC;
+        quint32 nCRC32;
         qint64 nDataOffset;
         qint64 nCompressedSize;
         qint64 nUncompressedSize;
