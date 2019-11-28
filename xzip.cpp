@@ -136,14 +136,14 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
         pZipFileRecord->nVersion=0x3F;
     }
 
-    if(pZipFileRecord->nCRC32==0)
-    {
-        pZipFileRecord->nCRC32=0; // TODO !!!
-    }
-
     if(pZipFileRecord->nUncompressedSize==0)
     {
         pZipFileRecord->nUncompressedSize=pSource->size();
+    }
+
+    if(pZipFileRecord->nCRC32==0)
+    {
+        pZipFileRecord->nCRC32=XBinary::_getCRC32(pSource);
     }
 
     if(!pZipFileRecord->dtTime.isValid())
@@ -186,7 +186,7 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     return true;
 }
 
-bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords)
+bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords, QString sComment)
 {
     qint64 nStartPosition=pDest->pos();
 
@@ -229,9 +229,10 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
     endofCD.nTotalNumberOfRecords=nZipFilesCount;
     endofCD.nSizeOfCentralDirectory=nCentralDirectorySize;
     endofCD.nOffsetToCentralDirectory=nStartPosition;
-    endofCD.nCommentLength=0;
+    endofCD.nCommentLength=sComment.size();
 
     pDest->write((char *)&endofCD,sizeof(endofCD));
+    pDest->write(sComment.toLatin1().data(),sComment.toLatin1().size());
 
     return true;
 }

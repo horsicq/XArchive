@@ -147,7 +147,7 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
     static bool addLocalFileRecord(QIODevice *pSource,QIODevice *pDest,ZIPFILE_RECORD *pZipFileRecord);
-    static bool addCentralDirectory(QIODevice *pDest,QList<ZIPFILE_RECORD> *pListZipFileRecords);
+    static bool addCentralDirectory(QIODevice *pDest,QList<ZIPFILE_RECORD> *pListZipFileRecords,QString sComment="");
 private:
     qint64 findECDOffset();
 };
