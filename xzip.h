@@ -139,6 +139,7 @@ public:
         qint64 nUncompressedSize;
         qint64 nHeaderOffset;
         qint64 nDataOffset;
+        // TODO Comment!!!
     };
 
     explicit XZip(QIODevice *__pDevice);
