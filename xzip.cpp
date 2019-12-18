@@ -29,7 +29,9 @@ bool XZip::isVaild()
 {
     bool bResult=false;
 
-    if(compareSignature("'PK'0304",0)||compareSignature("'PK'0506",0))
+    _MEMORY_MAP memoryMap=getMemoryMap();
+
+    if(compareSignature(&memoryMap,"'PK'0304",0)||compareSignature(&memoryMap,"'PK'0506",0))
     {
         bResult=true;
     }
