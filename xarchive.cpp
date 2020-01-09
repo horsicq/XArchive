@@ -135,7 +135,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 }
                 while(strm.avail_out==0);
 
-                if(ret!=Z_OK)
+                if((ret==Z_DATA_ERROR)||(ret==Z_MEM_ERROR)||(ret==Z_NEED_DICT)||(ret==Z_ERRNO))
                 {
                     break;
                 }
@@ -399,8 +399,11 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
 
             if(strm.avail_in==0)
             {
-                ret=Z_ERRNO;
-                break;
+                if(!pSourceDevice->atEnd())
+                {
+                    ret=Z_ERRNO;
+                    break;
+                }
             }
 
             strm.next_in=in;
@@ -426,7 +429,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
             }
             while(strm.avail_out==0);
 
-            if(ret!=Z_OK)
+            if((ret==Z_DATA_ERROR)||(ret==Z_MEM_ERROR)||(ret==Z_NEED_DICT)||(ret==Z_ERRNO))
             {
                 break;
             }
