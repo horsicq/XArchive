@@ -39,6 +39,73 @@ bool XZip::isVaild()
     return bResult;
 }
 
+QString XZip::getVersion()
+{
+    QString sResult;
+
+    qint64 nECDOffset=findECDOffset();
+
+    quint16 nVersion=0;
+    if(nECDOffset!=0)
+    {
+        qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
+
+        quint32 nSignature=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nSignature));
+
+        if(nSignature==SIGNATURE_CFD)
+        {
+            quint16 nVersion=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nVersion));
+
+            if(nVersion==0)
+            {
+                nVersion=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nMinVersion));;
+            }
+        }
+    }
+
+    if(nVersion==0)
+    {
+        // The first record
+        nVersion=read_uint16(0+offsetof(CENTRALDIRECTORYFILEHEADER,nVersion));
+        sResult=QString("%1").arg((double)nVersion/10,0,'f',1);
+    }
+
+    return sResult;
+}
+
+bool XZip::isEncrypted()
+{
+    bool bResult=false;
+
+    qint64 nECDOffset=findECDOffset();
+
+    bool bSuccess=false;
+    if(nECDOffset!=0)
+    {
+        qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
+
+        quint32 nSignature=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nSignature));
+
+        if(nSignature==SIGNATURE_CFD)
+        {
+            quint16 nFlags=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nFlags));
+
+            bResult=(nFlags&0x1);
+            bSuccess=true;
+        }
+    }
+
+    if(!bSuccess)
+    {
+        // The first record
+        quint16 nFlags=read_uint16(offsetof(CENTRALDIRECTORYFILEHEADER,nFlags));
+
+        bResult=(nFlags&0x1);
+    }
+
+    return bResult;
+}
+
 quint64 XZip::getNumberOfRecords()
 {
     quint64 nResult=0;
