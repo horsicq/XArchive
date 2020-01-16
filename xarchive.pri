@@ -3,11 +3,13 @@ DEPENDPATH += $$PWD
 
 HEADERS += \
     $$PWD/xarchive.h \
-    $$PWD/xzip.h
+    $$PWD/xzip.h \
+    $$PWD/xcab.h
 
 SOURCES += \
     $$PWD/xarchive.cpp \
-    $$PWD/xzip.cpp
+    $$PWD/xzip.cpp \
+    $$PWD/xcab.cpp
 
 !contains(XCONFIG, xbinary) {
     XCONFIG += xbinary
