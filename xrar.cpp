@@ -48,16 +48,13 @@ QString XRar::getVersion()
     {
         sResult="1.4";
     }
-    else if(compareSignature("'Rar!'1A07"))
+    else if(compareSignature("'Rar!'1A0700"))
     {
-        if(!read_uint8(6))
-        {
-            sResult="4.X";
-        }
-        else
-        {
-            sResult="5.X";
-        }
+        sResult="4.X";
+    }
+    else if(compareSignature("'Rar!'1A070100"))
+    {
+        sResult="5.X";
     }
 
     return sResult;
