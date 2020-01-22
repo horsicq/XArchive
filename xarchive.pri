@@ -5,13 +5,15 @@ HEADERS += \
     $$PWD/xarchive.h \
     $$PWD/xzip.h \
     $$PWD/xcab.h \
-    $$PWD/xrar.h
+    $$PWD/xrar.h \
+    $$PWD/sevenzip.h
 
 SOURCES += \
     $$PWD/xarchive.cpp \
     $$PWD/xzip.cpp \
     $$PWD/xcab.cpp \
-    $$PWD/xrar.cpp
+    $$PWD/xrar.cpp \
+    $$PWD/sevenzip.cpp
 
 !contains(XCONFIG, xbinary) {
     XCONFIG += xbinary
