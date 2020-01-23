@@ -25,7 +25,7 @@ XRar::XRar(QIODevice *__pDevice) : XArchive(__pDevice)
 
 }
 
-bool XRar::isVaild()
+bool XRar::isValid()
 {
     bool bResult=false;
 

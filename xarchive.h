@@ -26,6 +26,9 @@
 #include "zlib.h"
 #include "bzlib.h"
 #include "LzmaDec.h"
+#ifdef PPMD_SUPPORT
+#include "Ppmd7.h"
+#endif
 
 class XArchive : public XBinary
 {
@@ -65,18 +68,20 @@ public:
         COMPRESS_RESULT_WRITEERROR
     };
 
-    explicit XArchive(QIODevice *__pDevice);
+    explicit XArchive(QIODevice *__pDevice=0);
     virtual quint64 getNumberOfRecords()=0;
     virtual QList<RECORD> getRecords(qint32 nLimit=-1)=0;
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethos,QIODevice *pSourceDevice,QIODevice *pDestDevice);
     static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethos,QIODevice *pSourceDevice,QIODevice *pDestDevice);
     static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,int nLevel,int nMethod,int nWindowsBits,int nMemLevel,int nStrategy);
-    QByteArray decompress(RECORD *pRecord);
-    bool decompressToFile(RECORD *pRecord,QString sFileName);
-    bool dumpToFile(RECORD *pRecord,QString sFileName);
+    QByteArray decompress(const RECORD *pRecord);
+    bool decompressToFile(const RECORD *pRecord,QString sFileName);
+    bool dumpToFile(const RECORD *pRecord,QString sFileName);
 
     static RECORD getArchiveRecord(QString sFileName,QList<RECORD> *pListArchive);
     static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
+
+    bool unpackFile(QString sFileName,QString sResultPath);
 };
 
 #endif // XARCHIVE_H

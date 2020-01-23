@@ -25,11 +25,11 @@ SevenZip::SevenZip(QIODevice *__pDevice) : XArchive(__pDevice)
 
 }
 
-bool SevenZip::isVaild()
+bool SevenZip::isValid()
 {
     bool bResult=false;
 
-    if(getSize()>20) // TODO
+    if(getSize()>sizeof(SignatureHeader))
     {
         if(compareSignature("'7z'BCAF271C"))
         {
@@ -47,6 +47,13 @@ QString SevenZip::getVersion()
 
 quint64 SevenZip::getNumberOfRecords()
 {
+    SignatureHeader signatureHeader;
+
+    if(read_array(0,(char *)&signatureHeader,sizeof(SignatureHeader))==sizeof(SignatureHeader))
+    {
+
+    }
+
     return 0;
 }
 

@@ -25,7 +25,7 @@ XCab::XCab(QIODevice *__pDevice) : XArchive(__pDevice)
 
 }
 
-bool XCab::isVaild()
+bool XCab::isValid()
 {
     bool bResult=false;
 

@@ -29,8 +29,22 @@ class SevenZip : public XArchive
     Q_OBJECT
 
 public:    
-    explicit SevenZip(QIODevice *__pDevice);
-    virtual bool isVaild();
+#pragma pack(push)
+#pragma pack(1)
+    struct SignatureHeader
+    {
+        quint8 kSignature[6]; // {'7','z',0xBC,0xAF,0x27,0x1C}
+        quint8 Major;   // now = 0
+        quint8 Minor;   // now = 4
+        quint32 StartHeaderCRC;
+        quint64 NextHeaderOffset;
+        quint64 NextHeaderSize;
+        quint32 NextHeaderCRC;
+    };
+#pragma pack(pop)
+
+    explicit SevenZip(QIODevice *__pDevice=0);
+    virtual bool isValid();
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);

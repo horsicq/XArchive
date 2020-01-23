@@ -142,8 +142,8 @@ public:
         // TODO Comment!!!
     };
 
-    explicit XZip(QIODevice *__pDevice);
-    virtual bool isVaild();
+    explicit XZip(QIODevice *__pDevice=0);
+    virtual bool isValid();
     virtual QString getVersion();
     virtual bool isEncrypted();
     virtual quint64 getNumberOfRecords();

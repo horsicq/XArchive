@@ -81,6 +81,36 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             nSize-=nTemp;
         }
     }
+    else if(compressMethos==COMPRESS_METHOD_PPMD)
+    {
+#ifdef PPMD_SUPPORT
+        quint8 nOrder=0;
+        quint32 nMemSize=0;
+
+        pSourceDevice->read((char *)(&nOrder),1);
+        pSourceDevice->read((char *)(&nMemSize),4);
+
+        bool bSuccess=true;
+
+        if((nOrder<PPMD7_MIN_ORDER)||(nOrder>PPMD7_MAX_ORDER)||(nMemSize<PPMD7_MIN_MEM_SIZE)||(nMemSize>PPMD7_MAX_MEM_SIZE))
+        {
+            bSuccess=false;
+        }
+
+        bSuccess=true;
+
+        if(bSuccess)
+        {
+            CPpmd7 ppmd;
+            Ppmd7_Construct(&ppmd);
+
+            if(Ppmd7_Alloc(&ppmd,nMemSize,&g_Alloc))
+            {
+                Ppmd7_Init(&ppmd,nOrder);
+            }
+        }
+#endif
+    }
     else if(compressMethos==COMPRESS_METHOD_DEFLATE)
     {
         const int CHUNK=16384;
@@ -463,7 +493,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
     return result;
 }
 
-QByteArray XArchive::decompress(XArchive::RECORD *pRecord)
+QByteArray XArchive::decompress(const XArchive::RECORD *pRecord)
 {
     QByteArray result;
 
@@ -485,7 +515,7 @@ QByteArray XArchive::decompress(XArchive::RECORD *pRecord)
     return result;
 }
 
-bool XArchive::decompressToFile(XArchive::RECORD *pRecord, QString sFileName)
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sFileName)
 {
     bool bResult=false;
 
@@ -498,6 +528,8 @@ bool XArchive::decompressToFile(XArchive::RECORD *pRecord, QString sFileName)
 
         if(sd.open(QIODevice::ReadOnly))
         {
+            file.resize(0);
+
             bResult=(decompress(pRecord->compressMethod,&sd,&file)==COMPRESS_RESULT_OK);
 
             sd.close();
@@ -509,7 +541,7 @@ bool XArchive::decompressToFile(XArchive::RECORD *pRecord, QString sFileName)
     return bResult;
 }
 
-bool XArchive::dumpToFile(XArchive::RECORD *pRecord, QString sFileName)
+bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName)
 {
     return XBinary::dumpToFile(sFileName,pRecord->nDataOffset,pRecord->nCompressedSize);
 }
@@ -535,4 +567,42 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sFileName, QList<XArchive::R
 bool XArchive::isArchiveRecordPresent(QString sFileName, QList<XArchive::RECORD> *pListArchive)
 {
     return (!getArchiveRecord(sFileName,pListArchive).sFileName.isEmpty());
+}
+
+bool XArchive::unpackFile(QString sFileName, QString sResultPath)
+{
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        setData(&file);
+
+        if(isValid())
+        {
+            XBinary::createDirectory(sResultPath);
+
+            QList<RECORD> listRecords=getRecords();
+
+            int nCount=listRecords.count();
+
+            for(int i=0;i<nCount;i++)
+            {
+                QString _sFileName=sResultPath+QDir::separator()+listRecords.at(i).sFileName;
+                QFileInfo fi(_sFileName);
+
+                XBinary::createDirectory(fi.absolutePath());
+
+                dumpToFile(&(listRecords.at(i)),_sFileName+".dmp");
+                decompressToFile(&(listRecords.at(i)),_sFileName);
+            }
+        }
+
+        file.close();
+    }
+
+    return bResult;
 }

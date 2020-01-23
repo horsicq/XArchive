@@ -25,7 +25,7 @@ XZip::XZip(QIODevice *__pDevice) : XArchive(__pDevice)
 
 }
 
-bool XZip::isVaild()
+bool XZip::isValid()
 {
     bool bResult=false;
 
