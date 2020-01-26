@@ -62,12 +62,14 @@ QString XRar::getVersion()
 
 quint64 XRar::getNumberOfRecords()
 {
-    return 0;
+    return 0; // TODO
 }
 
 QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
+
+    // TODO
 
     return listResult;
 }

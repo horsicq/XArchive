@@ -47,12 +47,14 @@ QString XCab::getVersion()
 
 quint64 XCab::getNumberOfRecords()
 {
-    return 0;
+    return 0;  // TODO
 }
 
 QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
+
+    // TODO
 
     return listResult;
 }
