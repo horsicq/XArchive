@@ -109,7 +109,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
             quint64 nCurrentSize=0;
 
             qint64 nDataOffset=0;
-            qint64 nNumberOfFiles;
+
 
             while(nCurrentSize<signatureHeader.NextHeaderSize)
             {
@@ -143,7 +143,44 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
                 }
                 if(pn.nValue==k7zIdPackInfo)
                 {
+                    pn=get_packedNumber(nCurrentOffset);
+                    qDebug("Current Offset: %d",pn.nValue);
+                    nDataOffset=pn.nValue;
+                    nCurrentOffset+=pn.nByteSize;
+                    nCurrentSize+=pn.nByteSize;
+                    pn=get_packedNumber(nCurrentOffset);
+                    qint64 nNumberOfStreams=pn.nValue;
+                    qDebug("Number Of Streams: %d",nNumberOfStreams);
+                    nCurrentOffset+=pn.nByteSize;
+                    nCurrentSize+=pn.nByteSize;
 
+                    pn=get_packedNumber(nCurrentOffset);
+                    nCurrentOffset+=pn.nByteSize;
+                    nCurrentSize+=pn.nByteSize;
+
+                    if(pn.nValue==k7zIdSize)
+                    {
+                        qDebug("Size");
+
+                        for(int i=0;i<nNumberOfStreams;i++)
+                        {
+                            pn=get_packedNumber(nCurrentOffset);
+                            qDebug("Current Size: %d",pn.nValue);
+                            nDataOffset=pn.nValue;
+                            nCurrentOffset+=pn.nByteSize;
+                            nCurrentSize+=pn.nByteSize;
+                        }
+                    }
+
+                    pn=get_packedNumber(nCurrentOffset);
+
+                    if(pn.nValue==k7zIdEnd)
+                    {
+                        qDebug("End");
+                    }
+
+                    nCurrentOffset+=pn.nByteSize;
+                    nCurrentSize+=pn.nByteSize;
                 }
             }
 
