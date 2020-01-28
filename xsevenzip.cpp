@@ -110,7 +110,6 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 
             qint64 nDataOffset=0;
 
-
             while(nCurrentSize<signatureHeader.NextHeaderSize)
             {
                 PACKEDNUMBER pn=get_packedNumber(nCurrentOffset);
@@ -182,8 +181,40 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
                     nCurrentOffset+=pn.nByteSize;
                     nCurrentSize+=pn.nByteSize;
                 }
-            }
+                if(pn.nValue==k7zIdUnpackInfo)
+                {
+                    pn=get_packedNumber(nCurrentOffset);
+                    nCurrentOffset+=pn.nByteSize;
+                    nCurrentSize+=pn.nByteSize;
 
+                    if(pn.nValue==k7zIdFolder)
+                    {
+                        pn=get_packedNumber(nCurrentOffset);
+                        qint64 nNumberOfFolders=pn.nValue;
+                        qDebug("Number of folders: %d",pn.nValue);
+                        nCurrentOffset+=pn.nByteSize;
+                        nCurrentSize+=pn.nByteSize;
+
+                        quint8 nExtra=read_uint8(nCurrentOffset);
+                        // TODO compare to 0
+                        nCurrentOffset+=pn.nByteSize;
+                        nCurrentSize+=pn.nByteSize;
+
+                        for(int i=0;i<nNumberOfFolders;i++)
+                        {
+                            for(int i=0;i<nNumberOfFolders;i++)
+                            {
+                                pn=get_packedNumber(nCurrentOffset);
+                                qDebug("Current Coder: %d",pn.nValue);
+                                // TODO
+                                nDataOffset=pn.nValue;
+                                nCurrentOffset+=pn.nByteSize;
+                                nCurrentSize+=pn.nByteSize;
+                            }
+                        }
+                    }
+                }
+            }
             // TODO Encrypted
         }
     }
