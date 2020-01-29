@@ -197,19 +197,24 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 
                         quint8 nExtra=read_uint8(nCurrentOffset);
                         // TODO compare to 0
-                        nCurrentOffset+=pn.nByteSize;
-                        nCurrentSize+=pn.nByteSize;
+                        nCurrentOffset++;
+                        nCurrentSize++;
 
                         for(int i=0;i<nNumberOfFolders;i++)
                         {
-                            for(int i=0;i<nNumberOfFolders;i++)
+                            pn=get_packedNumber(nCurrentOffset);
+                            qint64 nNumberOfCoders=pn.nValue;
+                            qDebug("Number of coders: %d",nNumberOfCoders);
+                            // TODO
+                            nCurrentOffset+=pn.nByteSize;
+                            nCurrentSize+=pn.nByteSize;
+
+                            for(int j=0;j<nNumberOfCoders;j++)
                             {
-                                pn=get_packedNumber(nCurrentOffset);
-                                qDebug("Current Coder: %d",pn.nValue);
-                                // TODO
-                                nDataOffset=pn.nValue;
-                                nCurrentOffset+=pn.nByteSize;
-                                nCurrentSize+=pn.nByteSize;
+                                quint8 nMainByte=read_uint8(nCurrentOffset);
+                                // TODO compare to 0
+                                nCurrentOffset++;
+                                nCurrentSize++;
                             }
                         }
                     }
