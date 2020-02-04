@@ -29,7 +29,7 @@ bool XSevenZip::isValid()
 {
     bool bResult=false;
 
-    if(getSize()>sizeof(SignatureHeader))
+    if(getSize()>(qint64)sizeof(SignatureHeader))
     {
         if(compareSignature("'7z'BCAF271C"))
         {
