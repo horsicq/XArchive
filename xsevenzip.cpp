@@ -212,9 +212,30 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
                             for(int j=0;j<nNumberOfCoders;j++)
                             {
                                 quint8 nMainByte=read_uint8(nCurrentOffset);
-                                // TODO compare to 0
+
                                 nCurrentOffset++;
                                 nCurrentSize++;
+
+                                if((nMainByte&0xC0)==0)
+                                {
+                                    qint32 nCoderSize=nMainByte&0x0F;
+
+                                    if((nCoderSize<=8)&&(nCoderSize<getSize()))
+                                    {
+                                        nCurrentOffset+=nCoderSize;
+                                        nCurrentSize+=nCoderSize;
+                                    }
+                                    else
+                                    {
+                                        qDebug("Error");
+                                    }
+                                }
+                                else
+                                {
+                                    qDebug("Error");
+                                }
+                                // TODO compare to 0
+                                // TODO Check !!!
                             }
                         }
                     }

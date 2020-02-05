@@ -29,7 +29,7 @@ bool XCab::isValid()
 {
     bool bResult=false;
 
-    if(getSize()>20) // TODO
+    if(getSize()>sizeof(CFHEADER))
     {
         if(compareSignature("'MSCF'"))
         {
@@ -47,7 +47,11 @@ QString XCab::getVersion()
 
 quint64 XCab::getNumberOfRecords()
 {
-    return 0;  // TODO
+    quint64 nResult=0;
+
+    nResult=read_uint16(offsetof(CFHEADER,cFolders))+read_uint16(offsetof(CFHEADER,cFiles));
+
+    return nResult;
 }
 
 QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
