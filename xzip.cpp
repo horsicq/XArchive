@@ -58,7 +58,7 @@ QString XZip::getVersion()
 
             if(nVersion==0)
             {
-                nVersion=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nMinVersion));;
+                nVersion=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nMinVersion));
             }
         }
     }
@@ -275,7 +275,7 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
         cdFileHeader.nCRC32=pListZipFileRecords->at(i).nCRC32;
         cdFileHeader.nCompressedSize=pListZipFileRecords->at(i).nCompressedSize;
         cdFileHeader.nUncompressedSize=pListZipFileRecords->at(i).nUncompressedSize;
-        cdFileHeader.nFileNameLength=pListZipFileRecords->at(i).sFileName.size();;
+        cdFileHeader.nFileNameLength=pListZipFileRecords->at(i).sFileName.size();
         cdFileHeader.nExtraFieldLength=0;
         cdFileHeader.nFileCommentLength=0;
         cdFileHeader.nStartDisk=0;
