@@ -62,8 +62,6 @@ public:
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
-
-private:
 };
 
 #endif // XCAB_H

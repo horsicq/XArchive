@@ -151,6 +151,7 @@ public:
 
     static bool addLocalFileRecord(QIODevice *pSource,QIODevice *pDest,ZIPFILE_RECORD *pZipFileRecord);
     static bool addCentralDirectory(QIODevice *pDest,QList<ZIPFILE_RECORD> *pListZipFileRecords,QString sComment="");
+
 private:
     qint64 findECDOffset();
 };

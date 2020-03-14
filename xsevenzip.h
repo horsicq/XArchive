@@ -83,8 +83,6 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
     QString idToSring(EIdEnum id);
-
-private:
 };
 
 #endif // XSEVENZIP_H
