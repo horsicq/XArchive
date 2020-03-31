@@ -58,7 +58,35 @@ QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
 
+    CFHEADER cfHeader=readHeader();
+
     // TODO
 
     return listResult;
+}
+
+XCab::CFHEADER XCab::readHeader()
+{
+    CFHEADER result={};
+
+    result.signature[0]=read_uint8(0);
+    result.signature[1]=read_uint8(1);
+    result.signature[2]=read_uint8(2);
+    result.signature[3]=read_uint8(3);
+    result.reserved1=read_uint32(offsetof(CFHEADER,reserved1));
+    result.cbCabinet=read_uint32(offsetof(CFHEADER,cbCabinet));
+    result.reserved2=read_uint32(offsetof(CFHEADER,reserved2));
+    result.coffFiles=read_uint32(offsetof(CFHEADER,coffFiles));
+    result.reserved3=read_uint32(offsetof(CFHEADER,reserved3));
+    result.versionMinor=read_uint8(offsetof(CFHEADER,versionMinor));
+    result.versionMajor=read_uint8(offsetof(CFHEADER,versionMajor));
+    result.cFolders=read_uint16(offsetof(CFHEADER,cFolders));
+    result.cFiles=read_uint16(offsetof(CFHEADER,cFiles));
+    result.flags=read_uint16(offsetof(CFHEADER,flags));
+    result.setID=read_uint16(offsetof(CFHEADER,setID));
+    result.iCabinet=read_uint16(offsetof(CFHEADER,iCabinet));
+
+    // TODO Additional fields
+
+    return result;
 }

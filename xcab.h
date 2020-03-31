@@ -62,6 +62,8 @@ public:
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
+
+    CFHEADER readHeader();
 };
 
 #endif // XCAB_H
