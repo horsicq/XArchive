@@ -58,14 +58,14 @@ QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
 
-    CFHEADER cfHeader=readHeader();
+    CFHEADER cfHeader=readCFHeader();
 
     // TODO
 
     return listResult;
 }
 
-XCab::CFHEADER XCab::readHeader()
+XCab::CFHEADER XCab::readCFHeader()
 {
     CFHEADER result={};
 
@@ -86,7 +86,12 @@ XCab::CFHEADER XCab::readHeader()
     result.setID=read_uint16(offsetof(CFHEADER,setID));
     result.iCabinet=read_uint16(offsetof(CFHEADER,iCabinet));
 
-    // TODO Additional fields
+    if(result.flags&0x0004)
+    {
+        result.cbCFHeader=read_uint16(offsetof(CFHEADER,cbCFHeader));
+        result.cbCFFolder=read_uint8(offsetof(CFHEADER,cbCFFolder));
+        result.cbCFData=read_uint8(offsetof(CFHEADER,cbCFData));
+    }
 
     return result;
 }

@@ -46,9 +46,10 @@ public:
       quint16 flags;            // cabinet file option indicators */
       quint16 setID;            // must be the same for all cabinets in a set */
       quint16 iCabinet;         // number of this cabinet file in a set */
-//      u2  cbCFHeader;       /* (optional) size of per-cabinet reserved area */
-//      u1  cbCFFolder;       /* (optional) size of per-folder reserved area */
-//      u1  cbCFData;         /* (optional) size of per-datablock reserved area */
+      // Optional
+      quint16 cbCFHeader;       /* (optional) size of per-cabinet reserved area */
+      quint8 cbCFFolder;       /* (optional) size of per-folder reserved area */
+      quint8 cbCFData;         /* (optional) size of per-datablock reserved area */
 //      u1  abReserve[];      /* (optional) per-cabinet reserved area */
 //      u1  szCabinetPrev[];  /* (optional) name of previous cabinet file */
 //      u1  szDiskPrev[];     /* (optional) name of previous disk */
@@ -63,7 +64,7 @@ public:
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
-    CFHEADER readHeader();
+    CFHEADER readCFHeader();
 };
 
 #endif // XCAB_H
