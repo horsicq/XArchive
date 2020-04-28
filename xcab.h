@@ -33,28 +33,45 @@ public:
 #pragma pack(1)
     struct CFHEADER
     {
-      quint8 signature[4];      // Cabinet file signature
-      quint32 reserved1;        // reserved
-      quint32 cbCabinet;        // size of this cabinet file in bytes
-      quint32 reserved2;        // reserved
-      quint32 coffFiles;        // offset of the first CFFILE entry
-      quint32 reserved3;        // reserved
-      quint8 versionMinor;      // cabinet file format version, minor
-      quint8 versionMajor;      // cabinet file format version, major
-      quint16 cFolders;         // number of CFFOLDER entries in this cabinet */
-      quint16 cFiles;           // number of CFFILE entries in this cabinet */
-      quint16 flags;            // cabinet file option indicators */
-      quint16 setID;            // must be the same for all cabinets in a set */
-      quint16 iCabinet;         // number of this cabinet file in a set */
-      // Optional
-      quint16 cbCFHeader;       /* (optional) size of per-cabinet reserved area */
-      quint8 cbCFFolder;       /* (optional) size of per-folder reserved area */
-      quint8 cbCFData;         /* (optional) size of per-datablock reserved area */
-//      u1  abReserve[];      /* (optional) per-cabinet reserved area */
-//      u1  szCabinetPrev[];  /* (optional) name of previous cabinet file */
-//      u1  szDiskPrev[];     /* (optional) name of previous disk */
-//      u1  szCabinetNext[];  /* (optional) name of next cabinet file */
-//      u1  szDiskNext[];     /* (optional) name of next disk */
+        quint8 signature[4];      // Cabinet file signature
+        quint32 reserved1;        // reserved
+        quint32 cbCabinet;        // size of this cabinet file in bytes
+        quint32 reserved2;        // reserved
+        quint32 coffFiles;        // offset of the first CFFILE entry
+        quint32 reserved3;        // reserved
+        quint8 versionMinor;      // cabinet file format version, minor
+        quint8 versionMajor;      // cabinet file format version, major
+        quint16 cFolders;         // number of CFFOLDER entries in this cabinet */
+        quint16 cFiles;           // number of CFFILE entries in this cabinet */
+        quint16 flags;            // cabinet file option indicators */
+        quint16 setID;            // must be the same for all cabinets in a set */
+        quint16 iCabinet;         // number of this cabinet file in a set */
+        // Optional
+        quint16 cbCFHeader;       /* (optional) size of per-cabinet reserved area */
+        quint8 cbCFFolder;       /* (optional) size of per-folder reserved area */
+        quint8 cbCFData;         /* (optional) size of per-datablock reserved area */
+        //u1  abReserve[];      /* (optional) per-cabinet reserved area */
+        //u1  szCabinetPrev[];  /* (optional) name of previous cabinet file */
+        //u1  szDiskPrev[];     /* (optional) name of previous disk */
+        //u1  szCabinetNext[];  /* (optional) name of next cabinet file */
+        //u1  szDiskNext[];     /* (optional) name of next disk */
+    };
+    struct CFFOLDER
+    {
+        quint32 coffCabStart;  /* offset of the first CFDATA block in this folder */
+        quint16 cCFData;       /* number of CFDATA blocks in this folder */
+        quint16 typeCompress;  /* compression type indicator */
+        //u1  abReserve[];   /* (optional) per-folder reserved area */
+    };
+    struct CFFILE
+    {
+        quint32  cbFile;           /* uncompressed size of this file in bytes */
+        quint32  uoffFolderStart;  /* uncompressed offset of this file in the folder */
+        quint16  iFolder;          /* index into the CFFOLDER area */
+        quint16  date;             /* date stamp for this file */
+        quint16  time;             /* time stamp for this file */
+        quint16  attribs;          /* attribute flags for this file */
+        //u1  szName[];         /* name of this file */
     };
 #pragma pack(pop)
 
