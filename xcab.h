@@ -82,6 +82,7 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
     CFHEADER readCFHeader();
+    CFFOLDER readCFFolder(qint64 nOffset);
 };
 
 #endif // XCAB_H

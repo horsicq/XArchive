@@ -58,7 +58,20 @@ QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
 
+    qint64 nOffset=0;
+
     CFHEADER cfHeader=readCFHeader();
+
+    nOffset+=sizeof(CFHEADER)-4;
+
+    if(cfHeader.flags&0x0004)
+    {
+        nOffset+=4;
+
+        nOffset+=cfHeader.cbCFHeader;
+    }
+
+    CFFOLDER cfFolder=readCFFolder(nOffset);
 
     // TODO
 
@@ -92,6 +105,17 @@ XCab::CFHEADER XCab::readCFHeader()
         result.cbCFFolder=read_uint8(offsetof(CFHEADER,cbCFFolder));
         result.cbCFData=read_uint8(offsetof(CFHEADER,cbCFData));
     }
+
+    return result;
+}
+
+XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset)
+{
+    CFFOLDER result={};
+
+    result.coffCabStart=read_uint32(offsetof(CFHEADER,reserved1));
+    result.cCFData=read_uin16(offsetof(CFHEADER,cbCabinet));
+    result.typeCompress=read_uint16(offsetof(CFHEADER,reserved2));
 
     return result;
 }
