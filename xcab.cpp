@@ -113,9 +113,9 @@ XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset)
 {
     CFFOLDER result={};
 
-    result.coffCabStart=read_uint32(offsetof(CFHEADER,reserved1));
-    result.cCFData=read_uint16(offsetof(CFHEADER,cbCabinet));
-    result.typeCompress=read_uint16(offsetof(CFHEADER,reserved2));
+    result.coffCabStart=read_uint32(nOffset+offsetof(CFFOLDER,coffCabStart));
+    result.cCFData=read_uint16(nOffset+offsetof(CFFOLDER,cCFData));
+    result.typeCompress=read_uint16(nOffset+offsetof(CFFOLDER,typeCompress));
 
     return result;
 }

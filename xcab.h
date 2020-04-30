@@ -56,6 +56,7 @@ public:
         //u1  szCabinetNext[];  /* (optional) name of next cabinet file */
         //u1  szDiskNext[];     /* (optional) name of next disk */
     };
+
     struct CFFOLDER
     {
         quint32 coffCabStart;  /* offset of the first CFDATA block in this folder */
@@ -63,6 +64,7 @@ public:
         quint16 typeCompress;  /* compression type indicator */
         //u1  abReserve[];   /* (optional) per-folder reserved area */
     };
+
     struct CFFILE
     {
         quint32  cbFile;           /* uncompressed size of this file in bytes */
@@ -73,6 +75,16 @@ public:
         quint16  attribs;          /* attribute flags for this file */
         //u1  szName[];         /* name of this file */
     };
+
+    struct CFDATA
+    {
+        quint32  csum;         /* checksum of this CFDATA entry */
+        quint16  cbData;       /* number of compressed bytes in this block */
+        quint16  cbUncomp;     /* number of uncompressed bytes in this block */
+//        u1  abReserve[];  /* (optional) per-datablock reserved area */
+//        u1  ab[cbData];   /* compressed data bytes */
+    };
+
 #pragma pack(pop)
 
     explicit XCab(QIODevice *__pDevice=0);
