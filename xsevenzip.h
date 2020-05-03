@@ -76,7 +76,7 @@ public:
     };
 #pragma pack(pop)
 
-    explicit XSevenZip(QIODevice *__pDevice=0);
+    explicit XSevenZip(QIODevice *__pDevice=nullptr);
     virtual bool isValid();
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords();

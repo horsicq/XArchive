@@ -68,7 +68,7 @@ public:
         COMPRESS_RESULT_WRITEERROR
     };
 
-    explicit XArchive(QIODevice *__pDevice=0);
+    explicit XArchive(QIODevice *__pDevice=nullptr);
     virtual quint64 getNumberOfRecords()=0;
     virtual QList<RECORD> getRecords(qint32 nLimit=-1)=0;
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethos,QIODevice *pSourceDevice,QIODevice *pDestDevice);
@@ -77,10 +77,8 @@ public:
     QByteArray decompress(const RECORD *pRecord);
     bool decompressToFile(const RECORD *pRecord,QString sFileName);
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
-
     static RECORD getArchiveRecord(QString sFileName,QList<RECORD> *pListArchive);
     static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
-
     bool unpackFile(QString sFileName,QString sResultPath);
 };
 

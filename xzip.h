@@ -142,7 +142,7 @@ public:
         // TODO Comment!!!
     };
 
-    explicit XZip(QIODevice *__pDevice=0);
+    explicit XZip(QIODevice *__pDevice=nullptr);
     virtual bool isValid();
     virtual QString getVersion();
     virtual bool isEncrypted();

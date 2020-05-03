@@ -87,7 +87,7 @@ public:
 
 #pragma pack(pop)
 
-    explicit XCab(QIODevice *__pDevice=0);
+    explicit XCab(QIODevice *__pDevice=nullptr);
     virtual bool isValid();
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords();
