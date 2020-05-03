@@ -119,3 +119,14 @@ XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset)
 
     return result;
 }
+
+XCab::CFDATA XCab::readCFData(qint64 nOffset)
+{
+    CFDATA result={};
+
+    result.csum=read_uint32(nOffset+offsetof(CFDATA,csum));
+    result.cbData=read_uint16(nOffset+offsetof(CFDATA,cbData));
+    result.cbUncomp=read_uint16(nOffset+offsetof(CFDATA,cbUncomp));
+
+    return result;
+}

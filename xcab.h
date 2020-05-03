@@ -95,6 +95,7 @@ public:
 
     CFHEADER readCFHeader();
     CFFOLDER readCFFolder(qint64 nOffset);
+    CFDATA readCFData(qint64 nOffset);
 };
 
 #endif // XCAB_H
