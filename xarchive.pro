@@ -1,3 +1,4 @@
+# build libs
 TEMPLATE      = subdirs
 SUBDIRS       = \
-                ../3rdparty/bzip2
+                3rdparty/bzip2
