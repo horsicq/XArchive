@@ -45,11 +45,11 @@ unix:macx {
 }
 
 SOURCES += \
-    zlib/deflate.c \
-    zlib/inflate.c \
-    zlib/adler32.c \
-    zlib/crc32.c \
-    zlib/inffast.c \
-    zlib/inftrees.c \
-    zlib/trees.c \
-    zlib/zutil.c
+    $$PWD/src/deflate.c \
+    $$PWD/src/inflate.c \
+    $$PWD/src/adler32.c \
+    $$PWD/src/crc32.c \
+    $$PWD/src/inffast.c \
+    $$PWD/src/inftrees.c \
+    $$PWD/src/trees.c \
+    $$PWD/src/zutil.c
