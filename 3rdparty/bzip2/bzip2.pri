@@ -1,5 +1,5 @@
-INCLUDEPATH += $$PWD/include
-DEPENDPATH += $$PWD/include
+INCLUDEPATH += $$PWD/src
+DEPENDPATH += $$PWD/src
 
 win32-g++ {
     contains(QT_ARCH, i386) {
