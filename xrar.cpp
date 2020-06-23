@@ -67,6 +67,8 @@ quint64 XRar::getNumberOfRecords()
 
 QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit)
 {
+    Q_UNUSED(nLimit)
+
     QList<XArchive::RECORD> listResult;
 
     // TODO
