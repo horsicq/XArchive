@@ -198,7 +198,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     }
     else if(compressMethos==COMPRESS_METHOD_BZIP2)
     {
-        const int CHUNK=16384;
+        const int CHUNK=16384; // TODO const
 
         char in[CHUNK];
         char out[CHUNK];
@@ -294,7 +294,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 {
                     LzmaDec_Init(&state);
 
-                    const int CHUNK=16384;
+                    const int CHUNK=16384; // TODO const
 
                     char in[CHUNK];
                     char out[CHUNK];
@@ -399,7 +399,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
-    const int CHUNK=16384;
+    const int CHUNK=16384; // TODO const
 
     unsigned char in[CHUNK];
     unsigned char out[CHUNK];
