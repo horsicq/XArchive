@@ -56,7 +56,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
     if(compressMethos==COMPRESS_METHOD_STORE)
     {
-        const int CHUNK=4096;
+        const int CHUNK=4096; // TODO const
         char buffer[CHUNK];
         qint64 nSize=pSourceDevice->size();
 
@@ -113,7 +113,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     }
     else if(compressMethos==COMPRESS_METHOD_DEFLATE)
     {
-        const int CHUNK=16384;
+        const int CHUNK=16384; // TODO const
 
         unsigned char in[CHUNK];
         unsigned char out[CHUNK];
