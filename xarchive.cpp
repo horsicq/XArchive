@@ -596,7 +596,7 @@ bool XArchive::unpackFile(QString sFileName, QString sResultPath)
 
                 XBinary::createDirectory(fi.absolutePath());
 
-                dumpToFile(&(listRecords.at(i)),_sFileName+".dmp");
+                dumpToFile(&(listRecords.at(i)),_sFileName+".dmp"); // TODO using dmp name from XBinary
                 decompressToFile(&(listRecords.at(i)),_sFileName);
             }
         }
