@@ -64,7 +64,7 @@ QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
 
     nOffset+=sizeof(CFHEADER)-4;
 
-    if(cfHeader.flags&0x0004)
+    if(cfHeader.flags&0x0004)  // TODO const
     {
         nOffset+=4;
 
@@ -99,7 +99,7 @@ XCab::CFHEADER XCab::readCFHeader()
     result.setID=read_uint16(offsetof(CFHEADER,setID));
     result.iCabinet=read_uint16(offsetof(CFHEADER,iCabinet));
 
-    if(result.flags&0x0004)
+    if(result.flags&0x0004)  // TODO const
     {
         result.cbCFHeader=read_uint16(offsetof(CFHEADER,cbCFHeader));
         result.cbCFFolder=read_uint8(offsetof(CFHEADER,cbCFFolder));
