@@ -66,9 +66,9 @@ public:
 #pragma pack(1)
     struct SignatureHeader
     {
-        quint8 kSignature[6]; // {'7','z',0xBC,0xAF,0x27,0x1C}
-        quint8 Major;   // now = 0
-        quint8 Minor;   // now = 4
+        quint8 kSignature[6];       // {'7','z',0xBC,0xAF,0x27,0x1C}
+        quint8 Major;               // now = 0
+        quint8 Minor;               // now = 4
         quint32 StartHeaderCRC;
         quint64 NextHeaderOffset;
         quint64 NextHeaderSize;
