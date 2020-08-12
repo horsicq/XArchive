@@ -71,8 +71,8 @@ public:
     explicit XArchive(QIODevice *__pDevice=nullptr);
     virtual quint64 getNumberOfRecords()=0;
     virtual QList<RECORD> getRecords(qint32 nLimit=-1)=0;
-    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethos,QIODevice *pSourceDevice,QIODevice *pDestDevice);
-    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethos,QIODevice *pSourceDevice,QIODevice *pDestDevice);
+    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice);
+    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);
     static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,int nLevel,int nMethod,int nWindowsBits,int nMemLevel,int nStrategy);
     QByteArray decompress(const RECORD *pRecord);
     bool decompressToFile(const RECORD *pRecord,QString sFileName);

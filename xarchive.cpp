@@ -50,11 +50,11 @@ XArchive::XArchive(QIODevice *__pDevice): XBinary(__pDevice)
 
 }
 
-XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethos, QIODevice *pSourceDevice, QIODevice *pDestDevice)
+XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice)
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
-    if(compressMethos==COMPRESS_METHOD_STORE)
+    if(compressMethod==COMPRESS_METHOD_STORE)
     {
         const int CHUNK=4096; // TODO const
         char buffer[CHUNK];
@@ -81,7 +81,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             nSize-=nTemp;
         }
     }
-    else if(compressMethos==COMPRESS_METHOD_PPMD)
+    else if(compressMethod==COMPRESS_METHOD_PPMD)
     {
 #ifdef PPMD_SUPPORT
         quint8 nOrder=0;
@@ -111,7 +111,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         }
 #endif
     }
-    else if(compressMethos==COMPRESS_METHOD_DEFLATE)
+    else if(compressMethod==COMPRESS_METHOD_DEFLATE)
     {
         const int CHUNK=16384; // TODO const
 
@@ -196,7 +196,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             }
         }
     }
-    else if(compressMethos==COMPRESS_METHOD_BZIP2)
+    else if(compressMethod==COMPRESS_METHOD_BZIP2)
     {
         const int CHUNK=16384; // TODO const
 
@@ -267,7 +267,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             result=COMPRESS_RESULT_UNKNOWN;
         }
     }
-    else if(compressMethos==COMPRESS_METHOD_LZMA_ZIP)
+    else if(compressMethod==COMPRESS_METHOD_LZMA_ZIP)
     {
         // TODO more error codes
         int nPropSize=0;
@@ -356,11 +356,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     return result;
 }
 
-XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethos, QIODevice *pSourceDevice, QIODevice *pDestDevice)
+XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice)
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
-    if(compressMethos==COMPRESS_METHOD_STORE)
+    if(compressMethod==COMPRESS_METHOD_STORE)
     {
         const int CHUNK=4096; // TODO const
         char buffer[CHUNK];
@@ -387,7 +387,7 @@ XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressM
             nSize-=nTemp;
         }
     }
-    else if(compressMethos==COMPRESS_METHOD_DEFLATE)
+    else if(compressMethod==COMPRESS_METHOD_DEFLATE)
     {
         result=compress_deflate(pSourceDevice,pDestDevice,Z_DEFAULT_COMPRESSION,Z_DEFLATED,-MAX_WBITS,8,Z_DEFAULT_STRATEGY); // -MAX_WBITS for raw data
     }
