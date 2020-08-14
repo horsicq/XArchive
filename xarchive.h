@@ -66,6 +66,7 @@ public:
         COMPRESS_RESULT_METHODERROR,
         COMPRESS_RESULT_READERROR,
         COMPRESS_RESULT_WRITEERROR
+        // TODO more
     };
 
     explicit XArchive(QIODevice *__pDevice=nullptr);
