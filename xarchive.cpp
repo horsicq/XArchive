@@ -515,12 +515,16 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord)
     return result;
 }
 
-bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sFileName)
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResultFileName)
 {
     bool bResult=false;
 
+    QFileInfo fi(sResultFileName);
+
+    XBinary::createDirectory(fi.absolutePath());
+
     QFile file;
-    file.setFileName(sFileName);
+    file.setFileName(sResultFileName);
 
     if(file.open(QIODevice::ReadWrite))
     {
@@ -536,6 +540,20 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sFileNa
         }
 
         file.close();
+    }
+
+    return bResult;
+}
+
+bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString sFileName, QString sResultFileName)
+{
+    bool bResult=false;
+
+    XArchive::RECORD record=getArchiveRecord(sFileName,pListArchive);
+
+    if(record.sFileName!="") // TODO bIsValid
+    {
+        bResult=decompressToFile(&record,sResultFileName);
     }
 
     return bResult;
@@ -583,6 +601,8 @@ bool XArchive::unpackFile(QString sFileName, QString sResultPath)
 
         if(isValid())
         {
+            bResult=true;
+
             XBinary::createDirectory(sResultPath);
 
             QList<RECORD> listRecords=getRecords();
@@ -592,12 +612,12 @@ bool XArchive::unpackFile(QString sFileName, QString sResultPath)
             for(int i=0;i<nCount;i++)
             {
                 QString _sFileName=sResultPath+QDir::separator()+listRecords.at(i).sFileName;
-                QFileInfo fi(_sFileName);
 
-                XBinary::createDirectory(fi.absolutePath());
-
-                dumpToFile(&(listRecords.at(i)),_sFileName+".dmp"); // TODO using dmp name from XBinary
-                decompressToFile(&(listRecords.at(i)),_sFileName);
+                //dumpToFile(&(listRecords.at(i)),_sFileName+".dmp"); // TODO using dmp name from XBinary
+                if(!decompressToFile(&(listRecords.at(i)),_sFileName))
+                {
+                    bResult=false;
+                }
             }
         }
 

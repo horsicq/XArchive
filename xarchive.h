@@ -48,6 +48,7 @@ public:
 
     struct RECORD
     {
+        // TODO bIsValid
         QString sFileName;
         quint32 nCRC32;
         qint64 nDataOffset;
@@ -76,7 +77,8 @@ public:
     static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);
     static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,int nLevel,int nMethod,int nWindowsBits,int nMemLevel,int nStrategy);
     QByteArray decompress(const RECORD *pRecord);
-    bool decompressToFile(const RECORD *pRecord,QString sFileName);
+    bool decompressToFile(const RECORD *pRecord,QString sResultFileName);
+    bool decompressToFile(QList<RECORD> *pListArchive,QString sFileName,QString sResultFileName);
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
     static RECORD getArchiveRecord(QString sFileName,QList<RECORD> *pListArchive);
     static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
