@@ -468,7 +468,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
 
         deflateEnd(&strm);
 
-        if(ret==Z_OK)
+        if((ret==Z_OK)||(ret==Z_STREAM_END))
         {
             result=COMPRESS_RESULT_OK;
         }
