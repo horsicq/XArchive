@@ -599,6 +599,60 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
     return bResult;
 }
 
+bool XArchive::decompressToFile(QString sArchiveFileName, QString sFileName, QString sResultFileName)
+{
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sArchiveFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        setData(&file);
+
+        if(isValid())
+        {
+            bResult=true;
+
+            QList<RECORD> listRecords=getRecords();
+
+            bResult=decompressToFile(&listRecords,sFileName,sResultFileName);
+        }
+
+        file.close();
+    }
+
+    return bResult;
+}
+
+bool XArchive::decompressToPath(QString sArchiveFileName, QString sPathName, QString sResultPathName)
+{
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sArchiveFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        setData(&file);
+
+        if(isValid())
+        {
+            bResult=true;
+
+            QList<RECORD> listRecords=getRecords();
+
+            bResult=decompressToPath(&listRecords,sPathName,sResultPathName);
+        }
+
+        file.close();
+    }
+
+    return bResult;
+}
+
 bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName)
 {
     return XBinary::dumpToFile(sFileName,pRecord->nDataOffset,pRecord->nCompressedSize);

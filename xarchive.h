@@ -80,6 +80,8 @@ public:
     bool decompressToFile(const RECORD *pRecord,QString sResultFileName);
     bool decompressToFile(QList<RECORD> *pListArchive,QString sFileName,QString sResultFileName);
     bool decompressToPath(QList<RECORD> *pListArchive,QString sPathName,QString sResultPathName);
+    bool decompressToFile(QString sArchiveFileName,QString sFileName,QString sResultFileName);
+    bool decompressToPath(QString sArchiveFileName,QString sPathName,QString sResultPathName);
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
     static RECORD getArchiveRecord(QString sFileName,QList<RECORD> *pListArchive);
     static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
