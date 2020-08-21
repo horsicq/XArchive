@@ -576,7 +576,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
     {
         XArchive::RECORD record=pListArchive->at(i);
 
-        if(record.sFileName.contains(QRegExp(QString("^%1").arg(sPathName))))
+        if(record.sFileName.contains(QRegExp(QString("^%1").arg(sPathName)))||(sPathName=="/")||(sPathName==""))
         {
             QString sFileName=record.sFileName;
             sFileName.remove(QRegExp(QString("^%1").arg(sPathName)));
