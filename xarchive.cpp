@@ -174,7 +174,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
             inflateEnd(&strm);
 
-            if(ret==Z_OK)
+            if((ret==Z_OK)||(ret==Z_STREAM_END)) // TODO Check Z_OK
             {
                 result=COMPRESS_RESULT_OK;
             }
@@ -521,25 +521,28 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResult
 
     QFileInfo fi(sResultFileName);
 
-    XBinary::createDirectory(fi.absolutePath());
+    bResult=XBinary::createDirectory(fi.absolutePath());
 
-    QFile file;
-    file.setFileName(sResultFileName);
-
-    if(file.open(QIODevice::ReadWrite))
+    if(pRecord->nCompressedSize)
     {
-        SubDevice sd(getDevice(),pRecord->nDataOffset,pRecord->nCompressedSize);
+        QFile file;
+        file.setFileName(sResultFileName);
 
-        if(sd.open(QIODevice::ReadOnly))
+        if(file.open(QIODevice::ReadWrite))
         {
-            file.resize(0);
+            SubDevice sd(getDevice(),pRecord->nDataOffset,pRecord->nCompressedSize);
 
-            bResult=(decompress(pRecord->compressMethod,&sd,&file)==COMPRESS_RESULT_OK);
+            if(sd.open(QIODevice::ReadOnly))
+            {
+                file.resize(0);
 
-            sd.close();
+                bResult=(decompress(pRecord->compressMethod,&sd,&file)==COMPRESS_RESULT_OK);
+
+                sd.close();
+            }
+
+            file.close();
         }
-
-        file.close();
     }
 
     return bResult;
@@ -555,6 +558,43 @@ bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString s
     {
         bResult=decompressToFile(&record,sResultFileName);
     }
+
+    return bResult;
+}
+
+bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString sPathName, QString sResultPathName)
+{
+    bool bResult=true;
+
+    QFileInfo fi(sResultPathName);
+
+    XBinary::createDirectory(fi.absolutePath());
+
+    int nCount=pListArchive->count();
+
+    for(int i=0;i<nCount;i++)
+    {
+        XArchive::RECORD record=pListArchive->at(i);
+
+        if(record.sFileName.contains(QRegExp(QString("^%1").arg(sPathName))))
+        {
+            QString sFileName=record.sFileName;
+            sFileName.remove(QRegExp(QString("^%1").arg(sPathName)));
+
+            QString sResultFileName=sResultPathName+QDir::separator()+sFileName;
+
+            QFileInfo fi(sResultFileName);
+            XBinary::createDirectory(fi.absolutePath());
+
+            if(!decompressToFile(&record,sResultFileName))
+            {
+                bResult=false;
+                break;
+            }
+        }
+    }
+
+    // TODO Progressbar
 
     return bResult;
 }
