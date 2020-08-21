@@ -85,7 +85,6 @@ public:
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
     static RECORD getArchiveRecord(QString sFileName,QList<RECORD> *pListArchive);
     static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
-    bool unpackFile(QString sFileName,QString sResultPath);
 };
 
 #endif // XARCHIVE_H
