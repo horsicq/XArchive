@@ -29,7 +29,7 @@ class XRar : public XArchive
     Q_OBJECT
 
 public:    
-    explicit XRar(QIODevice *__pDevice=nullptr);
+    explicit XRar(QIODevice *pDevice=nullptr);
     virtual bool isValid();
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords();

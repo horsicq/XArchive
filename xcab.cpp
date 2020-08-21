@@ -20,7 +20,7 @@
 //
 #include "xcab.h"
 
-XCab::XCab(QIODevice *__pDevice) : XArchive(__pDevice)
+XCab::XCab(QIODevice *pDevice) : XArchive(pDevice)
 {
 
 }

@@ -71,7 +71,7 @@ public:
         // TODO more
     };
 
-    explicit XArchive(QIODevice *__pDevice=nullptr);
+    explicit XArchive(QIODevice *pDevice=nullptr);
     virtual quint64 getNumberOfRecords()=0;
     virtual QList<RECORD> getRecords(qint32 nLimit=-1)=0;
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice);

@@ -20,7 +20,7 @@
 //
 #include "xrar.h"
 
-XRar::XRar(QIODevice *__pDevice) : XArchive(__pDevice)
+XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
 {
 
 }
