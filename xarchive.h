@@ -44,6 +44,7 @@ public:
         COMPRESS_METHOD_BZIP2,
         COMPRESS_METHOD_LZMA_ZIP,
         COMPRESS_METHOD_PPMD
+        // TODO more
     };
 
     struct RECORD
