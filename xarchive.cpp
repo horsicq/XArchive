@@ -609,7 +609,7 @@ bool XArchive::decompressToFile(QString sArchiveFileName, QString sFileName, QSt
 
     if(file.open(QIODevice::ReadOnly))
     {
-        setData(&file);
+        setDevice(&file);
 
         if(isValid())
         {
@@ -636,7 +636,7 @@ bool XArchive::decompressToPath(QString sArchiveFileName, QString sPathName, QSt
 
     if(file.open(QIODevice::ReadOnly))
     {
-        setData(&file);
+        setDevice(&file);
 
         if(isValid())
         {
