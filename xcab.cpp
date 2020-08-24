@@ -56,6 +56,8 @@ quint64 XCab::getNumberOfRecords()
 
 QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
 {
+    Q_UNUSED(nLimit)
+
     QList<XArchive::RECORD> listResult;
 
     qint64 nOffset=0;
