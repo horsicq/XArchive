@@ -94,6 +94,8 @@ quint64 XSevenZip::getNumberOfRecords()
 
 QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 {
+    Q_UNUSED(nLimit)
+
     QList<XArchive::RECORD> listResult;
 
     SignatureHeader signatureHeader;
