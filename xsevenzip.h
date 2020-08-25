@@ -76,13 +76,31 @@ public:
     };
 #pragma pack(pop)
 
+    struct XPACKINFO
+    {
+        bool bIsValid;
+        qint64 nDataOffset;
+        QList<qint64> listSizes;
+    };
+
+    struct XHEADER
+    {
+        bool bIsValid;
+        XPACKINFO xPackInfo;
+    };
+
     explicit XSevenZip(QIODevice *pDevice=nullptr);
     virtual bool isValid();
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
+
+
+private:
     QString idToSring(EIdEnum id);
+    qint64 getEncodedHeader(qint64 nOffset,XHEADER *pHeader);
+    qint64 getPackInfo(qint64 nOffset,XPACKINFO *pPackInfo);
 };
 
 #endif // XSEVENZIP_H

@@ -100,7 +100,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 
     SignatureHeader signatureHeader;
 
-    if(read_array(0,(char *)&signatureHeader,sizeof(SignatureHeader))==sizeof(SignatureHeader))
+    if(read_array(0,(char *)&signatureHeader,sizeof(SignatureHeader))==sizeof(SignatureHeader)) // TODO read function
     {
         _MEMORY_MAP memoryMap=getMemoryMap();
 
@@ -285,4 +285,32 @@ QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
     }
 
     return sResult;
+}
+
+qint64 XSevenZip::getEncodedHeader(qint64 nOffset, XSevenZip::XHEADER *pHeader)
+{
+    qint64 nCurrent=0;
+
+    PACKEDNUMBER pn={};
+
+    pn=get_packedNumber(nOffset+nCurrent);
+
+    if(pn.nValue==k7zIdEncodedHeader)
+    {
+        nCurrent+=pn.nByteSize;
+        pHeader->bIsValid=true;
+
+        nCurrent+=getPackInfo(nOffset+nCurrent,&(pHeader->xPackInfo));
+    }
+
+    return nCurrent-nOffset;
+}
+
+qint64 XSevenZip::getPackInfo(qint64 nOffset, XSevenZip::XPACKINFO *pPackInfo)
+{
+    qint64 nResult=0;
+
+    PACKEDNUMBER pn=get_packedNumber(nOffset);
+
+    return nResult;
 }
