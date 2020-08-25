@@ -35,6 +35,14 @@ class XArchive : public XBinary
     Q_OBJECT
 
 public:
+
+    enum AT
+    {
+        AT_UNKNOWN=0,
+        AT_ZIP
+        // TODO more
+    };
+
     enum COMPRESS_METHOD
     {
         COMPRESS_METHOD_UNKNOWN=0,

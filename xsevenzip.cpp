@@ -305,6 +305,7 @@ qint64 XSevenZip::getEncodedHeader(qint64 nOffset, XSevenZip::XHEADER *pHeader)
         pHeader->bIsValid=true;
 
         nCurrent+=getPackInfo(nOffset+nCurrent,&(pHeader->xPackInfo));
+        nCurrent+=getUnpackInfo(nOffset+nCurrent,&(pHeader->xUnpackInfo));
     }
 
     return nCurrent-nOffset;
@@ -347,8 +348,83 @@ qint64 XSevenZip::getPackInfo(qint64 nOffset, XSevenZip::XPACKINFO *pPackInfo)
             {
                 pPackInfo->bIsValid=true;
             }
+
+            nCurrent+=pn.nByteSize;
         }
     }
 
-    return nCurrent-nOffset;
+    return nCurrent;
+}
+
+qint64 XSevenZip::getUnpackInfo(qint64 nOffset, XSevenZip::XUNPACKINFO *pUnpackInfo)
+{
+    qint64 nCurrent=0;
+
+    PACKEDNUMBER pn={};
+    pn=get_packedNumber(nOffset+nCurrent);
+
+    if(pn.nValue==k7zIdUnpackInfo)
+    {
+        nCurrent+=pn.nByteSize;
+        pn=get_packedNumber(nOffset+nCurrent);
+
+        if(pn.nValue==k7zIdFolder)
+        {
+            nCurrent+=pn.nByteSize;
+            pn=get_packedNumber(nOffset+nCurrent);
+
+            quint64 nFolderCount=pn.nValue;
+            nCurrent+=pn.nByteSize;
+
+            pn=get_packedNumber(nOffset+nCurrent);
+
+            if(pn.nValue==0) // Extra
+            {
+                nCurrent+=pn.nByteSize;
+
+                // TODO Check!
+                for(int i=0;i<nFolderCount;i++)
+                {
+                    pn=get_packedNumber(nOffset+nCurrent);
+
+                    quint64 nCodersCount=pn.nValue;
+                    nCurrent+=pn.nByteSize;
+
+                    for(int j=0;j<nCodersCount;j++)
+                    {
+                        // TODO read coder function
+                        pn=get_packedNumber(nOffset+nCurrent);
+                        nCurrent+=pn.nByteSize;
+                    }
+                }
+
+                pn=get_packedNumber(nOffset+nCurrent);
+
+                if(pn.nValue==k7zIdCodersUnpackSize)
+                {
+                    nCurrent+=pn.nByteSize;
+
+                    for(int i=0;i<nFolderCount;i++)
+                    {
+                        pn=get_packedNumber(nOffset+nCurrent);
+
+                        pUnpackInfo->listCoderSizes.append(pn.nValue);
+                        nCurrent+=pn.nByteSize;
+                    }
+                }
+
+                pn=get_packedNumber(nOffset+nCurrent);
+
+                if(pn.nValue==k7zIdEnd)
+                {
+                    pUnpackInfo->bIsValid=true;
+                }
+
+                nCurrent+=pn.nByteSize;
+            }
+        }
+
+    }
+
+    return nCurrent;
 }
