@@ -108,6 +108,10 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 
         if(isOffsetAndSizeValid(&memoryMap,nCurrentOffset,signatureHeader.NextHeaderSize)) // TODO Handle errors!
         {
+            XHEADER header={};
+
+            getEncodedHeader(nCurrentOffset,&header);
+
             quint64 nCurrentSize=0;
 
             qint64 nDataOffset=0;
@@ -308,9 +312,43 @@ qint64 XSevenZip::getEncodedHeader(qint64 nOffset, XSevenZip::XHEADER *pHeader)
 
 qint64 XSevenZip::getPackInfo(qint64 nOffset, XSevenZip::XPACKINFO *pPackInfo)
 {
-    qint64 nResult=0;
+    qint64 nCurrent=0;
 
-    PACKEDNUMBER pn=get_packedNumber(nOffset);
+    PACKEDNUMBER pn={};
+    pn=get_packedNumber(nOffset+nCurrent);
 
-    return nResult;
+    if(pn.nValue==k7zIdPackInfo)
+    {
+        nCurrent+=pn.nByteSize;
+        pn=get_packedNumber(nOffset+nCurrent);
+        pPackInfo->nDataOffset=pn.nValue;
+        nCurrent+=pn.nByteSize;
+        pn=get_packedNumber(nOffset+nCurrent);
+
+        quint64 nSize=pn.nValue;
+        nCurrent+=pn.nByteSize;
+
+        pn=get_packedNumber(nOffset+nCurrent);
+
+        if(pn.nValue==k7zIdSize)
+        {
+            nCurrent+=pn.nByteSize;
+
+            for(int i=0;i<nSize;i++)
+            {
+                pn=get_packedNumber(nOffset+nCurrent);
+
+                pPackInfo->listSizes.append(pn.nValue);
+                nCurrent+=pn.nByteSize;
+            }
+            pn=get_packedNumber(nOffset+nCurrent);
+
+            if(pn.nValue==k7zIdEnd)
+            {
+                pPackInfo->bIsValid=true;
+            }
+        }
+    }
+
+    return nCurrent-nOffset;
 }
