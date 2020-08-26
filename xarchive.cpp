@@ -685,7 +685,12 @@ QSet<XArchive::AT> XArchive::getArchiveTypes()
 {
     QSet<XArchive::AT> stResult;
 
-    // TODO
+    _MEMORY_MAP memoryMap=getMemoryMap();
+
+    if(compareSignature(&memoryMap,"'PK'0304",0)||compareSignature(&memoryMap,"'PK'0506",0))
+    {
+        stResult.insert(AT_ZIP);
+    }
 
     return stResult;
 }
