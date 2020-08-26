@@ -101,6 +101,8 @@ public:
     QSet<AT> getArchiveTypes();
     static QSet<AT> getArchiveTypes(QIODevice *pDevice); // mb TODO isImage
     static QSet<AT> getArchiveTypes(QString sFileName);
+
+    static QString archiveTypeIdToString(AT archiveType);
 };
 
 #endif // XARCHIVE_H

@@ -733,3 +733,16 @@ QSet<XArchive::AT> XArchive::getArchiveTypes(QString sFileName)
 
     return result;
 }
+
+QString XArchive::archiveTypeIdToString(XArchive::AT archiveType)
+{
+    QString sResult="Unknown"; // mb TODO translate
+
+    switch(archiveType)
+    {
+        case AT_UNKNOWN:            sResult=QString("Unknown");     break; // mb TODO translate
+        case AT_ZIP:                sResult=QString("ZIP");         break;
+    }
+
+    return sResult;
+}
