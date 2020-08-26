@@ -680,3 +680,12 @@ bool XArchive::isArchiveRecordPresent(QString sFileName, QList<XArchive::RECORD>
 {
     return (!getArchiveRecord(sFileName,pListArchive).sFileName.isEmpty());
 }
+
+QSet<XArchive::AT> XArchive::getArchiveTypes()
+{
+    QSet<XArchive::AT> stResult;
+
+    // TODO
+
+    return stResult;
+}

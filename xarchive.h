@@ -97,6 +97,8 @@ public:
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
     static RECORD getArchiveRecord(QString sFileName,QList<RECORD> *pListArchive);
     static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
+
+    QSet<AT> getArchiveTypes();
 };
 
 #endif // XARCHIVE_H
