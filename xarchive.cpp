@@ -50,6 +50,18 @@ XArchive::XArchive(QIODevice *pDevice): XBinary(pDevice)
 
 }
 
+quint64 XArchive::getNumberOfRecords()
+{
+    return 0;
+}
+
+QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit)
+{
+    QList<XArchive::RECORD> listResult;
+
+    return listResult;
+}
+
 XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice)
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
@@ -694,4 +706,30 @@ QSet<XArchive::AT> XArchive::getArchiveTypes()
     }
 
     return stResult;
+}
+
+QSet<XArchive::AT> XArchive::getArchiveTypes(QIODevice *pDevice)
+{
+    XArchive _xarchive(pDevice);
+
+    return _xarchive.getArchiveTypes();
+}
+
+QSet<XArchive::AT> XArchive::getArchiveTypes(QString sFileName)
+{
+    QSet<XArchive::AT> result;
+
+    QFile file;
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        XArchive _xarchive(&file);
+
+        result=_xarchive.getArchiveTypes();
+
+        file.close();
+    }
+
+    return result;
 }

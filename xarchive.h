@@ -83,8 +83,8 @@ public:
     };
 
     explicit XArchive(QIODevice *pDevice=nullptr);
-    virtual quint64 getNumberOfRecords()=0;
-    virtual QList<RECORD> getRecords(qint32 nLimit=-1)=0;
+    virtual quint64 getNumberOfRecords();
+    virtual QList<RECORD> getRecords(qint32 nLimit=-1);
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice);
     static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);
     static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,int nLevel,int nMethod,int nWindowsBits,int nMemLevel,int nStrategy);
@@ -99,6 +99,8 @@ public:
     static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
 
     QSet<AT> getArchiveTypes();
+    static QSet<AT> getArchiveTypes(QIODevice *pDevice); // mb TODO isImage
+    static QSet<AT> getArchiveTypes(QString sFileName);
 };
 
 #endif // XARCHIVE_H
