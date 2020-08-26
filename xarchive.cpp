@@ -742,6 +742,9 @@ QString XArchive::archiveTypeIdToString(XArchive::AT archiveType)
     {
         case AT_UNKNOWN:            sResult=QString("Unknown");     break; // mb TODO translate
         case AT_ZIP:                sResult=QString("ZIP");         break;
+        case AT_CAB:                sResult=QString("CAB");         break;
+        case AT_RAR:                sResult=QString("RAR");         break;
+        case AT_7Z:                 sResult=QString("7Z");          break;
     }
 
     return sResult;
