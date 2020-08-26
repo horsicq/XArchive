@@ -690,6 +690,7 @@ QSet<XArchive::AT> XArchive::getArchiveTypes()
     if(compareSignature(&memoryMap,"'PK'0304",0)||compareSignature(&memoryMap,"'PK'0506",0))
     {
         stResult.insert(AT_ZIP);
+        // TODO Check APK, JAR
     }
 
     return stResult;
