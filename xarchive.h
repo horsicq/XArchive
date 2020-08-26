@@ -82,10 +82,13 @@ public:
         // TODO more
     };
 
+    static const int COMPRESS_BUFFERSIZE=16384;
+    static const int DECOMPRESS_BUFFERSIZE=16384;
+
     explicit XArchive(QIODevice *pDevice=nullptr);
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
-    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice);
+    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false);
     static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);
     static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,int nLevel,int nMethod,int nWindowsBits,int nMemLevel,int nStrategy);
     QByteArray decompress(const RECORD *pRecord);
@@ -103,6 +106,8 @@ public:
     static QSet<AT> getArchiveTypes(QString sFileName);
 
     static QString archiveTypeIdToString(AT archiveType);
+    static quint32 getCompressBufferSize();
+    static quint32 getDecompressBufferSize();
 };
 
 #endif // XARCHIVE_H

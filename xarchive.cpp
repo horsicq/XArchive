@@ -62,13 +62,13 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit)
     return listResult;
 }
 
-XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice)
+XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly)
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
     if(compressMethod==COMPRESS_METHOD_STORE)
     {
-        const int CHUNK=4096; // TODO const
+        const int CHUNK=DECOMPRESS_BUFFERSIZE;
         char buffer[CHUNK];
         qint64 nSize=pSourceDevice->size();
 
@@ -87,6 +87,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             if(pDestDevice->write(buffer,nTemp)!=nTemp)
             {
                 result=COMPRESS_RESULT_WRITEERROR;
+                break;
+            }
+
+            if(bHeaderOnly) // Only the first bytes
+            {
                 break;
             }
 
@@ -125,7 +130,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     }
     else if(compressMethod==COMPRESS_METHOD_DEFLATE)
     {
-        const int CHUNK=16384; // TODO const
+        const int CHUNK=DECOMPRESS_BUFFERSIZE;
 
         unsigned char in[CHUNK];
         unsigned char out[CHUNK];
@@ -139,6 +144,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         strm.next_in=nullptr;
 
         int ret=Z_OK;
+        result=COMPRESS_RESULT_OK;
 
         if(inflateInit2(&strm,-MAX_WBITS)==Z_OK) // -MAX_WBITS for raw data
         {
@@ -172,6 +178,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                     if(pDestDevice->write((char *)out,nTemp)!=nTemp)
                     {
                         ret=Z_ERRNO;
+                        break;
+                    }
+
+                    if(bHeaderOnly) // Only the first bytes
+                    {
                         break;
                     }
                 }
@@ -210,13 +221,14 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     }
     else if(compressMethod==COMPRESS_METHOD_BZIP2)
     {
-        const int CHUNK=16384; // TODO const
+        const int CHUNK=DECOMPRESS_BUFFERSIZE;
 
         char in[CHUNK];
         char out[CHUNK];
 
         bz_stream strm={0};
         int ret=BZ_MEM_ERROR;
+        result=COMPRESS_RESULT_OK;
 
         int rc=BZ2_bzDecompressInit(&strm,0,0);
 
@@ -252,6 +264,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                         ret=BZ_MEM_ERROR;
                         break;
                     }
+
+                    if(bHeaderOnly) // Only the first bytes
+                    {
+                        break;
+                    }
                 }
                 while(strm.avail_out==0);
 
@@ -281,6 +298,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     }
     else if(compressMethod==COMPRESS_METHOD_LZMA_ZIP)
     {
+        result=COMPRESS_RESULT_OK;
+
         // TODO more error codes
         int nPropSize=0;
         char header1[4]={0};
@@ -306,7 +325,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 {
                     LzmaDec_Init(&state);
 
-                    const int CHUNK=16384; // TODO const
+                    const int CHUNK=DECOMPRESS_BUFFERSIZE;
 
                     char in[CHUNK];
                     char out[CHUNK];
@@ -340,6 +359,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                                     break;
                                 }
 
+                                if(bHeaderOnly) // Only the first bytes
+                                {
+                                    break;
+                                }
+
                                 if(status!=LZMA_STATUS_NOT_FINISHED)
                                 {
                                     if(status==LZMA_STATUS_FINISHED_WITH_MARK)
@@ -356,6 +380,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                         {
                             result=COMPRESS_RESULT_READERROR;
                             bRun=false;
+                        }
+
+                        if(bHeaderOnly) // Only the first bytes
+                        {
+                            break;
                         }
                     }
                 }
@@ -374,7 +403,7 @@ XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressM
 
     if(compressMethod==COMPRESS_METHOD_STORE)
     {
-        const int CHUNK=4096; // TODO const
+        const int CHUNK=COMPRESS_BUFFERSIZE;
         char buffer[CHUNK];
         qint64 nSize=pSourceDevice->size();
 
@@ -411,7 +440,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
-    const int CHUNK=16384; // TODO const
+    const int CHUNK=COMPRESS_BUFFERSIZE;
 
     unsigned char in[CHUNK];
     unsigned char out[CHUNK];
@@ -748,4 +777,14 @@ QString XArchive::archiveTypeIdToString(XArchive::AT archiveType)
     }
 
     return sResult;
+}
+
+quint32 XArchive::getCompressBufferSize()
+{
+    return COMPRESS_BUFFERSIZE;
+}
+
+quint32 XArchive::getDecompressBufferSize()
+{
+    return DECOMPRESS_BUFFERSIZE;
 }

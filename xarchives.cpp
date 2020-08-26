@@ -25,10 +25,36 @@ XArchives::XArchives(QObject *parent) : QObject(parent)
 
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(qint32 nLimit)
+QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
 
+    QSet<XArchive::AT> stAT=XArchive::getArchiveTypes(pDevice);
+
+    if(stAT.contains(XArchive::AT_ZIP))
+    {
+        XZip xzip(pDevice);
+
+        listResult=xzip.getRecords(nLimit);
+    }
+
+    return listResult;
+}
+
+QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit)
+{
+    QList<XArchive::RECORD> listResult;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        listResult=getRecords(&file,nLimit);
+
+        file.close();
+    }
 
     return listResult;
 }
