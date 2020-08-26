@@ -39,7 +39,10 @@ public:
     enum AT
     {
         AT_UNKNOWN=0,
-        AT_ZIP
+        AT_ZIP,
+        AT_CAB,
+        AT_RAR,
+        AT_7Z
         // TODO more
     };
 
