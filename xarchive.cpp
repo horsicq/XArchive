@@ -611,9 +611,9 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
 
     XBinary::createDirectory(fi.absolutePath());
 
-    int nCount=pListArchive->count();
+    int nNumberOfArchives=pListArchive->count();
 
-    for(int i=0;i<nCount;i++)
+    for(int i=0;i<nNumberOfArchives;i++)
     {
         XArchive::RECORD record=pListArchive->at(i);
 
@@ -703,9 +703,9 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sFileName, QList<XArchive::R
 {
     RECORD result={};
 
-    int nCount=pListArchive->count();
+    int nNumberOfArchives=pListArchive->count();
 
-    for(int i=0;i<nCount;i++)
+    for(int i=0;i<nNumberOfArchives;i++)
     {
         if(pListArchive->at(i).sFileName==sFileName)
         {
