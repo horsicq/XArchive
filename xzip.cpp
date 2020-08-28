@@ -259,9 +259,9 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
 {
     qint64 nStartPosition=pDest->pos();
 
-    int nZipFilesCount=pListZipFileRecords->count();
+    int nNumberOfRecords=pListZipFileRecords->count();
 
-    for(int i=0;i<nZipFilesCount;i++)
+    for(int i=0;i<nNumberOfRecords;i++)
     {
         XZip::CENTRALDIRECTORYFILEHEADER cdFileHeader={};
 
@@ -294,8 +294,8 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
     endofCD.nSignature=SIGNATURE_ECD;
     endofCD.nDiskNumber=0;
     endofCD.nStartDisk=0;
-    endofCD.nDiskNumberOfRecords=nZipFilesCount;
-    endofCD.nTotalNumberOfRecords=nZipFilesCount;
+    endofCD.nDiskNumberOfRecords=nNumberOfRecords;
+    endofCD.nTotalNumberOfRecords=nNumberOfRecords;
     endofCD.nSizeOfCentralDirectory=nCentralDirectorySize;
     endofCD.nOffsetToCentralDirectory=nStartPosition;
     endofCD.nCommentLength=sComment.size();
