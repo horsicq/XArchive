@@ -387,10 +387,10 @@ qint64 XSevenZip::getUnpackInfo(qint64 nOffset, XSevenZip::XUNPACKINFO *pUnpackI
                 {
                     pn=get_packedNumber(nOffset+nCurrent);
 
-                    quint64 nCodersCount=pn.nValue;
+                    quint64 nNumberOfCoders=pn.nValue;
                     nCurrent+=pn.nByteSize;
 
-                    for(int j=0;j<nCodersCount;j++)
+                    for(int j=0;j<nNumberOfCoders;j++)
                     {
                         // TODO read coder function
                         pn=get_packedNumber(nOffset+nCurrent);
