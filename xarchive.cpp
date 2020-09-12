@@ -733,6 +733,7 @@ QSet<XArchive::AT> XArchive::getArchiveTypes()
         stResult.insert(AT_ZIP);
         // TODO Check APK, JAR
     }
+    // TODO more
 
     return stResult;
 }
