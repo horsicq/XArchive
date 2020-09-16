@@ -91,7 +91,7 @@ public:
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false);
     static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);
     static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,int nLevel,int nMethod,int nWindowsBits,int nMemLevel,int nStrategy);
-    QByteArray decompress(const RECORD *pRecord);
+    QByteArray decompress(const RECORD *pRecord, bool bHeaderOnly=false);
     bool decompressToFile(const RECORD *pRecord,QString sResultFileName);
     bool decompressToFile(QList<RECORD> *pListArchive,QString sFileName,QString sResultFileName);
     bool decompressToPath(QList<RECORD> *pListArchive,QString sPathName,QString sResultPathName);

@@ -534,7 +534,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
     return result;
 }
 
-QByteArray XArchive::decompress(const XArchive::RECORD *pRecord)
+QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, bool bHeaderOnly)
 {
     QByteArray result;
 
@@ -546,7 +546,7 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord)
         buffer.setBuffer(&result);
         buffer.open(QIODevice::WriteOnly);
 
-        decompress(pRecord->compressMethod,&sd,&buffer);
+        decompress(pRecord->compressMethod,&sd,&buffer,bHeaderOnly);
 
         buffer.close();
 
