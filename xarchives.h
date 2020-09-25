@@ -31,6 +31,8 @@ public:
     explicit XArchives(QObject *parent=nullptr);
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice,qint32 nLimit=-1);
     static QList<XArchive::RECORD> getRecords(QString sFileName,qint32 nLimit=-1);
+    static QByteArray decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
+    static QByteArray decompress(QString sFileName,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
 };
 
 #endif // XARCHIVES_H

@@ -58,3 +58,37 @@ QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit)
 
     return listResult;
 }
+
+QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly)
+{
+    QByteArray baResult;
+
+    QSet<XArchive::AT> stAT=XArchive::getArchiveTypes(pDevice);
+
+    if(stAT.contains(XArchive::AT_ZIP))
+    {
+        XZip xzip(pDevice);
+
+        baResult=xzip.decompress(pRecord,bHeaderOnly);
+    }
+
+    return baResult;
+}
+
+QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly)
+{
+    QByteArray baResult;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        baResult=decompress(&file,pRecord,bHeaderOnly);
+
+        file.close();
+    }
+
+    return baResult;
+}
