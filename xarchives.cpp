@@ -92,3 +92,37 @@ QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, b
 
     return baResult;
 }
+
+bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName)
+{
+    bool bResult=false;
+
+    QSet<XArchive::AT> stAT=XArchive::getArchiveTypes(pDevice);
+
+    if(stAT.contains(XArchive::AT_ZIP))
+    {
+        XZip xzip(pDevice);
+
+        bResult=xzip.decompressToFile(pRecord,sResultFileName);
+    }
+
+    return bResult;
+}
+
+bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName)
+{
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        bResult=decompressToFile(&file,pRecord,sResultFileName);
+
+        file.close();
+    }
+
+    return bResult;
+}

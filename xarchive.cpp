@@ -57,13 +57,22 @@ quint64 XArchive::getNumberOfRecords()
 
 QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit)
 {
+    Q_UNUSED(nLimit)
+
     QList<XArchive::RECORD> listResult;
 
     return listResult;
 }
 
-XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly)
+XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly,bool *pbIsStop)
 {
+    bool _bIsStop=false;
+
+    if(pbIsStop==nullptr)
+    {
+        pbIsStop=&_bIsStop;
+    }
+
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
     if(compressMethod==COMPRESS_METHOD_STORE)
@@ -91,6 +100,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             }
 
             if(bHeaderOnly) // Only the first bytes
+            {
+                break;
+            }
+
+            if(*pbIsStop)
             {
                 break;
             }
@@ -192,6 +206,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 {
                     break;
                 }
+
+                if(*pbIsStop)
+                {
+                    break;
+                }
             }
             while(ret!=Z_STREAM_END);
 
@@ -273,6 +292,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 while(strm.avail_out==0);
 
                 if(ret!=BZ_OK)
+                {
+                    break;
+                }
+
+                if(*pbIsStop)
                 {
                     break;
                 }
@@ -384,7 +408,12 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
                         if(bHeaderOnly) // Only the first bytes
                         {
-                            break;
+                            bRun=false;
+                        }
+
+                        if(*pbIsStop)
+                        {
+                            bRun=false;
                         }
                     }
                 }
@@ -589,11 +618,11 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResult
     return bResult;
 }
 
-bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString sFileName, QString sResultFileName)
+bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, QString sResultFileName)
 {
     bool bResult=false;
 
-    XArchive::RECORD record=getArchiveRecord(sFileName,pListArchive);
+    XArchive::RECORD record=getArchiveRecord(sRecordFileName,pListArchive);
 
     if(record.sFileName!="") // TODO bIsValid
     {
@@ -603,7 +632,7 @@ bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString s
     return bResult;
 }
 
-bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString sPathName, QString sResultPathName)
+bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, QString sResultPathName)
 {
     bool bResult=true;
 
@@ -617,10 +646,10 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
     {
         XArchive::RECORD record=pListArchive->at(i);
 
-        if(record.sFileName.contains(QRegExp(QString("^%1").arg(sPathName)))||(sPathName=="/")||(sPathName==""))
+        if(record.sFileName.contains(QRegExp(QString("^%1").arg(sRecordFileName)))||(sRecordFileName=="/")||(sRecordFileName==""))
         {
             QString sFileName=record.sFileName;
-            sFileName.remove(QRegExp(QString("^%1").arg(sPathName)));
+            sFileName.remove(QRegExp(QString("^%1").arg(sRecordFileName)));
 
             QString sResultFileName=sResultPathName+QDir::separator()+sFileName;
 
@@ -640,7 +669,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
     return bResult;
 }
 
-bool XArchive::decompressToFile(QString sArchiveFileName, QString sFileName, QString sResultFileName)
+bool XArchive::decompressToFile(QString sArchiveFileName, QString sRecordFileName, QString sResultFileName)
 {
     bool bResult=false;
 
@@ -658,7 +687,7 @@ bool XArchive::decompressToFile(QString sArchiveFileName, QString sFileName, QSt
 
             QList<RECORD> listRecords=getRecords();
 
-            bResult=decompressToFile(&listRecords,sFileName,sResultFileName);
+            bResult=decompressToFile(&listRecords,sRecordFileName,sResultFileName);
         }
 
         file.close();
@@ -667,7 +696,7 @@ bool XArchive::decompressToFile(QString sArchiveFileName, QString sFileName, QSt
     return bResult;
 }
 
-bool XArchive::decompressToPath(QString sArchiveFileName, QString sPathName, QString sResultPathName)
+bool XArchive::decompressToPath(QString sArchiveFileName, QString sRecordPathName, QString sResultPathName)
 {
     bool bResult=false;
 
@@ -685,7 +714,7 @@ bool XArchive::decompressToPath(QString sArchiveFileName, QString sPathName, QSt
 
             QList<RECORD> listRecords=getRecords();
 
-            bResult=decompressToPath(&listRecords,sPathName,sResultPathName);
+            bResult=decompressToPath(&listRecords,sRecordPathName,sResultPathName);
         }
 
         file.close();
@@ -699,7 +728,7 @@ bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName)
     return XBinary::dumpToFile(sFileName,pRecord->nDataOffset,pRecord->nCompressedSize);
 }
 
-XArchive::RECORD XArchive::getArchiveRecord(QString sFileName, QList<XArchive::RECORD> *pListArchive)
+XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArchive::RECORD> *pListArchive)
 {
     RECORD result={};
 
@@ -707,7 +736,7 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sFileName, QList<XArchive::R
 
     for(int i=0;i<nNumberOfArchives;i++)
     {
-        if(pListArchive->at(i).sFileName==sFileName)
+        if(pListArchive->at(i).sFileName==sRecordFileName)
         {
             result=pListArchive->at(i);
             break;
@@ -717,9 +746,9 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sFileName, QList<XArchive::R
     return result;
 }
 
-bool XArchive::isArchiveRecordPresent(QString sFileName, QList<XArchive::RECORD> *pListArchive)
+bool XArchive::isArchiveRecordPresent(QString sRecordFileName, QList<XArchive::RECORD> *pListArchive)
 {
-    return (!getArchiveRecord(sFileName,pListArchive).sFileName.isEmpty());
+    return (!getArchiveRecord(sRecordFileName,pListArchive).sFileName.isEmpty());
 }
 
 QSet<XArchive::AT> XArchive::getArchiveTypes()

@@ -33,6 +33,8 @@ public:
     static QList<XArchive::RECORD> getRecords(QString sFileName,qint32 nLimit=-1);
     static QByteArray decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
     static QByteArray decompress(QString sFileName,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
+    static bool decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QString sResultFileName);
+    static bool decompressToFile(QString sFileName,XArchive::RECORD *pRecord,QString sResultFileName);
 };
 
 #endif // XARCHIVES_H

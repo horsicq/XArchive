@@ -88,18 +88,18 @@ public:
     explicit XArchive(QIODevice *pDevice=nullptr);
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
-    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false);
+    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false,bool *pbIsStop=nullptr);
     static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);
     static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,int nLevel,int nMethod,int nWindowsBits,int nMemLevel,int nStrategy);
     QByteArray decompress(const RECORD *pRecord, bool bHeaderOnly=false);
     bool decompressToFile(const RECORD *pRecord,QString sResultFileName);
-    bool decompressToFile(QList<RECORD> *pListArchive,QString sFileName,QString sResultFileName);
-    bool decompressToPath(QList<RECORD> *pListArchive,QString sPathName,QString sResultPathName);
-    bool decompressToFile(QString sArchiveFileName,QString sFileName,QString sResultFileName);
-    bool decompressToPath(QString sArchiveFileName,QString sPathName,QString sResultPathName);
+    bool decompressToFile(QList<RECORD> *pListArchive,QString sRecordFileName,QString sResultFileName);
+    bool decompressToPath(QList<RECORD> *pListArchive,QString sRecordFileName,QString sResultPathName);
+    bool decompressToFile(QString sArchiveFileName,QString sRecordFileName,QString sResultFileName);
+    bool decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName);
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
-    static RECORD getArchiveRecord(QString sFileName,QList<RECORD> *pListArchive);
-    static bool isArchiveRecordPresent(QString sFileName,QList<RECORD> *pListArchive);
+    static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListArchive);
+    static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListArchive);
 
     QSet<AT> getArchiveTypes();
     static QSet<AT> getArchiveTypes(QIODevice *pDevice); // mb TODO isImage
