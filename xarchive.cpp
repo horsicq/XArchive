@@ -746,9 +746,9 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArch
     return result;
 }
 
-bool XArchive::isArchiveRecordPresent(QString sRecordFileName, QList<XArchive::RECORD> *pListArchive)
+bool XArchive::isArchiveRecordPresent(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords)
 {
-    return (!getArchiveRecord(sRecordFileName,pListArchive).sFileName.isEmpty());
+    return (!getArchiveRecord(sRecordFileName,pListRecords).sFileName.isEmpty());
 }
 
 QSet<XArchive::AT> XArchive::getArchiveTypes()

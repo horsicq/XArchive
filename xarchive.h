@@ -99,7 +99,7 @@ public:
     bool decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName);
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
     static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListRecords);
-    static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListArchive);
+    static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListRecords);
 
     QSet<AT> getArchiveTypes();
     static QSet<AT> getArchiveTypes(QIODevice *pDevice); // mb TODO isImage
