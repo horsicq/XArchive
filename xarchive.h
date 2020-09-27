@@ -98,7 +98,7 @@ public:
     bool decompressToFile(QString sArchiveFileName,QString sRecordFileName,QString sResultFileName);
     bool decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName);
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
-    static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListArchive);
+    static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListRecords);
     static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListArchive);
 
     QSet<AT> getArchiveTypes();

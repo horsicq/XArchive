@@ -728,17 +728,17 @@ bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName)
     return XBinary::dumpToFile(sFileName,pRecord->nDataOffset,pRecord->nCompressedSize);
 }
 
-XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArchive::RECORD> *pListArchive)
+XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords)
 {
     RECORD result={};
 
-    int nNumberOfArchives=pListArchive->count();
+    int nNumberOfArchives=pListRecords->count();
 
     for(int i=0;i<nNumberOfArchives;i++)
     {
-        if(pListArchive->at(i).sFileName==sRecordFileName)
+        if(pListRecords->at(i).sFileName==sRecordFileName)
         {
-            result=pListArchive->at(i);
+            result=pListRecords->at(i);
             break;
         }
     }
