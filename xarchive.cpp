@@ -585,7 +585,7 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, bool bHeaderOnl
     return result;
 }
 
-bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResultFileName)
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResultFileName,bool *pbIsStop)
 {
     bool bResult=false;
 
@@ -606,7 +606,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResult
             {
                 file.resize(0);
 
-                bResult=(decompress(pRecord->compressMethod,&sd,&file)==COMPRESS_RESULT_OK);
+                bResult=(decompress(pRecord->compressMethod,&sd,&file,false,pbIsStop)==COMPRESS_RESULT_OK);
 
                 sd.close();
             }

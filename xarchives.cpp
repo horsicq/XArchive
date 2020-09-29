@@ -93,7 +93,7 @@ QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, b
     return baResult;
 }
 
-bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName)
+bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, bool *pbIsStop)
 {
     bool bResult=false;
 
@@ -103,13 +103,13 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     {
         XZip xzip(pDevice);
 
-        bResult=xzip.decompressToFile(pRecord,sResultFileName);
+        bResult=xzip.decompressToFile(pRecord,sResultFileName,pbIsStop);
     }
 
     return bResult;
 }
 
-bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName)
+bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName, bool *pbIsStop)
 {
     bool bResult=false;
 
@@ -119,7 +119,7 @@ bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, Q
 
     if(file.open(QIODevice::ReadOnly))
     {
-        bResult=decompressToFile(&file,pRecord,sResultFileName);
+        bResult=decompressToFile(&file,pRecord,sResultFileName,pbIsStop);
 
         file.close();
     }
