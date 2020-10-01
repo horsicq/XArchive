@@ -63,9 +63,9 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 {
     QByteArray baResult;
 
-    QSet<XBinary::FT> stFT=XBinary::getFileTypes(pDevice,true);
+    QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
 
-    if(stFT.contains(XArchive::FT_ZIP))
+    if(stFileTypes.contains(XArchive::FT_ZIP))
     {
         XZip xzip(pDevice);
 
