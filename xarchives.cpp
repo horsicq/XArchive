@@ -29,9 +29,9 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
 
-    QSet<XArchive::AT> stAT=XArchive::getArchiveTypes(pDevice);
+    QSet<XBinary::FT> stFT=XBinary::getFileTypes(pDevice,true);
 
-    if(stAT.contains(XArchive::AT_ZIP))
+    if(stFT.contains(XArchive::FT_ZIP))
     {
         XZip xzip(pDevice);
 
@@ -63,9 +63,9 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 {
     QByteArray baResult;
 
-    QSet<XArchive::AT> stAT=XArchive::getArchiveTypes(pDevice);
+    QSet<XBinary::FT> stFT=XBinary::getFileTypes(pDevice,true);
 
-    if(stAT.contains(XArchive::AT_ZIP))
+    if(stFT.contains(XArchive::FT_ZIP))
     {
         XZip xzip(pDevice);
 
@@ -97,9 +97,9 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 {
     bool bResult=false;
 
-    QSet<XArchive::AT> stAT=XArchive::getArchiveTypes(pDevice);
+    QSet<XBinary::FT> stFT=XBinary::getFileTypes(pDevice,true);
 
-    if(stAT.contains(XArchive::AT_ZIP))
+    if(stFT.contains(XArchive::FT_ZIP))
     {
         XZip xzip(pDevice);
 

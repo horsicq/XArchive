@@ -36,16 +36,6 @@ class XArchive : public XBinary
 
 public:
 
-    enum AT
-    {
-        AT_UNKNOWN=0,
-        AT_ZIP,
-        AT_CAB,
-        AT_RAR,
-        AT_7Z
-        // TODO more
-    };
-
     enum COMPRESS_METHOD
     {
         COMPRESS_METHOD_UNKNOWN=0,
@@ -101,11 +91,6 @@ public:
     static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListRecords);
     static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListRecords);
 
-    QSet<AT> getArchiveTypes();
-    static QSet<AT> getArchiveTypes(QIODevice *pDevice); // mb TODO isImage
-    static QSet<AT> getArchiveTypes(QString sFileName);
-
-    static QString archiveTypeIdToString(AT archiveType);
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();
 };

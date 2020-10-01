@@ -751,64 +751,6 @@ bool XArchive::isArchiveRecordPresent(QString sRecordFileName, QList<XArchive::R
     return (!getArchiveRecord(sRecordFileName,pListRecords).sFileName.isEmpty());
 }
 
-QSet<XArchive::AT> XArchive::getArchiveTypes()
-{
-    QSet<XArchive::AT> stResult;
-
-    _MEMORY_MAP memoryMap=getMemoryMap();
-
-    if(compareSignature(&memoryMap,"'PK'0304",0)||compareSignature(&memoryMap,"'PK'0506",0))
-    {
-        stResult.insert(AT_ZIP);
-        // TODO Check APK, JAR
-    }
-    // TODO more
-
-    return stResult;
-}
-
-QSet<XArchive::AT> XArchive::getArchiveTypes(QIODevice *pDevice)
-{
-    XArchive _xarchive(pDevice);
-
-    return _xarchive.getArchiveTypes();
-}
-
-QSet<XArchive::AT> XArchive::getArchiveTypes(QString sFileName)
-{
-    QSet<XArchive::AT> result;
-
-    QFile file;
-    file.setFileName(sFileName);
-
-    if(file.open(QIODevice::ReadOnly))
-    {
-        XArchive _xarchive(&file);
-
-        result=_xarchive.getArchiveTypes();
-
-        file.close();
-    }
-
-    return result;
-}
-
-QString XArchive::archiveTypeIdToString(XArchive::AT archiveType)
-{
-    QString sResult="Unknown"; // mb TODO translate
-
-    switch(archiveType)
-    {
-        case AT_UNKNOWN:            sResult=QString("Unknown");     break; // mb TODO translate
-        case AT_ZIP:                sResult=QString("ZIP");         break;
-        case AT_CAB:                sResult=QString("CAB");         break;
-        case AT_RAR:                sResult=QString("RAR");         break;
-        case AT_7Z:                 sResult=QString("7Z");          break;
-    }
-
-    return sResult;
-}
-
 quint32 XArchive::getCompressBufferSize()
 {
     return COMPRESS_BUFFERSIZE;
