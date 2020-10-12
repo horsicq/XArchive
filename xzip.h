@@ -32,8 +32,8 @@ public:
     enum SIGNATURE
     {
         SIGNATURE_ECD=0x06054B50,
-        SIGNATURE_CFD=0x02014b50,
-        SIGNATURE_LFD=0x04034b50
+        SIGNATURE_CFD=0X02014B50,
+        SIGNATURE_LFD=0X04034B50
     };
 
 //    0 - The file is stored (no compression)
