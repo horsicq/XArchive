@@ -585,6 +585,30 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, bool bHeaderOnl
     return result;
 }
 
+QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName)
+{
+    QByteArray baResult;
+
+    XArchive::RECORD record=XArchive::getArchiveRecord(sRecordFileName,pListArchive);
+
+    if(!record.sFileName.isEmpty())
+    {
+        if(record.nUncompressedSize)
+        {
+            baResult=decompress(&record);
+        }
+    }
+
+    return baResult;
+}
+
+QByteArray XArchive::decompress(QString sRecordFileName)
+{
+    QList<XArchive::RECORD> listArchive=getRecords();
+
+    return decompress(&listArchive,sRecordFileName);
+}
+
 bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResultFileName,bool *pbIsStop)
 {
     bool bResult=false;
