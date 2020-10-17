@@ -79,9 +79,9 @@ public:
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false,bool *pbIsStop=nullptr);
-    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);
+    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice);
     static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,int nLevel,int nMethod,int nWindowsBits,int nMemLevel,int nStrategy);
-    QByteArray decompress(const RECORD *pRecord, bool bHeaderOnly=false);
+    QByteArray decompress(const RECORD *pRecord,bool bHeaderOnly=false);
     QByteArray decompress(QList<RECORD> *pListArchive,QString sRecordFileName);
     QByteArray decompress(QString sRecordFileName);
     bool decompressToFile(const RECORD *pRecord,QString sResultFileName,bool *pbIsStop=nullptr);
