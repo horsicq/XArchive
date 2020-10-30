@@ -35,6 +35,9 @@ public:
     static QByteArray decompress(QString sFileName,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
     static bool decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QString sResultFileName,bool *pbIsStop=nullptr);
     static bool decompressToFile(QString sFileName,XArchive::RECORD *pRecord,QString sResultFileName,bool *pbIsStop=nullptr);
+    static bool decompressToFile(QString sFileName,QString sRecordFileName,QString sResultFileName,bool *pbIsStop=nullptr);
+    static bool isArchiveRecordPresent(QIODevice *pDevice,QString sRecordFileName);
+    static bool isArchiveRecordPresent(QString sFileName,QString sRecordFileName);
 };
 
 #endif // XARCHIVES_H

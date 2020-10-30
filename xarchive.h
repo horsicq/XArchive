@@ -91,6 +91,7 @@ public:
     bool decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName);
     bool dumpToFile(const RECORD *pRecord,QString sFileName);
     static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListRecords);
+    bool isArchiveRecordPresent(QString sRecordFileName);
     static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListRecords);
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();

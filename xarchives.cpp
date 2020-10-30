@@ -126,3 +126,62 @@ bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, Q
 
     return bResult;
 }
+
+bool XArchives::decompressToFile(QString sFileName, QString sRecordFileName, QString sResultFileName, bool *pbIsStop)
+{
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        QList<XArchive::RECORD> listRecords=getRecords(&file);
+
+        XArchive::RECORD record=XArchive::getArchiveRecord(sRecordFileName,&listRecords);
+
+        if(record.sFileName!="")
+        {
+             bResult=decompressToFile(&file,&record,sResultFileName,pbIsStop);
+        }
+
+        file.close();
+    }
+
+    return bResult;
+}
+
+bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileName)
+{
+    bool bResult=false;
+
+    QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
+
+    if(stFileTypes.contains(XArchive::FT_ZIP))
+    {
+        XZip xzip(pDevice);
+
+        bResult=xzip.isArchiveRecordPresent(sRecordFileName);
+    }
+
+    return bResult;
+}
+
+bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileName)
+{
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        bResult=isArchiveRecordPresent(&file,sRecordFileName);
+
+        file.close();
+    }
+
+    return bResult;
+}
