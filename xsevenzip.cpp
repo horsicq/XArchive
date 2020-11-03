@@ -63,7 +63,7 @@ quint64 XSevenZip::getNumberOfRecords()
 
             while(nCurrentSize<signatureHeader.NextHeaderSize)
             {
-                PACKEDNUMBER pn=get_packedNumber(nCurrentOffset);
+                PACKED pn=get_packedNumber(nCurrentOffset);
 
                 if(pn.nValue==k7zIdPackInfo)
                 {
@@ -118,7 +118,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 
             while(nCurrentSize<signatureHeader.NextHeaderSize)
             {
-                PACKEDNUMBER pn=get_packedNumber(nCurrentOffset);
+                PACKED pn=get_packedNumber(nCurrentOffset);
 
 //                if(pn.nValue==k7zIdPackInfo)
 //                {
@@ -295,7 +295,7 @@ qint64 XSevenZip::getEncodedHeader(qint64 nOffset, XSevenZip::XHEADER *pHeader)
 {
     qint64 nCurrent=0;
 
-    PACKEDNUMBER pn={};
+    PACKED pn={};
 
     pn=get_packedNumber(nOffset+nCurrent);
 
@@ -315,7 +315,7 @@ qint64 XSevenZip::getPackInfo(qint64 nOffset, XSevenZip::XPACKINFO *pPackInfo)
 {
     qint64 nCurrent=0;
 
-    PACKEDNUMBER pn={};
+    PACKED pn={};
     pn=get_packedNumber(nOffset+nCurrent);
 
     if(pn.nValue==k7zIdPackInfo)
@@ -360,7 +360,7 @@ qint64 XSevenZip::getUnpackInfo(qint64 nOffset, XSevenZip::XUNPACKINFO *pUnpackI
 {
     qint64 nCurrent=0;
 
-    PACKEDNUMBER pn={};
+    PACKED pn={};
     pn=get_packedNumber(nOffset+nCurrent);
 
     if(pn.nValue==k7zIdUnpackInfo)
