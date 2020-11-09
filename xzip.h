@@ -58,6 +58,7 @@ public:
 //    19 - IBM LZ77 z Architecture (PFS)
 //    97 - WavPack compressed data
 //    98 - PPMd version I, Rev 1
+//    99 - Apple LZFSE
 
     enum METHOD
     {
