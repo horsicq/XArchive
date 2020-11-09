@@ -67,6 +67,7 @@ public:
         METHOD_BZIP2=12,
         METHOD_LZMA=14,
         METHOD_PPMD=98,
+        METHOD_LZFSE=99, // Apple
     };
 
 #pragma pack(push)
