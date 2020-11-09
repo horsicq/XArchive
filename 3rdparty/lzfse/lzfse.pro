@@ -12,7 +12,7 @@ include(../../build.pri)
 CONFIG(debug, debug|release) {
     TARGET = lzfsed
 } else {
-    TARGET = lzfseb
+    TARGET = lzfse
 }
 
 TARGETLIB_PATH = $$PWD
