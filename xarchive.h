@@ -95,6 +95,8 @@ public:
     static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListRecords);
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();
+
+    virtual _MEMORY_MAP getMemoryMap();
 };
 
 #endif // XARCHIVE_H

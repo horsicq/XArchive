@@ -791,3 +791,41 @@ quint32 XArchive::getDecompressBufferSize()
 {
     return DECOMPRESS_BUFFERSIZE;
 }
+
+XBinary::_MEMORY_MAP XArchive::getMemoryMap()
+{
+    _MEMORY_MAP result={};
+
+    qint64 nTotalSize=getSize();
+
+    result.nBaseAddress=_getBaseAddress();
+    result.nRawSize=nTotalSize;
+    result.nImageSize=nTotalSize;
+    result.fileType=FT_ARCHIVE;
+    result.mode=getMode();
+    result.sArch=getArch();
+    result.bIsBigEndian=isBigEndian();
+    result.sType=getTypeAsString();
+
+    qint32 nIndex=0;
+
+    QList<XArchive::RECORD> listRecords=getRecords();
+
+    int nNumberOfRecords=listRecords.count();
+
+    for(int i=0;i<nNumberOfRecords;i++)
+    {
+        _MEMORY_RECORD record={};
+        record.nAddress=-1;
+        record.segment=ADDRESS_SEGMENT_FLAT;
+        record.nOffset=listRecords.at(i).nDataOffset;
+        record.nSize=listRecords.at(i).nCompressedSize;
+        record.nIndex=nIndex++;
+        record.type=MMT_FILESEGMENT;
+        record.sName=listRecords.at(i).sFileName;
+
+        result.listRecords.append(record);
+    }
+
+    return result;
+}
