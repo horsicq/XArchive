@@ -27,6 +27,7 @@
 class XArchives : public QObject
 {
     Q_OBJECT
+
 public:
     explicit XArchives(QObject *parent=nullptr);
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice,qint32 nLimit=-1);
