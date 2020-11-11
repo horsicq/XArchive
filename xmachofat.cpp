@@ -20,19 +20,43 @@
 //
 #include "xmachofat.h"
 
-XMACHOFat::XMACHOFat(QIODevice *pDevice)
+XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
 {
 
 }
 
 bool XMACHOFat::isValid()
 {
-    return false;
+    bool bResult=false;
+
+    quint32 nMagic=read_uint32(0);
+
+    if( (nMagic==XMACH_DEF::S_FAT_MAGIC)||
+        (nMagic==XMACH_DEF::S_FAT_CIGAM))
+    {
+        bResult=true;
+    }
+
+    return bResult;
+}
+
+bool XMACHOFat::isBigEndian()
+{
+    bool bResult=false;
+
+    quint32 nMagic=read_uint32(0);
+
+    if( (nMagic==XMACH_DEF::S_FAT_CIGAM))
+    {
+        bResult=true;
+    }
+
+    return bResult;
 }
 
 quint64 XMACHOFat::getNumberOfRecords()
 {
-    return 0;
+    return read_uint32(offsetof(XMACH_DEF::fat_header,nfat_arch),isBigEndian());
 }
 
 QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
