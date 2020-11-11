@@ -21,7 +21,6 @@
 #ifndef XARCHIVE_H
 #define XARCHIVE_H
 
-#include <QObject>
 #include "xbinary.h"
 #include "zlib.h"
 #include "bzlib.h"

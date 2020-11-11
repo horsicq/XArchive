@@ -3,6 +3,7 @@ DEPENDPATH += $$PWD
 
 HEADERS += \
     $$PWD/xarchive.h \
+    $$PWD/xmachofat.h \
     $$PWD/xsevenzip.h \
     $$PWD/xzip.h \
     $$PWD/xcab.h \
@@ -10,6 +11,7 @@ HEADERS += \
 
 SOURCES += \
     $$PWD/xarchive.cpp \
+    $$PWD/xmachofat.cpp \
     $$PWD/xsevenzip.cpp \
     $$PWD/xzip.cpp \
     $$PWD/xcab.cpp \

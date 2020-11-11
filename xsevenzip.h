@@ -21,7 +21,6 @@
 #ifndef XSEVENZIP_H
 #define XSEVENZIP_H
 
-#include <QObject>
 #include "xarchive.h"
 
 class XSevenZip : public XArchive

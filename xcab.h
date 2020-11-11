@@ -21,7 +21,6 @@
 #ifndef XCAB_H
 #define XCAB_H
 
-#include <QObject>
 #include "xarchive.h"
 
 class XCab : public XArchive

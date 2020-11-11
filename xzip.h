@@ -21,7 +21,6 @@
 #ifndef XZIP_H
 #define XZIP_H
 
-#include <QObject>
 #include "xarchive.h"
 
 class XZip : public XArchive

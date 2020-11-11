@@ -18,21 +18,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#ifndef XRAR_H
-#define XRAR_H
+#ifndef XMACHOFAT_H
+#define XMACHOFAT_H
 
 #include "xarchive.h"
 
-class XRar : public XArchive
+class XMACHOFat : public XArchive
 {
     Q_OBJECT
-
-public:    
-    explicit XRar(QIODevice *pDevice=nullptr);
-    virtual bool isValid();
-    virtual QString getVersion();
-    virtual quint64 getNumberOfRecords();
-    virtual QList<RECORD> getRecords(qint32 nLimit=-1);
+public:
+    explicit XMACHOFat(QIODevice *pDevice=nullptr);
 };
 
-#endif // XRAR_H
+#endif // XMACHOFAT_H
