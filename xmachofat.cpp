@@ -34,7 +34,7 @@ bool XMACHOFat::isValid()
     if( (nMagic==XMACH_DEF::S_FAT_MAGIC)||
         (nMagic==XMACH_DEF::S_FAT_CIGAM))
     {
-        bResult=true;
+        bResult=(getNumberOfRecords()<10);
     }
 
     return bResult;
@@ -62,6 +62,8 @@ quint64 XMACHOFat::getNumberOfRecords()
 QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 {
     QList<RECORD> listResult;
+
+    // TODO
 
     return listResult;
 }
