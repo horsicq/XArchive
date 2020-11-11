@@ -28,6 +28,10 @@ class XMACHOFat : public XArchive
     Q_OBJECT
 public:
     explicit XMACHOFat(QIODevice *pDevice=nullptr);
+
+    virtual bool isValid();
+    virtual quint64 getNumberOfRecords();
+    virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 };
 
 #endif // XMACHOFAT_H

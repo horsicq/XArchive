@@ -24,3 +24,20 @@ XMACHOFat::XMACHOFat(QIODevice *pDevice)
 {
 
 }
+
+bool XMACHOFat::isValid()
+{
+    return false;
+}
+
+quint64 XMACHOFat::getNumberOfRecords()
+{
+    return 0;
+}
+
+QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
+{
+    QList<RECORD> listResult;
+
+    return listResult;
+}
