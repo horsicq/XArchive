@@ -22,6 +22,7 @@
 #define XMACHOFAT_H
 
 #include "xarchive.h"
+#include "xmach.h"
 
 class XMACHOFat : public XArchive
 {

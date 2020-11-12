@@ -72,6 +72,8 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 
     bool bIsBigEndian=isBigEndian();
 
+    QMap<quint64, QString> mapCpuTypes=XMACH::getHeaderCpuTypesS();
+
     for(int i=0;i<nNumberOfRecords;i++)
     {
         qint64 nOffset=sizeof(XMACH_DEF::fat_header)+i*sizeof(XMACH_DEF::fat_arch);
@@ -84,7 +86,13 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 
         RECORD record={};
 
-        record.sFileName=QString("%1_%2").arg(_cputype).arg(_cpusubtype);
+        record.sFileName=QString("%1").arg(mapCpuTypes.value(_cputype,"UNKNNOWN"));
+
+        if(_cpusubtype)
+        {
+            record.sFileName+=QString("-%1").arg(_cpusubtype);
+        }
+
         record.nDataOffset=_offset;
         record.nCompressedSize=_size;
         record.nUncompressedSize=_size;
