@@ -86,7 +86,7 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 
         RECORD record={};
 
-        record.sFileName=QString("%1").arg(mapCpuTypes.value(_cputype,"UNKNNOWN"));
+        record.sFileName=QString("%1").arg(mapCpuTypes.value(_cputype,"UNKNOWN"));
 
         if(_cpusubtype)
         {
