@@ -37,6 +37,12 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit)
 
         listResult=xzip.getRecords(nLimit);
     }
+    else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
+    {
+        XMACHOFat xmachofat(pDevice);
+
+        listResult=xmachofat.getRecords(nLimit);
+    }
 
     return listResult;
 }
@@ -71,6 +77,12 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 
         baResult=xzip.decompress(pRecord,bHeaderOnly);
     }
+    else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
+    {
+        XMACHOFat xmachofat(pDevice);
+
+        baResult=xmachofat.decompress(pRecord,bHeaderOnly);
+    }
 
     return baResult;
 }
@@ -104,6 +116,12 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
         XZip xzip(pDevice);
 
         bResult=xzip.decompressToFile(pRecord,sResultFileName,pbIsStop);
+    }
+    else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
+    {
+        XMACHOFat xmachofat(pDevice);
+
+        bResult=xmachofat.decompressToFile(pRecord,sResultFileName,pbIsStop);
     }
 
     return bResult;
@@ -163,6 +181,12 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileNa
         XZip xzip(pDevice);
 
         bResult=xzip.isArchiveRecordPresent(sRecordFileName);
+    }
+    else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
+    {
+        XMACHOFat xmachofat(pDevice);
+
+        bResult=xmachofat.isArchiveRecordPresent(sRecordFileName);
     }
 
     return bResult;

@@ -63,7 +63,35 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 {
     QList<RECORD> listResult;
 
-    // TODO
+    qint32 nNumberOfRecords=(qint32)getNumberOfRecords();
+
+    if(nLimit!=-1)
+    {
+        nNumberOfRecords=qMin(nNumberOfRecords,nLimit);
+    }
+
+    bool bIsBigEndian=isBigEndian();
+
+    for(int i=0;i<nNumberOfRecords;i++)
+    {
+        qint64 nOffset=sizeof(XMACH_DEF::fat_header)+i*sizeof(XMACH_DEF::fat_arch);
+
+        quint32 _cputype=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,cputype),bIsBigEndian);
+        quint32 _cpusubtype=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,cpusubtype),bIsBigEndian);
+        quint32 _offset=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,offset),bIsBigEndian);
+        quint32 _size=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,size),bIsBigEndian);
+//        quint32 _align=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,align),bIsBigEndian);
+
+        RECORD record={};
+
+        record.sFileName=QString("%1_%2").arg(_cputype).arg(_cpusubtype);
+        record.nDataOffset=_offset;
+        record.nCompressedSize=_size;
+        record.nUncompressedSize=_size;
+        record.compressMethod=COMPRESS_METHOD_STORE;
+
+        listResult.append(record);
+    }
 
     return listResult;
 }
