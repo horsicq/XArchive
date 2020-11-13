@@ -53,7 +53,7 @@ quint64 XSevenZip::getNumberOfRecords()
 
     if(read_array(0,(char *)&signatureHeader,sizeof(SignatureHeader))==sizeof(SignatureHeader))
     {
-        _MEMORY_MAP memoryMap=getMemoryMap();
+        _MEMORY_MAP memoryMap=XBinary::getMemoryMap();
 
         qint64 nCurrentOffset=sizeof(SignatureHeader)+signatureHeader.NextHeaderOffset;
 
@@ -98,16 +98,37 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 
     QList<XArchive::RECORD> listResult;
 
-    SignatureHeader signatureHeader;
+    SignatureHeader signatureHeader={};
 
     if(read_array(0,(char *)&signatureHeader,sizeof(SignatureHeader))==sizeof(SignatureHeader)) // TODO read function
     {
-        _MEMORY_MAP memoryMap=getMemoryMap();
+        _MEMORY_MAP memoryMap=XBinary::getMemoryMap();
 
         qint64 nCurrentOffset=sizeof(SignatureHeader)+signatureHeader.NextHeaderOffset;
 
         if(isOffsetAndSizeValid(&memoryMap,nCurrentOffset,signatureHeader.NextHeaderSize)) // TODO Handle errors!
         {
+            // Header
+            // k7zIdHeader
+            // k7zIdMainStreamsInfo
+
+            while(true)
+            {
+                PACKED pn=get_packedNumber(nCurrentOffset);
+
+                if(pn.nValue==k7zIdHeader)
+                {
+                    qDebug("k7zIdHeader");
+                }
+                else if(pn.nValue==k7zIdMainStreamsInfo)
+                {
+                    qDebug("k7zIdMainStreamsInfo");
+                }
+
+                nCurrentOffset+=pn.nByteSize;
+            }
+
+
             XHEADER header={};
 
             getEncodedHeader(nCurrentOffset,&header);
