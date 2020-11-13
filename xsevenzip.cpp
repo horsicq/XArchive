@@ -111,6 +111,14 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
             // Header
             // k7zIdHeader
             // k7zIdMainStreamsInfo
+            //  k7zIdPackInfo
+            //      dataOffset
+            //      numberOfSizes;
+            //      Sizes ...
+            //  k7zIdUnpackInfo
+            //  k7zIdEnd
+            //  k7zIdUnpackInfo
+            //      k7zIdFolder
 
             while(true)
             {
@@ -124,6 +132,20 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
                 {
                     qDebug("k7zIdMainStreamsInfo");
                 }
+                else if(pn.nValue==k7zIdPackInfo)
+                {
+                    qDebug("k7zIdPackInfo");
+                }
+                else if(pn.nValue==k7zIdUnpackInfo)
+                {
+                    qDebug("k7zIdUnpackInfo");
+                }
+                else if(pn.nValue==k7zIdFolder)
+                {
+                    qDebug("k7zIdFolder");
+                }
+
+                qDebug("%d",pn.nValue);
 
                 nCurrentOffset+=pn.nByteSize;
             }
