@@ -104,6 +104,7 @@ public:
 
 private:
     QString idToSring(EIdEnum id);
+    qint64 getHeader(qint64 nOffset,XHEADER *pHeader);
     qint64 getEncodedHeader(qint64 nOffset,XHEADER *pHeader);
     qint64 getPackInfo(qint64 nOffset,XPACKINFO *pPackInfo);
     qint64 getUnpackInfo(qint64 nOffset,XUNPACKINFO *pUnpackInfo);

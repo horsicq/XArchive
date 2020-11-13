@@ -113,12 +113,35 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
             // k7zIdMainStreamsInfo
             //  k7zIdPackInfo
             //      dataOffset
-            //      numberOfSizes;
-            //      Sizes ...
+            //      numberOfFiles;
+            //      Sizes[numberOfFiles]
             //  k7zIdUnpackInfo
             //  k7zIdEnd
             //  k7zIdUnpackInfo
             //      k7zIdFolder
+            //      numberOfFiles
+            //      0
+            //      NumCoders[numberOfFiles]
+            //      MainByte[numberOfFiles]
+            //      Methods[numberOfFiles]
+            //      k7zIdCodersUnpackSize
+            //      numberOfFiles
+            //      Sizes[numberOfFiles]
+
+            PACKED pn=get_packedNumber(nCurrentOffset);
+
+            if(pn.nValue==k7zIdHeader)
+            {
+                XHEADER header={};
+
+                nCurrentOffset+=getHeader(nCurrentOffset,&header);
+            }
+            else if(pn.nValue==k7zIdEncodedHeader)
+            {
+                XHEADER header={};
+
+                nCurrentOffset+=getEncodedHeader(nCurrentOffset,&header);
+            }
 
             while(true)
             {
@@ -144,12 +167,19 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
                 {
                     qDebug("k7zIdFolder");
                 }
+                else if(pn.nValue==k7zIdCodersUnpackSize)
+                {
+                    qDebug("k7zIdCodersUnpackSize");
+                }
+                else if(pn.nValue==k7zIdEncodedHeader)
+                {
+                    qDebug("k7zIdEncodedHeader");
+                }
 
                 qDebug("%d",pn.nValue);
 
                 nCurrentOffset+=pn.nByteSize;
             }
-
 
             XHEADER header={};
 
@@ -334,6 +364,26 @@ QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
     return sResult;
 }
 
+qint64 XSevenZip::getHeader(qint64 nOffset, XSevenZip::XHEADER *pHeader)
+{
+    qint64 nCurrent=0;
+
+    PACKED pn={};
+
+    pn=get_packedNumber(nOffset+nCurrent);
+
+    if(pn.nValue==k7zIdHeader)
+    {
+        nCurrent+=pn.nByteSize;
+        pHeader->bIsValid=true;
+
+        nCurrent+=getPackInfo(nOffset+nCurrent,&(pHeader->xPackInfo));
+        nCurrent+=getUnpackInfo(nOffset+nCurrent,&(pHeader->xUnpackInfo));
+    }
+
+    return nCurrent;
+}
+
 qint64 XSevenZip::getEncodedHeader(qint64 nOffset, XSevenZip::XHEADER *pHeader)
 {
     qint64 nCurrent=0;
@@ -351,7 +401,7 @@ qint64 XSevenZip::getEncodedHeader(qint64 nOffset, XSevenZip::XHEADER *pHeader)
         nCurrent+=getUnpackInfo(nOffset+nCurrent,&(pHeader->xUnpackInfo));
     }
 
-    return nCurrent-nOffset;
+    return nCurrent;
 }
 
 qint64 XSevenZip::getPackInfo(qint64 nOffset, XSevenZip::XPACKINFO *pPackInfo)
@@ -442,6 +492,8 @@ qint64 XSevenZip::getUnpackInfo(qint64 nOffset, XSevenZip::XUNPACKINFO *pUnpackI
                 }
 
                 pn=get_packedNumber(nOffset+nCurrent);
+
+                // TODO Check k7zIdAdditionalStreamsInfo
 
                 if(pn.nValue==k7zIdCodersUnpackSize)
                 {
