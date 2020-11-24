@@ -83,7 +83,6 @@ public:
 //        u1  abReserve[];          /* (optional) per-datablock reserved area */
 //        u1  ab[cbData];           /* compressed data bytes */
     };
-
 #pragma pack(pop)
 
     explicit XCab(QIODevice *pDevice=nullptr);
