@@ -46,7 +46,7 @@ bool XMACHOFat::isBigEndian()
 
     quint32 nMagic=read_uint32(0);
 
-    if( (nMagic==XMACH_DEF::S_FAT_CIGAM))
+    if(nMagic==XMACH_DEF::S_FAT_CIGAM)
     {
         bResult=true;
     }
