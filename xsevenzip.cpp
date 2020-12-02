@@ -518,7 +518,6 @@ qint64 XSevenZip::getUnpackInfo(qint64 nOffset, XSevenZip::XUNPACKINFO *pUnpackI
                 nCurrent+=pn.nByteSize;
             }
         }
-
     }
 
     return nCurrent;
