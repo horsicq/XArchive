@@ -47,7 +47,7 @@ static ISzAlloc g_Alloc={SzAlloc,SzFree};
 
 XArchive::XArchive(QIODevice *pDevice): XBinary(pDevice)
 {
-
+    setMode(MODE_DATA);
 }
 
 quint64 XArchive::getNumberOfRecords()
