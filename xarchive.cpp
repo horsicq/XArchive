@@ -47,7 +47,6 @@ static ISzAlloc g_Alloc={SzAlloc,SzFree};
 
 XArchive::XArchive(QIODevice *pDevice): XBinary(pDevice)
 {
-    setMode(MODE_DATA);
 }
 
 quint64 XArchive::getNumberOfRecords()
@@ -791,6 +790,11 @@ quint32 XArchive::getCompressBufferSize()
 quint32 XArchive::getDecompressBufferSize()
 {
     return DECOMPRESS_BUFFERSIZE;
+}
+
+XBinary::MODE XArchive::getMode()
+{
+    return MODE_DATA;
 }
 
 XBinary::_MEMORY_MAP XArchive::getMemoryMap()

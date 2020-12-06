@@ -95,6 +95,7 @@ public:
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();
 
+    virtual MODE getMode();
     virtual _MEMORY_MAP getMemoryMap();
 };
 
