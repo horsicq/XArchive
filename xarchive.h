@@ -96,7 +96,7 @@ public:
     static quint32 getDecompressBufferSize();
 
     virtual MODE getMode();
-    virtual _MEMORY_MAP getMemoryMap();
+//    virtual _MEMORY_MAP getMemoryMap(); // TODO
 };
 
 #endif // XARCHIVE_H
