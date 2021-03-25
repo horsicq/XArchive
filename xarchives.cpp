@@ -20,7 +20,7 @@
 //
 #include "xarchives.h"
 
-XArchives::XArchives(QObject *parent) : QObject(parent)
+XArchives::XArchives(QObject *pParent) : QObject(pParent)
 {
 
 }

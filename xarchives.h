@@ -32,7 +32,7 @@ class XArchives : public QObject
     Q_OBJECT
 
 public:
-    explicit XArchives(QObject *parent=nullptr);
+    explicit XArchives(QObject *pParent=nullptr);
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice,qint32 nLimit=-1);
     static QList<XArchive::RECORD> getRecords(QString sFileName,qint32 nLimit=-1);
     static QByteArray decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
