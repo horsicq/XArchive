@@ -42,6 +42,9 @@ public:
     static bool decompressToFile(QString sFileName,QString sRecordFileName,QString sResultFileName,bool *pbIsStop=nullptr);
     static bool isArchiveRecordPresent(QIODevice *pDevice,QString sRecordFileName);
     static bool isArchiveRecordPresent(QString sFileName,QString sRecordFileName);
+
+    static bool isArchiveOpenValid(QIODevice *pDevice,QSet<XBinary::FT> stAvailable);
+    static bool isArchiveOpenValid(QString sFileName,QSet<XBinary::FT> stAvailable);
 };
 
 #endif // XARCHIVES_H

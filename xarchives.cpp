@@ -212,3 +212,34 @@ bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileNam
 
     return bResult;
 }
+
+bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvailable)
+{
+    QSet<XBinary::FT> stFT=XBinary::getFileTypes(pDevice,true);
+
+    if(!stAvailable.count())
+    {
+        stAvailable.insert(XBinary::FT_ZIP);
+        stAvailable.insert(XBinary::FT_MACHOFAT);
+    }
+
+    return XBinary::isFileTypePresent(&stFT,&stAvailable);
+}
+
+bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvailable)
+{
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        bResult=isArchiveOpenValid(&file,stAvailable);
+
+        file.close();
+    }
+
+    return bResult;
+}
