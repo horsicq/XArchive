@@ -40,6 +40,13 @@ bool XMACHOFat::isValid()
     return bResult;
 }
 
+bool XMACHOFat::isValid(QIODevice *pDevice)
+{
+    XMACHOFat xmachofat(pDevice);
+
+    return xmachofat.isValid();
+}
+
 bool XMACHOFat::isBigEndian()
 {
     bool bResult=false;

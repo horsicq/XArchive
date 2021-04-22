@@ -31,6 +31,7 @@ public:
     explicit XMACHOFat(QIODevice *pDevice=nullptr);
 
     virtual bool isValid();
+    static bool isValid(QIODevice *pDevice);
     virtual bool isBigEndian();
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
