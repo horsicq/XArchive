@@ -71,8 +71,8 @@ public:
         // TODO more
     };
 
-    static const int COMPRESS_BUFFERSIZE=16384;
-    static const int DECOMPRESS_BUFFERSIZE=16384;
+    static const int COMPRESS_BUFFERSIZE=0x4000;
+    static const int DECOMPRESS_BUFFERSIZE=0x4000;
 
     explicit XArchive(QIODevice *pDevice=nullptr);
     virtual quint64 getNumberOfRecords();
