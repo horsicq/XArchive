@@ -40,6 +40,13 @@ bool XSevenZip::isValid()
     return bResult;
 }
 
+bool XSevenZip::isValid(QIODevice *pDevice)
+{
+    XSevenZip xsevenzip(pDevice);
+
+    return xsevenzip.isValid();
+}
+
 QString XSevenZip::getVersion()
 {
     return QString("%1.%2").arg(read_uint8(6)).arg(read_uint8(7),1,10,QChar('0'));

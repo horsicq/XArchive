@@ -40,6 +40,13 @@ bool XCab::isValid()
     return bResult;
 }
 
+bool XCab::isValid(QIODevice *pDevice)
+{
+    XCab xcab(pDevice);
+
+    return xcab.isValid();
+}
+
 QString XCab::getVersion()
 {
     return QString("%1.%2").arg(read_uint8(25)).arg(read_uint8(24),2,10,QChar('0'));

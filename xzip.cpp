@@ -39,6 +39,13 @@ bool XZip::isValid()
     return bResult;
 }
 
+bool XZip::isValid(QIODevice *pDevice)
+{
+    XZip xzip(pDevice);
+
+    return xzip.isValid();
+}
+
 QString XZip::getVersion()
 {
     QString sResult;

@@ -40,6 +40,13 @@ bool XRar::isValid()
     return bResult;
 }
 
+bool XRar::isValid(QIODevice *pDevice)
+{
+    XRar xrar(pDevice);
+
+    return xrar.isValid();
+}
+
 QString XRar::getVersion()
 {
     QString sResult;

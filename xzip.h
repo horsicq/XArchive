@@ -145,6 +145,7 @@ public:
 
     explicit XZip(QIODevice *pDevice=nullptr);
     virtual bool isValid();
+    static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual bool isEncrypted();
     virtual quint64 getNumberOfRecords();
