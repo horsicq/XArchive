@@ -31,8 +31,8 @@ bool XMACHOFat::isValid()
 
     quint32 nMagic=read_uint32(0);
 
-    if( (nMagic==XMACH_DEF::FAT_MAGIC)||
-        (nMagic==XMACH_DEF::FAT_CIGAM))
+    if( (nMagic==XMACH_DEF::S_FAT_MAGIC)||
+        (nMagic==XMACH_DEF::S_FAT_CIGAM))
     {
         bResult=(getNumberOfRecords()<10);
     }
@@ -53,7 +53,7 @@ bool XMACHOFat::isBigEndian()
 
     quint32 nMagic=read_uint32(0);
 
-    if(nMagic==XMACH_DEF::FAT_CIGAM)
+    if(nMagic==XMACH_DEF::S_FAT_CIGAM)
     {
         bResult=true;
     }
