@@ -35,6 +35,7 @@ public:
     explicit XArchives(QObject *pParent=nullptr);
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice,qint32 nLimit=-1);
     static QList<XArchive::RECORD> getRecords(QString sFileName,qint32 nLimit=-1);
+    static QList<XArchive::RECORD> getRecordsFromDirectory(QString sDirectoryName,qint32 nLimit=-1);
     static QByteArray decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
     static QByteArray decompress(QString sFileName,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
     static bool decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QString sResultFileName,bool *pbIsStop=nullptr);
@@ -45,6 +46,9 @@ public:
 
     static bool isArchiveOpenValid(QIODevice *pDevice,QSet<XBinary::FT> stAvailable);
     static bool isArchiveOpenValid(QString sFileName,QSet<XBinary::FT> stAvailable);
+
+private:
+    static void _findFiles(QString sDirectoryName,QList<XArchive::RECORD> *pListRecords,qint32 nLimit);
 };
 
 #endif // XARCHIVES_H

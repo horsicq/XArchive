@@ -66,6 +66,15 @@ QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit)
     return listResult;
 }
 
+QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit)
+{
+    QList<XArchive::RECORD> listResult;
+
+    _findFiles(sDirectoryName,&listResult,nLimit);
+
+    return listResult;
+}
+
 QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly)
 {
     QByteArray baResult;
@@ -215,15 +224,22 @@ bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileNam
 
 bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvailable)
 {
-    QSet<XBinary::FT> stFT=XBinary::getFileTypes(pDevice,true);
+    bool bResult=false;
 
-    if(!stAvailable.count())
+    if(pDevice)
     {
-        stAvailable.insert(XBinary::FT_ZIP);
-        stAvailable.insert(XBinary::FT_MACHOFAT);
+        QSet<XBinary::FT> stFT=XBinary::getFileTypes(pDevice,true);
+
+        if(!stAvailable.count())
+        {
+            stAvailable.insert(XBinary::FT_ZIP);
+            stAvailable.insert(XBinary::FT_MACHOFAT);
+        }
+
+        bResult=XBinary::isFileTypePresent(&stFT,&stAvailable);
     }
 
-    return XBinary::isFileTypePresent(&stFT,&stAvailable);
+    return bResult;
 }
 
 bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvailable)
@@ -242,4 +258,45 @@ bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvaila
     }
 
     return bResult;
+}
+
+void XArchives::_findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit)
+{
+    if((nLimit<pListRecords->count())||(nLimit==-1))
+    {
+        QFileInfo fi(sDirectoryName);
+
+        if(fi.isFile())
+        {
+            XArchive::RECORD record={};
+
+            record.compressMethod=XArchive::COMPRESS_METHOD_FILE;
+            record.sFileName=fi.absoluteFilePath();
+            record.nCompressedSize=fi.size();
+            record.nUncompressedSize=fi.size();
+
+            if((nLimit<pListRecords->count())||(nLimit==-1))
+            {
+                pListRecords->append(record);
+            }
+        }
+        else if(fi.isDir())
+        {
+            QDir dir(sDirectoryName);
+
+            QFileInfoList eil=dir.entryInfoList();
+
+            int nNumberOfFiles=eil.count();
+
+            for(int i=0;i<nNumberOfFiles;i++)
+            {
+                QString sFN=eil.at(i).fileName();
+
+                if((sFN!=".")&&(sFN!=".."))
+                {
+                    _findFiles(eil.at(i).absoluteFilePath(),pListRecords,nLimit);
+                }
+            }
+        }
+    }
 }
