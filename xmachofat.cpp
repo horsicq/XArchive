@@ -97,7 +97,7 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 
         if(_cpusubtype)
         {
-            record.sFileName+=QString("-%1").arg(_cpusubtype);
+            record.sFileName+=QString("-%1").arg(_cpusubtype,0,16);
         }
 
         record.nDataOffset=_offset;
