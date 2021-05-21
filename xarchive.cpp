@@ -669,10 +669,16 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
     {
         XArchive::RECORD record=pListArchive->at(i);
 
-        if(record.sFileName.contains(QRegularExpression(QString("^%1").arg(sRecordFileName)))||(sRecordFileName=="/")||(sRecordFileName==""))
+        bool bNamePresent=XBinary::isRegExpPresent(QString("^%1").arg(sRecordFileName),record.sFileName);
+
+        if(bNamePresent||(sRecordFileName=="/")||(sRecordFileName==""))
         {
             QString sFileName=record.sFileName;
-            sFileName.remove(QRegularExpression(QString("^%1").arg(sRecordFileName)));
+
+            if(bNamePresent)
+            {
+                sFileName=sFileName.mid(sRecordFileName.size(),-1);
+            }
 
             QString sResultFileName=sResultPathName+QDir::separator()+sFileName;
 
@@ -734,8 +740,6 @@ bool XArchive::decompressToPath(QString sArchiveFileName, QString sRecordPathNam
 
         if(isValid())
         {
-            bResult=true;
-
             QList<RECORD> listRecords=getRecords();
 
             bResult=decompressToPath(&listRecords,sRecordPathName,sResultPathName);
