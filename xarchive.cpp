@@ -802,7 +802,7 @@ void XArchive::showRecords(QList<XArchive::RECORD> *pListArchive)
 
     for(int i=0;i<nCount;i++)
     {
-        qDebug(pListArchive->at(i).sFileName.toLatin1().data());
+        qDebug("%s", pListArchive->at(i).sFileName.toLatin1().data());
     }
 }
 
