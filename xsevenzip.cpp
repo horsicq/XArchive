@@ -187,7 +187,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
                     qDebug("k7zIdEncodedHeader");
                 }
 
-                qDebug("Test %d",pn.nValue);
+                qDebug("Test %lld",pn.nValue);
 
                 nCurrentOffset+=pn.nByteSize;
             }
