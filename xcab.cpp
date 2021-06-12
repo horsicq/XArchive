@@ -29,7 +29,7 @@ bool XCab::isValid()
 {
     bool bResult=false;
 
-    if(getSize()>sizeof(CFHEADER))
+    if(getSize()>(qint64)sizeof(CFHEADER))
     {
         if(compareSignature("'MSCF'"))
         {
@@ -80,7 +80,7 @@ QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
         nOffset+=cfHeader.cbCFHeader;
     }
 
-    CFFOLDER cfFolder=readCFFolder(nOffset);
+//    CFFOLDER cfFolder=readCFFolder(nOffset);
 
     // TODO
 

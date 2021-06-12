@@ -286,6 +286,8 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
                         nCurrentSize+=pn.nByteSize;
 
                         quint8 nExtra=read_uint8(nCurrentOffset);
+
+                        Q_UNUSED(nExtra)
                         // TODO compare to 0
                         nCurrentOffset++;
                         nCurrentSize++;
@@ -332,6 +334,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
                 }
             }
             // TODO Encrypted
+            Q_UNUSED(nDataOffset)
         }
     }
 
@@ -439,7 +442,7 @@ qint64 XSevenZip::getPackInfo(qint64 nOffset, XSevenZip::XPACKINFO *pPackInfo)
         {
             nCurrent+=pn.nByteSize;
 
-            for(int i=0;i<nSize;i++)
+            for(int i=0;i<(qint32)nSize;i++)
             {
                 pn=get_packedNumber(nOffset+nCurrent);
 
