@@ -151,11 +151,23 @@ public:
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
+    bool isAPKSignBlockPresent(); // For APK
+
+    struct APK_SIG_BLOCK_RECORD
+    {
+        quint32 nID;
+        quint64 nDataOffset;
+        quint64 nDataSize;
+    };
+
+    QList<APK_SIG_BLOCK_RECORD> getAPKSignaturesBlockList();
+
     static bool addLocalFileRecord(QIODevice *pSource,QIODevice *pDest,ZIPFILE_RECORD *pZipFileRecord);
     static bool addCentralDirectory(QIODevice *pDest,QList<ZIPFILE_RECORD> *pListZipFileRecords,QString sComment="");
 
 private:
     qint64 findECDOffset();
+    qint64 findAPKSignBlockOffset();
 };
 
 #endif // XZIP_H
