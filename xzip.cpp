@@ -205,7 +205,7 @@ bool XZip::isAPKSignBlockPresent()
     return (findAPKSignBlockOffset()!=-1);
 }
 
-QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockList()
+QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockRecordsList()
 {
     QList<XZip::APK_SIG_BLOCK_RECORD> listResult;
 
@@ -235,7 +235,7 @@ QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockList()
                 nOffset+=4;
                 nOffset+=record.nDataSize;
 
-                if(record.nID==0x42726577) // End
+                if(record.nID==0x42726577) // End TODO CONST
                 {
                     break;
                 }
@@ -249,6 +249,30 @@ QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockList()
     }
 
     return listResult;
+}
+
+bool XZip::isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID)
+{
+    return (getAPKSignatureBlockRecord(pList,nID).nID==nID);
+}
+
+XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID)
+{
+    XZip::APK_SIG_BLOCK_RECORD result={};
+
+    int nNumberOfRecords=pList->count();
+
+    for(int i=0;i<nNumberOfRecords;i++)
+    {
+        if(pList->at(i).nID==nID)
+        {
+            result=pList->at(i);
+
+            break;
+        }
+    }
+
+    return result;
 }
 
 bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord)
