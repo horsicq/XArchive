@@ -260,6 +260,76 @@ bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvaila
     return bResult;
 }
 
+bool XArchives::isSigned(QIODevice *pDevice)
+{
+    bool bResult=false;
+
+    QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
+
+    // TODO more
+    if(stFileTypes.contains(XArchive::FT_ZIP))
+    {
+        XZip xzip(pDevice);
+
+        bResult=xzip.isSigned();
+    }
+
+    return bResult;
+}
+
+bool XArchives::isSigned(QString sFileName)
+{
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        bResult=isSigned(&file);
+
+        file.close();
+    }
+
+    return bResult;
+}
+
+XBinary::OFFSETSIZE XArchives::getSignOS(QIODevice *pDevice)
+{
+    XBinary::OFFSETSIZE result={};
+
+    QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
+
+    // TODO more
+    if(stFileTypes.contains(XArchive::FT_ZIP))
+    {
+        XZip xzip(pDevice);
+
+        result=xzip.getSignOS();
+    }
+
+    return result;
+}
+
+XBinary::OFFSETSIZE XArchives::getSignOS(QString sFileName)
+{
+    XBinary::OFFSETSIZE result={};
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        result=getSignOS(&file);
+
+        file.close();
+    }
+
+    return result;
+}
+
 void XArchives::_findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit)
 {
     if((nLimit<pListRecords->count())||(nLimit==-1))

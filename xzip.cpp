@@ -200,6 +200,36 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
     return listResult;
 }
 
+bool XZip::isSigned()
+{
+    return isAPKSignBlockPresent();
+}
+
+XBinary::OFFSETSIZE XZip::getSignOS()
+{
+    OFFSETSIZE result={};
+
+    // TODO optimize
+
+    qint64 nOffset=findAPKSignBlockOffset();
+
+    quint64 nBlockSize1=read_uint64(nOffset-8);
+    quint64 nBlockSize2=read_uint64(nOffset-nBlockSize1+8);
+
+    if((nBlockSize1)&&(nBlockSize1==nBlockSize2))
+    {
+        nOffset=nOffset-nBlockSize1+16;
+
+        qint64 nCentralDirectoryOffset=findECDOffset();
+        nCentralDirectoryOffset=read_uint32(nCentralDirectoryOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
+
+        result.nOffset=nOffset;
+        result.nSize=qMax((qint64)0,nCentralDirectoryOffset-nOffset);
+    }
+
+    return result;
+}
+
 bool XZip::isAPKSignBlockPresent()
 {
     return (findAPKSignBlockOffset()!=-1);

@@ -151,6 +151,9 @@ public:
     virtual quint64 getNumberOfRecords();
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
+    virtual bool isSigned();
+    virtual OFFSETSIZE getSignOS();
+
     bool isAPKSignBlockPresent(); // For APK
 
     struct APK_SIG_BLOCK_RECORD
