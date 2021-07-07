@@ -47,13 +47,6 @@ public:
     static bool isArchiveOpenValid(QIODevice *pDevice,QSet<XBinary::FT> stAvailable);
     static bool isArchiveOpenValid(QString sFileName,QSet<XBinary::FT> stAvailable);
 
-    // TODO move to xformats
-    static bool isSigned(QIODevice *pDevice);
-    static bool isSigned(QString sFileName);
-
-    static XBinary::OFFSETSIZE getSignOS(QIODevice *pDevice);
-    static XBinary::OFFSETSIZE getSignOS(QString sFileName);
-
 private:
     static void _findFiles(QString sDirectoryName,QList<XArchive::RECORD> *pListRecords,qint32 nLimit);
 };
