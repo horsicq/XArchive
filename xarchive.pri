@@ -22,6 +22,11 @@ SOURCES += \
     include($$PWD/../Formats/xbinary.pri)
 }
 
+!contains(XCONFIG, xmach) {
+    XCONFIG += xmach
+    include($$PWD/../Formats/xmach.pri) # MACHFAT
+}
+
 !contains(XCONFIG, zlib) {
     XCONFIG += zlib
     include($$PWD/3rdparty/zlib/zlib.pri)
