@@ -63,7 +63,7 @@ class XSevenZip : public XArchive
 public:    
 #pragma pack(push)
 #pragma pack(1)
-    struct SignatureHeader
+    struct SIGNATURERECORD
     {
         quint8 kSignature[6];       // {'7','z',0xBC,0xAF,0x27,0x1C}
         quint8 Major;               // now = 0
@@ -75,25 +75,19 @@ public:
     };
 #pragma pack(pop)
 
-    struct XPACKINFO
+    struct XRECORD
     {
-        bool bIsValid;
-        qint64 nDataOffset;
+        quint32 nID;
+        QList<XRECORD> listRecords;
+        qint64 nPackPos;
+        qint64 nNumPackStreams;
         QList<qint64> listSizes;
     };
 
-    struct XUNPACKINFO
+    struct XINFO
     {
-        bool bIsValid;
-        QList<qint64> listSizes;
-        QList<qint64> listCoderSizes;
-    };
-
-    struct XHEADER
-    {
-        bool bIsValid;
-        XPACKINFO xPackInfo;
-        XUNPACKINFO xUnpackInfo;
+        SIGNATURERECORD signatureRecord;
+        XRECORD mainXRecord;
     };
 
     explicit XSevenZip(QIODevice *pDevice=nullptr);
@@ -105,10 +99,7 @@ public:
 
 private:
     QString idToSring(EIdEnum id);
-    qint64 getHeader(qint64 nOffset,XHEADER *pHeader);
-    qint64 getEncodedHeader(qint64 nOffset,XHEADER *pHeader);
-    qint64 getPackInfo(qint64 nOffset,XPACKINFO *pPackInfo);
-    qint64 getUnpackInfo(qint64 nOffset,XUNPACKINFO *pUnpackInfo);
+    qint32 getXRecord(XBinary::_MEMORY_MAP *pMemoryMap,qint64 nOffset,XRECORD *pXRecord,qint64 nExtra=0);
 };
 
 #endif // XSEVENZIP_H
