@@ -82,6 +82,7 @@ public:
         qint64 nPackPos;
         qint64 nNumPackStreams;
         QList<qint64> listSizes;
+        qint64 nNumFolders;
     };
 
     struct XINFO

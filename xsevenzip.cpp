@@ -464,8 +464,8 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *p
 
             if(pnCRC.nValue==k7zIdCRC)
             {
-                // TODO !!!
-                qDebug("TODO: CRC");
+//                // TODO !!!
+//                qDebug("TODO: CRC");
             }
 
             PACKED pnEnd=get_packedNumber(nOffset);
@@ -489,8 +489,34 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *p
         }
         else if(pXRecord->nID==k7zIdUnpackInfo)
         {
-            QString _sTest=getSignature(nOffset,16);
-            qDebug(_sTest.toLatin1().data());
+            PACKED pnFolder=get_packedNumber(nOffset);
+
+            if(pnFolder.nValue==k7zIdFolder)
+            {
+                XRECORD xrecord={};
+
+                qint32 nRSize=getXRecord(pMemoryMap,nOffset,&xrecord);
+
+                pXRecord->listRecords.append(xrecord);
+
+                nOffset+=nRSize;
+                nResult+=nRSize;
+            }
+        }
+        else if(pXRecord->nID==k7zIdFolder)
+        {
+            PACKED pnNumFolders=get_packedNumber(nOffset);
+            pXRecord->nNumFolders=pnNumFolders.nValue;
+            nOffset+=pnNumFolders.nByteSize;
+            nResult+=pnNumFolders.nByteSize;
+
+            quint8 nExtraByte=read_uint8(nOffset);
+            nOffset++;
+            nResult++;
+
+            // TODO
+//            QString _sTest=getSignature(nOffset,16);
+//            qDebug(_sTest.toLatin1().data());
 //            QString sTest=idToSring((XSevenZip::EIdEnum)pnPackPos.nValue);
         }
     }
