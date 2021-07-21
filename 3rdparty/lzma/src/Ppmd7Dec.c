@@ -14,7 +14,7 @@ BoolInt Ppmd7z_RangeDec_Init(CPpmd7z_RangeDec *p)
   p->Code = 0;
   p->Range = 0xFFFFFFFF;
   if (IByteIn_Read(p->Stream) != 0)
-    return False;
+    return _False;
   for (i = 0; i < 4; i++)
     p->Code = (p->Code << 8) | IByteIn_Read(p->Stream);
   return (p->Code < 0xFFFFFFFF);

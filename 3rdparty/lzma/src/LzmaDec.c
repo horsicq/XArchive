@@ -868,7 +868,7 @@ void LzmaDec_InitDicAndState(CLzmaDec *p, BoolInt initDic, BoolInt initState)
 void LzmaDec_Init(CLzmaDec *p)
 {
   p->dicPos = 0;
-  LzmaDec_InitDicAndState(p, True, True);
+  LzmaDec_InitDicAndState(p, _True, _True);
 }
 
 
