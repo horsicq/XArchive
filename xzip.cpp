@@ -53,6 +53,7 @@ QString XZip::getVersion()
     qint64 nECDOffset=findECDOffset();
 
     quint16 nVersion=0;
+
     if(nECDOffset!=0)
     {
         qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
@@ -61,7 +62,7 @@ QString XZip::getVersion()
 
         if(nSignature==SIGNATURE_CFD)
         {
-            quint16 nVersion=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nVersion));
+            nVersion=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nVersion));
 
             if(nVersion==0)
             {
@@ -74,6 +75,10 @@ QString XZip::getVersion()
     {
         // The first record
         nVersion=read_uint16(0+offsetof(CENTRALDIRECTORYFILEHEADER,nVersion));
+    }
+
+    if(nVersion)
+    {
         sResult=QString("%1").arg((double)nVersion/10,0,'f',1);
     }
 

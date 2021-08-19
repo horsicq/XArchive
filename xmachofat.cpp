@@ -34,7 +34,7 @@ bool XMACHOFat::isValid()
     if( (nMagic==XMACH_DEF::S_FAT_MAGIC)||
         (nMagic==XMACH_DEF::S_FAT_CIGAM))
     {
-        bResult=(getNumberOfRecords()<10);
+        bResult=(getNumberOfRecords()<10); // TODO Check
     }
 
     return bResult;
