@@ -34,7 +34,6 @@ class XArchive : public XBinary
     Q_OBJECT
 
 public:
-
     enum COMPRESS_METHOD
     {
         COMPRESS_METHOD_UNKNOWN=0,
