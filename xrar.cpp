@@ -51,6 +51,7 @@ QString XRar::getVersion()
 {
     QString sResult;
 
+    // TODO more
     if(compareSignature("'RE~^'"))
     {
         sResult="1.4";
