@@ -340,7 +340,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 
 QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
 {
-    QString sResult="Unknown";
+    QString sResult=tr("Unknown");
 
     switch(id)
     {
