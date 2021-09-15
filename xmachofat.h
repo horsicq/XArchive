@@ -27,6 +27,7 @@
 class XMACHOFat : public XArchive
 {
     Q_OBJECT
+
 public:
     explicit XMACHOFat(QIODevice *pDevice=nullptr);
 

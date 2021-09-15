@@ -24,7 +24,7 @@ SOURCES += \
 
 !contains(XCONFIG, xmach) {
     XCONFIG += xmach
-    include($$PWD/../Formats/xmach.pri) # MACHFAT
+    include($$PWD/../Formats/xmach.pri) # MACHFAT archive
 }
 
 !contains(XCONFIG, zlib) {
