@@ -153,7 +153,7 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
 
     virtual bool isSigned();
-    virtual OFFSETSIZE getSignOS();
+    virtual OFFSETSIZE getSignOffsetSize();
 
     bool isAPKSignBlockPresent(); // For APK
 

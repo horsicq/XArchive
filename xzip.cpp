@@ -210,7 +210,7 @@ bool XZip::isSigned()
     return isAPKSignBlockPresent();
 }
 
-XBinary::OFFSETSIZE XZip::getSignOS()
+XBinary::OFFSETSIZE XZip::getSignOffsetSize()
 {
     OFFSETSIZE result={};
 
