@@ -510,9 +510,9 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *p
             nOffset+=pnNumFolders.nByteSize;
             nResult+=pnNumFolders.nByteSize;
 
-            quint8 nExtraByte=read_uint8(nOffset);
-            nOffset++;
-            nResult++;
+//            quint8 nExtraByte=read_uint8(nOffset);
+//            nOffset++;
+//            nResult++;
 
             // TODO
 //            QString _sTest=getSignature(nOffset,16);
