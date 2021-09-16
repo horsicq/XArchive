@@ -212,7 +212,7 @@ bool XZip::isSigned()
 
 XBinary::OFFSETSIZE XZip::getSignOffsetSize()
 {
-    OFFSETSIZE result={};
+    OFFSETSIZE osResult={};
 
     // TODO optimize
 
@@ -228,11 +228,11 @@ XBinary::OFFSETSIZE XZip::getSignOffsetSize()
         qint64 nCentralDirectoryOffset=findECDOffset();
         nCentralDirectoryOffset=read_uint32(nCentralDirectoryOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
 
-        result.nOffset=nOffset;
-        result.nSize=qMax((qint64)0,nCentralDirectoryOffset-nOffset);
+        osResult.nOffset=nOffset;
+        osResult.nSize=qMax((qint64)0,nCentralDirectoryOffset-nOffset);
     }
 
-    return result;
+    return osResult;
 }
 
 bool XZip::isAPKSignBlockPresent()
