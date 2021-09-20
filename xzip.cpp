@@ -207,6 +207,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
 
 bool XZip::isSigned()
 {
+    // TODO Check more !!!
     return isAPKSignBlockPresent();
 }
 
