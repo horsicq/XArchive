@@ -23,7 +23,7 @@
 
 #include "xarchive.h"
 
-// TODO OS
+// TODO OSNAME
 class XZip : public XArchive
 {
     Q_OBJECT
