@@ -22,9 +22,9 @@
 #define XARCHIVE_H
 
 #include "xbinary.h"
-#include "zlib.h"
-#include "bzlib.h"
 #include "LzmaDec.h"
+#include "bzlib.h"
+#include "zlib.h"
 #ifdef PPMD_SUPPORT
 #include "Ppmd7.h"
 #endif
