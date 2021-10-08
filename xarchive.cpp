@@ -113,6 +113,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     }
     else if(compressMethod==COMPRESS_METHOD_PPMD)
     {
+        // TODO Check
 #ifdef PPMD_SUPPORT
         quint8 nOrder=0;
         quint32 nMemSize=0;
