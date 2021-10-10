@@ -149,7 +149,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
 
         qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
 
-        for(int i=0; i<nNumberOfRecords; i++)
+        for(int i=0;i<nNumberOfRecords;i++)
         {
             RECORD record={};
 
