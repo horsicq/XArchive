@@ -38,6 +38,8 @@ public:
     static QList<XArchive::RECORD> getRecordsFromDirectory(QString sDirectoryName,qint32 nLimit=-1);
     static QByteArray decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
     static QByteArray decompress(QString sFileName,XArchive::RECORD *pRecord,bool bHeaderOnly=false);
+    static QByteArray decompress(QIODevice *pDevice,QString sRecordFileName,bool bHeaderOnly=false);
+    static QByteArray decompress(QString sFileName,QString sRecordFileName,bool bHeaderOnly=false);
     static bool decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QString sResultFileName,bool *pbIsStop=nullptr);
     static bool decompressToFile(QString sFileName,XArchive::RECORD *pRecord,QString sResultFileName,bool *pbIsStop=nullptr);
     static bool decompressToFile(QString sFileName,QString sRecordFileName,QString sResultFileName,bool *pbIsStop=nullptr);

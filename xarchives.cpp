@@ -115,6 +115,33 @@ QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, b
     return baResult;
 }
 
+QByteArray XArchives::decompress(QIODevice *pDevice, QString sRecordFileName, bool bHeaderOnly)
+{
+    QList<XArchive::RECORD> listRecords=getRecords(pDevice);
+
+    XArchive::RECORD record=XArchive::getArchiveRecord(sRecordFileName,&listRecords);
+
+    return decompress(pDevice,&record,bHeaderOnly);
+}
+
+QByteArray XArchives::decompress(QString sFileName, QString sRecordFileName, bool bHeaderOnly)
+{
+    QByteArray baResult;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        baResult=decompress(&file,sRecordFileName,bHeaderOnly);
+
+        file.close();
+    }
+
+    return baResult;
+}
+
 bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, bool *pbIsStop)
 {
     bool bResult=false;
