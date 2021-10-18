@@ -21,11 +21,11 @@
 #ifndef XARCHIVES_H
 #define XARCHIVES_H
 
-#include "xzip.h"
 #include "xcab.h"
+#include "xmachofat.h"
 #include "xrar.h"
 #include "xsevenzip.h"
-#include "xmachofat.h"
+#include "xzip.h"
 
 class XArchives : public QObject
 {
