@@ -11,3 +11,7 @@ SOURCES += \
     XCONFIG += xarchive
     include(xarchive.pri)
 }
+
+DISTFILES += \
+    $$PWD/LICENSE \
+    $$PWD/README.md
