@@ -666,7 +666,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
 
     int nNumberOfArchives=pListArchive->count();
 
-    for(int i=0;i<nNumberOfArchives;i++)
+    for(qint32 i=0;i<nNumberOfArchives;i++)
     {
         XArchive::RECORD record=pListArchive->at(i);
 
