@@ -835,7 +835,7 @@ XBinary::MODE XArchive::getMode()
 
 //    int nNumberOfRecords=listRecords.count();
 
-//    for(int i=0;i<nNumberOfRecords;i++)
+//    for(qint32 i=0;i<nNumberOfRecords;i++)
 //    {
 //        _MEMORY_RECORD record={};
 //        record.nAddress=-1;
