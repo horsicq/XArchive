@@ -763,7 +763,7 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArch
 
     int nNumberOfArchives=pListRecords->count();
 
-    for(int i=0;i<nNumberOfArchives;i++)
+    for(qint32 i=0;i<nNumberOfArchives;i++)
     {
         if(pListRecords->at(i).sFileName==sRecordFileName)
         {
