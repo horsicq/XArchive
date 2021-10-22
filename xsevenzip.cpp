@@ -588,7 +588,7 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *p
 //        {
 //            nCurrent+=pn.nByteSize;
 
-//            for(int i=0;i<(qint32)nSize;i++)
+//            for(qint32 i=0;i<(qint32)nSize;i++)
 //            {
 //                pn=get_packedNumber(nOffset+nCurrent);
 
@@ -636,14 +636,14 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *p
 //                nCurrent+=pn.nByteSize;
 
 //                // TODO Check!
-//                for(int i=0;i<(qint32)nFolderCount;i++)
+//                for(qint32 i=0;i<(qint32)nFolderCount;i++)
 //                {
 //                    pn=get_packedNumber(nOffset+nCurrent);
 
 //                    quint64 nNumberOfCoders=pn.nValue;
 //                    nCurrent+=pn.nByteSize;
 
-//                    for(int j=0;j<(qint32)nNumberOfCoders;j++)
+//                    for(qint32 j=0;j<(qint32)nNumberOfCoders;j++)
 //                    {
 //                        // TODO read coder function
 //                        pn=get_packedNumber(nOffset+nCurrent);
