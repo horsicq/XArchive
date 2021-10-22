@@ -81,7 +81,7 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 
     QMap<quint64, QString> mapCpuTypes=XMACH::getHeaderCpuTypesS();
 
-    for(int i=0;i<nNumberOfRecords;i++)
+    for(qint32 i=0;i<nNumberOfRecords;i++)
     {
         qint64 nOffset=sizeof(XMACH_DEF::fat_header)+i*sizeof(XMACH_DEF::fat_arch);
 
