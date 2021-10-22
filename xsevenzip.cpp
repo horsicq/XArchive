@@ -248,7 +248,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 //                    {
 //                        qDebug("Size");
 
-//                        for(int i=0;i<nNumberOfStreams;i++)
+//                        for(qint32 i=0;i<nNumberOfStreams;i++)
 //                        {
 //                            pn=get_packedNumber(nCurrentOffset);
 //                            qDebug("Current Size: %llu",pn.nValue);
@@ -289,7 +289,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
 //                        nCurrentOffset++;
 //                        nCurrentSize++;
 
-//                        for(int i=0;i<nNumberOfFolders;i++)
+//                        for(qint32 i=0;i<nNumberOfFolders;i++)
 //                        {
 //                            pn=get_packedNumber(nCurrentOffset);
 //                            qint64 nNumberOfCoders=pn.nValue;
