@@ -659,7 +659,7 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *p
 //                {
 //                    nCurrent+=pn.nByteSize;
 
-//                    for(int i=0;i<(qint32)nFolderCount;i++)
+//                    for(qint32 i=0;i<(qint32)nFolderCount;i++)
 //                    {
 //                        pn=get_packedNumber(nOffset+nCurrent);
 
