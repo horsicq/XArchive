@@ -296,9 +296,9 @@ XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_
 {
     XZip::APK_SIG_BLOCK_RECORD result={};
 
-    int nNumberOfRecords=pList->count();
+    qint32 nNumberOfRecords=pList->count();
 
-    for(int i=0;i<nNumberOfRecords;i++)
+    for(qint32 i=0;i<nNumberOfRecords;i++)
     {
         if(pList->at(i).nID==nID)
         {
