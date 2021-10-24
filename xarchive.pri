@@ -41,3 +41,6 @@ SOURCES += \
     XCONFIG += lzma
     include($$PWD/3rdparty/lzma/lzma.pri)
 }
+
+DISTFILES += \
+    $$PWD/xarchive.cmake
