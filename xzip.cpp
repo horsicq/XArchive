@@ -377,9 +377,9 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
 {
     qint64 nStartPosition=pDest->pos();
 
-    int nNumberOfRecords=pListZipFileRecords->count();
+    qint32 nNumberOfRecords=pListZipFileRecords->count();
 
-    for(int i=0;i<nNumberOfRecords;i++)
+    for(qint32 i=0;i<nNumberOfRecords;i++)
     {
         XZip::CENTRALDIRECTORYFILEHEADER cdFileHeader={};
 
