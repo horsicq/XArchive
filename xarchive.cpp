@@ -664,7 +664,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
 
     XBinary::createDirectory(fi.absolutePath());
 
-    int nNumberOfArchives=pListArchive->count();
+    qint32 nNumberOfArchives=pListArchive->count();
 
     for(qint32 i=0;i<nNumberOfArchives;i++)
     {
