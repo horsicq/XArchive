@@ -313,7 +313,7 @@ void XArchives::_findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pLis
 
             QFileInfoList eil=dir.entryInfoList();
 
-            int nNumberOfFiles=eil.count();
+            qint32 nNumberOfFiles=eil.count();
 
             for(qint32 i=0;i<nNumberOfFiles;i++)
             {
