@@ -325,7 +325,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         result=COMPRESS_RESULT_OK;
 
         // TODO more error codes
-        int nPropSize=0;
+        qint32 nPropSize=0;
         char header1[4]={0};
         quint8 properties[32]={0};
 
