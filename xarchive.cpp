@@ -432,7 +432,7 @@ XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressM
 
     if(compressMethod==COMPRESS_METHOD_STORE)
     {
-        const int CHUNK=COMPRESS_BUFFERSIZE;
+        const qint32 CHUNK=COMPRESS_BUFFERSIZE;
         char buffer[CHUNK];
         qint64 nSize=pSourceDevice->size();
 
