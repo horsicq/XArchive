@@ -276,7 +276,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                         break;
                     }
 
-                    int nTemp=CHUNK-strm.avail_out;
+                    qint32 nTemp=CHUNK-strm.avail_out;
 
                     if(pDestDevice->write((char *)out,nTemp)!=nTemp)
                     {
