@@ -349,7 +349,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 {
                     LzmaDec_Init(&state);
 
-                    const int CHUNK=DECOMPRESS_BUFFERSIZE;
+                    const qint32 CHUNK=DECOMPRESS_BUFFERSIZE;
 
                     char in[CHUNK];
                     char out[CHUNK];
