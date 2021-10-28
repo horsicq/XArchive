@@ -799,7 +799,7 @@ quint32 XArchive::getDecompressBufferSize()
 
 void XArchive::showRecords(QList<XArchive::RECORD> *pListArchive)
 {
-    int nCount=pListArchive->count();
+    qint32 nCount=pListArchive->count();
 
     for(qint32 i=0;i<nCount;i++)
     {
