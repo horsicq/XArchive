@@ -144,7 +144,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     }
     else if(compressMethod==COMPRESS_METHOD_DEFLATE)
     {
-        const int CHUNK=DECOMPRESS_BUFFERSIZE;
+        const qint32 CHUNK=DECOMPRESS_BUFFERSIZE;
 
         unsigned char in[CHUNK];
         unsigned char out[CHUNK];
