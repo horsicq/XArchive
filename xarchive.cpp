@@ -469,7 +469,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
-    const int CHUNK=COMPRESS_BUFFERSIZE;
+    const qint32 CHUNK=COMPRESS_BUFFERSIZE;
 
     unsigned char in[CHUNK];
     unsigned char out[CHUNK];
