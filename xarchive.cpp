@@ -157,7 +157,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         strm.avail_in=0;
         strm.next_in=nullptr;
 
-        int ret=Z_OK;
+        qint32 ret=Z_OK;
         result=COMPRESS_RESULT_OK;
 
         if(inflateInit2(&strm,-MAX_WBITS)==Z_OK) // -MAX_WBITS for raw data
