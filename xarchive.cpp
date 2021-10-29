@@ -761,7 +761,7 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArch
 {
     RECORD result={};
 
-    int nNumberOfArchives=pListRecords->count();
+    qint32 nNumberOfArchives=pListRecords->count();
 
     for(qint32 i=0;i<nNumberOfArchives;i++)
     {
