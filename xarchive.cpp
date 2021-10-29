@@ -519,7 +519,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
                     break;
                 }
 
-                int nTemp=CHUNK-strm.avail_out;
+                qint32 nTemp=CHUNK-strm.avail_out;
 
                 if(pDestDevice->write((char *)out,nTemp)!=nTemp)
                 {
