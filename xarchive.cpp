@@ -249,7 +249,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         int ret=BZ_MEM_ERROR;
         result=COMPRESS_RESULT_OK;
 
-        int rc=BZ2_bzDecompressInit(&strm,0,0);
+        qint32 rc=BZ2_bzDecompressInit(&strm,0,0);
 
         if(rc==BZ_OK)
         {
