@@ -246,7 +246,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         char out[CHUNK];
 
         bz_stream strm={0};
-        int ret=BZ_MEM_ERROR;
+        qint32 ret=BZ_MEM_ERROR;
         result=COMPRESS_RESULT_OK;
 
         qint32 rc=BZ2_bzDecompressInit(&strm,0,0);
