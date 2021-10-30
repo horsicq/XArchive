@@ -482,7 +482,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
     strm.avail_in=0;
     strm.next_in=nullptr;
 
-    int ret=Z_OK;
+    qint32 ret=Z_OK;
 
     if(deflateInit2(&strm,nLevel,nMethod,nWindowsBits,nMemLevel,nStrategy)==Z_OK)
     {
