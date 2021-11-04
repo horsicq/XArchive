@@ -490,7 +490,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
         {
             strm.avail_in=pSourceDevice->read((char *)in,CHUNK);
 
-            int nFlush=Z_NO_FLUSH;
+            qint32 nFlush=Z_NO_FLUSH;
 
             if(strm.avail_in!=CHUNK)
             {
