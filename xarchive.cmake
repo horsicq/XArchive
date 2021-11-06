@@ -1,4 +1,3 @@
-# TODO guard
 include_directories(${CMAKE_CURRENT_LIST_DIR})
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/bzip2/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/lzma/src/)
