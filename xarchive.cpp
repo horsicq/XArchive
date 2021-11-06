@@ -833,7 +833,7 @@ XBinary::MODE XArchive::getMode()
 
 //    QList<XArchive::RECORD> listRecords=getRecords();
 
-//    int nNumberOfRecords=listRecords.count();
+//    qint32 nNumberOfRecords=listRecords.count();
 
 //    for(qint32 i=0;i<nNumberOfRecords;i++)
 //    {
