@@ -79,7 +79,7 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit=-1);
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false,bool *pbIsStop=nullptr);
     static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice);
-    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,qint32 nLevel,qint32 nMethod,qint32 nWindowsBits,int nMemLevel,int nStrategy);
+    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,qint32 nLevel,qint32 nMethod,qint32 nWindowsBits,qint32 nMemLevel,int nStrategy);
     QByteArray decompress(const RECORD *pRecord,bool bHeaderOnly=false);
     QByteArray decompress(QList<RECORD> *pListArchive,QString sRecordFileName);
     QByteArray decompress(QString sRecordFileName);
