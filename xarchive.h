@@ -71,7 +71,7 @@ public:
         // TODO more
     };
 
-    static const int COMPRESS_BUFFERSIZE=0x4000; // TODO Check
+    static const qint32 COMPRESS_BUFFERSIZE=0x4000; // TODO Check
     static const int DECOMPRESS_BUFFERSIZE=0x4000;
 
     explicit XArchive(QIODevice *pDevice=nullptr);
