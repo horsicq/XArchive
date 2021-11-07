@@ -465,7 +465,7 @@ XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressM
     return result;
 }
 
-XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, int nMethod, int nWindowsBits, int nMemLevel, int nStrategy)
+XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, int nWindowsBits, int nMemLevel, int nStrategy)
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
