@@ -140,7 +140,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
 
     if(nECDOffset!=-1) // TODO if no ECD, only the first record
     {
-        int nNumberOfRecords=read_uint16(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nTotalNumberOfRecords));
+        qint32 nNumberOfRecords=read_uint16(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nTotalNumberOfRecords));
 
         if(nLimit!=-1)
         {
