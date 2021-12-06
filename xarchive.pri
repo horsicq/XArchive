@@ -43,4 +43,6 @@ SOURCES += \
 }
 
 DISTFILES += \
+    $$PWD/LICENSE \
+    $$PWD/README.md \
     $$PWD/xarchive.cmake
