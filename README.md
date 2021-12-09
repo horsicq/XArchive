@@ -1,2 +1,2 @@
 # XArchive
-Archives
+Archives formats
