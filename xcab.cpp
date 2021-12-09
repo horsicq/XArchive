@@ -80,7 +80,7 @@ QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
         nOffset+=cfHeader.cbCFHeader;
     }
 
-//    CFFOLDER cfFolder=readCFFolder(nOffset);
+    // CFFOLDER cfFolder=readCFFolder(nOffset);
 
     // TODO
 
