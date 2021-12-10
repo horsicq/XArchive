@@ -29,7 +29,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
 
-    // TODO more
+    // TODO more !!!
     QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
 
     if(stFileTypes.contains(XArchive::FT_ZIP))
