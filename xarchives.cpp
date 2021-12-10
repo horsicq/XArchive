@@ -148,7 +148,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 
     QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
 
-    // TODO more
+    // TODO more !!!
     if(stFileTypes.contains(XArchive::FT_ZIP))
     {
         XZip xzip(pDevice);

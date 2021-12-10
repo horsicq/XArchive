@@ -31,7 +31,9 @@ bool XRar::isValid()
 
     if(getSize()>20) // TODO
     {
-        if(compareSignature("'RE~^'")||compareSignature("'Rar!'1A07"))
+        _MEMORY_MAP memoryMap=getMemoryMap();
+
+        if(compareSignature(&memoryMap,"'RE~^'")||compareSignature(&memoryMap,"'Rar!'1A07"))
         {
             bResult=true;
         }
@@ -51,16 +53,18 @@ QString XRar::getVersion()
 {
     QString sResult;
 
+    _MEMORY_MAP memoryMap=getMemoryMap();
+
     // TODO more
-    if(compareSignature("'RE~^'"))
+    if(compareSignature(&memoryMap,"'RE~^'"))
     {
         sResult="1.4";
     }
-    else if(compareSignature("'Rar!'1A0700"))
+    else if(compareSignature(&memoryMap,"'Rar!'1A0700"))
     {
         sResult="4.X";
     }
-    else if(compareSignature("'Rar!'1A070100"))
+    else if(compareSignature(&memoryMap,"'Rar!'1A070100"))
     {
         sResult="5.X";
     }
