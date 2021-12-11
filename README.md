@@ -1,2 +1,4 @@
 # XArchive
 Archives formats
+
+* ZIP
