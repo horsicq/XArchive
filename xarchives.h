@@ -33,6 +33,7 @@ class XArchives : public QObject
 
 public:
     explicit XArchives(QObject *pParent=nullptr);
+
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice,qint32 nLimit=-1);
     static QList<XArchive::RECORD> getRecords(QString sFileName,qint32 nLimit=-1);
     static QList<XArchive::RECORD> getRecordsFromDirectory(QString sDirectoryName,qint32 nLimit=-1);
