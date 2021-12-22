@@ -799,9 +799,9 @@ quint32 XArchive::getDecompressBufferSize()
 
 void XArchive::showRecords(QList<XArchive::RECORD> *pListArchive)
 {
-    qint32 nCount=pListArchive->count();
+    qint32 nNumberOfRecords=pListArchive->count();
 
-    for(qint32 i=0;i<nCount;i++)
+    for(qint32 i=0;i<nNumberOfRecords;i++)
     {
     #ifdef QT_DEBUG
         qDebug("%s", pListArchive->at(i).sFileName.toLatin1().data());
