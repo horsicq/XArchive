@@ -2,3 +2,4 @@
 Archives formats
 
 * ZIP
+* MACHOFAT
