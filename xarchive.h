@@ -71,8 +71,8 @@ public:
         // TODO more
     };
 
-    static const qint32 COMPRESS_BUFFERSIZE=0x4000; // TODO Check
-    static const qint32 DECOMPRESS_BUFFERSIZE=0x4000; // TODO Check
+    static const qint32 COMPRESS_BUFFERSIZE=0x4000; // TODO Check mb set/get ???
+    static const qint32 DECOMPRESS_BUFFERSIZE=0x4000; // TODO Check mb set/get ???
 
     explicit XArchive(QIODevice *pDevice=nullptr);
     virtual quint64 getNumberOfRecords();
