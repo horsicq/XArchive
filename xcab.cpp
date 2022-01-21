@@ -67,7 +67,7 @@ QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit)
 
     QList<XArchive::RECORD> listResult;
 
-    qint64 nOffset=0;
+    qint64 nOffset=0; // TODO
 
     CFHEADER cfHeader=readCFHeader();
 
