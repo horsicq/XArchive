@@ -50,7 +50,7 @@ public:
     static bool isArchiveOpenValid(QString sFileName,QSet<XBinary::FT> stAvailable);
 
 private:
-    static void _findFiles(QString sDirectoryName,QList<XArchive::RECORD> *pListRecords,qint32 nLimit); // mb nLimit pointer to qint32
+    static void _findFiles(QString sDirectoryName,QList<XArchive::RECORD> *pListRecords,qint32 nLimit); // mb nLimit pointer to qint32 Check
 };
 
 #endif // XARCHIVES_H
