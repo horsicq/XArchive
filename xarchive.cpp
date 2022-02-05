@@ -63,7 +63,7 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit)
     return listResult;
 }
 
-XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly,bool *pbIsStop)
+XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly,bool *pbIsStop)
 {
     bool _bIsStop=false;
 
