@@ -33,7 +33,7 @@ extern "C" FILE *__cdecl __iob_func(void)
 #endif
 #endif
 
-static void *SzAlloc(ISzAllocPtr, size_t size)
+static void *SzAlloc(ISzAllocPtr,size_t size)
 {
     return malloc(size);
 }
