@@ -287,7 +287,7 @@ QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockRecordsList()
     return listResult;
 }
 
-bool XZip::isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID)
+bool XZip::isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList,quint32 nID)
 {
     return (getAPKSignatureBlockRecord(pList,nID).nID==nID);
 }
