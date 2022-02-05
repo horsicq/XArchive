@@ -25,7 +25,7 @@ XArchives::XArchives(QObject *pParent) : QObject(pParent)
 
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit)
+QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice,qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
 
