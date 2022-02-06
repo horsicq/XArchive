@@ -426,7 +426,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     return result;
 }
 
-XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice)
+XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice)
 {
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
 
