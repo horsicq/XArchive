@@ -563,7 +563,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice,QI
     return result;
 }
 
-QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, bool bHeaderOnly)
+QByteArray XArchive::decompress(const XArchive::RECORD *pRecord,bool bHeaderOnly)
 {
     QByteArray result;
 
