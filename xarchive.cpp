@@ -609,7 +609,7 @@ QByteArray XArchive::decompress(QString sRecordFileName)
     return decompress(&listArchive,sRecordFileName);
 }
 
-bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResultFileName,bool *pbIsStop)
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord,QString sResultFileName,bool *pbIsStop)
 {
     bool bResult=false;
 
