@@ -642,7 +642,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord,QString sResultF
     return bResult;
 }
 
-bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, QString sResultFileName)
+bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive,QString sRecordFileName,QString sResultFileName)
 {
     bool bResult=false;
 
