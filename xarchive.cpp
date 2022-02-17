@@ -727,7 +727,7 @@ bool XArchive::decompressToFile(QString sArchiveFileName,QString sRecordFileName
     return bResult;
 }
 
-bool XArchive::decompressToPath(QString sArchiveFileName, QString sRecordPathName, QString sResultPathName)
+bool XArchive::decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName)
 {
     bool bResult=false;
 
