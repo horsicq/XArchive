@@ -656,7 +656,7 @@ bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive,QString sR
     return bResult;
 }
 
-bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, QString sResultPathName)
+bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive,QString sRecordFileName,QString sResultPathName)
 {
     bool bResult=true;
 
