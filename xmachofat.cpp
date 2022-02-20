@@ -79,7 +79,7 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 
     bool bIsBigEndian=isBigEndian();
 
-    QMap<quint64, QString> mapCpuTypes=XMACH::getHeaderCpuTypesS();
+    QMap<quint64,QString> mapCpuTypes=XMACH::getHeaderCpuTypesS();
 
     for(qint32 i=0;i<nNumberOfRecords;i++)
     {
