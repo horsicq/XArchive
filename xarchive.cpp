@@ -757,7 +757,7 @@ bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName)
     return XBinary::dumpToFile(sFileName,pRecord->nDataOffset,pRecord->nCompressedSize);
 }
 
-XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords)
+XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName,QList<XArchive::RECORD> *pListRecords)
 {
     RECORD result={};
 
