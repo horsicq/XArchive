@@ -804,7 +804,7 @@ void XArchive::showRecords(QList<XArchive::RECORD> *pListArchive)
     for(qint32 i=0;i<nNumberOfRecords;i++)
     {
     #ifdef QT_DEBUG
-        qDebug("%s", pListArchive->at(i).sFileName.toLatin1().data());
+        qDebug("%s",pListArchive->at(i).sFileName.toLatin1().data());
     #endif
     }
 }
