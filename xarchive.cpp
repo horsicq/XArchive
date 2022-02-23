@@ -418,7 +418,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                     }
                 }
 
-                LzmaDec_Free(&state, &g_Alloc);
+                LzmaDec_Free(&state,&g_Alloc);
             }
         }
     }
