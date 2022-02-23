@@ -375,7 +375,7 @@ QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
     return sResult;
 }
 
-qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra)
+qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap,qint64 nOffset,XRECORD *pXRecord,qint64 nExtra)
 {
     qint32 nResult=0;
 
