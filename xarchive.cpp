@@ -24,7 +24,7 @@
 #if _MSC_VER > 1800 // TODO Check !!!
 #pragma comment(lib,"legacy_stdio_definitions.lib") // bzip2.lib(compress.obj) __imp__fprintf
 
-FILE _iob[]={*stdin, *stdout, *stderr}; // bzip2.lib(compress.obj) _iob_func
+FILE _iob[]={*stdin,*stdout,*stderr}; // bzip2.lib(compress.obj) _iob_func
 
 extern "C" FILE *__cdecl __iob_func(void)
 {
