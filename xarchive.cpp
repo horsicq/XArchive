@@ -38,7 +38,7 @@ static void *SzAlloc(ISzAllocPtr,size_t size)
     return malloc(size);
 }
 
-static void SzFree(ISzAllocPtr, void *address)
+static void SzFree(ISzAllocPtr,void *address)
 {
     free(address);
 }
