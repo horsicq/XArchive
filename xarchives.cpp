@@ -125,7 +125,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, QString sRecordFileName, bo
     return decompress(pDevice,&record,bHeaderOnly);
 }
 
-QByteArray XArchives::decompress(QString sFileName, QString sRecordFileName, bool bHeaderOnly)
+QByteArray XArchives::decompress(QString sFileName,QString sRecordFileName,bool bHeaderOnly)
 {
     QByteArray baResult;
 
