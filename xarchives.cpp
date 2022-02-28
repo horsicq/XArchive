@@ -250,7 +250,7 @@ bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileNam
     return bResult;
 }
 
-bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvailable)
+bool XArchives::isArchiveOpenValid(QIODevice *pDevice,QSet<XBinary::FT> stAvailable)
 {
     bool bResult=false;
 
