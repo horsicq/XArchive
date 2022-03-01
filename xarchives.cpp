@@ -184,7 +184,7 @@ bool XArchives::decompressToFile(QString sFileName,XArchive::RECORD *pRecord,QSt
     return bResult;
 }
 
-bool XArchives::decompressToFile(QString sFileName, QString sRecordFileName, QString sResultFileName, bool *pbIsStop)
+bool XArchives::decompressToFile(QString sFileName,QString sRecordFileName,QString sResultFileName,bool *pbIsStop)
 {
     bool bResult=false;
 
