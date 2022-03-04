@@ -76,7 +76,7 @@ QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryNam
     return listResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly)
+QByteArray XArchives::decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bool bHeaderOnly)
 {
     QByteArray baResult;
 
