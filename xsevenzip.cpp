@@ -609,7 +609,7 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap,qint64 nOffset,XRECORD *pXR
 //    return nCurrent;
 //}
 
-//qint64 XSevenZip::getUnpackInfo(qint64 nOffset, XSevenZip::XUNPACKINFO *pUnpackInfo)
+//qint64 XSevenZip::getUnpackInfo(qint64 nOffset,XSevenZip::XUNPACKINFO *pUnpackInfo)
 //{
 //    qint64 nCurrent=0;
 
