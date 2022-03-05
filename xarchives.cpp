@@ -67,7 +67,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit)
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit)
+QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName,qint32 nLimit)
 {
     QList<XArchive::RECORD> listResult;
 
