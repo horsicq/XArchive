@@ -209,7 +209,7 @@ bool XArchives::decompressToFile(QString sFileName,QString sRecordFileName,QStri
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileName)
+bool XArchives::isArchiveRecordPresent(QIODevice *pDevice,QString sRecordFileName)
 {
     bool bResult=false;
 
