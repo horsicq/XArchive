@@ -232,7 +232,7 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice,QString sRecordFileNam
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileName)
+bool XArchives::isArchiveRecordPresent(QString sFileName,QString sRecordFileName)
 {
     bool bResult=false;
 
