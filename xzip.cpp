@@ -311,7 +311,7 @@ XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_
     return result;
 }
 
-bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord)
+bool XZip::addLocalFileRecord(QIODevice *pSource,QIODevice *pDest,ZIPFILE_RECORD *pZipFileRecord)
 {
     if(pZipFileRecord->nMinVersion==0)
     {
@@ -373,7 +373,7 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     return true;
 }
 
-bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords, QString sComment)
+bool XZip::addCentralDirectory(QIODevice *pDest,QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords,QString sComment)
 {
     qint64 nStartPosition=pDest->pos();
 
