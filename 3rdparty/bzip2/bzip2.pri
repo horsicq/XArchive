@@ -1,6 +1,7 @@
 INCLUDEPATH += $$PWD/src
 DEPENDPATH += $$PWD/src
 
+# TODO ARM
 win32-g++ {
     contains(QT_ARCH, i386) {
         LIBS += $$PWD/libs/win32-g++/libbzip2.a
