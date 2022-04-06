@@ -25,6 +25,7 @@ unix:!macx {
         LIBS +=  $$PWD/libs/lin32/libbzip2.a
     }
 }
+# TODO ARM
 unix:macx {
     LIBS +=  $$PWD/libs/mac/libbzip2.a
 }
