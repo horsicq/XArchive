@@ -9,6 +9,7 @@ win32-g++ {
         LIBS += $$PWD/libs/win64-g++/libbzip2.a
     }
 }
+# TODO ARM
 win32-msvc* {
     contains(QMAKE_TARGET.arch, x86_64) {
         LIBS += $$PWD/libs/win64-msvc/bzip2.lib
