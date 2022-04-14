@@ -58,6 +58,7 @@ class XSevenZip : public XArchive
         // k7zNtSecure,
         // k7zParent,
         // k7zIsReal
+        // Test
     };
 
 public:    
