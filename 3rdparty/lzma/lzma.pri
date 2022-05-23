@@ -17,6 +17,7 @@ win32-msvc* {
         LIBS += $$PWD/libs/win32-msvc/lzma.lib
     }
 }
+# TODO ARM
 unix:!macx {
     BITSIZE = $$system(getconf LONG_BIT)
     if (contains(BITSIZE, 64)) {
