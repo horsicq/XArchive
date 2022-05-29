@@ -31,7 +31,8 @@ bool XZip::isValid()
 
     _MEMORY_MAP memoryMap=XBinary::getMemoryMap(); // TODO Check
 
-    if(compareSignature(&memoryMap,"'PK'0304",0)||compareSignature(&memoryMap,"'PK'0506",0))
+    if( compareSignature(&memoryMap,"'PK'0304",0)||
+        compareSignature(&memoryMap,"'PK'0506",0))
     {
         bResult=true;
     }
