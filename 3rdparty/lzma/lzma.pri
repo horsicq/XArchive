@@ -1,6 +1,9 @@
 INCLUDEPATH += $$PWD/src
 DEPENDPATH += $$PWD/src
 
+#message($$QT_ARCH)
+# TODO win32-msvc-$$QT_ARCH
+#message(win32-msvc-$$QT_ARCH)
 # TODO ARM
 win32-g++ {
     contains(QT_ARCH, i386) {
