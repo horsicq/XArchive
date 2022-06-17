@@ -1,32 +1,15 @@
 INCLUDEPATH += $$PWD/src
 DEPENDPATH += $$PWD/src
 
-# TODO ARM
 win32-g++ {
-    contains(QT_ARCH, i386) {
-        LIBS += $$PWD/libs/win32-g++/libzlib.a
-    } else {
-        LIBS += $$PWD/libs/win64-g++/libzlib.a
-    }
+    LIBS += $$PWD/libs/libzlib-win-$${QT_ARCH}.a
 }
-# TODO ARM
 win32-msvc* {
-    contains(QMAKE_TARGET.arch, x86_64) {
-        LIBS += $$PWD/libs/win64-msvc/zlib.lib
-    } else {
-        LIBS += $$PWD/libs/win32-msvc/zlib.lib
-    }
+    LIBS += $$PWD/libs/zlib-win-$${QT_ARCH}.lib
 }
-# TODO ARM
 unix:!macx {
-    BITSIZE = $$system(getconf LONG_BIT)
-    if (contains(BITSIZE, 64)) {
-        LIBS +=  $$PWD/libs/lin64/libzlib.a
-    }
-    if (contains(BITSIZE, 32)) {
-        LIBS +=  $$PWD/libs/lin32/libzlib.a
-    }
+    LIBS += $$PWD/libs/libzlib-unix-$${QT_ARCH}.a
 }
 unix:macx {
-    LIBS +=  $$PWD/libs/mac/libzlib.a
+    LIBS += $$PWD/libs/libzlib-macos-$${QT_ARCH}.a
 }
