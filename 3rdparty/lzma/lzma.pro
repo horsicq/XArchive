@@ -15,34 +15,14 @@ CONFIG(debug, debug|release) {
     TARGET = lzma
 }
 
-TARGETLIB_PATH = $$PWD
-
-win32-g++ {
-    contains(QT_ARCH, i386) {
-        DESTDIR=$${TARGETLIB_PATH}/libs/win32-g++
-    } else {
-        DESTDIR=$${TARGETLIB_PATH}/libs/win64-g++
-    }
-}
-win32-msvc* {
-    contains(QMAKE_TARGET.arch, x86_64) {
-        DESTDIR=$${TARGETLIB_PATH}/libs/win64-msvc
-    } else {
-        DESTDIR=$${TARGETLIB_PATH}/libs/win32-msvc
-    }
-
+win32{
+    TARGET = lzma-win-$${QT_ARCH}
 }
 unix:!macx {
-    BITSIZE = $$system(getconf LONG_BIT)
-    if (contains(BITSIZE, 64)) {
-        DESTDIR=$${TARGETLIB_PATH}/libs/lin64
-    }
-    if (contains(BITSIZE, 32)) {
-        DESTDIR=$${TARGETLIB_PATH}/libs/lin32
-    }
+    TARGET = lzma-unix-$${QT_ARCH}
 }
 unix:macx {
-    DESTDIR=$${TARGETLIB_PATH}/libs/mac
+    TARGET = lzma-macos-$${QT_ARCH}
 }
 
 SOURCES += \
@@ -50,3 +30,6 @@ SOURCES += \
     $$PWD/src/Ppmd7.c \
     $$PWD/src/Ppmd7Dec.c
 
+TARGETLIB_PATH = $$PWD
+
+DESTDIR=$${TARGETLIB_PATH}/libs
