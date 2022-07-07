@@ -63,13 +63,14 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit)
     return listResult;
 }
 
-XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly,bool *pbIsStop)
+XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly,PDSTRUCT *pPdStruct)
 {
-    bool _bIsStop=false;
+    // TODO Progress
+    PDSTRUCT pdStructEmpty={};
 
-    if(pbIsStop==nullptr)
+    if(pPdStruct==nullptr)
     {
-        pbIsStop=&_bIsStop;
+        pPdStruct=&pdStructEmpty;
     }
 
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
@@ -103,7 +104,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 break;
             }
 
-            if(*pbIsStop)
+            if(pPdStruct->bIsStop)
             {
                 break;
             }
@@ -207,7 +208,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                     break;
                 }
 
-                if(*pbIsStop)
+                if(pPdStruct->bIsStop)
                 {
                     break;
                 }
@@ -296,7 +297,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                     break;
                 }
 
-                if(*pbIsStop)
+                if(pPdStruct->bIsStop)
                 {
                     break;
                 }
@@ -411,7 +412,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                             bRun=false;
                         }
 
-                        if(*pbIsStop)
+                        if(pPdStruct->bIsStop)
                         {
                             bRun=false;
                         }
@@ -563,7 +564,7 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice,QI
     return result;
 }
 
-QByteArray XArchive::decompress(const XArchive::RECORD *pRecord,bool bHeaderOnly)
+QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, bool bHeaderOnly, PDSTRUCT *pPdStruct)
 {
     QByteArray result;
 
@@ -575,7 +576,7 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord,bool bHeaderOnly
         buffer.setBuffer(&result);
         buffer.open(QIODevice::WriteOnly);
 
-        decompress(pRecord->compressMethod,&sd,&buffer,bHeaderOnly);
+        decompress(pRecord->compressMethod,&sd,&buffer,bHeaderOnly,pPdStruct);
 
         buffer.close();
 
@@ -585,7 +586,7 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord,bool bHeaderOnly
     return result;
 }
 
-QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive,QString sRecordFileName)
+QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive,QString sRecordFileName,PDSTRUCT *pPdStruct)
 {
     QByteArray baResult;
 
@@ -595,21 +596,21 @@ QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive,QString sR
     {
         if(record.nUncompressedSize)
         {
-            baResult=decompress(&record);
+            baResult=decompress(&record,false,pPdStruct);
         }
     }
 
     return baResult;
 }
 
-QByteArray XArchive::decompress(QString sRecordFileName)
+QByteArray XArchive::decompress(QString sRecordFileName, PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listArchive=getRecords();
 
-    return decompress(&listArchive,sRecordFileName);
+    return decompress(&listArchive,sRecordFileName,pPdStruct);
 }
 
-bool XArchive::decompressToFile(const XArchive::RECORD *pRecord,QString sResultFileName,bool *pbIsStop)
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord,QString sResultFileName,PDSTRUCT *pPdStruct)
 {
     bool bResult=false;
 
@@ -630,7 +631,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord,QString sResultF
             {
                 file.resize(0);
 
-                bResult=(decompress(pRecord->compressMethod,&sd,&file,false,pbIsStop)==COMPRESS_RESULT_OK);
+                bResult=(decompress(pRecord->compressMethod,&sd,&file,false,pPdStruct)==COMPRESS_RESULT_OK);
 
                 sd.close();
             }
@@ -642,7 +643,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord,QString sResultF
     return bResult;
 }
 
-bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive,QString sRecordFileName,QString sResultFileName)
+bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive,QString sRecordFileName,QString sResultFileName,PDSTRUCT *pPdStruct)
 {
     bool bResult=false;
 
@@ -650,13 +651,13 @@ bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive,QString sR
 
     if(record.sFileName!="") // TODO bIsValid
     {
-        bResult=decompressToFile(&record,sResultFileName);
+        bResult=decompressToFile(&record,sResultFileName,pPdStruct);
     }
 
     return bResult;
 }
 
-bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive,QString sRecordFileName,QString sResultPathName)
+bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive,QString sRecordFileName,QString sResultPathName,PDSTRUCT *pPdStruct)
 {
     bool bResult=true;
 
@@ -686,7 +687,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive,QString sR
             QFileInfo fi(sResultFileName);
             XBinary::createDirectory(fi.absolutePath());
 
-            if(!decompressToFile(&record,sResultFileName))
+            if(!decompressToFile(&record,sResultFileName,pPdStruct))
             {
                 bResult=false;
                 break;
@@ -700,34 +701,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive,QString sR
     return bResult;
 }
 
-bool XArchive::decompressToFile(QString sArchiveFileName,QString sRecordFileName,QString sResultFileName)
-{
-    bool bResult=false;
-
-    QFile file;
-
-    file.setFileName(sArchiveFileName);
-
-    if(file.open(QIODevice::ReadOnly))
-    {
-        setDevice(&file);
-
-        if(isValid())
-        {
-            bResult=true;
-
-            QList<RECORD> listRecords=getRecords();
-
-            bResult=decompressToFile(&listRecords,sRecordFileName,sResultFileName);
-        }
-
-        file.close();
-    }
-
-    return bResult;
-}
-
-bool XArchive::decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName)
+bool XArchive::decompressToFile(QString sArchiveFileName,QString sRecordFileName,QString sResultFileName,PDSTRUCT *pPdStruct)
 {
     bool bResult=false;
 
@@ -743,7 +717,7 @@ bool XArchive::decompressToPath(QString sArchiveFileName,QString sRecordPathName
         {
             QList<RECORD> listRecords=getRecords();
 
-            bResult=decompressToPath(&listRecords,sRecordPathName,sResultPathName);
+            bResult=decompressToFile(&listRecords,sRecordFileName,sResultFileName,pPdStruct);
         }
 
         file.close();
@@ -752,9 +726,34 @@ bool XArchive::decompressToPath(QString sArchiveFileName,QString sRecordPathName
     return bResult;
 }
 
-bool XArchive::dumpToFile(const XArchive::RECORD *pRecord,QString sFileName)
+bool XArchive::decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName,PDSTRUCT *pPdStruct)
 {
-    return XBinary::dumpToFile(sFileName,pRecord->nDataOffset,pRecord->nCompressedSize);
+    bool bResult=false;
+
+    QFile file;
+
+    file.setFileName(sArchiveFileName);
+
+    if(file.open(QIODevice::ReadOnly))
+    {
+        setDevice(&file);
+
+        if(isValid())
+        {
+            QList<RECORD> listRecords=getRecords();
+
+            bResult=decompressToPath(&listRecords,sRecordPathName,sResultPathName,pPdStruct);
+        }
+
+        file.close();
+    }
+
+    return bResult;
+}
+
+bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName, PDSTRUCT *pPdStruct)
+{
+    return XBinary::dumpToFile(sFileName,pRecord->nDataOffset,pRecord->nCompressedSize,pPdStruct);
 }
 
 XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName,QList<XArchive::RECORD> *pListRecords)
