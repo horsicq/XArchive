@@ -143,7 +143,7 @@ QByteArray XArchives::decompress(QString sFileName, QString sRecordFileName, boo
     return baResult;
 }
 
-bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QString sResultFileName,XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult=false;
 
