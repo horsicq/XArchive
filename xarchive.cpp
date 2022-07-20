@@ -603,7 +603,7 @@ QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive,QString sR
     return baResult;
 }
 
-QByteArray XArchive::decompress(QString sRecordFileName, PDSTRUCT *pPdStruct)
+QByteArray XArchive::decompress(QString sRecordFileName,PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listArchive=getRecords();
 
