@@ -86,7 +86,7 @@ public:
     bool decompressToFile(const RECORD *pRecord,QString sResultFileName,PDSTRUCT *pPdStruct=nullptr);
     bool decompressToFile(QList<RECORD> *pListArchive,QString sRecordFileName,QString sResultFileName,PDSTRUCT *pPdStruct=nullptr);
     bool decompressToPath(QList<RECORD> *pListArchive,QString sRecordFileName,QString sResultPathName,PDSTRUCT *pPdStruct=nullptr);
-    bool decompressToFile(QString sArchiveFileName, QString sRecordFileName, QString sResultFileName,PDSTRUCT *pPdStruct=nullptr);
+    bool decompressToFile(QString sArchiveFileName,QString sRecordFileName,QString sResultFileName,PDSTRUCT *pPdStruct=nullptr);
     bool decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName,PDSTRUCT *pPdStruct=nullptr);
     bool dumpToFile(const RECORD *pRecord,QString sFileName,PDSTRUCT *pPdStruct=nullptr);
     static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListRecords);
