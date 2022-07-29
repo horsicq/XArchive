@@ -94,7 +94,6 @@ public:
     static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListRecords);
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();
-
     static void showRecords(QList<RECORD> *pListArchive);
 
     virtual MODE getMode();
