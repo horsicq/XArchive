@@ -2,6 +2,7 @@ INCLUDEPATH += $$PWD
 DEPENDPATH += $$PWD
 
 HEADERS += \
+    $$PWD/x_ar.h \
     $$PWD/xarchive.h \
     $$PWD/xmachofat.h \
     $$PWD/xsevenzip.h \
@@ -10,6 +11,7 @@ HEADERS += \
     $$PWD/xrar.h
 
 SOURCES += \
+    $$PWD/x_ar.cpp \
     $$PWD/xarchive.cpp \
     $$PWD/xmachofat.cpp \
     $$PWD/xsevenzip.cpp \

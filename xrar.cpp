@@ -31,7 +31,7 @@ bool XRar::isValid()
 
     if(getSize()>20) // TODO
     {
-        _MEMORY_MAP memoryMap=getMemoryMap();
+        _MEMORY_MAP memoryMap=XBinary::getMemoryMap();
 
         if(compareSignature(&memoryMap,"'RE~^'")||compareSignature(&memoryMap,"'Rar!'1A07"))
         {

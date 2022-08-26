@@ -27,6 +27,7 @@
 #include "xrar.h"
 #include "xsevenzip.h"
 #include "xzip.h"
+#include "x_ar.h"
 
 class XArchives : public QObject
 {
