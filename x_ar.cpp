@@ -98,6 +98,8 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit)
     nOffset+=8;
     nSize-=8;
 
+    QString sList;
+
     while(nSize>0)
     {
         FRECORD frecord=readFRECORD(nOffset);
@@ -119,9 +121,65 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit)
         record.sFileName.resize(sizeof(frecord.fileId));
         record.sFileName=record.sFileName.trimmed();
 
-        record.nDataOffset=nOffset+sizeof(FRECORD);
-        record.nCompressedSize=nRecordSize;
-        record.nUncompressedSize=nRecordSize;
+        if(record.sFileName=="//") // Linux/GNU
+        {
+            sList=read_ansiString(nOffset+sizeof(FRECORD),nRecordSize);
+        }
+
+        if(record.sFileName.section("/",0,0)=="#1") // BSD style
+        {
+            qint32 nFileNameLength=record.sFileName.section("/",1,1).toInt();
+
+            record.sFileName=read_ansiString(nOffset+sizeof(FRECORD),nFileNameLength); // TODO Check UTF8
+
+            record.nDataOffset=nOffset+sizeof(FRECORD)+nFileNameLength;
+            record.nCompressedSize=nRecordSize-nFileNameLength;
+            record.nUncompressedSize=nRecordSize-nFileNameLength;
+        }
+        else
+        {
+            qint32 nFileNameSie=record.sFileName.size();
+
+            if(nFileNameSie>=2) // Linux/GNU
+            {
+                if((record.sFileName.at(0)==QChar('/'))&&(record.sFileName.at(nFileNameSie-1)!=QChar('/')))
+                {
+                    qint32 nIndex=record.sFileName.section("/",1,1).toULong();
+
+                    if(nIndex<sList.size())
+                    {
+                        if(nIndex)
+                        {
+                            record.sFileName=sList.right(nIndex).section("/",0,0);
+                        }
+                        else
+                        {
+                            record.sFileName=sList.section("/",0,0);
+                        }
+                    }
+                }
+                else if((nFileNameSie>2)&&(record.sFileName.at(nFileNameSie-1)==QChar('/')))
+                {
+                    record.sFileName.remove(nFileNameSie-1,1);
+                }
+            }
+            // TODO remove last /
+
+            record.nDataOffset=nOffset+sizeof(FRECORD);
+            record.nCompressedSize=nRecordSize;
+            record.nUncompressedSize=nRecordSize;
+        }
+
+        if(record.nCompressedSize<0)
+        {
+            record.nCompressedSize=0;
+        }
+
+        if(record.nUncompressedSize<0)
+        {
+            record.nUncompressedSize=0;
+        }
+
         record.compressMethod=COMPRESS_METHOD_STORE;
 
         listRecords.append(record);

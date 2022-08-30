@@ -45,6 +45,12 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice,qint32 nLimit)
 
         listResult=xmachofat.getRecords(nLimit);
     }
+    else if(stFileTypes.contains(XArchive::FT_AR))
+    {
+        X_Ar x_ar(pDevice);
+
+        listResult=x_ar.getRecords(nLimit);
+    }
 
     return listResult;
 }
@@ -93,6 +99,12 @@ QByteArray XArchives::decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bo
         XMACHOFat xmachofat(pDevice);
 
         baResult=xmachofat.decompress(pRecord,bHeaderOnly,pPdStruct);
+    }
+    else if(stFileTypes.contains(XArchive::FT_AR))
+    {
+        X_Ar x_ar(pDevice);
+
+        baResult=x_ar.decompress(pRecord,bHeaderOnly,pPdStruct);
     }
 
     return baResult;
@@ -162,6 +174,12 @@ bool XArchives::decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QS
 
         bResult=xmachofat.decompressToFile(pRecord,sResultFileName,pPdStruct);
     }
+    else if(stFileTypes.contains(XArchive::FT_AR))
+    {
+        X_Ar x_ar(pDevice);
+
+        bResult=x_ar.decompressToFile(pRecord,sResultFileName,pPdStruct);
+    }
 
     return bResult;
 }
@@ -228,6 +246,12 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice,QString sRecordFileNam
 
         bResult=xmachofat.isArchiveRecordPresent(sRecordFileName);
     }
+    else if(stFileTypes.contains(XArchive::FT_AR))
+    {
+        X_Ar x_ar(pDevice);
+
+        bResult=x_ar.isArchiveRecordPresent(sRecordFileName);
+    }
 
     return bResult;
 }
@@ -262,6 +286,7 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice,QSet<XBinary::FT> stAvaila
         {
             stAvailable.insert(XBinary::FT_ZIP);
             stAvailable.insert(XBinary::FT_MACHOFAT);
+            stAvailable.insert(XBinary::FT_AR);
         }
 
         bResult=XBinary::isFileTypePresent(&stFT,&stAvailable);

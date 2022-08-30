@@ -41,7 +41,6 @@ class X_Ar : public XArchive
     };
 #pragma pack(pop)
 
-
 public:
     explicit X_Ar(QIODevice *pDevice=nullptr);
 
