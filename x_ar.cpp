@@ -31,7 +31,7 @@ bool X_Ar::isValid()
 
     _MEMORY_MAP memoryMap=XBinary::getMemoryMap();
 
-    if(getSize()>8+sizeof(RECORD)) // TODO
+    if(getSize()>8+sizeof(RECORD)) // TODO const
     {
         if(compareSignature(&memoryMap,"'!<arch>'0a"))
         {
@@ -163,7 +163,6 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit)
                     record.sFileName.remove(nFileNameSie-1,1);
                 }
             }
-            // TODO remove last /
 
             record.nDataOffset=nOffset+sizeof(FRECORD);
             record.nCompressedSize=nRecordSize;
