@@ -72,12 +72,12 @@ QString XRar::getVersion()
     return sResult;
 }
 
-quint64 XRar::getNumberOfRecords()
+quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     return 0; // TODO
 }
 
-QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit)
+QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
 

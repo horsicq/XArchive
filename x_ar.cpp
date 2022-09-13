@@ -49,7 +49,7 @@ bool X_Ar::isValid(QIODevice *pDevice)
     return x_ar.isValid();
 }
 
-quint64 X_Ar::getNumberOfRecords()
+quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     quint64 nResult=0;
 
@@ -88,8 +88,17 @@ quint64 X_Ar::getNumberOfRecords()
     return nResult;
 }
 
-QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit)
+QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
 {
+    // TODO Limit
+
+    XBinary::PDSTRUCT pdStructEmpty={};
+
+    if(!pPdStruct)
+    {
+        pPdStruct=&pdStructEmpty;
+    }
+
     QList<XArchive::RECORD> listRecords;
 
     qint64 nOffset=0;
@@ -100,7 +109,7 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit)
 
     QString sList;
 
-    while(nSize>0)
+    while((nSize>0)&&(!(pPdStruct->bIsStop)))
     {
         FRECORD frecord=readFRECORD(nOffset);
 

@@ -149,8 +149,8 @@ public:
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual bool isEncrypted();
-    virtual quint64 getNumberOfRecords();
-    virtual QList<RECORD> getRecords(qint32 nLimit=-1);
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
 
     virtual bool isSigned();
     virtual OFFSETSIZE getSignOffsetSize();
@@ -174,6 +174,7 @@ public:
 private:
     qint64 findECDOffset();
     qint64 findAPKSignBlockOffset();
+    COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);
 };
 
 #endif // XZIP_H

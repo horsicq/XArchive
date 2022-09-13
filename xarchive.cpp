@@ -49,20 +49,6 @@ XArchive::XArchive(QIODevice *pDevice): XBinary(pDevice)
 {
 }
 
-quint64 XArchive::getNumberOfRecords()
-{
-    return 0;
-}
-
-QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit)
-{
-    Q_UNUSED(nLimit)
-
-    QList<XArchive::RECORD> listResult;
-
-    return listResult;
-}
-
 XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly,PDSTRUCT *pPdStruct)
 {
     // TODO Progress
@@ -590,7 +576,7 @@ QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive,QString sR
 {
     QByteArray baResult;
 
-    XArchive::RECORD record=XArchive::getArchiveRecord(sRecordFileName,pListArchive);
+    XArchive::RECORD record=XArchive::getArchiveRecord(sRecordFileName,pListArchive,pPdStruct);
 
     if(!record.sFileName.isEmpty())
     {
@@ -605,7 +591,7 @@ QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive,QString sR
 
 QByteArray XArchive::decompress(QString sRecordFileName,PDSTRUCT *pPdStruct)
 {
-    QList<XArchive::RECORD> listArchive=getRecords();
+    QList<XArchive::RECORD> listArchive=getRecords(-1,pPdStruct);
 
     return decompress(&listArchive,sRecordFileName,pPdStruct);
 }
@@ -715,7 +701,7 @@ bool XArchive::decompressToFile(QString sArchiveFileName,QString sRecordFileName
 
         if(isValid())
         {
-            QList<RECORD> listRecords=getRecords();
+            QList<RECORD> listRecords=getRecords(-1,pPdStruct);
 
             bResult=decompressToFile(&listRecords,sRecordFileName,sResultFileName,pPdStruct);
         }
@@ -740,7 +726,7 @@ bool XArchive::decompressToPath(QString sArchiveFileName,QString sRecordPathName
 
         if(isValid())
         {
-            QList<RECORD> listRecords=getRecords();
+            QList<RECORD> listRecords=getRecords(-1,pPdStruct);
 
             bResult=decompressToPath(&listRecords,sRecordPathName,sResultPathName,pPdStruct);
         }
@@ -756,13 +742,20 @@ bool XArchive::dumpToFile(const XArchive::RECORD *pRecord,QString sFileName,PDST
     return XBinary::dumpToFile(sFileName,pRecord->nDataOffset,pRecord->nCompressedSize,pPdStruct);
 }
 
-XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName,QList<XArchive::RECORD> *pListRecords)
+XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName,QList<XArchive::RECORD> *pListRecords,PDSTRUCT *pPdStruct)
 {
+    XBinary::PDSTRUCT pdStructEmpty={};
+
+    if(!pPdStruct)
+    {
+        pPdStruct=&pdStructEmpty;
+    }
+
     RECORD result={};
 
     qint32 nNumberOfArchives=pListRecords->count();
 
-    for(qint32 i=0;i<nNumberOfArchives;i++)
+    for(qint32 i=0;(i<nNumberOfArchives)&&(!(pPdStruct->bIsStop));i++)
     {
         if(pListRecords->at(i).sFileName==sRecordFileName)
         {
@@ -774,16 +767,16 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName,QList<XArchi
     return result;
 }
 
-bool XArchive::isArchiveRecordPresent(QString sRecordFileName)
+bool XArchive::isArchiveRecordPresent(QString sRecordFileName,PDSTRUCT *pPdStruct)
 {
-    QList<XArchive::RECORD> listRecords=getRecords();
+    QList<XArchive::RECORD> listRecords=getRecords(-1,pPdStruct);
 
-    return isArchiveRecordPresent(sRecordFileName,&listRecords);
+    return isArchiveRecordPresent(sRecordFileName,&listRecords,pPdStruct);
 }
 
-bool XArchive::isArchiveRecordPresent(QString sRecordFileName,QList<XArchive::RECORD> *pListRecords)
+bool XArchive::isArchiveRecordPresent(QString sRecordFileName,QList<XArchive::RECORD> *pListRecords,PDSTRUCT *pPdStruct)
 {
-    return (!getArchiveRecord(sRecordFileName,pListRecords).sFileName.isEmpty());
+    return (!getArchiveRecord(sRecordFileName,pListRecords,pPdStruct).sFileName.isEmpty());
 }
 
 quint32 XArchive::getCompressBufferSize()

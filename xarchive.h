@@ -75,11 +75,11 @@ public:
     static const qint32 DECOMPRESS_BUFFERSIZE=0x4000; // TODO Check mb set/get ???
 
     explicit XArchive(QIODevice *pDevice=nullptr);
-    virtual quint64 getNumberOfRecords();
-    virtual QList<RECORD> getRecords(qint32 nLimit=-1);
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct)=0;
+    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)=0;
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false,PDSTRUCT *pPdStruct=nullptr);
-    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice);
-    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,qint32 nLevel,qint32 nMethod,qint32 nWindowsBits,qint32 nMemLevel,qint32 nStrategy);
+    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice); // TODO PDSTRUCT
+    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,qint32 nLevel,qint32 nMethod,qint32 nWindowsBits,qint32 nMemLevel,qint32 nStrategy); // TODO PDSTRUCT
     QByteArray decompress(const RECORD *pRecord,bool bHeaderOnly,PDSTRUCT *pPdStruct);
     QByteArray decompress(QList<RECORD> *pListArchive,QString sRecordFileName,PDSTRUCT *pPdStruct=nullptr);
     QByteArray decompress(QString sRecordFileName,PDSTRUCT *pPdStruct=nullptr);
@@ -89,9 +89,9 @@ public:
     bool decompressToFile(QString sArchiveFileName,QString sRecordFileName,QString sResultFileName,PDSTRUCT *pPdStruct=nullptr);
     bool decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName,PDSTRUCT *pPdStruct=nullptr);
     bool dumpToFile(const RECORD *pRecord,QString sFileName,PDSTRUCT *pPdStruct=nullptr);
-    static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListRecords);
-    bool isArchiveRecordPresent(QString sRecordFileName);
-    static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListRecords);
+    static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListRecords,PDSTRUCT *pPdStruct=nullptr);
+    bool isArchiveRecordPresent(QString sRecordFileName,PDSTRUCT *pPdStruct=nullptr);
+    static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListRecords,PDSTRUCT *pPdStruct=nullptr);
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();
     static void showRecords(QList<RECORD> *pListArchive);

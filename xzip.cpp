@@ -55,7 +55,7 @@ QString XZip::getVersion()
 
     quint16 nVersion=0;
 
-    if(nECDOffset!=0)
+    if(nECDOffset!=-1)
     {
         qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
 
@@ -93,7 +93,8 @@ bool XZip::isEncrypted()
     qint64 nECDOffset=findECDOffset();
 
     bool bSuccess=false;
-    if(nECDOffset!=0)
+
+    if(nECDOffset!=-1)
     {
         qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
 
@@ -119,27 +120,55 @@ bool XZip::isEncrypted()
     return bResult;
 }
 
-quint64 XZip::getNumberOfRecords()
+quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     quint64 nResult=0;
 
     qint64 nECDOffset=findECDOffset();
 
-    if(nECDOffset!=0)
+    if(nECDOffset!=-1)
     {
         nResult=read_uint16(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nTotalNumberOfRecords));
+    }
+    else
+    {
+        qint64 nOffset=0;
+
+        for(qint32 i=0;(!(pPdStruct->bIsStop));i++)
+        {
+            quint32 nLocalSignature=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nSignature));
+            quint32 nLocalFileNameSize=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nFileNameLength));
+            quint32 nLocalExtraFieldSize=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nExtraFieldLength));
+            quint32 nCompressedSize=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nCompressedSize));
+
+            if(nLocalSignature!=SIGNATURE_LFD)
+            {
+                break;
+            }
+
+            nResult++;
+
+            nOffset+=sizeof(LOCALFILEHEADER)+nLocalFileNameSize+nLocalExtraFieldSize+nCompressedSize;
+        }
     }
 
     return nResult;
 }
 
-QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
+QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
 {
+    XBinary::PDSTRUCT pdStructEmpty={};
+
+    if(!pPdStruct)
+    {
+        pPdStruct=&pdStructEmpty;
+    }
+
     QList<RECORD> listResult;
 
     qint64 nECDOffset=findECDOffset();
 
-    if(nECDOffset!=-1) // TODO if no ECD, only the first record
+    if(nECDOffset!=-1)
     {
         qint32 nNumberOfRecords=read_uint16(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nTotalNumberOfRecords));
 
@@ -150,7 +179,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
 
         qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
 
-        for(qint32 i=0;i<nNumberOfRecords;i++)
+        for(qint32 i=0;i<(nNumberOfRecords)&&(!(pPdStruct->bIsStop));i++)
         {
             RECORD record={};
 
@@ -169,18 +198,9 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
             record.nCompressedSize=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nCompressedSize));
             record.nUncompressedSize=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nUncompressedSize));
             record.compressMethod=COMPRESS_METHOD_UNKNOWN;
-            quint32 nZipMethod=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nMethod));
+            quint16 nZipMethod=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nMethod));
 
-            switch(nZipMethod)
-            {
-                case METHOD_STORE:          record.compressMethod=COMPRESS_METHOD_STORE;        break;
-                case METHOD_DEFLATE:        record.compressMethod=COMPRESS_METHOD_DEFLATE;      break;
-                case METHOD_DEFLATE64:      record.compressMethod=COMPRESS_METHOD_DEFLATE64;    break; // TODO
-                case METHOD_BZIP2:          record.compressMethod=COMPRESS_METHOD_BZIP2;        break;
-                case METHOD_LZMA:           record.compressMethod=COMPRESS_METHOD_LZMA_ZIP;     break;
-                case METHOD_PPMD:           record.compressMethod=COMPRESS_METHOD_PPMD;         break; // TODO
-            }
-            // TODO more methods
+            record.compressMethod=zipToCompressMethod(nZipMethod);
 
             record.sFileName=read_ansiString(nOffset+sizeof(CENTRALDIRECTORYFILEHEADER),nFileNameSize);
 
@@ -200,6 +220,49 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit)
             listResult.append(record);
 
             nOffset+=(sizeof(CENTRALDIRECTORYFILEHEADER)+nFileNameSize+nExtraFieldSize+nFileCommentSize);
+        }
+    }
+    else
+    {
+        // if no ECD, only the first record
+        qint32 nNumberOfRecords=nLimit;
+
+        if(nNumberOfRecords==-1)
+        {
+            nNumberOfRecords=0xFFFFFF;
+        }
+
+        qint64 nOffset=0;
+
+        for(qint32 i=0;i<(nNumberOfRecords)&&(!(pPdStruct->bIsStop));i++)
+        {
+            quint32 nLocalSignature=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nSignature));
+            quint32 nLocalFileNameSize=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nFileNameLength));
+            quint32 nLocalExtraFieldSize=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nExtraFieldLength));
+            quint32 nCompressedSize=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nCompressedSize));
+
+            if(nLocalSignature!=SIGNATURE_LFD)
+            {
+                break;
+            }
+
+            RECORD record={};
+
+            record.nCRC32=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nCRC32));
+            record.nCompressedSize=nCompressedSize;
+            record.nUncompressedSize=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nUncompressedSize));
+            record.compressMethod=COMPRESS_METHOD_UNKNOWN;
+            quint16 nZipMethod=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nMethod));
+
+            record.compressMethod=zipToCompressMethod(nZipMethod);
+
+            record.sFileName=read_ansiString(nOffset+sizeof(LOCALFILEHEADER),nLocalFileNameSize);
+
+            record.nDataOffset=nOffset+sizeof(LOCALFILEHEADER)+nLocalFileNameSize+nLocalExtraFieldSize;
+
+            listResult.append(record);
+
+            nOffset+=sizeof(LOCALFILEHEADER)+nLocalFileNameSize+nLocalExtraFieldSize+nCompressedSize;
         }
     }
 
@@ -474,4 +537,22 @@ qint64 XZip::findAPKSignBlockOffset()
     }
 
     return nResult;
+}
+
+XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod)
+{
+    COMPRESS_METHOD result=COMPRESS_METHOD_UNKNOWN;
+
+    switch(nZipMethod)
+    {
+        case METHOD_STORE:          result=COMPRESS_METHOD_STORE;        break;
+        case METHOD_DEFLATE:        result=COMPRESS_METHOD_DEFLATE;      break;
+        case METHOD_DEFLATE64:      result=COMPRESS_METHOD_DEFLATE64;    break; // TODO
+        case METHOD_BZIP2:          result=COMPRESS_METHOD_BZIP2;        break;
+        case METHOD_LZMA:           result=COMPRESS_METHOD_LZMA_ZIP;     break;
+        case METHOD_PPMD:           result=COMPRESS_METHOD_PPMD;         break; // TODO
+    }
+    // TODO more methods
+
+    return result;
 }

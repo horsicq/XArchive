@@ -52,7 +52,7 @@ QString XSevenZip::getVersion()
     return QString("%1.%2").arg(read_uint8(6)).arg(read_uint8(7),1,10,QChar('0'));
 }
 
-quint64 XSevenZip::getNumberOfRecords()
+quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     quint64 nResult=0;
 
@@ -99,7 +99,7 @@ quint64 XSevenZip::getNumberOfRecords()
     return nResult;
 }
 
-QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit)
+QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
 

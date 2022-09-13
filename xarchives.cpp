@@ -25,8 +25,15 @@ XArchives::XArchives(QObject *pParent) : QObject(pParent)
 
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice,qint32 nLimit)
+QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
+    XBinary::PDSTRUCT pdStructEmpty={};
+
+    if(!pPdStruct)
+    {
+        pPdStruct=&pdStructEmpty;
+    }
+
     QList<XArchive::RECORD> listResult;
 
     // TODO more !!!
@@ -37,25 +44,25 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice,qint32 nLimit)
     {
         XZip xzip(pDevice);
 
-        listResult=xzip.getRecords(nLimit);
+        listResult=xzip.getRecords(nLimit,pPdStruct);
     }
     else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
     {
         XMACHOFat xmachofat(pDevice);
 
-        listResult=xmachofat.getRecords(nLimit);
+        listResult=xmachofat.getRecords(nLimit,pPdStruct);
     }
     else if(stFileTypes.contains(XArchive::FT_AR))
     {
         X_Ar x_ar(pDevice);
 
-        listResult=x_ar.getRecords(nLimit);
+        listResult=x_ar.getRecords(nLimit,pPdStruct);
     }
 
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QString sFileName,qint32 nLimit)
+QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
 
@@ -65,7 +72,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QString sFileName,qint32 nLimit)
 
     if(file.open(QIODevice::ReadOnly))
     {
-        listResult=getRecords(&file,nLimit);
+        listResult=getRecords(&file,nLimit,pPdStruct);
 
         file.close();
     }
@@ -73,7 +80,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QString sFileName,qint32 nLimit)
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName,qint32 nLimit)
+QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
 

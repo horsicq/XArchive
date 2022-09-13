@@ -34,7 +34,9 @@ bool XMACHOFat::isValid()
     if( (nMagic==XMACH_DEF::S_FAT_MAGIC)||
         (nMagic==XMACH_DEF::S_FAT_CIGAM))
     {
-        bResult=(getNumberOfRecords()<10); // TODO Check !!!
+        PDSTRUCT pdStruct={};
+
+        bResult=(getNumberOfRecords(&pdStruct)<10); // TODO Check !!!
     }
 
     return bResult;
@@ -61,16 +63,23 @@ bool XMACHOFat::isBigEndian()
     return bResult;
 }
 
-quint64 XMACHOFat::getNumberOfRecords()
+quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     return read_uint32(offsetof(XMACH_DEF::fat_header,nfat_arch),isBigEndian());
 }
 
-QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
+QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
 {
+    XBinary::PDSTRUCT pdStructEmpty={};
+
+    if(!pPdStruct)
+    {
+        pPdStruct=&pdStructEmpty;
+    }
+
     QList<RECORD> listResult;
 
-    qint32 nNumberOfRecords=(qint32)getNumberOfRecords();
+    qint32 nNumberOfRecords=(qint32)getNumberOfRecords(pPdStruct);
 
     if(nLimit!=-1)
     {
@@ -81,7 +90,7 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit)
 
     QMap<quint64,QString> mapCpuTypes=XMACH::getHeaderCpuTypesS();
 
-    for(qint32 i=0;i<nNumberOfRecords;i++)
+    for(qint32 i=0;(i<nNumberOfRecords)&&(!(pPdStruct->bIsStop));i++)
     {
         qint64 nOffset=sizeof(XMACH_DEF::fat_header)+i*sizeof(XMACH_DEF::fat_arch);
 

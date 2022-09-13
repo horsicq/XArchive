@@ -32,8 +32,8 @@ public:
     virtual bool isValid();
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
-    virtual quint64 getNumberOfRecords();
-    virtual QList<RECORD> getRecords(qint32 nLimit=-1);
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
 };
 
 #endif // XRAR_H
