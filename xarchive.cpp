@@ -681,7 +681,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive,QString sR
         }
     }
 
-    // TODO Progressbar
+    // TODO Progressbar pPdStruct
     // TODO emits
 
     return bResult;
