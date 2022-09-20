@@ -80,11 +80,11 @@ QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit, 
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName,qint32 nLimit,XBinary::PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
 
-    _findFiles(sDirectoryName,&listResult,nLimit);
+    _findFiles(sDirectoryName,&listResult,nLimit,pPdStruct);
 
     return listResult;
 }
@@ -320,7 +320,7 @@ bool XArchives::isArchiveOpenValid(QString sFileName,QSet<XBinary::FT> stAvailab
     return bResult;
 }
 
-void XArchives::_findFiles(QString sDirectoryName,QList<XArchive::RECORD> *pListRecords,qint32 nLimit)
+void XArchives::_findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     if((nLimit<pListRecords->count())||(nLimit==-1))
     {
@@ -348,13 +348,13 @@ void XArchives::_findFiles(QString sDirectoryName,QList<XArchive::RECORD> *pList
 
             qint32 nNumberOfFiles=eil.count();
 
-            for(qint32 i=0;i<nNumberOfFiles;i++)
+            for(qint32 i=0;(i<nNumberOfFiles)&&(!(pPdStruct->bIsStop));i++)
             {
                 QString sFN=eil.at(i).fileName();
 
                 if((sFN!=".")&&(sFN!=".."))
                 {
-                    _findFiles(eil.at(i).absoluteFilePath(),pListRecords,nLimit);
+                    _findFiles(eil.at(i).absoluteFilePath(),pListRecords,nLimit,pPdStruct);
                 }
             }
         }
