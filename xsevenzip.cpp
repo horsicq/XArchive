@@ -72,7 +72,16 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
             {
                 PACKED pn=get_packedNumber(nCurrentOffset);
 
-                if(pn.nValue==k7zIdPackInfo)
+                if(pn.nValue==k7zIdHeader)
+                {
+                    nCurrentOffset+=pn.nByteSize;
+                    nCurrentSize+=pn.nByteSize;
+
+                    pn=get_packedNumber(nCurrentOffset);
+                    nCurrentOffset+=pn.nByteSize;
+                    nCurrentSize+=pn.nByteSize;
+                }
+                else if(pn.nValue==k7zIdPackInfo)
                 {
                     nCurrentOffset+=pn.nByteSize;
                     nCurrentSize+=pn.nByteSize;

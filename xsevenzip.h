@@ -23,6 +23,7 @@
 
 #include "xarchive.h"
 
+// TODO https://py7zr.readthedocs.io/en/latest/archive_format.html
 class XSevenZip : public XArchive
 {
     Q_OBJECT
