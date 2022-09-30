@@ -32,12 +32,16 @@ bool XGzip::isValid()
 
 bool XGzip::isValid(QIODevice *pDevice)
 {
-    return false;
+    XGzip xgzip(pDevice);
+
+    return xgzip.isValid();
 }
 
 quint64 XGzip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
-    return 0;
+    Q_UNUSED(pPdStruct)
+
+    return 1; // Always 1
 }
 
 QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
