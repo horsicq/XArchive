@@ -22,12 +22,12 @@
 #define XARCHIVES_H
 
 // TODO tar
+#include "x_ar.h"
 #include "xcab.h"
 #include "xmachofat.h"
 #include "xrar.h"
 #include "xsevenzip.h"
 #include "xzip.h"
-#include "x_ar.h"
 
 class XArchives : public QObject
 {
