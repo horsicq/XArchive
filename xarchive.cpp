@@ -49,14 +49,20 @@ XArchive::XArchive(QIODevice *pDevice): XBinary(pDevice)
 {
 }
 
-XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly,PDSTRUCT *pPdStruct)
+XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly,PDSTRUCT *pPdStruct,qint64 *pnSize)
 {
     // TODO Progress
+    qint64 __nSize=0;
     PDSTRUCT pdStructEmpty={};
 
     if(pPdStruct==nullptr)
     {
         pPdStruct=&pdStructEmpty;
+    }
+
+    if(pnSize==0)
+    {
+        pnSize=&__nSize;
     }
 
     COMPRESS_RESULT result=COMPRESS_RESULT_UNKNOWN;
@@ -96,6 +102,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             }
 
             nSize-=nTemp;
+            *pnSize+=nTemp;
         }
     }
     else if(compressMethod==COMPRESS_METHOD_PPMD)
@@ -181,6 +188,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                         ret=Z_ERRNO;
                         break;
                     }
+
+                    *pnSize+=nTemp;
 
                     if(bHeaderOnly) // Only the first bytes
                     {
@@ -270,6 +279,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                         ret=BZ_MEM_ERROR;
                         break;
                     }
+
+                    *pnSize+=nTemp;
 
                     if(bHeaderOnly) // Only the first bytes
                     {
@@ -369,6 +380,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                                     bRun=false;
                                     break;
                                 }
+
+                                *pnSize+=outProcessed;
 
                                 if(bHeaderOnly) // Only the first bytes
                                 {

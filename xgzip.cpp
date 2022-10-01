@@ -27,6 +27,8 @@ XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XGzip::isValid()
 {
+    // TODO
+
     return false;
 }
 
