@@ -24,6 +24,7 @@
 // TODO tar
 #include "x_ar.h"
 #include "xcab.h"
+#include "xgzip.h"
 #include "xmachofat.h"
 #include "xrar.h"
 #include "xsevenzip.h"
