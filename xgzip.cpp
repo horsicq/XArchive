@@ -27,9 +27,19 @@ XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XGzip::isValid()
 {
-    // TODO
+    bool bResult=false;
 
-    return false;
+    if(getSize()>sizeof(GZIP_HEADER))
+    {
+        quint16 nSignature=read_uint16(0);
+
+        if(nSignature==0x8B1F) // TODO Const
+        {
+            bResult=true;
+        }
+    }
+
+    return bResult;
 }
 
 bool XGzip::isValid(QIODevice *pDevice)

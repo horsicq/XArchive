@@ -27,7 +27,9 @@ class XGzip : public XArchive
 {
     Q_OBJECT
 public:
-    struct HEADER
+#pragma pack(push)
+#pragma pack(1)
+    struct GZIP_HEADER
     {
         quint16 nMagic;             // 0x1f 0x8b	Magic number identifying file type
         quint8 nCompressionMethod;  // Compression Method * 0-7 (Reserved) * 8 (Deflate)
@@ -36,6 +38,7 @@ public:
         quint8 nCompressionFlags;   // Compression flags
         quint8 nOS;                 // Operating system ID
     };
+#pragma pack(pop)
 
     explicit XGzip(QIODevice *pDevice=nullptr);
 
