@@ -50,6 +50,7 @@ public:
     struct RECORD
     {
         // TODO bIsValid !!!
+        // TODO Date
         QString sFileName;
         quint32 nCRC32;
         qint64 nDataOffset;
