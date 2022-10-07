@@ -64,6 +64,10 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     RECORD record={};
 
+    GZIP_HEADER gzipHeader={};
+
+    read_array(0,(char *)&gzipHeader,sizeof(GZIP_HEADER));
+
     // TODO
 
     listResult.append(record);
