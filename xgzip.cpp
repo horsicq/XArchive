@@ -68,6 +68,11 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     read_array(0,(char *)&gzipHeader,sizeof(GZIP_HEADER));
 
+    if(gzipHeader.nCompressionMethod==8) // TODO consts
+    {
+
+    }
+
     // TODO
 
     listResult.append(record);
