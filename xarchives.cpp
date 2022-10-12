@@ -37,7 +37,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice,qint32 nLimit,X
     QList<XArchive::RECORD> listResult;
 
     // TODO more !!!
-    // CAB RAR GZIP
+    // CAB RAR
     QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
 
     if(stFileTypes.contains(XArchive::FT_ZIP))
@@ -57,6 +57,12 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice,qint32 nLimit,X
         X_Ar x_ar(pDevice);
 
         listResult=x_ar.getRecords(nLimit,pPdStruct);
+    }
+    else if(stFileTypes.contains(XArchive::FT_GZIP))
+    {
+        XGzip xgzip(pDevice);
+
+        listResult=xgzip.getRecords(nLimit,pPdStruct);
     }
 
     return listResult;
@@ -112,6 +118,12 @@ QByteArray XArchives::decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bo
         X_Ar x_ar(pDevice);
 
         baResult=x_ar.decompress(pRecord,bHeaderOnly,pPdStruct);
+    }
+    else if(stFileTypes.contains(XArchive::FT_GZIP))
+    {
+        XGzip xgzip(pDevice);
+
+        baResult=xgzip.decompress(pRecord,bHeaderOnly,pPdStruct);
     }
 
     return baResult;
@@ -187,6 +199,12 @@ bool XArchives::decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QS
 
         bResult=x_ar.decompressToFile(pRecord,sResultFileName,pPdStruct);
     }
+    else if(stFileTypes.contains(XArchive::FT_GZIP))
+    {
+        XGzip xgzip(pDevice);
+
+        bResult=xgzip.decompressToFile(pRecord,sResultFileName,pPdStruct);
+    }
 
     return bResult;
 }
@@ -259,6 +277,12 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice,QString sRecordFileNam
 
         bResult=x_ar.isArchiveRecordPresent(sRecordFileName);
     }
+    else if(stFileTypes.contains(XArchive::FT_GZIP))
+    {
+        XGzip xgzip(pDevice);
+
+        bResult=xgzip.isArchiveRecordPresent(sRecordFileName);
+    }
 
     return bResult;
 }
@@ -294,6 +318,7 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice,QSet<XBinary::FT> stAvaila
             stAvailable.insert(XBinary::FT_ZIP);
             stAvailable.insert(XBinary::FT_MACHOFAT);
             stAvailable.insert(XBinary::FT_AR);
+            stAvailable.insert(XBinary::FT_GZIP);
         }
 
         bResult=XBinary::isFileTypePresent(&stFT,&stAvailable);

@@ -91,10 +91,13 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 break;
             }
 
-            if(pDestDevice->write(buffer,nTemp)!=nTemp)
+            if(pDestDevice)
             {
-                result=COMPRESS_RESULT_WRITEERROR;
-                break;
+                if(pDestDevice->write(buffer,nTemp)!=nTemp)
+                {
+                    result=COMPRESS_RESULT_WRITEERROR;
+                    break;
+                }
             }
 
             if(bHeaderOnly) // Only the first bytes
@@ -192,10 +195,13 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
                     qint32 nTemp=CHUNK-strm.avail_out;
 
-                    if(pDestDevice->write((char *)out,nTemp)!=nTemp)
+                    if(pDestDevice)
                     {
-                        ret=Z_ERRNO;
-                        break;
+                        if(pDestDevice->write((char *)out,nTemp)!=nTemp)
+                        {
+                            ret=Z_ERRNO;
+                            break;
+                        }
                     }
 
                     *pnOutSize+=nTemp;
@@ -207,7 +213,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 }
                 while(strm.avail_out==0);
 
-                nTmpInSize-=strm.avail_out;
+                nTmpInSize-=strm.avail_in;
+
                 *pnInSize+=nTmpInSize;
 
                 if((ret==Z_DATA_ERROR)||(ret==Z_MEM_ERROR)||(ret==Z_NEED_DICT)||(ret==Z_ERRNO))
@@ -288,10 +295,13 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
                     qint32 nTemp=CHUNK-strm.avail_out;
 
-                    if(pDestDevice->write((char *)out,nTemp)!=nTemp)
+                    if(pDestDevice)
                     {
-                        ret=BZ_MEM_ERROR;
-                        break;
+                        if(pDestDevice->write((char *)out,nTemp)!=nTemp)
+                        {
+                            ret=BZ_MEM_ERROR;
+                            break;
+                        }
                     }
 
                     *pnOutSize+=nTemp;
@@ -303,7 +313,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 }
                 while(strm.avail_out==0);
 
-                nTmpInSize-=strm.avail_out;
+                nTmpInSize-=strm.avail_in;
                 *pnInSize+=nTmpInSize;
 
                 if(ret!=BZ_OK)
@@ -394,11 +404,14 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                                 *pnInSize+=inProcessed;
                                 *pnOutSize+=outProcessed;
 
-                                if(pDestDevice->write((char *)out,outProcessed)!=(qint64)outProcessed)
+                                if(pDestDevice)
                                 {
-                                    result=COMPRESS_RESULT_WRITEERROR;
-                                    bRun=false;
-                                    break;
+                                    if(pDestDevice->write((char *)out,outProcessed)!=(qint64)outProcessed)
+                                    {
+                                        result=COMPRESS_RESULT_WRITEERROR;
+                                        bRun=false;
+                                        break;
+                                    }
                                 }
 
                                 if(bHeaderOnly) // Only the first bytes

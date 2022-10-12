@@ -64,13 +64,39 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     RECORD record={};
 
+    qint64 nOffset=0;
+
     GZIP_HEADER gzipHeader={};
 
-    read_array(0,(char *)&gzipHeader,sizeof(GZIP_HEADER));
+    read_array(nOffset,(char *)&gzipHeader,sizeof(GZIP_HEADER));
 
     if(gzipHeader.nCompressionMethod==8) // TODO consts
     {
+        record.compressMethod=COMPRESS_METHOD_DEFLATE;
+    }
 
+    nOffset+=sizeof(GZIP_HEADER);
+
+    if(gzipHeader.nFileFlags&8) // File name
+    {
+        record.sFileName=read_ansiString(nOffset);
+        nOffset+=record.sFileName.size()+1;
+    }
+
+    SubDevice sd(getDevice(),nOffset,-1);
+
+    if(sd.open(QIODevice::ReadOnly))
+    {
+        qint64 nInSize=0;
+        qint64 nOutSize=0;
+
+        XArchive::COMPRESS_RESULT cr=decompress(record.compressMethod,&sd,0,false,pPdStruct,&nInSize,&nOutSize);
+
+        record.nDataOffset=nOffset;
+        record.nCompressedSize=nInSize;
+        record.nUncompressedSize=nOutSize;
+
+        sd.close();
     }
 
     // TODO
