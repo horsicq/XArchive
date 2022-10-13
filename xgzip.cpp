@@ -105,3 +105,12 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     return listResult;
 }
+
+qint64 XGzip::getFileFormatSize()
+{
+    qint64 nResult=0;
+
+    // TODO
+
+    return nResult;
+}

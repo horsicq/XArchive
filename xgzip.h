@@ -46,6 +46,7 @@ public:
     static bool isValid(QIODevice *pDevice);
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
+    virtual qint64 getFileFormatSize();
 };
 
 #endif // XGZIP_H
