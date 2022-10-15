@@ -72,7 +72,7 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     if(gzipHeader.nCompressionMethod==8) // TODO consts
     {
-        record.compressMethod=COMPRESS_METHOD_DEFLATE;
+        record.compressMethod=COMPRESS_METHOD_DEFLATE; // TODO more
     }
 
     nOffset+=sizeof(GZIP_HEADER);
