@@ -4,6 +4,7 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/lzma/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/zlib/src/)
 
 include(${CMAKE_CURRENT_LIST_DIR}/../Formats/xbinary.cmake)
+#include(${CMAKE_CURRENT_LIST_DIR}/../Formats/xmach.cmake)
 
 set(XARCHIVE_SOURCES
     ${XBINARY_SOURCES}
