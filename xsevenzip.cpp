@@ -60,49 +60,103 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
     if(read_array(0,(char *)&signatureHeader,sizeof(SIGNATURERECORD))==sizeof(SIGNATURERECORD))
     {
-        _MEMORY_MAP memoryMap=XBinary::getMemoryMap();
-
         qint64 nCurrentOffset=sizeof(SIGNATURERECORD)+signatureHeader.NextHeaderOffset;
+        qint64 nMaxOffset=sizeof(SIGNATURERECORD)+signatureHeader.NextHeaderOffset+signatureHeader.NextHeaderSize;
 
-        if(isOffsetAndSizeValid(&memoryMap,nCurrentOffset,signatureHeader.NextHeaderSize)) // TODO Handle errors!
+        bool bSuccess=true;
+
+        quint64 nHeaderId=_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess);
+
+        if(bSuccess)
         {
-            quint64 nCurrentSize=0;
-
-            while(nCurrentSize<signatureHeader.NextHeaderSize)
+            if(nHeaderId==k7zIdHeader)
             {
-                PACKED pn=get_packedNumber(nCurrentOffset);
+                bSuccess&=(_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess)==k7zIdMainStreamsInfo);
 
-                if(pn.nValue==k7zIdHeader)
+                // Pack Information
+                if(bSuccess)
                 {
-                    nCurrentOffset+=pn.nByteSize;
-                    nCurrentSize+=pn.nByteSize;
+                    bSuccess&=(_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess)==k7zIdPackInfo);
 
-                    pn=get_packedNumber(nCurrentOffset);
-                    nCurrentOffset+=pn.nByteSize;
-                    nCurrentSize+=pn.nByteSize;
+                    quint64 nPackPosition=_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess);
+                    quint64 nCountOfPack=_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess);
+
+                    if(bSuccess)
+                    {
+                        for(qint32 i=0;i<nCountOfPack;i++)
+                        {
+                            quint64 nSizeOfPackStream=_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess);
+
+                            // TODO
+                        }
+
+                        for(qint32 i=0;i<nCountOfPack;i++)
+                        {
+                            quint64 nCRCOfPackStream=_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess);
+
+                            // TODO
+                        }
+                    }
+
+                    bSuccess&=(_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess)==k7zIdEnd);
                 }
-                else if(pn.nValue==k7zIdPackInfo)
+
+                // Coders Information
+                if(bSuccess)
                 {
-                    nCurrentOffset+=pn.nByteSize;
-                    nCurrentSize+=pn.nByteSize;
-                    pn=get_packedNumber(nCurrentOffset); // Offset
-                    nCurrentOffset+=pn.nByteSize;
-                    nCurrentSize+=pn.nByteSize;
-                    pn=get_packedNumber(nCurrentOffset); // Number of Streams
+                    bSuccess&=(_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess)==k7zIdUnpackInfo);
 
-                    nResult=pn.nValue;
+                    bSuccess&=(_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess)==k7zIdFolder);
 
-                    break;
+                    quint64 nNumberOfFolders=_readIntPackedValue(&nCurrentOffset,nMaxOffset,&bSuccess);
+                    //qDebug("TEST");
                 }
-
-//                QString sDebugString=QString("%1 %2").arg(uleb.nValue).arg(uleb.nByteSize);
-//                qDebug("%s",sDebugString.toLatin1().data());
-                nCurrentOffset+=pn.nByteSize;
-                nCurrentSize+=pn.nByteSize;
             }
-
-            // TODO Encrypted
+            else if(nHeaderId==k7zIdPackInfo)
+            {
+                //qDebug("k7zIdPackInfo");
+            }
         }
+
+//        if(isOffsetAndSizeValid(&memoryMap,nCurrentOffset,signatureHeader.NextHeaderSize)) // TODO Handle errors!
+//        {
+//            quint64 nCurrentSize=0;
+
+//            while(nCurrentSize<signatureHeader.NextHeaderSize)
+//            {
+//                PACKED pn=get_packedNumber(nCurrentOffset);
+
+//                if(pn.nValue==k7zIdHeader)
+//                {
+//                    nCurrentOffset+=pn.nByteSize;
+//                    nCurrentSize+=pn.nByteSize;
+
+//                    pn=get_packedNumber(nCurrentOffset);
+//                    nCurrentOffset+=pn.nByteSize;
+//                    nCurrentSize+=pn.nByteSize;
+//                }
+//                else if(pn.nValue==k7zIdPackInfo)
+//                {
+//                    nCurrentOffset+=pn.nByteSize;
+//                    nCurrentSize+=pn.nByteSize;
+//                    pn=get_packedNumber(nCurrentOffset); // Offset
+//                    nCurrentOffset+=pn.nByteSize;
+//                    nCurrentSize+=pn.nByteSize;
+//                    pn=get_packedNumber(nCurrentOffset); // Number of Streams
+
+//                    nResult=pn.nValue;
+
+//                    break;
+//                }
+
+////                QString sDebugString=QString("%1 %2").arg(uleb.nValue).arg(uleb.nByteSize);
+////                qDebug("%s",sDebugString.toLatin1().data());
+//                nCurrentOffset+=pn.nByteSize;
+//                nCurrentSize+=pn.nByteSize;
+//            }
+
+//            // TODO Encrypted
+//        }
     }
 
     return nResult;
@@ -528,6 +582,31 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap,qint64 nOffset,XRECORD *pXR
 //            qDebug(_sTest.toLatin1().data());
 //            QString sTest=idToSring((XSevenZip::EIdEnum)pnPackPos.nValue);
         }
+    }
+
+    return nResult;
+}
+
+quint64 XSevenZip::_readIntPackedValue(qint64 *pnOffset,qint64 nMaxOffset,bool *pbSuccess)
+{
+    quint64 nResult=0;
+
+    if(((*pnOffset)<nMaxOffset)&&(*pbSuccess))
+    {
+        PACKED pnValue=get_packedNumber(*pnOffset);
+
+        if(((*pnOffset)+pnValue.nByteSize)<=nMaxOffset)
+        {
+            nResult=pnValue.nValue;
+
+            (*pnOffset)+=pnValue.nByteSize;
+
+            *pbSuccess=true;
+        }
+    }
+    else
+    {
+        *pbSuccess=false;
     }
 
     return nResult;
