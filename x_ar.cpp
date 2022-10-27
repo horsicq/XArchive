@@ -31,7 +31,7 @@ bool X_Ar::isValid()
 
     _MEMORY_MAP memoryMap=XBinary::getMemoryMap();
 
-    if(getSize()>8+sizeof(RECORD)) // TODO const
+    if(getSize()>(8+sizeof(RECORD))) // TODO const
     {
         if(compareSignature(&memoryMap,"'!<arch>'0a"))
         {
