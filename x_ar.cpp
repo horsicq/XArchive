@@ -27,6 +27,7 @@ X_Ar::X_Ar(QIODevice *pDevice) : XArchive(pDevice)
 
 bool X_Ar::isValid()
 {
+    // TODO more checks
     bool bResult=false;
 
     _MEMORY_MAP memoryMap=XBinary::getMemoryMap();

@@ -94,11 +94,13 @@ public:
     };
 
     explicit XSevenZip(QIODevice *pDevice=nullptr);
+
     virtual bool isValid();
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
+    virtual qint64 getFileFormatSize();
 
 private:
     QString idToSring(EIdEnum id);

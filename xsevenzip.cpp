@@ -56,7 +56,7 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     quint64 nResult=0;
 
-    SIGNATURERECORD signatureHeader;
+    SIGNATURERECORD signatureHeader={};
 
     if(read_array(0,(char *)&signatureHeader,sizeof(SIGNATURERECORD))==sizeof(SIGNATURERECORD))
     {
@@ -399,6 +399,20 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
     }
 
     return listResult;
+}
+
+qint64 XSevenZip::getFileFormatSize()
+{
+    qint64 nResult=0;
+
+    SIGNATURERECORD signatureHeader={};
+
+    if(read_array(0,(char *)&signatureHeader,sizeof(SIGNATURERECORD))==sizeof(SIGNATURERECORD))
+    {
+        nResult=sizeof(SIGNATURERECORD)+signatureHeader.NextHeaderOffset+signatureHeader.NextHeaderSize;
+    }
+
+    return nResult;
 }
 
 QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
