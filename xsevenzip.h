@@ -101,6 +101,8 @@ public:
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
     virtual qint64 getFileFormatSize();
+    virtual QString getFileFormatString();
+    virtual QString getFileFormatExt();
 
 private:
     QString idToSring(EIdEnum id);
