@@ -488,6 +488,11 @@ bool XZip::addCentralDirectory(QIODevice *pDest,QList<XZip::ZIPFILE_RECORD> *pLi
     return true;
 }
 
+QString XZip::getFileFormatExt()
+{
+    return "zip";
+}
+
 qint64 XZip::findECDOffset()
 {
     qint64 nResult=-1;

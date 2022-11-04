@@ -171,6 +171,8 @@ public:
     static bool addLocalFileRecord(QIODevice *pSource,QIODevice *pDest,ZIPFILE_RECORD *pZipFileRecord);
     static bool addCentralDirectory(QIODevice *pDest,QList<ZIPFILE_RECORD> *pListZipFileRecords,QString sComment="");
 
+    virtual QString getFileFormatExt();
+
 private:
     qint64 findECDOffset();
     qint64 findAPKSignBlockOffset();
