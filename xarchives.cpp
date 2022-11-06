@@ -183,6 +183,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QS
     // TODO more !!!
     // 7Zip
     // WinRAR
+    // CAB
     if(stFileTypes.contains(XArchive::FT_ZIP))
     {
         XZip xzip(pDevice);
