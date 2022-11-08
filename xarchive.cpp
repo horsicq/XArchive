@@ -51,7 +51,7 @@ XArchive::XArchive(QIODevice *pDevice): XBinary(pDevice)
 
 XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly,PDSTRUCT *pPdStruct,qint64 *pnInSize,qint64 *pnOutSize)
 {
-    // TODO Progress
+    // TODO Progress PDSTRUCT
     qint64 __nInSize=0;
     qint64 __nOutSize=0;
     PDSTRUCT pdStructEmpty={};
