@@ -76,6 +76,7 @@ public:
     static const qint32 DECOMPRESS_BUFFERSIZE=0x4000; // TODO Check mb set/get ???
 
     explicit XArchive(QIODevice *pDevice=nullptr);
+
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct)=0;
     virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)=0;
     static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false,PDSTRUCT *pPdStruct=nullptr,qint64 *pnInSize=nullptr,qint64 *pnOutSize=nullptr);
