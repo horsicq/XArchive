@@ -172,6 +172,7 @@ public:
     static bool addCentralDirectory(QIODevice *pDest,QList<ZIPFILE_RECORD> *pListZipFileRecords,QString sComment="");
 
     virtual QString getFileFormatExt();
+    virtual QString getFileFormatString();
 
 private:
     qint64 findECDOffset();

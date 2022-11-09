@@ -493,6 +493,16 @@ QString XZip::getFileFormatExt()
     return "zip";
 }
 
+QString XZip::getFileFormatString()
+{
+    QString sResult;
+
+    sResult=QString("ZIP(%1)").arg(getVersion());
+    // TODO more info
+
+    return sResult;
+}
+
 qint64 XZip::findECDOffset()
 {
     qint64 nResult=-1;
