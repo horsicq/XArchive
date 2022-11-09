@@ -87,3 +87,8 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
 
     return listResult;
 }
+
+QString XRar::getFileFormatExt()
+{
+    return "rar";
+}
