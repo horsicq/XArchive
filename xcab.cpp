@@ -139,3 +139,32 @@ XCab::CFDATA XCab::readCFData(qint64 nOffset)
 
     return result;
 }
+
+XBinary::FT XCab::getFileType()
+{
+    return FT_CAB;
+}
+
+QString XCab::getFileFormatString()
+{
+    QString sResult;
+
+    sResult=QString("ZIP(%1)").arg(getVersion());
+    // TODO more info
+
+    return sResult;
+}
+
+QString XCab::getFileFormatExt()
+{
+    return "cab";
+}
+
+qint64 XCab::getFileFormatSize()
+{
+    qint64 nResult = 0;
+
+    nResult = readCFHeader().cbCabinet;  // TODO check mn _getRawSize
+
+    return nResult;
+}

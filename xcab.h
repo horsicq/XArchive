@@ -96,6 +96,11 @@ public:
     CFHEADER readCFHeader();
     CFFOLDER readCFFolder(qint64 nOffset);
     CFDATA readCFData(qint64 nOffset);
+
+    virtual FT getFileType();
+    virtual QString getFileFormatString();
+    virtual QString getFileFormatExt();
+    virtual qint64 getFileFormatSize();
 };
 
 #endif // XCAB_H
