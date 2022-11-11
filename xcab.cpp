@@ -20,64 +20,55 @@
  */
 #include "xcab.h"
 
-XCab::XCab(QIODevice *pDevice) : XArchive(pDevice)
-{
-
+XCab::XCab(QIODevice *pDevice) : XArchive(pDevice) {
 }
 
-bool XCab::isValid()
-{
-    bool bResult=false;
+bool XCab::isValid() {
+    bool bResult = false;
 
-    if(getSize()>(qint64)sizeof(CFHEADER))
-    {
-        if(compareSignature("'MSCF'"))
-        {
-            bResult=true;
+    if (getSize() > (qint64)sizeof(CFHEADER)) {
+        if (compareSignature("'MSCF'")) {
+            bResult = true;
         }
     }
 
     return bResult;
 }
 
-bool XCab::isValid(QIODevice *pDevice)
-{
+bool XCab::isValid(QIODevice *pDevice) {
     XCab xcab(pDevice);
 
     return xcab.isValid();
 }
 
-QString XCab::getVersion()
-{
-    return QString("%1.%2").arg(read_uint8(25)).arg(read_uint8(24),2,10,QChar('0'));
+QString XCab::getVersion() {
+    return QString("%1.%2").arg(read_uint8(25)).arg(read_uint8(24), 2, 10, QChar('0'));
 }
 
-quint64 XCab::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    quint64 nResult=0;
+quint64 XCab::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+    quint64 nResult = 0;
 
-    nResult=read_uint16(offsetof(CFHEADER,cFolders))+read_uint16(offsetof(CFHEADER,cFiles));
+    nResult = read_uint16(offsetof(CFHEADER, cFolders)) + read_uint16(offsetof(CFHEADER, cFiles));
 
     return nResult;
 }
 
-QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
-{
+QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
     Q_UNUSED(nLimit)
 
     QList<XArchive::RECORD> listResult;
 
-    qint64 nOffset=0; // TODO
+    qint64 nOffset = 0;  // TODO
 
-    CFHEADER cfHeader=readCFHeader();
+    CFHEADER cfHeader = readCFHeader();
 
-    nOffset+=sizeof(CFHEADER)-4;
+    nOffset += sizeof(CFHEADER) - 4;
 
-    if(cfHeader.flags&0x0004)  // TODO const
+    if (cfHeader.flags & 0x0004)  // TODO const
     {
-        nOffset+=4;
+        nOffset += 4;
 
-        nOffset+=cfHeader.cbCFHeader;
+        nOffset += cfHeader.cbCFHeader;
     }
 
     // CFFOLDER cfFolder=readCFFolder(nOffset);
@@ -87,81 +78,74 @@ QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
     return listResult;
 }
 
-XCab::CFHEADER XCab::readCFHeader()
-{
-    CFHEADER result={};
+XCab::CFHEADER XCab::readCFHeader() {
+    CFHEADER result = {};
 
-    result.signature[0]=read_uint8(0);
-    result.signature[1]=read_uint8(1);
-    result.signature[2]=read_uint8(2);
-    result.signature[3]=read_uint8(3);
-    result.reserved1=read_uint32(offsetof(CFHEADER,reserved1));
-    result.cbCabinet=read_uint32(offsetof(CFHEADER,cbCabinet));
-    result.reserved2=read_uint32(offsetof(CFHEADER,reserved2));
-    result.coffFiles=read_uint32(offsetof(CFHEADER,coffFiles));
-    result.reserved3=read_uint32(offsetof(CFHEADER,reserved3));
-    result.versionMinor=read_uint8(offsetof(CFHEADER,versionMinor));
-    result.versionMajor=read_uint8(offsetof(CFHEADER,versionMajor));
-    result.cFolders=read_uint16(offsetof(CFHEADER,cFolders));
-    result.cFiles=read_uint16(offsetof(CFHEADER,cFiles));
-    result.flags=read_uint16(offsetof(CFHEADER,flags));
-    result.setID=read_uint16(offsetof(CFHEADER,setID));
-    result.iCabinet=read_uint16(offsetof(CFHEADER,iCabinet));
+    result.signature[0] = read_uint8(0);
+    result.signature[1] = read_uint8(1);
+    result.signature[2] = read_uint8(2);
+    result.signature[3] = read_uint8(3);
+    result.reserved1 = read_uint32(offsetof(CFHEADER, reserved1));
+    result.cbCabinet = read_uint32(offsetof(CFHEADER, cbCabinet));
+    result.reserved2 = read_uint32(offsetof(CFHEADER, reserved2));
+    result.coffFiles = read_uint32(offsetof(CFHEADER, coffFiles));
+    result.reserved3 = read_uint32(offsetof(CFHEADER, reserved3));
+    result.versionMinor = read_uint8(offsetof(CFHEADER, versionMinor));
+    result.versionMajor = read_uint8(offsetof(CFHEADER, versionMajor));
+    result.cFolders = read_uint16(offsetof(CFHEADER, cFolders));
+    result.cFiles = read_uint16(offsetof(CFHEADER, cFiles));
+    result.flags = read_uint16(offsetof(CFHEADER, flags));
+    result.setID = read_uint16(offsetof(CFHEADER, setID));
+    result.iCabinet = read_uint16(offsetof(CFHEADER, iCabinet));
 
-    if(result.flags&0x0004)  // TODO const
+    if (result.flags & 0x0004)  // TODO const
     {
-        result.cbCFHeader=read_uint16(offsetof(CFHEADER,cbCFHeader));
-        result.cbCFFolder=read_uint8(offsetof(CFHEADER,cbCFFolder));
-        result.cbCFData=read_uint8(offsetof(CFHEADER,cbCFData));
+        result.cbCFHeader = read_uint16(offsetof(CFHEADER, cbCFHeader));
+        result.cbCFFolder = read_uint8(offsetof(CFHEADER, cbCFFolder));
+        result.cbCFData = read_uint8(offsetof(CFHEADER, cbCFData));
     }
 
     return result;
 }
 
-XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset)
-{
-    CFFOLDER result={};
+XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset) {
+    CFFOLDER result = {};
 
-    result.coffCabStart=read_uint32(nOffset+offsetof(CFFOLDER,coffCabStart));
-    result.cCFData=read_uint16(nOffset+offsetof(CFFOLDER,cCFData));
-    result.typeCompress=read_uint16(nOffset+offsetof(CFFOLDER,typeCompress));
-
-    return result;
-}
-
-XCab::CFDATA XCab::readCFData(qint64 nOffset)
-{
-    CFDATA result={};
-
-    result.csum=read_uint32(nOffset+offsetof(CFDATA,csum));
-    result.cbData=read_uint16(nOffset+offsetof(CFDATA,cbData));
-    result.cbUncomp=read_uint16(nOffset+offsetof(CFDATA,cbUncomp));
+    result.coffCabStart = read_uint32(nOffset + offsetof(CFFOLDER, coffCabStart));
+    result.cCFData = read_uint16(nOffset + offsetof(CFFOLDER, cCFData));
+    result.typeCompress = read_uint16(nOffset + offsetof(CFFOLDER, typeCompress));
 
     return result;
 }
 
-XBinary::FT XCab::getFileType()
-{
+XCab::CFDATA XCab::readCFData(qint64 nOffset) {
+    CFDATA result = {};
+
+    result.csum = read_uint32(nOffset + offsetof(CFDATA, csum));
+    result.cbData = read_uint16(nOffset + offsetof(CFDATA, cbData));
+    result.cbUncomp = read_uint16(nOffset + offsetof(CFDATA, cbUncomp));
+
+    return result;
+}
+
+XBinary::FT XCab::getFileType() {
     return FT_CAB;
 }
 
-QString XCab::getFileFormatString()
-{
+QString XCab::getFileFormatString() {
     QString sResult;
 
-    sResult=QString("ZIP(%1)").arg(getVersion());
+    sResult = QString("ZIP(%1)").arg(getVersion());
     // TODO more info
 
     return sResult;
 }
 
-QString XCab::getFileFormatExt()
-{
+QString XCab::getFileFormatExt() {
     return "cab";
 }
 
-qint64 XCab::getFileFormatSize()
-{
+qint64 XCab::getFileFormatSize() {
     qint64 nResult = 0;
 
     nResult = readCFHeader().cbCabinet;  // TODO check mn _getRawSize

@@ -20,65 +20,52 @@
  */
 #include "xrar.h"
 
-XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
-{
-
+XRar::XRar(QIODevice *pDevice) : XArchive(pDevice) {
 }
 
-bool XRar::isValid()
-{
-    bool bResult=false;
+bool XRar::isValid() {
+    bool bResult = false;
 
-    if(getSize()>20) // TODO
+    if (getSize() > 20)  // TODO
     {
-        _MEMORY_MAP memoryMap=XBinary::getMemoryMap();
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
-        if(compareSignature(&memoryMap,"'RE~^'")||compareSignature(&memoryMap,"'Rar!'1A07"))
-        {
-            bResult=true;
+        if (compareSignature(&memoryMap, "'RE~^'") || compareSignature(&memoryMap, "'Rar!'1A07")) {
+            bResult = true;
         }
     }
 
     return bResult;
 }
 
-bool XRar::isValid(QIODevice *pDevice)
-{
+bool XRar::isValid(QIODevice *pDevice) {
     XRar xrar(pDevice);
 
     return xrar.isValid();
 }
 
-QString XRar::getVersion()
-{
+QString XRar::getVersion() {
     QString sResult;
 
-    _MEMORY_MAP memoryMap=getMemoryMap();
+    _MEMORY_MAP memoryMap = getMemoryMap();
 
     // TODO more
-    if(compareSignature(&memoryMap,"'RE~^'"))
-    {
-        sResult="1.4";
-    }
-    else if(compareSignature(&memoryMap,"'Rar!'1A0700"))
-    {
-        sResult="4.X";
-    }
-    else if(compareSignature(&memoryMap,"'Rar!'1A070100"))
-    {
-        sResult="5.X";
+    if (compareSignature(&memoryMap, "'RE~^'")) {
+        sResult = "1.4";
+    } else if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
+        sResult = "4.X";
+    } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
+        sResult = "5.X";
     }
 
     return sResult;
 }
 
-quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    return 0; // TODO
+quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+    return 0;  // TODO
 }
 
-QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
-{
+QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
     Q_UNUSED(nLimit)
 
     QList<XArchive::RECORD> listResult;
@@ -88,7 +75,6 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
     return listResult;
 }
 
-QString XRar::getFileFormatExt()
-{
+QString XRar::getFileFormatExt() {
     return "rar";
 }

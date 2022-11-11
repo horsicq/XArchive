@@ -23,14 +23,12 @@
 
 #include "xarchive.h"
 
-class XGzip : public XArchive
-{
+class XGzip : public XArchive {
     Q_OBJECT
 public:
 #pragma pack(push)
 #pragma pack(1)
-    struct GZIP_HEADER
-    {
+    struct GZIP_HEADER {
         quint16 nMagic;             // 0x1f 0x8b	Magic number identifying file type
         quint8 nCompressionMethod;  // Compression Method * 0-7 (Reserved) * 8 (Deflate)
         quint8 nFileFlags;          // File Flags
@@ -40,13 +38,13 @@ public:
     };
 #pragma pack(pop)
 
-    explicit XGzip(QIODevice *pDevice=nullptr);
+    explicit XGzip(QIODevice *pDevice = nullptr);
 
     virtual bool isValid();
     static bool isValid(QIODevice *pDevice);
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual qint64 getFileFormatSize();
 };
 
-#endif // XGZIP_H
+#endif  // XGZIP_H

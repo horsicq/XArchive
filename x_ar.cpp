@@ -20,68 +20,60 @@
  */
 #include "x_ar.h"
 
-X_Ar::X_Ar(QIODevice *pDevice) : XArchive(pDevice)
-{
-
+X_Ar::X_Ar(QIODevice *pDevice) : XArchive(pDevice) {
 }
 
-bool X_Ar::isValid()
-{
+bool X_Ar::isValid() {
     // TODO more checks
-    bool bResult=false;
+    bool bResult = false;
 
-    _MEMORY_MAP memoryMap=XBinary::getMemoryMap();
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
-    if(getSize()>(8+sizeof(RECORD))) // TODO const
+    if (getSize() > (8 + sizeof(RECORD)))  // TODO const
     {
-        if(compareSignature(&memoryMap,"'!<arch>'0a"))
-        {
-            bResult=true;
+        if (compareSignature(&memoryMap, "'!<arch>'0a")) {
+            bResult = true;
         }
     }
 
     return bResult;
 }
 
-bool X_Ar::isValid(QIODevice *pDevice)
-{
+bool X_Ar::isValid(QIODevice *pDevice) {
     X_Ar x_ar(pDevice);
 
     return x_ar.isValid();
 }
 
-quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    quint64 nResult=0;
+quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+    quint64 nResult = 0;
 
-    qint64 nOffset=0;
-    qint64 nSize=getSize();
+    qint64 nOffset = 0;
+    qint64 nSize = getSize();
 
-    nOffset+=8;
-    nSize-=8;
+    nOffset += 8;
+    nSize -= 8;
 
-    while(nSize>0)
-    {
+    while (nSize > 0) {
         char fileSize[16];
 
-        read_array(nOffset+offsetof(FRECORD,fileSize),fileSize,10);
+        read_array(nOffset + offsetof(FRECORD, fileSize), fileSize, 10);
 
-        QString sSize=QString(fileSize);
+        QString sSize = QString(fileSize);
 
         sSize.resize(10);
 
-        qint32 nRecordSize=sSize.trimmed().toULongLong();
+        qint32 nRecordSize = sSize.trimmed().toULongLong();
 
-        if(nRecordSize==0)
-        {
+        if (nRecordSize == 0) {
             break;
         }
 
-        nOffset+=sizeof(FRECORD);
-        nOffset+=S_ALIGN_UP(nRecordSize,2);
+        nOffset += sizeof(FRECORD);
+        nOffset += S_ALIGN_UP(nRecordSize, 2);
 
-        nSize-=sizeof(FRECORD);
-        nSize-=S_ALIGN_UP(nRecordSize,2);
+        nSize -= sizeof(FRECORD);
+        nSize -= S_ALIGN_UP(nRecordSize, 2);
 
         nResult++;
     }
@@ -89,131 +81,115 @@ quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return nResult;
 }
 
-QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
-{
+QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
     // TODO Limit
 
-    XBinary::PDSTRUCT pdStructEmpty={};
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
-    if(!pPdStruct)
-    {
-        pPdStruct=&pdStructEmpty;
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
     }
 
     QList<XArchive::RECORD> listRecords;
 
-    qint64 nOffset=0;
-    qint64 nSize=getSize();
+    qint64 nOffset = 0;
+    qint64 nSize = getSize();
 
-    nOffset+=8;
-    nSize-=8;
+    nOffset += 8;
+    nSize -= 8;
 
     QString sList;
 
-    while((nSize>0)&&(!(pPdStruct->bIsStop)))
-    {
-        FRECORD frecord=readFRECORD(nOffset);
+    while ((nSize > 0) && (!(pPdStruct->bIsStop))) {
+        FRECORD frecord = readFRECORD(nOffset);
 
-        QString sSize=QString(frecord.fileSize);
+        QString sSize = QString(frecord.fileSize);
 
         sSize.resize(sizeof(frecord.fileSize));
 
-        qint32 nRecordSize=sSize.trimmed().toULongLong();
+        qint32 nRecordSize = sSize.trimmed().toULongLong();
 
-        if(nRecordSize==0)
-        {
+        if (nRecordSize == 0) {
             break;
         }
 
-        RECORD record={};
+        RECORD record = {};
 
-        record.sFileName=frecord.fileId;
+        record.sFileName = frecord.fileId;
         record.sFileName.resize(sizeof(frecord.fileId));
-        record.sFileName=record.sFileName.trimmed();
+        record.sFileName = record.sFileName.trimmed();
 
-        if(record.sFileName=="//") // Linux/GNU
+        if (record.sFileName == "//")  // Linux/GNU
         {
-            sList=read_ansiString(nOffset+sizeof(FRECORD),nRecordSize);
+            sList = read_ansiString(nOffset + sizeof(FRECORD), nRecordSize);
         }
 
-        if(record.sFileName.section("/",0,0)=="#1") // BSD style
+        if (record.sFileName.section("/", 0, 0) == "#1")  // BSD style
         {
-            qint32 nFileNameLength=record.sFileName.section("/",1,1).toInt();
+            qint32 nFileNameLength = record.sFileName.section("/", 1, 1).toInt();
 
-            record.sFileName=read_ansiString(nOffset+sizeof(FRECORD),nFileNameLength); // TODO Check UTF8
+            record.sFileName = read_ansiString(nOffset + sizeof(FRECORD), nFileNameLength);  // TODO Check UTF8
 
-            record.nDataOffset=nOffset+sizeof(FRECORD)+nFileNameLength;
-            record.nCompressedSize=nRecordSize-nFileNameLength;
-            record.nUncompressedSize=nRecordSize-nFileNameLength;
-        }
-        else
-        {
-            qint32 nFileNameSie=record.sFileName.size();
+            record.nDataOffset = nOffset + sizeof(FRECORD) + nFileNameLength;
+            record.nCompressedSize = nRecordSize - nFileNameLength;
+            record.nUncompressedSize = nRecordSize - nFileNameLength;
+        } else {
+            qint32 nFileNameSie = record.sFileName.size();
 
-            if(nFileNameSie>=2) // Linux/GNU
+            if (nFileNameSie >= 2)  // Linux/GNU
             {
-                if((record.sFileName.at(0)==QChar('/'))&&(record.sFileName.at(nFileNameSie-1)!=QChar('/')))
-                {
-                    qint32 nIndex=record.sFileName.section("/",1,1).toULong();
+                if ((record.sFileName.at(0) == QChar('/')) && (record.sFileName.at(nFileNameSie - 1) != QChar('/'))) {
+                    qint32 nIndex = record.sFileName.section("/", 1, 1).toULong();
 
-                    if(nIndex<sList.size())
-                    {
-                        if(nIndex)
-                        {
-                            record.sFileName=sList.right(nIndex).section("/",0,0);
-                        }
-                        else
-                        {
-                            record.sFileName=sList.section("/",0,0);
+                    if (nIndex < sList.size()) {
+                        if (nIndex) {
+                            record.sFileName = sList.right(nIndex).section("/", 0, 0);
+                        } else {
+                            record.sFileName = sList.section("/", 0, 0);
                         }
                     }
-                }
-                else if((nFileNameSie>2)&&(record.sFileName.at(nFileNameSie-1)==QChar('/')))
-                {
-                    record.sFileName.remove(nFileNameSie-1,1);
+                } else if ((nFileNameSie > 2) && (record.sFileName.at(nFileNameSie - 1) == QChar('/'))) {
+                    record.sFileName.remove(nFileNameSie - 1, 1);
                 }
             }
 
-            record.nDataOffset=nOffset+sizeof(FRECORD);
-            record.nCompressedSize=nRecordSize;
-            record.nUncompressedSize=nRecordSize;
+            record.nDataOffset = nOffset + sizeof(FRECORD);
+            record.nCompressedSize = nRecordSize;
+            record.nUncompressedSize = nRecordSize;
         }
 
-        if(record.nCompressedSize<0)
-        {
-            record.nCompressedSize=0;
+        if (record.nCompressedSize < 0) {
+            record.nCompressedSize = 0;
         }
 
-        if(record.nUncompressedSize<0)
-        {
-            record.nUncompressedSize=0;
+        if (record.nUncompressedSize < 0) {
+            record.nUncompressedSize = 0;
         }
 
-        record.compressMethod=COMPRESS_METHOD_STORE;
+        record.compressMethod = COMPRESS_METHOD_STORE;
 
         listRecords.append(record);
 
-        nOffset+=sizeof(FRECORD);
-        nOffset+=S_ALIGN_UP(nRecordSize,2);
+        nOffset += sizeof(FRECORD);
+        nOffset += S_ALIGN_UP(nRecordSize, 2);
 
-        nSize-=sizeof(FRECORD);
-        nSize-=S_ALIGN_UP(nRecordSize,2);
+        nSize -= sizeof(FRECORD);
+        nSize -= S_ALIGN_UP(nRecordSize, 2);
     }
 
     return listRecords;
 }
 
-X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
-{
-    FRECORD record={};
+X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset) {
+    FRECORD record = {};
 
-    read_array(nOffset+offsetof(FRECORD,fileId),record.fileId,sizeof(record.fileId));
-    read_array(nOffset+offsetof(FRECORD,fileMod),record.fileMod,sizeof(record.fileMod));
-    read_array(nOffset+offsetof(FRECORD,ownerId),record.ownerId,sizeof(record.ownerId));
-    read_array(nOffset+offsetof(FRECORD,groupId),record.groupId,sizeof(record.groupId));
-    read_array(nOffset+offsetof(FRECORD,fileMode),record.fileMode,sizeof(record.fileMode));
-    read_array(nOffset+offsetof(FRECORD,fileSize),record.fileSize,sizeof(record.fileSize));
-    read_array(nOffset+offsetof(FRECORD,endChar),record.endChar,sizeof(record.endChar));
+    read_array(nOffset + offsetof(FRECORD, fileId), record.fileId, sizeof(record.fileId));
+    read_array(nOffset + offsetof(FRECORD, fileMod), record.fileMod, sizeof(record.fileMod));
+    read_array(nOffset + offsetof(FRECORD, ownerId), record.ownerId, sizeof(record.ownerId));
+    read_array(nOffset + offsetof(FRECORD, groupId), record.groupId, sizeof(record.groupId));
+    read_array(nOffset + offsetof(FRECORD, fileMode), record.fileMode, sizeof(record.fileMode));
+    read_array(nOffset + offsetof(FRECORD, fileSize), record.fileSize, sizeof(record.fileSize));
+    read_array(nOffset + offsetof(FRECORD, endChar), record.endChar, sizeof(record.endChar));
 
     return record;
 }

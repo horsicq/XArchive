@@ -20,65 +20,52 @@
  */
 #include "xarchives.h"
 
-XArchives::XArchives(QObject *pParent) : QObject(pParent)
-{
-
+XArchives::XArchives(QObject *pParent) : QObject(pParent) {
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice,qint32 nLimit,XBinary::PDSTRUCT *pPdStruct)
-{
-    XBinary::PDSTRUCT pdStructEmpty={};
+QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct) {
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
-    if(!pPdStruct)
-    {
-        pPdStruct=&pdStructEmpty;
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
     }
 
     QList<XArchive::RECORD> listResult;
 
     // TODO more !!!
     // CAB RAR 7ZIP
-    QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
+    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
 
-    if(stFileTypes.contains(XArchive::FT_ZIP))
-    {
+    if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
 
-        listResult=xzip.getRecords(nLimit,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
-    {
+        listResult = xzip.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
 
-        listResult=xmachofat.getRecords(nLimit,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_AR))
-    {
+        listResult = xmachofat.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
 
-        listResult=x_ar.getRecords(nLimit,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_GZIP))
-    {
+        listResult = x_ar.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
 
-        listResult=xgzip.getRecords(nLimit,pPdStruct);
+        listResult = xgzip.getRecords(nLimit, pPdStruct);
     }
 
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QString sFileName,qint32 nLimit,XBinary::PDSTRUCT *pPdStruct)
-{
+QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct) {
     QList<XArchive::RECORD> listResult;
 
     QFile file;
 
     file.setFileName(sFileName);
 
-    if(file.open(QIODevice::ReadOnly))
-    {
-        listResult=getRecords(&file,nLimit,pPdStruct);
+    if (file.open(QIODevice::ReadOnly)) {
+        listResult = getRecords(&file, nLimit, pPdStruct);
 
         file.close();
     }
@@ -86,60 +73,49 @@ QList<XArchive::RECORD> XArchives::getRecords(QString sFileName,qint32 nLimit,XB
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName,qint32 nLimit,XBinary::PDSTRUCT *pPdStruct)
-{
+QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct) {
     QList<XArchive::RECORD> listResult;
 
-    _findFiles(sDirectoryName,&listResult,nLimit,pPdStruct);
+    _findFiles(sDirectoryName, &listResult, nLimit, pPdStruct);
 
     return listResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice,XArchive::RECORD *pRecord,bool bHeaderOnly,XBinary::PDSTRUCT *pPdStruct)
-{
+QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct) {
     QByteArray baResult;
 
-    QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
+    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
 
-    if(stFileTypes.contains(XArchive::FT_ZIP))
-    {
+    if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
 
-        baResult=xzip.decompress(pRecord,bHeaderOnly,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
-    {
+        baResult = xzip.decompress(pRecord, bHeaderOnly, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
 
-        baResult=xmachofat.decompress(pRecord,bHeaderOnly,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_AR))
-    {
+        baResult = xmachofat.decompress(pRecord, bHeaderOnly, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
 
-        baResult=x_ar.decompress(pRecord,bHeaderOnly,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_GZIP))
-    {
+        baResult = x_ar.decompress(pRecord, bHeaderOnly, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
 
-        baResult=xgzip.decompress(pRecord,bHeaderOnly,pPdStruct);
+        baResult = xgzip.decompress(pRecord, bHeaderOnly, pPdStruct);
     }
 
     return baResult;
 }
 
-QByteArray XArchives::decompress(QString sFileName,XArchive::RECORD *pRecord,bool bHeaderOnly,XBinary::PDSTRUCT *pPdStruct)
-{
+QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct) {
     QByteArray baResult;
 
     QFile file;
 
     file.setFileName(sFileName);
 
-    if(file.open(QIODevice::ReadOnly))
-    {
-        baResult=decompress(&file,pRecord,bHeaderOnly,pPdStruct);
+    if (file.open(QIODevice::ReadOnly)) {
+        baResult = decompress(&file, pRecord, bHeaderOnly, pPdStruct);
 
         file.close();
     }
@@ -147,26 +123,23 @@ QByteArray XArchives::decompress(QString sFileName,XArchive::RECORD *pRecord,boo
     return baResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice,QString sRecordFileName,bool bHeaderOnly,XBinary::PDSTRUCT *pPdStruct)
-{
-    QList<XArchive::RECORD> listRecords=getRecords(pDevice);
+QByteArray XArchives::decompress(QIODevice *pDevice, QString sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct) {
+    QList<XArchive::RECORD> listRecords = getRecords(pDevice);
 
-    XArchive::RECORD record=XArchive::getArchiveRecord(sRecordFileName,&listRecords);
+    XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords);
 
-    return decompress(pDevice,&record,bHeaderOnly,pPdStruct);
+    return decompress(pDevice, &record, bHeaderOnly, pPdStruct);
 }
 
-QByteArray XArchives::decompress(QString sFileName,QString sRecordFileName,bool bHeaderOnly,XBinary::PDSTRUCT *pPdStruct)
-{
+QByteArray XArchives::decompress(QString sFileName, QString sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct) {
     QByteArray baResult;
 
     QFile file;
 
     file.setFileName(sFileName);
 
-    if(file.open(QIODevice::ReadOnly))
-    {
-        baResult=decompress(&file,sRecordFileName,bHeaderOnly,pPdStruct);
+    if (file.open(QIODevice::ReadOnly)) {
+        baResult = decompress(&file, sRecordFileName, bHeaderOnly, pPdStruct);
 
         file.close();
     }
@@ -174,55 +147,45 @@ QByteArray XArchives::decompress(QString sFileName,QString sRecordFileName,bool 
     return baResult;
 }
 
-bool XArchives::decompressToFile(QIODevice *pDevice,XArchive::RECORD *pRecord,QString sResultFileName,XBinary::PDSTRUCT *pPdStruct)
-{
-    bool bResult=false;
+bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct) {
+    bool bResult = false;
 
-    QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
+    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
 
     // TODO more !!!
     // 7Zip
     // WinRAR
     // CAB
-    if(stFileTypes.contains(XArchive::FT_ZIP))
-    {
+    if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
 
-        bResult=xzip.decompressToFile(pRecord,sResultFileName,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
-    {
+        bResult = xzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
 
-        bResult=xmachofat.decompressToFile(pRecord,sResultFileName,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_AR))
-    {
+        bResult = xmachofat.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
 
-        bResult=x_ar.decompressToFile(pRecord,sResultFileName,pPdStruct);
-    }
-    else if(stFileTypes.contains(XArchive::FT_GZIP))
-    {
+        bResult = x_ar.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
 
-        bResult=xgzip.decompressToFile(pRecord,sResultFileName,pPdStruct);
+        bResult = xgzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
     }
 
     return bResult;
 }
 
-bool XArchives::decompressToFile(QString sFileName,XArchive::RECORD *pRecord,QString sResultFileName,XBinary::PDSTRUCT *pPdStruct)
-{
-    bool bResult=false;
+bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct) {
+    bool bResult = false;
 
     QFile file;
 
     file.setFileName(sFileName);
 
-    if(file.open(QIODevice::ReadOnly))
-    {
-        bResult=decompressToFile(&file,pRecord,sResultFileName,pPdStruct);
+    if (file.open(QIODevice::ReadOnly)) {
+        bResult = decompressToFile(&file, pRecord, sResultFileName, pPdStruct);
 
         file.close();
     }
@@ -230,23 +193,20 @@ bool XArchives::decompressToFile(QString sFileName,XArchive::RECORD *pRecord,QSt
     return bResult;
 }
 
-bool XArchives::decompressToFile(QString sFileName,QString sRecordFileName,QString sResultFileName,XBinary::PDSTRUCT *pPdStruct)
-{
-    bool bResult=false;
+bool XArchives::decompressToFile(QString sFileName, QString sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct) {
+    bool bResult = false;
 
     QFile file;
 
     file.setFileName(sFileName);
 
-    if(file.open(QIODevice::ReadOnly))
-    {
-        QList<XArchive::RECORD> listRecords=getRecords(&file);
+    if (file.open(QIODevice::ReadOnly)) {
+        QList<XArchive::RECORD> listRecords = getRecords(&file);
 
-        XArchive::RECORD record=XArchive::getArchiveRecord(sRecordFileName,&listRecords);
+        XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords);
 
-        if(record.sFileName!="")
-        {
-             bResult=decompressToFile(&file,&record,sResultFileName,pPdStruct);
+        if (record.sFileName != "") {
+            bResult = decompressToFile(&file, &record, sResultFileName, pPdStruct);
         }
 
         file.close();
@@ -255,52 +215,42 @@ bool XArchives::decompressToFile(QString sFileName,QString sRecordFileName,QStri
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QIODevice *pDevice,QString sRecordFileName)
-{
-    bool bResult=false;
+bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileName) {
+    bool bResult = false;
 
-    QSet<XBinary::FT> stFileTypes=XBinary::getFileTypes(pDevice,true);
+    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
 
     // TODO more
-    if(stFileTypes.contains(XArchive::FT_ZIP))
-    {
+    if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
 
-        bResult=xzip.isArchiveRecordPresent(sRecordFileName);
-    }
-    else if(stFileTypes.contains(XArchive::FT_MACHOFAT))
-    {
+        bResult = xzip.isArchiveRecordPresent(sRecordFileName);
+    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
 
-        bResult=xmachofat.isArchiveRecordPresent(sRecordFileName);
-    }
-    else if(stFileTypes.contains(XArchive::FT_AR))
-    {
+        bResult = xmachofat.isArchiveRecordPresent(sRecordFileName);
+    } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
 
-        bResult=x_ar.isArchiveRecordPresent(sRecordFileName);
-    }
-    else if(stFileTypes.contains(XArchive::FT_GZIP))
-    {
+        bResult = x_ar.isArchiveRecordPresent(sRecordFileName);
+    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
 
-        bResult=xgzip.isArchiveRecordPresent(sRecordFileName);
+        bResult = xgzip.isArchiveRecordPresent(sRecordFileName);
     }
 
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QString sFileName,QString sRecordFileName)
-{
-    bool bResult=false;
+bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileName) {
+    bool bResult = false;
 
     QFile file;
 
     file.setFileName(sFileName);
 
-    if(file.open(QIODevice::ReadOnly))
-    {
-        bResult=isArchiveRecordPresent(&file,sRecordFileName);
+    if (file.open(QIODevice::ReadOnly)) {
+        bResult = isArchiveRecordPresent(&file, sRecordFileName);
 
         file.close();
     }
@@ -308,39 +258,34 @@ bool XArchives::isArchiveRecordPresent(QString sFileName,QString sRecordFileName
     return bResult;
 }
 
-bool XArchives::isArchiveOpenValid(QIODevice *pDevice,QSet<XBinary::FT> stAvailable)
-{
-    bool bResult=false;
+bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvailable) {
+    bool bResult = false;
 
-    if(pDevice)
-    {
-        QSet<XBinary::FT> stFT=XBinary::getFileTypes(pDevice,true);
+    if (pDevice) {
+        QSet<XBinary::FT> stFT = XBinary::getFileTypes(pDevice, true);
 
-        if(!stAvailable.count())
-        {
+        if (!stAvailable.count()) {
             stAvailable.insert(XBinary::FT_ZIP);
             stAvailable.insert(XBinary::FT_MACHOFAT);
             stAvailable.insert(XBinary::FT_AR);
             stAvailable.insert(XBinary::FT_GZIP);
         }
 
-        bResult=XBinary::isFileTypePresent(&stFT,&stAvailable);
+        bResult = XBinary::isFileTypePresent(&stFT, &stAvailable);
     }
 
     return bResult;
 }
 
-bool XArchives::isArchiveOpenValid(QString sFileName,QSet<XBinary::FT> stAvailable)
-{
-    bool bResult=false;
+bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvailable) {
+    bool bResult = false;
 
     QFile file;
 
     file.setFileName(sFileName);
 
-    if(file.open(QIODevice::ReadOnly))
-    {
-        bResult=isArchiveOpenValid(&file,stAvailable);
+    if (file.open(QIODevice::ReadOnly)) {
+        bResult = isArchiveOpenValid(&file, stAvailable);
 
         file.close();
     }
@@ -348,41 +293,33 @@ bool XArchives::isArchiveOpenValid(QString sFileName,QSet<XBinary::FT> stAvailab
     return bResult;
 }
 
-void XArchives::_findFiles(QString sDirectoryName,QList<XArchive::RECORD> *pListRecords,qint32 nLimit,XBinary::PDSTRUCT *pPdStruct)
-{
-    if((nLimit<pListRecords->count())||(nLimit==-1))
-    {
+void XArchives::_findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct) {
+    if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
         QFileInfo fi(sDirectoryName);
 
-        if(fi.isFile())
-        {
-            XArchive::RECORD record={};
+        if (fi.isFile()) {
+            XArchive::RECORD record = {};
 
-            record.compressMethod=XArchive::COMPRESS_METHOD_FILE;
-            record.sFileName=fi.absoluteFilePath();
-            record.nCompressedSize=fi.size();
-            record.nUncompressedSize=fi.size();
+            record.compressMethod = XArchive::COMPRESS_METHOD_FILE;
+            record.sFileName = fi.absoluteFilePath();
+            record.nCompressedSize = fi.size();
+            record.nUncompressedSize = fi.size();
 
-            if((nLimit<pListRecords->count())||(nLimit==-1))
-            {
+            if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
                 pListRecords->append(record);
             }
-        }
-        else if(fi.isDir())
-        {
+        } else if (fi.isDir()) {
             QDir dir(sDirectoryName);
 
-            QFileInfoList eil=dir.entryInfoList();
+            QFileInfoList eil = dir.entryInfoList();
 
-            qint32 nNumberOfFiles=eil.count();
+            qint32 nNumberOfFiles = eil.count();
 
-            for(qint32 i=0;(i<nNumberOfFiles)&&(!(pPdStruct->bIsStop));i++)
-            {
-                QString sFN=eil.at(i).fileName();
+            for (qint32 i = 0; (i < nNumberOfFiles) && (!(pPdStruct->bIsStop)); i++) {
+                QString sFN = eil.at(i).fileName();
 
-                if((sFN!=".")&&(sFN!=".."))
-                {
-                    _findFiles(eil.at(i).absoluteFilePath(),pListRecords,nLimit,pPdStruct);
+                if ((sFN != ".") && (sFN != "..")) {
+                    _findFiles(eil.at(i).absoluteFilePath(), pListRecords, nLimit, pPdStruct);
                 }
             }
         }

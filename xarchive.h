@@ -21,22 +21,20 @@
 #ifndef XARCHIVE_H
 #define XARCHIVE_H
 
-#include "xbinary.h"
 #include "LzmaDec.h"
 #include "bzlib.h"
+#include "xbinary.h"
 #include "zlib.h"
 #ifdef PPMD_SUPPORT
 #include "Ppmd7.h"
 #endif
 
-class XArchive : public XBinary
-{
+class XArchive : public XBinary {
     Q_OBJECT
 
 public:
-    enum COMPRESS_METHOD
-    {
-        COMPRESS_METHOD_UNKNOWN=0,
+    enum COMPRESS_METHOD {
+        COMPRESS_METHOD_UNKNOWN = 0,
         COMPRESS_METHOD_STORE,
         COMPRESS_METHOD_FILE,
         COMPRESS_METHOD_DEFLATE,
@@ -47,8 +45,7 @@ public:
         // TODO check more
     };
 
-    struct RECORD
-    {
+    struct RECORD {
         // TODO bIsValid !!!
         // TODO Date
         QString sFileName;
@@ -59,9 +56,8 @@ public:
         COMPRESS_METHOD compressMethod;
     };
 
-    enum COMPRESS_RESULT
-    {
-        COMPRESS_RESULT_UNKNOWN=0,
+    enum COMPRESS_RESULT {
+        COMPRESS_RESULT_UNKNOWN = 0,
         COMPRESS_RESULT_OK,
         COMPRESS_RESULT_DATAERROR,
         COMPRESS_RESULT_MEMORYERROR,
@@ -72,33 +68,35 @@ public:
         // TODO more
     };
 
-    static const qint32 COMPRESS_BUFFERSIZE=0x4000; // TODO Check mb set/get ???
-    static const qint32 DECOMPRESS_BUFFERSIZE=0x4000; // TODO Check mb set/get ???
+    static const qint32 COMPRESS_BUFFERSIZE = 0x4000;    // TODO Check mb set/get ???
+    static const qint32 DECOMPRESS_BUFFERSIZE = 0x4000;  // TODO Check mb set/get ???
 
-    explicit XArchive(QIODevice *pDevice=nullptr);
+    explicit XArchive(QIODevice *pDevice = nullptr);
 
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct)=0;
-    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)=0;
-    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice,bool bHeaderOnly=false,PDSTRUCT *pPdStruct=nullptr,qint64 *pnInSize=nullptr,qint64 *pnOutSize=nullptr);
-    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod,QIODevice *pSourceDevice,QIODevice *pDestDevice); // TODO PDSTRUCT
-    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice,QIODevice *pDestDevice,qint32 nLevel,qint32 nMethod,qint32 nWindowsBits,qint32 nMemLevel,qint32 nStrategy); // TODO PDSTRUCT
-    QByteArray decompress(const RECORD *pRecord,bool bHeaderOnly,PDSTRUCT *pPdStruct);
-    QByteArray decompress(QList<RECORD> *pListArchive,QString sRecordFileName,PDSTRUCT *pPdStruct=nullptr);
-    QByteArray decompress(QString sRecordFileName,PDSTRUCT *pPdStruct=nullptr);
-    bool decompressToFile(const RECORD *pRecord,QString sResultFileName,PDSTRUCT *pPdStruct=nullptr);
-    bool decompressToFile(QList<RECORD> *pListArchive,QString sRecordFileName,QString sResultFileName,PDSTRUCT *pPdStruct=nullptr);
-    bool decompressToPath(QList<RECORD> *pListArchive,QString sRecordFileName,QString sResultPathName,PDSTRUCT *pPdStruct=nullptr);
-    bool decompressToFile(QString sArchiveFileName,QString sRecordFileName,QString sResultFileName,PDSTRUCT *pPdStruct=nullptr);
-    bool decompressToPath(QString sArchiveFileName,QString sRecordPathName,QString sResultPathName,PDSTRUCT *pPdStruct=nullptr);
-    bool dumpToFile(const RECORD *pRecord,QString sFileName,PDSTRUCT *pPdStruct=nullptr);
-    static RECORD getArchiveRecord(QString sRecordFileName,QList<RECORD> *pListRecords,PDSTRUCT *pPdStruct=nullptr);
-    bool isArchiveRecordPresent(QString sRecordFileName,PDSTRUCT *pPdStruct=nullptr);
-    static bool isArchiveRecordPresent(QString sRecordFileName,QList<RECORD> *pListRecords,PDSTRUCT *pPdStruct=nullptr);
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) = 0;
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) = 0;
+    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly = false,
+                                      PDSTRUCT *pPdStruct = nullptr, qint64 *pnInSize = nullptr, qint64 *pnOutSize = nullptr);
+    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);  // TODO PDSTRUCT
+    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits,
+                                            qint32 nMemLevel, qint32 nStrategy);  // TODO PDSTRUCT
+    QByteArray decompress(const RECORD *pRecord, bool bHeaderOnly, PDSTRUCT *pPdStruct);
+    QByteArray decompress(QList<RECORD> *pListArchive, QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
+    QByteArray decompress(QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToFile(const RECORD *pRecord, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToFile(QList<RECORD> *pListArchive, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToPath(QList<RECORD> *pListArchive, QString sRecordFileName, QString sResultPathName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToFile(QString sArchiveFileName, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToPath(QString sArchiveFileName, QString sRecordPathName, QString sResultPathName, PDSTRUCT *pPdStruct = nullptr);
+    bool dumpToFile(const RECORD *pRecord, QString sFileName, PDSTRUCT *pPdStruct = nullptr);
+    static RECORD getArchiveRecord(QString sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
+    bool isArchiveRecordPresent(QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
+    static bool isArchiveRecordPresent(QString sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();
     static void showRecords(QList<RECORD> *pListArchive);
     virtual MODE getMode();
-//    virtual _MEMORY_MAP getMemoryMap(); // TODO
+    //    virtual _MEMORY_MAP getMemoryMap(); // TODO
 };
 
-#endif // XARCHIVE_H
+#endif  // XARCHIVE_H

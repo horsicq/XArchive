@@ -24,18 +24,17 @@
 #include "xarchive.h"
 #include "xmach.h"
 
-class XMACHOFat : public XArchive
-{
+class XMACHOFat : public XArchive {
     Q_OBJECT
 
 public:
-    explicit XMACHOFat(QIODevice *pDevice=nullptr);
+    explicit XMACHOFat(QIODevice *pDevice = nullptr);
 
     virtual bool isValid();
     static bool isValid(QIODevice *pDevice);
     virtual bool isBigEndian();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 };
 
-#endif // XMACHOFAT_H
+#endif  // XMACHOFAT_H

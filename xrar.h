@@ -23,20 +23,19 @@
 
 #include "xarchive.h"
 
-class XRar : public XArchive
-{
+class XRar : public XArchive {
     Q_OBJECT
 
-public:    
-    explicit XRar(QIODevice *pDevice=nullptr);
+public:
+    explicit XRar(QIODevice *pDevice = nullptr);
 
     virtual bool isValid();
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
     virtual QString getFileFormatExt();
 };
 
-#endif // XRAR_H
+#endif  // XRAR_H

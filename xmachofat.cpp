@@ -20,99 +20,85 @@
  */
 #include "xmachofat.h"
 
-XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
-{
-
+XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice) {
 }
 
-bool XMACHOFat::isValid()
-{
-    bool bResult=false;
+bool XMACHOFat::isValid() {
+    bool bResult = false;
 
-    quint32 nMagic=read_uint32(0);
+    quint32 nMagic = read_uint32(0);
 
-    if( (nMagic==XMACH_DEF::S_FAT_MAGIC)||
-        (nMagic==XMACH_DEF::S_FAT_CIGAM))
-    {
-        PDSTRUCT pdStruct={};
+    if ((nMagic == XMACH_DEF::S_FAT_MAGIC) || (nMagic == XMACH_DEF::S_FAT_CIGAM)) {
+        PDSTRUCT pdStruct = {};
 
-        bResult=(getNumberOfRecords(&pdStruct)<10); // TODO Check !!!
+        bResult = (getNumberOfRecords(&pdStruct) < 10);  // TODO Check !!!
     }
 
     return bResult;
 }
 
-bool XMACHOFat::isValid(QIODevice *pDevice)
-{
+bool XMACHOFat::isValid(QIODevice *pDevice) {
     XMACHOFat xmachofat(pDevice);
 
     return xmachofat.isValid();
 }
 
-bool XMACHOFat::isBigEndian()
-{
-    bool bResult=false;
+bool XMACHOFat::isBigEndian() {
+    bool bResult = false;
 
-    quint32 nMagic=read_uint32(0);
+    quint32 nMagic = read_uint32(0);
 
-    if(nMagic==XMACH_DEF::S_FAT_CIGAM)
-    {
-        bResult=true;
+    if (nMagic == XMACH_DEF::S_FAT_CIGAM) {
+        bResult = true;
     }
 
     return bResult;
 }
 
-quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    return read_uint32(offsetof(XMACH_DEF::fat_header,nfat_arch),isBigEndian());
+quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+    return read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
 }
 
-QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
-{
-    XBinary::PDSTRUCT pdStructEmpty={};
+QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
-    if(!pPdStruct)
-    {
-        pPdStruct=&pdStructEmpty;
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
     }
 
     QList<RECORD> listResult;
 
-    qint32 nNumberOfRecords=(qint32)getNumberOfRecords(pPdStruct);
+    qint32 nNumberOfRecords = (qint32)getNumberOfRecords(pPdStruct);
 
-    if(nLimit!=-1)
-    {
-        nNumberOfRecords=qMin(nNumberOfRecords,nLimit);
+    if (nLimit != -1) {
+        nNumberOfRecords = qMin(nNumberOfRecords, nLimit);
     }
 
-    bool bIsBigEndian=isBigEndian();
+    bool bIsBigEndian = isBigEndian();
 
-    QMap<quint64,QString> mapCpuTypes=XMACH::getHeaderCpuTypesS();
+    QMap<quint64, QString> mapCpuTypes = XMACH::getHeaderCpuTypesS();
 
-    for(qint32 i=0;(i<nNumberOfRecords)&&(!(pPdStruct->bIsStop));i++)
-    {
-        qint64 nOffset=sizeof(XMACH_DEF::fat_header)+i*sizeof(XMACH_DEF::fat_arch);
+    for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+        qint64 nOffset = sizeof(XMACH_DEF::fat_header) + i * sizeof(XMACH_DEF::fat_arch);
 
-        quint32 _cputype=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,cputype),bIsBigEndian);
-        quint32 _cpusubtype=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,cpusubtype),bIsBigEndian);
-        quint32 _offset=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,offset),bIsBigEndian);
-        quint32 _size=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,size),bIsBigEndian);
-//        quint32 _align=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,align),bIsBigEndian);
+        quint32 _cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
+        quint32 _cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
+        quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
+        quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
+        //        quint32 _align=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,align),bIsBigEndian);
 
-        RECORD record={};
+        RECORD record = {};
 
-        record.sFileName=QString("%1").arg(mapCpuTypes.value(_cputype,tr("Unknown")));
+        record.sFileName = QString("%1").arg(mapCpuTypes.value(_cputype, tr("Unknown")));
 
-        if(_cpusubtype)
-        {
-            record.sFileName+=QString("-%1").arg(_cpusubtype,0,16);
+        if (_cpusubtype) {
+            record.sFileName += QString("-%1").arg(_cpusubtype, 0, 16);
         }
 
-        record.nDataOffset=_offset;
-        record.nCompressedSize=_size;
-        record.nUncompressedSize=_size;
-        record.compressMethod=COMPRESS_METHOD_STORE;
+        record.nDataOffset = _offset;
+        record.nCompressedSize = _size;
+        record.nUncompressedSize = _size;
+        record.compressMethod = COMPRESS_METHOD_STORE;
 
         listResult.append(record);
     }

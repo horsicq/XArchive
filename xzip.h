@@ -24,58 +24,54 @@
 #include "xarchive.h"
 
 // TODO OSNAME
-class XZip : public XArchive
-{
+class XZip : public XArchive {
     Q_OBJECT
 
 public:
-    enum SIGNATURE
-    {
-        SIGNATURE_ECD=0x06054B50,
-        SIGNATURE_CFD=0x02014B50,
-        SIGNATURE_LFD=0x04034B50
+    enum SIGNATURE {
+        SIGNATURE_ECD = 0x06054B50,
+        SIGNATURE_CFD = 0x02014B50,
+        SIGNATURE_LFD = 0x04034B50
     };
 
-//    0 - The file is stored (no compression)
-//    1 - The file is Shrunk
-//    2 - The file is Reduced with compression factor 1
-//    3 - The file is Reduced with compression factor 2
-//    4 - The file is Reduced with compression factor 3
-//    5 - The file is Reduced with compression factor 4
-//    6 - The file is Imploded
-//    7 - Reserved for Tokenizing compression algorithm
-//    8 - The file is Deflated
-//    9 - Enhanced Deflating using Deflate64(tm)
-//    10 - PKWARE Data Compression Library Imploding (old IBM TERSE)
-//    11 - Reserved by PKWARE
-//    12 - File is compressed using BZIP2 algorithm
-//    13 - Reserved by PKWARE
-//    14 - LZMA (EFS)
-//    15 - Reserved by PKWARE
-//    16 - Reserved by PKWARE
-//    17 - Reserved by PKWARE
-//    18 - File is compressed using IBM TERSE (new)
-//    19 - IBM LZ77 z Architecture (PFS)
-//    97 - WavPack compressed data
-//    98 - PPMd version I, Rev 1
-//    99 - Apple LZFSE
+    //    0 - The file is stored (no compression)
+    //    1 - The file is Shrunk
+    //    2 - The file is Reduced with compression factor 1
+    //    3 - The file is Reduced with compression factor 2
+    //    4 - The file is Reduced with compression factor 3
+    //    5 - The file is Reduced with compression factor 4
+    //    6 - The file is Imploded
+    //    7 - Reserved for Tokenizing compression algorithm
+    //    8 - The file is Deflated
+    //    9 - Enhanced Deflating using Deflate64(tm)
+    //    10 - PKWARE Data Compression Library Imploding (old IBM TERSE)
+    //    11 - Reserved by PKWARE
+    //    12 - File is compressed using BZIP2 algorithm
+    //    13 - Reserved by PKWARE
+    //    14 - LZMA (EFS)
+    //    15 - Reserved by PKWARE
+    //    16 - Reserved by PKWARE
+    //    17 - Reserved by PKWARE
+    //    18 - File is compressed using IBM TERSE (new)
+    //    19 - IBM LZ77 z Architecture (PFS)
+    //    97 - WavPack compressed data
+    //    98 - PPMd version I, Rev 1
+    //    99 - Apple LZFSE
 
-    enum METHOD
-    {
-        METHOD_STORE=0,
-        METHOD_DEFLATE=8,
-        METHOD_DEFLATE64=9,
-        METHOD_BZIP2=12,
-        METHOD_LZMA=14,
-        METHOD_PPMD=98,
-        METHOD_LZFSE=99, // Apple
+    enum METHOD {
+        METHOD_STORE = 0,
+        METHOD_DEFLATE = 8,
+        METHOD_DEFLATE64 = 9,
+        METHOD_BZIP2 = 12,
+        METHOD_LZMA = 14,
+        METHOD_PPMD = 98,
+        METHOD_LZFSE = 99,  // Apple
     };
 
 #pragma pack(push)
 #pragma pack(1)
-    struct LOCALFILEHEADER
-    {
-        quint32 nSignature; // SIGNATURE_LFD
+    struct LOCALFILEHEADER {
+        quint32 nSignature;  // SIGNATURE_LFD
         quint16 nMinVersion;
         quint16 nFlags;
         quint16 nMethod;
@@ -90,9 +86,8 @@ public:
         // Extra field
     };
 
-    struct ENDOFCENTRALDIRECTORYRECORD
-    {
-        quint32 nSignature; // SIGNATURE_ECD
+    struct ENDOFCENTRALDIRECTORYRECORD {
+        quint32 nSignature;  // SIGNATURE_ECD
         quint16 nDiskNumber;
         quint16 nStartDisk;
         quint16 nDiskNumberOfRecords;
@@ -103,9 +98,8 @@ public:
         // Comment
     };
 
-    struct CENTRALDIRECTORYFILEHEADER
-    {
-        quint32 nSignature; // SIGNATURE_CFD
+    struct CENTRALDIRECTORYFILEHEADER {
+        quint32 nSignature;  // SIGNATURE_CFD
         quint16 nVersion;
         quint16 nMinVersion;
         quint16 nFlags;
@@ -125,11 +119,10 @@ public:
         // File name
         // Extra field
         // File Comment
-    };    
+    };
 #pragma pack(pop)
 
-    struct ZIPFILE_RECORD
-    {
+    struct ZIPFILE_RECORD {
         QString sFileName;
         quint16 nVersion;
         quint16 nMinVersion;
@@ -144,32 +137,31 @@ public:
         // TODO Comment!!!
     };
 
-    explicit XZip(QIODevice *pDevice=nullptr);
+    explicit XZip(QIODevice *pDevice = nullptr);
     virtual bool isValid();
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual bool isEncrypted();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
     virtual bool isSigned();
     virtual OFFSETSIZE getSignOffsetSize();
 
-    bool isAPKSignBlockPresent(); // For APK
+    bool isAPKSignBlockPresent();  // For APK
 
-    struct APK_SIG_BLOCK_RECORD
-    {
+    struct APK_SIG_BLOCK_RECORD {
         quint32 nID;
         quint64 nDataOffset;
         quint64 nDataSize;
     };
 
     QList<APK_SIG_BLOCK_RECORD> getAPKSignaturesBlockRecordsList();
-    static bool isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList,quint32 nID);
-    static APK_SIG_BLOCK_RECORD getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList,quint32 nID);
+    static bool isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID);
+    static APK_SIG_BLOCK_RECORD getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID);
 
-    static bool addLocalFileRecord(QIODevice *pSource,QIODevice *pDest,ZIPFILE_RECORD *pZipFileRecord);
-    static bool addCentralDirectory(QIODevice *pDest,QList<ZIPFILE_RECORD> *pListZipFileRecords,QString sComment="");
+    static bool addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord);
+    static bool addCentralDirectory(QIODevice *pDest, QList<ZIPFILE_RECORD> *pListZipFileRecords, QString sComment = "");
 
     virtual QString getFileFormatExt();
     virtual QString getFileFormatString();
@@ -180,4 +172,4 @@ private:
     COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);
 };
 
-#endif // XZIP_H
+#endif  // XZIP_H

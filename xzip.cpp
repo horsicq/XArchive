@@ -20,328 +20,285 @@
  */
 #include "xzip.h"
 
-XZip::XZip(QIODevice *pDevice) : XArchive(pDevice)
-{
-
+XZip::XZip(QIODevice *pDevice) : XArchive(pDevice) {
 }
 
-bool XZip::isValid()
-{
-    bool bResult=false;
+bool XZip::isValid() {
+    bool bResult = false;
 
-    _MEMORY_MAP memoryMap=XBinary::getMemoryMap(); // TODO Check
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap();  // TODO Check
 
-    if( compareSignature(&memoryMap,"'PK'0304",0)||
-        compareSignature(&memoryMap,"'PK'0506",0))
-    {
-        bResult=true;
+    if (compareSignature(&memoryMap, "'PK'0304", 0) || compareSignature(&memoryMap, "'PK'0506", 0)) {
+        bResult = true;
     }
 
     return bResult;
 }
 
-bool XZip::isValid(QIODevice *pDevice)
-{
+bool XZip::isValid(QIODevice *pDevice) {
     XZip xzip(pDevice);
 
     return xzip.isValid();
 }
 
-QString XZip::getVersion()
-{
+QString XZip::getVersion() {
     QString sResult;
 
-    qint64 nECDOffset=findECDOffset();
+    qint64 nECDOffset = findECDOffset();
 
-    quint16 nVersion=0;
+    quint16 nVersion = 0;
 
-    if(nECDOffset!=-1)
-    {
-        qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
+    if (nECDOffset != -1) {
+        qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
-        quint32 nSignature=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nSignature));
+        quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
 
-        if(nSignature==SIGNATURE_CFD)
-        {
-            nVersion=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nVersion));
+        if (nSignature == SIGNATURE_CFD) {
+            nVersion = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nVersion));
 
-            if(nVersion==0)
-            {
-                nVersion=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nMinVersion));
+            if (nVersion == 0) {
+                nVersion = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nMinVersion));
             }
         }
     }
 
-    if(nVersion==0)
-    {
+    if (nVersion == 0) {
         // The first record
-        nVersion=read_uint16(0+offsetof(CENTRALDIRECTORYFILEHEADER,nVersion));
+        nVersion = read_uint16(0 + offsetof(CENTRALDIRECTORYFILEHEADER, nVersion));
     }
 
-    if(nVersion)
-    {
-        sResult=QString("%1").arg((double)nVersion/10,0,'f',1);
+    if (nVersion) {
+        sResult = QString("%1").arg((double)nVersion / 10, 0, 'f', 1);
     }
 
     return sResult;
 }
 
-bool XZip::isEncrypted()
-{
-    bool bResult=false;
+bool XZip::isEncrypted() {
+    bool bResult = false;
 
-    qint64 nECDOffset=findECDOffset();
+    qint64 nECDOffset = findECDOffset();
 
-    bool bSuccess=false;
+    bool bSuccess = false;
 
-    if(nECDOffset!=-1)
-    {
-        qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
+    if (nECDOffset != -1) {
+        qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
-        quint32 nSignature=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nSignature));
+        quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
 
-        if(nSignature==SIGNATURE_CFD)
-        {
-            quint16 nFlags=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nFlags));
+        if (nSignature == SIGNATURE_CFD) {
+            quint16 nFlags = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFlags));
 
-            bResult=(nFlags&0x1);
-            bSuccess=true;
+            bResult = (nFlags & 0x1);
+            bSuccess = true;
         }
     }
 
-    if(!bSuccess)
-    {
+    if (!bSuccess) {
         // The first record
-        quint16 nFlags=read_uint16(offsetof(CENTRALDIRECTORYFILEHEADER,nFlags));
+        quint16 nFlags = read_uint16(offsetof(CENTRALDIRECTORYFILEHEADER, nFlags));
 
-        bResult=(nFlags&0x1);
+        bResult = (nFlags & 0x1);
     }
 
     return bResult;
 }
 
-quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    quint64 nResult=0;
+quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+    quint64 nResult = 0;
 
-    qint64 nECDOffset=findECDOffset();
+    qint64 nECDOffset = findECDOffset();
 
-    if(nECDOffset!=-1)
-    {
-        nResult=read_uint16(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nTotalNumberOfRecords));
-    }
-    else
-    {
-        qint64 nOffset=0;
+    if (nECDOffset != -1) {
+        nResult = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
+    } else {
+        qint64 nOffset = 0;
 
-        for(qint32 i=0;(!(pPdStruct->bIsStop));i++)
-        {
-            quint32 nLocalSignature=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nSignature));
-            quint32 nLocalFileNameSize=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nFileNameLength));
-            quint32 nLocalExtraFieldSize=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nExtraFieldLength));
-            quint32 nCompressedSize=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nCompressedSize));
+        for (qint32 i = 0; (!(pPdStruct->bIsStop)); i++) {
+            quint32 nLocalSignature = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nSignature));
+            quint32 nLocalFileNameSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
+            quint32 nLocalExtraFieldSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
+            quint32 nCompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
 
-            if(nLocalSignature!=SIGNATURE_LFD)
-            {
+            if (nLocalSignature != SIGNATURE_LFD) {
                 break;
             }
 
             nResult++;
 
-            nOffset+=sizeof(LOCALFILEHEADER)+nLocalFileNameSize+nLocalExtraFieldSize+nCompressedSize;
+            nOffset += sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
         }
     }
 
     return nResult;
 }
 
-QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit,PDSTRUCT *pPdStruct)
-{
-    XBinary::PDSTRUCT pdStructEmpty={};
+QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
-    if(!pPdStruct)
-    {
-        pPdStruct=&pdStructEmpty;
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
     }
 
     QList<RECORD> listResult;
 
-    qint64 nECDOffset=findECDOffset();
+    qint64 nECDOffset = findECDOffset();
 
-    if(nECDOffset!=-1)
-    {
-        qint32 nNumberOfRecords=read_uint16(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nTotalNumberOfRecords));
+    if (nECDOffset != -1) {
+        qint32 nNumberOfRecords = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
 
-        if(nLimit!=-1)
-        {
-            nNumberOfRecords=qMin(nNumberOfRecords,nLimit);
+        if (nLimit != -1) {
+            nNumberOfRecords = qMin(nNumberOfRecords, nLimit);
         }
 
-        qint64 nOffset=read_uint32(nECDOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
+        qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
-        for(qint32 i=0;i<(nNumberOfRecords)&&(!(pPdStruct->bIsStop));i++)
-        {
-            RECORD record={};
+        for (qint32 i = 0; i < (nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+            RECORD record = {};
 
-            quint32 nSignature=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nSignature));
+            quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
 
-            if(nSignature!=SIGNATURE_CFD)
-            {
+            if (nSignature != SIGNATURE_CFD) {
                 break;
             }
 
-            quint32 nFileNameSize=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nFileNameLength));
-            quint32 nExtraFieldSize=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nExtraFieldLength));
-            quint32 nFileCommentSize=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nFileCommentLength));
+            quint32 nFileNameSize = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength));
+            quint32 nExtraFieldSize = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength));
+            quint32 nFileCommentSize = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength));
 
-            record.nCRC32=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nCRC32));
-            record.nCompressedSize=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nCompressedSize));
-            record.nUncompressedSize=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nUncompressedSize));
-            record.compressMethod=COMPRESS_METHOD_UNKNOWN;
-            quint16 nZipMethod=read_uint16(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nMethod));
+            record.nCRC32 = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nCRC32));
+            record.nCompressedSize = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nCompressedSize));
+            record.nUncompressedSize = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize));
+            record.compressMethod = COMPRESS_METHOD_UNKNOWN;
+            quint16 nZipMethod = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nMethod));
 
-            record.compressMethod=zipToCompressMethod(nZipMethod);
+            record.compressMethod = zipToCompressMethod(nZipMethod);
 
-            record.sFileName=read_ansiString(nOffset+sizeof(CENTRALDIRECTORYFILEHEADER),nFileNameSize);
+            record.sFileName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), nFileNameSize);
 
-            quint32 nLocalFileHeaderOffset=read_uint32(nOffset+offsetof(CENTRALDIRECTORYFILEHEADER,nOffsetToLocalFileHeader));
+            quint32 nLocalFileHeaderOffset = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader));
 
-            quint32 nLocalSignature=read_uint32(nLocalFileHeaderOffset+offsetof(LOCALFILEHEADER,nSignature));
-            quint32 nLocalFileNameSize=read_uint16(nLocalFileHeaderOffset+offsetof(LOCALFILEHEADER,nFileNameLength));
-            quint32 nLocalExtraFieldSize=read_uint16(nLocalFileHeaderOffset+offsetof(LOCALFILEHEADER,nExtraFieldLength));
+            quint32 nLocalSignature = read_uint32(nLocalFileHeaderOffset + offsetof(LOCALFILEHEADER, nSignature));
+            quint32 nLocalFileNameSize = read_uint16(nLocalFileHeaderOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
+            quint32 nLocalExtraFieldSize = read_uint16(nLocalFileHeaderOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
 
-            if(nLocalSignature!=SIGNATURE_LFD)
-            {
+            if (nLocalSignature != SIGNATURE_LFD) {
                 break;
             }
 
-            record.nDataOffset=nLocalFileHeaderOffset+sizeof(LOCALFILEHEADER)+nLocalFileNameSize+nLocalExtraFieldSize;
+            record.nDataOffset = nLocalFileHeaderOffset + sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize;
 
             listResult.append(record);
 
-            nOffset+=(sizeof(CENTRALDIRECTORYFILEHEADER)+nFileNameSize+nExtraFieldSize+nFileCommentSize);
+            nOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + nFileNameSize + nExtraFieldSize + nFileCommentSize);
         }
-    }
-    else
-    {
+    } else {
         // if no ECD, only the first record
-        qint32 nNumberOfRecords=nLimit;
+        qint32 nNumberOfRecords = nLimit;
 
-        if(nNumberOfRecords==-1)
-        {
-            nNumberOfRecords=0xFFFFFF;
+        if (nNumberOfRecords == -1) {
+            nNumberOfRecords = 0xFFFFFF;
         }
 
-        qint64 nOffset=0;
+        qint64 nOffset = 0;
 
-        for(qint32 i=0;i<(nNumberOfRecords)&&(!(pPdStruct->bIsStop));i++)
-        {
-            quint32 nLocalSignature=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nSignature));
-            quint32 nLocalFileNameSize=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nFileNameLength));
-            quint32 nLocalExtraFieldSize=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nExtraFieldLength));
-            quint32 nCompressedSize=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nCompressedSize));
+        for (qint32 i = 0; i < (nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+            quint32 nLocalSignature = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nSignature));
+            quint32 nLocalFileNameSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
+            quint32 nLocalExtraFieldSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
+            quint32 nCompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
 
-            if(nLocalSignature!=SIGNATURE_LFD)
-            {
+            if (nLocalSignature != SIGNATURE_LFD) {
                 break;
             }
 
-            RECORD record={};
+            RECORD record = {};
 
-            record.nCRC32=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nCRC32));
-            record.nCompressedSize=nCompressedSize;
-            record.nUncompressedSize=read_uint32(nOffset+offsetof(LOCALFILEHEADER,nUncompressedSize));
-            record.compressMethod=COMPRESS_METHOD_UNKNOWN;
-            quint16 nZipMethod=read_uint16(nOffset+offsetof(LOCALFILEHEADER,nMethod));
+            record.nCRC32 = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nCRC32));
+            record.nCompressedSize = nCompressedSize;
+            record.nUncompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nUncompressedSize));
+            record.compressMethod = COMPRESS_METHOD_UNKNOWN;
+            quint16 nZipMethod = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nMethod));
 
-            record.compressMethod=zipToCompressMethod(nZipMethod);
+            record.compressMethod = zipToCompressMethod(nZipMethod);
 
-            record.sFileName=read_ansiString(nOffset+sizeof(LOCALFILEHEADER),nLocalFileNameSize);
+            record.sFileName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), nLocalFileNameSize);
 
-            record.nDataOffset=nOffset+sizeof(LOCALFILEHEADER)+nLocalFileNameSize+nLocalExtraFieldSize;
+            record.nDataOffset = nOffset + sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize;
 
             listResult.append(record);
 
-            nOffset+=sizeof(LOCALFILEHEADER)+nLocalFileNameSize+nLocalExtraFieldSize+nCompressedSize;
+            nOffset += sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
         }
     }
 
     return listResult;
 }
 
-bool XZip::isSigned()
-{
+bool XZip::isSigned() {
     // TODO Check more !!!
     return isAPKSignBlockPresent();
 }
 
-XBinary::OFFSETSIZE XZip::getSignOffsetSize()
-{
-    OFFSETSIZE osResult={};
+XBinary::OFFSETSIZE XZip::getSignOffsetSize() {
+    OFFSETSIZE osResult = {};
 
     // TODO optimize
 
-    qint64 nOffset=findAPKSignBlockOffset();
+    qint64 nOffset = findAPKSignBlockOffset();
 
-    quint64 nBlockSize1=read_uint64(nOffset-8);
-    quint64 nBlockSize2=read_uint64(nOffset-nBlockSize1+8);
+    quint64 nBlockSize1 = read_uint64(nOffset - 8);
+    quint64 nBlockSize2 = read_uint64(nOffset - nBlockSize1 + 8);
 
-    if((nBlockSize1)&&(nBlockSize1==nBlockSize2))
-    {
-        nOffset=nOffset-nBlockSize1+16;
+    if ((nBlockSize1) && (nBlockSize1 == nBlockSize2)) {
+        nOffset = nOffset - nBlockSize1 + 16;
 
-        qint64 nCentralDirectoryOffset=findECDOffset();
-        nCentralDirectoryOffset=read_uint32(nCentralDirectoryOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
+        qint64 nCentralDirectoryOffset = findECDOffset();
+        nCentralDirectoryOffset = read_uint32(nCentralDirectoryOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
-        osResult.nOffset=nOffset;
-        osResult.nSize=qMax((qint64)0,nCentralDirectoryOffset-nOffset);
+        osResult.nOffset = nOffset;
+        osResult.nSize = qMax((qint64)0, nCentralDirectoryOffset - nOffset);
     }
 
     return osResult;
 }
 
-bool XZip::isAPKSignBlockPresent()
-{
-    return (findAPKSignBlockOffset()!=-1);
+bool XZip::isAPKSignBlockPresent() {
+    return (findAPKSignBlockOffset() != -1);
 }
 
-QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockRecordsList()
-{
+QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockRecordsList() {
     QList<XZip::APK_SIG_BLOCK_RECORD> listResult;
 
-    qint64 nOffset=findAPKSignBlockOffset();
+    qint64 nOffset = findAPKSignBlockOffset();
 
-    if(nOffset!=-1)
-    {
-        quint64 nBlockSize1=read_uint64(nOffset-8);
-        quint64 nBlockSize2=read_uint64(nOffset-nBlockSize1+8);
+    if (nOffset != -1) {
+        quint64 nBlockSize1 = read_uint64(nOffset - 8);
+        quint64 nBlockSize2 = read_uint64(nOffset - nBlockSize1 + 8);
 
-        if((nBlockSize1)&&(nBlockSize1==nBlockSize2))
-        {
-            qint64 nEndOffset=nOffset-8;
-            nOffset=nOffset-nBlockSize1+16;
+        if ((nBlockSize1) && (nBlockSize1 == nBlockSize2)) {
+            qint64 nEndOffset = nOffset - 8;
+            nOffset = nOffset - nBlockSize1 + 16;
 
-            while(nOffset<nEndOffset)
-            {
-                APK_SIG_BLOCK_RECORD record={};
-                record.nID=read_uint32(nOffset);
-                nOffset+=4;
+            while (nOffset < nEndOffset) {
+                APK_SIG_BLOCK_RECORD record = {};
+                record.nID = read_uint32(nOffset);
+                nOffset += 4;
 
-                record.nDataOffset=nOffset+4;
-                record.nDataSize=read_uint32(nOffset);
+                record.nDataOffset = nOffset + 4;
+                record.nDataSize = read_uint32(nOffset);
 
                 listResult.append(record);
 
-                nOffset+=4;
-                nOffset+=record.nDataSize;
+                nOffset += 4;
+                nOffset += record.nDataSize;
 
-                if(record.nID==0x42726577) // End TODO CONST
+                if (record.nID == 0x42726577)  // End TODO CONST
                 {
                     break;
                 }
 
-                if(record.nID==0)
-                {
+                if (record.nID == 0) {
                     break;
                 }
             }
@@ -351,22 +308,18 @@ QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockRecordsList()
     return listResult;
 }
 
-bool XZip::isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList,quint32 nID)
-{
-    return (getAPKSignatureBlockRecord(pList,nID).nID==nID);
+bool XZip::isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID) {
+    return (getAPKSignatureBlockRecord(pList, nID).nID == nID);
 }
 
-XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList,quint32 nID)
-{
-    XZip::APK_SIG_BLOCK_RECORD result={};
+XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID) {
+    XZip::APK_SIG_BLOCK_RECORD result = {};
 
-    qint32 nNumberOfRecords=pList->count();
+    qint32 nNumberOfRecords = pList->count();
 
-    for(qint32 i=0;i<nNumberOfRecords;i++)
-    {
-        if(pList->at(i).nID==nID)
-        {
-            result=pList->at(i);
+    for (qint32 i = 0; i < nNumberOfRecords; i++) {
+        if (pList->at(i).nID == nID) {
+            result = pList->at(i);
 
             break;
         }
@@ -375,197 +328,191 @@ XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_
     return result;
 }
 
-bool XZip::addLocalFileRecord(QIODevice *pSource,QIODevice *pDest,ZIPFILE_RECORD *pZipFileRecord)
-{
-    if(pZipFileRecord->nMinVersion==0)
-    {
-        pZipFileRecord->nMinVersion=0x14;
+bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord) {
+    if (pZipFileRecord->nMinVersion == 0) {
+        pZipFileRecord->nMinVersion = 0x14;
     }
 
-    if(pZipFileRecord->nVersion==0)
-    {
-        pZipFileRecord->nVersion=0x3F;
+    if (pZipFileRecord->nVersion == 0) {
+        pZipFileRecord->nVersion = 0x3F;
     }
 
-    if(pZipFileRecord->nUncompressedSize==0)
-    {
-        pZipFileRecord->nUncompressedSize=pSource->size();
+    if (pZipFileRecord->nUncompressedSize == 0) {
+        pZipFileRecord->nUncompressedSize = pSource->size();
     }
 
-    if(pZipFileRecord->nCRC32==0)
-    {
-        pZipFileRecord->nCRC32=XBinary::_getCRC32(pSource);
+    if (pZipFileRecord->nCRC32 == 0) {
+        pZipFileRecord->nCRC32 = XBinary::_getCRC32(pSource);
     }
 
-    if(!pZipFileRecord->dtTime.isValid())
-    {
-        pZipFileRecord->dtTime=QDateTime::currentDateTime();
+    if (!pZipFileRecord->dtTime.isValid()) {
+        pZipFileRecord->dtTime = QDateTime::currentDateTime();
     }
 
-    pZipFileRecord->nHeaderOffset=pDest->pos();
+    pZipFileRecord->nHeaderOffset = pDest->pos();
 
-    XZip::LOCALFILEHEADER localFileHeader={};
-    localFileHeader.nSignature=XZip::SIGNATURE_LFD;
-    localFileHeader.nMinVersion=pZipFileRecord->nMinVersion;
-    localFileHeader.nFlags=pZipFileRecord->nFlags;
-    localFileHeader.nMethod=pZipFileRecord->method;
-    localFileHeader.nLastModTime=0; // TODO
-    localFileHeader.nLastModDate=0; // TODO
-    localFileHeader.nCRC32=pZipFileRecord->nCRC32;
-    localFileHeader.nCompressedSize=0;
-    localFileHeader.nUncompressedSize=pZipFileRecord->nUncompressedSize;
-    localFileHeader.nFileNameLength=pZipFileRecord->sFileName.size();
-    localFileHeader.nExtraFieldLength=0;
+    XZip::LOCALFILEHEADER localFileHeader = {};
+    localFileHeader.nSignature = XZip::SIGNATURE_LFD;
+    localFileHeader.nMinVersion = pZipFileRecord->nMinVersion;
+    localFileHeader.nFlags = pZipFileRecord->nFlags;
+    localFileHeader.nMethod = pZipFileRecord->method;
+    localFileHeader.nLastModTime = 0;  // TODO
+    localFileHeader.nLastModDate = 0;  // TODO
+    localFileHeader.nCRC32 = pZipFileRecord->nCRC32;
+    localFileHeader.nCompressedSize = 0;
+    localFileHeader.nUncompressedSize = pZipFileRecord->nUncompressedSize;
+    localFileHeader.nFileNameLength = pZipFileRecord->sFileName.size();
+    localFileHeader.nExtraFieldLength = 0;
 
-    pDest->write((char *)&localFileHeader,sizeof(localFileHeader));
-    pDest->write(pZipFileRecord->sFileName.toLatin1().data(),pZipFileRecord->sFileName.toLatin1().size());
+    pDest->write((char *)&localFileHeader, sizeof(localFileHeader));
+    pDest->write(pZipFileRecord->sFileName.toLatin1().data(), pZipFileRecord->sFileName.toLatin1().size());
 
-    pZipFileRecord->nDataOffset=pDest->pos();
+    pZipFileRecord->nDataOffset = pDest->pos();
 
-    XArchive::compress(XArchive::COMPRESS_METHOD_DEFLATE,pSource,pDest);
+    XArchive::compress(XArchive::COMPRESS_METHOD_DEFLATE, pSource, pDest);
 
-    qint64 nEndPosition=pDest->pos();
+    qint64 nEndPosition = pDest->pos();
 
-    pZipFileRecord->nCompressedSize=(nEndPosition)-(pZipFileRecord->nDataOffset);
+    pZipFileRecord->nCompressedSize = (nEndPosition) - (pZipFileRecord->nDataOffset);
 
     XBinary binary(pDest);
 
-    binary.write_uint32(pZipFileRecord->nHeaderOffset+offsetof(XZip::LOCALFILEHEADER,nCompressedSize),pZipFileRecord->nCompressedSize);
+    binary.write_uint32(pZipFileRecord->nHeaderOffset + offsetof(XZip::LOCALFILEHEADER, nCompressedSize), pZipFileRecord->nCompressedSize);
 
     pDest->seek(nEndPosition);
 
     return true;
 }
 
-bool XZip::addCentralDirectory(QIODevice *pDest,QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords,QString sComment)
-{
-    qint64 nStartPosition=pDest->pos();
+bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords, QString sComment) {
+    qint64 nStartPosition = pDest->pos();
 
-    qint32 nNumberOfRecords=pListZipFileRecords->count();
+    qint32 nNumberOfRecords = pListZipFileRecords->count();
 
-    for(qint32 i=0;i<nNumberOfRecords;i++)
-    {
-        XZip::CENTRALDIRECTORYFILEHEADER cdFileHeader={};
+    for (qint32 i = 0; i < nNumberOfRecords; i++) {
+        XZip::CENTRALDIRECTORYFILEHEADER cdFileHeader = {};
 
-        cdFileHeader.nSignature=SIGNATURE_CFD;
-        cdFileHeader.nVersion=pListZipFileRecords->at(i).nVersion;
-        cdFileHeader.nMinVersion=pListZipFileRecords->at(i).nMinVersion;
-        cdFileHeader.nFlags=pListZipFileRecords->at(i).nFlags;
-        cdFileHeader.nMethod=pListZipFileRecords->at(i).method;
-        cdFileHeader.nLastModTime=0; // TODO
-        cdFileHeader.nLastModDate=0; // TODO
-        cdFileHeader.nCRC32=pListZipFileRecords->at(i).nCRC32;
-        cdFileHeader.nCompressedSize=pListZipFileRecords->at(i).nCompressedSize;
-        cdFileHeader.nUncompressedSize=pListZipFileRecords->at(i).nUncompressedSize;
-        cdFileHeader.nFileNameLength=pListZipFileRecords->at(i).sFileName.size();
-        cdFileHeader.nExtraFieldLength=0;
-        cdFileHeader.nFileCommentLength=0;
-        cdFileHeader.nStartDisk=0;
-        cdFileHeader.nInternalFileAttributes=0;
-        cdFileHeader.nExternalFileAttributes=0;
-        cdFileHeader.nOffsetToLocalFileHeader=pListZipFileRecords->at(i).nHeaderOffset;
+        cdFileHeader.nSignature = SIGNATURE_CFD;
+        cdFileHeader.nVersion = pListZipFileRecords->at(i).nVersion;
+        cdFileHeader.nMinVersion = pListZipFileRecords->at(i).nMinVersion;
+        cdFileHeader.nFlags = pListZipFileRecords->at(i).nFlags;
+        cdFileHeader.nMethod = pListZipFileRecords->at(i).method;
+        cdFileHeader.nLastModTime = 0;  // TODO
+        cdFileHeader.nLastModDate = 0;  // TODO
+        cdFileHeader.nCRC32 = pListZipFileRecords->at(i).nCRC32;
+        cdFileHeader.nCompressedSize = pListZipFileRecords->at(i).nCompressedSize;
+        cdFileHeader.nUncompressedSize = pListZipFileRecords->at(i).nUncompressedSize;
+        cdFileHeader.nFileNameLength = pListZipFileRecords->at(i).sFileName.size();
+        cdFileHeader.nExtraFieldLength = 0;
+        cdFileHeader.nFileCommentLength = 0;
+        cdFileHeader.nStartDisk = 0;
+        cdFileHeader.nInternalFileAttributes = 0;
+        cdFileHeader.nExternalFileAttributes = 0;
+        cdFileHeader.nOffsetToLocalFileHeader = pListZipFileRecords->at(i).nHeaderOffset;
 
-        pDest->write((char *)&cdFileHeader,sizeof(cdFileHeader));
-        pDest->write(pListZipFileRecords->at(i).sFileName.toLatin1().data(),pListZipFileRecords->at(i).sFileName.toLatin1().size());
+        pDest->write((char *)&cdFileHeader, sizeof(cdFileHeader));
+        pDest->write(pListZipFileRecords->at(i).sFileName.toLatin1().data(), pListZipFileRecords->at(i).sFileName.toLatin1().size());
     }
 
-    qint64 nCentralDirectorySize=pDest->pos()-nStartPosition;
+    qint64 nCentralDirectorySize = pDest->pos() - nStartPosition;
 
-    ENDOFCENTRALDIRECTORYRECORD endofCD={};
+    ENDOFCENTRALDIRECTORYRECORD endofCD = {};
 
-    endofCD.nSignature=SIGNATURE_ECD;
-    endofCD.nDiskNumber=0;
-    endofCD.nStartDisk=0;
-    endofCD.nDiskNumberOfRecords=nNumberOfRecords;
-    endofCD.nTotalNumberOfRecords=nNumberOfRecords;
-    endofCD.nSizeOfCentralDirectory=nCentralDirectorySize;
-    endofCD.nOffsetToCentralDirectory=nStartPosition;
-    endofCD.nCommentLength=sComment.size();
+    endofCD.nSignature = SIGNATURE_ECD;
+    endofCD.nDiskNumber = 0;
+    endofCD.nStartDisk = 0;
+    endofCD.nDiskNumberOfRecords = nNumberOfRecords;
+    endofCD.nTotalNumberOfRecords = nNumberOfRecords;
+    endofCD.nSizeOfCentralDirectory = nCentralDirectorySize;
+    endofCD.nOffsetToCentralDirectory = nStartPosition;
+    endofCD.nCommentLength = sComment.size();
 
-    pDest->write((char *)&endofCD,sizeof(endofCD));
-    pDest->write(sComment.toLatin1().data(),sComment.toLatin1().size());
+    pDest->write((char *)&endofCD, sizeof(endofCD));
+    pDest->write(sComment.toLatin1().data(), sComment.toLatin1().size());
 
     return true;
 }
 
-QString XZip::getFileFormatExt()
-{
+QString XZip::getFileFormatExt() {
     return "zip";
 }
 
-QString XZip::getFileFormatString()
-{
+QString XZip::getFileFormatString() {
     QString sResult;
 
-    sResult=QString("ZIP(%1)").arg(getVersion());
+    sResult = QString("ZIP(%1)").arg(getVersion());
     // TODO more info
 
     return sResult;
 }
 
-qint64 XZip::findECDOffset()
-{
-    qint64 nResult=-1;
-    qint64 nSize=getSize();
+qint64 XZip::findECDOffset() {
+    qint64 nResult = -1;
+    qint64 nSize = getSize();
 
-    if(nSize>=22) // 22 is minimum size [0x50,0x4B,0x05,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
+    if (nSize >= 22)  // 22 is minimum size [0x50,0x4B,0x05,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
     {
-        qint64 nOffset=qMax((qint64)0,nSize-0x1000);  // TODO const
+        qint64 nOffset = qMax((qint64)0, nSize - 0x1000);  // TODO const
 
-        while(true)
-        {
-            qint64 nCurrent=find_uint32(nOffset,-1,SIGNATURE_ECD);
+        while (true) {
+            qint64 nCurrent = find_uint32(nOffset, -1, SIGNATURE_ECD);
 
-            if(nCurrent==-1)
-            {
+            if (nCurrent == -1) {
                 break;
             }
 
-            nResult=nCurrent;
-            nOffset=nCurrent+4; // Get the last
+            nResult = nCurrent;
+            nOffset = nCurrent + 4;  // Get the last
         }
     }
 
     return nResult;
 }
 
-qint64 XZip::findAPKSignBlockOffset()
-{
-    qint64 nResult=-1;
+qint64 XZip::findAPKSignBlockOffset() {
+    qint64 nResult = -1;
 
-    qint64 nOffset=findECDOffset();
-    nOffset=read_uint32(nOffset+offsetof(ENDOFCENTRALDIRECTORYRECORD,nOffsetToCentralDirectory));
+    qint64 nOffset = findECDOffset();
+    nOffset = read_uint32(nOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
-    nOffset=qMax((qint64)0,nOffset-0x100);  // TODO const
+    nOffset = qMax((qint64)0, nOffset - 0x100);  // TODO const
 
-    while(true)
-    {
-        qint64 nCurrent=find_ansiString(nOffset,-1,"APK Sig Block 42");
+    while (true) {
+        qint64 nCurrent = find_ansiString(nOffset, -1, "APK Sig Block 42");
 
-        if(nCurrent==-1)
-        {
+        if (nCurrent == -1) {
             break;
         }
 
-        nResult=nCurrent;
-        nOffset=nCurrent+8; // Get the last
+        nResult = nCurrent;
+        nOffset = nCurrent + 8;  // Get the last
     }
 
     return nResult;
 }
 
-XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod)
-{
-    COMPRESS_METHOD result=COMPRESS_METHOD_UNKNOWN;
+XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod) {
+    COMPRESS_METHOD result = COMPRESS_METHOD_UNKNOWN;
 
-    switch(nZipMethod)
-    {
-        case METHOD_STORE:          result=COMPRESS_METHOD_STORE;        break;
-        case METHOD_DEFLATE:        result=COMPRESS_METHOD_DEFLATE;      break;
-        case METHOD_DEFLATE64:      result=COMPRESS_METHOD_DEFLATE64;    break; // TODO
-        case METHOD_BZIP2:          result=COMPRESS_METHOD_BZIP2;        break;
-        case METHOD_LZMA:           result=COMPRESS_METHOD_LZMA_ZIP;     break;
-        case METHOD_PPMD:           result=COMPRESS_METHOD_PPMD;         break; // TODO
+    switch (nZipMethod) {
+        case METHOD_STORE:
+            result = COMPRESS_METHOD_STORE;
+            break;
+        case METHOD_DEFLATE:
+            result = COMPRESS_METHOD_DEFLATE;
+            break;
+        case METHOD_DEFLATE64:
+            result = COMPRESS_METHOD_DEFLATE64;
+            break;  // TODO
+        case METHOD_BZIP2:
+            result = COMPRESS_METHOD_BZIP2;
+            break;
+        case METHOD_LZMA:
+            result = COMPRESS_METHOD_LZMA_ZIP;
+            break;
+        case METHOD_PPMD:
+            result = COMPRESS_METHOD_PPMD;
+            break;  // TODO
     }
     // TODO more methods
 

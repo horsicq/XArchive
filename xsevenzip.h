@@ -24,13 +24,11 @@
 #include "xarchive.h"
 
 // TODO https://py7zr.readthedocs.io/en/latest/archive_format.html
-class XSevenZip : public XArchive
-{
+class XSevenZip : public XArchive {
     Q_OBJECT
 
-    enum EIdEnum
-    {
-        k7zIdEnd=0,
+    enum EIdEnum {
+        k7zIdEnd = 0,
         k7zIdHeader,
         k7zIdArchiveProperties,
         k7zIdAdditionalStreamsInfo,
@@ -62,14 +60,13 @@ class XSevenZip : public XArchive
         // Test
     };
 
-public:    
+public:
 #pragma pack(push)
 #pragma pack(1)
-    struct SIGNATURERECORD
-    {
-        quint8 kSignature[6];       // {'7','z',0xBC,0xAF,0x27,0x1C}
-        quint8 Major;               // now = 0
-        quint8 Minor;               // now = 4
+    struct SIGNATURERECORD {
+        quint8 kSignature[6];  // {'7','z',0xBC,0xAF,0x27,0x1C}
+        quint8 Major;          // now = 0
+        quint8 Minor;          // now = 4
         quint32 StartHeaderCRC;
         quint64 NextHeaderOffset;
         quint64 NextHeaderSize;
@@ -77,8 +74,7 @@ public:
     };
 #pragma pack(pop)
 
-    struct XRECORD
-    {
+    struct XRECORD {
         quint32 nID;
         QList<XRECORD> listRecords;
         qint64 nPackPos;
@@ -87,27 +83,26 @@ public:
         qint64 nNumFolders;
     };
 
-    struct XINFO
-    {
+    struct XINFO {
         SIGNATURERECORD signatureRecord;
         XRECORD mainXRecord;
     };
 
-    explicit XSevenZip(QIODevice *pDevice=nullptr);
+    explicit XSevenZip(QIODevice *pDevice = nullptr);
 
     virtual bool isValid();
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit,PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual qint64 getFileFormatSize();
     virtual QString getFileFormatString();
     virtual QString getFileFormatExt();
 
 private:
     QString idToSring(EIdEnum id);
-    qint32 getXRecord(XBinary::_MEMORY_MAP *pMemoryMap,qint64 nOffset,XRECORD *pXRecord,qint64 nExtra=0);
-    quint64 _readIntPackedValue(qint64 *pnOffset,qint64 nMaxOffset,bool *pbSuccess);
+    qint32 getXRecord(XBinary::_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra = 0);
+    quint64 _readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
 };
 
-#endif // XSEVENZIP_H
+#endif  // XSEVENZIP_H
