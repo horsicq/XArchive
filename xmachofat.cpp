@@ -105,3 +105,18 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
 
     return listResult;
 }
+
+//QString XMACHOFat::getFileFormatExt()
+//{
+
+//}
+
+//qint64 XMACHOFat::getFileFormatSize()
+//{
+
+//}
+
+//QString XMACHOFat::getFileFormatString()
+//{
+
+//}
