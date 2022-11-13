@@ -36,6 +36,8 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
     virtual QString getFileFormatExt();
+    virtual qint64 getFileFormatSize();
+    virtual QString getFileFormatString();
 };
 
 #endif  // XRAR_H
