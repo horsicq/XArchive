@@ -79,13 +79,11 @@ QString XRar::getFileFormatExt() {
     return "rar";
 }
 
-qint64 XRar::getFileFormatSize()
-{
+qint64 XRar::getFileFormatSize() {
     return XBinary::getFileFormatSize();
 }
 
-QString XRar::getFileFormatString()
-{
+QString XRar::getFileFormatString() {
     QString sResult;
 
     sResult = QString("RAR(%1)").arg(getVersion());

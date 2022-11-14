@@ -75,11 +75,11 @@ public:
 
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) = 0;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) = 0;
-    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly = false,
-                                      PDSTRUCT *pPdStruct = nullptr, qint64 *pnInSize = nullptr, qint64 *pnOutSize = nullptr);
+    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly = false, PDSTRUCT *pPdStruct = nullptr,
+                                      qint64 *pnInSize = nullptr, qint64 *pnOutSize = nullptr);
     static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice);  // TODO PDSTRUCT
-    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits,
-                                            qint32 nMemLevel, qint32 nStrategy);  // TODO PDSTRUCT
+    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
+                                            qint32 nStrategy);  // TODO PDSTRUCT
     QByteArray decompress(const RECORD *pRecord, bool bHeaderOnly, PDSTRUCT *pPdStruct);
     QByteArray decompress(QList<RECORD> *pListArchive, QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     QByteArray decompress(QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
