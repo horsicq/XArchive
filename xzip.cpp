@@ -441,7 +441,7 @@ QString XZip::getFileFormatString() {
     QString sResult;
 
     sResult = QString("ZIP(%1)").arg(getVersion());
-    // TODO more info
+    // TODO more info number of records
 
     return sResult;
 }
