@@ -148,7 +148,7 @@ public:
     virtual bool isSigned();
     virtual OFFSETSIZE getSignOffsetSize();
 
-    bool isAPKSignBlockPresent();  // For APK
+    bool isAPKSignBlockPresent();  // For APK Check jar
 
     struct APK_SIG_BLOCK_RECORD {
         quint32 nID;
