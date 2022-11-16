@@ -26,27 +26,32 @@
 
 FILE _iob[] = {*stdin, *stdout, *stderr};  // bzip2.lib(compress.obj) _iob_func
 
-extern "C" FILE *__cdecl __iob_func(void) {
+extern "C" FILE *__cdecl __iob_func(void)
+{
     return _iob;
 }
 #endif
 #endif
 
-static void *SzAlloc(ISzAllocPtr, size_t size) {
+static void *SzAlloc(ISzAllocPtr, size_t size)
+{
     return malloc(size);
 }
 
-static void SzFree(ISzAllocPtr, void *address) {
+static void SzFree(ISzAllocPtr, void *address)
+{
     free(address);
 }
 
 static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 
-XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice) {
+XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice)
+{
 }
 
 XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly, PDSTRUCT *pPdStruct,
-                                               qint64 *pnInSize, qint64 *pnOutSize) {
+                                               qint64 *pnInSize, qint64 *pnOutSize)
+{
     // TODO Progress PDSTRUCT
     qint64 __nInSize = 0;
     qint64 __nOutSize = 0;
@@ -388,7 +393,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     return result;
 }
 
-XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice) {
+XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice)
+{
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 
     if (compressMethod == COMPRESS_METHOD_STORE) {
@@ -421,7 +427,8 @@ XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressM
 }
 
 XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
-                                                     qint32 nStrategy) {
+                                                     qint32 nStrategy)
+{
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 
     const qint32 CHUNK = COMPRESS_BUFFERSIZE;
@@ -498,7 +505,8 @@ XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, Q
     return result;
 }
 
-QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, bool bHeaderOnly, PDSTRUCT *pPdStruct) {
+QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, bool bHeaderOnly, PDSTRUCT *pPdStruct)
+{
     QByteArray result;
 
     SubDevice sd(getDevice(), pRecord->nDataOffset, pRecord->nCompressedSize);
@@ -518,7 +526,8 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, bool bHeaderOnl
     return result;
 }
 
-QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, PDSTRUCT *pPdStruct) {
+QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, PDSTRUCT *pPdStruct)
+{
     QByteArray baResult;
 
     XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, pListArchive, pPdStruct);
@@ -532,13 +541,15 @@ QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive, QString s
     return baResult;
 }
 
-QByteArray XArchive::decompress(QString sRecordFileName, PDSTRUCT *pPdStruct) {
+QByteArray XArchive::decompress(QString sRecordFileName, PDSTRUCT *pPdStruct)
+{
     QList<XArchive::RECORD> listArchive = getRecords(-1, pPdStruct);
 
     return decompress(&listArchive, sRecordFileName, pPdStruct);
 }
 
-bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResultFileName, PDSTRUCT *pPdStruct) {
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResultFileName, PDSTRUCT *pPdStruct)
+{
     bool bResult = false;
 
     QFileInfo fi(sResultFileName);
@@ -567,7 +578,8 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResult
     return bResult;
 }
 
-bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct) {
+bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct)
+{
     bool bResult = false;
 
     XArchive::RECORD record = getArchiveRecord(sRecordFileName, pListArchive);
@@ -580,7 +592,8 @@ bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, QString s
     return bResult;
 }
 
-bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, QString sResultPathName, PDSTRUCT *pPdStruct) {
+bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString sRecordFileName, QString sResultPathName, PDSTRUCT *pPdStruct)
+{
     bool bResult = true;
 
     QFileInfo fi(sResultPathName);
@@ -619,7 +632,8 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, QString s
     return bResult;
 }
 
-bool XArchive::decompressToFile(QString sArchiveFileName, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct) {
+bool XArchive::decompressToFile(QString sArchiveFileName, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct)
+{
     bool bResult = false;
 
     QFile file;
@@ -641,7 +655,8 @@ bool XArchive::decompressToFile(QString sArchiveFileName, QString sRecordFileNam
     return bResult;
 }
 
-bool XArchive::decompressToPath(QString sArchiveFileName, QString sRecordPathName, QString sResultPathName, PDSTRUCT *pPdStruct) {
+bool XArchive::decompressToPath(QString sArchiveFileName, QString sRecordPathName, QString sResultPathName, PDSTRUCT *pPdStruct)
+{
     bool bResult = false;
 
     QFile file;
@@ -663,11 +678,13 @@ bool XArchive::decompressToPath(QString sArchiveFileName, QString sRecordPathNam
     return bResult;
 }
 
-bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName, PDSTRUCT *pPdStruct) {
+bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName, PDSTRUCT *pPdStruct)
+{
     return XBinary::dumpToFile(sFileName, pRecord->nDataOffset, pRecord->nCompressedSize, pPdStruct);
 }
 
-XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct) {
+XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
     XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
@@ -688,25 +705,30 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArch
     return result;
 }
 
-bool XArchive::isArchiveRecordPresent(QString sRecordFileName, PDSTRUCT *pPdStruct) {
+bool XArchive::isArchiveRecordPresent(QString sRecordFileName, PDSTRUCT *pPdStruct)
+{
     QList<XArchive::RECORD> listRecords = getRecords(-1, pPdStruct);
 
     return isArchiveRecordPresent(sRecordFileName, &listRecords, pPdStruct);
 }
 
-bool XArchive::isArchiveRecordPresent(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct) {
+bool XArchive::isArchiveRecordPresent(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
     return (!getArchiveRecord(sRecordFileName, pListRecords, pPdStruct).sFileName.isEmpty());
 }
 
-quint32 XArchive::getCompressBufferSize() {
+quint32 XArchive::getCompressBufferSize()
+{
     return COMPRESS_BUFFERSIZE;
 }
 
-quint32 XArchive::getDecompressBufferSize() {
+quint32 XArchive::getDecompressBufferSize()
+{
     return DECOMPRESS_BUFFERSIZE;
 }
 
-void XArchive::showRecords(QList<XArchive::RECORD> *pListArchive) {
+void XArchive::showRecords(QList<XArchive::RECORD> *pListArchive)
+{
     qint32 nNumberOfRecords = pListArchive->count();
 
     for (qint32 i = 0; i < nNumberOfRecords; i++) {
@@ -716,7 +738,8 @@ void XArchive::showRecords(QList<XArchive::RECORD> *pListArchive) {
     }
 }
 
-XBinary::MODE XArchive::getMode() {
+XBinary::MODE XArchive::getMode()
+{
     return MODE_DATA;
 }
 

@@ -20,10 +20,12 @@
  */
 #include "xzip.h"
 
-XZip::XZip(QIODevice *pDevice) : XArchive(pDevice) {
+XZip::XZip(QIODevice *pDevice) : XArchive(pDevice)
+{
 }
 
-bool XZip::isValid() {
+bool XZip::isValid()
+{
     bool bResult = false;
 
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap();  // TODO Check
@@ -35,13 +37,15 @@ bool XZip::isValid() {
     return bResult;
 }
 
-bool XZip::isValid(QIODevice *pDevice) {
+bool XZip::isValid(QIODevice *pDevice)
+{
     XZip xzip(pDevice);
 
     return xzip.isValid();
 }
 
-QString XZip::getVersion() {
+QString XZip::getVersion()
+{
     QString sResult;
 
     qint64 nECDOffset = findECDOffset();
@@ -74,7 +78,8 @@ QString XZip::getVersion() {
     return sResult;
 }
 
-bool XZip::isEncrypted() {
+bool XZip::isEncrypted()
+{
     bool bResult = false;
 
     qint64 nECDOffset = findECDOffset();
@@ -104,7 +109,8 @@ bool XZip::isEncrypted() {
     return bResult;
 }
 
-quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
+{
     quint64 nResult = 0;
 
     qint64 nECDOffset = findECDOffset();
@@ -133,7 +139,8 @@ quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct) {
     return nResult;
 }
 
-QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
     XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
@@ -235,12 +242,14 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
     return listResult;
 }
 
-bool XZip::isSigned() {
+bool XZip::isSigned()
+{
     // TODO Check more !!!
     return isAPKSignBlockPresent();
 }
 
-XBinary::OFFSETSIZE XZip::getSignOffsetSize() {
+XBinary::OFFSETSIZE XZip::getSignOffsetSize()
+{
     OFFSETSIZE osResult = {};
 
     // TODO optimize
@@ -263,11 +272,13 @@ XBinary::OFFSETSIZE XZip::getSignOffsetSize() {
     return osResult;
 }
 
-bool XZip::isAPKSignBlockPresent() {
+bool XZip::isAPKSignBlockPresent()
+{
     return (findAPKSignBlockOffset() != -1);
 }
 
-QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockRecordsList() {
+QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockRecordsList()
+{
     QList<XZip::APK_SIG_BLOCK_RECORD> listResult;
 
     qint64 nOffset = findAPKSignBlockOffset();
@@ -308,11 +319,13 @@ QList<XZip::APK_SIG_BLOCK_RECORD> XZip::getAPKSignaturesBlockRecordsList() {
     return listResult;
 }
 
-bool XZip::isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID) {
+bool XZip::isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID)
+{
     return (getAPKSignatureBlockRecord(pList, nID).nID == nID);
 }
 
-XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID) {
+XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID)
+{
     XZip::APK_SIG_BLOCK_RECORD result = {};
 
     qint32 nNumberOfRecords = pList->count();
@@ -328,7 +341,8 @@ XZip::APK_SIG_BLOCK_RECORD XZip::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_
     return result;
 }
 
-bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord) {
+bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord)
+{
     if (pZipFileRecord->nMinVersion == 0) {
         pZipFileRecord->nMinVersion = 0x14;
     }
@@ -384,7 +398,8 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     return true;
 }
 
-bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords, QString sComment) {
+bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords, QString sComment)
+{
     qint64 nStartPosition = pDest->pos();
 
     qint32 nNumberOfRecords = pListZipFileRecords->count();
@@ -433,11 +448,13 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
     return true;
 }
 
-QString XZip::getFileFormatExt() {
+QString XZip::getFileFormatExt()
+{
     return "zip";
 }
 
-QString XZip::getFileFormatString() {
+QString XZip::getFileFormatString()
+{
     QString sResult;
 
     sResult = QString("ZIP(%1)").arg(getVersion());
@@ -446,7 +463,8 @@ QString XZip::getFileFormatString() {
     return sResult;
 }
 
-qint64 XZip::findECDOffset() {
+qint64 XZip::findECDOffset()
+{
     qint64 nResult = -1;
     qint64 nSize = getSize();
 
@@ -469,7 +487,8 @@ qint64 XZip::findECDOffset() {
     return nResult;
 }
 
-qint64 XZip::findAPKSignBlockOffset() {
+qint64 XZip::findAPKSignBlockOffset()
+{
     qint64 nResult = -1;
 
     qint64 nOffset = findECDOffset();
@@ -491,7 +510,8 @@ qint64 XZip::findAPKSignBlockOffset() {
     return nResult;
 }
 
-XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod) {
+XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod)
+{
     COMPRESS_METHOD result = COMPRESS_METHOD_UNKNOWN;
 
     switch (nZipMethod) {

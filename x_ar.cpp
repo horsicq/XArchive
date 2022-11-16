@@ -20,10 +20,12 @@
  */
 #include "x_ar.h"
 
-X_Ar::X_Ar(QIODevice *pDevice) : XArchive(pDevice) {
+X_Ar::X_Ar(QIODevice *pDevice) : XArchive(pDevice)
+{
 }
 
-bool X_Ar::isValid() {
+bool X_Ar::isValid()
+{
     // TODO more checks
     bool bResult = false;
 
@@ -39,13 +41,15 @@ bool X_Ar::isValid() {
     return bResult;
 }
 
-bool X_Ar::isValid(QIODevice *pDevice) {
+bool X_Ar::isValid(QIODevice *pDevice)
+{
     X_Ar x_ar(pDevice);
 
     return x_ar.isValid();
 }
 
-quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
+{
     quint64 nResult = 0;
 
     qint64 nOffset = 0;
@@ -81,7 +85,8 @@ quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct) {
     return nResult;
 }
 
-QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
     // TODO Limit
 
     XBinary::PDSTRUCT pdStructEmpty = {};
@@ -180,7 +185,8 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
     return listRecords;
 }
 
-X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset) {
+X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
+{
     FRECORD record = {};
 
     read_array(nOffset + offsetof(FRECORD, fileId), record.fileId, sizeof(record.fileId));

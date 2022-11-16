@@ -20,10 +20,12 @@
  */
 #include "xgzip.h"
 
-XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice) {
+XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
+{
 }
 
-bool XGzip::isValid() {
+bool XGzip::isValid()
+{
     bool bResult = false;
 
     if (getSize() > sizeof(GZIP_HEADER)) {
@@ -38,19 +40,22 @@ bool XGzip::isValid() {
     return bResult;
 }
 
-bool XGzip::isValid(QIODevice *pDevice) {
+bool XGzip::isValid(QIODevice *pDevice)
+{
     XGzip xgzip(pDevice);
 
     return xgzip.isValid();
 }
 
-quint64 XGzip::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+quint64 XGzip::getNumberOfRecords(PDSTRUCT *pPdStruct)
+{
     Q_UNUSED(pPdStruct)
 
     return 1;  // Always 1
 }
 
-QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
     Q_UNUSED(nLimit)  // Always 1
 
     QList<RECORD> listResult;
@@ -98,7 +103,8 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
     return listResult;
 }
 
-qint64 XGzip::getFileFormatSize() {
+qint64 XGzip::getFileFormatSize()
+{
     qint64 nResult = 0;
 
     // TODO

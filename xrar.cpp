@@ -20,10 +20,12 @@
  */
 #include "xrar.h"
 
-XRar::XRar(QIODevice *pDevice) : XArchive(pDevice) {
+XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
+{
 }
 
-bool XRar::isValid() {
+bool XRar::isValid()
+{
     bool bResult = false;
 
     if (getSize() > 20)  // TODO
@@ -38,13 +40,15 @@ bool XRar::isValid() {
     return bResult;
 }
 
-bool XRar::isValid(QIODevice *pDevice) {
+bool XRar::isValid(QIODevice *pDevice)
+{
     XRar xrar(pDevice);
 
     return xrar.isValid();
 }
 
-QString XRar::getVersion() {
+QString XRar::getVersion()
+{
     QString sResult;
 
     _MEMORY_MAP memoryMap = getMemoryMap();
@@ -61,11 +65,13 @@ QString XRar::getVersion() {
     return sResult;
 }
 
-quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
+{
     return 0;  // TODO
 }
 
-QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
     Q_UNUSED(nLimit)
 
     QList<XArchive::RECORD> listResult;
@@ -75,15 +81,18 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
     return listResult;
 }
 
-QString XRar::getFileFormatExt() {
+QString XRar::getFileFormatExt()
+{
     return "rar";
 }
 
-qint64 XRar::getFileFormatSize() {
+qint64 XRar::getFileFormatSize()
+{
     return XBinary::getFileFormatSize();
 }
 
-QString XRar::getFileFormatString() {
+QString XRar::getFileFormatString()
+{
     QString sResult;
 
     sResult = QString("RAR(%1)").arg(getVersion());

@@ -20,10 +20,12 @@
  */
 #include "xsevenzip.h"
 
-XSevenZip::XSevenZip(QIODevice *pDevice) : XArchive(pDevice) {
+XSevenZip::XSevenZip(QIODevice *pDevice) : XArchive(pDevice)
+{
 }
 
-bool XSevenZip::isValid() {
+bool XSevenZip::isValid()
+{
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(SIGNATURERECORD)) {
@@ -35,17 +37,20 @@ bool XSevenZip::isValid() {
     return bResult;
 }
 
-bool XSevenZip::isValid(QIODevice *pDevice) {
+bool XSevenZip::isValid(QIODevice *pDevice)
+{
     XSevenZip xsevenzip(pDevice);
 
     return xsevenzip.isValid();
 }
 
-QString XSevenZip::getVersion() {
+QString XSevenZip::getVersion()
+{
     return QString("%1.%2").arg(read_uint8(6)).arg(read_uint8(7), 1, 10, QChar('0'));
 }
 
-quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
+{
     quint64 nResult = 0;
 
     SIGNATURERECORD signatureHeader = {};
@@ -144,7 +149,8 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct) {
     return nResult;
 }
 
-QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
     Q_UNUSED(nLimit)
 
     QList<XArchive::RECORD> listResult;
@@ -382,7 +388,8 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
     return listResult;
 }
 
-qint64 XSevenZip::getFileFormatSize() {
+qint64 XSevenZip::getFileFormatSize()
+{
     qint64 nResult = 0;
 
     SIGNATURERECORD signatureHeader = {};
@@ -394,7 +401,8 @@ qint64 XSevenZip::getFileFormatSize() {
     return nResult;
 }
 
-QString XSevenZip::getFileFormatString() {
+QString XSevenZip::getFileFormatString()
+{
     QString sResult;
 
     sResult = QString("7-Zip(%1)").arg(getVersion());
@@ -403,11 +411,13 @@ QString XSevenZip::getFileFormatString() {
     return sResult;
 }
 
-QString XSevenZip::getFileFormatExt() {
+QString XSevenZip::getFileFormatExt()
+{
     return "7z";
 }
 
-QString XSevenZip::idToSring(XSevenZip::EIdEnum id) {
+QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
+{
     QString sResult = tr("Unknown");
 
     switch (id) {
@@ -494,7 +504,8 @@ QString XSevenZip::idToSring(XSevenZip::EIdEnum id) {
     return sResult;
 }
 
-qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra) {
+qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra)
+{
     qint32 nResult = 0;
 
     if (isOffsetValid(pMemoryMap, nOffset)) {
@@ -622,7 +633,8 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *p
     return nResult;
 }
 
-quint64 XSevenZip::_readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess) {
+quint64 XSevenZip::_readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess)
+{
     quint64 nResult = 0;
 
     if (((*pnOffset) < nMaxOffset) && (*pbSuccess)) {

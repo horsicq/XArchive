@@ -20,10 +20,12 @@
  */
 #include "xmachofat.h"
 
-XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice) {
+XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
+{
 }
 
-bool XMACHOFat::isValid() {
+bool XMACHOFat::isValid()
+{
     bool bResult = false;
 
     quint32 nMagic = read_uint32(0);
@@ -37,13 +39,15 @@ bool XMACHOFat::isValid() {
     return bResult;
 }
 
-bool XMACHOFat::isValid(QIODevice *pDevice) {
+bool XMACHOFat::isValid(QIODevice *pDevice)
+{
     XMACHOFat xmachofat(pDevice);
 
     return xmachofat.isValid();
 }
 
-bool XMACHOFat::isBigEndian() {
+bool XMACHOFat::isBigEndian()
+{
     bool bResult = false;
 
     quint32 nMagic = read_uint32(0);
@@ -55,11 +59,13 @@ bool XMACHOFat::isBigEndian() {
     return bResult;
 }
 
-quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct) {
+quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct)
+{
     return read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
 }
 
-QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
     XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {

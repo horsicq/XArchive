@@ -20,10 +20,12 @@
  */
 #include "xarchives.h"
 
-XArchives::XArchives(QObject *pParent) : QObject(pParent) {
+XArchives::XArchives(QObject *pParent) : QObject(pParent)
+{
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+{
     XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
@@ -57,7 +59,8 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit,
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+{
     QList<XArchive::RECORD> listResult;
 
     QFile file;
@@ -73,7 +76,8 @@ QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit, 
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct) {
+QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+{
     QList<XArchive::RECORD> listResult;
 
     _findFiles(sDirectoryName, &listResult, nLimit, pPdStruct);
@@ -81,7 +85,8 @@ QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryNam
     return listResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct) {
+QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+{
     QByteArray baResult;
 
     QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
@@ -107,7 +112,8 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     return baResult;
 }
 
-QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct) {
+QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+{
     QByteArray baResult;
 
     QFile file;
@@ -123,7 +129,8 @@ QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, b
     return baResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice, QString sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct) {
+QByteArray XArchives::decompress(QIODevice *pDevice, QString sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+{
     QList<XArchive::RECORD> listRecords = getRecords(pDevice);
 
     XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords);
@@ -131,7 +138,8 @@ QByteArray XArchives::decompress(QIODevice *pDevice, QString sRecordFileName, bo
     return decompress(pDevice, &record, bHeaderOnly, pPdStruct);
 }
 
-QByteArray XArchives::decompress(QString sFileName, QString sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct) {
+QByteArray XArchives::decompress(QString sFileName, QString sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+{
     QByteArray baResult;
 
     QFile file;
@@ -147,7 +155,8 @@ QByteArray XArchives::decompress(QString sFileName, QString sRecordFileName, boo
     return baResult;
 }
 
-bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct) {
+bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+{
     bool bResult = false;
 
     QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
@@ -177,7 +186,8 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     return bResult;
 }
 
-bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct) {
+bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+{
     bool bResult = false;
 
     QFile file;
@@ -193,7 +203,8 @@ bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, Q
     return bResult;
 }
 
-bool XArchives::decompressToFile(QString sFileName, QString sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct) {
+bool XArchives::decompressToFile(QString sFileName, QString sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+{
     bool bResult = false;
 
     QFile file;
@@ -215,7 +226,8 @@ bool XArchives::decompressToFile(QString sFileName, QString sRecordFileName, QSt
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileName) {
+bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileName)
+{
     bool bResult = false;
 
     QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
@@ -242,7 +254,8 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileNa
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileName) {
+bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileName)
+{
     bool bResult = false;
 
     QFile file;
@@ -258,7 +271,8 @@ bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileNam
     return bResult;
 }
 
-bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvailable) {
+bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvailable)
+{
     bool bResult = false;
 
     if (pDevice) {
@@ -277,7 +291,8 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvail
     return bResult;
 }
 
-bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvailable) {
+bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvailable)
+{
     bool bResult = false;
 
     QFile file;
@@ -293,7 +308,8 @@ bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvaila
     return bResult;
 }
 
-void XArchives::_findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct) {
+void XArchives::_findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+{
     if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
         QFileInfo fi(sDirectoryName);
 
