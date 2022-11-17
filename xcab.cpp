@@ -29,7 +29,7 @@ bool XCab::isValid()
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(CFHEADER)) {
-        if (compareSignature("'MSCF'")) {
+        if (compareSignature("'MSCF'00........00")) {
             bResult = true;
         }
     }
@@ -146,7 +146,7 @@ QString XCab::getFileFormatString()
 {
     QString sResult;
 
-    sResult = QString("ZIP(%1)").arg(getVersion());
+    sResult = QString("CAB(%1)").arg(getVersion());
     // TODO more info
 
     return sResult;
@@ -161,7 +161,7 @@ qint64 XCab::getFileFormatSize()
 {
     qint64 nResult = 0;
 
-    nResult = readCFHeader().cbCabinet;  // TODO check mn _getRawSize
+    nResult = readCFHeader().cbCabinet;  // TODO check mb _getRawSize
 
     return nResult;
 }

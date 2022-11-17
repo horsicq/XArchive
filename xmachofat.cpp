@@ -112,17 +112,23 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
     return listResult;
 }
 
-// QString XMACHOFat::getFileFormatExt()
-//{
+QString XMACHOFat::getFileFormatExt()
+{
+    return "machofat";
+}
 
-//}
+qint64 XMACHOFat::getFileFormatSize()
+{
+    // TODO
+    return XBinary::getFileFormatSize();
+}
 
-// qint64 XMACHOFat::getFileFormatSize()
-//{
+ QString XMACHOFat::getFileFormatString()
+{
+     QString sResult;
 
-//}
+     sResult = QString("MACHOFAT");
+     // TODO more info, number of records
 
-// QString XMACHOFat::getFileFormatString()
-//{
-
-//}
+     return sResult;
+}

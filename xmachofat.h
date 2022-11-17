@@ -36,9 +36,9 @@ public:
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
-    //    virtual QString getFileFormatExt();
-    //    virtual qint64 getFileFormatSize();
-    //    virtual QString getFileFormatString();
+    virtual QString getFileFormatExt();
+    virtual qint64 getFileFormatSize();
+    virtual QString getFileFormatString();
 };
 
 #endif  // XMACHOFAT_H

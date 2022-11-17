@@ -236,6 +236,11 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             listResult.append(record);
 
             nOffset += sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
+
+            if((nOffset+16)>=getSize())
+            {
+                break;
+            }
         }
     }
 
@@ -458,7 +463,7 @@ QString XZip::getFileFormatString()
     QString sResult;
 
     sResult = QString("ZIP(%1)").arg(getVersion());
-    // TODO more info number of records
+    // TODO more info, number of records
 
     return sResult;
 }
