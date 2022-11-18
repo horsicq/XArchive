@@ -45,7 +45,8 @@ static void SzFree(ISzAllocPtr, void *address)
 
 static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 
-XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice)
+XArchive::XArchive(QIODevice *pDevice)
+    : XBinary(pDevice)
 {
 }
 

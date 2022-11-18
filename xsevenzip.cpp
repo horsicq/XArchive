@@ -20,7 +20,8 @@
  */
 #include "xsevenzip.h"
 
-XSevenZip::XSevenZip(QIODevice *pDevice) : XArchive(pDevice)
+XSevenZip::XSevenZip(QIODevice *pDevice)
+    : XArchive(pDevice)
 {
 }
 

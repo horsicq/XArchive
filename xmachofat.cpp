@@ -20,7 +20,8 @@
  */
 #include "xmachofat.h"
 
-XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
+XMACHOFat::XMACHOFat(QIODevice *pDevice)
+    : XArchive(pDevice)
 {
 }
 
@@ -123,12 +124,12 @@ qint64 XMACHOFat::getFileFormatSize()
     return XBinary::getFileFormatSize();
 }
 
- QString XMACHOFat::getFileFormatString()
+QString XMACHOFat::getFileFormatString()
 {
-     QString sResult;
+    QString sResult;
 
-     sResult = QString("MACHOFAT");
-     // TODO more info, number of records
+    sResult = QString("MACHOFAT");
+    // TODO more info, number of records
 
-     return sResult;
+    return sResult;
 }

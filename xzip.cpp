@@ -20,7 +20,8 @@
  */
 #include "xzip.h"
 
-XZip::XZip(QIODevice *pDevice) : XArchive(pDevice)
+XZip::XZip(QIODevice *pDevice)
+    : XArchive(pDevice)
 {
 }
 
@@ -237,8 +238,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
             nOffset += sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
 
-            if((nOffset+16)>=getSize())
-            {
+            if ((nOffset + 16) >= getSize()) {
                 break;
             }
         }
