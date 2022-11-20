@@ -468,6 +468,12 @@ QString XZip::getFileFormatString()
     return sResult;
 }
 
+qint64 XZip::getFileFormatSize()
+{
+    // TODO
+    return XBinary::getFileFormatSize();
+}
+
 qint64 XZip::findECDOffset()
 {
     qint64 nResult = -1;

@@ -165,6 +165,7 @@ public:
 
     virtual QString getFileFormatExt();
     virtual QString getFileFormatString();
+    virtual qint64 getFileFormatSize();
 
 private:
     qint64 findECDOffset();
