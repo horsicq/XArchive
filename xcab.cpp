@@ -52,6 +52,8 @@ QString XCab::getVersion()
 
 quint64 XCab::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     quint64 nResult = 0;
 
     nResult = read_uint16(offsetof(CFHEADER, cFolders)) + read_uint16(offsetof(CFHEADER, cFiles));
