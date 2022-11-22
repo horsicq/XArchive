@@ -20,8 +20,7 @@
  */
 #include "xgzip.h"
 
-XGzip::XGzip(QIODevice *pDevice)
-    : XArchive(pDevice)
+XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 

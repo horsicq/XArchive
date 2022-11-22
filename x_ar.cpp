@@ -20,8 +20,7 @@
  */
 #include "x_ar.h"
 
-X_Ar::X_Ar(QIODevice *pDevice)
-    : XArchive(pDevice)
+X_Ar::X_Ar(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 

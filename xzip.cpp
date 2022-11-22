@@ -20,8 +20,7 @@
  */
 #include "xzip.h"
 
-XZip::XZip(QIODevice *pDevice)
-    : XArchive(pDevice)
+XZip::XZip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
@@ -275,6 +274,76 @@ XBinary::OFFSETSIZE XZip::getSignOffsetSize()
     }
 
     return osResult;
+}
+
+XBinary::FT XZip::getFileType()
+{
+    XBinary::PDSTRUCT pdStructEmpty = {};
+
+    QList<RECORD> listRecords = getRecords(-1, &pdStructEmpty);
+
+    return getFileType(getDevice(), &listRecords, true);
+}
+
+XBinary::FT XZip::getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, bool bDeep)
+{
+    FT result = FT_ZIP;
+
+    if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
+        result = XBinary::FT_APK;
+    } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords)) {
+        result = FT_JAR;
+    } else if (XArchive::isArchiveRecordPresent("Payload/", pListRecords)) {
+        result = FT_IPA;
+    }
+
+    if (bDeep) {
+        if ((result != XBinary::FT_JAR) && (result != XBinary::FT_APK) && (result != XBinary::FT_IPA)) {
+            qint32 nNumberOfRecords = pListRecords->count();
+
+            bool bAPKS = false;
+
+            if (nNumberOfRecords) {
+                bAPKS = true;
+            }
+
+            for (qint32 i = 0; i < nNumberOfRecords; i++) {
+                if (pListRecords->at(i).compressMethod == XArchive::COMPRESS_METHOD_STORE) {
+                    XArchive::RECORD record = pListRecords->at(i);
+
+                    SubDevice subDevice(pDevice, record.nDataOffset, record.nUncompressedSize);
+
+                    if (subDevice.open(QIODevice::ReadOnly)) {
+                        if (XBinary::getFileTypes(&subDevice, true).contains(FT_ZIP)) {
+                            bool bAPK = false;
+
+                            if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
+                                bAPK = true;
+                            }
+
+                            if (!bAPK) {
+                                bAPKS = false;
+                            }
+                        }
+
+                        subDevice.close();
+                    }
+                } else {
+                    bAPKS = false;
+                }
+
+                if (!bAPKS) {
+                    break;
+                }
+            }
+
+            if (bAPKS) {
+                result = FT_APKS;
+            }
+        }
+    }
+
+    return result;
 }
 
 bool XZip::isAPKSignBlockPresent()

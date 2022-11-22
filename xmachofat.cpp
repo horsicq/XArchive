@@ -20,8 +20,7 @@
  */
 #include "xmachofat.h"
 
-XMACHOFat::XMACHOFat(QIODevice *pDevice)
-    : XArchive(pDevice)
+XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 

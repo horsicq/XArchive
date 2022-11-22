@@ -148,6 +148,10 @@ public:
     virtual bool isSigned();
     virtual OFFSETSIZE getSignOffsetSize();
 
+    virtual FT getFileType();
+
+    static FT getFileType(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep);
+
     bool isAPKSignBlockPresent();  // For APK Check jar
 
     struct APK_SIG_BLOCK_RECORD {
