@@ -539,8 +539,34 @@ QString XZip::getFileFormatString()
 
 qint64 XZip::getFileFormatSize()
 {
-    // TODO
-    return XBinary::getFileFormatSize();
+    qint64 nResult = 0;
+    // TODO the last ECD
+    qint64 nECDOffset = 0;
+
+    while (true) {
+        nECDOffset = find_uint32(nECDOffset, -1, SIGNATURE_ECD);
+
+        if (nECDOffset != -1) {
+            qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
+
+            quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
+            qint64 nStartOffset = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader));
+
+            if ((nSignature == SIGNATURE_CFD) && (nStartOffset == 0)) {
+                break;
+            }
+        } else {
+            break;
+        }
+
+        nECDOffset += 4;
+    }
+
+    if (nECDOffset != -1) {
+        nResult = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+    }
+
+    return nResult;
 }
 
 qint64 XZip::findECDOffset()
