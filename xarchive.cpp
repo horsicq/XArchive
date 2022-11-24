@@ -49,8 +49,8 @@ XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice)
 {
 }
 
-XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly, PDSTRUCT *pPdStruct, qint64 *pnInSize,
-                                               qint64 *pnOutSize)
+XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly, PDSTRUCT *pPdStruct,
+                                               qint64 *pnInSize, qint64 *pnOutSize)
 {
     // TODO Progress PDSTRUCT
     qint64 __nInSize = 0;
@@ -426,7 +426,8 @@ XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressM
     return result;
 }
 
-XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel, qint32 nStrategy)
+XArchive::COMPRESS_RESULT XArchive::compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
+                                                     qint32 nStrategy)
 {
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 

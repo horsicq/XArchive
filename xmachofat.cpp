@@ -101,6 +101,8 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
             record.sFileName += QString("-%1").arg(_cpusubtype, 0, 16);
         }
 
+        record.nHeaderOffset = nOffset;
+        record.nHeaderSize = sizeof(XMACH_DEF::fat_arch);
         record.nDataOffset = _offset;
         record.nCompressedSize = _size;
         record.nUncompressedSize = _size;

@@ -106,6 +106,9 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     QString sList;
 
     while ((nSize > 0) && (!(pPdStruct->bIsStop))) {
+        RECORD record = {};
+        record.nHeaderOffset = nOffset;
+
         FRECORD frecord = readFRECORD(nOffset);
 
         QString sSize = QString(frecord.fileSize);
@@ -117,8 +120,6 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         if (nRecordSize == 0) {
             break;
         }
-
-        RECORD record = {};
 
         record.sFileName = frecord.fileId;
         record.sFileName.resize(sizeof(frecord.fileId));
@@ -138,6 +139,7 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             record.nDataOffset = nOffset + sizeof(FRECORD) + nFileNameLength;
             record.nCompressedSize = nRecordSize - nFileNameLength;
             record.nUncompressedSize = nRecordSize - nFileNameLength;
+            record.nHeaderSize = record.nDataOffset - record.nHeaderOffset;
         } else {
             qint32 nFileNameSie = record.sFileName.size();
 

@@ -54,6 +54,10 @@ public:
         qint64 nCompressedSize;
         qint64 nUncompressedSize;
         COMPRESS_METHOD compressMethod;
+        qint64 nHeaderOffset;
+        qint64 nHeaderSize;
+        qint64 nOptHeaderOffset;
+        qint64 nOptHeaderSize;
     };
 
     enum COMPRESS_RESULT {

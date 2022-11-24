@@ -100,3 +100,12 @@ QString XRar::getFileFormatString()
 
     return sResult;
 }
+
+XBinary::_MEMORY_MAP XRar::getMemoryMap()
+{
+    XBinary::_MEMORY_MAP result = {};
+
+    // TODO
+
+    return result;
+}

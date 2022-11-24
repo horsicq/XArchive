@@ -89,6 +89,8 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
         XArchive::COMPRESS_RESULT cr = decompress(record.compressMethod, &sd, 0, false, pPdStruct, &nInSize, &nOutSize);
 
+        record.nHeaderOffset = 0;
+        record.nHeaderSize = nOffset;
         record.nDataOffset = nOffset;
         record.nCompressedSize = nInSize;
         record.nUncompressedSize = nOutSize;

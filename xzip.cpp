@@ -194,6 +194,11 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             }
 
             record.nDataOffset = nLocalFileHeaderOffset + sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize;
+            record.nHeaderOffset = nLocalFileHeaderOffset;
+            record.nHeaderSize = record.nDataOffset - record.nHeaderOffset;
+
+            record.nOptHeaderOffset = nOffset;
+            record.nOptHeaderSize = (sizeof(CENTRALDIRECTORYFILEHEADER) + nFileNameSize + nExtraFieldSize + nFileCommentSize);
 
             listResult.append(record);
 
@@ -232,6 +237,8 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             record.sFileName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), nLocalFileNameSize);
 
             record.nDataOffset = nOffset + sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize;
+            record.nHeaderOffset = nOffset;
+            record.nHeaderSize = record.nDataOffset - record.nHeaderOffset;
 
             listResult.append(record);
 
