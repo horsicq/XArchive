@@ -531,6 +531,7 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
 
 QString XZip::getFileFormatExt()
 {
+    // TODO jar,apk
     return "zip";
 }
 
