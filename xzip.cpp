@@ -600,7 +600,7 @@ qint64 XZip::findECDOffset()
     return nResult;
 }
 
-qint64 XZip::findAPKSignBlockOffset()
+qint64 XZip::findAPKSignBlockOffset(PDSTRUCT *pPdStruct)
 {
     qint64 nResult = -1;
 
@@ -610,7 +610,7 @@ qint64 XZip::findAPKSignBlockOffset()
     nOffset = qMax((qint64)0, nOffset - 0x100);  // TODO const
 
     while (true) {
-        qint64 nCurrent = find_ansiString(nOffset, -1, "APK Sig Block 42");
+        qint64 nCurrent = find_ansiString(nOffset, -1, "APK Sig Block 42",pPdStruct);
 
         if (nCurrent == -1) {
             break;

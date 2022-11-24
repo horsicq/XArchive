@@ -88,6 +88,7 @@ QString XRar::getFileFormatExt()
 
 qint64 XRar::getFileFormatSize()
 {
+    // TODO
     return XBinary::getFileFormatSize();
 }
 

@@ -173,7 +173,7 @@ public:
 
 private:
     qint64 findECDOffset();
-    qint64 findAPKSignBlockOffset();
+    qint64 findAPKSignBlockOffset(PDSTRUCT *pPdStruct = nullptr);
     COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);
 };
 
