@@ -353,6 +353,29 @@ XBinary::FT XZip::getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, b
     return result;
 }
 
+XBinary::FILEFORMATINFO XZip::getFileFormatInfo()
+{
+    XBinary::FILEFORMATINFO result = {};
+
+    result.bIsValid = isValid();
+
+    if(result.bIsValid) {
+        result.nSize = getFileFormatSize();
+
+        if(result.nSize) {
+            XBinary::PDSTRUCT pdStructEmpty = {};
+
+            QList<RECORD> listRecords = getRecords(-1, &pdStructEmpty);
+
+            result.fileType = getFileType(getDevice(),&listRecords,true);
+            result.sString = getFileFormatString();
+            result.sExt = getFileFormatExt();
+        }
+    }
+
+    return result;
+}
+
 bool XZip::isAPKSignBlockPresent()
 {
     return (findAPKSignBlockOffset() != -1);

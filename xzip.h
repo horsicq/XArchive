@@ -152,6 +152,8 @@ public:
 
     static FT getFileType(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep);
 
+    virtual FILEFORMATINFO getFileFormatInfo();
+
     bool isAPKSignBlockPresent();  // For APK Check jar
 
     struct APK_SIG_BLOCK_RECORD {
