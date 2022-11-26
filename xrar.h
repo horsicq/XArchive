@@ -40,6 +40,7 @@ public:
     virtual QString getFileFormatString();
 
     virtual _MEMORY_MAP getMemoryMap();
+    virtual FT getFileType();
 };
 
 #endif  // XRAR_H

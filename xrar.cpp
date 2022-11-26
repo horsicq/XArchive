@@ -137,3 +137,8 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap()
 
     return result;
 }
+
+XBinary::FT XRar::getFileType()
+{
+    return FT_RAR;
+}

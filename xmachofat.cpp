@@ -61,6 +61,8 @@ bool XMACHOFat::isBigEndian()
 
 quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     return read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
 }
 
