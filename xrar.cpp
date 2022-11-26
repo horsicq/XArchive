@@ -51,7 +51,7 @@ QString XRar::getVersion()
 {
     QString sResult;
 
-    _MEMORY_MAP memoryMap = getMemoryMap();
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
     // TODO more
     if (compareSignature(&memoryMap, "'RE~^'")) {
@@ -105,6 +105,33 @@ QString XRar::getFileFormatString()
 XBinary::_MEMORY_MAP XRar::getMemoryMap()
 {
     XBinary::_MEMORY_MAP result = {};
+
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
+
+    qint64 nFileHeaderSize = 0;
+
+    if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
+        nFileHeaderSize = 7;
+    } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
+        nFileHeaderSize = 8;
+    }
+
+    if (nFileHeaderSize) {
+        qint32 nIndex = 0;
+
+        {
+            _MEMORY_RECORD record = {};
+
+            record.nIndex = nIndex++;
+            record.type = MMT_HEADER;
+            record.nOffset = 0;
+            record.nSize = nFileHeaderSize;
+            record.nAddress = -1;
+            record.sName = tr("Header");
+
+            result.listRecords.append(record);
+        }
+    }
 
     // TODO
 
