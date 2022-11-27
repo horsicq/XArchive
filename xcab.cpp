@@ -167,3 +167,9 @@ qint64 XCab::getFileFormatSize()
 
     return nResult;
 }
+
+XBinary::_MEMORY_MAP XCab::getMemoryMap()
+{
+    // TODO
+    return XBinary::getMemoryMap();
+}
