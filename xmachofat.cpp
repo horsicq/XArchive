@@ -123,8 +123,7 @@ QString XMACHOFat::getFileFormatExt()
 
 qint64 XMACHOFat::getFileFormatSize()
 {
-    // TODO
-    return XBinary::getFileFormatSize();
+    return _calculateRawSize();
 }
 
 QString XMACHOFat::getFileFormatString()
@@ -135,4 +134,57 @@ QString XMACHOFat::getFileFormatString()
     // TODO more info, number of records
 
     return sResult;
+}
+
+XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap()
+{
+    XBinary::_MEMORY_MAP result = {};
+
+    result.bIsBigEndian = isBigEndian();
+
+    qint32 nIndex = 0;
+
+    {
+        _MEMORY_RECORD record = {};
+
+        record.nIndex = nIndex++;
+        record.type = MMT_HEADER;
+        record.nOffset = 0;
+        record.nSize = sizeof(XMACH_DEF::fat_header);
+        record.nAddress = -1;
+        record.sName = tr("Header");
+
+        result.listRecords.append(record);
+    }
+
+    quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), result.bIsBigEndian);
+
+    QMap<quint64, QString> mapCpuTypes = XMACH::getHeaderCpuTypesS();
+
+    for (qint32 i = 0; i < (qint32)nNumberOfRecords; i++) {
+
+        _MEMORY_RECORD record = {};
+
+        qint64 nOffset = sizeof(XMACH_DEF::fat_header) + i * sizeof(XMACH_DEF::fat_arch);
+
+        quint32 _cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), result.bIsBigEndian);
+        quint32 _cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), result.bIsBigEndian);
+        quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), result.bIsBigEndian);
+        quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), result.bIsBigEndian);
+
+        record.sName = QString("%1").arg(mapCpuTypes.value(_cputype, tr("Unknown")));
+
+        if (_cpusubtype) {
+            record.sName += QString("-%1").arg(_cpusubtype, 0, 16);
+        }
+
+        record.nOffset = _offset;
+        record.nSize = _size;
+        record.nAddress = -1;
+        record.type = MMT_LOADSEGMENT;
+
+        result.listRecords.append(record);
+    }
+
+    return result;
 }
