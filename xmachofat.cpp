@@ -136,7 +136,7 @@ QString XMACHOFat::getFileFormatString()
     return sResult;
 }
 
-XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap()
+XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(PDSTRUCT *pPdStruct)
 {
     XBinary::_MEMORY_MAP result = {};
 

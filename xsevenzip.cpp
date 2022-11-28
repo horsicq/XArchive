@@ -29,7 +29,8 @@ bool XSevenZip::isValid()
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(SIGNATURERECORD)) {
-        if (compareSignature("'7z'BCAF271C")) {
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
+        if (compareSignature(&memoryMap,"'7z'BCAF271C")) {
             bResult = true;
         }
     }
@@ -163,7 +164,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
 
     if (read_array(0, (char *)&(xinfo.signatureRecord), sizeof(SIGNATURERECORD)) == sizeof(SIGNATURERECORD))  // TODO read function
     {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(pPdStruct);
 
         qint64 nCurrentOffset = sizeof(SIGNATURERECORD) + xinfo.signatureRecord.NextHeaderOffset;
 

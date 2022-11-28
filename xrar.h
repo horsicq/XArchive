@@ -26,6 +26,16 @@
 class XRar : public XArchive {
     Q_OBJECT
 
+    struct GENERICHEADER5 {
+        qint64 nSize;
+        quint32 nCRC32;
+        quint32 nHeaderSize;
+        quint32 nType;
+        quint32 nFlags;
+        quint32 nExtraAreaSize;
+        quint64 nDataSize;
+    };
+
 public:
     explicit XRar(QIODevice *pDevice = nullptr);
 
@@ -39,8 +49,11 @@ public:
     virtual qint64 getFileFormatSize();
     virtual QString getFileFormatString();
 
-    virtual _MEMORY_MAP getMemoryMap();
+    virtual _MEMORY_MAP getMemoryMap(PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType();
+
+private:
+    GENERICHEADER5 readGenericHeader5(qint64 nOffset);
 };
 
 #endif  // XRAR_H

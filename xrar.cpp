@@ -102,11 +102,11 @@ QString XRar::getFileFormatString()
     return sResult;
 }
 
-XBinary::_MEMORY_MAP XRar::getMemoryMap()
+XBinary::_MEMORY_MAP XRar::getMemoryMap(PDSTRUCT *pPdStruct)
 {
     XBinary::_MEMORY_MAP result = {};
 
-    _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(pPdStruct);
 
     qint64 nFileHeaderSize = 0;
 
@@ -131,9 +131,36 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap()
 
             result.listRecords.append(record);
         }
-    }
 
-    // TODO
+        qint64 nCurrentOffset = nFileHeaderSize;
+
+        while (true) {
+            GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
+
+            if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
+                _MEMORY_RECORD record = {};
+
+                record.nIndex = nIndex++;
+                record.type = MMT_DATA;
+                record.nOffset = nCurrentOffset;
+                record.nSize = genericHeader.nSize;
+                record.nAddress = -1;
+                record.sName = tr("Data");
+
+                result.listRecords.append(record);
+
+                nCurrentOffset += genericHeader.nSize;
+            }
+            else
+            {
+                break;
+            }
+
+            if (genericHeader.nType == 5) { // END
+                break;
+            }
+        }
+    }
 
     return result;
 }
@@ -141,4 +168,42 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap()
 XBinary::FT XRar::getFileType()
 {
     return FT_RAR;
+}
+
+XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)
+{
+    GENERICHEADER5 result = {};
+
+    qint64 nCurrentOffset = nOffset;
+    PACKED_INT packeInt = {};
+    qint32 nByteSize = 0;
+
+    result.nCRC32 = read_uint32(nCurrentOffset);
+    nCurrentOffset += 4;
+    packeInt = read_uleb128(nCurrentOffset,4);
+    result.nHeaderSize = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+    nByteSize = packeInt.nByteSize;
+    packeInt = read_uleb128(nCurrentOffset,4);
+    result.nType = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+    packeInt = read_uleb128(nCurrentOffset,4);
+    result.nFlags = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+
+    if (result.nFlags & 0x0001) {
+        packeInt = read_uleb128(nCurrentOffset,4);
+        result.nExtraAreaSize = packeInt.nValue;
+        nCurrentOffset += packeInt.nByteSize;
+    }
+
+    if (result.nFlags & 0x0002) {
+        packeInt = read_uleb128(nCurrentOffset,8);
+        result.nDataSize = packeInt.nValue;
+        nCurrentOffset += packeInt.nByteSize;
+    }
+
+    result.nSize = 4 + nByteSize + result.nHeaderSize + result.nDataSize;
+
+    return result;
 }

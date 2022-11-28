@@ -29,7 +29,8 @@ bool XCab::isValid()
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(CFHEADER)) {
-        if (compareSignature("'MSCF'00........00")) {
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
+        if (compareSignature(&memoryMap,"'MSCF'00........00")) {
             bResult = true;
         }
     }
@@ -168,8 +169,8 @@ qint64 XCab::getFileFormatSize()
     return nResult;
 }
 
-XBinary::_MEMORY_MAP XCab::getMemoryMap()
+XBinary::_MEMORY_MAP XCab::getMemoryMap(PDSTRUCT *pPdStruct)
 {
     // TODO
-    return XBinary::getMemoryMap();
+    return XBinary::getMemoryMap(pPdStruct);
 }

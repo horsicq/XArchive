@@ -39,7 +39,7 @@ public:
     virtual QString getFileFormatExt();
     virtual qint64 getFileFormatSize();
     virtual QString getFileFormatString();
-    virtual _MEMORY_MAP getMemoryMap();
+    virtual _MEMORY_MAP getMemoryMap(PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XMACHOFAT_H
