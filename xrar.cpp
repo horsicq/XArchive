@@ -150,13 +150,11 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(PDSTRUCT *pPdStruct)
                 result.listRecords.append(record);
 
                 nCurrentOffset += genericHeader.nSize;
-            }
-            else
-            {
+            } else {
                 break;
             }
 
-            if (genericHeader.nType == 5) { // END
+            if (genericHeader.nType == 5) {  // END
                 break;
             }
         }
@@ -180,25 +178,25 @@ XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)
 
     result.nCRC32 = read_uint32(nCurrentOffset);
     nCurrentOffset += 4;
-    packeInt = read_uleb128(nCurrentOffset,4);
+    packeInt = read_uleb128(nCurrentOffset, 4);
     result.nHeaderSize = packeInt.nValue;
     nCurrentOffset += packeInt.nByteSize;
     nByteSize = packeInt.nByteSize;
-    packeInt = read_uleb128(nCurrentOffset,4);
+    packeInt = read_uleb128(nCurrentOffset, 4);
     result.nType = packeInt.nValue;
     nCurrentOffset += packeInt.nByteSize;
-    packeInt = read_uleb128(nCurrentOffset,4);
+    packeInt = read_uleb128(nCurrentOffset, 4);
     result.nFlags = packeInt.nValue;
     nCurrentOffset += packeInt.nByteSize;
 
     if (result.nFlags & 0x0001) {
-        packeInt = read_uleb128(nCurrentOffset,4);
+        packeInt = read_uleb128(nCurrentOffset, 4);
         result.nExtraAreaSize = packeInt.nValue;
         nCurrentOffset += packeInt.nByteSize;
     }
 
     if (result.nFlags & 0x0002) {
-        packeInt = read_uleb128(nCurrentOffset,8);
+        packeInt = read_uleb128(nCurrentOffset, 8);
         result.nDataSize = packeInt.nValue;
         nCurrentOffset += packeInt.nByteSize;
     }

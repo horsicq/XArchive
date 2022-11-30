@@ -30,7 +30,7 @@ bool XCab::isValid()
 
     if (getSize() > (qint64)sizeof(CFHEADER)) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
-        if (compareSignature(&memoryMap,"'MSCF'00........00")) {
+        if (compareSignature(&memoryMap, "'MSCF'00........00")) {
             bResult = true;
         }
     }

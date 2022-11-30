@@ -359,15 +359,15 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo()
 
     result.bIsValid = isValid();
 
-    if(result.bIsValid) {
+    if (result.bIsValid) {
         result.nSize = getFileFormatSize();
 
-        if(result.nSize) {
+        if (result.nSize) {
             XBinary::PDSTRUCT pdStructEmpty = {};
 
             QList<RECORD> listRecords = getRecords(-1, &pdStructEmpty);
 
-            result.fileType = getFileType(getDevice(),&listRecords,true);
+            result.fileType = getFileType(getDevice(), &listRecords, true);
             result.sString = getFileFormatString();
             result.sExt = getFileFormatExt();
         }
@@ -634,7 +634,7 @@ qint64 XZip::findAPKSignBlockOffset(PDSTRUCT *pPdStruct)
     nOffset = qMax((qint64)0, nOffset - 0x100);  // TODO const
 
     while (true) {
-        qint64 nCurrent = find_ansiString(nOffset, -1, "APK Sig Block 42",pPdStruct);
+        qint64 nCurrent = find_ansiString(nOffset, -1, "APK Sig Block 42", pPdStruct);
 
         if (nCurrent == -1) {
             break;

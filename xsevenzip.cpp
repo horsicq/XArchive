@@ -30,7 +30,7 @@ bool XSevenZip::isValid()
 
     if (getSize() > (qint64)sizeof(SIGNATURERECORD)) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
-        if (compareSignature(&memoryMap,"'7z'BCAF271C")) {
+        if (compareSignature(&memoryMap, "'7z'BCAF271C")) {
             bResult = true;
         }
     }

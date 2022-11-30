@@ -162,7 +162,6 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(PDSTRUCT *pPdStruct)
     QMap<quint64, QString> mapCpuTypes = XMACH::getHeaderCpuTypesS();
 
     for (qint32 i = 0; i < (qint32)nNumberOfRecords; i++) {
-
         _MEMORY_RECORD record = {};
 
         qint64 nOffset = sizeof(XMACH_DEF::fat_header) + i * sizeof(XMACH_DEF::fat_arch);
