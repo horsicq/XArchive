@@ -108,6 +108,8 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(PDSTRUCT *pPdStruct)
 
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap(pPdStruct);
 
+    result.nRawSize = getSize();
+
     qint64 nFileHeaderSize = 0;
 
     if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
@@ -158,6 +160,8 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(PDSTRUCT *pPdStruct)
                 break;
             }
         }
+
+        // TODO Overlay
     }
 
     return result;
