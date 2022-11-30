@@ -164,7 +164,7 @@ qint64 XCab::getFileFormatSize()
 {
     qint64 nResult = 0;
 
-    nResult = readCFHeader().cbCabinet;  // TODO check mb _getRawSize
+    nResult = readCFHeader().cbCabinet;  // TODO check mb _getRawSize !!!
 
     return nResult;
 }
