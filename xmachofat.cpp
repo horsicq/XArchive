@@ -138,9 +138,12 @@ QString XMACHOFat::getFileFormatString()
 
 XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     XBinary::_MEMORY_MAP result = {};
 
     result.bIsBigEndian = isBigEndian();
+    result.nRawSize = getSize();
 
     qint32 nIndex = 0;
 
