@@ -187,6 +187,11 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     return listRecords;
 }
 
+QString X_Ar::getFileFormatExt()
+{
+    return "ar"; // TODO
+}
+
 X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
 {
     FRECORD record = {};
