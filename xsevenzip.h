@@ -98,6 +98,7 @@ public:
     virtual qint64 getFileFormatSize();
     virtual QString getFileFormatString();
     virtual QString getFileFormatExt();
+    virtual _MEMORY_MAP getMemoryMap(PDSTRUCT *pPdStruct = nullptr);
 
 private:
     QString idToSring(EIdEnum id);

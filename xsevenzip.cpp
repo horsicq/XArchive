@@ -395,6 +395,7 @@ qint64 XSevenZip::getFileFormatSize()
 
     SIGNATURERECORD signatureHeader = {};
 
+    // TODO Check
     if (read_array(0, (char *)&signatureHeader, sizeof(SIGNATURERECORD)) == sizeof(SIGNATURERECORD)) {
         nResult = sizeof(SIGNATURERECORD) + signatureHeader.NextHeaderOffset + signatureHeader.NextHeaderSize;
     }
@@ -415,6 +416,48 @@ QString XSevenZip::getFileFormatString()
 QString XSevenZip::getFileFormatExt()
 {
     return "7z";
+}
+
+XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(PDSTRUCT *pPdStruct)
+{
+    _MEMORY_MAP result = {};
+
+    result.nRawSize = getSize();
+
+    qint32 nIndex = 0;
+
+    qint64 nOffset = 0;
+
+    {
+        _MEMORY_RECORD record = {};
+
+        record.nIndex = nIndex++;
+        record.type = MMT_HEADER;
+        record.nOffset = nOffset;
+        record.nSize = sizeof(SIGNATURERECORD);
+        record.nAddress = -1;
+        record.sName = tr("Header");
+
+        result.listRecords.append(record);
+    }
+
+    qint64 nNextHeaderOffset = sizeof(SIGNATURERECORD) + read_uint32(nOffset + offsetof(SIGNATURERECORD, NextHeaderOffset));
+    qint64 nNextHeaderSize = read_uint32(nOffset + offsetof(SIGNATURERECORD, NextHeaderSize));
+
+    if (nNextHeaderSize) {
+        _MEMORY_RECORD record = {};
+
+        record.nIndex = nIndex++;
+        record.type = MMT_HEADER;
+        record.nOffset = nNextHeaderOffset;
+        record.nSize = nNextHeaderSize;
+        record.nAddress = -1;
+        record.sName = tr("Header");
+
+        result.listRecords.append(record);
+    }
+
+    return result;
 }
 
 QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
