@@ -58,7 +58,7 @@ quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
     nOffset += 8;
     nSize -= 8;
 
-    while ((nSize > 0)&&(!(pPdStruct->bIsStop))) {
+    while ((nSize > 0) && (!(pPdStruct->bIsStop))) {
         char fileSize[16];
 
         read_array(nOffset + offsetof(FRECORD, fileSize), fileSize, 10);
@@ -189,7 +189,7 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
 QString X_Ar::getFileFormatExt()
 {
-    return "ar"; // TODO
+    return "ar";  // TODO
 }
 
 X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)

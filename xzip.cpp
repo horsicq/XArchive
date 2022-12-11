@@ -299,7 +299,6 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(QIODevice *pDevice, QList<RECORD
     result.bIsValid = isValid(pDevice);
 
     if (result.bIsValid) {
-
         XZip xzip(pDevice);
 
         if (xzip.isValid()) {
@@ -335,7 +334,8 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(QIODevice *pDevice, QList<RECORD
                                 if (XBinary::getFileTypes(&subDevice, true).contains(FT_ZIP)) {
                                     bool bAPK = false;
 
-                                    if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
+                                    if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) ||
+                                        XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
                                         bAPK = true;
                                     }
 
