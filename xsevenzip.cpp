@@ -420,6 +420,12 @@ QString XSevenZip::getFileFormatExt()
 
 XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(PDSTRUCT *pPdStruct)
 {
+    PDSTRUCT ppStructEmpty = {};
+
+    if (!pPdStruct) {
+        pPdStruct = &ppStructEmpty;
+    }
+
     _MEMORY_MAP result = {};
 
     result.nRawSize = getSize();

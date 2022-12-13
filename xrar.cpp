@@ -104,6 +104,12 @@ QString XRar::getFileFormatString()
 
 XBinary::_MEMORY_MAP XRar::getMemoryMap(PDSTRUCT *pPdStruct)
 {
+    PDSTRUCT ppStructEmpty = {};
+
+    if (!pPdStruct) {
+        pPdStruct = &ppStructEmpty;
+    }
+
     XBinary::_MEMORY_MAP result = {};
 
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap(pPdStruct);

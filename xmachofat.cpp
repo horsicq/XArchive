@@ -138,6 +138,12 @@ QString XMACHOFat::getFileFormatString()
 
 XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(PDSTRUCT *pPdStruct)
 {
+    PDSTRUCT ppStructEmpty = {};
+
+    if (!pPdStruct) {
+        pPdStruct = &ppStructEmpty;
+    }
+
     Q_UNUSED(pPdStruct)
 
     XBinary::_MEMORY_MAP result = {};
