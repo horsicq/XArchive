@@ -54,7 +54,7 @@ public:
 
 private:
     static void _findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit,
-                           XBinary::PDSTRUCT *pPdStruct);  // TODO mb nLimit pointer to qint32 Check TODO PDSTRUCT
+                           XBinary::PDSTRUCT *pPdStruct);  // TODO mb nLimit pointer to qint32 Check PDSTRUCT
 };
 
 #endif  // XARCHIVES_H
