@@ -73,6 +73,7 @@ quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
+    Q_UNUSED(pPdStruct)
 
     QList<XArchive::RECORD> listResult;
 
