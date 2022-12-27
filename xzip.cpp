@@ -285,11 +285,8 @@ XBinary::OFFSETSIZE XZip::getSignOffsetSize()
 
 XBinary::FT XZip::getFileType()
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    QList<RECORD> listRecords = getRecords(-1, &pdStructEmpty);
-
-    return getFileFormatInfo(getDevice(), &listRecords, true).fileType;
+    // For extra use getFileFormatInfo
+    return FT_ZIP;
 }
 
 XBinary::FILEFORMATINFO XZip::getFileFormatInfo(QIODevice *pDevice, QList<RECORD> *pListRecords, bool bDeep)
