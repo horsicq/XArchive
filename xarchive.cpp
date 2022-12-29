@@ -58,6 +58,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     PDSTRUCT pdStructEmpty = {};
 
     if (pPdStruct == nullptr) {
+        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 
@@ -688,6 +689,7 @@ XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArch
     XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
+        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 

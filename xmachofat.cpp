@@ -32,6 +32,7 @@ bool XMACHOFat::isValid()
 
     if ((nMagic == XMACH_DEF::S_FAT_MAGIC) || (nMagic == XMACH_DEF::S_FAT_CIGAM)) {
         PDSTRUCT pdStruct = {};
+        XBinary::_pdStructInit(&pdStruct);
 
         bResult = (getNumberOfRecords(&pdStruct) < 10);  // TODO Check !!!
     }
@@ -71,6 +72,7 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
     XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
+        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 
@@ -138,10 +140,11 @@ QString XMACHOFat::getFileFormatString()
 
 XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(PDSTRUCT *pPdStruct)
 {
-    PDSTRUCT ppStructEmpty = {};
+    PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
-        pPdStruct = &ppStructEmpty;
+        XBinary::_pdStructInit(&pdStructEmpty);
+        pPdStruct = &pdStructEmpty;
     }
 
     Q_UNUSED(pPdStruct)

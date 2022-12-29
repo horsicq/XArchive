@@ -171,10 +171,11 @@ qint64 XCab::getFileFormatSize()
 
 XBinary::_MEMORY_MAP XCab::getMemoryMap(PDSTRUCT *pPdStruct)
 {
-    PDSTRUCT ppStructEmpty = {};
+    PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
-        pPdStruct = &ppStructEmpty;
+        XBinary::_pdStructInit(&pdStructEmpty);
+        pPdStruct = &pdStructEmpty;
     }
     // TODO
     return XBinary::getMemoryMap(pPdStruct);
