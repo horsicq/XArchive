@@ -31,8 +31,7 @@ bool XMACHOFat::isValid()
     quint32 nMagic = read_uint32(0);
 
     if ((nMagic == XMACH_DEF::S_FAT_MAGIC) || (nMagic == XMACH_DEF::S_FAT_CIGAM)) {
-        PDSTRUCT pdStruct = {};
-        XBinary::_pdStructInit(&pdStruct);
+        PDSTRUCT pdStruct = XBinary::createPdStruct();
 
         bResult = (getNumberOfRecords(&pdStruct) < 10);  // TODO Check !!!
     }
@@ -69,10 +68,9 @@ quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
-        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 
@@ -140,10 +138,9 @@ QString XMACHOFat::getFileFormatString()
 
 XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(PDSTRUCT *pPdStruct)
 {
-    PDSTRUCT pdStructEmpty = {};
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
-        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 

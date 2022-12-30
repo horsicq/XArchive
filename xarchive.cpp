@@ -55,10 +55,9 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     // TODO Progress PDSTRUCT
     qint64 __nInSize = 0;
     qint64 __nOutSize = 0;
-    PDSTRUCT pdStructEmpty = {};
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (pPdStruct == nullptr) {
-        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 
@@ -686,10 +685,9 @@ bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName, PD
 
 XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
-        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 

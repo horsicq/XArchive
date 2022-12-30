@@ -90,10 +90,9 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     Q_UNUSED(nLimit)
     // TODO Limit
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
-        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 

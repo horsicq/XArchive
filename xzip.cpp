@@ -141,10 +141,9 @@ quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
-        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 
@@ -372,8 +371,7 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo()
 {
     XBinary::FILEFORMATINFO result = {};
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
-    XBinary::_pdStructInit(&pdStructEmpty);
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     QList<RECORD> listRecords = getRecords(-1, &pdStructEmpty);
 

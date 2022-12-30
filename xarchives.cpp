@@ -26,10 +26,9 @@ XArchives::XArchives(QObject *pParent) : QObject(pParent)
 
 QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
-        XBinary::_pdStructInit(&pdStructEmpty);
         pPdStruct = &pdStructEmpty;
     }
 
