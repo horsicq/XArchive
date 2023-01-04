@@ -113,3 +113,79 @@ qint64 XGzip::getFileFormatSize()
 
     return nResult;
 }
+
+XBinary::_MEMORY_MAP XGzip::getMemoryMap(PDSTRUCT *pPdStruct)
+{
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    _MEMORY_MAP result = {};
+
+    _MEMORY_RECORD memoryRecordHeader = {};
+    _MEMORY_RECORD memoryRecord = {};
+    _MEMORY_RECORD memoryRecordFooter = {};
+
+    qint64 nOffset = 0;
+
+    GZIP_HEADER gzipHeader = {};
+
+    read_array(nOffset, (char *)&gzipHeader, sizeof(GZIP_HEADER));
+
+    COMPRESS_METHOD cm = COMPRESS_METHOD_DEFLATE;
+
+    if (gzipHeader.nCompressionMethod == 8)  // TODO consts
+    {
+        cm = COMPRESS_METHOD_DEFLATE;  // TODO more
+    }
+
+    nOffset += sizeof(GZIP_HEADER);
+
+    if (gzipHeader.nFileFlags & 8)  // File name
+    {
+        QString sFileName = read_ansiString(nOffset);
+        nOffset += sFileName.size() + 1;
+    }
+
+    memoryRecordHeader.nOffset = 0;
+    memoryRecordHeader.nAddress = -1;
+    memoryRecordHeader.nSize = nOffset;
+    memoryRecordHeader.sName = tr("Header");
+    memoryRecordHeader.type = MMT_HEADER;
+
+    result.listRecords.append(memoryRecordHeader);
+
+    SubDevice sd(getDevice(), nOffset, -1);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        qint64 nInSize = 0;
+        qint64 nOutSize = 0;
+
+        XArchive::COMPRESS_RESULT cr = decompress(cm, &sd, 0, false, pPdStruct, &nInSize, &nOutSize);
+
+        memoryRecord.nOffset = nOffset;
+        memoryRecord.nAddress = -1;
+        memoryRecord.nSize = nInSize;
+        memoryRecord.type = MMT_FILESEGMENT;
+
+        sd.close();
+    }
+
+    // TODO
+
+    result.listRecords.append(memoryRecord);
+
+    memoryRecordFooter.nOffset = memoryRecord.nOffset + memoryRecord.nSize;
+    memoryRecordFooter.nAddress = -1;
+    memoryRecordFooter.nSize = 8;
+    memoryRecordFooter.sName = tr("Footer");
+    memoryRecordFooter.type = MMT_FOOTER;
+
+    result.listRecords.append(memoryRecordFooter);
+
+    result.nRawSize = memoryRecordHeader.nSize + memoryRecord.nSize + memoryRecordFooter.nSize;
+
+    return result;
+}
