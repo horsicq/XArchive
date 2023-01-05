@@ -54,6 +54,10 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit,
         XGzip xgzip(pDevice);
 
         listResult = xgzip.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
+        XZlib xzlib(pDevice);
+
+        listResult = xzlib.getRecords(nLimit, pPdStruct);
     }
 
     return listResult;
@@ -107,6 +111,10 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
         XGzip xgzip(pDevice);
 
         baResult = xgzip.decompress(pRecord, bHeaderOnly, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
+        XZlib xzlib(pDevice);
+
+        baResult = xzlib.decompress(pRecord, bHeaderOnly, pPdStruct);
     }
 
     return baResult;
@@ -181,6 +189,10 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
         XGzip xgzip(pDevice);
 
         bResult = xgzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
+        XZlib xzlib(pDevice);
+
+        bResult = xzlib.decompressToFile(pRecord, sResultFileName, pPdStruct);
     }
 
     return bResult;
@@ -249,6 +261,10 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileNa
         XGzip xgzip(pDevice);
 
         bResult = xgzip.isArchiveRecordPresent(sRecordFileName);
+    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
+        XZlib xzlib(pDevice);
+
+        bResult = xzlib.isArchiveRecordPresent(sRecordFileName);
     }
 
     return bResult;
@@ -283,6 +299,7 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvail
             stAvailable.insert(XBinary::FT_MACHOFAT);
             stAvailable.insert(XBinary::FT_AR);
             stAvailable.insert(XBinary::FT_GZIP);
+            stAvailable.insert(XBinary::FT_ZLIB);
         }
 
         bResult = XBinary::isFileTypePresent(&stFT, &stAvailable);

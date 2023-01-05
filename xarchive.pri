@@ -9,7 +9,8 @@ HEADERS += \
     $$PWD/xmachofat.h \
     $$PWD/xrar.h \
     $$PWD/xsevenzip.h \
-    $$PWD/xzip.h
+    $$PWD/xzip.h \
+    $$PWD/xzlib.h
 
 SOURCES += \
     $$PWD/x_ar.cpp \
@@ -19,7 +20,8 @@ SOURCES += \
     $$PWD/xmachofat.cpp \
     $$PWD/xrar.cpp \
     $$PWD/xsevenzip.cpp \
-    $$PWD/xzip.cpp
+    $$PWD/xzip.cpp \
+    $$PWD/xzlib.cpp
 
 !contains(XCONFIG, xbinary) {
     XCONFIG += xbinary

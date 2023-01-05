@@ -30,6 +30,7 @@
 #include "xrar.h"
 #include "xsevenzip.h"
 #include "xzip.h"
+#include "xzlib.h"
 
 class XArchives : public QObject {
     Q_OBJECT

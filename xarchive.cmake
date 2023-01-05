@@ -14,6 +14,7 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xrar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzip.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xzlib.cpp
     ${CMAKE_CURRENT_LIST_DIR}/x_ar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xgzip.cpp
 )
