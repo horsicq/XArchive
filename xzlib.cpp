@@ -169,3 +169,18 @@ XBinary::FT XZlib::getFileType()
 {
     return FT_ZLIB;
 }
+
+QString XZlib::getFileFormatString()
+{
+    QString sResult;
+
+    sResult = QString("zlib");
+    // TODO more info
+
+    return sResult;
+}
+
+QString XZlib::getFileFormatExt()
+{
+    return "zlib";
+}

@@ -224,13 +224,58 @@ bool XArchives::decompressToFile(QString sFileName, QString sRecordFileName, QSt
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        QList<XArchive::RECORD> listRecords = getRecords(&file);
+        QList<XArchive::RECORD> listRecords = getRecords(&file, -1, pPdStruct);
 
-        XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords);
+        XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords, pPdStruct);
 
         if (record.sFileName != "") {
             bResult = decompressToFile(&file, &record, sResultFileName, pPdStruct);
         }
+
+        file.close();
+    }
+
+    return bResult;
+}
+
+bool XArchives::decompressToFolder(QIODevice *pDevice, QString sResultFileFolder, XBinary::PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    QList<XArchive::RECORD> listRecords = getRecords(pDevice, -1, pPdStruct);
+
+    qint32 nNumberOfRecords = listRecords.count();
+
+    for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+        XArchive::RECORD record = listRecords.at(i);
+        QString sResultFileName = sResultFileFolder + QDir::separator() + record.sFileName;
+
+        bResult = decompressToFile(pDevice, &record, sResultFileName, pPdStruct);
+
+        if (!bResult) {
+            break;
+        }
+    }
+
+    return bResult;
+}
+
+bool XArchives::decompressToFolder(QString sFileName, QString sResultFileFolder, XBinary::PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    QFile file;
+
+    file.setFileName(sFileName);
+
+    if (file.open(QIODevice::ReadOnly)) {
+        bResult = decompressToFolder(&file, sResultFileFolder, pPdStruct);
 
         file.close();
     }

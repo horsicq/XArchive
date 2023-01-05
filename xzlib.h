@@ -36,6 +36,8 @@ public:
     virtual qint64 getFileFormatSize();
     virtual _MEMORY_MAP getMemoryMap(PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType();
+    virtual QString getFileFormatString();
+    virtual QString getFileFormatExt();
 };
 
 #endif // XZLIB_H
