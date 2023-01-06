@@ -31,6 +31,7 @@
 #include "xsevenzip.h"
 #include "xzip.h"
 #include "xzlib.h"
+#include "xlha.h"
 
 class XArchives : public QObject {
     Q_OBJECT

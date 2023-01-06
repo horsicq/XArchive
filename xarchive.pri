@@ -6,6 +6,7 @@ HEADERS += \
     $$PWD/xarchive.h \
     $$PWD/xcab.h \
     $$PWD/xgzip.h \
+    $$PWD/xlha.h \
     $$PWD/xmachofat.h \
     $$PWD/xrar.h \
     $$PWD/xsevenzip.h \
@@ -17,6 +18,7 @@ SOURCES += \
     $$PWD/xarchive.cpp \
     $$PWD/xcab.cpp \
     $$PWD/xgzip.cpp \
+    $$PWD/xlha.cpp \
     $$PWD/xmachofat.cpp \
     $$PWD/xrar.cpp \
     $$PWD/xsevenzip.cpp \

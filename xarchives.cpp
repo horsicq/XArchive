@@ -58,6 +58,10 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit,
         XZlib xzlib(pDevice);
 
         listResult = xzlib.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
+        XLHA xhla(pDevice);
+
+        listResult = xhla.getRecords(nLimit, pPdStruct);
     }
 
     return listResult;
@@ -115,6 +119,10 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
         XZlib xzlib(pDevice);
 
         baResult = xzlib.decompress(pRecord, bHeaderOnly, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
+        XLHA xlha(pDevice);
+
+        baResult = xlha.decompress(pRecord, bHeaderOnly, pPdStruct);
     }
 
     return baResult;
@@ -193,6 +201,10 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
         XZlib xzlib(pDevice);
 
         bResult = xzlib.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
+        XLHA xlha(pDevice);
+
+        bResult = xlha.decompressToFile(pRecord, sResultFileName, pPdStruct);
     }
 
     return bResult;
@@ -259,7 +271,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, QString sResultFileFolder
         bResult = decompressToFile(pDevice, &record, sResultFileName, pPdStruct);
 
         if (!bResult) {
-            break;
+//            break;
         }
     }
 
@@ -310,6 +322,10 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileNa
         XZlib xzlib(pDevice);
 
         bResult = xzlib.isArchiveRecordPresent(sRecordFileName);
+    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
+        XLHA xlha(pDevice);
+
+        bResult = xlha.isArchiveRecordPresent(sRecordFileName);
     }
 
     return bResult;
@@ -345,6 +361,7 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvail
             stAvailable.insert(XBinary::FT_AR);
             stAvailable.insert(XBinary::FT_GZIP);
             stAvailable.insert(XBinary::FT_ZLIB);
+            stAvailable.insert(XBinary::FT_LHA);
         }
 
         bResult = XBinary::isFileTypePresent(&stFT, &stAvailable);
