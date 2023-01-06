@@ -46,6 +46,9 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual qint64 getFileFormatSize();
     virtual _MEMORY_MAP getMemoryMap(PDSTRUCT *pPdStruct = nullptr);
+
+    virtual QString getFileFormatExt();
+    virtual QString getFileFormatString();
 };
 
 #endif  // XGZIP_H

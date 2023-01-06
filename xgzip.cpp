@@ -185,3 +185,18 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(PDSTRUCT *pPdStruct)
 
     return result;
 }
+
+QString XGzip::getFileFormatExt()
+{
+    return "gz";
+}
+
+QString XGzip::getFileFormatString()
+{
+    QString sResult;
+
+    sResult = QString("GZip");
+    // TODO more info
+
+    return sResult;
+}
