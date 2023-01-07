@@ -303,6 +303,11 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(QIODevice *pDevice, QList<RECORD
         }
 
         if (result.nSize) {
+            // TODO
+            result.sString = "ZIP";
+            result.sExt = "zip";
+            result.fileType = FT_ZIP;
+
             if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
                 result.fileType = XBinary::FT_APK;
             } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords)) {
@@ -357,10 +362,6 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(QIODevice *pDevice, QList<RECORD
                     }
                 }
             }
-
-            // TODO
-            result.sString = "ZIP";
-            result.sExt = "zip";
         }
     }
 
@@ -375,7 +376,7 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo()
 
     QList<RECORD> listRecords = getRecords(-1, &pdStructEmpty);
 
-    result = getFileFormatInfo(getDevice(), &listRecords, true);
+    result = XZip::getFileFormatInfo(getDevice(), &listRecords, true);
 
     return result;
 }
