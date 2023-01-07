@@ -388,6 +388,8 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 LzmaDec_Free(&state, &g_Alloc);
             }
         }
+    } else if (compressMethod == COMPRESS_METHOD_LZH5) {
+
     }
 
     return result;

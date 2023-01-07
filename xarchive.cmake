@@ -10,6 +10,7 @@ set(XARCHIVE_SOURCES
     ${XBINARY_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/xarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcab.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xcompress.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xmachofat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xrar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.cpp

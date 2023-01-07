@@ -28,6 +28,7 @@
 #ifdef PPMD_SUPPORT
 #include "Ppmd7.h"
 #endif
+#include "xcompress.h"
 
 class XArchive : public XBinary {
     Q_OBJECT
@@ -41,7 +42,10 @@ public:
         COMPRESS_METHOD_DEFLATE64,
         COMPRESS_METHOD_BZIP2,
         COMPRESS_METHOD_LZMA_ZIP,
-        COMPRESS_METHOD_PPMD
+        COMPRESS_METHOD_PPMD,
+        COMPRESS_METHOD_LZH5,
+        COMPRESS_METHOD_LZH6,
+        COMPRESS_METHOD_LZH7
         // TODO check more
     };
 
