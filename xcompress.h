@@ -45,12 +45,48 @@ public:
 #define PT_BITLEN_SIZE		(3 + 16)
 #define HTBL_BITS	10
 
+#define ST_RD_BLOCK		0
+#define ST_RD_PT_1		1
+#define ST_RD_PT_2		2
+#define ST_RD_PT_3		3
+#define ST_RD_PT_4		4
+#define ST_RD_LITERAL_1		5
+#define ST_RD_LITERAL_2		6
+#define ST_RD_LITERAL_3		7
+#define ST_RD_POS_DATA_1	8
+#define ST_GET_LITERAL		9
+#define ST_GET_POS_1		10
+#define ST_GET_POS_2		11
+#define ST_COPY_DATA		12
+
+#define	ARCHIVE_EOF	  1	/* Found end of archive. */
+#define	ARCHIVE_OK	  0	/* Operation was successful. */
+#define	ARCHIVE_RETRY	(-10)	/* Retry might succeed. */
+#define	ARCHIVE_WARN	(-20)	/* Partial success. */
+/* For example, if write_header "fails", then you can't push data. */
+#define	ARCHIVE_FAILED	(-25)	/* Current operation cannot complete. */
+/* But if write_header is "fatal," then this archive is dead and useless. */
+#define	ARCHIVE_FATAL	(-30)	/* No more operations are possible. */
+
+#define CACHE_TYPE		uint64_t
+#define CACHE_BITS		(8 * sizeof(CACHE_TYPE))
+
     /*
      * Huffman coding.
      */
     struct htree_t {
         uint16_t left;
         uint16_t right;
+    };
+
+    /*
+     * Bit stream reader.
+     */
+    struct lzh_br {
+        /* Cache buffer. */
+        uint64_t	 cache_buffer;
+        /* Indicates how many bits avail in cache_buffer. */
+        int		 cache_avail;
     };
 
     struct huffman {
@@ -99,12 +135,7 @@ public:
         /*
          * Bit stream reader.
          */
-        struct lzh_br {
-            /* Cache buffer. */
-            uint64_t	 cache_buffer;
-            /* Indicates how many bits avail in cache_buffer. */
-            int		 cache_avail;
-        } br;
+        lzh_br br;
 
         huffman lt, pt;
 
@@ -128,10 +159,48 @@ public:
         struct lzh_dec		*ds;
     };
 
+    /*
+     * Bit stream reader.
+     */
+    /* Check that the cache buffer has enough bits. */
+    #define lzh_br_has(br, n)	((br)->cache_avail >= n)
+    /* Get compressed data by bit. */
+    #define lzh_br_bits(br, n)				\
+        (((uint16_t)((br)->cache_buffer >>		\
+            ((br)->cache_avail - (n)))) & cache_masks[n])
+    #define lzh_br_bits_forced(br, n)			\
+        (((uint16_t)((br)->cache_buffer <<		\
+            ((n) - (br)->cache_avail))) & cache_masks[n])
+    /* Read ahead to make sure the cache buffer has enough compressed data we
+     * will use.
+     *  True  : completed, there is enough data in the cache buffer.
+     *  False : we met that strm->next_in is empty, we have to get following
+     *          bytes. */
+    #define lzh_br_read_ahead_0(strm, br, n)	\
+        (lzh_br_has(br, (n)) || lzh_br_fillup(strm, br))
+    /*  True  : the cache buffer has some bits as much as we need.
+     *  False : there are no enough bits in the cache buffer to be used,
+     *          we have to get following bytes if we could. */
+    #define lzh_br_read_ahead(strm, br, n)	\
+        (lzh_br_read_ahead_0((strm), (br), (n)) || lzh_br_has((br), (n)))
+
+    /* Notify how many bits we consumed. */
+    #define lzh_br_consume(br, n)	((br)->cache_avail -= (n))
+    #define lzh_br_unconsume(br, n)	((br)->cache_avail += (n))
+
     XCompress();
 
     static bool lzh_decode_init(struct lzh_stream *strm, int method);
     static bool lzh_huffman_init(struct huffman *hf, size_t len_size, int tbl_bits);
+    static int lzh_decode(struct lzh_stream *strm, int last);
+    static int lzh_read_blocks(struct lzh_stream *strm, int last);
+    static int lzh_decode_blocks(struct lzh_stream *strm, int last);
+    static int lzh_br_fillup(struct lzh_stream *strm, struct lzh_br *br);
+    static void lzh_emit_window(struct lzh_stream *strm, size_t s);
+    static int lzh_decode_huffman_tree(struct huffman *hf, unsigned rbits, int c);
+    static inline int lzh_decode_huffman(struct huffman *hf, unsigned rbits);
+    static int lzh_make_fake_table(struct huffman *hf, uint16_t c);
+    static int lzh_read_pt_bitlen(struct lzh_stream *strm, int start, int end);
 };
 
 #endif // XCOMPRESS_H
