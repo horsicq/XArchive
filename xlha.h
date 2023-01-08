@@ -23,8 +23,7 @@
 
 #include "xarchive.h"
 
-class XLHA : public XArchive
-{
+class XLHA : public XArchive {
     Q_OBJECT
 public:
     explicit XLHA(QIODevice *pDevice = nullptr);
@@ -40,4 +39,4 @@ public:
     virtual QString getFileFormatExt();
 };
 
-#endif // XLHA_H
+#endif  // XLHA_H

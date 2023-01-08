@@ -23,8 +23,7 @@
 
 #include "xarchive.h"
 
-class XZlib : public XArchive
-{
+class XZlib : public XArchive {
     Q_OBJECT
 public:
     explicit XZlib(QIODevice *pDevice = nullptr);
@@ -40,4 +39,4 @@ public:
     virtual QString getFileFormatExt();
 };
 
-#endif // XZLIB_H
+#endif  // XZLIB_H

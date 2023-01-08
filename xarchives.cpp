@@ -271,7 +271,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, QString sResultFileFolder
         bResult = decompressToFile(pDevice, &record, sResultFileName, pPdStruct);
 
         if (!bResult) {
-//            break;
+            //            break;
         }
     }
 

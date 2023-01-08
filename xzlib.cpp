@@ -22,7 +22,6 @@
 
 XZlib::XZlib(QIODevice *pDevice) : XArchive(pDevice)
 {
-
 }
 
 bool XZlib::isValid()
@@ -57,7 +56,7 @@ quint64 XZlib::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    return 1; // Always 1
+    return 1;  // Always 1
 }
 
 QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
@@ -122,7 +121,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(PDSTRUCT *pPdStruct)
 
     COMPRESS_METHOD cm = COMPRESS_METHOD_DEFLATE;
 
-    nOffset += 2; // TODO consts
+    nOffset += 2;  // TODO consts
 
     memoryRecordHeader.nOffset = 0;
     memoryRecordHeader.nAddress = -1;

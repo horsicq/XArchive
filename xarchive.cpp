@@ -388,10 +388,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
                 LzmaDec_Free(&state, &g_Alloc);
             }
         }
-    } else if ((compressMethod == COMPRESS_METHOD_LZH5) ||
-               (compressMethod == COMPRESS_METHOD_LZH6) ||
-               (compressMethod == COMPRESS_METHOD_LZH7)) {
-
+    } else if ((compressMethod == COMPRESS_METHOD_LZH5) || (compressMethod == COMPRESS_METHOD_LZH6) || (compressMethod == COMPRESS_METHOD_LZH7)) {
         qint32 nMethod = 5;
 
         if (compressMethod == COMPRESS_METHOD_LZH5) {
@@ -415,8 +412,11 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             strm.avail_in = pSourceDevice->read((char *)in, CHUNK);
             strm.next_in = in;
             strm.avail_out = CHUNK;
-            // strm.next_out = out;
+            strm.ref_ptr = out;
 
+            XCompress::lzh_decode(&strm, true);
+
+            XCompress::lzh_decode_free(&strm);
         }
     }
 

@@ -22,7 +22,6 @@
 
 XLHA::XLHA(QIODevice *pDevice) : XArchive(pDevice)
 {
-
 }
 
 bool XLHA::isValid()
@@ -33,22 +32,11 @@ bool XLHA::isValid()
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
         if (compareSignature(&memoryMap, "....'-lh'..2d") || compareSignature(&memoryMap, "....'-lz'..2d")) {
-
             QString sMethod = read_ansiString(2, 5);
 
-            if (    (sMethod == "-lz4-") ||
-                    (sMethod == "-lz5-") ||
-                    (sMethod == "-lzs-") ||
-                    (sMethod == "-lh0-") ||
-                    (sMethod == "-lh1-") ||
-                    (sMethod == "-lh4-") ||
-                    (sMethod == "-lh5-") ||
-                    (sMethod == "-lh6-") ||
-                    (sMethod == "-lh7-") ||
-                    (sMethod == "-lhx-") ||
-                    (sMethod == "-pm0-") ||
-                    (sMethod == "-pm1-") ||
-                    (sMethod == "-pm2-")){
+            if ((sMethod == "-lz4-") || (sMethod == "-lz5-") || (sMethod == "-lzs-") || (sMethod == "-lh0-") || (sMethod == "-lh1-") || (sMethod == "-lh4-") ||
+                (sMethod == "-lh5-") || (sMethod == "-lh6-") || (sMethod == "-lh7-") || (sMethod == "-lhx-") || (sMethod == "-pm0-") || (sMethod == "-pm1-") ||
+                (sMethod == "-pm2-")) {
                 bResult = true;
             }
         }
@@ -87,13 +75,13 @@ QList<XArchive::RECORD> XLHA::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint32 nNumberOfFiles = 0;
 
-    while((nFileSize > 0) && (!(pPdStruct->bIsStop))) {
+    while ((nFileSize > 0) && (!(pPdStruct->bIsStop))) {
         if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset)) {
             qint64 nHeaderSize = read_uint8(nOffset) + 2;
             qint64 nCompressedSize = read_uint32(nOffset + 7);
             qint64 nUncompressedSize = read_uint32(nOffset + 11);
             QString sFileName = read_ansiString(nOffset + 22, read_uint8(nOffset + 21));
-            sFileName = sFileName.replace("\\","/");
+            sFileName = sFileName.replace("\\", "/");
 
             if (nHeaderSize < 21) {
                 break;
@@ -113,6 +101,8 @@ QList<XArchive::RECORD> XLHA::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                 record.compressMethod = COMPRESS_METHOD_LZH7;
             }
 
+            record.nHeaderOffset = nOffset;
+            record.nDataOffset = nOffset + nHeaderSize;
             record.nUncompressedSize = nUncompressedSize;
             record.nHeaderSize = nHeaderSize;
             record.nCompressedSize = nCompressedSize;
@@ -159,7 +149,7 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(PDSTRUCT *pPdStruct)
 
     qint64 nOffset = 0;
 
-    while((nFileSize > 0) && (!(pPdStruct->bIsStop))) {
+    while ((nFileSize > 0) && (!(pPdStruct->bIsStop))) {
         if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset)) {
             qint64 nHeaderSize = read_uint8(nOffset) + 2;
             qint64 nDataSize = read_uint32(nOffset + 7);
