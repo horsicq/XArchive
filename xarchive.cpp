@@ -390,6 +390,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         }
     } else if ((compressMethod == COMPRESS_METHOD_LZH5) || (compressMethod == COMPRESS_METHOD_LZH6) || (compressMethod == COMPRESS_METHOD_LZH7)) {
         qint32 nMethod = 5;
+        qint32 nBufferSize = 1U << 17;
 
         if (compressMethod == COMPRESS_METHOD_LZH5) {
             nMethod = 5;
@@ -399,24 +400,48 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             nMethod = 7;
         }
 
-        const qint32 CHUNK = DECOMPRESS_BUFFERSIZE;
-
-        unsigned char in[CHUNK];
-        unsigned char out[CHUNK];
-
         XCompress::lzh_stream strm = {0};
+
+        int ret = ARCHIVE_OK;
+
+        //        qDebug("Size: %lld", pSourceDevice->size());
+
+        //        if (pSourceDevice->size() > 25000) {
+        //            ret = ARCHIVE_OK;
+        //        }
+
+        unsigned char *pInBuffer = (unsigned char *)malloc(nBufferSize);
 
         result = COMPRESS_RESULT_OK;
 
         if (XCompress::lzh_decode_init(&strm, nMethod)) {
-            strm.avail_in = pSourceDevice->read((char *)in, CHUNK);
-            strm.next_in = in;
-            strm.avail_out = CHUNK;
-            strm.ref_ptr = out;
+            strm.avail_in = pSourceDevice->read((char *)pInBuffer, nBufferSize);  // We read from Device so if size < nBufferSize is OK
 
-            XCompress::lzh_decode(&strm, true);
+            if (strm.avail_in) {
+                strm.next_in = pInBuffer;
+
+                strm.total_in = 0;
+                strm.avail_out = 0;
+                // strm.ref_ptr = out;
+                ret = XCompress::lzh_decode(&strm, true);
+
+                if (pDestDevice) {
+                    if (pDestDevice->write((char *)strm.ref_ptr, strm.total_out) != strm.total_out) {
+                        ret = ARCHIVE_FATAL;
+                    }
+                }
+
+                *pnInSize += strm.total_in;
+                *pnOutSize += strm.total_out;
+            }
 
             XCompress::lzh_decode_free(&strm);
+        }
+
+        free(pInBuffer);
+
+        if (ret == ARCHIVE_OK) {
+            result = COMPRESS_RESULT_OK;
         }
     }
 
