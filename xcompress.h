@@ -66,15 +66,15 @@ public:
 /* But if write_header is "fatal," then this archive is dead and useless. */
 #define ARCHIVE_FATAL (-30) /* No more operations are possible. */
 
-#define CACHE_TYPE uint64_t
+#define CACHE_TYPE quint64
 #define CACHE_BITS (8 * sizeof(CACHE_TYPE))
 
     /*
      * Huffman coding.
      */
     struct htree_t {
-        uint16_t left;
-        uint16_t right;
+        quint16 left;
+        quint16 right;
     };
 
     /*
@@ -82,7 +82,7 @@ public:
      */
     struct lzh_br {
         /* Cache buffer. */
-        uint64_t cache_buffer;
+        quint64 cache_buffer;
         /* Indicates how many bits avail in cache_buffer. */
         int cache_avail;
     };
@@ -105,7 +105,7 @@ public:
         int tree_used;
         int tree_avail;
         /* Direct access table. */
-        uint16_t *tbl;
+        quint16 *tbl;
         /* Binary tree table for extra bits over the direct access. */
         htree_t *tree;
     };
@@ -150,10 +150,10 @@ public:
     struct lzh_stream {
         const unsigned char *next_in;
         int avail_in;
-        int64_t total_in;
+        qint64 total_in;
         const unsigned char *ref_ptr;
         int avail_out;
-        int64_t total_out;
+        qint64 total_out;
         struct lzh_dec *ds;
     };
 
@@ -163,8 +163,8 @@ public:
 /* Check that the cache buffer has enough bits. */
 #define lzh_br_has(br, n) ((br)->cache_avail >= n)
 /* Get compressed data by bit. */
-#define lzh_br_bits(br, n) (((uint16_t)((br)->cache_buffer >> ((br)->cache_avail - (n)))) & cache_masks[n])
-#define lzh_br_bits_forced(br, n) (((uint16_t)((br)->cache_buffer << ((n) - (br)->cache_avail))) & cache_masks[n])
+#define lzh_br_bits(br, n) (((quint16)((br)->cache_buffer >> ((br)->cache_avail - (n)))) & cache_masks[n])
+#define lzh_br_bits_forced(br, n) (((quint16)((br)->cache_buffer << ((n) - (br)->cache_avail))) & cache_masks[n])
 /* Read ahead to make sure the cache buffer has enough compressed data we
  * will use.
  *  True  : completed, there is enough data in the cache buffer.
@@ -191,7 +191,7 @@ public:
     static void lzh_emit_window(struct lzh_stream *strm, size_t s);
     static int lzh_decode_huffman_tree(struct huffman *hf, unsigned rbits, int c);
     static inline int lzh_decode_huffman(struct huffman *hf, unsigned rbits);
-    static int lzh_make_fake_table(struct huffman *hf, uint16_t c);
+    static int lzh_make_fake_table(struct huffman *hf, quint16 c);
     static int lzh_read_pt_bitlen(struct lzh_stream *strm, int start, int end);
     static int lzh_make_huffman_table(struct huffman *hf);
     static void lzh_decode_free(struct lzh_stream *strm);

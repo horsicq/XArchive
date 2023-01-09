@@ -21,7 +21,7 @@
 
 #include "xcompress.h"
 
-static const uint16_t cache_masks[] = {0x0000, 0x0001, 0x0003, 0x0007, 0x000F, 0x001F, 0x003F, 0x007F, 0x00FF, 0x01FF,
+static const quint16 cache_masks[] = {0x0000, 0x0001, 0x0003, 0x0007, 0x000F, 0x001F, 0x003F, 0x007F, 0x00FF, 0x01FF,
                                        0x03FF, 0x07FF, 0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
 
 static const char bitlen_tbl[0x400] = {
@@ -117,7 +117,7 @@ bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, int tbl_bits)
             bits = tbl_bits;
         else
             bits = HTBL_BITS;
-        hf->tbl = (uint16_t *)malloc(((size_t)1 << bits) * sizeof(hf->tbl[0]));
+        hf->tbl = (quint16 *)malloc(((size_t)1 << bits) * sizeof(hf->tbl[0]));
     }
     if (hf->tree == NULL && tbl_bits > HTBL_BITS) {
         hf->tree_avail = 1 << (tbl_bits - HTBL_BITS + 4);
@@ -538,25 +538,25 @@ int XCompress::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
         if (strm->avail_in >= x) {
             switch (x) {
                 case 8:
-                    br->cache_buffer = ((uint64_t)strm->next_in[0]) << 56 | ((uint64_t)strm->next_in[1]) << 48 | ((uint64_t)strm->next_in[2]) << 40 |
-                                       ((uint64_t)strm->next_in[3]) << 32 | ((uint32_t)strm->next_in[4]) << 24 | ((uint32_t)strm->next_in[5]) << 16 |
-                                       ((uint32_t)strm->next_in[6]) << 8 | (uint32_t)strm->next_in[7];
+                    br->cache_buffer = ((quint64)strm->next_in[0]) << 56 | ((quint64)strm->next_in[1]) << 48 | ((quint64)strm->next_in[2]) << 40 |
+                                       ((quint64)strm->next_in[3]) << 32 | ((quint32)strm->next_in[4]) << 24 | ((quint32)strm->next_in[5]) << 16 |
+                                       ((quint32)strm->next_in[6]) << 8 | (quint32)strm->next_in[7];
                     strm->next_in += 8;
                     strm->avail_in -= 8;
                     br->cache_avail += 8 * 8;
                     return (1);
                 case 7:
-                    br->cache_buffer = (br->cache_buffer << 56) | ((uint64_t)strm->next_in[0]) << 48 | ((uint64_t)strm->next_in[1]) << 40 |
-                                       ((uint64_t)strm->next_in[2]) << 32 | ((uint32_t)strm->next_in[3]) << 24 | ((uint32_t)strm->next_in[4]) << 16 |
-                                       ((uint32_t)strm->next_in[5]) << 8 | (uint32_t)strm->next_in[6];
+                    br->cache_buffer = (br->cache_buffer << 56) | ((quint64)strm->next_in[0]) << 48 | ((quint64)strm->next_in[1]) << 40 |
+                                       ((quint64)strm->next_in[2]) << 32 | ((quint32)strm->next_in[3]) << 24 | ((quint32)strm->next_in[4]) << 16 |
+                                       ((quint32)strm->next_in[5]) << 8 | (quint32)strm->next_in[6];
                     strm->next_in += 7;
                     strm->avail_in -= 7;
                     br->cache_avail += 7 * 8;
                     return (1);
                 case 6:
-                    br->cache_buffer = (br->cache_buffer << 48) | ((uint64_t)strm->next_in[0]) << 40 | ((uint64_t)strm->next_in[1]) << 32 |
-                                       ((uint32_t)strm->next_in[2]) << 24 | ((uint32_t)strm->next_in[3]) << 16 | ((uint32_t)strm->next_in[4]) << 8 |
-                                       (uint32_t)strm->next_in[5];
+                    br->cache_buffer = (br->cache_buffer << 48) | ((quint64)strm->next_in[0]) << 40 | ((quint64)strm->next_in[1]) << 32 |
+                                       ((quint32)strm->next_in[2]) << 24 | ((quint32)strm->next_in[3]) << 16 | ((quint32)strm->next_in[4]) << 8 |
+                                       (quint32)strm->next_in[5];
                     strm->next_in += 6;
                     strm->avail_in -= 6;
                     br->cache_avail += 6 * 8;
@@ -619,7 +619,7 @@ int XCompress::lzh_decode_huffman(huffman *hf, unsigned rbits)
     return (lzh_decode_huffman_tree(hf, rbits, c));
 }
 
-int XCompress::lzh_make_fake_table(huffman *hf, uint16_t c)
+int XCompress::lzh_make_fake_table(huffman *hf, quint16 c)
 {
     if (c >= hf->len_size) return (0);
     hf->tbl[0] = c;
@@ -666,7 +666,7 @@ int XCompress::lzh_read_pt_bitlen(lzh_stream *strm, int start, int end)
 
 int XCompress::lzh_make_huffman_table(huffman *hf)
 {
-    uint16_t *tbl;
+    quint16 *tbl;
     const unsigned char *bitlen;
     int bitptn[17], weight[17];
     int i, maxbits = 0, ptn, tbl_size, w;
@@ -702,7 +702,7 @@ int XCompress::lzh_make_huffman_table(huffman *hf)
     }
     if (maxbits > HTBL_BITS) {
         unsigned htbl_max;
-        uint16_t *p;
+        quint16 *p;
 
         diffbits = maxbits - HTBL_BITS;
         for (i = 1; i <= HTBL_BITS; i++) {
@@ -725,9 +725,9 @@ int XCompress::lzh_make_huffman_table(huffman *hf)
     len_avail = hf->len_avail;
     hf->tree_used = 0;
     for (i = 0; i < len_avail; i++) {
-        uint16_t *p;
+        quint16 *p;
         int len, cnt;
-        uint16_t bit;
+        quint16 bit;
         int extlen;
         struct htree_t *ht;
 
@@ -742,34 +742,34 @@ int XCompress::lzh_make_huffman_table(huffman *hf)
             /* Update the table */
             p = &(tbl[ptn]);
             if (cnt > 7) {
-                uint16_t *pc;
+                quint16 *pc;
 
                 cnt -= 8;
                 pc = &p[cnt];
-                pc[0] = (uint16_t)i;
-                pc[1] = (uint16_t)i;
-                pc[2] = (uint16_t)i;
-                pc[3] = (uint16_t)i;
-                pc[4] = (uint16_t)i;
-                pc[5] = (uint16_t)i;
-                pc[6] = (uint16_t)i;
-                pc[7] = (uint16_t)i;
+                pc[0] = (quint16)i;
+                pc[1] = (quint16)i;
+                pc[2] = (quint16)i;
+                pc[3] = (quint16)i;
+                pc[4] = (quint16)i;
+                pc[5] = (quint16)i;
+                pc[6] = (quint16)i;
+                pc[7] = (quint16)i;
                 if (cnt > 7) {
                     cnt -= 8;
-                    memcpy(&p[cnt], pc, 8 * sizeof(uint16_t));
+                    memcpy(&p[cnt], pc, 8 * sizeof(quint16));
                     pc = &p[cnt];
                     while (cnt > 15) {
                         cnt -= 16;
-                        memcpy(&p[cnt], pc, 16 * sizeof(uint16_t));
+                        memcpy(&p[cnt], pc, 16 * sizeof(quint16));
                     }
                 }
-                if (cnt) memcpy(p, pc, cnt * sizeof(uint16_t));
+                if (cnt) memcpy(p, pc, cnt * sizeof(quint16));
             } else {
                 while (cnt > 1) {
-                    p[--cnt] = (uint16_t)i;
-                    p[--cnt] = (uint16_t)i;
+                    p[--cnt] = (quint16)i;
+                    p[--cnt] = (quint16)i;
                 }
-                if (cnt) p[--cnt] = (uint16_t)i;
+                if (cnt) p[--cnt] = (quint16)i;
             }
             continue;
         }
@@ -819,10 +819,10 @@ int XCompress::lzh_make_huffman_table(huffman *hf)
         }
         if (ptn & bit) {
             if (ht->left != 0) return (0); /* Invalid */
-            ht->left = (uint16_t)i;
+            ht->left = (quint16)i;
         } else {
             if (ht->right != 0) return (0); /* Invalid */
-            ht->right = (uint16_t)i;
+            ht->right = (quint16)i;
         }
     }
     return (1);
