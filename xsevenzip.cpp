@@ -52,6 +52,8 @@ QString XSevenZip::getVersion()
 
 quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     quint64 nResult = 0;
 
     SIGNATURERECORD signatureHeader = {};
@@ -75,16 +77,20 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
                     quint64 nPackPosition = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
                     quint64 nCountOfPack = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
+                    Q_UNUSED(nPackPosition)
+
                     if (bSuccess) {
                         for (qint32 i = 0; i < nCountOfPack; i++) {
                             quint64 nSizeOfPackStream = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
+                            Q_UNUSED(nSizeOfPackStream)
                             // TODO
                         }
 
                         for (qint32 i = 0; i < nCountOfPack; i++) {
                             quint64 nCRCOfPackStream = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
+                            Q_UNUSED(nCRCOfPackStream)
                             // TODO
                         }
                     }
@@ -99,6 +105,8 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
                     bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdFolder);
 
                     quint64 nNumberOfFolders = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+
+                    Q_UNUSED(nNumberOfFolders)
                     // qDebug("TEST");
                 }
             } else if (nHeaderId == k7zIdPackInfo) {

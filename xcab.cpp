@@ -64,6 +64,7 @@ quint64 XCab::getNumberOfRecords(PDSTRUCT *pPdStruct)
 QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
+    Q_UNUSED(pPdStruct)
 
     QList<XArchive::RECORD> listResult;
 

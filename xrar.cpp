@@ -67,6 +67,8 @@ QString XRar::getVersion()
 
 quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     return 0;  // TODO
 }
 
