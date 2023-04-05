@@ -30,23 +30,23 @@ public:
 #pragma pack(push)
 #pragma pack(1)
     struct CFHEADER {
-        quint8 signature[4];    // Cabinet file signature
-        quint32 reserved1;      // reserved
-        quint32 cbCabinet;      // size of this cabinet file in bytes
-        quint32 reserved2;      // reserved
-        quint32 coffFiles;      // offset of the first CFFILE entry
-        quint32 reserved3;      // reserved
-        quint8 versionMinor;    // cabinet file format version, minor
-        quint8 versionMajor;    // cabinet file format version, major
-        quint16 cFolders;       // number of CFFOLDER entries in this cabinet */
-        quint16 cFiles;         // number of CFFILE entries in this cabinet */
-        quint16 flags;          // cabinet file option indicators */
-        quint16 setID;          // must be the same for all cabinets in a set */
-        quint16 iCabinet;       // number of this cabinet file in a set */
+        quint8 signature[4];  // Cabinet file signature
+        quint32 reserved1;    // reserved
+        quint32 cbCabinet;    // size of this cabinet file in bytes
+        quint32 reserved2;    // reserved
+        quint32 coffFiles;    // offset of the first CFFILE entry
+        quint32 reserved3;    // reserved
+        quint8 versionMinor;  // cabinet file format version, minor
+        quint8 versionMajor;  // cabinet file format version, major
+        quint16 cFolders;     // number of CFFOLDER entries in this cabinet */
+        quint16 cFiles;       // number of CFFILE entries in this cabinet */
+        quint16 flags;        // cabinet file option indicators */
+        quint16 setID;        // must be the same for all cabinets in a set */
+        quint16 iCabinet;     // number of this cabinet file in a set */
         // Optional
-        quint16 cbCFHeader;     // (optional) size of per-cabinet reserved area */
-        quint8 cbCFFolder;      // (optional) size of per-folder reserved area */
-        quint8 cbCFData;        // (optional) size of per-datablock reserved area */
+        quint16 cbCFHeader;  // (optional) size of per-cabinet reserved area */
+        quint8 cbCFFolder;   // (optional) size of per-folder reserved area */
+        quint8 cbCFData;     // (optional) size of per-datablock reserved area */
         // u1  abReserve[];          /* (optional) per-cabinet reserved area */
         // u1  szCabinetPrev[];      /* (optional) name of previous cabinet file */
         // u1  szDiskPrev[];         /* (optional) name of previous disk */
