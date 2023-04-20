@@ -28,7 +28,7 @@ bool XGzip::isValid()
 {
     bool bResult = false;
 
-    if (getSize() > sizeof(GZIP_HEADER)) {
+    if (getSize() > (qint64)sizeof(GZIP_HEADER)) {
         quint16 nSignature = read_uint16(0);
 
         if (nSignature == 0x8B1F)  // TODO Const

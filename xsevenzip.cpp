@@ -80,14 +80,14 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
                     Q_UNUSED(nPackPosition)
 
                     if (bSuccess) {
-                        for (qint32 i = 0; i < nCountOfPack; i++) {
+                        for (quint64 i = 0; i < nCountOfPack; i++) {
                             quint64 nSizeOfPackStream = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
                             Q_UNUSED(nSizeOfPackStream)
                             // TODO
                         }
 
-                        for (qint32 i = 0; i < nCountOfPack; i++) {
+                        for (quint64 i = 0; i < nCountOfPack; i++) {
                             quint64 nCRCOfPackStream = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
                             Q_UNUSED(nCRCOfPackStream)
