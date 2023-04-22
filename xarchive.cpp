@@ -400,7 +400,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
             nMethod = 7;
         }
 
-        XCompress::lzh_stream strm = {0};
+        XCompress::lzh_stream strm = {};
 
         int ret = ARCHIVE_OK;
 
