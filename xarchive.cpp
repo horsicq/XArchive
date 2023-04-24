@@ -307,7 +307,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
         if (nPropSize && (nPropSize < 30)) {
             pSourceDevice->read((char *)properties, nPropSize);
 
-            CLzmaDec state = {0};
+            CLzmaDec state = {};
 
             SRes ret = LzmaProps_Decode(&state.prop, (Byte *)properties, nPropSize);
 
