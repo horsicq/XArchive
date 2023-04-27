@@ -190,7 +190,7 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(PDSTRUCT *pPdStruct)
         }
     }
 
-    result.nRawSize = nOffset;
+    result.nBinarySize = nOffset;
 
     return result;
 }

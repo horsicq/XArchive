@@ -163,7 +163,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(PDSTRUCT *pPdStruct)
 
     result.listRecords.append(memoryRecordFooter);
 
-    result.nRawSize = memoryRecordHeader.nSize + memoryRecord.nSize + memoryRecordFooter.nSize;
+    result.nBinarySize = memoryRecordHeader.nSize + memoryRecord.nSize + memoryRecordFooter.nSize;
 
     return result;
 }

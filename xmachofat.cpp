@@ -149,7 +149,7 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(PDSTRUCT *pPdStruct)
     XBinary::_MEMORY_MAP result = {};
 
     result.bIsBigEndian = isBigEndian();
-    result.nRawSize = getSize();
+    result.nBinarySize = getSize();
 
     qint32 nIndex = 0;
 

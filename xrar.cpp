@@ -117,7 +117,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(PDSTRUCT *pPdStruct)
 
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap(pPdStruct);
 
-    result.nRawSize = getSize();
+    result.nBinarySize = getSize();
 
     qint64 nFileHeaderSize = 0;
 
