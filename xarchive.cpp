@@ -298,7 +298,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
         // TODO more error codes
         qint32 nPropSize = 0;
-        char header1[4] = {0};
+        char header1[4] = {};
         quint8 properties[32] = {0};
 
         pSourceDevice->read(header1, sizeof(header1));
