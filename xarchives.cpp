@@ -67,7 +67,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit,
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QString sFileName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+QList<XArchive::RECORD> XArchives::getRecords(const QString &sFileName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
 
