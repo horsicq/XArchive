@@ -603,7 +603,7 @@ QByteArray XArchive::decompress(QString sRecordFileName, PDSTRUCT *pPdStruct)
     return decompress(&listArchive, sRecordFileName, pPdStruct);
 }
 
-bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, QString sResultFileName, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 

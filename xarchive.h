@@ -91,7 +91,7 @@ public:
     QByteArray decompress(const RECORD *pRecord, bool bHeaderOnly, PDSTRUCT *pPdStruct);
     QByteArray decompress(QList<RECORD> *pListArchive, const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     QByteArray decompress(QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
-    bool decompressToFile(const RECORD *pRecord, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToFile(const RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(QList<RECORD> *pListArchive, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToPath(QList<RECORD> *pListArchive, QString sRecordFileName, QString sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(QString sArchiveFileName, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
