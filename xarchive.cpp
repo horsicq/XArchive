@@ -596,7 +596,7 @@ QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive, const QSt
     return baResult;
 }
 
-QByteArray XArchive::decompress(QString sRecordFileName, PDSTRUCT *pPdStruct)
+QByteArray XArchive::decompress(const QString &sRecordFileName, PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listArchive = getRecords(-1, pPdStruct);
 

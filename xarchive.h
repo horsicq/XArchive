@@ -90,7 +90,7 @@ public:
                                             qint32 nStrategy);  // TODO PDSTRUCT
     QByteArray decompress(const RECORD *pRecord, bool bHeaderOnly, PDSTRUCT *pPdStruct);
     QByteArray decompress(QList<RECORD> *pListArchive, const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
-    QByteArray decompress(QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
+    QByteArray decompress(const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(const RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(QList<RECORD> *pListArchive, QString sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToPath(QList<RECORD> *pListArchive, QString sRecordFileName, QString sResultPathName, PDSTRUCT *pPdStruct = nullptr);
