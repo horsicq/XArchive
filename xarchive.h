@@ -92,10 +92,10 @@ public:
     QByteArray decompress(QList<RECORD> *pListArchive, const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     QByteArray decompress(const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(const RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
-    bool decompressToFile(QList<RECORD> *pListArchive, const QString &sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
-    bool decompressToPath(QList<RECORD> *pListArchive, const QString &sRecordFileName, QString sResultPathName, PDSTRUCT *pPdStruct = nullptr);
-    bool decompressToFile(QString sArchiveFileName, const QString &sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct = nullptr);
-    bool decompressToPath(QString sArchiveFileName, const QString &sRecordPathName, QString sResultPathName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToFile(QList<RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToPath(QList<RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToFile(QString sArchiveFileName, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToPath(QString sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool dumpToFile(const RECORD *pRecord, QString sFileName, PDSTRUCT *pPdStruct = nullptr);
     static RECORD getArchiveRecord(QString sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
     bool isArchiveRecordPresent(QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);

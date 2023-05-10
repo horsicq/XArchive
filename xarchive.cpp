@@ -633,7 +633,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
     return bResult;
 }
 
-bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, const QString &sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -647,7 +647,7 @@ bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, const QSt
     return bResult;
 }
 
-bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QString &sRecordFileName, QString sResultPathName, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultPathName, PDSTRUCT *pPdStruct)
 {
     bool bResult = true;
 
@@ -687,7 +687,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
     return bResult;
 }
 
-bool XArchive::decompressToFile(QString sArchiveFileName, const QString &sRecordFileName, QString sResultFileName, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToFile(QString sArchiveFileName, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -710,7 +710,7 @@ bool XArchive::decompressToFile(QString sArchiveFileName, const QString &sRecord
     return bResult;
 }
 
-bool XArchive::decompressToPath(QString sArchiveFileName, const QString &sRecordPathName, QString sResultPathName, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToPath(QString sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
