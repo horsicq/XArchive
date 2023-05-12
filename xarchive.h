@@ -96,7 +96,7 @@ public:
     bool decompressToPath(QList<RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(const QString &sArchiveFileName, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToPath(const QString &sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
-    bool dumpToFile(const RECORD *pRecord, QString sFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool dumpToFile(const RECORD *pRecord, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr);
     static RECORD getArchiveRecord(QString sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
     bool isArchiveRecordPresent(QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveRecordPresent(QString sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);

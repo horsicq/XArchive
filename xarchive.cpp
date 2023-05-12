@@ -733,7 +733,7 @@ bool XArchive::decompressToPath(const QString &sArchiveFileName, const QString &
     return bResult;
 }
 
-bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, QString sFileName, PDSTRUCT *pPdStruct)
+bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, const QString &sFileName, PDSTRUCT *pPdStruct)
 {
     return XBinary::dumpToFile(sFileName, pRecord->nDataOffset, pRecord->nCompressedSize, pPdStruct);
 }
