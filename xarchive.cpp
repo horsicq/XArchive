@@ -738,7 +738,7 @@ bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, const QString &sFileN
     return XBinary::dumpToFile(sFileName, pRecord->nDataOffset, pRecord->nCompressedSize, pPdStruct);
 }
 
-XArchive::RECORD XArchive::getArchiveRecord(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+XArchive::RECORD XArchive::getArchiveRecord(const QString &sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
