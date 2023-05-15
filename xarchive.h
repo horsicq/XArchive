@@ -98,7 +98,7 @@ public:
     bool decompressToPath(const QString &sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool dumpToFile(const RECORD *pRecord, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr);
     static RECORD getArchiveRecord(const QString &sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
-    bool isArchiveRecordPresent(QString sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
+    bool isArchiveRecordPresent(const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveRecordPresent(QString sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();

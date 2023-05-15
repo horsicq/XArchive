@@ -760,7 +760,7 @@ XArchive::RECORD XArchive::getArchiveRecord(const QString &sRecordFileName, QLis
     return result;
 }
 
-bool XArchive::isArchiveRecordPresent(QString sRecordFileName, PDSTRUCT *pPdStruct)
+bool XArchive::isArchiveRecordPresent(const QString &sRecordFileName, PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listRecords = getRecords(-1, pPdStruct);
 
