@@ -767,7 +767,7 @@ bool XArchive::isArchiveRecordPresent(const QString &sRecordFileName, PDSTRUCT *
     return isArchiveRecordPresent(sRecordFileName, &listRecords, pPdStruct);
 }
 
-bool XArchive::isArchiveRecordPresent(QString sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+bool XArchive::isArchiveRecordPresent(const QString &sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     return (!getArchiveRecord(sRecordFileName, pListRecords, pPdStruct).sFileName.isEmpty());
 }
