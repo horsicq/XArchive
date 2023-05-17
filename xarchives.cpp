@@ -84,7 +84,7 @@ QList<XArchive::RECORD> XArchives::getRecords(const QString &sFileName, qint32 n
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(const QString &sDirectoryName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
 

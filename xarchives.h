@@ -41,7 +41,7 @@ public:
 
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QList<XArchive::RECORD> getRecords(const QString &sFileName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QList<XArchive::RECORD> getRecordsFromDirectory(QString sDirectoryName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static QList<XArchive::RECORD> getRecordsFromDirectory(const QString &sDirectoryName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QString sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QIODevice *pDevice, QString sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
