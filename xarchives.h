@@ -43,9 +43,9 @@ public:
     static QList<XArchive::RECORD> getRecords(const QString &sFileName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QList<XArchive::RECORD> getRecordsFromDirectory(const QString &sDirectoryName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QByteArray decompress(QString sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static QByteArray decompress(const QString &sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QIODevice *pDevice, QString sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QByteArray decompress(QString sFileName, QString sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static QByteArray decompress(const QString &sFileName, QString sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(QString sFileName, QString sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);

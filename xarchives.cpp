@@ -128,7 +128,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     return baResult;
 }
 
-QByteArray XArchives::decompress(QString sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XArchives::decompress(const QString &sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
 {
     QByteArray baResult;
 
@@ -154,7 +154,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, QString sRecordFileName, bo
     return decompress(pDevice, &record, bHeaderOnly, pPdStruct);
 }
 
-QByteArray XArchives::decompress(QString sFileName, QString sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XArchives::decompress(const QString &sFileName, QString sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
 {
     QByteArray baResult;
 
