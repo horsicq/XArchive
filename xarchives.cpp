@@ -387,7 +387,7 @@ bool XArchives::isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvaila
     return bResult;
 }
 
-void XArchives::_findFiles(QString sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+void XArchives::_findFiles(const QString &sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
         QFileInfo fi(sDirectoryName);
