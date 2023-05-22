@@ -45,7 +45,7 @@ public:
     static QByteArray decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(const QString &sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QIODevice *pDevice, const QString &sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QByteArray decompress(const QString &sFileName, QString sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static QByteArray decompress(const QString &sFileName, const QString &sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(QString sFileName, QString sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
