@@ -171,7 +171,7 @@ QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecor
     return baResult;
 }
 
-bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
