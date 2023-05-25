@@ -210,7 +210,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     return bResult;
 }
 
-bool XArchives::decompressToFile(QString sFileName, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToFile(const QString &sFileName, XArchive::RECORD *pRecord, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
