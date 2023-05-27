@@ -54,7 +54,7 @@ public:
     static bool isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileName);
     static bool isArchiveRecordPresent(QString sFileName, QString sRecordFileName);
     static bool isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvailable);
-    static bool isArchiveOpenValid(QString sFileName, QSet<XBinary::FT> stAvailable);
+    static bool isArchiveOpenValid(const QString &sFileName, QSet<XBinary::FT> stAvailable);
 
 private:
     static void _findFiles(const QString &sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit,
