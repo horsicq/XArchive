@@ -48,7 +48,7 @@ public:
     static QByteArray decompress(const QString &sFileName, const QString &sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(const QString &sFileName, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decompressToFile(QString sFileName, QString sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompressToFile(const QString &sFileName, QString sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(QIODevice *pDevice, QString sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(QString sFileName, QString sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileName);
