@@ -331,7 +331,7 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileNa
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QString sFileName, QString sRecordFileName)
+bool XArchives::isArchiveRecordPresent(const QString &sFileName, QString sRecordFileName)
 {
     bool bResult = false;
 
