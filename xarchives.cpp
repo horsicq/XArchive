@@ -295,7 +295,7 @@ bool XArchives::decompressToFolder(QString sFileName, QString sResultFileFolder,
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, QString sRecordFileName)
+bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName)
 {
     bool bResult = false;
 
