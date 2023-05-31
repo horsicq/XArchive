@@ -278,7 +278,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, QString sResultFileFolder
     return bResult;
 }
 
-bool XArchives::decompressToFolder(QString sFileName, QString sResultFileFolder, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToFolder(const QString &sFileName, QString sResultFileFolder, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
