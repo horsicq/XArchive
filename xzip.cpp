@@ -590,7 +590,7 @@ qint64 XZip::getFileFormatSize()
 
             if (nSignature == SIGNATURE_CFD) {
                 nResult = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
-                if(nStartOffset == 0) {
+                if (nStartOffset == 0) {
                     break;
                 }
             }
