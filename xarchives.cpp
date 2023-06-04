@@ -227,7 +227,7 @@ bool XArchives::decompressToFile(const QString &sFileName, XArchive::RECORD *pRe
     return bResult;
 }
 
-bool XArchives::decompressToFile(const QString &sFileName, QString sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecordFileName, QString sResultFileName, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
