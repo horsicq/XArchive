@@ -75,8 +75,7 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, int method)
         case 7:
             w_bits = 16; /* 64KiB for window */
             break;
-        default:
-            return false; /* Not supported. */
+        default: return false; /* Not supported. */
     }
     /* Expand a window size up to 128 KiB for decompressing process
      * performance whatever its original window size is. */
@@ -348,8 +347,7 @@ int XCompress::lzh_read_blocks(lzh_stream *strm, int last)
                 ds->reading_position = 1;
                 ds->state = ST_RD_PT_1;
                 break;
-            case ST_GET_LITERAL:
-                return (100);
+            case ST_GET_LITERAL: return (100);
         }
     }
 failed:
@@ -565,8 +563,7 @@ int XCompress::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
                     /* We have enough compressed data in
                      * the cache buffer.*/
                     return (1);
-                default:
-                    break;
+                default: break;
             }
         }
         if (strm->avail_in == 0) {

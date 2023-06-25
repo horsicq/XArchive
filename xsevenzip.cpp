@@ -479,84 +479,32 @@ QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
     QString sResult = tr("Unknown");
 
     switch (id) {
-        case k7zIdEnd:
-            sResult = QString("k7zIdEnd");
-            break;
-        case k7zIdHeader:
-            sResult = QString("k7zIdHeader");
-            break;
-        case k7zIdArchiveProperties:
-            sResult = QString("k7zIdArchiveProperties");
-            break;
-        case k7zIdAdditionalStreamsInfo:
-            sResult = QString("k7zIdAdditionalStreamsInfo");
-            break;
-        case k7zIdMainStreamsInfo:
-            sResult = QString("k7zIdMainStreamsInfo");
-            break;
-        case k7zIdFilesInfo:
-            sResult = QString("k7zIdFilesInfo");
-            break;
-        case k7zIdPackInfo:
-            sResult = QString("k7zIdPackInfo");
-            break;
-        case k7zIdUnpackInfo:
-            sResult = QString("k7zIdUnpackInfo");
-            break;
-        case k7zIdSubStreamsInfo:
-            sResult = QString("k7zIdSubStreamsInfo");
-            break;
-        case k7zIdSize:
-            sResult = QString("k7zIdSize");
-            break;
-        case k7zIdCRC:
-            sResult = QString("k7zIdCRC");
-            break;
-        case k7zIdFolder:
-            sResult = QString("k7zIdFolder");
-            break;
-        case k7zIdCodersUnpackSize:
-            sResult = QString("k7zIdCodersUnpackSize");
-            break;
-        case k7zIdNumUnpackStream:
-            sResult = QString("k7zIdNumUnpackStream");
-            break;
-        case k7zIdEmptyStream:
-            sResult = QString("k7zIdEmptyStream");
-            break;
-        case k7zIdEmptyFile:
-            sResult = QString("k7zIdEmptyFile");
-            break;
-        case k7zIdAnti:
-            sResult = QString("k7zIdAnti");
-            break;
-        case k7zIdName:
-            sResult = QString("k7zIdName");
-            break;
-        case k7zIdCTime:
-            sResult = QString("k7zIdCTime");
-            break;
-        case k7zIdATime:
-            sResult = QString("k7zIdATime");
-            break;
-        case k7zIdMTime:
-            sResult = QString("k7zIdMTime");
-            break;
-        case k7zIdWinAttrib:
-            sResult = QString("k7zIdWinAttrib");
-            break;
-        case k7zIdComment:
-            sResult = QString("k7zIdComment");
-            break;
-        case k7zIdEncodedHeader:
-            sResult = QString("k7zIdEncodedHeader");
-            break;
-        case k7zIdStartPos:
-            sResult = QString("k7zIdStartPos");
-            break;
-        case k7zIdDummy:
-            sResult = QString("k7zIdDummy");
-            break;
+        case k7zIdEnd: sResult = QString("k7zIdEnd"); break;
+        case k7zIdHeader: sResult = QString("k7zIdHeader"); break;
+        case k7zIdArchiveProperties: sResult = QString("k7zIdArchiveProperties"); break;
+        case k7zIdAdditionalStreamsInfo: sResult = QString("k7zIdAdditionalStreamsInfo"); break;
+        case k7zIdMainStreamsInfo: sResult = QString("k7zIdMainStreamsInfo"); break;
+        case k7zIdFilesInfo: sResult = QString("k7zIdFilesInfo"); break;
+        case k7zIdPackInfo: sResult = QString("k7zIdPackInfo"); break;
+        case k7zIdUnpackInfo: sResult = QString("k7zIdUnpackInfo"); break;
+        case k7zIdSubStreamsInfo: sResult = QString("k7zIdSubStreamsInfo"); break;
+        case k7zIdSize: sResult = QString("k7zIdSize"); break;
+        case k7zIdCRC: sResult = QString("k7zIdCRC"); break;
+        case k7zIdFolder: sResult = QString("k7zIdFolder"); break;
+        case k7zIdCodersUnpackSize: sResult = QString("k7zIdCodersUnpackSize"); break;
+        case k7zIdNumUnpackStream: sResult = QString("k7zIdNumUnpackStream"); break;
+        case k7zIdEmptyStream: sResult = QString("k7zIdEmptyStream"); break;
+        case k7zIdEmptyFile: sResult = QString("k7zIdEmptyFile"); break;
+        case k7zIdAnti: sResult = QString("k7zIdAnti"); break;
+        case k7zIdName: sResult = QString("k7zIdName"); break;
+        case k7zIdCTime: sResult = QString("k7zIdCTime"); break;
+        case k7zIdATime: sResult = QString("k7zIdATime"); break;
+        case k7zIdMTime: sResult = QString("k7zIdMTime"); break;
+        case k7zIdWinAttrib: sResult = QString("k7zIdWinAttrib"); break;
+        case k7zIdComment: sResult = QString("k7zIdComment"); break;
+        case k7zIdEncodedHeader: sResult = QString("k7zIdEncodedHeader"); break;
+        case k7zIdStartPos: sResult = QString("k7zIdStartPos"); break;
+        case k7zIdDummy: sResult = QString("k7zIdDummy"); break;
     }
 
     return sResult;

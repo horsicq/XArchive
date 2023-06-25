@@ -660,24 +660,12 @@ XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod)
     COMPRESS_METHOD result = COMPRESS_METHOD_UNKNOWN;
 
     switch (nZipMethod) {
-        case METHOD_STORE:
-            result = COMPRESS_METHOD_STORE;
-            break;
-        case METHOD_DEFLATE:
-            result = COMPRESS_METHOD_DEFLATE;
-            break;
-        case METHOD_DEFLATE64:
-            result = COMPRESS_METHOD_DEFLATE64;
-            break;  // TODO
-        case METHOD_BZIP2:
-            result = COMPRESS_METHOD_BZIP2;
-            break;
-        case METHOD_LZMA:
-            result = COMPRESS_METHOD_LZMA_ZIP;
-            break;
-        case METHOD_PPMD:
-            result = COMPRESS_METHOD_PPMD;
-            break;  // TODO
+        case METHOD_STORE: result = COMPRESS_METHOD_STORE; break;
+        case METHOD_DEFLATE: result = COMPRESS_METHOD_DEFLATE; break;
+        case METHOD_DEFLATE64: result = COMPRESS_METHOD_DEFLATE64; break;  // TODO
+        case METHOD_BZIP2: result = COMPRESS_METHOD_BZIP2; break;
+        case METHOD_LZMA: result = COMPRESS_METHOD_LZMA_ZIP; break;
+        case METHOD_PPMD: result = COMPRESS_METHOD_PPMD; break;  // TODO
     }
     // TODO more methods
 
