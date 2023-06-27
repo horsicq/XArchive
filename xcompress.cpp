@@ -112,10 +112,8 @@ bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, int tbl_bits)
         hf->bitlen = (unsigned char *)malloc(len_size * sizeof(hf->bitlen[0]));
     }
     if (hf->tbl == NULL) {
-        if (tbl_bits < HTBL_BITS)
-            bits = tbl_bits;
-        else
-            bits = HTBL_BITS;
+        if (tbl_bits < HTBL_BITS) bits = tbl_bits;
+        else bits = HTBL_BITS;
         hf->tbl = (quint16 *)malloc(((size_t)1 << bits) * sizeof(hf->tbl[0]));
     }
     if (hf->tree == NULL && tbl_bits > HTBL_BITS) {
@@ -138,10 +136,8 @@ int XCompress::lzh_decode(lzh_stream *strm, int last)
 
     avail_in = strm->avail_in;
     do {
-        if (ds->state < ST_GET_LITERAL)
-            r = lzh_read_blocks(strm, last);
-        else
-            r = lzh_decode_blocks(strm, last);
+        if (ds->state < ST_GET_LITERAL) r = lzh_read_blocks(strm, last);
+        else r = lzh_decode_blocks(strm, last);
     } while (r == 100);
     strm->total_in += avail_in - strm->avail_in;
     return (r);
@@ -218,13 +214,10 @@ int XCompress::lzh_read_blocks(lzh_stream *strm, int last)
                     }
                     if (!lzh_make_fake_table(&(ds->pt), lzh_br_bits(br, ds->pt.len_bits))) goto failed; /* Invalid data. */
                     lzh_br_consume(br, ds->pt.len_bits);
-                    if (ds->reading_position)
-                        ds->state = ST_GET_LITERAL;
-                    else
-                        ds->state = ST_RD_LITERAL_1;
+                    if (ds->reading_position) ds->state = ST_GET_LITERAL;
+                    else ds->state = ST_RD_LITERAL_1;
                     break;
-                } else if (ds->pt.len_avail > ds->pt.len_size)
-                    goto failed; /* Invalid data. */
+                } else if (ds->pt.len_avail > ds->pt.len_size) goto failed; /* Invalid data. */
                 ds->loop = 0;
                 memset(ds->pt.freq, 0, sizeof(ds->pt.freq));
                 if (ds->pt.len_avail < 3 || ds->pt.len_size == ds->pos_pt_len_size) {
@@ -287,8 +280,7 @@ int XCompress::lzh_read_blocks(lzh_stream *strm, int last)
                     lzh_br_consume(br, ds->lt.len_bits);
                     ds->state = ST_RD_POS_DATA_1;
                     break;
-                } else if (ds->lt.len_avail > ds->lt.len_size)
-                    goto failed; /* Invalid data */
+                } else if (ds->lt.len_avail > ds->lt.len_size) goto failed; /* Invalid data */
                 ds->loop = 0;
                 memset(ds->lt.freq, 0, sizeof(ds->lt.freq));
                 /* FALL THROUGH */
@@ -499,8 +491,7 @@ int XCompress::lzh_decode_blocks(lzh_stream *strm, int last)
                     if (w_pos == w_size) {
                         w_pos = 0;
                         lzh_emit_window(strm, w_size);
-                        if (copy_len <= l)
-                            state = ST_GET_LITERAL;
+                        if (copy_len <= l) state = ST_GET_LITERAL;
                         else {
                             state = ST_COPY_DATA;
                             ds->copy_len = copy_len - l;
@@ -595,10 +586,8 @@ int XCompress::lzh_decode_huffman_tree(huffman *hf, unsigned rbits, int c)
     while (c >= hf->len_avail) {
         c -= hf->len_avail;
         if (extlen-- <= 0 || c >= hf->tree_used) return (0);
-        if (rbits & (1U << extlen))
-            c = ht[c].left;
-        else
-            c = ht[c].right;
+        if (rbits & (1U << extlen)) c = ht[c].left;
+        else c = ht[c].right;
     }
     return (c);
 }
@@ -649,12 +638,9 @@ int XCompress::lzh_read_pt_bitlen(lzh_stream *strm, int start, int end)
         if ((c = lzh_br_bits(br, 3)) == 7) {
             if (!lzh_br_read_ahead(strm, br, 13)) return (i);
             c = bitlen_tbl[lzh_br_bits(br, 13) & 0x3FF];
-            if (c)
-                lzh_br_consume(br, c - 3);
-            else
-                return (-1); /* Invalid data. */
-        } else
-            lzh_br_consume(br, 3);
+            if (c) lzh_br_consume(br, c - 3);
+            else return (-1); /* Invalid data. */
+        } else lzh_br_consume(br, 3);
         ds->pt.bitlen[i++] = c;
         ds->pt.freq[c]++;
     }
@@ -709,8 +695,7 @@ int XCompress::lzh_make_huffman_table(huffman *hf)
         htbl_max = bitptn[HTBL_BITS] + weight[HTBL_BITS] * hf->freq[HTBL_BITS];
         p = &(hf->tbl[htbl_max]);
         while (p < &hf->tbl[1U << HTBL_BITS]) *p++ = 0;
-    } else
-        diffbits = 0;
+    } else diffbits = 0;
     hf->shift_bits = diffbits;
 
     /*
