@@ -72,7 +72,6 @@ QList<XArchive::RECORD> XArchives::getRecords(const QString &sFileName, qint32 n
     QList<XArchive::RECORD> listResult;
 
     QFile file;
-
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
@@ -133,7 +132,6 @@ QByteArray XArchives::decompress(const QString &sFileName, XArchive::RECORD *pRe
     QByteArray baResult;
 
     QFile file;
-
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
@@ -159,7 +157,6 @@ QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecor
     QByteArray baResult;
 
     QFile file;
-
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
@@ -215,7 +212,6 @@ bool XArchives::decompressToFile(const QString &sFileName, XArchive::RECORD *pRe
     bool bResult = false;
 
     QFile file;
-
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
@@ -232,7 +228,6 @@ bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecor
     bool bResult = false;
 
     QFile file;
-
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
@@ -283,7 +278,6 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
     bool bResult = false;
 
     QFile file;
-
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
@@ -336,7 +330,6 @@ bool XArchives::isArchiveRecordPresent(const QString &sFileName, const QString &
     bool bResult = false;
 
     QFile file;
-
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
@@ -375,7 +368,6 @@ bool XArchives::isArchiveOpenValid(const QString &sFileName, QSet<XBinary::FT> s
     bool bResult = false;
 
     QFile file;
-
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
