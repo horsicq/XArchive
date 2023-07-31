@@ -692,7 +692,6 @@ bool XArchive::decompressToFile(const QString &sArchiveFileName, const QString &
     bool bResult = false;
 
     QFile file;
-
     file.setFileName(sArchiveFileName);
 
     if (file.open(QIODevice::ReadOnly)) {

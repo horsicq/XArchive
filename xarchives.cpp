@@ -136,7 +136,6 @@ QByteArray XArchives::decompress(const QString &sFileName, XArchive::RECORD *pRe
 
     if (file.open(QIODevice::ReadOnly)) {
         baResult = decompress(&file, pRecord, bHeaderOnly, pPdStruct);
-
         file.close();
     }
 
@@ -161,7 +160,6 @@ QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecor
 
     if (file.open(QIODevice::ReadOnly)) {
         baResult = decompress(&file, sRecordFileName, bHeaderOnly, pPdStruct);
-
         file.close();
     }
 
@@ -282,7 +280,6 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
 
     if (file.open(QIODevice::ReadOnly)) {
         bResult = decompressToFolder(&file, sResultFileFolder, pPdStruct);
-
         file.close();
     }
 
@@ -334,7 +331,6 @@ bool XArchives::isArchiveRecordPresent(const QString &sFileName, const QString &
 
     if (file.open(QIODevice::ReadOnly)) {
         bResult = isArchiveRecordPresent(&file, sRecordFileName);
-
         file.close();
     }
 
@@ -372,7 +368,6 @@ bool XArchives::isArchiveOpenValid(const QString &sFileName, QSet<XBinary::FT> s
 
     if (file.open(QIODevice::ReadOnly)) {
         bResult = isArchiveOpenValid(&file, stAvailable);
-
         file.close();
     }
 
