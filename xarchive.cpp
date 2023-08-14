@@ -402,7 +402,7 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
 
         XCompress::lzh_stream strm = {};
 
-        int ret = ARCHIVE_OK;
+        qint32 ret = ARCHIVE_OK;
 
         //        qDebug("Size: %lld", pSourceDevice->size());
 
