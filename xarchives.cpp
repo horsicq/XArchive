@@ -359,7 +359,7 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvail
     return bResult;
 }
 
-bool XArchives::isArchiveOpenValid(const QString &sFileName, QSet<XBinary::FT> stAvailable)
+bool XArchives::isArchiveOpenValid(const QString &sFileName, const QSet<XBinary::FT> &stAvailable)
 {
     bool bResult = false;
 
