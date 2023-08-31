@@ -376,32 +376,34 @@ bool XArchives::isArchiveOpenValid(const QString &sFileName, const QSet<XBinary:
 
 void XArchives::_findFiles(const QString &sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
-    if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
-        QFileInfo fi(sDirectoryName);
+    if (!(pPdStruct->bIsStop)) {
+        if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
+            QFileInfo fi(sDirectoryName);
 
-        if (fi.isFile()) {
-            XArchive::RECORD record = {};
+            if (fi.isFile()) {
+                XArchive::RECORD record = {};
 
-            record.compressMethod = XArchive::COMPRESS_METHOD_FILE;
-            record.sFileName = fi.absoluteFilePath();
-            record.nCompressedSize = fi.size();
-            record.nUncompressedSize = fi.size();
+                record.compressMethod = XArchive::COMPRESS_METHOD_FILE;
+                record.sFileName = fi.absoluteFilePath();
+                record.nCompressedSize = fi.size();
+                record.nUncompressedSize = fi.size();
 
-            if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
-                pListRecords->append(record);
-            }
-        } else if (fi.isDir()) {
-            QDir dir(sDirectoryName);
+                if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
+                    pListRecords->append(record);
+                }
+            } else if (fi.isDir()) {
+                QDir dir(sDirectoryName);
 
-            QFileInfoList eil = dir.entryInfoList();
+                QFileInfoList eil = dir.entryInfoList();
 
-            qint32 nNumberOfFiles = eil.count();
+                qint32 nNumberOfFiles = eil.count();
 
-            for (qint32 i = 0; (i < nNumberOfFiles) && (!(pPdStruct->bIsStop)); i++) {
-                QString sFN = eil.at(i).fileName();
+                for (qint32 i = 0; (i < nNumberOfFiles) && (!(pPdStruct->bIsStop)); i++) {
+                    QString sFN = eil.at(i).fileName();
 
-                if ((sFN != ".") && (sFN != "..")) {
-                    _findFiles(eil.at(i).absoluteFilePath(), pListRecords, nLimit, pPdStruct);
+                    if ((sFN != ".") && (sFN != "..")) {
+                        _findFiles(eil.at(i).absoluteFilePath(), pListRecords, nLimit, pPdStruct);
+                    }
                 }
             }
         }
