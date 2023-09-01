@@ -337,23 +337,25 @@ bool XArchives::isArchiveRecordPresent(const QString &sFileName, const QString &
     return bResult;
 }
 
-bool XArchives::isArchiveOpenValid(QIODevice *pDevice, QSet<XBinary::FT> stAvailable)
+bool XArchives::isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &stAvailable)
 {
     bool bResult = false;
+
+    QSet<XBinary::FT> _stAvailable = stAvailable;
 
     if (pDevice) {
         QSet<XBinary::FT> stFT = XBinary::getFileTypes(pDevice, true);
 
-        if (!stAvailable.count()) {
-            stAvailable.insert(XBinary::FT_ZIP);
-            stAvailable.insert(XBinary::FT_MACHOFAT);
-            stAvailable.insert(XBinary::FT_AR);
-            stAvailable.insert(XBinary::FT_GZIP);
-            stAvailable.insert(XBinary::FT_ZLIB);
-            stAvailable.insert(XBinary::FT_LHA);
+        if (!_stAvailable.count()) {
+            _stAvailable.insert(XBinary::FT_ZIP);
+            _stAvailable.insert(XBinary::FT_MACHOFAT);
+            _stAvailable.insert(XBinary::FT_AR);
+            _stAvailable.insert(XBinary::FT_GZIP);
+            _stAvailable.insert(XBinary::FT_ZLIB);
+            _stAvailable.insert(XBinary::FT_LHA);
         }
 
-        bResult = XBinary::isFileTypePresent(&stFT, &stAvailable);
+        bResult = XBinary::isFileTypePresent(&stFT, &_stAvailable);
     }
 
     return bResult;
