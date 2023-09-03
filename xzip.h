@@ -144,7 +144,6 @@ public:
     virtual bool isEncrypted();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
-
     virtual bool isSigned();
     virtual OFFSETSIZE getSignOffsetSize();
 
