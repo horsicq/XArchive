@@ -9,12 +9,6 @@ DEPENDPATH += $$PWD/lzma
 
 include(../../build.pri)
 
-CONFIG(debug, debug|release) {
-    TARGET = lzmad
-} else {
-    TARGET = lzma
-}
-
 win32{
     TARGET = lzma-win-$${QT_ARCH}
 }

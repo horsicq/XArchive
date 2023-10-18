@@ -9,12 +9,6 @@ DEPENDPATH += $$PWD/bzip2
 
 include(../../build.pri)
 
-CONFIG(debug, debug|release) {
-    TARGET = bzip2d
-} else {
-    TARGET = bzip2
-}
-
 win32{
     TARGET = bzip2-win-$${QT_ARCH}
 }

@@ -9,12 +9,6 @@ DEPENDPATH += $$PWD/zlib
 
 include(../../build.pri)
 
-CONFIG(debug, debug|release) {
-    TARGET = zlibd
-} else {
-    TARGET = zlib
-}
-
 win32{
     TARGET = zlib-win-$${QT_ARCH}
 }
