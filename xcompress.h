@@ -182,7 +182,7 @@ public:
 
     XCompress();
 
-    static bool lzh_decode_init(struct lzh_stream *strm, qint32 method);
+    static bool lzh_decode_init(struct lzh_stream *strm, int method);
     static bool lzh_huffman_init(struct huffman *hf, size_t len_size, int tbl_bits);
     static int lzh_decode(struct lzh_stream *strm, int last);
     static int lzh_read_blocks(struct lzh_stream *strm, int last);
