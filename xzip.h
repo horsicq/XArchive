@@ -58,14 +58,14 @@ public:
     //    98 - PPMd version I, Rev 1
     //    99 - Apple LZFSE
 
-    enum METHOD {
-        METHOD_STORE = 0,
-        METHOD_DEFLATE = 8,
-        METHOD_DEFLATE64 = 9,
-        METHOD_BZIP2 = 12,
-        METHOD_LZMA = 14,
-        METHOD_PPMD = 98,
-        METHOD_LZFSE = 99,  // Apple
+    enum CMETHOD {
+        CMETHOD_STORE = 0,
+        CMETHOD_DEFLATE = 8,
+        CMETHOD_DEFLATE64 = 9,
+        CMETHOD_BZIP2 = 12,
+        CMETHOD_LZMA = 14,
+        CMETHOD_PPMD = 98,
+        CMETHOD_LZFSE = 99,  // Apple
     };
 
 #pragma pack(push)
@@ -127,7 +127,7 @@ public:
         quint16 nVersion;
         quint16 nMinVersion;
         quint16 nFlags;
-        METHOD method;
+        CMETHOD method;
         QDateTime dtTime;
         quint32 nCRC32;
         qint64 nCompressedSize;
