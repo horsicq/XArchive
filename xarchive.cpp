@@ -448,8 +448,14 @@ XArchive::COMPRESS_RESULT XArchive::decompress(XArchive::COMPRESS_METHOD compres
     return result;
 }
 
-XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice)
+XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
 {
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (pPdStruct == nullptr) {
+        pPdStruct = &pdStructEmpty;
+    }
+
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 
     if (compressMethod == COMPRESS_METHOD_STORE) {
@@ -459,7 +465,7 @@ XArchive::COMPRESS_RESULT XArchive::compress(XArchive::COMPRESS_METHOD compressM
 
         result = COMPRESS_RESULT_OK;
 
-        while (nSize > 0) {
+        while ((nSize > 0) && (!(pPdStruct->bIsStop))) {
             qint64 nTemp = qMin((qint64)CHUNK, nSize);
 
             if (pSourceDevice->read(buffer, nTemp) != nTemp) {
