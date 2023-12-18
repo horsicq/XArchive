@@ -105,7 +105,7 @@ QString XRar::getFileFormatString()
     return sResult;
 }
 
-XBinary::_MEMORY_MAP XRar::getMemoryMap(PDSTRUCT *pPdStruct)
+XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
@@ -115,7 +115,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(PDSTRUCT *pPdStruct)
 
     XBinary::_MEMORY_MAP result = {};
 
-    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(pPdStruct);
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct); // TODO rewrite
 
     result.nBinarySize = getSize();
 

@@ -172,7 +172,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
 
     if (read_array(0, (char *)&(xinfo.signatureRecord), sizeof(SIGNATURERECORD)) == sizeof(SIGNATURERECORD))  // TODO read function
     {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(pPdStruct);
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
         qint64 nCurrentOffset = sizeof(SIGNATURERECORD) + xinfo.signatureRecord.NextHeaderOffset;
 
@@ -426,7 +426,7 @@ QString XSevenZip::getFileFormatExt()
     return "7z";
 }
 
-XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(PDSTRUCT *pPdStruct)
+XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 

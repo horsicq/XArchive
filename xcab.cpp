@@ -170,7 +170,7 @@ qint64 XCab::getFileFormatSize()
     return nResult;
 }
 
-XBinary::_MEMORY_MAP XCab::getMemoryMap(PDSTRUCT *pPdStruct)
+XBinary::_MEMORY_MAP XCab::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
@@ -178,5 +178,5 @@ XBinary::_MEMORY_MAP XCab::getMemoryMap(PDSTRUCT *pPdStruct)
         pPdStruct = &pdStructEmpty;
     }
     // TODO
-    return XBinary::getMemoryMap(pPdStruct);
+    return XBinary::getMemoryMap(mapMode, pPdStruct);
 }

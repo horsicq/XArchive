@@ -105,7 +105,7 @@ qint64 XZlib::getFileFormatSize()
     return _calculateRawSize();
 }
 
-XBinary::_MEMORY_MAP XZlib::getMemoryMap(PDSTRUCT *pPdStruct)
+XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
