@@ -96,6 +96,7 @@ public:
     virtual QString getFileFormatString();
     virtual QString getFileFormatExt();
     virtual qint64 getFileFormatSize();
+    virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
 };
 
