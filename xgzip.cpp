@@ -114,6 +114,8 @@ qint64 XGzip::getFileFormatSize()
 
 XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapMode)
+
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {

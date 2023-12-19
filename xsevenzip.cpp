@@ -428,6 +428,8 @@ QString XSevenZip::getFileFormatExt()
 
 XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapMode)
+
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {

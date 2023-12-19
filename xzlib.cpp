@@ -105,8 +105,21 @@ qint64 XZlib::getFileFormatSize()
     return _calculateRawSize();
 }
 
+QList<XBinary::MAPMODE> XZlib::getMapModesList(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<MAPMODE> listResult;
+
+    listResult.append(MAPMODE_REGIONS);
+
+    return listResult;
+}
+
 XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapMode)
+
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
