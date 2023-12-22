@@ -136,6 +136,17 @@ QString XMACHOFat::getFileFormatString()
     return sResult;
 }
 
+QList<XBinary::MAPMODE> XMACHOFat::getMapModesList(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<MAPMODE> listResult;
+
+    listResult.append(MAPMODE_REGIONS);
+
+    return listResult;
+}
+
 XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapMode)
