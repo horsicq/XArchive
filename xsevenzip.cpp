@@ -426,6 +426,17 @@ QString XSevenZip::getFileFormatExt()
     return "7z";
 }
 
+QList<XBinary::MAPMODE> XSevenZip::getMapModesList(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<MAPMODE> listResult;
+
+    listResult.append(MAPMODE_REGIONS);
+
+    return listResult;
+}
+
 XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapMode)
