@@ -194,6 +194,17 @@ QString X_Ar::getFileFormatExt()
     return "ar";  // TODO
 }
 
+QList<XBinary::MAPMODE> X_Ar::getMapModesList(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<MAPMODE> listResult;
+
+    listResult.append(MAPMODE_REGIONS);
+
+    return listResult;
+}
+
 X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
 {
     FRECORD record = {};
