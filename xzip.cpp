@@ -289,76 +289,84 @@ XBinary::FT XZip::getFileType()
     return FT_ZIP;
 }
 
-XBinary::FILEFORMATINFO XZip::getFileFormatInfo(QIODevice *pDevice, QList<RECORD> *pListRecords, bool bDeep)
+XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, bool bDeep)
 {
-    FILEFORMATINFO result = {};
+    FT result = FT_ZIP;
 
-    result.bIsValid = isValid(pDevice);
+    bool bIsValid = isValid(pDevice);
 
-    if (result.bIsValid) {
+    if (bIsValid) {
         XZip xzip(pDevice);
 
         if (xzip.isValid()) {
-            result.nSize = xzip.getFileFormatSize();
-        }
+            qint64 nSize = xzip.getFileFormatSize();
 
-        if (result.nSize) {
-            // TODO
-            result.sString = "ZIP";
-            result.sExt = "zip";
-            result.fileType = FT_ZIP;
+            if (nSize) {
+                // TODO
+                if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
+                    // result.sString = "APK";
+                    // result.sExt = "apk";
+                    result = XBinary::FT_APK;
+                } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords)) {
+                    // result.sString = "JAR";
+                    // result.sExt = "jar";
+                    result = FT_JAR;
+                } else if (XArchive::isArchiveRecordPresent("Payload/", pListRecords)) {
+                    // result.sString = "IPA";
+                    // result.sExt = "ipa";
+                    result = FT_IPA;
+                } else {
+                    // result.sString = "ZIP";
+                    // result.sExt = "zip";
+                    result = FT_ZIP;
+                }
 
-            if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
-                result.fileType = XBinary::FT_APK;
-            } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords)) {
-                result.fileType = FT_JAR;
-            } else if (XArchive::isArchiveRecordPresent("Payload/", pListRecords)) {
-                result.fileType = FT_IPA;
-            }
+                if (bDeep) {
+                    if ((result != XBinary::FT_JAR) && (result != XBinary::FT_APK) && (result != XBinary::FT_IPA)) {
+                        qint32 nNumberOfRecords = pListRecords->count();
 
-            if (bDeep) {
-                if ((result.fileType != XBinary::FT_JAR) && (result.fileType != XBinary::FT_APK) && (result.fileType != XBinary::FT_IPA)) {
-                    qint32 nNumberOfRecords = pListRecords->count();
+                        bool bAPKS = false;
 
-                    bool bAPKS = false;
+                        if (nNumberOfRecords) {
+                            bAPKS = true;
+                        }
 
-                    if (nNumberOfRecords) {
-                        bAPKS = true;
-                    }
+                        for (qint32 i = 0; i < nNumberOfRecords; i++) {
+                            if (pListRecords->at(i).compressMethod == XArchive::COMPRESS_METHOD_STORE) {
+                                XArchive::RECORD record = pListRecords->at(i);
 
-                    for (qint32 i = 0; i < nNumberOfRecords; i++) {
-                        if (pListRecords->at(i).compressMethod == XArchive::COMPRESS_METHOD_STORE) {
-                            XArchive::RECORD record = pListRecords->at(i);
+                                SubDevice subDevice(pDevice, record.nDataOffset, record.nUncompressedSize);
 
-                            SubDevice subDevice(pDevice, record.nDataOffset, record.nUncompressedSize);
+                                if (subDevice.open(QIODevice::ReadOnly)) {
+                                    if (XBinary::getFileTypes(&subDevice, true).contains(FT_ZIP)) {
+                                        bool bAPK = false;
 
-                            if (subDevice.open(QIODevice::ReadOnly)) {
-                                if (XBinary::getFileTypes(&subDevice, true).contains(FT_ZIP)) {
-                                    bool bAPK = false;
+                                        if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) ||
+                                            XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
+                                            bAPK = true;
+                                        }
 
-                                    if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) ||
-                                        XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
-                                        bAPK = true;
+                                        if (!bAPK) {
+                                            bAPKS = false;
+                                        }
                                     }
 
-                                    if (!bAPK) {
-                                        bAPKS = false;
-                                    }
+                                    subDevice.close();
                                 }
-
-                                subDevice.close();
+                            } else {
+                                bAPKS = false;
                             }
-                        } else {
-                            bAPKS = false;
+
+                            if (!bAPKS) {
+                                break;
+                            }
                         }
 
-                        if (!bAPKS) {
-                            break;
+                        if (bAPKS) {
+                            result = FT_APKS;
+                            // result.sString = "APKS";
+                            // result.sExt = "apks";
                         }
-                    }
-
-                    if (bAPKS) {
-                        result.fileType = FT_APKS;
                     }
                 }
             }
@@ -372,11 +380,15 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo()
 {
     XBinary::FILEFORMATINFO result = {};
 
-    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    XZip xzip(getDevice());
 
-    QList<RECORD> listRecords = getRecords(-1, &pdStructEmpty);
-
-    result = XZip::getFileFormatInfo(getDevice(), &listRecords, true);
+    if (xzip.isValid()) {
+        result.bIsValid = true;
+        result.nSize = xzip.getFileFormatSize();
+        result.sString = "ZIP";
+        result.sExt = "zip";
+        result.fileType = FT_ZIP;
+    }
 
     return result;
 }

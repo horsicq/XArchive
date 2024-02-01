@@ -149,7 +149,7 @@ public:
 
     virtual FT getFileType();
 
-    static FILEFORMATINFO getFileFormatInfo(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep);
+    static FT _getFileType(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep);
 
     virtual FILEFORMATINFO getFileFormatInfo();
 
