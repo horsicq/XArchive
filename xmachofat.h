@@ -30,7 +30,7 @@ class XMACHOFat : public XArchive {
 public:
     explicit XMACHOFat(QIODevice *pDevice = nullptr);
 
-    virtual bool isValid();
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
     virtual bool isBigEndian();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);

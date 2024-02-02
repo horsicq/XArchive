@@ -39,7 +39,7 @@ class XRar : public XArchive {
 public:
     explicit XRar(QIODevice *pDevice = nullptr);
 
-    virtual bool isValid();
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);

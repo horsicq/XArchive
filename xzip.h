@@ -138,7 +138,7 @@ public:
     };
 
     explicit XZip(QIODevice *pDevice = nullptr);
-    virtual bool isValid();
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual bool isEncrypted();

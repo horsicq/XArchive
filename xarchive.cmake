@@ -19,4 +19,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xlha.cpp
     ${CMAKE_CURRENT_LIST_DIR}/x_ar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xgzip.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xapk.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xipa.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xapks.cpp
 )

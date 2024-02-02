@@ -32,6 +32,10 @@
 #include "xzip.h"
 #include "xzlib.h"
 #include "xlha.h"
+#include "xjar.h"
+#include "xapk.h"
+#include "xipa.h"
+#include "xapks.h"
 
 class XArchives : public QObject {
     Q_OBJECT

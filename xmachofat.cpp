@@ -24,8 +24,10 @@ XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-bool XMACHOFat::isValid()
+bool XMACHOFat::isValid(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     bool bResult = false;
 
     quint32 nMagic = read_uint32(0);

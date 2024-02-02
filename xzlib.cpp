@@ -24,7 +24,7 @@ XZlib::XZlib(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-bool XZlib::isValid()
+bool XZlib::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 

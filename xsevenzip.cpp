@@ -24,7 +24,7 @@ XSevenZip::XSevenZip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-bool XSevenZip::isValid()
+bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 

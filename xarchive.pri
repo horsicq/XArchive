@@ -3,10 +3,14 @@ DEPENDPATH += $$PWD
 
 HEADERS += \
     $$PWD/x_ar.h \
+    $$PWD/xapk.h \
+    $$PWD/xapks.h \
     $$PWD/xarchive.h \
     $$PWD/xcab.h \
     $$PWD/xcompress.h \
     $$PWD/xgzip.h \
+    $$PWD/xipa.h \
+    $$PWD/xjar.h \
     $$PWD/xlha.h \
     $$PWD/xmachofat.h \
     $$PWD/xrar.h \
@@ -16,10 +20,14 @@ HEADERS += \
 
 SOURCES += \
     $$PWD/x_ar.cpp \
+    $$PWD/xapk.cpp \
+    $$PWD/xapks.cpp \
     $$PWD/xarchive.cpp \
     $$PWD/xcab.cpp \
     $$PWD/xcompress.cpp \
     $$PWD/xgzip.cpp \
+    $$PWD/xipa.cpp \
+    $$PWD/xjar.cpp \
     $$PWD/xlha.cpp \
     $$PWD/xmachofat.cpp \
     $$PWD/xrar.cpp \

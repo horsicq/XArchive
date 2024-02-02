@@ -24,7 +24,7 @@ XZip::XZip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-bool XZip::isValid()
+bool XZip::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -307,14 +307,14 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
                     // result.sString = "APK";
                     // result.sExt = "apk";
                     result = XBinary::FT_APK;
-                } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords)) {
-                    // result.sString = "JAR";
-                    // result.sExt = "jar";
-                    result = FT_JAR;
                 } else if (XArchive::isArchiveRecordPresent("Payload/", pListRecords)) {
                     // result.sString = "IPA";
                     // result.sExt = "ipa";
                     result = FT_IPA;
+                } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords)) {
+                    // result.sString = "JAR";
+                    // result.sExt = "jar";
+                    result = FT_JAR;
                 } else {
                     // result.sString = "ZIP";
                     // result.sExt = "zip";

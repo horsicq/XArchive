@@ -24,7 +24,7 @@ XLHA::XLHA(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-bool XLHA::isValid()
+bool XLHA::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 

@@ -24,7 +24,7 @@ XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-bool XGzip::isValid()
+bool XGzip::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
