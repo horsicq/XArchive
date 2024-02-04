@@ -79,3 +79,8 @@ XBinary::FILEFORMATINFO XJAR::getFileFormatInfo()
 
     return result;
 }
+
+QString XJAR::getFileFormatExt()
+{
+    return "jar";
+}

@@ -35,6 +35,7 @@ public:
 
     virtual FT getFileType();
     virtual FILEFORMATINFO getFileFormatInfo();
+    virtual QString getFileFormatExt();
 
 signals:
 
