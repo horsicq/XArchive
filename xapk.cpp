@@ -25,3 +25,107 @@ XAPK::XAPK(QIODevice *pDevice)
 {
 
 }
+
+bool XAPK::isValid(PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    XZip xzip(getDevice());
+
+    if (xzip.isValid()) {
+        XBinary::PDSTRUCT pdStruct = XBinary::createPdStruct();
+
+        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, &pdStruct);
+
+        bResult = isValid(&listArchiveRecords);
+    }
+
+    return bResult;
+}
+
+bool XAPK::isValid(QIODevice *pDevice)
+{
+    XAPK xapk(pDevice);
+
+    return xapk.isValid();
+}
+
+bool XAPK::isValid(QList<RECORD> *pListRecords)
+{
+    bool bResult = false;
+
+    bResult = (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) ||
+               XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords));
+
+    return bResult;
+}
+
+XBinary::FT XAPK::getFileType()
+{
+    return FT_APK;
+}
+
+XBinary::FILEFORMATINFO XAPK::getFileFormatInfo()
+{
+    XBinary::FILEFORMATINFO result = {};
+
+    XAPK xapk(getDevice());
+
+    if (xapk.isValid()) {
+        result.bIsValid = true;
+        result.nSize = xapk.getFileFormatSize();
+        result.sString = "APK";
+        result.sExt = "apk";
+        result.fileType = FT_APK;
+    }
+
+    return result;
+}
+
+QString XAPK::getFileFormatExt()
+{
+    return "apk";
+}
+
+XBinary::OSINFO XAPK::getOsInfo()
+{
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    QList<XArchive::RECORD> listRecords = getRecords(2000, &pdStructEmpty);
+
+    return getOsInfo(&listRecords, &pdStructEmpty);
+}
+
+XBinary::OSINFO XAPK::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
+    XBinary::OSINFO result = {};
+
+    // TODO
+
+    return result;
+}
+
+bool XAPK::isBigEndian()
+{
+    return false;
+}
+
+XBinary::MODE XAPK::getMode()
+{
+    return MODE_UNKNOWN;
+}
+
+QString XAPK::getArch()
+{
+    return "";
+}
+
+qint32 XAPK::getType()
+{
+    return 0;
+}
+
+QString XAPK::typeIdToString(qint32 nType)
+{
+    return "";
+}

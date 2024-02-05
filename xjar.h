@@ -27,6 +27,12 @@ class XJAR : public XZip
 {
     Q_OBJECT
 public:
+    enum TYPE {
+        TYPE_UNKNOWN = 0,
+        TYPE_PACKAGE,
+        // TODO more
+    };
+
     explicit XJAR(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
@@ -36,9 +42,14 @@ public:
     virtual FT getFileType();
     virtual FILEFORMATINFO getFileFormatInfo();
     virtual QString getFileFormatExt();
-
-signals:
-
+    virtual OSINFO getOsInfo();
+    OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
+    virtual ENDIAN getEndian();
+    virtual MODE getMode();
+    virtual QString getArch();
+    virtual qint32 getType();
+    virtual QString typeIdToString(qint32 nType);
+    static QString _getJDKVersion(quint16 nMajor, quint16 nMinor);
 };
 
 #endif // XJAR_H

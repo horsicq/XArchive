@@ -28,9 +28,20 @@ class XAPK : public XJAR
     Q_OBJECT
 public:
     explicit XAPK(QIODevice *pDevice = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QList<RECORD> *pListRecords);
 
-signals:
-
+    virtual FT getFileType();
+    virtual FILEFORMATINFO getFileFormatInfo();
+    virtual QString getFileFormatExt();
+    virtual OSINFO getOsInfo();
+    OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
+    virtual bool isBigEndian(); // TODO!!!
+    virtual MODE getMode();
+    virtual QString getArch();
+    virtual qint32 getType();
+    virtual QString typeIdToString(qint32 nType);
 };
 
 #endif // XAPK_H

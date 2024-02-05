@@ -48,17 +48,19 @@ bool XMACHOFat::isValid(QIODevice *pDevice)
     return xmachofat.isValid();
 }
 
-bool XMACHOFat::isBigEndian()
+XBinary::ENDIAN XMACHOFat::getEndian()
 {
-    bool bResult = false;
+    ENDIAN result = ENDIAN_UNKNOWN;
 
-    quint32 nMagic = read_uint32(0);
+    quint8 nData = read_uint32(0);
 
-    if (nMagic == XMACH_DEF::S_FAT_CIGAM) {
-        bResult = true;
+    if (nData == XMACH_DEF::S_FAT_MAGIC) {
+        result = ENDIAN_LITTLE;
+    } else if (nData == XMACH_DEF::S_FAT_CIGAM) {
+        result = ENDIAN_BIG;
     }
 
-    return bResult;
+    return result;
 }
 
 quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct)
@@ -163,8 +165,10 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
 
     XBinary::_MEMORY_MAP result = {};
 
-    result.bIsBigEndian = isBigEndian();
+    result.endian = getEndian();
     result.nBinarySize = getSize();
+
+    bool bIsBigEndian = (result.endian == ENDIAN_BIG);
 
     qint32 nIndex = 0;
 
@@ -181,7 +185,7 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         result.listRecords.append(record);
     }
 
-    quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), result.bIsBigEndian);
+    quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
 
     QMap<quint64, QString> mapCpuTypes = XMACH::getHeaderCpuTypesS();
 
@@ -190,10 +194,10 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
 
         qint64 nOffset = sizeof(XMACH_DEF::fat_header) + i * sizeof(XMACH_DEF::fat_arch);
 
-        quint32 _cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), result.bIsBigEndian);
-        quint32 _cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), result.bIsBigEndian);
-        quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), result.bIsBigEndian);
-        quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), result.bIsBigEndian);
+        quint32 _cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
+        quint32 _cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
+        quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
+        quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
 
         record.sName = QString("%1").arg(mapCpuTypes.value(_cputype, tr("Unknown")));
 

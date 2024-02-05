@@ -28,6 +28,7 @@ class XIPA : public XJAR
     Q_OBJECT
 public:
     explicit XIPA(QIODevice *pDevice = nullptr);
+    static bool isValid(QList<RECORD> *pListRecords);
 
 signals:
 

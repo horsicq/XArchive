@@ -25,3 +25,8 @@ XIPA::XIPA(QIODevice *pDevice)
 {
 
 }
+
+bool XIPA::isValid(QList<RECORD> *pListRecords)
+{
+    return false;
+}
