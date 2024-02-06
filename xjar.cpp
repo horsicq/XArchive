@@ -32,11 +32,9 @@ bool XJAR::isValid(PDSTRUCT *pPdStruct) // PDSTRUCT
     XZip xzip(getDevice());
 
     if (xzip.isValid()) {
-        XBinary::PDSTRUCT pdStruct = XBinary::createPdStruct();
+        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, pPdStruct);
 
-        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, &pdStruct);
-
-        bResult = isValid(&listArchiveRecords);
+        bResult = isValid(&listArchiveRecords, pPdStruct);
     }
 
     return bResult;
@@ -49,11 +47,11 @@ bool XJAR::isValid(QIODevice *pDevice)
     return xjar.isValid();
 }
 
-bool XJAR::isValid(QList<RECORD> *pListRecords)
+bool XJAR::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    bResult = XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords);
+    bResult = XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords, pPdStruct);
 
     return bResult;
 }
@@ -127,8 +125,6 @@ XBinary::OSINFO XJAR::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct
         }
     }
 
-    // TODO get Version from files
-
     return result;
 }
 
@@ -139,12 +135,12 @@ XBinary::ENDIAN XJAR::getEndian()
 
 XBinary::MODE XJAR::getMode()
 {
-    return MODE_32;
+    return MODE_DATA;
 }
 
 QString XJAR::getArch()
 {
-    return "Bytecode";
+    return tr("Universal");
 }
 
 qint32 XJAR::getType()

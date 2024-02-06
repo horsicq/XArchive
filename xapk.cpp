@@ -33,11 +33,9 @@ bool XAPK::isValid(PDSTRUCT *pPdStruct)
     XZip xzip(getDevice());
 
     if (xzip.isValid()) {
-        XBinary::PDSTRUCT pdStruct = XBinary::createPdStruct();
+        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, pPdStruct);
 
-        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, &pdStruct);
-
-        bResult = isValid(&listArchiveRecords);
+        bResult = isValid(&listArchiveRecords, pPdStruct);
     }
 
     return bResult;
@@ -50,12 +48,12 @@ bool XAPK::isValid(QIODevice *pDevice)
     return xapk.isValid();
 }
 
-bool XAPK::isValid(QList<RECORD> *pListRecords)
+bool XAPK::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    bResult = (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) ||
-               XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords));
+    bResult = (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) ||
+               XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct));
 
     return bResult;
 }
@@ -100,32 +98,38 @@ XBinary::OSINFO XAPK::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct
 {
     XBinary::OSINFO result = {};
 
-    // TODO
+    result.osName = OSNAME_ANDROID;
+
+    result.sArch = getArch();
+    result.mode = getMode();
+    result.sType = typeIdToString(getType());
+    result.endian = getEndian();
 
     return result;
 }
 
-bool XAPK::isBigEndian()
-{
-    return false;
-}
-
 XBinary::MODE XAPK::getMode()
 {
-    return MODE_UNKNOWN;
+    return MODE_DATA;
 }
 
 QString XAPK::getArch()
 {
-    return "";
+    return tr("Universal");
 }
 
 qint32 XAPK::getType()
 {
-    return 0;
+    return TYPE_PACKAGE;
 }
 
 QString XAPK::typeIdToString(qint32 nType)
 {
-    return "";
+    QString sResult = tr("Unknown");
+
+    switch (nType) {
+        case TYPE_PACKAGE: sResult = tr("Package");
+    }
+
+    return sResult;
 }

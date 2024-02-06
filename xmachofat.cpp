@@ -52,7 +52,7 @@ XBinary::ENDIAN XMACHOFat::getEndian()
 {
     ENDIAN result = ENDIAN_UNKNOWN;
 
-    quint8 nData = read_uint32(0);
+    quint32 nData = read_uint32(0);
 
     if (nData == XMACH_DEF::S_FAT_MAGIC) {
         result = ENDIAN_LITTLE;

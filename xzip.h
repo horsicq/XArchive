@@ -172,6 +172,8 @@ public:
     virtual QString getFileFormatString();
     virtual qint64 getFileFormatSize();
 
+    virtual OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
+
 private:
     qint64 findECDOffset();
     qint64 findAPKSignBlockOffset(PDSTRUCT *pPdStruct = nullptr);

@@ -37,13 +37,13 @@ public:
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
-    static bool isValid(QList<RECORD> *pListRecords);
+    static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     virtual FT getFileType();
     virtual FILEFORMATINFO getFileFormatInfo();
     virtual QString getFileFormatExt();
     virtual OSINFO getOsInfo();
-    OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
+    virtual OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
     virtual ENDIAN getEndian();
     virtual MODE getMode();
     virtual QString getArch();

@@ -26,7 +26,7 @@ XIPA::XIPA(QIODevice *pDevice)
 
 }
 
-bool XIPA::isValid(QList<RECORD> *pListRecords)
+bool XIPA::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     return false;
 }

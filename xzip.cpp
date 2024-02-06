@@ -141,6 +141,12 @@ quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
+#ifdef QT_DEBUG
+    qDebug("XZip::getRecords");
+    QElapsedTimer timer;
+    timer.start();
+#endif
+
     XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
@@ -249,6 +255,10 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             }
         }
     }
+
+#ifdef QT_DEBUG
+    qDebug("Elapsed XZip::getRecords %lld", timer.elapsed());
+#endif
 
     return listResult;
 }
@@ -618,6 +628,14 @@ qint64 XZip::getFileFormatSize()
     }
 
     return nResult;
+}
+
+XBinary::OSINFO XZip::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pListRecords);
+    Q_UNUSED(pPdStruct);
+
+    return XBinary::getOsInfo();
 }
 
 qint64 XZip::findECDOffset()
