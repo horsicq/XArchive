@@ -28,9 +28,9 @@ bool XZip::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    _MEMORY_MAP memoryMap = XBinary::getMemoryMap();  // TODO Check
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);  // TODO Check
 
-    if (compareSignature(&memoryMap, "'PK'0304", 0) || compareSignature(&memoryMap, "'PK'0506", 0)) {
+    if (compareSignature(&memoryMap, "'PK'0304", 0, pPdStruct) || compareSignature(&memoryMap, "'PK'0506", 0, pPdStruct)) {
         bResult = true;
     }
 

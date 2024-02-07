@@ -29,11 +29,11 @@ bool X_Ar::isValid(PDSTRUCT *pPdStruct)
     // TODO more checks
     bool bResult = false;
 
-    _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
     if (getSize() > (qint64)(8 + sizeof(RECORD)))  // TODO const
     {
-        if (compareSignature(&memoryMap, "'!<arch>'0a")) {
+        if (compareSignature(&memoryMap, "'!<arch>'0a", 0, pPdStruct)) {
             bResult = true;
         }
     }
