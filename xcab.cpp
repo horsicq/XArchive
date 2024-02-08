@@ -29,8 +29,8 @@ bool XCab::isValid(PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(CFHEADER)) {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
-        if (compareSignature(&memoryMap, "'MSCF'00........00")) {
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        if (compareSignature(&memoryMap, "'MSCF'00........00", 0, pPdStruct)) {
             bResult = true;
         }
     }
