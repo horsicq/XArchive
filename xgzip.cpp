@@ -26,6 +26,7 @@ XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XGzip::isValid(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(GZIP_HEADER)) {
