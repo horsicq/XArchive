@@ -23,15 +23,13 @@
 
 #include "xjar.h"
 
-class XIPA : public XJAR
-{
+class XIPA : public XJAR {
     Q_OBJECT
 public:
     explicit XIPA(QIODevice *pDevice = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
 signals:
-
 };
 
-#endif // XIPA_H
+#endif  // XIPA_H

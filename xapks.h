@@ -23,14 +23,12 @@
 
 #include "xapk.h"
 
-class XAPKS : public XAPK
-{
+class XAPKS : public XAPK {
     Q_OBJECT
 public:
     explicit XAPKS(QIODevice *pDevice = nullptr);
 
 signals:
-
 };
 
-#endif // XAPKS_H
+#endif  // XAPKS_H

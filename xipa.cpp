@@ -20,10 +20,8 @@
  */
 #include "xipa.h"
 
-XIPA::XIPA(QIODevice *pDevice)
-    : XJAR(pDevice)
+XIPA::XIPA(QIODevice *pDevice) : XJAR(pDevice)
 {
-
 }
 
 bool XIPA::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)

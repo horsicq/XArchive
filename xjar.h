@@ -23,8 +23,7 @@
 
 #include "xzip.h"
 
-class XJAR : public XZip
-{
+class XJAR : public XZip {
     Q_OBJECT
 public:
     enum TYPE {
@@ -52,4 +51,4 @@ public:
     static QString _getJDKVersion(quint16 nMajor, quint16 nMinor);
 };
 
-#endif // XJAR_H
+#endif  // XJAR_H

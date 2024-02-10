@@ -20,10 +20,8 @@
  */
 #include "xapk.h"
 
-XAPK::XAPK(QIODevice *pDevice)
-    : XJAR(pDevice)
+XAPK::XAPK(QIODevice *pDevice) : XJAR(pDevice)
 {
-
 }
 
 bool XAPK::isValid(PDSTRUCT *pPdStruct)
@@ -52,8 +50,8 @@ bool XAPK::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    bResult = (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) ||
-               XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct));
+    bResult =
+        (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct));
 
     return bResult;
 }

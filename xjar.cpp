@@ -22,10 +22,9 @@
 
 XJAR::XJAR(QIODevice *pDevice) : XZip(pDevice)
 {
-
 }
 
-bool XJAR::isValid(PDSTRUCT *pPdStruct) // PDSTRUCT
+bool XJAR::isValid(PDSTRUCT *pPdStruct)  // PDSTRUCT
 {
     bool bResult = false;
 

@@ -22,5 +22,4 @@
 
 XAPKS::XAPKS(QIODevice *pDevice) : XAPK(pDevice)
 {
-
 }

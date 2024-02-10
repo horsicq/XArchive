@@ -23,8 +23,7 @@
 
 #include "xjar.h"
 
-class XAPK : public XJAR
-{
+class XAPK : public XJAR {
     Q_OBJECT
 public:
     enum TYPE {
@@ -36,7 +35,7 @@ public:
     explicit XAPK(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
-    static bool isValid(QList<RECORD> *pListRecords,PDSTRUCT *pPdStruct);
+    static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     virtual FT getFileType();
     virtual FILEFORMATINFO getFileFormatInfo();
@@ -49,4 +48,4 @@ public:
     virtual QString typeIdToString(qint32 nType);
 };
 
-#endif // XAPK_H
+#endif  // XAPK_H
