@@ -94,6 +94,9 @@ XBinary::OSINFO XAPK::getOsInfo()
 
 XBinary::OSINFO XAPK::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pListRecords)
+    Q_UNUSED(pPdStruct)
+
     XBinary::OSINFO result = {};
 
     result.osName = OSNAME_ANDROID;
