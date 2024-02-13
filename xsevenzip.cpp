@@ -29,8 +29,8 @@ bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(SIGNATURERECORD)) {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
-        if (compareSignature(&memoryMap, "'7z'BCAF271C")) {
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        if (compareSignature(&memoryMap, "'7z'BCAF271C", 0, pPdStruct)) {
             bResult = true;
         }
     }
