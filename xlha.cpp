@@ -29,9 +29,9 @@ bool XLHA::isValid(PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (getSize() >= 12) {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
-        if (compareSignature(&memoryMap, "....'-lh'..2d") || compareSignature(&memoryMap, "....'-lz'..2d")) {
+        if (compareSignature(&memoryMap, "....'-lh'..2d", 0, pPdStruct) || compareSignature(&memoryMap, "....'-lz'..2d", 0, pPdStruct)) {
             QString sMethod = read_ansiString(2, 5);
 
             if ((sMethod == "-lz4-") || (sMethod == "-lz5-") || (sMethod == "-lzs-") || (sMethod == "-lh0-") || (sMethod == "-lh1-") || (sMethod == "-lh4-") ||
