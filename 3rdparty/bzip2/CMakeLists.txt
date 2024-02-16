@@ -21,3 +21,7 @@ ${PROJECT_SOURCE_DIR}/src/huffman.c
 
 set_target_properties(bzip2 PROPERTIES LINKER_LANGUAGE C)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+if(MSVC)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+endif()

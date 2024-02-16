@@ -21,3 +21,7 @@ ${PROJECT_SOURCE_DIR}/src/zutil.c
 
 set_target_properties(zlib PROPERTIES LINKER_LANGUAGE C)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+if(MSVC)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+endif()
