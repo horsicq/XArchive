@@ -26,6 +26,8 @@ XZlib::XZlib(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XZlib::isValid(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     bool bResult = false;
 
     if (getSize() >= 6) {
