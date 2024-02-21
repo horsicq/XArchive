@@ -22,6 +22,7 @@
 #define XAPK_H
 
 #include "xjar.h"
+#include "xandroidbinary.h"
 
 class XAPK : public XJAR {
     Q_OBJECT

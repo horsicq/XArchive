@@ -106,6 +106,50 @@ XBinary::OSINFO XAPK::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct
     result.sType = typeIdToString(getType());
     result.endian = getEndian();
 
+    QByteArray baAndroidManifest = decompress(pListRecords, "AndroidManifest.xml", pPdStruct);
+
+    if (baAndroidManifest.size() > 0) {
+        QString sAndroidManifest = XAndroidBinary::getDecoded(&baAndroidManifest);
+
+        QString sCompileSdkVersion = XBinary::regExp("android:compileSdkVersion=\"(.*?)\"", sAndroidManifest, 1);
+        QString sCompileSdkVersionCodename = XBinary::regExp("android:compileSdkVersionCodename=\"(.*?)\"", sAndroidManifest, 1);
+        QString sPlatformBuildVersionCode = XBinary::regExp("platformBuildVersionCode=\"(.*?)\"", sAndroidManifest, 1);
+        QString sPlatformBuildVersionName = XBinary::regExp("platformBuildVersionName=\"(.*?)\"", sAndroidManifest, 1);
+        QString sTargetSdkVersion = XBinary::regExp("android:targetSdkVersion=\"(.*?)\"", sAndroidManifest, 1);
+        QString sMinSdkVersion = XBinary::regExp("android:minSdkVersion=\"(.*?)\"", sAndroidManifest, 1);
+
+        // Check
+        if (!XBinary::checkStringNumber(sCompileSdkVersion, 1, 40)) sCompileSdkVersion = "";
+        if (!XBinary::checkStringNumber(sPlatformBuildVersionCode, 1, 40)) sPlatformBuildVersionCode = "";
+        if (!XBinary::checkStringNumber(sTargetSdkVersion, 1, 40)) sTargetSdkVersion = "";
+        if (!XBinary::checkStringNumber(sMinSdkVersion, 1, 40)) sMinSdkVersion = "";
+
+        if (!XBinary::checkStringNumber(sCompileSdkVersionCodename.section(".", 0, 0), 1, 15)) sCompileSdkVersionCodename = "";
+        if (!XBinary::checkStringNumber(sPlatformBuildVersionName.section(".", 0, 0), 1, 15)) sPlatformBuildVersionName = "";
+
+        if ((sCompileSdkVersion != "") || (sCompileSdkVersionCodename != "") || (sPlatformBuildVersionCode != "") || (sPlatformBuildVersionName != "") ||
+            (sTargetSdkVersion != "") || (sMinSdkVersion != "")) {
+
+            QString _sVersion;
+            QString _sAndroidVersion;
+
+            if (_sVersion == "") _sVersion = sTargetSdkVersion;
+            if (_sVersion == "") _sVersion = sMinSdkVersion;
+            if (_sVersion == "") _sVersion = sCompileSdkVersion;
+            if (_sVersion == "") _sVersion = sPlatformBuildVersionCode;
+
+            if (_sAndroidVersion == "") _sAndroidVersion = sCompileSdkVersionCodename;
+            if (_sAndroidVersion == "") _sAndroidVersion = sPlatformBuildVersionName;
+
+            if (_sAndroidVersion == "") {
+                _sAndroidVersion = XBinary::getAndroidVersionFromApi(_sVersion.toUInt());
+            }
+
+            result.sOsVersion = _sAndroidVersion;
+            result.sBuild = sPlatformBuildVersionCode;
+        }
+    }
+
     return result;
 }
 
