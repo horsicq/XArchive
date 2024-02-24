@@ -129,7 +129,6 @@ XBinary::OSINFO XAPK::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct
 
         if ((sCompileSdkVersion != "") || (sCompileSdkVersionCodename != "") || (sPlatformBuildVersionCode != "") || (sPlatformBuildVersionName != "") ||
             (sTargetSdkVersion != "") || (sMinSdkVersion != "")) {
-
             QString _sVersion;
             QString _sAndroidVersion;
 
