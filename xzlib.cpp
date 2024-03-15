@@ -81,7 +81,7 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         qint64 nInSize = 0;
         qint64 nOutSize = 0;
 
-        XArchive::COMPRESS_RESULT cr = decompress(record.compressMethod, &sd, 0, false, pPdStruct, &nInSize, &nOutSize);
+        XArchive::COMPRESS_RESULT cr = _decompress(record.compressMethod, &sd, 0, pPdStruct, &nInSize, &nOutSize);
 
         Q_UNUSED(cr)
 
@@ -154,7 +154,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         qint64 nInSize = 0;
         qint64 nOutSize = 0;
 
-        XArchive::COMPRESS_RESULT cr = decompress(cm, &sd, 0, false, pPdStruct, &nInSize, &nOutSize);
+        XArchive::COMPRESS_RESULT cr = _decompress(cm, &sd, 0, pPdStruct, &nInSize, &nOutSize);
 
         Q_UNUSED(cr)
 

@@ -92,7 +92,7 @@ QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(const QString &sDirec
     return listResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedSize)
 {
     QByteArray baResult;
 
@@ -101,33 +101,33 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
 
-        baResult = xzip.decompress(pRecord, bHeaderOnly, pPdStruct);
+        baResult = xzip.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
 
-        baResult = xmachofat.decompress(pRecord, bHeaderOnly, pPdStruct);
+        baResult = xmachofat.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
 
-        baResult = x_ar.decompress(pRecord, bHeaderOnly, pPdStruct);
+        baResult = x_ar.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
 
-        baResult = xgzip.decompress(pRecord, bHeaderOnly, pPdStruct);
+        baResult = xgzip.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
         XZlib xzlib(pDevice);
 
-        baResult = xzlib.decompress(pRecord, bHeaderOnly, pPdStruct);
+        baResult = xzlib.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
 
-        baResult = xlha.decompress(pRecord, bHeaderOnly, pPdStruct);
+        baResult = xlha.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     }
 
     return baResult;
 }
 
-QByteArray XArchives::decompress(const QString &sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XArchives::decompress(const QString &sFileName, XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedSize)
 {
     QByteArray baResult;
 
@@ -135,23 +135,23 @@ QByteArray XArchives::decompress(const QString &sFileName, XArchive::RECORD *pRe
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        baResult = decompress(&file, pRecord, bHeaderOnly, pPdStruct);
+        baResult = decompress(&file, pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
         file.close();
     }
 
     return baResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice, const QString &sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XArchives::decompress(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listRecords = getRecords(pDevice);
 
     XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords);
 
-    return decompress(pDevice, &record, bHeaderOnly, pPdStruct);
+    return decompress(pDevice, &record, pPdStruct);
 }
 
-QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecordFileName, bool bHeaderOnly, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
 {
     QByteArray baResult;
 
@@ -159,7 +159,7 @@ QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecor
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        baResult = decompress(&file, sRecordFileName, bHeaderOnly, pPdStruct);
+        baResult = decompress(&file, sRecordFileName, pPdStruct);
         file.close();
     }
 

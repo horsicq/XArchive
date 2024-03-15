@@ -105,7 +105,7 @@ XBinary::OSINFO XAPK::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct
     result.mode = getMode();
     result.sType = typeIdToString(getType());
     result.endian = getEndian();
-
+#ifdef USE_DEX
     QByteArray baAndroidManifest = decompress(pListRecords, "AndroidManifest.xml", pPdStruct);
 
     if (baAndroidManifest.size() > 0) {
@@ -148,7 +148,7 @@ XBinary::OSINFO XAPK::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct
             result.sBuild = sPlatformBuildVersionCode;
         }
     }
-
+#endif
     return result;
 }
 

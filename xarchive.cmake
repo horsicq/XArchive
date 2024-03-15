@@ -20,6 +20,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xcab.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.h
+    ${CMAKE_CURRENT_LIST_DIR}/xcompresseddevice.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xcompresseddevice.h
     ${CMAKE_CURRENT_LIST_DIR}/xgzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xgzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xipa.cpp

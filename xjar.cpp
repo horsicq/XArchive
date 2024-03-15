@@ -108,7 +108,7 @@ XBinary::OSINFO XJAR::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct
     for (qint32 i = 0; i < nNumberOfRecords; i++) {
         if (pListRecords->at(i).sFileName.section(".", -1, -1) == "class") {
             RECORD record = pListRecords->at(i);
-            QByteArray baData = XArchive::decompress(&record, true, pPdStruct);
+            QByteArray baData = XArchive::decompress(&record, pPdStruct, 0, 0x100);
 
             if (baData.size() > 10) {
                 char *pData = baData.data();

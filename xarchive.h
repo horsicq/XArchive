@@ -83,12 +83,12 @@ public:
 
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) = 0;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) = 0;
-    static COMPRESS_RESULT decompress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, bool bHeaderOnly = false,
-                                      PDSTRUCT *pPdStruct = nullptr, qint64 *pnInSize = nullptr, qint64 *pnOutSize = nullptr);
-    static COMPRESS_RESULT compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr);
-    static COMPRESS_RESULT compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
+    static COMPRESS_RESULT _decompress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice,
+                                      PDSTRUCT *pPdStruct = nullptr, qint64 *pnInSize = nullptr, qint64 *pnOutSize = nullptr, qint64 nDecompressedOffset = 0, qint64 nDecompressedSize = -1);
+    static COMPRESS_RESULT _compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr);
+    static COMPRESS_RESULT _compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
                                             qint32 nStrategy);  // TODO PDSTRUCT
-    QByteArray decompress(const RECORD *pRecord, bool bHeaderOnly, PDSTRUCT *pPdStruct);
+    QByteArray decompress(const RECORD *pRecord, PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0, qint64 nDecompressedSize = -1);
     QByteArray decompress(QList<RECORD> *pListArchive, const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     QByteArray decompress(const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(const RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
@@ -105,6 +105,9 @@ public:
     static void showRecords(QList<RECORD> *pListArchive);
     virtual MODE getMode();
     //    virtual _MEMORY_MAP getMemoryMap(); // TODO
+
+private:
+    static bool _writeToDevice(QIODevice *pDevice, char *pBuffer, qint32 nBufferSize, qint64 nTotalHandled, qint64 nDecompressedOffset, qint64 nDecompressedSize);
 };
 
 #endif  // XARCHIVE_H

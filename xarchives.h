@@ -46,10 +46,10 @@ public:
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QList<XArchive::RECORD> getRecords(const QString &sFileName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QList<XArchive::RECORD> getRecordsFromDirectory(const QString &sDirectoryName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QByteArray decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QByteArray decompress(const QString &sFileName, XArchive::RECORD *pRecord, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QByteArray decompress(QIODevice *pDevice, const QString &sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QByteArray decompress(const QString &sFileName, const QString &sRecordFileName, bool bHeaderOnly = false, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static QByteArray decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0, qint64 nDecompressedSize = -1);
+    static QByteArray decompress(const QString &sFileName, XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0, qint64 nDecompressedSize = -1);
+    static QByteArray decompress(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static QByteArray decompress(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(const QString &sFileName, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFile(const QString &sFileName, const QString &sRecordFileName, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
