@@ -514,7 +514,7 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
 
     pZipFileRecord->nDataOffset = pDest->pos();
 
-    XArchive::_compress(XArchive::COMPRESS_METHOD_DEFLATE, pSource, pDest); // TODO PdStruct
+    XArchive::_compress(XArchive::COMPRESS_METHOD_DEFLATE, pSource, pDest);  // TODO PdStruct
 
     qint64 nEndPosition = pDest->pos();
 

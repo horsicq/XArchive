@@ -49,8 +49,8 @@ XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice)
 {
 }
 
-XArchive::COMPRESS_RESULT XArchive::_decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice,
-                                               PDSTRUCT *pPdStruct, qint64 *pnInSize, qint64 *pnOutSize, qint64 nDecompressedOffset, qint64 nDecompressedSize)
+XArchive::COMPRESS_RESULT XArchive::_decompress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct,
+                                                qint64 *pnInSize, qint64 *pnOutSize, qint64 nDecompressedOffset, qint64 nDecompressedSize)
 {
     // TODO Progress PDSTRUCT
     qint64 __nInSize = 0;
@@ -86,7 +86,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(XArchive::COMPRESS_METHOD compre
                 break;
             }
 
-            if(!_writeToDevice(pDestDevice, (char *)buffer, nTemp, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
+            if (!_writeToDevice(pDestDevice, (char *)buffer, nTemp, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
                 result = COMPRESS_RESULT_WRITEERROR;
                 break;
             }
@@ -173,7 +173,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(XArchive::COMPRESS_METHOD compre
 
                     qint32 nTemp = CHUNK - strm.avail_out;
 
-                    if(!_writeToDevice(pDestDevice, (char *)out, nTemp, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
+                    if (!_writeToDevice(pDestDevice, (char *)out, nTemp, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
                         ret = Z_ERRNO;
                         break;
                     }
@@ -248,7 +248,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(XArchive::COMPRESS_METHOD compre
 
                     qint32 nTemp = CHUNK - strm.avail_out;
 
-                    if(!_writeToDevice(pDestDevice, (char *)out, nTemp, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
+                    if (!_writeToDevice(pDestDevice, (char *)out, nTemp, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
                         ret = BZ_MEM_ERROR;
                         break;
                     }
@@ -332,7 +332,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(XArchive::COMPRESS_METHOD compre
 
                                 nPos += inProcessed;
 
-                                if(!_writeToDevice(pDestDevice, (char *)out, outProcessed, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
+                                if (!_writeToDevice(pDestDevice, (char *)out, outProcessed, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
                                     result = COMPRESS_RESULT_WRITEERROR;
                                     bRun = false;
                                     break;
@@ -405,7 +405,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(XArchive::COMPRESS_METHOD compre
                 // strm.ref_ptr = out;
                 ret = XCompress::lzh_decode(&strm, true);
 
-                if(!_writeToDevice(pDestDevice, (char *)strm.ref_ptr, strm.total_out, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
+                if (!_writeToDevice(pDestDevice, (char *)strm.ref_ptr, strm.total_out, *pnOutSize, nDecompressedOffset, nDecompressedSize)) {
                     ret = ARCHIVE_FATAL;
                 }
 
@@ -470,7 +470,7 @@ XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compress
 }
 
 XArchive::COMPRESS_RESULT XArchive::_compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits,
-                                                     qint32 nMemLevel, qint32 nStrategy)
+                                                      qint32 nMemLevel, qint32 nStrategy)
 {
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 

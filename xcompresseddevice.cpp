@@ -20,8 +20,6 @@
  */
 #include "xcompresseddevice.h"
 
-XCompressedDevice::XCompressedDevice(QObject *parent)
-    : QObject{parent}
+XCompressedDevice::XCompressedDevice(QObject *parent) : QObject{parent}
 {
-
 }

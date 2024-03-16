@@ -23,14 +23,12 @@
 
 #include <QObject>
 
-class XCompressedDevice : public QObject
-{
+class XCompressedDevice : public QObject {
     Q_OBJECT
 public:
     explicit XCompressedDevice(QObject *parent = nullptr);
 
 signals:
-
 };
 
-#endif // XCOMPRESSEDDEVICE_H
+#endif  // XCOMPRESSEDDEVICE_H
