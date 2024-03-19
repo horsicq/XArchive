@@ -16,6 +16,7 @@ HEADERS += \
     $$PWD/xmachofat.h \
     $$PWD/xrar.h \
     $$PWD/xsevenzip.h \
+    $$PWD/xtar.h \
     $$PWD/xzip.h \
     $$PWD/xzlib.h
 
@@ -34,6 +35,7 @@ SOURCES += \
     $$PWD/xmachofat.cpp \
     $$PWD/xrar.cpp \
     $$PWD/xsevenzip.cpp \
+    $$PWD/xtar.cpp \
     $$PWD/xzip.cpp \
     $$PWD/xzlib.cpp
 

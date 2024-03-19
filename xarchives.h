@@ -36,6 +36,7 @@
 #include "xapk.h"
 #include "xipa.h"
 #include "xapks.h"
+#include "xtar.h"
 
 class XArchives : public QObject {
     Q_OBJECT

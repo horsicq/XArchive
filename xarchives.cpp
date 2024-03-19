@@ -40,27 +40,24 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit,
 
     if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
-
         listResult = xzip.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
-
         listResult = xmachofat.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
-
         listResult = x_ar.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
+        XTAR xtar(pDevice);
+        listResult = xtar.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
-
         listResult = xgzip.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
         XZlib xzlib(pDevice);
-
         listResult = xzlib.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xhla(pDevice);
-
         listResult = xhla.getRecords(nLimit, pPdStruct);
     }
 
@@ -100,27 +97,24 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 
     if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
-
         baResult = xzip.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
-
         baResult = xmachofat.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
-
         baResult = x_ar.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
+        XTAR xtar(pDevice);
+        baResult = xtar.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
-
         baResult = xgzip.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
         XZlib xzlib(pDevice);
-
         baResult = xzlib.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
-
         baResult = xlha.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     }
 
@@ -178,27 +172,24 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     // CAB
     if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
-
         bResult = xzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
-
         bResult = xmachofat.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
-
         bResult = x_ar.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
+        XTAR xtar(pDevice);
+        bResult = xtar.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
-
         bResult = xgzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
         XZlib xzlib(pDevice);
-
         bResult = xzlib.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
-
         bResult = xlha.decompressToFile(pRecord, sResultFileName, pPdStruct);
     }
 
@@ -295,27 +286,24 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     // TODO more
     if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
-
         bResult = xzip.isArchiveRecordPresent(sRecordFileName);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
-
         bResult = xmachofat.isArchiveRecordPresent(sRecordFileName);
     } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
-
         bResult = x_ar.isArchiveRecordPresent(sRecordFileName);
+    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
+        XTAR xtar(pDevice);
+        bResult = xtar.isArchiveRecordPresent(sRecordFileName);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
-
         bResult = xgzip.isArchiveRecordPresent(sRecordFileName);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
         XZlib xzlib(pDevice);
-
         bResult = xzlib.isArchiveRecordPresent(sRecordFileName);
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
-
         bResult = xlha.isArchiveRecordPresent(sRecordFileName);
     }
 
@@ -350,6 +338,7 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &
             _stAvailable.insert(XBinary::FT_ZIP);
             _stAvailable.insert(XBinary::FT_MACHOFAT);
             _stAvailable.insert(XBinary::FT_AR);
+            _stAvailable.insert(XBinary::FT_TAR);
             _stAvailable.insert(XBinary::FT_GZIP);
             _stAvailable.insert(XBinary::FT_ZLIB);
             _stAvailable.insert(XBinary::FT_LHA);
