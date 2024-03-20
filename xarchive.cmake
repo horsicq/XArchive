@@ -42,4 +42,6 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xzlib.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzlib.h
+    ${CMAKE_CURRENT_LIST_DIR}/xnpm.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xnpm.h
 )

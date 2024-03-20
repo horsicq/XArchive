@@ -30,7 +30,7 @@ class XTAR : public XArchive
 #pragma pack(push)
 #pragma pack(1)
     struct posix_header
-    {                              /* byte offset */
+    {                               /* byte offset */
       char name[100];               /*   0 */
       char mode[8];                 /* 100 */
       char uid[8];                  /* 108 */
@@ -38,7 +38,7 @@ class XTAR : public XArchive
       char size[12];                /* 124 */
       char mtime[12];               /* 136 */
       char chksum[8];               /* 148 */
-      char typeflag;                /* 156 */
+      char typeflag[1];             /* 156 */
       char linkname[100];           /* 157 */
       char magic[6];                /* 257 */
       char version[2];              /* 263 */
@@ -60,6 +60,9 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
     virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
+
+private:
+    posix_header read_posix_header(qint64 nOffset);
 
 signals:
 
