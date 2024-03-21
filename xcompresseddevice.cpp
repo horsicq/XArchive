@@ -20,6 +20,43 @@
  */
 #include "xcompresseddevice.h"
 
-XCompressedDevice::XCompressedDevice(QObject *parent) : QObject(parent)
+XCompressedDevice::XCompressedDevice(QObject *parent) : XIODevice(parent)
 {
+    g_pSubDevice = nullptr;
+    g_fileType = XBinary::FT_UNKNOWN;
+}
+
+XCompressedDevice::~XCompressedDevice()
+{
+    if (g_pSubDevice) {
+        g_pSubDevice->close();
+    }
+}
+
+bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
+{
+    bool bResult = false;
+
+    g_fileType = fileType;
+
+    if (fileType == XBinary::FT_GZIP) {
+        XGzip xgzip(pDevice);
+
+        if (xgzip.isValid()) {
+            XBinary::PDSTRUCT pdStruct = XBinary::createPdStruct();
+            QList<XArchive::RECORD> listRecords = xgzip.getRecords(1, &pdStruct);
+
+            if (listRecords.count()) {
+                XArchive::RECORD record = listRecords.at(0);
+
+                g_pSubDevice = new SubDevice(pDevice, record.nDataOffset, record.nCompressedSize);
+
+                if (g_pSubDevice->open(QIODevice::ReadOnly)) {
+                    setSize(record.nUncompressedSize);
+                }
+            }
+        }
+    }
+
+    return bResult;
 }

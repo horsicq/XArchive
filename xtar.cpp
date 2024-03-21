@@ -27,7 +27,24 @@ XTAR::XTAR(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XTAR::isValid(PDSTRUCT *pPdStruct)
 {
-    return false;
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+
+    return _isValid(&memoryMap, 0, pPdStruct);
+}
+
+bool XTAR::_isValid(_MEMORY_MAP *pMemoryMap, qint64 nOffset, PDSTRUCT *pPdStruct)
+{
+    // TODO more checks
+    bool bResult = false;
+
+    if ((getSize() - nOffset) >= 0x200) // TODO const
+    {
+        if (compareSignature(pMemoryMap, "00'ustar'", nOffset + 0x100, pPdStruct)) {
+            bResult = true;
+        }
+    }
+
+    return bResult;
 }
 
 bool XTAR::isValid(QIODevice *pDevice)
@@ -39,7 +56,27 @@ bool XTAR::isValid(QIODevice *pDevice)
 
 quint64 XTAR::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
-    return 0;
+    quint64 nResult = 0;
+
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+
+    qint64 nOffset = 0;
+
+    while (!(pPdStruct->bIsStop)) {
+        if (_isValid(&memoryMap, nOffset, pPdStruct)) {
+            nResult++;
+        } else {
+            break;
+        }
+
+        char size[12] = {};
+
+        read_array(nOffset + offsetof(posix_header, size), size, sizeof(size));
+
+        nOffset += (0x200);
+    }
+
+    return nResult;
 }
 
 QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)

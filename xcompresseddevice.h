@@ -21,14 +21,21 @@
 #ifndef XCOMPRESSEDDEVICE_H
 #define XCOMPRESSEDDEVICE_H
 
-#include <QObject>
+#include "xiodevice.h"
+#include "subdevice.h"
+#include "xgzip.h"
 
-class XCompressedDevice : public QObject {
+class XCompressedDevice : public XIODevice {
     Q_OBJECT
 public:
     explicit XCompressedDevice(QObject *parent = nullptr);
+    ~XCompressedDevice();
 
-signals:
+    bool setData(QIODevice *pDevice, XBinary::FT fileType);
+
+private:
+    SubDevice *g_pSubDevice;
+    XBinary::FT g_fileType;
 };
 
 #endif  // XCOMPRESSEDDEVICE_H
