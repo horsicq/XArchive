@@ -22,7 +22,6 @@
 
 XTAR::XTAR(QIODevice *pDevice) : XArchive(pDevice)
 {
-
 }
 
 bool XTAR::isValid(PDSTRUCT *pPdStruct)
@@ -37,7 +36,7 @@ bool XTAR::_isValid(_MEMORY_MAP *pMemoryMap, qint64 nOffset, PDSTRUCT *pPdStruct
     // TODO more checks
     bool bResult = false;
 
-    if ((getSize() - nOffset) >= 0x200) // TODO const
+    if ((getSize() - nOffset) >= 0x200)  // TODO const
     {
         if (compareSignature(pMemoryMap, "00'ustar'", nOffset + 0x100, pPdStruct)) {
             bResult = true;

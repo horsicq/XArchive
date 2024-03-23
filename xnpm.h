@@ -23,8 +23,7 @@
 
 #include "xarchive.h"
 
-class XNPM : public XArchive
-{
+class XNPM : public XArchive {
     Q_OBJECT
 
 public:
@@ -38,7 +37,6 @@ public:
     virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
 
 signals:
-
 };
 
-#endif // XNPM_H
+#endif  // XNPM_H

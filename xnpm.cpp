@@ -22,7 +22,6 @@
 
 XNPM::XNPM(QIODevice *pDevice) : XArchive(pDevice)
 {
-
 }
 
 bool XNPM::isValid(PDSTRUCT *pPdStruct)
