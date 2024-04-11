@@ -470,8 +470,14 @@ XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compress
 }
 
 XArchive::COMPRESS_RESULT XArchive::_compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits,
-                                                      qint32 nMemLevel, qint32 nStrategy)
+                                                      qint32 nMemLevel, qint32 nStrategy, PDSTRUCT *pPdStruct)
 {
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (pPdStruct == nullptr) {
+        pPdStruct = &pdStructEmpty;
+    }
+
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 
     const qint32 CHUNK = COMPRESS_BUFFERSIZE;
@@ -523,7 +529,7 @@ XArchive::COMPRESS_RESULT XArchive::_compress_deflate(QIODevice *pSourceDevice, 
                     ret = Z_ERRNO;
                     break;
                 }
-            } while (strm.avail_out == 0);
+            } while ((strm.avail_out == 0) && (!(pPdStruct->bIsStop)));
 
             if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
                 break;
