@@ -165,7 +165,7 @@ public:
     static bool isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID);
     static APK_SIG_BLOCK_RECORD getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID);
 
-    static bool addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord);
+    static bool addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord); // TODO PdStruct
     static bool addCentralDirectory(QIODevice *pDest, QList<ZIPFILE_RECORD> *pListZipFileRecords, const QString &sComment = "");
 
     virtual QString getFileFormatExt();
