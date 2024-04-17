@@ -71,7 +71,29 @@ bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
     return bResult;
 }
 
-bool XCompressedDevice::isValid()
+bool XCompressedDevice::open(OpenMode mode)
 {
-    return g_bIsValid;
+    bool bResult = false;
+
+    if ((g_bIsValid) && (mode == QIODevice::ReadOnly)) {
+        bResult = XIODevice::open(mode);
+    }
+
+    return bResult;
+}
+
+qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
+{
+#ifdef QT_DEBUG
+    qDebug("XCompressedDevice::readData: seekpos %ll", pos());
+#endif
+    return 0;
+}
+
+qint64 XCompressedDevice::writeData(const char *pData, qint64 nMaxSize)
+{
+#ifdef QT_DEBUG
+    qDebug("XCompressedDevice::writeData: seekpos %ll", pos());
+#endif
+    return 0;
 }

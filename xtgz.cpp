@@ -30,6 +30,11 @@ XTGZ::XTGZ(QIODevice *pDevice)
 XTGZ::~XTGZ()
 {
     delete g_pXtar;
+
+    if (g_pCompressedDevice->isOpen()) {
+        g_pCompressedDevice->close();
+    }
+
     delete g_pCompressedDevice;
 }
 
@@ -37,7 +42,7 @@ bool XTGZ::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (g_pCompressedDevice->isValid()) {
+    if (g_pCompressedDevice->isOpen()) {
         bResult = g_pXtar->isValid(pPdStruct);
     }
 
@@ -55,14 +60,21 @@ void XTGZ::setDevice(QIODevice *pDevice)
 {
     g_pCompressedDevice->setData(pDevice, FT_GZIP);
 
-    XBinary::setDevice(g_pCompressedDevice);
+    if (g_pCompressedDevice->isOpen()) {
+        g_pCompressedDevice->close();
+    }
+
+    if (g_pCompressedDevice->open(QIODevice::ReadOnly)) {
+        XBinary::setDevice(g_pCompressedDevice);
+        g_pXtar->setDevice(g_pCompressedDevice);
+    }
 }
 
 quint64 XTGZ::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     quint64 nResult = 0;
 
-    if (g_pCompressedDevice->isValid()) {
+    if (g_pCompressedDevice->isOpen()) {
         nResult = g_pXtar->getNumberOfRecords(pPdStruct);
     }
 
@@ -73,7 +85,7 @@ QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> result;
 
-    if (g_pCompressedDevice->isValid()) {
+    if (g_pCompressedDevice->isOpen()) {
         result = g_pXtar->getRecords(nLimit, pPdStruct);
     }
 
@@ -82,16 +94,19 @@ QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
 QString XTGZ::getFileFormatExt()
 {
-    return "tgz";
+    return "tar.gz";
 }
 
 QList<XBinary::MAPMODE> XTGZ::getMapModesList(PDSTRUCT *pPdStruct)
 {
     QList<XBinary::MAPMODE> result;
 
-    if (g_pCompressedDevice->isValid()) {
-        result = g_pXtar->getMapModesList(pPdStruct);
-    }
+    result = g_pXtar->getMapModesList(pPdStruct);
 
     return result;
+}
+
+XBinary::FT XTGZ::getFileType()
+{
+    return FT_TARGZ;
 }

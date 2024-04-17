@@ -21,9 +21,9 @@
 #ifndef XNPM_H
 #define XNPM_H
 
-#include "xarchive.h"
+#include "xtgz.h"
 
-class XNPM : public XArchive {
+class XNPM : public XTGZ {
     Q_OBJECT
 
 public:
@@ -31,10 +31,8 @@ public:
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
-    virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
+    virtual FT getFileType();
 
 signals:
 };

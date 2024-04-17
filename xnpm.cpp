@@ -20,7 +20,7 @@
  */
 #include "xnpm.h"
 
-XNPM::XNPM(QIODevice *pDevice) : XArchive(pDevice)
+XNPM::XNPM(QIODevice *pDevice) : XTGZ(pDevice)
 {
 }
 
@@ -36,30 +36,12 @@ bool XNPM::isValid(QIODevice *pDevice)
     return xtar.isValid();
 }
 
-quint64 XNPM::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    return 0;
-}
-
-QList<XArchive::RECORD> XNPM::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    QList<XArchive::RECORD> listResult;
-
-    return listResult;
-}
-
 QString XNPM::getFileFormatExt()
 {
     return "tgz";
 }
 
-QList<XBinary::MAPMODE> XNPM::getMapModesList(PDSTRUCT *pPdStruct)
+XBinary::FT XNPM::getFileType()
 {
-    Q_UNUSED(pPdStruct)
-
-    QList<MAPMODE> listResult;
-
-    listResult.append(MAPMODE_REGIONS);
-
-    return listResult;
+    return FT_NPM;
 }

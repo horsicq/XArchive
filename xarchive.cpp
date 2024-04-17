@@ -796,7 +796,7 @@ bool XArchive::_writeToDevice(QIODevice *pDevice, char *pBuffer, qint32 nBufferS
 
     if (pDevice) {
         if (nDecompressedSize == -1) {
-            nDecompressedSize = nBufferSize;
+            nDecompressedSize = nTotalHandled + nBufferSize;
         }
 
         char *_pOffset = pBuffer;

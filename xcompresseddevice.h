@@ -32,7 +32,11 @@ public:
     ~XCompressedDevice();
 
     bool setData(QIODevice *pDevice, XBinary::FT fileType);
-    bool isValid();
+    virtual bool open(OpenMode mode);
+
+protected:
+    virtual qint64 readData(char *pData, qint64 nMaxSize);
+    virtual qint64 writeData(const char *pData, qint64 nMaxSize);
 
 private:
     SubDevice *g_pSubDevice;
