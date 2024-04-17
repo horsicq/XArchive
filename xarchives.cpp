@@ -24,7 +24,7 @@ XArchives::XArchives(QObject *pParent) : QObject(pParent)
 {
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fileType, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
@@ -36,7 +36,13 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit,
 
     // TODO more !!!
     // CAB RAR 7ZIP
-    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
+    QSet<XBinary::FT> stFileTypes;
+
+    if (fileType == XBinary::FT_UNKNOWN) {
+        stFileTypes = XBinary::getFileTypes(pDevice, true);
+    } else {
+        stFileTypes += fileType;
+    }
 
     if (stFileTypes.contains(XArchive::FT_ZIP)) {
         XZip xzip(pDevice);
@@ -50,6 +56,9 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit,
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         listResult = xtar.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
+        XTGZ xtgz(pDevice);
+        listResult = xtgz.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
         listResult = xgzip.getRecords(nLimit, pPdStruct);
@@ -64,7 +73,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, qint32 nLimit,
     return listResult;
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(const QString &sFileName, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+QList<XArchive::RECORD> XArchives::getRecords(const QString &sFileName, XBinary::FT fileType, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
 
@@ -72,7 +81,7 @@ QList<XArchive::RECORD> XArchives::getRecords(const QString &sFileName, qint32 n
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        listResult = getRecords(&file, nLimit, pPdStruct);
+        listResult = getRecords(&file, fileType, nLimit, pPdStruct);
 
         file.close();
     }
@@ -107,6 +116,9 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         baResult = xtar.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
+        XTGZ xtgz(pDevice);
+        baResult = xtgz.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
         baResult = xgzip.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
@@ -182,6 +194,9 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         bResult = xtar.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
+        XTGZ xtgz(pDevice);
+        bResult = xtgz.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
         bResult = xgzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
@@ -220,7 +235,7 @@ bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecor
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        QList<XArchive::RECORD> listRecords = getRecords(&file, -1, pPdStruct);
+        QList<XArchive::RECORD> listRecords = getRecords(&file, XBinary::FT_UNKNOWN, -1, pPdStruct); // TODO FT
 
         XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords, pPdStruct);
 
@@ -244,7 +259,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
         pPdStruct = &pdStructEmpty;
     }
 
-    QList<XArchive::RECORD> listRecords = getRecords(pDevice, -1, pPdStruct);
+    QList<XArchive::RECORD> listRecords = getRecords(pDevice, XBinary::FT_UNKNOWN, -1, pPdStruct);
 
     qint32 nNumberOfRecords = listRecords.count();
 
@@ -296,6 +311,9 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         bResult = xtar.isArchiveRecordPresent(sRecordFileName);
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
+        XTGZ xtgz(pDevice);
+        bResult = xtgz.isArchiveRecordPresent(sRecordFileName);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
         bResult = xgzip.isArchiveRecordPresent(sRecordFileName);

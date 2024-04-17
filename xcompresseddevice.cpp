@@ -24,12 +24,14 @@ XCompressedDevice::XCompressedDevice(QObject *parent) : XIODevice(parent)
 {
     g_pSubDevice = nullptr;
     g_fileType = XBinary::FT_UNKNOWN;
+    g_bIsValid = false;
 }
 
 XCompressedDevice::~XCompressedDevice()
 {
     if (g_pSubDevice) {
         g_pSubDevice->close();
+        delete g_pSubDevice;
     }
 }
 
@@ -49,14 +51,27 @@ bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
             if (listRecords.count()) {
                 XArchive::RECORD record = listRecords.at(0);
 
+                if (g_pSubDevice) {
+                    g_pSubDevice->close();
+                    delete g_pSubDevice;
+                }
+
                 g_pSubDevice = new SubDevice(pDevice, record.nDataOffset, record.nCompressedSize);
 
                 if (g_pSubDevice->open(QIODevice::ReadOnly)) {
                     setSize(record.nUncompressedSize);
+                    g_bIsValid = true;
                 }
             }
         }
     }
 
+    g_bIsValid = bResult;
+
     return bResult;
+}
+
+bool XCompressedDevice::isValid()
+{
+    return g_bIsValid;
 }

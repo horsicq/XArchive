@@ -32,10 +32,12 @@ public:
     ~XCompressedDevice();
 
     bool setData(QIODevice *pDevice, XBinary::FT fileType);
+    bool isValid();
 
 private:
     SubDevice *g_pSubDevice;
     XBinary::FT g_fileType;
+    bool g_bIsValid;
 };
 
 #endif  // XCOMPRESSEDDEVICE_H

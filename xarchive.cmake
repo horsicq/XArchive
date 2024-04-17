@@ -38,6 +38,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xtar.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtgz.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtgz.h
     ${CMAKE_CURRENT_LIST_DIR}/xzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xzlib.cpp

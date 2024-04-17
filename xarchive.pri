@@ -17,6 +17,7 @@ HEADERS += \
     $$PWD/xrar.h \
     $$PWD/xsevenzip.h \
     $$PWD/xtar.h \
+    $$PWD/xtgz.h \
     $$PWD/xzip.h \
     $$PWD/xnpm.h \
     $$PWD/xzlib.h
@@ -37,6 +38,7 @@ SOURCES += \
     $$PWD/xrar.cpp \
     $$PWD/xsevenzip.cpp \
     $$PWD/xtar.cpp \
+    $$PWD/xtgz.cpp \
     $$PWD/xzip.cpp \
     $$PWD/xnpm.cpp \
     $$PWD/xzlib.cpp
