@@ -85,18 +85,20 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     SubDevice sd(getDevice(), nOffset, -1);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        qint64 nInSize = 0;
-        qint64 nOutSize = 0;
+        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+        decompressStruct.compressMethod = record.compressMethod;
+        decompressStruct.pSourceDevice = &sd;
+        decompressStruct.pDestDevice = 0;
 
-        XArchive::COMPRESS_RESULT cr = _decompress(record.compressMethod, &sd, 0, pPdStruct, &nInSize, &nOutSize);
+        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
 
         Q_UNUSED(cr)
 
         record.nHeaderOffset = 0;
         record.nHeaderSize = nOffset;
         record.nDataOffset = nOffset;
-        record.nCompressedSize = nInSize;
-        record.nUncompressedSize = nOutSize;
+        record.nCompressedSize = decompressStruct.nInSize;
+        record.nUncompressedSize = decompressStruct.nOutSize;
 
         sd.close();
     }
@@ -171,17 +173,19 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     SubDevice sd(getDevice(), nOffset, -1);
 
-    if (sd.open(QIODevice::ReadOnly)) {
-        qint64 nInSize = 0;
-        qint64 nOutSize = 0;
+    if (sd.open(QIODevice::ReadOnly)) { 
+        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+        decompressStruct.compressMethod = cm;
+        decompressStruct.pSourceDevice = &sd;
+        decompressStruct.pDestDevice = 0;
 
-        XArchive::COMPRESS_RESULT cr = _decompress(cm, &sd, 0, pPdStruct, &nInSize, &nOutSize);
+        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
 
         Q_UNUSED(cr)
 
         memoryRecord.nOffset = nOffset;
         memoryRecord.nAddress = -1;
-        memoryRecord.nSize = nInSize;
+        memoryRecord.nSize = decompressStruct.nInSize;
         memoryRecord.type = MMT_FILESEGMENT;
 
         sd.close();

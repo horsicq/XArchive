@@ -66,7 +66,7 @@ bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
         }
     }
 
-    g_bIsValid = bResult;
+    bResult = g_bIsValid;
 
     return bResult;
 }
@@ -84,10 +84,33 @@ bool XCompressedDevice::open(OpenMode mode)
 
 qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
 {
+    qint64 nResult = 0;
 #ifdef QT_DEBUG
-    qDebug("XCompressedDevice::readData: seekpos %ll", pos());
+    qDebug("XCompressedDevice::readData: seekpos %d", (qint32)pos());
+    qDebug("XCompressedDevice::readData: size %d", (qint32)nMaxSize);
 #endif
-    return 0;
+    QBuffer buffer;
+
+    if (buffer.open(QIODevice::ReadWrite)) {
+        g_pSubDevice->seek(0);
+
+        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+        decompressStruct.compressMethod = XArchive::COMPRESS_METHOD_DEFLATE;
+        decompressStruct.pSourceDevice = g_pSubDevice;
+        decompressStruct.pDestDevice = &buffer;
+        decompressStruct.nDecompressedOffset = pos();
+        decompressStruct.nDecompressedSize = nMaxSize;
+
+        XArchive::COMPRESS_RESULT compressResult = XArchive::_decompress(&decompressStruct);
+
+        if (compressResult == XArchive::COMPRESS_RESULT_OK) {
+            nResult = decompressStruct.nOutSize; // TODO
+        }
+
+        buffer.close();
+    }
+
+    return nResult;
 }
 
 qint64 XCompressedDevice::writeData(const char *pData, qint64 nMaxSize)

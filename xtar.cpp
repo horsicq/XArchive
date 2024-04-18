@@ -71,6 +71,7 @@ quint64 XTAR::getNumberOfRecords(PDSTRUCT *pPdStruct)
         char size[12] = {};
 
         read_array(nOffset + offsetof(posix_header, size), size, sizeof(size));
+        // TODO Check magic
 
         nOffset += (0x200);
     }
@@ -81,6 +82,16 @@ quint64 XTAR::getNumberOfRecords(PDSTRUCT *pPdStruct)
 QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
+
+    qint64 nOffset = 0;
+
+    while (!(pPdStruct->bIsStop)) {
+        XTAR::posix_header header = read_posix_header(nOffset);
+
+        nOffset += (0x200);
+
+        break;
+    }
 
     return listResult;
 }
@@ -99,6 +110,11 @@ QList<XBinary::MAPMODE> XTAR::getMapModesList(PDSTRUCT *pPdStruct)
     listResult.append(MAPMODE_REGIONS);
 
     return listResult;
+}
+
+XBinary::FT XTAR::getFileType()
+{
+    return FT_TAR;
 }
 
 XTAR::posix_header XTAR::read_posix_header(qint64 nOffset)

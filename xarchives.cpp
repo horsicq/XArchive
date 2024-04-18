@@ -56,6 +56,9 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         listResult = xtar.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_NPM)) {
+        XNPM xnpm(pDevice);
+        listResult = xnpm.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
         XTGZ xtgz(pDevice);
         listResult = xtgz.getRecords(nLimit, pPdStruct);

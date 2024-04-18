@@ -83,8 +83,18 @@ public:
 
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) = 0;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) = 0;
-    static COMPRESS_RESULT _decompress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr,
-                                       qint64 *pnInSize = nullptr, qint64 *pnOutSize = nullptr, qint64 nDecompressedOffset = 0, qint64 nDecompressedSize = -1);
+
+    struct DECOMPRESSSTRUCT {
+        COMPRESS_METHOD compressMethod;
+        QIODevice *pSourceDevice;
+        QIODevice *pDestDevice;
+        qint64 nInSize;
+        qint64 nOutSize;
+        qint64 nDecompressedOffset;
+        qint64 nDecompressedSize;
+    };
+
+    static COMPRESS_RESULT _decompress(DECOMPRESSSTRUCT *pDecompressStruct, PDSTRUCT *pPdStruct = nullptr);
     static COMPRESS_RESULT _compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr);
     static COMPRESS_RESULT _compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
                                              qint32 nStrategy, PDSTRUCT *pPdStruct = nullptr);
@@ -107,7 +117,7 @@ public:
     //    virtual _MEMORY_MAP getMemoryMap(); // TODO
 
 private:
-    static bool _writeToDevice(QIODevice *pDevice, char *pBuffer, qint32 nBufferSize, qint64 nTotalHandled, qint64 nDecompressedOffset, qint64 nDecompressedSize);
+    static bool _writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct);
 };
 
 #endif  // XARCHIVE_H
