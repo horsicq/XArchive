@@ -24,8 +24,7 @@
 #include "xtar.h"
 #include "xcompresseddevice.h"
 
-class XTGZ : public XArchive
-{
+class XTGZ : public XArchive {
     Q_OBJECT
 public:
     explicit XTGZ(QIODevice *pDevice = nullptr);
@@ -46,4 +45,4 @@ private:
     XTAR *g_pXtar;
     XCompressedDevice *g_pCompressedDevice;
 };
-#endif // XTGZ_H
+#endif  // XTGZ_H

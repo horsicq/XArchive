@@ -46,7 +46,8 @@ public:
     explicit XArchives(QObject *pParent = nullptr);
 
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice, XBinary::FT fileType = XBinary::FT_UNKNOWN, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QList<XArchive::RECORD> getRecords(const QString &sFileName, XBinary::FT fileType = XBinary::FT_UNKNOWN, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static QList<XArchive::RECORD> getRecords(const QString &sFileName, XBinary::FT fileType = XBinary::FT_UNKNOWN, qint32 nLimit = -1,
+                                              XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QList<XArchive::RECORD> getRecordsFromDirectory(const QString &sDirectoryName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0,
                                  qint64 nDecompressedSize = -1);
@@ -59,7 +60,7 @@ public:
     static bool decompressToFile(const QString &sFileName, const QString &sRecordFileName, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(const QString &sFileName, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName); // TODO PDSTRUCT
+    static bool isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName);  // TODO PDSTRUCT
     static bool isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName);
     static bool isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &stAvailable);
     static bool isArchiveOpenValid(const QString &sFileName, const QSet<XBinary::FT> &stAvailable);

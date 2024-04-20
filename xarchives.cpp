@@ -238,7 +238,7 @@ bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecor
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        QList<XArchive::RECORD> listRecords = getRecords(&file, XBinary::FT_UNKNOWN, -1, pPdStruct); // TODO FT
+        QList<XArchive::RECORD> listRecords = getRecords(&file, XBinary::FT_UNKNOWN, -1, pPdStruct);  // TODO FT
 
         XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords, pPdStruct);
 

@@ -173,7 +173,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     SubDevice sd(getDevice(), nOffset, -1);
 
-    if (sd.open(QIODevice::ReadOnly)) { 
+    if (sd.open(QIODevice::ReadOnly)) {
         XArchive::DECOMPRESSSTRUCT decompressStruct = {};
         decompressStruct.compressMethod = cm;
         decompressStruct.pSourceDevice = &sd;

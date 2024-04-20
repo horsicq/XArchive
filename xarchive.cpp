@@ -91,7 +91,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             pDecompressStruct->nInSize += nTemp;
             pDecompressStruct->nOutSize += nTemp;
 
-            if ((pDecompressStruct->nDecompressedSize != -1) && ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
+            if ((pDecompressStruct->nDecompressedSize != -1) &&
+                ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
                 break;
             }
         }
@@ -173,7 +174,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                     pDecompressStruct->nInSize += strm.total_in;
                     pDecompressStruct->nOutSize += strm.total_out;
 
-                    if ((pDecompressStruct->nDecompressedSize != -1) && ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
+                    if ((pDecompressStruct->nDecompressedSize != -1) &&
+                        ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
                         ret = Z_STREAM_END;
                         break;
                     }
@@ -249,7 +251,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                     pDecompressStruct->nInSize += strm.total_in_lo32;
                     pDecompressStruct->nOutSize += strm.total_out_lo32;
 
-                    if ((pDecompressStruct->nDecompressedSize != -1) && ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
+                    if ((pDecompressStruct->nDecompressedSize != -1) &&
+                        ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
                         ret = BZ_STREAM_END;
                         break;
                     }
@@ -344,7 +347,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                                 pDecompressStruct->nInSize += inProcessed;
                                 pDecompressStruct->nOutSize += outProcessed;
 
-                                if ((pDecompressStruct->nDecompressedSize != -1) && ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
+                                if ((pDecompressStruct->nDecompressedSize != -1) &&
+                                    ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
                                     result = COMPRESS_RESULT_OK;
                                     bRun = false;
                                     break;
@@ -364,7 +368,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 LzmaDec_Free(&state, &g_Alloc);
             }
         }
-    } else if ((pDecompressStruct->compressMethod == COMPRESS_METHOD_LZH5) || (pDecompressStruct->compressMethod == COMPRESS_METHOD_LZH6) || (pDecompressStruct->compressMethod == COMPRESS_METHOD_LZH7)) {
+    } else if ((pDecompressStruct->compressMethod == COMPRESS_METHOD_LZH5) || (pDecompressStruct->compressMethod == COMPRESS_METHOD_LZH6) ||
+               (pDecompressStruct->compressMethod == COMPRESS_METHOD_LZH7)) {
         qint32 nMethod = 5;
         qint32 nBufferSize = 1U << 17;
 
@@ -811,7 +816,8 @@ bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUC
             nDecompressedSize = pDecompressStruct->nOutSize + nBufferSize;
         }
 
-        if ((pDecompressStruct->nDecompressedOffset < (pDecompressStruct->nOutSize + nBufferSize)) && (pDecompressStruct->nDecompressedOffset > pDecompressStruct->nOutSize)){
+        if ((pDecompressStruct->nDecompressedOffset < (pDecompressStruct->nOutSize + nBufferSize)) &&
+            (pDecompressStruct->nDecompressedOffset > pDecompressStruct->nOutSize)) {
             _pOffset += (pDecompressStruct->nDecompressedOffset - pDecompressStruct->nOutSize);
             _nSize -= (pDecompressStruct->nDecompressedOffset - pDecompressStruct->nOutSize);
         }
@@ -823,7 +829,7 @@ bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUC
         if (_nSize > 0) {
             qint64 nBytesWrote = pDecompressStruct->pDestDevice->write(_pOffset, _nSize);
 
-            pDecompressStruct->nDecompressedWrote +=nBytesWrote;
+            pDecompressStruct->nDecompressedWrote += nBytesWrote;
 
             if (nBytesWrote != _nSize) {
                 bResult = false;
