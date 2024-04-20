@@ -326,7 +326,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
                                 nPos += inProcessed;
 
-                                if (!_writeToDevice((char *)out, outProcessed, pDecompressStruct)) {
+                                if (!_writeToDevice((char *)out, (qint32)outProcessed, pDecompressStruct)) {
                                     result = COMPRESS_RESULT_WRITEERROR;
                                     bRun = false;
                                     break;
@@ -802,7 +802,7 @@ bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUC
 {
     bool bResult = true;
 
-    if (pDecompressStruct->pSourceDevice) {
+    if (pDecompressStruct->pDestDevice) {
         char *_pOffset = pBuffer;
         qint32 _nSize = nBufferSize;
         qint64 nDecompressedSize = pDecompressStruct->nDecompressedSize;
@@ -821,7 +821,11 @@ bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUC
         }
 
         if (_nSize > 0) {
-            if (pDecompressStruct->pSourceDevice->write(_pOffset, _nSize) != _nSize) {
+            qint64 nBytesWrote = pDecompressStruct->pDestDevice->write(_pOffset, _nSize);
+
+            pDecompressStruct->nDecompressedWrote +=nBytesWrote;
+
+            if (nBytesWrote != _nSize) {
                 bResult = false;
             }
         }

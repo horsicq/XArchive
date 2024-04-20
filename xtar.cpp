@@ -121,22 +121,7 @@ XTAR::posix_header XTAR::read_posix_header(qint64 nOffset)
 {
     posix_header record = {};
 
-    read_array(nOffset + offsetof(posix_header, name), record.name, sizeof(record.name));
-    read_array(nOffset + offsetof(posix_header, mode), record.mode, sizeof(record.mode));
-    read_array(nOffset + offsetof(posix_header, uid), record.uid, sizeof(record.uid));
-    read_array(nOffset + offsetof(posix_header, gid), record.gid, sizeof(record.gid));
-    read_array(nOffset + offsetof(posix_header, size), record.size, sizeof(record.size));
-    read_array(nOffset + offsetof(posix_header, mtime), record.mtime, sizeof(record.mtime));
-    read_array(nOffset + offsetof(posix_header, chksum), record.chksum, sizeof(record.chksum));
-    read_array(nOffset + offsetof(posix_header, typeflag), record.typeflag, sizeof(record.typeflag));
-    read_array(nOffset + offsetof(posix_header, linkname), record.linkname, sizeof(record.linkname));
-    read_array(nOffset + offsetof(posix_header, magic), record.magic, sizeof(record.magic));
-    read_array(nOffset + offsetof(posix_header, version), record.version, sizeof(record.version));
-    read_array(nOffset + offsetof(posix_header, uname), record.uname, sizeof(record.uname));
-    read_array(nOffset + offsetof(posix_header, gname), record.gname, sizeof(record.gname));
-    read_array(nOffset + offsetof(posix_header, devmajor), record.devmajor, sizeof(record.devmajor));
-    read_array(nOffset + offsetof(posix_header, devminor), record.devminor, sizeof(record.devminor));
-    read_array(nOffset + offsetof(posix_header, prefix), record.prefix, sizeof(record.prefix));
+    read_array(nOffset, (char *)&record, sizeof(record));
 
     return record;
 }

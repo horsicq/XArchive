@@ -103,8 +103,9 @@ qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
 
         XArchive::COMPRESS_RESULT compressResult = XArchive::_decompress(&decompressStruct);
 
-        if (compressResult == XArchive::COMPRESS_RESULT_OK) {
-            nResult = decompressStruct.nOutSize; // TODO
+        if ((compressResult == XArchive::COMPRESS_RESULT_OK) && (buffer.size() == decompressStruct.nDecompressedWrote)) {
+            XBinary::_copyMemory(pData, (char *)(buffer.data().data()), decompressStruct.nDecompressedWrote);
+            nResult = decompressStruct.nDecompressedWrote;
         }
 
         buffer.close();
