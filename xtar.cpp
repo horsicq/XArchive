@@ -88,9 +88,23 @@ QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     while (!(pPdStruct->bIsStop)) {
         XTAR::posix_header header = read_posix_header(nOffset);
 
-        nOffset += (0x200);
+        if (!compareMemory(header.magic, "ustar", 6)) {
+            break;
+        }
 
-        break;
+        RECORD record = {};
+        record.compressMethod = COMPRESS_METHOD_STORE;
+        record.nDataOffset = nOffset + 0x200;
+        record.nHeaderOffset = nOffset;
+        record.nHeaderSize = 0x200;
+        record.nUncompressedSize = QString(header.size).toULongLong(0, 8);
+        record.sFileName = header.name;
+        record.nCompressedSize = record.nUncompressedSize;
+
+        listResult.append(record);
+
+        nOffset += (0x200);
+        nOffset += align_up(record.nCompressedSize, 0x200);
     }
 
     return listResult;
