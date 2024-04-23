@@ -62,18 +62,16 @@ quint64 XTAR::getNumberOfRecords(PDSTRUCT *pPdStruct)
     qint64 nOffset = 0;
 
     while (!(pPdStruct->bIsStop)) {
-        if (_isValid(&memoryMap, nOffset, pPdStruct)) {
-            nResult++;
-        } else {
+        XTAR::posix_header header = read_posix_header(nOffset);
+
+        if (!compareMemory(header.magic, "ustar", 6)) {
             break;
         }
 
-        char size[12] = {};
-
-        read_array(nOffset + offsetof(posix_header, size), size, sizeof(size));
-        // TODO Check magic
+        nResult++;
 
         nOffset += (0x200);
+        nOffset += align_up(QString(header.size).toULongLong(0, 8), 0x200);
     }
 
     return nResult;
