@@ -34,6 +34,13 @@ public:
     bool setData(QIODevice *pDevice, XBinary::FT fileType);
     virtual bool open(OpenMode mode);
 
+    void setLayerSize(qint64 nLayerSize);
+    qint64 getLayerSize();
+    void setLayerOffset(qint64 nLayerOffset);
+    qint64 getLayerOffset();
+    void setLayerCompressMethod(XArchive::COMPRESS_METHOD compressMethod);
+    XArchive::COMPRESS_METHOD getLayerCompressMethod();
+
 protected:
     virtual qint64 readData(char *pData, qint64 nMaxSize);
     virtual qint64 writeData(const char *pData, qint64 nMaxSize);
@@ -42,6 +49,9 @@ private:
     SubDevice *g_pSubDevice;
     XBinary::FT g_fileType;
     bool g_bIsValid;
+    qint64 g_nLayerSize;
+    qint64 g_nLayerOffset;
+    XArchive::COMPRESS_METHOD g_compressMethod;
 };
 
 #endif  // XCOMPRESSEDDEVICE_H

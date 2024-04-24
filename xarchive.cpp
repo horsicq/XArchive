@@ -431,6 +431,46 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
     return result;
 }
 
+bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset = 0, qint64 nDecompressedSize = -1)
+{
+    bool bResult = false;
+
+    if (pRecord->layerCompressMethod == COMPRESS_METHOD_UNKNOWN) {
+        SubDevice sd(pSourceDevice, pRecord->nDataOffset, pRecord->nCompressedSize);
+
+        if (sd.open(QIODevice::ReadOnly)) {
+            XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+            decompressStruct.compressMethod = pRecord->compressMethod;
+            decompressStruct.pSourceDevice = &sd;
+            decompressStruct.pDestDevice = pDestDevice;
+            decompressStruct.nDecompressedOffset = nDecompressedOffset;
+            decompressStruct.nDecompressedSize = nDecompressedSize;
+
+            bResult = (_decompress(&decompressStruct, pPdStruct) == COMPRESS_RESULT_OK);
+
+            sd.close();
+        }
+    } else if ((pRecord->layerCompressMethod != COMPRESS_METHOD_UNKNOWN) && (pRecord->compressMethod == COMPRESS_METHOD_STORE)) {
+        SubDevice sd(pSourceDevice, pRecord->nLayerOffset, pRecord->nLayerSize);
+
+        if (sd.open(QIODevice::ReadOnly)) {
+            XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+            decompressStruct.compressMethod = pRecord->layerCompressMethod;
+            decompressStruct.pSourceDevice = &sd;
+            decompressStruct.pDestDevice = pDestDevice;
+            decompressStruct.nDecompressedOffset = pRecord->nDataOffset;
+            decompressStruct.nDecompressedSize = pRecord->nUncompressedSize;
+
+            bResult = (_decompress(&decompressStruct, pPdStruct) == COMPRESS_RESULT_OK);
+
+            sd.close();
+        }
+        // TODO nDecompressedOffset -> Create buffer copy
+    }
+
+    return bResult;
+}
+
 XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
 {
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -559,25 +599,12 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdSt
 {
     QByteArray result;
 
-    SubDevice sd(getDevice(), pRecord->nDataOffset, pRecord->nCompressedSize);
+    QBuffer buffer;
+    buffer.setBuffer(&result);
 
-    if (sd.open(QIODevice::ReadOnly)) {
-        QBuffer buffer;
-        buffer.setBuffer(&result);
-        buffer.open(QIODevice::WriteOnly);
-
-        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.compressMethod = pRecord->compressMethod;
-        decompressStruct.pSourceDevice = &sd;
-        decompressStruct.pDestDevice = &buffer;
-        decompressStruct.nDecompressedOffset = nDecompressedOffset;
-        decompressStruct.nDecompressedSize = nDecompressedSize;
-
-        _decompress(&decompressStruct, pPdStruct);
-
+    if (buffer.open(QIODevice::WriteOnly)) {
+        _decompressRecord(pRecord, getDevice(), &buffer, pPdStruct, nDecompressedOffset, nDecompressedSize);
         buffer.close();
-
-        sd.close();
     }
 
     return result;
@@ -618,21 +645,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
         file.setFileName(sResultFileName);
 
         if (file.open(QIODevice::ReadWrite)) {
-            SubDevice sd(getDevice(), pRecord->nDataOffset, pRecord->nCompressedSize);
-
-            if (sd.open(QIODevice::ReadOnly)) {
-                file.resize(0);
-
-                XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-                decompressStruct.compressMethod = pRecord->compressMethod;
-                decompressStruct.pSourceDevice = &sd;
-                decompressStruct.pDestDevice = &file;
-
-                bResult = (_decompress(&decompressStruct, pPdStruct) == COMPRESS_RESULT_OK);
-
-                sd.close();
-            }
-
+            bResult = _decompressRecord(pRecord, getDevice(), &file, pPdStruct, 0, -1);
             file.close();
         }
     }
@@ -816,23 +829,25 @@ bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUC
             nDecompressedSize = pDecompressStruct->nOutSize + nBufferSize;
         }
 
-        if ((pDecompressStruct->nDecompressedOffset < (pDecompressStruct->nOutSize + nBufferSize)) &&
-            (pDecompressStruct->nDecompressedOffset > pDecompressStruct->nOutSize)) {
-            _pOffset += (pDecompressStruct->nDecompressedOffset - pDecompressStruct->nOutSize);
-            _nSize -= (pDecompressStruct->nDecompressedOffset - pDecompressStruct->nOutSize);
-        }
+        if ((pDecompressStruct->nDecompressedOffset) < (pDecompressStruct->nOutSize + nBufferSize)) {
+            if ((pDecompressStruct->nDecompressedOffset < (pDecompressStruct->nOutSize + nBufferSize)) &&
+                (pDecompressStruct->nDecompressedOffset > pDecompressStruct->nOutSize)) {
+                _pOffset += (pDecompressStruct->nDecompressedOffset - pDecompressStruct->nOutSize);
+                _nSize -= (pDecompressStruct->nDecompressedOffset - pDecompressStruct->nOutSize);
+            }
 
-        if ((pDecompressStruct->nDecompressedOffset + nDecompressedSize) < (pDecompressStruct->nOutSize + nBufferSize)) {
-            _nSize -= ((pDecompressStruct->nOutSize + nBufferSize) - (pDecompressStruct->nDecompressedOffset + nDecompressedSize));
-        }
+            if ((pDecompressStruct->nDecompressedOffset + nDecompressedSize) < (pDecompressStruct->nOutSize + nBufferSize)) {
+                _nSize -= ((pDecompressStruct->nOutSize + nBufferSize) - (pDecompressStruct->nDecompressedOffset + nDecompressedSize));
+            }
 
-        if (_nSize > 0) {
-            qint64 nBytesWrote = pDecompressStruct->pDestDevice->write(_pOffset, _nSize);
+            if (_nSize > 0) {
+                qint64 nBytesWrote = pDecompressStruct->pDestDevice->write(_pOffset, _nSize);
 
-            pDecompressStruct->nDecompressedWrote += nBytesWrote;
+                pDecompressStruct->nDecompressedWrote += nBytesWrote;
 
-            if (nBytesWrote != _nSize) {
-                bResult = false;
+                if (nBytesWrote != _nSize) {
+                    bResult = false;
+                }
             }
         }
     }

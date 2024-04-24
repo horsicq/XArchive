@@ -83,6 +83,8 @@ QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint64 nOffset = 0;
 
+    qint32 nIndex = 0;
+
     while (!(pPdStruct->bIsStop)) {
         XTAR::posix_header header = read_posix_header(nOffset);
 
@@ -100,6 +102,12 @@ QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         record.nCompressedSize = record.nUncompressedSize;
 
         listResult.append(record);
+
+        nIndex++;
+
+        if ((nLimit != -1) && (nIndex > nLimit)) {
+            break;
+        }
 
         nOffset += (0x200);
         nOffset += align_up(record.nCompressedSize, 0x200);

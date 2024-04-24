@@ -25,6 +25,9 @@ XCompressedDevice::XCompressedDevice(QObject *parent) : XIODevice(parent)
     g_pSubDevice = nullptr;
     g_fileType = XBinary::FT_UNKNOWN;
     g_bIsValid = false;
+    g_nLayerSize = 0;
+    g_nLayerOffset = 0;
+    g_compressMethod = XArchive::COMPRESS_METHOD_UNKNOWN;
 }
 
 XCompressedDevice::~XCompressedDevice()
@@ -60,6 +63,9 @@ bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
 
                 if (g_pSubDevice->open(QIODevice::ReadOnly)) {
                     setSize(record.nUncompressedSize);
+                    setLayerSize(record.nUncompressedSize);
+                    setLayerOffset(record.nDataOffset);
+                    setLayerCompressMethod(XArchive::COMPRESS_METHOD_DEFLATE);
                     g_bIsValid = true;
                 }
             }
@@ -82,6 +88,36 @@ bool XCompressedDevice::open(OpenMode mode)
     return bResult;
 }
 
+void XCompressedDevice::setLayerSize(qint64 nLayerSize)
+{
+    g_nLayerSize = nLayerSize;
+}
+
+qint64 XCompressedDevice::getLayerSize()
+{
+    return g_nLayerSize;
+}
+
+void XCompressedDevice::setLayerOffset(qint64 nLayerOffset)
+{
+    g_nLayerOffset = nLayerOffset;
+}
+
+qint64 XCompressedDevice::getLayerOffset()
+{
+    return g_nLayerOffset;
+}
+
+void XCompressedDevice::setLayerCompressMethod(XArchive::COMPRESS_METHOD compressMethod)
+{
+    g_compressMethod = compressMethod;
+}
+
+XArchive::COMPRESS_METHOD XCompressedDevice::getLayerCompressMethod()
+{
+    return g_compressMethod;
+}
+
 qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
 {
     qint64 nResult = 0;
@@ -95,7 +131,7 @@ qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
         g_pSubDevice->seek(0);
 
         XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.compressMethod = XArchive::COMPRESS_METHOD_DEFLATE;
+        decompressStruct.compressMethod = g_compressMethod;
         decompressStruct.pSourceDevice = g_pSubDevice;
         decompressStruct.pDestDevice = &buffer;
         decompressStruct.nDecompressedOffset = pos();

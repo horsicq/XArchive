@@ -87,6 +87,14 @@ QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     if (g_pCompressedDevice->isOpen()) {
         result = g_pXtar->getRecords(nLimit, pPdStruct);
+
+        qint32 nNumberOfRecords = result.count();
+
+        for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+            result[i].nLayerOffset = g_pCompressedDevice->getLayerOffset();
+            result[i].nLayerSize = g_pCompressedDevice->getLayerSize();
+            result[i].layerCompressMethod = g_pCompressedDevice->getLayerCompressMethod();
+        }
     }
 
     return result;
