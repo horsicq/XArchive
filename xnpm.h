@@ -27,12 +27,27 @@ class XNPM : public XTGZ {
     Q_OBJECT
 
 public:
+    enum TYPE {
+        TYPE_UNKNOWN = 0,
+        TYPE_PACKAGE,
+        // TODO more
+    };
+
+
     explicit XNPM(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
+
     virtual QString getFileFormatExt();
     virtual FT getFileType();
+
+    virtual FILEFORMATINFO getFileFormatInfo();
+    virtual OSINFO getOsInfo();
+    virtual MODE getMode();
+    virtual QString getArch();
+    virtual qint32 getType();
+    virtual QString typeIdToString(qint32 nType);
 
 signals:
 };

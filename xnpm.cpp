@@ -45,3 +45,59 @@ XBinary::FT XNPM::getFileType()
 {
     return FT_NPM;
 }
+
+XBinary::FILEFORMATINFO XNPM::getFileFormatInfo()
+{
+    XBinary::FILEFORMATINFO result = {};
+
+    XNPM xnpm(getDevice());
+
+    if (xnpm.isValid()) {
+        result.bIsValid = true;
+        result.nSize = xnpm.getFileFormatSize();
+        result.sString = "NPM";
+        result.sExt = "tgz";
+        result.fileType = FT_NPM;
+    }
+
+    return result;
+}
+
+XBinary::OSINFO XNPM::getOsInfo()
+{
+    OSINFO result = {};
+
+    result.osName = OSNAME_MULTIPLATFORM;
+    result.sArch = getArch();
+    result.mode = getMode();
+    result.sType = typeIdToString(getType());
+    result.endian = getEndian();
+
+    return result;
+}
+
+XBinary::MODE XNPM::getMode()
+{
+    return MODE_32;
+}
+
+QString XNPM::getArch()
+{
+    return tr("Universal");
+}
+
+qint32 XNPM::getType()
+{
+    return TYPE_PACKAGE;
+}
+
+QString XNPM::typeIdToString(qint32 nType)
+{
+    QString sResult = tr("Unknown");
+
+    switch (nType) {
+        case TYPE_PACKAGE: sResult = tr("Package");
+    }
+
+    return sResult;
+}
