@@ -26,6 +26,7 @@ XNPM::XNPM(QIODevice *pDevice) : XTGZ(pDevice)
 
 bool XNPM::isValid(PDSTRUCT *pPdStruct)
 {
+    // TODO
     return false;
 }
 
