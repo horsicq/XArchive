@@ -33,7 +33,6 @@ public:
         // TODO more
     };
 
-
     explicit XNPM(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
