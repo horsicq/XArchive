@@ -26,8 +26,17 @@ XNPM::XNPM(QIODevice *pDevice) : XTGZ(pDevice)
 
 bool XNPM::isValid(PDSTRUCT *pPdStruct)
 {
-    // TODO
-    return false;
+    bool bResult = false;
+
+    XTGZ xtgz(getDevice());
+
+    if (xtgz.isValid()) {
+        QList<XArchive::RECORD> listArchiveRecords = xtgz.getRecords(20000, pPdStruct);
+
+        bResult = isValid(&listArchiveRecords, pPdStruct);
+    }
+
+    return bResult;
 }
 
 bool XNPM::isValid(QIODevice *pDevice)
@@ -35,6 +44,15 @@ bool XNPM::isValid(QIODevice *pDevice)
     XNPM xtar(pDevice);
 
     return xtar.isValid();
+}
+
+bool XNPM::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    bResult = XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct);
+
+    return bResult;
 }
 
 QString XNPM::getFileFormatExt()

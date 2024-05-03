@@ -43,7 +43,7 @@ bool XTGZ::isValid(PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (g_pCompressedDevice->isOpen()) {
-        bResult = g_pXtar->isValid(pPdStruct);
+        bResult = g_pXtar->isValid();
     }
 
     return bResult;
