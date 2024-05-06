@@ -817,6 +817,22 @@ XBinary::MODE XArchive::getMode()
     return MODE_DATA;
 }
 
+qint32 XArchive::getType()
+{
+    return TYPE_ARCHIVE;
+}
+
+QString XArchive::typeIdToString(qint32 nType)
+{
+    QString sResult = tr("Unknown");
+
+    switch (nType) {
+        case TYPE_ARCHIVE: sResult = tr("Archive");
+    }
+
+    return sResult;
+}
+
 bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct)
 {
     bool bResult = true;

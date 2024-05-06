@@ -20,7 +20,7 @@
  */
 #include "xtgz.h"
 
-XTGZ::XTGZ(QIODevice *pDevice)
+XTGZ::XTGZ(QIODevice *pDevice) // No need Parent constructor
 {
     g_pXtar = new XTAR;
     g_pCompressedDevice = new XCompressedDevice;
@@ -83,6 +83,12 @@ quint64 XTGZ::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
     QList<XArchive::RECORD> result;
 
     if (g_pCompressedDevice->isOpen()) {
@@ -117,4 +123,21 @@ QList<XBinary::MAPMODE> XTGZ::getMapModesList(PDSTRUCT *pPdStruct)
 XBinary::FT XTGZ::getFileType()
 {
     return FT_TARGZ;
+}
+
+qint64 XTGZ::getFileFormatSize()
+{
+    XGzip gzip(g_pCompressedDevice->getOrigDevice());
+
+    return gzip.getFileFormatSize();
+}
+
+QString XTGZ::getFileFormatString()
+{
+    return "TGZ";
+}
+
+XCompressedDevice *XTGZ::getCompressedDevice()
+{
+    return g_pCompressedDevice;
 }

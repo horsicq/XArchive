@@ -26,14 +26,11 @@ XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XGzip::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(GZIP_HEADER)) {
-        quint16 nSignature = read_uint16(0);
-
-        if (nSignature == 0x8B1F)  // TODO Const
-        {
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        if (compareSignature(&memoryMap, "1F8B08", 0, pPdStruct)) {
             bResult = true;
         }
     }
@@ -137,6 +134,12 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     }
 
     _MEMORY_MAP result = {};
+
+    result.fileType = getFileType();
+    result.mode = getMode();
+    result.sArch = getArch();
+    result.endian = getEndian();
+    result.sType = getTypeAsString();
 
     _MEMORY_RECORD memoryRecordHeader = {};
     _MEMORY_RECORD memoryRecord = {};

@@ -34,6 +34,12 @@ class XArchive : public XBinary {
     Q_OBJECT
 
 public:
+    enum TYPE {
+        TYPE_UNKNOWN = 0,
+        TYPE_ARCHIVE,
+        // TODO more
+    };
+
     enum COMPRESS_METHOD {
         COMPRESS_METHOD_UNKNOWN = 0,
         COMPRESS_METHOD_STORE,
@@ -122,6 +128,8 @@ public:
     static void showRecords(QList<RECORD> *pListArchive);
     virtual MODE getMode();
     //    virtual _MEMORY_MAP getMemoryMap(); // TODO
+    virtual qint32 getType();
+    virtual QString typeIdToString(qint32 nType);
 
 private:
     static bool _writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct);

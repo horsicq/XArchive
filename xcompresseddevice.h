@@ -41,12 +41,15 @@ public:
     void setLayerCompressMethod(XArchive::COMPRESS_METHOD compressMethod);
     XArchive::COMPRESS_METHOD getLayerCompressMethod();
 
+    QIODevice *getOrigDevice();
+
 protected:
     virtual qint64 readData(char *pData, qint64 nMaxSize);
     virtual qint64 writeData(const char *pData, qint64 nMaxSize);
 
 private:
     SubDevice *g_pSubDevice;
+    QIODevice *g_pOrigDevice;
     XBinary::FT g_fileType;
     bool g_bIsValid;
     qint64 g_nLayerSize;

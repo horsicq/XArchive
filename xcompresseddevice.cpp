@@ -23,6 +23,7 @@
 XCompressedDevice::XCompressedDevice(QObject *parent) : XIODevice(parent)
 {
     g_pSubDevice = nullptr;
+    g_pOrigDevice = nullptr;
     g_fileType = XBinary::FT_UNKNOWN;
     g_bIsValid = false;
     g_nLayerSize = 0;
@@ -42,10 +43,11 @@ bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
 {
     bool bResult = false;
 
+    g_pOrigDevice = pDevice;
     g_fileType = fileType;
 
     if (fileType == XBinary::FT_GZIP) {
-        XGzip xgzip(pDevice);
+        XGzip xgzip(g_pOrigDevice);
 
         if (xgzip.isValid()) {
             XBinary::PDSTRUCT pdStruct = XBinary::createPdStruct();
@@ -59,7 +61,7 @@ bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
                     delete g_pSubDevice;
                 }
 
-                g_pSubDevice = new SubDevice(pDevice, record.nDataOffset, record.nCompressedSize);
+                g_pSubDevice = new SubDevice(g_pOrigDevice, record.nDataOffset, record.nCompressedSize);
 
                 if (g_pSubDevice->open(QIODevice::ReadOnly)) {
                     setSize(record.nUncompressedSize);
@@ -116,6 +118,11 @@ void XCompressedDevice::setLayerCompressMethod(XArchive::COMPRESS_METHOD compres
 XArchive::COMPRESS_METHOD XCompressedDevice::getLayerCompressMethod()
 {
     return g_compressMethod;
+}
+
+QIODevice *XCompressedDevice::getOrigDevice()
+{
+    return g_pOrigDevice;
 }
 
 qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)

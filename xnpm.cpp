@@ -28,7 +28,7 @@ bool XNPM::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    XTGZ xtgz(getDevice());
+    XTGZ xtgz(getCompressedDevice()->getOrigDevice());
 
     if (xtgz.isValid()) {
         QList<XArchive::RECORD> listArchiveRecords = xtgz.getRecords(20000, pPdStruct);
@@ -50,7 +50,7 @@ bool XNPM::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    bResult = XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct);
+    bResult = XArchive::isArchiveRecordPresent("package/package.json", pListRecords, pPdStruct);
 
     return bResult;
 }
@@ -58,6 +58,11 @@ bool XNPM::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 QString XNPM::getFileFormatExt()
 {
     return "tgz";
+}
+
+QString XNPM::getFileFormatString()
+{
+    return "NPM";
 }
 
 XBinary::FT XNPM::getFileType()
@@ -69,7 +74,7 @@ XBinary::FILEFORMATINFO XNPM::getFileFormatInfo()
 {
     XBinary::FILEFORMATINFO result = {};
 
-    XNPM xnpm(getDevice());
+    XNPM xnpm(getCompressedDevice()->getOrigDevice());
 
     if (xnpm.isValid()) {
         result.bIsValid = true;

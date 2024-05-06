@@ -40,6 +40,10 @@ public:
     virtual QString getFileFormatExt();
     virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType();
+    virtual qint64 getFileFormatSize();
+    virtual QString getFileFormatString();
+
+    XCompressedDevice *getCompressedDevice();
 
 private:
     XTAR *g_pXtar;
