@@ -144,26 +144,12 @@ public:
     virtual bool isEncrypted();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
-    virtual bool isSigned();
-    virtual OFFSETSIZE getSignOffsetSize();
 
     virtual FT getFileType();
 
     static FT _getFileType(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep);
 
     virtual FILEFORMATINFO getFileFormatInfo();
-
-    bool isAPKSignBlockPresent();  // For APK Check jar
-
-    struct APK_SIG_BLOCK_RECORD {
-        quint32 nID;
-        quint64 nDataOffset;
-        quint64 nDataSize;
-    };
-
-    QList<APK_SIG_BLOCK_RECORD> getAPKSignaturesBlockRecordsList();
-    static bool isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID);
-    static APK_SIG_BLOCK_RECORD getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID);
 
     static bool addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord);  // TODO PdStruct
     static bool addCentralDirectory(QIODevice *pDest, QList<ZIPFILE_RECORD> *pListZipFileRecords, const QString &sComment = "");
@@ -174,9 +160,8 @@ public:
 
     virtual OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
-private:
+protected:
     qint64 findECDOffset();
-    qint64 findAPKSignBlockOffset(PDSTRUCT *pPdStruct = nullptr);
     COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);
 };
 

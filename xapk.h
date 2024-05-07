@@ -49,6 +49,23 @@ public:
     virtual QString getArch();
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
+    virtual bool isSigned();
+    virtual OFFSETSIZE getSignOffsetSize();
+
+    bool isAPKSignBlockPresent();  // For APK Check jar
+
+    struct APK_SIG_BLOCK_RECORD {
+        quint32 nID;
+        quint64 nDataOffset;
+        quint64 nDataSize;
+    };
+
+    QList<APK_SIG_BLOCK_RECORD> getAPKSignaturesBlockRecordsList();
+    static bool isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID);
+    static APK_SIG_BLOCK_RECORD getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID);
+
+private:
+    qint64 findAPKSignBlockOffset(PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XAPK_H

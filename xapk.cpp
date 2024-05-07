@@ -177,3 +177,125 @@ QString XAPK::typeIdToString(qint32 nType)
 
     return sResult;
 }
+
+bool XAPK::isSigned()
+{
+    // TODO Check more !!!
+    return isAPKSignBlockPresent();
+}
+
+XBinary::OFFSETSIZE XAPK::getSignOffsetSize()
+{
+    OFFSETSIZE osResult = {};
+
+    // TODO optimize
+
+    qint64 nOffset = findAPKSignBlockOffset();
+
+    quint64 nBlockSize1 = read_uint64(nOffset - 8);
+    quint64 nBlockSize2 = read_uint64(nOffset - nBlockSize1 + 8);
+
+    if ((nBlockSize1) && (nBlockSize1 == nBlockSize2)) {
+        nOffset = nOffset - nBlockSize1 + 16;
+
+        qint64 nCentralDirectoryOffset = findECDOffset();
+        nCentralDirectoryOffset = read_uint32(nCentralDirectoryOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
+
+        osResult.nOffset = nOffset;
+        osResult.nSize = qMax((qint64)0, nCentralDirectoryOffset - nOffset);
+    }
+
+    return osResult;
+}
+
+bool XAPK::isAPKSignBlockPresent()
+{
+    return (findAPKSignBlockOffset() != -1);
+}
+
+QList<XAPK::APK_SIG_BLOCK_RECORD> XAPK::getAPKSignaturesBlockRecordsList()
+{
+    QList<XAPK::APK_SIG_BLOCK_RECORD> listResult;
+
+    qint64 nOffset = findAPKSignBlockOffset();
+
+    if (nOffset != -1) {
+        quint64 nBlockSize1 = read_uint64(nOffset - 8);
+        quint64 nBlockSize2 = read_uint64(nOffset - nBlockSize1 + 8);
+
+        if ((nBlockSize1) && (nBlockSize1 == nBlockSize2)) {
+            qint64 nEndOffset = nOffset - 8;
+            nOffset = nOffset - nBlockSize1 + 16;
+
+            while (nOffset < nEndOffset) {
+                APK_SIG_BLOCK_RECORD record = {};
+                record.nID = read_uint32(nOffset);
+                nOffset += 4;
+
+                record.nDataOffset = nOffset + 4;
+                record.nDataSize = read_uint32(nOffset);
+
+                listResult.append(record);
+
+                nOffset += 4;
+                nOffset += record.nDataSize;
+
+                if (record.nID == 0x42726577)  // End TODO CONST
+                {
+                    break;
+                }
+
+                if (record.nID == 0) {
+                    break;
+                }
+            }
+        }
+    }
+
+    return listResult;
+}
+
+bool XAPK::isAPKSignatureBlockRecordPresent(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID)
+{
+    return (getAPKSignatureBlockRecord(pList, nID).nID == nID);
+}
+
+XAPK::APK_SIG_BLOCK_RECORD XAPK::getAPKSignatureBlockRecord(QList<APK_SIG_BLOCK_RECORD> *pList, quint32 nID)
+{
+    XAPK::APK_SIG_BLOCK_RECORD result = {};
+
+    qint32 nNumberOfRecords = pList->count();
+
+    for (qint32 i = 0; i < nNumberOfRecords; i++) {
+        if (pList->at(i).nID == nID) {
+            result = pList->at(i);
+
+            break;
+        }
+    }
+
+    return result;
+}
+
+qint64 XAPK::findAPKSignBlockOffset(PDSTRUCT *pPdStruct)
+{
+    qint64 nResult = -1;
+
+    qint64 nOffset = findECDOffset();
+    nOffset = read_uint32(nOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
+
+    nOffset = qMax((qint64)0, nOffset - 0x100);  // TODO const
+
+    while (true) {
+        qint64 nCurrent = find_ansiString(nOffset, -1, "APK Sig Block 42", pPdStruct);
+
+        if (nCurrent == -1) {
+            break;
+        }
+
+        nResult = nCurrent;
+        nOffset = nCurrent + 8;  // Get the last
+    }
+
+    return nResult;
+}
