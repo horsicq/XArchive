@@ -791,6 +791,28 @@ bool XArchive::isArchiveRecordPresent(const QString &sRecordFileName, QList<XArc
     return (!getArchiveRecord(sRecordFileName, pListRecords, pPdStruct).sFileName.isEmpty());
 }
 
+bool XArchive::isArchiveRecordPresentExp(const QString &sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    bool bResult = false;
+
+    qint32 nNumberOfArchives = pListRecords->count();
+
+    for (qint32 i = 0; (i < nNumberOfArchives) && (!(pPdStruct->bIsStop)); i++) {
+        if (isRegExpPresent(sRecordFileName, pListRecords->at(i).sFileName)) {
+            bResult = true;
+            break;
+        }
+    }
+
+    return bResult;
+}
+
 quint32 XArchive::getCompressBufferSize()
 {
     return COMPRESS_BUFFERSIZE;
