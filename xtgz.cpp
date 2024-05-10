@@ -20,7 +20,7 @@
  */
 #include "xtgz.h"
 
-XTGZ::XTGZ(QIODevice *pDevice) // No need Parent constructor
+XTGZ::XTGZ(QIODevice *pDevice)  // No need Parent constructor
 {
     g_pXtar = new XTAR;
     g_pCompressedDevice = new XCompressedDevice;
