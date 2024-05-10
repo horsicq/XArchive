@@ -225,3 +225,16 @@ QString XGzip::getFileFormatString()
 
     return sResult;
 }
+
+XBinary::OSINFO XGzip::getOsInfo()
+{
+    OSINFO result = {};
+
+    result.osName = OSNAME_MULTIPLATFORM;
+    result.sArch = getArch();
+    result.mode = getMode();
+    result.sType = typeIdToString(getType());
+    result.endian = getEndian();
+
+    return result;
+}
