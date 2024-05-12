@@ -49,8 +49,6 @@ public:
     virtual QString getArch();
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
-
-signals:
 };
 
 #endif  // XNPM_H
