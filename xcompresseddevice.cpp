@@ -128,10 +128,10 @@ QIODevice *XCompressedDevice::getOrigDevice()
 qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
 {
     qint64 nResult = 0;
-#ifdef QT_DEBUG
-    qDebug("XCompressedDevice::readData: seekpos %d", (qint32)pos());
-    qDebug("XCompressedDevice::readData: size %d", (qint32)nMaxSize);
-#endif
+// #ifdef QT_DEBUG
+//     qDebug("XCompressedDevice::readData: seekpos %d", (qint32)pos());
+//     qDebug("XCompressedDevice::readData: size %d", (qint32)nMaxSize);
+// #endif
     QBuffer buffer;
 
     if (buffer.open(QIODevice::ReadWrite)) {

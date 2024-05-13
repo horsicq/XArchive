@@ -65,7 +65,7 @@ void XTGZ::setDevice(QIODevice *pDevice)
     }
 
     if (g_pCompressedDevice->open(QIODevice::ReadOnly)) {
-        XBinary::setDevice(g_pCompressedDevice);
+        XBinary::setDevice(pDevice);
         g_pXtar->setDevice(g_pCompressedDevice);
     }
 }

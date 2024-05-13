@@ -28,7 +28,7 @@ bool XNPM::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    XTGZ xtgz(getCompressedDevice()->getOrigDevice());
+    XTGZ xtgz(getDevice());
 
     if (xtgz.isValid()) {
         QList<XArchive::RECORD> listArchiveRecords = xtgz.getRecords(20000, pPdStruct);
@@ -74,7 +74,7 @@ XBinary::FILEFORMATINFO XNPM::getFileFormatInfo()
 {
     XBinary::FILEFORMATINFO result = {};
 
-    XNPM xnpm(getCompressedDevice()->getOrigDevice());
+    XNPM xnpm(getDevice());
 
     if (xnpm.isValid()) {
         result.bIsValid = true;
