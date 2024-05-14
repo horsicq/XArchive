@@ -52,7 +52,11 @@ QString XSevenZip::getVersion()
 
 quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
 
     quint64 nResult = 0;
 
@@ -62,57 +66,64 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
         qint64 nCurrentOffset = sizeof(SIGNATURERECORD) + signatureHeader.NextHeaderOffset;
         qint64 nMaxOffset = sizeof(SIGNATURERECORD) + signatureHeader.NextHeaderOffset + signatureHeader.NextHeaderSize;
 
-        bool bSuccess = true;
+        // bool bSuccess = true;
 
-        quint64 nHeaderId = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+        STATE _state = {};
+        _state.nOffset = nCurrentOffset;
+        _state.nMaxOffset = nMaxOffset;
 
-        if (bSuccess) {
-            if (nHeaderId == k7zIdHeader) {
-                bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdMainStreamsInfo);
+        _handle(&_state, pPdStruct);
 
-                // Pack Information
-                if (bSuccess) {
-                    bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdPackInfo);
+        // quint64 nHeaderId = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
-                    quint64 nPackPosition = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
-                    quint64 nCountOfPack = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+        // if (bSuccess) {
+        //     if (nHeaderId == k7zIdHeader) {
+        //         quint64 nSubHeaderId = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+        //         bSuccess &= (nSubHeaderId == k7zIdMainStreamsInfo);
 
-                    Q_UNUSED(nPackPosition)
+        //         // Pack Information
+        //         if (bSuccess) {
+        //             bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdPackInfo);
 
-                    if (bSuccess) {
-                        for (quint64 i = 0; i < nCountOfPack; i++) {
-                            quint64 nSizeOfPackStream = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+        //             quint64 nPackPosition = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+        //             quint64 nCountOfPack = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
-                            Q_UNUSED(nSizeOfPackStream)
-                            // TODO
-                        }
+        //             Q_UNUSED(nPackPosition)
 
-                        for (quint64 i = 0; i < nCountOfPack; i++) {
-                            quint64 nCRCOfPackStream = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+        //             if (bSuccess) {
+        //                 for (quint64 i = 0; i < nCountOfPack; i++) {
+        //                     quint64 nSizeOfPackStream = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
-                            Q_UNUSED(nCRCOfPackStream)
-                            // TODO
-                        }
-                    }
+        //                     Q_UNUSED(nSizeOfPackStream)
+        //                     // TODO
+        //                 }
 
-                    bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdEnd);
-                }
+        //                 for (quint64 i = 0; i < nCountOfPack; i++) {
+        //                     quint64 nCRCOfPackStream = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
 
-                // Coders Information
-                if (bSuccess) {
-                    bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdUnpackInfo);
+        //                     Q_UNUSED(nCRCOfPackStream)
+        //                     // TODO
+        //                 }
+        //             }
 
-                    bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdFolder);
+        //             bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdEnd);
+        //         }
 
-                    quint64 nNumberOfFolders = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+        //         // Coders Information
+        //         if (bSuccess) {
+        //             bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdUnpackInfo);
 
-                    Q_UNUSED(nNumberOfFolders)
-                    // qDebug("TEST");
-                }
-            } else if (nHeaderId == k7zIdPackInfo) {
-                // qDebug("k7zIdPackInfo");
-            }
-        }
+        //             bSuccess &= (_readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess) == k7zIdFolder);
+
+        //             quint64 nNumberOfFolders = _readIntPackedValue(&nCurrentOffset, nMaxOffset, &bSuccess);
+
+        //             Q_UNUSED(nNumberOfFolders)
+        //             // qDebug("TEST");
+        //         }
+        //     } else if (nHeaderId == k7zIdPackInfo) {
+        //         // qDebug("k7zIdPackInfo");
+        //     }
+        // }
 
         //        if(isOffsetAndSizeValid(&memoryMap,nCurrentOffset,signatureHeader.NextHeaderSize)) // TODO Handle errors!
         //        {
@@ -161,6 +172,12 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
 
     QList<XArchive::RECORD> listResult;
 
@@ -668,6 +685,86 @@ quint64 XSevenZip::_readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool
         }
     } else {
         *pbSuccess = false;
+    }
+
+    return nResult;
+}
+
+quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
+{
+    quint64 nResult = 0;
+    // https://py7zr.readthedocs.io/en/latest/archive_format.html
+    if (!(pPdStruct->bIsStop)) {
+        bool bSuccess = true;
+        nResult = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+
+#ifdef QT_DEBUG
+        qDebug("%X", nResult);
+        qDebug("%s", idToSring((XSevenZip::EIdEnum)nResult).toUtf8().data());
+#endif
+
+        if (bSuccess) {
+            if (nResult == k7zIdHeader) {
+                _handle(pState, pPdStruct);
+            } else if (nResult == k7zIdEncodedHeader) {
+                _handle(pState, pPdStruct); // k7zIdPackInfo
+                _handle(pState, pPdStruct); // k7zIdUnpackInfo
+            } else if (nResult == k7zIdPackInfo) {
+                pState->nPackPosition = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+                pState->nNumberOfPackStreams = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+
+                for (qint32 i = 0; (i < pState->nNumberOfPackStreams) && (!(pPdStruct->bIsStop)); i++) {
+                    quint64 nPackSize = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+                    pState->listPackSizes.append(nPackSize);
+                }
+
+                for (qint32 i = 0; (i < pState->nNumberOfPackStreams) && (!(pPdStruct->bIsStop)); i++) {
+                    quint64 nCRC = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+                    pState->listPackSizes.append(nCRC);
+                }
+
+                _handle(pState, pPdStruct); // k7zIdEnd
+            } else if (nResult == k7zIdUnpackInfo) {
+                _handle(pState, pPdStruct); // k7zIdFolder
+                _handle(pState, pPdStruct); // k7zIdCodersUnpackSize
+                _handle(pState, pPdStruct); // k7zIdEnd
+            } else if (nResult == k7zIdFolder) {
+                pState->nNumberOfFolders = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+                pState->nExtraByte = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+
+                for (qint32 i = 0; (i < pState->nNumberOfFolders) && (!(pPdStruct->bIsStop)); i++) {
+                    pState->nNumberOfProperties = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+
+                    for (qint32 j = 0; (j < pState->nNumberOfProperties) && (!(pPdStruct->bIsStop)); j++) {
+                        quint64 nFlag = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+                        qint32 nCodecSize = getBits_uint8(nFlag, 0, 4);
+                        //qint32 nIsComplex = getBits_uint8(nFlag, 4, 1);
+                        qint32 nIsAttr = getBits_uint8(nFlag, 5, 1);
+                        // TODO read codec
+                        pState->nOffset += nCodecSize;
+
+                        if (nIsAttr) {
+                            quint64 nPropertySize = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+                            // TODO read property
+                            pState->nOffset += nPropertySize;
+                        }
+                    }
+                }
+            } else if (nResult == k7zIdCodersUnpackSize) {
+                for (qint32 i = 0; (i < pState->nNumberOfPackStreams) && (!(pPdStruct->bIsStop)); i++) {
+                    quint64 nUnpackSize = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+                    pState->listUnpackSizes.append(nUnpackSize);
+                }
+            } else if (nResult == k7zIdFilesInfo) {
+                quint64 nNumberOfFiles = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
+
+                for (qint32 i = 0; (i < nNumberOfFiles) && (!(pPdStruct->bIsStop)); i++) {
+                    // TODO
+                }
+            } else if (nResult == k7zIdEnd) {
+                // END
+            }
+        }
     }
 
     return nResult;

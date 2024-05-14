@@ -105,6 +105,21 @@ private:
     QString idToSring(EIdEnum id);
     qint32 getXRecord(XBinary::_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra = 0);
     quint64 _readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
+
+    struct STATE {
+        qint64 nOffset;
+        qint64 nMaxOffset;
+        quint64 nPackPosition;
+        quint64 nNumberOfPackStreams;
+        QList<quint64> listPackSizes;
+        QList<quint64> listCRC;
+        QList<quint64> listUnpackSizes;
+        quint64 nNumberOfFolders;
+        quint8 nExtraByte;
+        quint64 nNumberOfProperties;
+    };
+
+    quint64 _handle(STATE *pState, PDSTRUCT *pPdStruct);
 };
 
 #endif  // XSEVENZIP_H
