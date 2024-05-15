@@ -720,7 +720,7 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
 
                 for (qint32 i = 0; (i < pState->nNumberOfPackStreams) && (!(pPdStruct->bIsStop)); i++) {
                     quint64 nCRC = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
-                    pState->listPackSizes.append(nCRC);
+                    pState->listCRC.append(nCRC);
                 }
 
                 _handle(pState, pPdStruct); // k7zIdEnd
