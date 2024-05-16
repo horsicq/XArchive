@@ -707,8 +707,8 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
             if (nResult == k7zIdHeader) {
                 _handle(pState, pPdStruct);
             } else if (nResult == k7zIdEncodedHeader) {
-                _handle(pState, pPdStruct); // k7zIdPackInfo
-                _handle(pState, pPdStruct); // k7zIdUnpackInfo
+                _handle(pState, pPdStruct);  // k7zIdPackInfo
+                _handle(pState, pPdStruct);  // k7zIdUnpackInfo
             } else if (nResult == k7zIdPackInfo) {
                 pState->nPackPosition = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
                 pState->nNumberOfPackStreams = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
@@ -723,11 +723,11 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
                     pState->listCRC.append(nCRC);
                 }
 
-                _handle(pState, pPdStruct); // k7zIdEnd
+                _handle(pState, pPdStruct);  // k7zIdEnd
             } else if (nResult == k7zIdUnpackInfo) {
-                _handle(pState, pPdStruct); // k7zIdFolder
-                _handle(pState, pPdStruct); // k7zIdCodersUnpackSize
-                _handle(pState, pPdStruct); // k7zIdEnd
+                _handle(pState, pPdStruct);  // k7zIdFolder
+                _handle(pState, pPdStruct);  // k7zIdCodersUnpackSize
+                _handle(pState, pPdStruct);  // k7zIdEnd
             } else if (nResult == k7zIdFolder) {
                 pState->nNumberOfFolders = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
                 pState->nExtraByte = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
@@ -738,7 +738,7 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
                     for (qint32 j = 0; (j < pState->nNumberOfProperties) && (!(pPdStruct->bIsStop)); j++) {
                         quint64 nFlag = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
                         qint32 nCodecSize = getBits_uint8(nFlag, 0, 4);
-                        //qint32 nIsComplex = getBits_uint8(nFlag, 4, 1);
+                        // qint32 nIsComplex = getBits_uint8(nFlag, 4, 1);
                         qint32 nIsAttr = getBits_uint8(nFlag, 5, 1);
                         // TODO read codec
                         pState->nOffset += nCodecSize;
