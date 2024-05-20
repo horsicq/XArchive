@@ -221,6 +221,10 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         qint64 nOffset = 0;
 
         for (qint32 i = 0; i < (nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+            if ((nOffset + sizeof(LOCALFILEHEADER)) > getSize()) {
+                break;
+            }
+
             quint32 nLocalSignature = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nSignature));
             quint32 nLocalFileNameSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
             quint32 nLocalExtraFieldSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
@@ -249,10 +253,6 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             listResult.append(record);
 
             nOffset += sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
-
-            if ((nOffset + 16) >= getSize()) {
-                break;
-            }
         }
     }
 

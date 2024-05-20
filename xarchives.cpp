@@ -44,9 +44,12 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
         stFileTypes += fileType;
     }
 
-    if (stFileTypes.contains(XArchive::FT_ZIP)) {
+    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
         XZip xzip(pDevice);
         listResult = xzip.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
+        XMACHOFat xmachofat(pDevice);
+        listResult = xmachofat.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
         listResult = xmachofat.getRecords(nLimit, pPdStruct);
@@ -107,7 +110,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 
     QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
 
-    if (stFileTypes.contains(XArchive::FT_ZIP)) {
+    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
         XZip xzip(pDevice);
         baResult = xzip.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
@@ -185,7 +188,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     // 7Zip
     // WinRAR
     // CAB
-    if (stFileTypes.contains(XArchive::FT_ZIP)) {
+    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
         XZip xzip(pDevice);
         bResult = xzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
@@ -302,7 +305,7 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
 
     // TODO more
-    if (stFileTypes.contains(XArchive::FT_ZIP)) {
+    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
         XZip xzip(pDevice);
         bResult = xzip.isArchiveRecordPresent(sRecordFileName);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
