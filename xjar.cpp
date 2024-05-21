@@ -60,13 +60,13 @@ XBinary::FT XJAR::getFileType()
     return FT_JAR;
 }
 
-XBinary::FILEFORMATINFO XJAR::getFileFormatInfo()
+XBinary::FILEFORMATINFO XJAR::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
 
     XJAR xjar(getDevice());
 
-    if (xjar.isValid()) {
+    if (xjar.isValid(pPdStruct)) {
         result.bIsValid = true;
         result.nSize = xjar.getFileFormatSize();
         result.sString = "JAR";

@@ -149,7 +149,7 @@ public:
 
     static FT _getFileType(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep);
 
-    virtual FILEFORMATINFO getFileFormatInfo();
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
 
     static bool addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord);  // TODO PdStruct
     static bool addCentralDirectory(QIODevice *pDest, QList<ZIPFILE_RECORD> *pListZipFileRecords, const QString &sComment = "");

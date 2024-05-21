@@ -61,13 +61,13 @@ XBinary::FT XAPK::getFileType()
     return FT_APK;
 }
 
-XBinary::FILEFORMATINFO XAPK::getFileFormatInfo()
+XBinary::FILEFORMATINFO XAPK::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
 
     XAPK xapk(getDevice());
 
-    if (xapk.isValid()) {
+    if (xapk.isValid(pPdStruct)) {
         result.bIsValid = true;
         result.nSize = xapk.getFileFormatSize();
         result.sString = "APK";

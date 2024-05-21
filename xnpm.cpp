@@ -70,13 +70,13 @@ XBinary::FT XNPM::getFileType()
     return FT_NPM;
 }
 
-XBinary::FILEFORMATINFO XNPM::getFileFormatInfo()
+XBinary::FILEFORMATINFO XNPM::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
 
     XNPM xnpm(getDevice());
 
-    if (xnpm.isValid()) {
+    if (xnpm.isValid(pPdStruct)) {
         result.bIsValid = true;
         result.nSize = xnpm.getFileFormatSize();
         result.sString = "NPM";

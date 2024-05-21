@@ -41,7 +41,7 @@ public:
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     virtual FT getFileType();
-    virtual FILEFORMATINFO getFileFormatInfo();
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
     virtual OSINFO getOsInfo();
     virtual OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);

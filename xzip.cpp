@@ -356,13 +356,13 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
     return result;
 }
 
-XBinary::FILEFORMATINFO XZip::getFileFormatInfo()
+XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
 
     XZip xzip(getDevice());
 
-    if (xzip.isValid()) {
+    if (xzip.isValid(pPdStruct)) {
         result.bIsValid = true;
         result.nSize = xzip.getFileFormatSize();
         result.sString = "ZIP";

@@ -59,7 +59,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         listResult = xtar.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_NPM)) {
+    } else if (stFileTypes.contains(XArchive::FT_NPM) || stFileTypes.contains(XArchive::FT_NPM)) {
         XNPM xnpm(pDevice);
         listResult = xnpm.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
@@ -122,7 +122,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         baResult = xtar.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
         XTGZ xtgz(pDevice);
         baResult = xtgz.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
@@ -200,7 +200,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         bResult = xtar.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
         XTGZ xtgz(pDevice);
         bResult = xtgz.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
@@ -317,7 +317,7 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
         bResult = xtar.isArchiveRecordPresent(sRecordFileName);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
         XTGZ xtgz(pDevice);
         bResult = xtgz.isArchiveRecordPresent(sRecordFileName);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
@@ -360,9 +360,13 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &
 
         if (!_stAvailable.count()) {
             _stAvailable.insert(XBinary::FT_ZIP);
+            _stAvailable.insert(XBinary::FT_JAR);
+            _stAvailable.insert(XBinary::FT_APK);
             _stAvailable.insert(XBinary::FT_MACHOFAT);
             _stAvailable.insert(XBinary::FT_AR);
             _stAvailable.insert(XBinary::FT_TAR);
+            _stAvailable.insert(XBinary::FT_TARGZ);
+            _stAvailable.insert(XBinary::FT_NPM);
             _stAvailable.insert(XBinary::FT_GZIP);
             _stAvailable.insert(XBinary::FT_ZLIB);
             _stAvailable.insert(XBinary::FT_LHA);
