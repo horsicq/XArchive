@@ -96,6 +96,7 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         record.nDataOffset = nOffset;
         record.nCompressedSize = decompressStruct.nInSize;
         record.nUncompressedSize = decompressStruct.nOutSize;
+        record.sFileName = XBinary::getDeviceFileBaseName(getDevice());
 
         sd.close();
     }

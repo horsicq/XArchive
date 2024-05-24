@@ -60,8 +60,8 @@ public:
     static bool decompressToFile(const QString &sFileName, const QString &sRecordFileName, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(const QString &sFileName, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName);  // TODO PDSTRUCT
-    static bool isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName);
+    static bool isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &stAvailable);
     static bool isArchiveOpenValid(const QString &sFileName, const QSet<XBinary::FT> &stAvailable);
 

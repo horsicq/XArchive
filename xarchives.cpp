@@ -298,7 +298,7 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName)
+bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -307,34 +307,34 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     // TODO more
     if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
         XZip xzip(pDevice);
-        bResult = xzip.isArchiveRecordPresent(sRecordFileName);
+        bResult = xzip.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
-        bResult = xmachofat.isArchiveRecordPresent(sRecordFileName);
+        bResult = xmachofat.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_AR)) {
         X_Ar x_ar(pDevice);
-        bResult = x_ar.isArchiveRecordPresent(sRecordFileName);
+        bResult = x_ar.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         XTAR xtar(pDevice);
-        bResult = xtar.isArchiveRecordPresent(sRecordFileName);
+        bResult = xtar.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
         XTGZ xtgz(pDevice);
-        bResult = xtgz.isArchiveRecordPresent(sRecordFileName);
+        bResult = xtgz.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
-        bResult = xgzip.isArchiveRecordPresent(sRecordFileName);
+        bResult = xgzip.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
         XZlib xzlib(pDevice);
-        bResult = xzlib.isArchiveRecordPresent(sRecordFileName);
+        bResult = xzlib.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
-        bResult = xlha.isArchiveRecordPresent(sRecordFileName);
+        bResult = xlha.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     }
 
     return bResult;
 }
 
-bool XArchives::isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName)
+bool XArchives::isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -342,7 +342,7 @@ bool XArchives::isArchiveRecordPresent(const QString &sFileName, const QString &
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        bResult = isArchiveRecordPresent(&file, sRecordFileName);
+        bResult = isArchiveRecordPresent(&file, sRecordFileName, pPdStruct);
         file.close();
     }
 
