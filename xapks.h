@@ -28,6 +28,8 @@ class XAPKS : public XAPK {
 public:
     explicit XAPKS(QIODevice *pDevice = nullptr);
 
+    virtual FT getFileType();
+
 signals:
 };
 

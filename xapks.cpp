@@ -23,3 +23,8 @@
 XAPKS::XAPKS(QIODevice *pDevice) : XAPK(pDevice)
 {
 }
+
+XBinary::FT XAPKS::getFileType()
+{
+    return FT_APKS;
+}
