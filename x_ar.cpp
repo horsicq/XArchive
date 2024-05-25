@@ -205,6 +205,11 @@ QList<XBinary::MAPMODE> X_Ar::getMapModesList(PDSTRUCT *pPdStruct)
     return listResult;
 }
 
+XBinary::FT X_Ar::getFileType()
+{
+    return XBinary::FT_AR;
+}
+
 X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
 {
     FRECORD record = {};

@@ -48,6 +48,7 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
     virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
+    virtual FT getFileType();
 
 private:
     FRECORD readFRECORD(qint64 nOffset);
