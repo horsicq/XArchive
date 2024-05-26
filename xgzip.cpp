@@ -227,6 +227,11 @@ QString XGzip::getFileFormatString()
     return sResult;
 }
 
+XBinary::FT XGzip::getFileType()
+{
+    return FT_GZIP;
+}
+
 XBinary::OSINFO XGzip::getOsInfo()
 {
     OSINFO result = {};
