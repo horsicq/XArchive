@@ -504,6 +504,11 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
     return result;
 }
 
+XBinary::FT XSevenZip::getFileType()
+{
+    return FT_7Z;
+}
+
 QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
 {
     QString sResult = tr("Unknown");

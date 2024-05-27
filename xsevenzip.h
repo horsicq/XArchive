@@ -100,6 +100,7 @@ public:
     virtual QString getFileFormatExt();
     virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    virtual FT getFileType();
 
 private:
     QString idToSring(EIdEnum id);
