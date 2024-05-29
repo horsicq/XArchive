@@ -45,13 +45,15 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
             bResult = false;
 
             if (getSize() > 10) {
-                SubDevice sd(getDevice(), 2, 8);
+                SubDevice sd(getDevice(), 2, -1);
 
                 if (sd.open(QIODevice::ReadOnly)) {
                     XArchive::DECOMPRESSSTRUCT decompressStruct = {};
                     decompressStruct.compressMethod = COMPRESS_METHOD_DEFLATE;
                     decompressStruct.pSourceDevice = &sd;
                     decompressStruct.pDestDevice = 0;
+                    decompressStruct.nDecompressedOffset = 0;
+                    decompressStruct.nDecompressedSize = 0x200;
 
                     COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
 
@@ -187,6 +189,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         memoryRecord.nAddress = -1;
         memoryRecord.nSize = decompressStruct.nInSize;
         memoryRecord.type = MMT_FILESEGMENT;
+        memoryRecord.sName = tr("Data");
 
         sd.close();
     }
@@ -218,7 +221,22 @@ QString XZlib::getFileFormatString()
     QString sResult;
 
     sResult = QString("zlib");
-    // TODO more info
+
+    QString sCompression;
+
+    quint16 nHeader = read_uint16(0);
+    // 0x0178 no compression
+    if (nHeader == 0x5E78) {
+        sCompression = "fast";
+    } else if (nHeader == 0x9C78) {
+        sCompression = "default";
+    } else if (nHeader == 0xDA78) {
+        sCompression = "best";
+    }
+
+    if (sCompression != "") {
+        sResult += QString("(%1)").arg(sCompression);
+    }
 
     return sResult;
 }
