@@ -373,8 +373,14 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
     return result;
 }
 
-bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord)
+bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord, PDSTRUCT *pPdStruct)
 {
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
     if (pZipFileRecord->nMinVersion == 0) {
         pZipFileRecord->nMinVersion = 0x14;
     }
@@ -411,11 +417,11 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     localFileHeader.nExtraFieldLength = 0;
 
     pDest->write((char *)&localFileHeader, sizeof(localFileHeader));
-    pDest->write(pZipFileRecord->sFileName.toLatin1().data(), pZipFileRecord->sFileName.toLatin1().size());
+    pDest->write(pZipFileRecord->sFileName.toUtf8().data(), pZipFileRecord->sFileName.toUtf8().size());
 
     pZipFileRecord->nDataOffset = pDest->pos();
 
-    XArchive::_compress(XArchive::COMPRESS_METHOD_DEFLATE, pSource, pDest);  // TODO PdStruct
+    XArchive::_compress(XArchive::COMPRESS_METHOD_DEFLATE, pSource, pDest, pPdStruct);
 
     qint64 nEndPosition = pDest->pos();
 
@@ -458,7 +464,7 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
         cdFileHeader.nOffsetToLocalFileHeader = pListZipFileRecords->at(i).nHeaderOffset;
 
         pDest->write((char *)&cdFileHeader, sizeof(cdFileHeader));
-        pDest->write(pListZipFileRecords->at(i).sFileName.toLatin1().data(), pListZipFileRecords->at(i).sFileName.toLatin1().size());
+        pDest->write(pListZipFileRecords->at(i).sFileName.toUtf8().data(), pListZipFileRecords->at(i).sFileName.toUtf8().size());
     }
 
     qint64 nCentralDirectorySize = pDest->pos() - nStartPosition;
@@ -475,7 +481,7 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
     endofCD.nCommentLength = sComment.size();
 
     pDest->write((char *)&endofCD, sizeof(endofCD));
-    pDest->write(sComment.toLatin1().data(), sComment.toLatin1().size());
+    pDest->write(sComment.toUtf8().data(), sComment.toUtf8().size());
 
     return true;
 }
