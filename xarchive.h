@@ -68,6 +68,7 @@ public:
         qint64 nHeaderSize;
         qint64 nOptHeaderOffset;
         qint64 nOptHeaderSize;
+        QString sUUID;
         // for targz
         qint64 nLayerOffset;
         qint64 nLayerSize;
@@ -121,6 +122,7 @@ public:
     bool decompressToPath(const QString &sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool dumpToFile(const RECORD *pRecord, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr);
     static RECORD getArchiveRecord(const QString &sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
+    static RECORD getArchiveRecordByUUID(const QString &sUUID, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
     bool isArchiveRecordPresent(const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveRecordPresent(const QString &sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveRecordPresentExp(const QString &sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);

@@ -777,6 +777,28 @@ XArchive::RECORD XArchive::getArchiveRecord(const QString &sRecordFileName, QLis
     return result;
 }
 
+XArchive::RECORD XArchive::getArchiveRecordByUUID(const QString &sUUID, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
+    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    RECORD result = {};
+
+    qint32 nNumberOfArchives = pListRecords->count();
+
+    for (qint32 i = 0; (i < nNumberOfArchives) && (!(pPdStruct->bIsStop)); i++) {
+        if (pListRecords->at(i).sUUID == sUUID) {
+            result = pListRecords->at(i);
+            break;
+        }
+    }
+
+    return result;
+}
+
 bool XArchive::isArchiveRecordPresent(const QString &sRecordFileName, PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listRecords = getRecords(-1, pPdStruct);
