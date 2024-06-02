@@ -44,7 +44,7 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
         if (bResult) {
             bResult = false;
 
-            if (getSize() > 10) {
+            if (getSize() >= 10) {
                 SubDevice sd(getDevice(), 2, -1);
 
                 if (sd.open(QIODevice::ReadOnly)) {
@@ -57,10 +57,29 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
 
                     COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
 
-                    Q_UNUSED(cr)
-
                     if (decompressStruct.nInSize > 0) {
-                        bResult = true;
+                        if (decompressStruct.nInSize < 0x1000) {
+                            QBuffer buffer;
+                            if (buffer.open(QIODevice::ReadWrite)) {
+                                sd.reset();
+                                XArchive::DECOMPRESSSTRUCT _decompressStruct = {};
+                                _decompressStruct.compressMethod = COMPRESS_METHOD_DEFLATE;
+                                _decompressStruct.pSourceDevice = &sd;
+                                _decompressStruct.pDestDevice = &buffer;
+
+                                cr = _decompress(&_decompressStruct, pPdStruct);
+
+                                if (cr == COMPRESS_RESULT_OK) {
+                                    quint32 nAdler = read_uint32(2 + _decompressStruct.nInSize, true);
+
+                                    bResult = (nAdler == XBinary::getAdler32(&buffer));
+                                }
+
+                                buffer.close();
+                            }
+                        } else {
+                            bResult = true;
+                        }
                     }
                 }
             }
