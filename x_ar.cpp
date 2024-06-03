@@ -87,7 +87,6 @@ quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     // TODO Limit
     // TODO GetMemoryMap
 
@@ -106,6 +105,8 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     nSize -= 8;
 
     QString sList;
+
+    qint32 nIndex = 0;
 
     while ((nSize > 0) && (!(pPdStruct->bIsStop))) {
         RECORD record = {};
@@ -184,6 +185,12 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
         nSize -= sizeof(FRECORD);
         nSize -= S_ALIGN_UP(nRecordSize, 2);
+
+        nIndex++;
+
+        if ((nLimit != -1) && (nIndex >= nLimit)) {
+            break;
+        }
     }
 
     return listRecords;
