@@ -39,6 +39,12 @@ class X_Ar : public XArchive {
     };
 #pragma pack(pop)
 
+    enum TYPE {
+        TYPE_UNKNOWN = 0,
+        TYPE_PACKAGE,
+        // TODO more
+    };
+
 public:
     explicit X_Ar(QIODevice *pDevice = nullptr);
 
@@ -49,6 +55,7 @@ public:
     virtual QString getFileFormatExt();
     virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType();
+    virtual qint32 getType();
 
 private:
     FRECORD readFRECORD(qint64 nOffset);

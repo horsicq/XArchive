@@ -217,6 +217,11 @@ XBinary::FT X_Ar::getFileType()
     return XBinary::FT_AR;
 }
 
+qint32 X_Ar::getType()
+{
+    return TYPE_PACKAGE;
+}
+
 X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
 {
     FRECORD record = {};
