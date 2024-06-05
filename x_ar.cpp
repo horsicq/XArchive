@@ -201,7 +201,7 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
 QString X_Ar::getFileFormatExt()
 {
-    return "ar";  // TODO
+    return "ar";
 }
 
 QList<XBinary::MAPMODE> X_Ar::getMapModesList(PDSTRUCT *pPdStruct)
