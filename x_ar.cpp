@@ -34,6 +34,7 @@ bool X_Ar::isValid(PDSTRUCT *pPdStruct)
     if (getSize() > (qint64)(8 + sizeof(RECORD)))  // TODO const
     {
         if (compareSignature(&memoryMap, "'!<arch>'0a", 0, pPdStruct)) {
+            FRECORD frecord = readFRECORD(8);
             bResult = true;
         }
     }
