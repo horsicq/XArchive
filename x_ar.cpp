@@ -35,7 +35,10 @@ bool X_Ar::isValid(PDSTRUCT *pPdStruct)
     {
         if (compareSignature(&memoryMap, "'!<arch>'0a", 0, pPdStruct)) {
             FRECORD frecord = readFRECORD(8);
-            bResult = true;
+
+            if ((frecord.endChar[0] == 0x60) && (frecord.endChar[1] == 0x0a)) {
+                bResult = true;
+            }
         }
     }
 
