@@ -53,7 +53,7 @@ public:
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
-    virtual QList<MAPMODE> getMapModesList(PDSTRUCT *pPdStruct = nullptr);
+    static QList<MAPMODE> getMapModesList();
     virtual FT getFileType();
     virtual qint32 getType();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);

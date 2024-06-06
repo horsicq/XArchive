@@ -443,10 +443,8 @@ QString XSevenZip::getFileFormatExt()
     return "7z";
 }
 
-QList<XBinary::MAPMODE> XSevenZip::getMapModesList(PDSTRUCT *pPdStruct)
+QList<XBinary::MAPMODE> XSevenZip::getMapModesList()
 {
-    Q_UNUSED(pPdStruct)
-
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);

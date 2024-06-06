@@ -151,10 +151,8 @@ qint64 XZlib::getFileFormatSize()
     return _calculateRawSize();
 }
 
-QList<XBinary::MAPMODE> XZlib::getMapModesList(PDSTRUCT *pPdStruct)
+QList<XBinary::MAPMODE> XZlib::getMapModesList()
 {
-    Q_UNUSED(pPdStruct)
-
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);

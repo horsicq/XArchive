@@ -111,13 +111,9 @@ QString XTGZ::getFileFormatExt()
     return "tar.gz";
 }
 
-QList<XBinary::MAPMODE> XTGZ::getMapModesList(PDSTRUCT *pPdStruct)
+QList<XBinary::MAPMODE> XTGZ::getMapModesList()
 {
-    QList<XBinary::MAPMODE> result;
-
-    result = g_pXtar->getMapModesList(pPdStruct);
-
-    return result;
+    return XTAR::getMapModesList();
 }
 
 XBinary::FT XTGZ::getFileType()

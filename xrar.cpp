@@ -105,10 +105,8 @@ QString XRar::getFileFormatString()
     return sResult;
 }
 
-QList<XBinary::MAPMODE> XRar::getMapModesList(PDSTRUCT *pPdStruct)
+QList<XBinary::MAPMODE> XRar::getMapModesList()
 {
-    Q_UNUSED(pPdStruct)
-
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);

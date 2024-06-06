@@ -170,10 +170,8 @@ qint64 XCab::getFileFormatSize()
     return nResult;
 }
 
-QList<XBinary::MAPMODE> XCab::getMapModesList(PDSTRUCT *pPdStruct)
+QList<XBinary::MAPMODE> XCab::getMapModesList()
 {
-    Q_UNUSED(pPdStruct)
-
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);

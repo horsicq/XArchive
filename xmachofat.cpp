@@ -140,10 +140,8 @@ QString XMACHOFat::getFileFormatString()
     return sResult;
 }
 
-QList<XBinary::MAPMODE> XMACHOFat::getMapModesList(PDSTRUCT *pPdStruct)
+QList<XBinary::MAPMODE> XMACHOFat::getMapModesList()
 {
-    Q_UNUSED(pPdStruct)
-
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);

@@ -121,10 +121,8 @@ QString XTAR::getFileFormatExt()
     return "tar";
 }
 
-QList<XBinary::MAPMODE> XTAR::getMapModesList(PDSTRUCT *pPdStruct)
+QList<XBinary::MAPMODE> XTAR::getMapModesList()
 {
-    Q_UNUSED(pPdStruct)
-
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);

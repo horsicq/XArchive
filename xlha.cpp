@@ -133,10 +133,8 @@ qint64 XLHA::getFileFormatSize()
     return _calculateRawSize();
 }
 
-QList<XBinary::MAPMODE> XLHA::getMapModesList(PDSTRUCT *pPdStruct)
+QList<XBinary::MAPMODE> XLHA::getMapModesList()
 {
-    Q_UNUSED(pPdStruct)
-
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);
