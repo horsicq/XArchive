@@ -225,6 +225,12 @@ qint32 X_Ar::getType()
     return TYPE_PACKAGE;
 }
 
+XBinary::_MEMORY_MAP X_Ar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
+{
+    // TODO
+    return XBinary::getMemoryMap(mapMode, pPdStruct);
+}
+
 X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
 {
     FRECORD record = {};
