@@ -9,6 +9,7 @@ HEADERS += \
     $$PWD/xcab.h \
     $$PWD/xcompress.h \
     $$PWD/xcompresseddevice.h \
+    $$PWD/xdeb.h \
     $$PWD/xgzip.h \
     $$PWD/xipa.h \
     $$PWD/xjar.h \
@@ -30,6 +31,7 @@ SOURCES += \
     $$PWD/xcab.cpp \
     $$PWD/xcompress.cpp \
     $$PWD/xcompresseddevice.cpp \
+    $$PWD/xdeb.cpp \
     $$PWD/xgzip.cpp \
     $$PWD/xipa.cpp \
     $$PWD/xjar.cpp \

@@ -38,6 +38,7 @@
 #include "xtar.h"
 #include "xtgz.h"
 #include "xnpm.h"
+#include "xdeb.h"
 
 class XArchives : public QObject {
     Q_OBJECT
