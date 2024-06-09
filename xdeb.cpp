@@ -25,3 +25,21 @@ XDEB::XDEB(QIODevice *pDevice)
 {
 
 }
+
+bool XDEB::isValid(PDSTRUCT *pPdStruct)
+{
+    // TODO
+    return false;
+}
+
+bool XDEB::isValid(QIODevice *pDevice)
+{
+    // TODO
+    return false;
+}
+
+bool XDEB::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
+    // TODO
+    return false;
+}
