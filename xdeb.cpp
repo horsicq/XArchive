@@ -34,8 +34,9 @@ bool XDEB::isValid(PDSTRUCT *pPdStruct)
 
 bool XDEB::isValid(QIODevice *pDevice)
 {
-    // TODO
-    return false;
+    XDEB xdeb(pDevice);
+
+    return xdeb.isValid();
 }
 
 bool XDEB::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
