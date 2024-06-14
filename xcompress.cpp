@@ -310,7 +310,7 @@ int XCompress::lzh_read_blocks(lzh_stream *strm, int last)
                         ds->lt.bitlen[i++] = 0;
                     } else {
                         /* c == 1 or c == 2 */
-                        int n = (c == 1) ? 4 : 9;
+                        qint32 n = (c == 1) ? 4 : 9;
                         if (!lzh_br_read_ahead(strm, br, ds->pt.bitlen[c] + n)) {
                             if (last) /* Truncated data. */
                                 goto failed;
