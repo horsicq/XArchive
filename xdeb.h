@@ -23,8 +23,7 @@
 
 #include "x_ar.h"
 
-class XDEB : public X_Ar
-{
+class XDEB : public X_Ar {
     Q_OBJECT
 public:
     explicit XDEB(QIODevice *pDevice = nullptr);
@@ -33,7 +32,6 @@ public:
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
 signals:
-
 };
 
-#endif // XDEB_H
+#endif  // XDEB_H

@@ -20,10 +20,8 @@
  */
 #include "xdeb.h"
 
-XDEB::XDEB(QIODevice *pDevice)
-    : X_Ar(pDevice)
+XDEB::XDEB(QIODevice *pDevice) : X_Ar(pDevice)
 {
-
 }
 
 bool XDEB::isValid(PDSTRUCT *pPdStruct)
