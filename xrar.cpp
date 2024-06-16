@@ -156,7 +156,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
         qint64 nCurrentOffset = nFileHeaderSize;
 
-        while (true) {
+        while (!(pPdStruct->bIsStop)) {
             GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 
             if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
