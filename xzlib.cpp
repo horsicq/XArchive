@@ -58,7 +58,7 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
                     COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
 
                     if (decompressStruct.nInSize > 0) {
-                        if (decompressStruct.nInSize < 0x1000) {
+                        if (!decompressStruct.bLimit) {
                             QBuffer buffer;
                             if (buffer.open(QIODevice::ReadWrite)) {
                                 sd.reset();
@@ -72,7 +72,7 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
                                 if (cr == COMPRESS_RESULT_OK) {
                                     quint32 nAdler = read_uint32(2 + _decompressStruct.nInSize, true);
 
-                                    bResult = (nAdler == XBinary::getAdler32(&buffer));
+                                    bResult = (nAdler == XBinary::getAdler32(&buffer, pPdStruct));
                                 }
 
                                 buffer.close();

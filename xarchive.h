@@ -104,6 +104,7 @@ public:
         qint64 nDecompressedOffset;
         qint64 nDecompressedSize;
         qint64 nDecompressedWrote;
+        bool bLimit;
     };
 
     static COMPRESS_RESULT _decompress(DECOMPRESSSTRUCT *pDecompressStruct, PDSTRUCT *pPdStruct = nullptr);

@@ -93,6 +93,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
             if ((pDecompressStruct->nDecompressedSize != -1) &&
                 ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
+                pDecompressStruct->bLimit = true;
                 break;
             }
         }
@@ -176,6 +177,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
                     if ((pDecompressStruct->nDecompressedSize != -1) &&
                         ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
+                        pDecompressStruct->bLimit = true;
                         ret = Z_STREAM_END;
                         break;
                     }
@@ -253,6 +255,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
                     if ((pDecompressStruct->nDecompressedSize != -1) &&
                         ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
+                        pDecompressStruct->bLimit = true;
                         ret = BZ_STREAM_END;
                         break;
                     }
@@ -349,6 +352,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
                                 if ((pDecompressStruct->nDecompressedSize != -1) &&
                                     ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedSize) < pDecompressStruct->nOutSize)) {
+                                    pDecompressStruct->bLimit = true;
                                     result = COMPRESS_RESULT_OK;
                                     bRun = false;
                                     break;
