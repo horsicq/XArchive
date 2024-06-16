@@ -269,7 +269,7 @@ XBinary::FT XZip::getFileType()
     return FT_ZIP;
 }
 
-XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, bool bDeep)
+XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, bool bDeep, PDSTRUCT *pPdStruct)
 {
     FT result = FT_ZIP;
 
@@ -279,19 +279,19 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
         XZip xzip(pDevice);
 
         if (xzip.isValid()) {
-            qint64 nSize = xzip.getFileFormatSize();
+            qint64 nSize = xzip.getFileFormatSize(pPdStruct);
 
             if (nSize) {
                 // TODO
-                if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
+                if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct)) {
                     // result.sString = "APK";
                     // result.sExt = "apk";
                     result = XBinary::FT_APK;
-                } else if (XArchive::isArchiveRecordPresent("Payload/", pListRecords)) {
+                } else if (XArchive::isArchiveRecordPresent("Payload/", pListRecords, pPdStruct)) {
                     // result.sString = "IPA";
                     // result.sExt = "ipa";
                     result = FT_IPA;
-                } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords)) {
+                } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords, pPdStruct)) {
                     // result.sString = "JAR";
                     // result.sExt = "jar";
                     result = FT_JAR;
@@ -311,7 +311,7 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
                             bAPKS = true;
                         }
 
-                        for (qint32 i = 0; i < nNumberOfRecords; i++) {
+                        for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
                             if (pListRecords->at(i).compressMethod == XArchive::COMPRESS_METHOD_STORE) {
                                 XArchive::RECORD record = pListRecords->at(i);
 
@@ -321,8 +321,8 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
                                     if (XBinary::getFileTypes(&subDevice, true).contains(FT_ZIP)) {
                                         bool bAPK = false;
 
-                                        if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords) ||
-                                            XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords)) {
+                                        if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) ||
+                                            XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct)) {
                                             bAPK = true;
                                         }
 
@@ -363,12 +363,15 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
     XZip xzip(getDevice());
 
     if (xzip.isValid(pPdStruct)) {
-        result.bIsValid = true;
-        result.nSize = xzip.getFileFormatSize();
-        result.sString = "ZIP";
-        result.sExt = "zip";
-        result.fileType = FT_ZIP;
-        result.sVersion = xzip.getVersion();
+        result.nSize = xzip.getFileFormatSize(pPdStruct);
+
+        if (result.nSize > 0) {
+            result.bIsValid = true;
+            result.sString = "ZIP";
+            result.sExt = "zip";
+            result.fileType = FT_ZIP;
+            result.sVersion = xzip.getVersion();
+        }
     }
 
     return result;
@@ -502,14 +505,14 @@ QString XZip::getFileFormatString()
     return sResult;
 }
 
-qint64 XZip::getFileFormatSize()
+qint64 XZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     qint64 nResult = 0;
     // TODO the last ECD
     qint64 nECDOffset = 0;
 
     while (true) {
-        nECDOffset = find_uint32(nECDOffset, -1, SIGNATURE_ECD);
+        nECDOffset = find_uint32(nECDOffset, -1, SIGNATURE_ECD, false, pPdStruct);
 
         if (nECDOffset != -1) {
             qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));

@@ -147,7 +147,7 @@ public:
 
     virtual FT getFileType();
 
-    static FT _getFileType(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep);
+    static FT _getFileType(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep, PDSTRUCT *pPdStruct);
 
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
 
@@ -156,7 +156,7 @@ public:
 
     virtual QString getFileFormatExt();
     virtual QString getFileFormatString();
-    virtual qint64 getFileFormatSize();
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
 
     virtual OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 

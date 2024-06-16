@@ -125,8 +125,9 @@ QString XMACHOFat::getFileFormatExt()
     return "machofat";
 }
 
-qint64 XMACHOFat::getFileFormatSize()
+qint64 XMACHOFat::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
     return _calculateRawSize();
 }
 

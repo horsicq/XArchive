@@ -414,7 +414,7 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
     return listResult;
 }
 
-qint64 XSevenZip::getFileFormatSize()
+qint64 XSevenZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     qint64 nResult = 0;
 

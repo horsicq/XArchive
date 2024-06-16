@@ -128,8 +128,9 @@ QList<XArchive::RECORD> XLHA::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     return listResult;
 }
 
-qint64 XLHA::getFileFormatSize()
+qint64 XLHA::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
     return _calculateRawSize();
 }
 

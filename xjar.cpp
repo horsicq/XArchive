@@ -68,7 +68,7 @@ XBinary::FILEFORMATINFO XJAR::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
     if (xjar.isValid(pPdStruct)) {
         result.bIsValid = true;
-        result.nSize = xjar.getFileFormatSize();
+        result.nSize = xjar.getFileFormatSize(pPdStruct);
         result.sString = "JAR";
         result.sExt = "jar";
         result.fileType = FT_JAR;

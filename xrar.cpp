@@ -89,10 +89,10 @@ QString XRar::getFileFormatExt()
     return "rar";
 }
 
-qint64 XRar::getFileFormatSize()
+qint64 XRar::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     // TODO
-    return XBinary::getFileFormatSize();
+    return XBinary::getFileFormatSize(pPdStruct);
 }
 
 QString XRar::getFileFormatString()

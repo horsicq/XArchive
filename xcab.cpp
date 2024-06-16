@@ -161,8 +161,9 @@ QString XCab::getFileFormatExt()
     return "cab";
 }
 
-qint64 XCab::getFileFormatSize()
+qint64 XCab::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
     qint64 nResult = 0;
 
     nResult = readCFHeader().cbCabinet;  // TODO check mb _getRawSize !!!

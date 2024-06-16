@@ -69,7 +69,7 @@ XBinary::FILEFORMATINFO XAPK::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
     if (xapk.isValid(pPdStruct)) {
         result.bIsValid = true;
-        result.nSize = xapk.getFileFormatSize();
+        result.nSize = xapk.getFileFormatSize(pPdStruct);
         result.sString = "APK";
         result.sExt = "apk";
         result.fileType = FT_APK;

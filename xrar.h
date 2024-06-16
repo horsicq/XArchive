@@ -46,7 +46,7 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
     virtual QString getFileFormatExt();
-    virtual qint64 getFileFormatSize();
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     virtual QString getFileFormatString();
 
     static QList<MAPMODE> getMapModesList();

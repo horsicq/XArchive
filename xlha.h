@@ -32,7 +32,7 @@ public:
     static bool isValid(QIODevice *pDevice);
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
-    virtual qint64 getFileFormatSize();
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     static QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType();

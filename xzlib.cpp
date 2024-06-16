@@ -146,8 +146,9 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     return listResult;
 }
 
-qint64 XZlib::getFileFormatSize()
+qint64 XZlib::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
     return _calculateRawSize();
 }
 

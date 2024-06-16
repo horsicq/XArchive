@@ -78,7 +78,7 @@ XBinary::FILEFORMATINFO XNPM::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
     if (xnpm.isValid(pPdStruct)) {
         result.bIsValid = true;
-        result.nSize = xnpm.getFileFormatSize();
+        result.nSize = xnpm.getFileFormatSize(pPdStruct);
         result.sString = "NPM";
         result.sExt = "tgz";
         result.fileType = FT_NPM;
