@@ -91,8 +91,7 @@ QString XRar::getFileFormatExt()
 
 qint64 XRar::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    // TODO
-    return XBinary::getFileFormatSize(pPdStruct);
+    return _calculateRawSize(pPdStruct);
 }
 
 QString XRar::getFileFormatString()

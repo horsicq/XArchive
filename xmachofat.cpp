@@ -127,8 +127,7 @@ QString XMACHOFat::getFileFormatExt()
 
 qint64 XMACHOFat::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-    return _calculateRawSize();
+    return _calculateRawSize(pPdStruct);
 }
 
 QString XMACHOFat::getFileFormatString()

@@ -36,6 +36,15 @@ class XRar : public XArchive {
         quint64 nDataSize;
     };
 
+    enum HEADERTYPE {
+        HEADERTYPE_UNKNOWN = 0,
+        HEADERTYPE_MAIN = 1,
+        HEADERTYPE_FILE = 2,
+        HEADERTYPE_SERVICE = 3,
+        HEADERTYPE_ENCRYPTION = 4,
+        HEADERTYPE_ENDARC = 5,
+    };
+
 public:
     explicit XRar(QIODevice *pDevice = nullptr);
 
