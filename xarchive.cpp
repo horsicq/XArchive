@@ -658,6 +658,11 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
     return bResult;
 }
 
+bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
+{
+    return _decompressRecord(pRecord, getDevice(), pDestDevice, pPdStruct, 0, -1);
+}
+
 bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;

@@ -217,6 +217,45 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     return bResult;
 }
 
+bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord, QIODevice *pDestDevice, XBinary::PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
+
+    // TODO more !!!
+    // 7Zip
+    // WinRAR
+    // CAB
+    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
+        XZip xzip(pDevice);
+        bResult = xzip.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
+        XMACHOFat xmachofat(pDevice);
+        bResult = xmachofat.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_AR)) {
+        X_Ar x_ar(pDevice);
+        bResult = x_ar.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
+        XTAR xtar(pDevice);
+        bResult = xtar.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
+        XTGZ xtgz(pDevice);
+        bResult = xtgz.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
+        XGzip xgzip(pDevice);
+        bResult = xgzip.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
+        XZlib xzlib(pDevice);
+        bResult = xzlib.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
+        XLHA xlha(pDevice);
+        bResult = xlha.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    }
+
+    return bResult;
+}
+
 bool XArchives::decompressToFile(const QString &sFileName, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
