@@ -283,7 +283,8 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
 
             if (nSize) {
                 // TODO
-                if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct)) {
+                if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) ||
+                    XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct)) {
                     // result.sString = "APK";
                     // result.sExt = "apk";
                     result = XBinary::FT_APK;
