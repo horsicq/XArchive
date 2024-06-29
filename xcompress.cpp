@@ -58,7 +58,7 @@ XCompress::XCompress()
 bool XCompress::lzh_decode_init(lzh_stream *strm, int method)
 {
     struct lzh_dec *ds;
-    int w_bits, w_size;
+    qint32 w_bits, w_size;
 
     if (strm->ds == NULL) {
         strm->ds = (lzh_dec *)calloc(1, sizeof(*strm->ds));
