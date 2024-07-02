@@ -24,10 +24,23 @@ XIPA::XIPA(QIODevice *pDevice) : XJAR(pDevice)
 {
 }
 
+bool XIPA::isValid(PDSTRUCT *pPdStruct)
+{
+    // TODO
+    return XJAR::isValid(pPdStruct);
+}
+
 bool XIPA::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pListRecords)
     Q_UNUSED(pPdStruct)
 
     return false;
+}
+
+bool XIPA::isValid(QIODevice *pDevice)
+{
+    XIPA xipa(pDevice);
+
+    return xipa.isValid();
 }

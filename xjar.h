@@ -25,6 +25,7 @@
 
 class XJAR : public XZip {
     Q_OBJECT
+
 public:
     enum TYPE {
         TYPE_UNKNOWN = 0,
