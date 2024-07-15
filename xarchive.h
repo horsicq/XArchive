@@ -37,6 +37,7 @@ public:
     enum TYPE {
         TYPE_UNKNOWN = 0,
         TYPE_ARCHIVE,
+        TYPE_DOSEXTENDER
         // TODO more
     };
 

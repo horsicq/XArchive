@@ -10,6 +10,7 @@ HEADERS += \
     $$PWD/xcompress.h \
     $$PWD/xcompresseddevice.h \
     $$PWD/xdeb.h \
+    $$PWD/xdos16.h \
     $$PWD/xgzip.h \
     $$PWD/xipa.h \
     $$PWD/xjar.h \
@@ -32,6 +33,7 @@ SOURCES += \
     $$PWD/xcompress.cpp \
     $$PWD/xcompresseddevice.cpp \
     $$PWD/xdeb.cpp \
+    $$PWD/xdos16.cpp \
     $$PWD/xgzip.cpp \
     $$PWD/xipa.cpp \
     $$PWD/xjar.cpp \

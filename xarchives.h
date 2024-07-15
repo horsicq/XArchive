@@ -39,6 +39,7 @@
 #include "xtgz.h"
 #include "xnpm.h"
 #include "xdeb.h"
+#include "xdos16.h"
 
 class XArchives : public QObject {
     Q_OBJECT
@@ -66,6 +67,7 @@ public:
     static bool isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &stAvailable);
     static bool isArchiveOpenValid(const QString &sFileName, const QSet<XBinary::FT> &stAvailable);
+    static QSet<XBinary::FT> getArchiveOpenValidFileTypes();
 
 private:
     static void _findFiles(const QString &sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit,
