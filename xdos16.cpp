@@ -123,7 +123,7 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                 } else if (nSignature == 0x5A4D) { // MZ
                     RECORD record = {};
 
-                    record.sFileName = tr("Data");
+                    record.sFileName = tr("Payload");
                     record.nDataOffset = nSignatureOffset;
                     record.nCompressedSize = nSize - nSignatureOffset;
                     record.nUncompressedSize = nSize - nSignatureOffset;
