@@ -48,7 +48,7 @@ bool XDOS16::isValid(QIODevice *pDevice)
 
 quint64 XDOS16::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
-    quint64 nResult=0;
+    quint64 nResult = 0;
 
     quint16 nCP = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cp));
     quint16 nCblp = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cblp));
@@ -61,10 +61,10 @@ quint64 XDOS16::getNumberOfRecords(PDSTRUCT *pPdStruct)
             while (true) {
                 quint16 nSignature = read_uint16(nSignatureOffset);
 
-                if (nSignature == 0x5742) {     // BW
+                if (nSignature == 0x5742) {  // BW
                     nSignatureOffset = read_uint32(nSignatureOffset + offsetof(XMSDOS_DEF::dos16m_exe_header, next_header_pos));
                     nResult++;
-                } else if (nSignature == 0x5A4D) { // MZ
+                } else if (nSignature == 0x5A4D) {  // MZ
                     nResult++;
                     break;
                 } else {
@@ -103,7 +103,7 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             while (true) {
                 quint16 nSignature = read_uint16(nSignatureOffset);
 
-                if (nSignature == 0x5742) {     // BW
+                if (nSignature == 0x5742) {  // BW
                     qint64 nNewSignatureOffset = read_uint32(nSignatureOffset + offsetof(XMSDOS_DEF::dos16m_exe_header, next_header_pos));
                     QString sName = read_ansiString(nSignatureOffset + offsetof(XMSDOS_DEF::dos16m_exe_header, EXP_path));
 
@@ -120,7 +120,7 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                     listResult.append(record);
 
                     nSignatureOffset = nNewSignatureOffset;
-                } else if (nSignature == 0x5A4D) { // MZ
+                } else if (nSignature == 0x5A4D) {  // MZ
                     RECORD record = {};
 
                     record.sFileName = tr("Payload");
@@ -156,18 +156,18 @@ XBinary::FT XDOS16::getFileType()
             while (true) {
                 quint16 nSignature = read_uint16(nSignatureOffset);
 
-                if (nSignature == 0x5742) {     // BW
+                if (nSignature == 0x5742) {  // BW
                     result = FT_DOS16M;
                     nSignatureOffset = read_uint32(nSignatureOffset + offsetof(XMSDOS_DEF::dos16m_exe_header, next_header_pos));
-                } else if (nSignature == 0x5A4D) { // MZ
+                } else if (nSignature == 0x5A4D) {  // MZ
                     qint64 nSignatureOffsetOpt = read_uint32(nSignatureOffset + offsetof(XMSDOS_DEF::IMAGE_DOS_HEADEREX, e_lfanew));
                     quint16 nSignatureOpt = read_uint16(nSignatureOffsetOpt + nSignatureOffset);
 
-                    if (nSignatureOpt == 0x454E) { // NE
+                    if (nSignatureOpt == 0x454E) {  // NE
                         result = FT_DOS16M;
-                    } else if (nSignatureOpt == 0x454C) { // LE
+                    } else if (nSignatureOpt == 0x454C) {  // LE
                         result = FT_DOS4G;
-                    } else if (nSignatureOpt == 0x584C) { // LX
+                    } else if (nSignatureOpt == 0x584C) {  // LX
                         result = FT_DOS4G;
                     }
                     break;
@@ -192,8 +192,10 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
 
     result.fileType = getFileType();
 
-    result.sArch = QString("386");;
-    result.sType = typeIdToString(getType());;
+    result.sArch = QString("386");
+    ;
+    result.sType = typeIdToString(getType());
+    ;
     result.mode = getMode();
     result.nBinarySize = getSize();
     result.nImageSize = getImageSize();
@@ -224,7 +226,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
             while (true) {
                 quint16 nSignature = read_uint16(nSignatureOffset);
 
-                if (nSignature == 0x5742) {     // BW
+                if (nSignature == 0x5742) {  // BW
                     qint64 nNewSignatureOffset = read_uint32(nSignatureOffset + offsetof(XMSDOS_DEF::dos16m_exe_header, next_header_pos));
                     QString sName = read_ansiString(nSignatureOffset + offsetof(XMSDOS_DEF::dos16m_exe_header, EXP_path));
 
@@ -242,7 +244,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
                     result.listRecords.append(record);
 
                     nSignatureOffset = nNewSignatureOffset;
-                } else if (nSignature == 0x5A4D) { // MZ
+                } else if (nSignature == 0x5A4D) {  // MZ
                     _MEMORY_RECORD record = {};
                     record.nSize = nSize - nSignatureOffset;
                     record.nOffset = nSignatureOffset;
