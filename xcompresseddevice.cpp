@@ -160,7 +160,7 @@ qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
 qint64 XCompressedDevice::writeData(const char *pData, qint64 nMaxSize)
 {
 #ifdef QT_DEBUG
-    qDebug("XCompressedDevice::writeData: seekpos %ll", pos());
+    qDebug("XCompressedDevice::writeData: seekpos %lld", pos());
 #endif
     return 0;
 }
