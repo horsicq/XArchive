@@ -164,10 +164,10 @@ public:
 
     struct lzh_stream {
         const unsigned char *next_in;
-        int avail_in;
+        qint32 avail_in;
         qint64 total_in;
         const unsigned char *ref_ptr;
-        int avail_out;
+        qint32 avail_out;
         qint64 total_out;
         struct lzh_dec *ds;
     };
