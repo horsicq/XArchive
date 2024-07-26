@@ -106,7 +106,7 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, int method)
 
 bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, int tbl_bits)
 {
-    int bits;
+    qint32 bits;
 
     if (hf->bitlen == NULL) {
         hf->bitlen = (unsigned char *)malloc(len_size * sizeof(hf->bitlen[0]));
