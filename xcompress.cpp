@@ -104,7 +104,7 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, qint32 method)
     return true;
 }
 
-bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, int tbl_bits)
+bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, qint32 tbl_bits)
 {
     qint32 bits;
 
