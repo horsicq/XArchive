@@ -702,7 +702,7 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
         nResult = _readIntPackedValue(&(pState->nOffset), pState->nMaxOffset, &bSuccess);
 
 #ifdef QT_DEBUG
-        qDebug("%X", nResult);
+        qDebug("%llX", nResult);
         qDebug("%s", idToSring((XSevenZip::EIdEnum)nResult).toUtf8().data());
 #endif
 
