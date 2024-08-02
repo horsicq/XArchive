@@ -346,7 +346,7 @@ failed:
     return (ds->error = ARCHIVE_FAILED);
 }
 
-int XCompress::lzh_decode_blocks(lzh_stream *strm, int last)
+qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
 {
     struct lzh_dec *ds = strm->ds;
     struct lzh_br bre = ds->br;
