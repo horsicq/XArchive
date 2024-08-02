@@ -143,7 +143,7 @@ qint32 XCompress::lzh_decode(lzh_stream *strm, qint32 last)
     return (r);
 }
 
-int XCompress::lzh_read_blocks(lzh_stream *strm, int last)
+qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
 {
     struct lzh_dec *ds = strm->ds;
     struct lzh_br *br = &(ds->br);

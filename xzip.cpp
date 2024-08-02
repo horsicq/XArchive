@@ -372,6 +372,7 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
             result.sExt = "zip";
             result.fileType = FT_ZIP;
             result.sVersion = xzip.getVersion();
+            result.sOptions = xzip.getOptions();
         }
     }
 

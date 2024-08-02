@@ -878,8 +878,8 @@ QString XArchive::typeIdToString(qint32 nType)
     QString sResult = tr("Unknown");
 
     switch (nType) {
-        case TYPE_ARCHIVE: sResult = tr("Archive");
-        case TYPE_DOSEXTENDER: sResult = QString("DOS %1").arg(tr("extender"));
+        case TYPE_ARCHIVE: sResult = tr("Archive"); break;
+        case TYPE_DOSEXTENDER: sResult = QString("DOS %1").arg(tr("extender")); break;
     }
 
     return sResult;
