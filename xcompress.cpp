@@ -518,7 +518,7 @@ next_data:
     return (ARCHIVE_OK);
 }
 
-int XCompress::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
+qint32 XCompress::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
 {
     qint32 n = CACHE_BITS - br->cache_avail;
 
