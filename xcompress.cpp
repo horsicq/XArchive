@@ -576,10 +576,10 @@ void XCompress::lzh_emit_window(lzh_stream *strm, size_t s)
     strm->total_out += s;
 }
 
-int XCompress::lzh_decode_huffman_tree(huffman *hf, unsigned rbits, int c)
+qint32 XCompress::lzh_decode_huffman_tree(huffman *hf, unsigned rbits, qint32 c)
 {
     struct htree_t *ht;
-    int extlen;
+    qint32 extlen;
 
     ht = hf->tree;
     extlen = hf->shift_bits;
