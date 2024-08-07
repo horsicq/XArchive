@@ -205,7 +205,7 @@ public:
     static qint32 lzh_br_fillup(struct lzh_stream *strm, struct lzh_br *br);
     static void lzh_emit_window(struct lzh_stream *strm, size_t s);
     static qint32 lzh_decode_huffman_tree(struct huffman *hf, unsigned rbits, qint32 c);
-    static inline int lzh_decode_huffman(struct huffman *hf, unsigned rbits);
+    static inline qint32 lzh_decode_huffman(struct huffman *hf, unsigned rbits);
     static int lzh_make_fake_table(struct huffman *hf, quint16 c);
     static int lzh_read_pt_bitlen(struct lzh_stream *strm, int start, int end);
     static int lzh_make_huffman_table(struct huffman *hf);

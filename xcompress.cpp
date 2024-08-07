@@ -592,9 +592,9 @@ qint32 XCompress::lzh_decode_huffman_tree(huffman *hf, unsigned rbits, qint32 c)
     return (c);
 }
 
-int XCompress::lzh_decode_huffman(huffman *hf, unsigned rbits)
+qint32 XCompress::lzh_decode_huffman(huffman *hf, unsigned rbits)
 {
-    int c;
+    qint32 c;
     /*
      * At first search an index table for a bit pattern.
      * If it fails, search a huffman tree for.
