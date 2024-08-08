@@ -207,7 +207,7 @@ public:
     static qint32 lzh_decode_huffman_tree(struct huffman *hf, unsigned rbits, qint32 c);
     static inline qint32 lzh_decode_huffman(struct huffman *hf, unsigned rbits);
     static qint32 lzh_make_fake_table(struct huffman *hf, quint16 c);
-    static int lzh_read_pt_bitlen(struct lzh_stream *strm, int start, int end);
+    static qint32 lzh_read_pt_bitlen(struct lzh_stream *strm, qint32 start, qint32 end);
     static int lzh_make_huffman_table(struct huffman *hf);
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct huffman *hf);

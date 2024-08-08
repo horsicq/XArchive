@@ -615,11 +615,11 @@ qint32 XCompress::lzh_make_fake_table(huffman *hf, quint16 c)
     return (1);
 }
 
-int XCompress::lzh_read_pt_bitlen(lzh_stream *strm, int start, int end)
+qint32 XCompress::lzh_read_pt_bitlen(lzh_stream *strm, qint32 start, qint32 end)
 {
     struct lzh_dec *ds = strm->ds;
     struct lzh_br *br = &(ds->br);
-    int c, i;
+    qint32 c, i;
 
     for (i = start; i < end;) {
         /*
