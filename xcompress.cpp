@@ -605,7 +605,7 @@ qint32 XCompress::lzh_decode_huffman(huffman *hf, unsigned rbits)
     return (lzh_decode_huffman_tree(hf, rbits, c));
 }
 
-int XCompress::lzh_make_fake_table(huffman *hf, quint16 c)
+qint32 XCompress::lzh_make_fake_table(huffman *hf, quint16 c)
 {
     if (c >= hf->len_size) return (0);
     hf->tbl[0] = c;
