@@ -647,13 +647,13 @@ qint32 XCompress::lzh_read_pt_bitlen(lzh_stream *strm, qint32 start, qint32 end)
     return (i);
 }
 
-int XCompress::lzh_make_huffman_table(huffman *hf)
+qint32 XCompress::lzh_make_huffman_table(huffman *hf)
 {
     quint16 *tbl;
     const unsigned char *bitlen;
-    int bitptn[17], weight[17];
-    int i, maxbits = 0, ptn, tbl_size, w;
-    int diffbits, len_avail;
+    qint32 bitptn[17], weight[17];
+    qint32 i, maxbits = 0, ptn, tbl_size, w;
+    qint32 diffbits, len_avail;
 
     /*
      * Initialize bit patterns.
