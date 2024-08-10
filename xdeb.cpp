@@ -41,6 +41,6 @@ bool XDEB::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pListRecords)
     Q_UNUSED(pPdStruct)
-   // TODO
+    // TODO
     return false;
 }
