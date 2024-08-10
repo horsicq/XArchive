@@ -79,6 +79,9 @@ quint64 XDOS16::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(nLimit)
+    Q_UNUSED(pPdStruct)
+
     QList<XArchive::RECORD> listResult;
 
     quint16 nCP = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cp));

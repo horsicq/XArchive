@@ -39,6 +39,8 @@ bool XDEB::isValid(QIODevice *pDevice)
 
 bool XDEB::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    // TODO
+    Q_UNUSED(pListRecords)
+    Q_UNUSED(pPdStruct)
+   // TODO
     return false;
 }
