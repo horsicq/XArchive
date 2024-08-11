@@ -221,7 +221,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         qint64 nOffset = 0;
 
         for (qint32 i = 0; i < (nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
-            if ((nOffset + sizeof(LOCALFILEHEADER)) > getSize()) {
+            if ((nOffset + (qint64)sizeof(LOCALFILEHEADER)) > getSize()) {
                 break;
             }
 
