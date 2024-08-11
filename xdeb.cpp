@@ -26,6 +26,7 @@ XDEB::XDEB(QIODevice *pDevice) : X_Ar(pDevice)
 
 bool XDEB::isValid(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
     // TODO
     return false;
 }
