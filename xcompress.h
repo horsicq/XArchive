@@ -99,7 +99,7 @@ public:
         /* Cache buffer. */
         quint64 cache_buffer;
         /* Indicates how many bits avail in cache_buffer. */
-        int cache_avail;
+        qint32 cache_avail;
     };
 
     struct huffman {
