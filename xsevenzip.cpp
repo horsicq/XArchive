@@ -416,6 +416,8 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
 
 qint64 XSevenZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     qint64 nResult = 0;
 
     SIGNATURERECORD signatureHeader = {};

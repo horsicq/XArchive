@@ -82,7 +82,7 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, qint32 method)
     ds->w_size = 1U << 17;
     ds->w_mask = ds->w_size - 1;
     if (ds->w_buff == NULL) {
-        ds->w_buff = (unsigned char *)malloc(ds->w_size);
+        ds->w_buff = (quint8 *)malloc(ds->w_size);
     }
     w_size = 1U << w_bits;
     memset(ds->w_buff + ds->w_size - w_size, 0x20, w_size);
@@ -109,7 +109,7 @@ bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, qint32 tbl_bits)
     qint32 bits;
 
     if (hf->bitlen == NULL) {
-        hf->bitlen = (unsigned char *)malloc(len_size * sizeof(hf->bitlen[0]));
+        hf->bitlen = (quint8 *)malloc(len_size * sizeof(hf->bitlen[0]));
     }
     if (hf->tbl == NULL) {
         if (tbl_bits < HTBL_BITS) bits = tbl_bits;
@@ -352,9 +352,9 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
     struct lzh_br bre = ds->br;
     struct huffman *lt = &(ds->lt);
     struct huffman *pt = &(ds->pt);
-    unsigned char *w_buff = ds->w_buff;
-    unsigned char *lt_bitlen = lt->bitlen;
-    unsigned char *pt_bitlen = pt->bitlen;
+    quint8 *w_buff = ds->w_buff;
+    quint8 *lt_bitlen = lt->bitlen;
+    quint8 *pt_bitlen = pt->bitlen;
     int blocks_avail = ds->blocks_avail, c = 0;
     int copy_len = ds->copy_len, copy_pos = ds->copy_pos;
     int w_pos = ds->w_pos, w_mask = ds->w_mask, w_size = ds->w_size;
@@ -473,8 +473,8 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
                         /* No overlap. */
                         memcpy(w_buff + w_pos, w_buff + copy_pos, l);
                     } else {
-                        const unsigned char *s;
-                        unsigned char *d;
+                        const quint8 *s;
+                        quint8 *d;
                         int li;
 
                         d = w_buff + w_pos;
@@ -650,7 +650,7 @@ qint32 XCompress::lzh_read_pt_bitlen(lzh_stream *strm, qint32 start, qint32 end)
 qint32 XCompress::lzh_make_huffman_table(huffman *hf)
 {
     quint16 *tbl;
-    const unsigned char *bitlen;
+    const quint8 *bitlen;
     qint32 bitptn[17], weight[17];
     qint32 i, maxbits = 0, ptn, tbl_size, w;
     qint32 diffbits, len_avail;

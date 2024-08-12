@@ -107,7 +107,7 @@ public:
         int len_avail;
         int len_bits;
         int freq[17];
-        unsigned char *bitlen;
+        quint8 *bitlen;
 
         /*
          * Use a index table. It's faster than searching a huffman
@@ -136,7 +136,7 @@ public:
         int w_size;
         int w_mask;
         /* Window buffer, which is a loop buffer. */
-        unsigned char *w_buff;
+        quint8 *w_buff;
         /* The insert position to the window. */
         int w_pos;
         /* The position where we can copy decoded code from the window. */
@@ -163,10 +163,10 @@ public:
     };
 
     struct lzh_stream {
-        const unsigned char *next_in;
+        const quint8 *next_in;
         qint32 avail_in;
         qint64 total_in;
-        const unsigned char *ref_ptr;
+        const quint8 *ref_ptr;
         qint32 avail_out;
         qint64 total_out;
         struct lzh_dec *ds;
