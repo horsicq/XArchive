@@ -129,7 +129,7 @@ bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, qint32 tbl_bits)
 qint32 XCompress::lzh_decode(lzh_stream *strm, qint32 last)
 {
     struct lzh_dec *ds = strm->ds;
-    int avail_in;
+    qint32 avail_in;
     qint32 r;
 
     if (ds->error) return (ds->error);
@@ -147,7 +147,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
 {
     struct lzh_dec *ds = strm->ds;
     struct lzh_br *br = &(ds->br);
-    int c = 0, i;
+    qint32 c = 0, i;
     unsigned rbits;
 
     for (;;) {
