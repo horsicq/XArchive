@@ -355,11 +355,11 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
     quint8 *w_buff = ds->w_buff;
     quint8 *lt_bitlen = lt->bitlen;
     quint8 *pt_bitlen = pt->bitlen;
-    int blocks_avail = ds->blocks_avail, c = 0;
-    int copy_len = ds->copy_len, copy_pos = ds->copy_pos;
-    int w_pos = ds->w_pos, w_mask = ds->w_mask, w_size = ds->w_size;
-    int lt_max_bits = lt->max_bits, pt_max_bits = pt->max_bits;
-    int state = ds->state;
+    qint32 blocks_avail = ds->blocks_avail, c = 0;
+    qint32 copy_len = ds->copy_len, copy_pos = ds->copy_pos;
+    qint32 w_pos = ds->w_pos, w_mask = ds->w_mask, w_size = ds->w_size;
+    qint32 lt_max_bits = lt->max_bits, pt_max_bits = pt->max_bits;
+    qint32 state = ds->state;
 
     for (;;) {
         switch (state) {
