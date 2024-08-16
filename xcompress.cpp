@@ -439,7 +439,7 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
                 if (copy_pos > 1) {
                     /* We need an additional adjustment number to
                      * the position. */
-                    int p = copy_pos - 1;
+                    qint32 p = copy_pos - 1;
                     if (!lzh_br_read_ahead(strm, &bre, p)) {
                         if (last) goto failed; /* Truncated data.*/
                         state = ST_GET_POS_2;
