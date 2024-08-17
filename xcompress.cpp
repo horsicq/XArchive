@@ -461,7 +461,7 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
                  * the window into the output buffer.
                  */
                 for (;;) {
-                    int l;
+                    qint32 l;
 
                     l = copy_len;
                     if (copy_pos > w_pos) {
@@ -475,7 +475,7 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
                     } else {
                         const quint8 *s;
                         quint8 *d;
-                        int li;
+                        qint32 li;
 
                         d = w_buff + w_pos;
                         s = w_buff + copy_pos;
