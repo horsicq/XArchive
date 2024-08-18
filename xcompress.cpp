@@ -523,7 +523,7 @@ qint32 XCompress::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
     qint32 n = CACHE_BITS - br->cache_avail;
 
     for (;;) {
-        const int x = n >> 3;
+        const qint32 x = n >> 3;
         if (strm->avail_in >= x) {
             switch (x) {
                 case 8:
