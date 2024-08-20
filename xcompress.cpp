@@ -677,7 +677,7 @@ qint32 XCompress::lzh_make_huffman_table(huffman *hf)
      * making the table.
      */
     if (maxbits < 16) {
-        int ebits = 16 - maxbits;
+        qint32 ebits = 16 - maxbits;
         for (i = 1; i <= maxbits; i++) {
             bitptn[i] >>= ebits;
             weight[i] >>= ebits;
@@ -708,9 +708,9 @@ qint32 XCompress::lzh_make_huffman_table(huffman *hf)
     hf->tree_used = 0;
     for (i = 0; i < len_avail; i++) {
         quint16 *p;
-        int len, cnt;
+        qint32 len, cnt;
         quint16 bit;
-        int extlen;
+        qint32 extlen;
         struct htree_t *ht;
 
         if (bitlen[i] == 0) continue;
