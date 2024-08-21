@@ -127,23 +127,23 @@ public:
 
     struct lzh_dec {
         /* Decoding status. */
-        int state;
+        qint32 state;
 
         /*
          * Window to see last 8Ki(lh5),32Ki(lh6),64Ki(lh7) bytes of decoded
          * data.
          */
-        int w_size;
-        int w_mask;
+        qint32 w_size;
+        qint32 w_mask;
         /* Window buffer, which is a loop buffer. */
         quint8 *w_buff;
         /* The insert position to the window. */
-        int w_pos;
+        qint32 w_pos;
         /* The position where we can copy decoded code from the window. */
-        int copy_pos;
+        qint32 copy_pos;
         /* The length how many bytes we can copy decoded code from
          * the window. */
-        int copy_len;
+        qint32 copy_len;
 
         /*
          * Bit stream reader.
