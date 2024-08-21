@@ -103,10 +103,10 @@ public:
     };
 
     struct huffman {
-        int len_size;
-        int len_avail;
-        int len_bits;
-        int freq[17];
+        qint32 len_size;
+        qint32 len_avail;
+        qint32 len_bits;
+        qint32 freq[17];
         quint8 *bitlen;
 
         /*
@@ -114,11 +114,11 @@ public:
          * coding tree, which is a binary tree. But a use of a large
          * index table causes L1 cache read miss many times.
          */
-        int max_bits;
-        int shift_bits;
-        int tbl_bits;
-        int tree_used;
-        int tree_avail;
+        qint32 max_bits;
+        qint32 shift_bits;
+        qint32 tbl_bits;
+        qint32 tree_used;
+        qint32 tree_avail;
         /* Direct access table. */
         quint16 *tbl;
         /* Binary tree table for extra bits over the direct access. */
