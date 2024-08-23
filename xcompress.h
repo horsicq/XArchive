@@ -152,8 +152,8 @@ public:
 
         huffman lt, pt;
 
-        int blocks_avail;
-        int pos_pt_len_size;
+        qint32 blocks_avail;
+        qint32 pos_pt_len_size;
         int pos_pt_len_bits;
         int literal_pt_len_size;
         int literal_pt_len_bits;
