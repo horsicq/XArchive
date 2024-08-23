@@ -154,8 +154,8 @@ public:
 
         qint32 blocks_avail;
         qint32 pos_pt_len_size;
-        int pos_pt_len_bits;
-        int literal_pt_len_size;
+        qint32 pos_pt_len_bits;
+        qint32 literal_pt_len_size;
         int literal_pt_len_bits;
         int reading_position;
         int loop;
