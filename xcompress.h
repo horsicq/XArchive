@@ -156,10 +156,10 @@ public:
         qint32 pos_pt_len_size;
         qint32 pos_pt_len_bits;
         qint32 literal_pt_len_size;
-        int literal_pt_len_bits;
-        int reading_position;
-        int loop;
-        int error;
+        qint32 literal_pt_len_bits;
+        qint32 reading_position;
+        qint32 loop;
+        qint32 error;
     };
 
     struct lzh_stream {
