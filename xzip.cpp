@@ -157,6 +157,8 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint64 nECDOffset = findECDOffset();
 
+    qint64 nTotalSize = getSize();
+
     if (nECDOffset != -1) {
         qint32 nNumberOfRecords = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
 
@@ -164,52 +166,53 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             nNumberOfRecords = qMin(nNumberOfRecords, nLimit);
         }
 
+        listResult.reserve(nNumberOfRecords);
+
+        qint32 nFreeIndex = XBinary::getFreeIndex(pPdStruct);
+        XBinary::setPdStructInit(pPdStruct, nFreeIndex, nNumberOfRecords);
+
         qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
         for (qint32 i = 0; i < (nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
             RECORD record = {};
 
-            quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
+            CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nOffset, pPdStruct);
 
-            if (nSignature != SIGNATURE_CFD) {
+            if (cdh.nSignature != SIGNATURE_CFD) {
                 break;
             }
 
-            quint32 nFileNameSize = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength));
-            quint32 nExtraFieldSize = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength));
-            quint32 nFileCommentSize = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength));
-
-            record.nCRC32 = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nCRC32));
-            record.nCompressedSize = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nCompressedSize));
-            record.nUncompressedSize = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize));
+            record.nCRC32 = cdh.nCRC32;
+            record.nCompressedSize = cdh.nCompressedSize;
+            record.nUncompressedSize = cdh.nUncompressedSize;
             record.compressMethod = COMPRESS_METHOD_UNKNOWN;
-            quint16 nZipMethod = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nMethod));
+            quint16 nZipMethod = cdh.nMethod;
 
             record.compressMethod = zipToCompressMethod(nZipMethod);
 
-            record.sFileName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), nFileNameSize);
+            record.sFileName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
 
-            quint32 nLocalFileHeaderOffset = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader));
+            LOCALFILEHEADER lfh = read_LOCALFILEHEADER(cdh.nOffsetToLocalFileHeader, pPdStruct);
 
-            quint32 nLocalSignature = read_uint32(nLocalFileHeaderOffset + offsetof(LOCALFILEHEADER, nSignature));
-            quint32 nLocalFileNameSize = read_uint16(nLocalFileHeaderOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
-            quint32 nLocalExtraFieldSize = read_uint16(nLocalFileHeaderOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
-
-            if (nLocalSignature != SIGNATURE_LFD) {
+            if (lfh.nSignature != SIGNATURE_LFD) {
                 break;
             }
 
-            record.nDataOffset = nLocalFileHeaderOffset + sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize;
-            record.nHeaderOffset = nLocalFileHeaderOffset;
+            record.nDataOffset = cdh.nOffsetToLocalFileHeader + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
+            record.nHeaderOffset = cdh.nOffsetToLocalFileHeader;
             record.nHeaderSize = record.nDataOffset - record.nHeaderOffset;
 
             record.nOptHeaderOffset = nOffset;
-            record.nOptHeaderSize = (sizeof(CENTRALDIRECTORYFILEHEADER) + nFileNameSize + nExtraFieldSize + nFileCommentSize);
+            record.nOptHeaderSize = (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
 
             listResult.append(record);
 
-            nOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + nFileNameSize + nExtraFieldSize + nFileCommentSize);
+            nOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
+
+            XBinary::setPdStructCurrent(pPdStruct, nFreeIndex, i);
         }
+
+        XBinary::setPdStructFinished(pPdStruct, nFreeIndex);
     } else {
         // if no ECD, only the first record
         qint32 nNumberOfRecords = nLimit;
@@ -221,38 +224,35 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         qint64 nOffset = 0;
 
         for (qint32 i = 0; i < (nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
-            if ((nOffset + (qint64)sizeof(LOCALFILEHEADER)) > getSize()) {
+            if ((nOffset + (qint64)sizeof(LOCALFILEHEADER)) > nTotalSize) {
                 break;
             }
 
-            quint32 nLocalSignature = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nSignature));
-            quint32 nLocalFileNameSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
-            quint32 nLocalExtraFieldSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
-            quint32 nCompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
+            LOCALFILEHEADER lfh = read_LOCALFILEHEADER(nOffset, pPdStruct);
 
-            if (nLocalSignature != SIGNATURE_LFD) {
+            if (lfh.nSignature != SIGNATURE_LFD) {
                 break;
             }
 
             RECORD record = {};
 
-            record.nCRC32 = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nCRC32));
-            record.nCompressedSize = nCompressedSize;
-            record.nUncompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nUncompressedSize));
+            record.nCRC32 = lfh.nCRC32;
+            record.nCompressedSize = lfh.nCompressedSize;
+            record.nUncompressedSize = lfh.nUncompressedSize;
             record.compressMethod = COMPRESS_METHOD_UNKNOWN;
-            quint16 nZipMethod = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nMethod));
+            quint16 nZipMethod = lfh.nMethod;
 
             record.compressMethod = zipToCompressMethod(nZipMethod);
 
-            record.sFileName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), nLocalFileNameSize);
+            record.sFileName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
 
-            record.nDataOffset = nOffset + sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize;
+            record.nDataOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
             record.nHeaderOffset = nOffset;
             record.nHeaderSize = record.nDataOffset - record.nHeaderOffset;
 
             listResult.append(record);
 
-            nOffset += sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
+            nOffset += sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength + lfh.nCompressedSize;
         }
     }
 
@@ -548,6 +548,24 @@ XBinary::OSINFO XZip::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct
     Q_UNUSED(pPdStruct);
 
     return XBinary::getOsInfo();
+}
+
+XZip::CENTRALDIRECTORYFILEHEADER XZip::read_CENTRALDIRECTORYFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct)
+{
+    CENTRALDIRECTORYFILEHEADER result = {};
+
+    read_array(nOffset, (char *)&result, sizeof(CENTRALDIRECTORYFILEHEADER), pPdStruct);
+
+    return result;
+}
+
+XZip::LOCALFILEHEADER XZip::read_LOCALFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct)
+{
+    LOCALFILEHEADER result = {};
+
+    read_array(nOffset, (char *)&result, sizeof(LOCALFILEHEADER), pPdStruct);
+
+    return result;
 }
 
 qint64 XZip::findECDOffset()

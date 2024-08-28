@@ -160,6 +160,9 @@ public:
 
     virtual OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
+    CENTRALDIRECTORYFILEHEADER read_CENTRALDIRECTORYFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct);
+    LOCALFILEHEADER read_LOCALFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct);
+
 protected:
     qint64 findECDOffset();
     COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);
