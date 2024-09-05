@@ -33,9 +33,7 @@ bool XMACHOFat::isValid(PDSTRUCT *pPdStruct)
     quint32 nMagic = read_uint32(0);
 
     if ((nMagic == XMACH_DEF::S_FAT_MAGIC) || (nMagic == XMACH_DEF::S_FAT_CIGAM)) {
-        PDSTRUCT pdStruct = XBinary::createPdStruct();
-
-        bResult = (getNumberOfRecords(&pdStruct) < 10);  // TODO Check !!!
+        bResult = (getNumberOfRecords(pPdStruct) < 10);  // TODO Check !!!
     }
 
     return bResult;
