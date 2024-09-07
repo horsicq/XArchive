@@ -108,7 +108,7 @@ private:
     quint64 _readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
 
     struct STATE {
-        qint64 nOffset;
+        qint64 nCurrentOffset;
         qint64 nMaxOffset;
         quint64 nPackPosition;
         quint64 nNumberOfPackStreams;
