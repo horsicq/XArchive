@@ -768,9 +768,9 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
                 // k7zIdCRC
                 // CRCs[NumPackStreams]
                 // k7zIdEnd
-                _handle(pState, pPdStruct); // k7zIdPackInfo
-                _handle(pState, pPdStruct); // k7zIdUnpackInfo
-                _handle(pState, pPdStruct); // k7zIdSubStreamsInfo
+                _handle(pState, pPdStruct);  // k7zIdPackInfo
+                _handle(pState, pPdStruct);  // k7zIdUnpackInfo
+                _handle(pState, pPdStruct);  // k7zIdSubStreamsInfo
             } else if (nResult == k7zIdPackInfo) {
                 // k7zIdPackInfo
                 // PackPosition
