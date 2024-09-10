@@ -106,6 +106,7 @@ private:
     QString idToSring(EIdEnum id);
     qint32 getXRecord(XBinary::_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra = 0);
     quint64 _readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
+    quint8 _readBYTE(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
 
     struct STATE {
         qint64 nCurrentOffset;

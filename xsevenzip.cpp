@@ -82,7 +82,6 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
             // k7zIdPackInfo
             // k7zIdUnpackInfo
             nHeaderId = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
-            qDebug("%s", idToSring((EIdEnum)nHeaderId).toLatin1().data());
             bSuccess &= (nHeaderId == k7zIdPackInfo);
 
             _state.nPackPosition = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
@@ -103,6 +102,27 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
             nHeaderId = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
             bSuccess &= (nHeaderId == k7zIdUnpackInfo);
+            nHeaderId = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
+            bSuccess &= (nHeaderId == k7zIdFolder);
+            _state.nNumberOfFolders = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
+            // TODO Check
+            qDebug("Number of folders: %d", _state.nNumberOfFolders);
+            _state.nExtraByte = _readBYTE(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
+            qDebug("nExtraByte: %d", _state.nExtraByte);
+
+            if (_state.nExtraByte == 0) {
+                // TODO
+            } else {
+                // TODO
+            }
+
+            for (qint32 i = 0; i < _state.nNumberOfFolders; i++) {
+
+            }
+
+            quint32 nTest = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
+            qDebug("Test: %d", nTest);
+
             qDebug("%s", idToSring((EIdEnum)nHeaderId).toLatin1().data());
         }
 
@@ -724,6 +744,22 @@ quint64 XSevenZip::_readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool
 
             *pbSuccess = true;
         }
+    } else {
+        *pbSuccess = false;
+    }
+
+    return nResult;
+}
+
+quint8 XSevenZip::_readBYTE(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess)
+{
+    quint8 nResult = 0;
+
+    if (((*pnOffset) < nMaxOffset) && (*pbSuccess)) {
+        nResult = read_uint8(*pnOffset);
+
+        (*pnOffset) += 1;
+        *pbSuccess = true;
     } else {
         *pbSuccess = false;
     }
