@@ -104,20 +104,25 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
             bSuccess &= (nHeaderId == k7zIdUnpackInfo);
             nHeaderId = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
             bSuccess &= (nHeaderId == k7zIdFolder);
-            _state.nNumberOfFolders = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
+            qint32 nNumberOfFolders = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
             // TODO Check
-            qDebug("Number of folders: %d", _state.nNumberOfFolders);
-            _state.nExtraByte = _readBYTE(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
+            qDebug("Number of folders: %d", nNumberOfFolders);
+            quint8 nExtraByte = _readBYTE(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
             qDebug("nExtraByte: %d", _state.nExtraByte);
 
-            if (_state.nExtraByte == 0) {
+            if (nExtraByte == 0) {
                 // TODO
             } else {
                 // TODO
             }
 
-            for (qint32 i = 0; i < _state.nNumberOfFolders; i++) {
+            for (qint32 i = 0; i < nNumberOfFolders; i++) {
+                qint32 nNumberOfCoders = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
+                qDebug("Number of coders: %d", nNumberOfCoders);
 
+                for (qint32 j = 0; j < nNumberOfCoders; j++) {
+
+                }
             }
 
             quint32 nTest = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
