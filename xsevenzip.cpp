@@ -887,7 +887,7 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
                     }
                 }
             } else if (nResult == k7zIdCodersUnpackSize) {
-                for (qint32 i = 0; (i < pState->nNumberOfPackStreams) && (!(pPdStruct->bIsStop)); i++) {
+                for (qint32 i = 0; ((quint64)i < pState->nNumberOfPackStreams) && (!(pPdStruct->bIsStop)); i++) {
                     quint64 nUnpackSize = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
                     pState->listUnpackSizes.append(nUnpackSize);
                 }
