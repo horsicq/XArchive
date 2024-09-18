@@ -868,7 +868,7 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
                 pState->nNumberOfFolders = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
                 pState->nExtraByte = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
 
-                for (qint32 i = 0; (i < pState->nNumberOfFolders) && (!(pPdStruct->bIsStop)); i++) {
+                for (qint32 i = 0; ((quint64)i < pState->nNumberOfFolders) && (!(pPdStruct->bIsStop)); i++) {
                     pState->nNumberOfProperties = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
 
                     for (qint32 j = 0; (j < pState->nNumberOfProperties) && (!(pPdStruct->bIsStop)); j++) {
