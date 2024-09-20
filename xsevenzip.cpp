@@ -128,6 +128,8 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
                     qint32 nCodersOutStreams = 0;
                     qint32 nPropertySize = 0;
 
+                    Q_UNUSED(nCodersInStreams)
+
                     if ((nMainByte & 0x10) != 0) {
                         nCodersInStreams = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess) + 1;
                         nCodersOutStreams = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
