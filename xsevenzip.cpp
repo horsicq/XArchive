@@ -873,7 +873,7 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
                 for (qint32 i = 0; ((quint64)i < pState->nNumberOfFolders) && (!(pPdStruct->bIsStop)); i++) {
                     pState->nNumberOfProperties = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
 
-                    for (qint32 j = 0; (j < pState->nNumberOfProperties) && (!(pPdStruct->bIsStop)); j++) {
+                    for (qint32 j = 0; ((quint64)j < pState->nNumberOfProperties) && (!(pPdStruct->bIsStop)); j++) {
                         quint64 nFlag = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
                         qint32 nCodecSize = getBits_uint8(nFlag, 0, 4);
                         // qint32 nIsComplex = getBits_uint8(nFlag, 4, 1);
