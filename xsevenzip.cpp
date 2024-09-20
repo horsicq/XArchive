@@ -896,7 +896,7 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
             } else if (nResult == k7zIdFilesInfo) {
                 quint64 nNumberOfFiles = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
 
-                for (qint32 i = 0; (i < nNumberOfFiles) && (!(pPdStruct->bIsStop)); i++) {
+                for (qint32 i = 0; ((quint64)i < nNumberOfFiles) && (!(pPdStruct->bIsStop)); i++) {
                     // TODO
                 }
             } else if (nResult == k7zIdEnd) {
