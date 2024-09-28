@@ -479,9 +479,10 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
 
 XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
 {
-    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
-    if (pPdStruct == nullptr) {
+    if (!pPdStruct) {
+        pdStructEmpty = XBinary::createPdStruct();
         pPdStruct = &pdStructEmpty;
     }
 
