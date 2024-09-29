@@ -520,9 +520,10 @@ XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compress
 XArchive::COMPRESS_RESULT XArchive::_compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits,
                                                       qint32 nMemLevel, qint32 nStrategy, PDSTRUCT *pPdStruct)
 {
-    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
-    if (pPdStruct == nullptr) {
+    if (!pPdStruct) {
+        pdStructEmpty = XBinary::createPdStruct();
         pPdStruct = &pdStructEmpty;
     }
 
