@@ -311,9 +311,10 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
 {
     bool bResult = false;
 
-    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
+        pdStructEmpty = XBinary::createPdStruct();
         pPdStruct = &pdStructEmpty;
     }
 
