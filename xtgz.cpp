@@ -85,9 +85,10 @@ quint64 XTGZ::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
+        pdStructEmpty = XBinary::createPdStruct();
         pPdStruct = &pdStructEmpty;
     }
 
