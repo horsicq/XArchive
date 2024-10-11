@@ -147,9 +147,10 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     timer.start();
 #endif
 
-    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
+        pdStructEmpty = XBinary::createPdStruct();
         pPdStruct = &pdStructEmpty;
     }
 
