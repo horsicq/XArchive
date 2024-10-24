@@ -27,7 +27,7 @@ XIPA::XIPA(QIODevice *pDevice) : XJAR(pDevice)
 bool XIPA::isValid(PDSTRUCT *pPdStruct)
 {
     // TODO
-    // CHeck "Payload/"
+    // Check "Payload/"
     return XJAR::isValid(pPdStruct);
 }
 
