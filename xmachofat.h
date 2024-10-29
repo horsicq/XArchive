@@ -28,6 +28,11 @@ class XMACHOFat : public XArchive {
     Q_OBJECT
 
 public:
+    enum TYPE {
+        TYPE_UNKNOWN = 0,
+        TYPE_BUNDLE,
+    };
+
     explicit XMACHOFat(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
@@ -36,11 +41,15 @@ public:
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
+    virtual OSINFO getOsInfo();
     virtual QString getFileFormatExt();
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     virtual QString getFileFormatString();
     static QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    virtual QString getArch();
+    virtual qint32 getType();
+    virtual QString typeIdToString(qint32 nType);
 };
 
 #endif  // XMACHOFAT_H

@@ -119,9 +119,23 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
     return listResult;
 }
 
+XBinary::OSINFO XMACHOFat::getOsInfo()
+{
+    XBinary::OSINFO result = {};
+
+    result.osName = OSNAME_MACOS;
+
+    result.sArch = getArch();
+    result.mode = getMode();
+    result.sType = typeIdToString(getType());
+    result.endian = getEndian();
+
+    return result;
+}
+
 QString XMACHOFat::getFileFormatExt()
 {
-    return "machofat";
+    return "";
 }
 
 qint64 XMACHOFat::getFileFormatSize(PDSTRUCT *pPdStruct)
@@ -212,4 +226,25 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
     }
 
     return result;
+}
+
+QString XMACHOFat::getArch()
+{
+    return tr("Universal");
+}
+
+qint32 XMACHOFat::getType()
+{
+    return TYPE_BUNDLE;
+}
+
+QString XMACHOFat::typeIdToString(qint32 nType)
+{
+    QString sResult = tr("Unknown");
+
+    switch (nType) {
+        case TYPE_BUNDLE: sResult = tr("Bundle");
+    }
+
+    return sResult;
 }
