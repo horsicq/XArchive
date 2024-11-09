@@ -66,6 +66,8 @@ quint64 XDOS16::getNumberOfRecords(PDSTRUCT *pPdStruct)
                 if (nSignature == 0x5742) {  // BW
                     nSignatureOffset = read_uint32(nSignatureOffset + offsetof(XMSDOS_DEF::dos16m_exe_header, next_header_pos));
                     nResult++;
+                } else if (nSignature == 0x464D) {  // MF - find info
+                    nSignatureOffset += read_uint32(nSignatureOffset + 2);
                 } else if (nSignature == 0x5A4D) {  // MZ
                     nResult++;
                     break;
@@ -125,6 +127,8 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                     listResult.append(record);
 
                     nSignatureOffset = nNewSignatureOffset;
+                } else if (nSignature == 0x464D) {  // MF - find info
+                    nSignatureOffset += read_uint32(nSignatureOffset + 2);
                 } else if (nSignature == 0x5A4D) {  // MZ
                     RECORD record = {};
 
@@ -158,22 +162,32 @@ XBinary::FT XDOS16::getFileType()
     if (nCP > 0) {
         qint64 nSignatureOffset = (nCP - 1) * 512 + nCblp;
         if (nSize - nSignatureOffset) {
+            bool bBW = false;
             while (true) {
                 quint16 nSignature = read_uint16(nSignatureOffset);
 
                 if (nSignature == 0x5742) {  // BW
+                    bBW = true;
                     result = FT_DOS16M;
                     nSignatureOffset = read_uint32(nSignatureOffset + offsetof(XMSDOS_DEF::dos16m_exe_header, next_header_pos));
+                } else if (nSignature == 0x464D) {  // MF - find info
+                    nSignatureOffset += read_uint32(nSignatureOffset + 2);
                 } else if (nSignature == 0x5A4D) {  // MZ
                     qint64 nSignatureOffsetOpt = read_uint32(nSignatureOffset + offsetof(XMSDOS_DEF::IMAGE_DOS_HEADEREX, e_lfanew));
                     quint16 nSignatureOpt = read_uint16(nSignatureOffsetOpt + nSignatureOffset);
 
                     if (nSignatureOpt == 0x454E) {  // NE
-                        result = FT_DOS16M;
+                        if (bBW) {
+                            result = FT_DOS16M;
+                        }
                     } else if (nSignatureOpt == 0x454C) {  // LE
-                        result = FT_DOS4G;
+                        if (bBW) {
+                            result = FT_DOS4G;
+                        }
                     } else if (nSignatureOpt == 0x584C) {  // LX
-                        result = FT_DOS4G;
+                        if (bBW) {
+                            result = FT_DOS4G;
+                        }
                     }
                     break;
                 } else {
@@ -249,6 +263,9 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
                     result.listRecords.append(record);
 
                     nSignatureOffset = nNewSignatureOffset;
+                } else if (nSignature == 0x464D) {  // MF - find info
+                    // TODO
+                    nSignatureOffset += read_uint32(nSignatureOffset + 2);
                 } else if (nSignature == 0x5A4D) {  // MZ
                     _MEMORY_RECORD record = {};
                     record.nSize = nSize - nSignatureOffset;
