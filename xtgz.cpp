@@ -40,12 +40,10 @@ XTGZ::~XTGZ()
 
 bool XTGZ::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
     if (g_pCompressedDevice->isOpen()) {
-        bResult = g_pXtar->isValid();
+        bResult = g_pXtar->isValid(pPdStruct);
     }
 
     return bResult;
