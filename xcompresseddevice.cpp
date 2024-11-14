@@ -20,7 +20,7 @@
  */
 #include "xcompresseddevice.h"
 
-XCompressedDevice::XCompressedDevice(QObject *parent) : XIODevice(parent)
+XCompressedDevice::XCompressedDevice(QObject *pParent) : XIODevice(pParent)
 {
     g_pSubDevice = nullptr;
     g_pOrigDevice = nullptr;
