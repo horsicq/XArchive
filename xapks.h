@@ -25,6 +25,7 @@
 
 class XAPKS : public XAPK {
     Q_OBJECT
+
 public:
     explicit XAPKS(QIODevice *pDevice = nullptr);
 

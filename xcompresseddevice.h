@@ -27,6 +27,7 @@
 
 class XCompressedDevice : public XIODevice {
     Q_OBJECT
+
 public:
     explicit XCompressedDevice(QObject *pParent = nullptr);
     ~XCompressedDevice();
