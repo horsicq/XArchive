@@ -3,10 +3,15 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/bzip2/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/lzma/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/zlib/src/)
 
-include(${CMAKE_CURRENT_LIST_DIR}/../Formats/xbinary.cmake)
+if (NOT DEFINED XBINARY_SOURCES)
+    include(${CMAKE_CURRENT_LIST_DIR}/../Formats/xbinary.cmake)
+    set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XBINARY_SOURCES})
+endif()
+
 #include(${CMAKE_CURRENT_LIST_DIR}/../Formats/exec/xmach.cmake)
 
 set(XARCHIVE_SOURCES
+    ${XARCHIVE_SOURCES}
     ${XBINARY_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/x_ar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/x_ar.h
