@@ -184,6 +184,9 @@ QString XJAR::_getJDKVersion(quint16 nMajor, quint16 nMinor)
         case 0x3F: sResult = "Java SE 19"; break;
         case 0x40: sResult = "Java SE 20"; break;
         case 0x41: sResult = "Java SE 21"; break;
+        case 0x42: sResult = "Java SE 22"; break;
+        case 0x43: sResult = "Java SE 23"; break;
+        case 0x44: sResult = "Java SE 24"; break;
     }
 
     if ((sResult != "") && (nMinor)) {
