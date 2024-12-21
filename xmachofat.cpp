@@ -100,12 +100,7 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
 
         RECORD record = {};
 
-        record.sFileName = QString("%1").arg(mapCpuTypes.value(_cputype, tr("Unknown")));
-
-        if (_cpusubtype) {
-            record.sFileName += QString("-%1").arg(_cpusubtype, 0, 16);
-        }
-
+        record.sFileName = XMACH::_getArch(_cputype, _cpusubtype);
         record.nHeaderOffset = nOffset;
         record.nHeaderSize = sizeof(XMACH_DEF::fat_arch);
         record.nDataOffset = _offset;
@@ -199,8 +194,6 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
 
     quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
 
-    QMap<quint64, QString> mapCpuTypes = XMACH::getHeaderCpuTypesS();
-
     for (qint32 i = 0; i < (qint32)nNumberOfRecords; i++) {
         _MEMORY_RECORD record = {};
 
@@ -211,12 +204,7 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
         quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
 
-        record.sName = QString("%1").arg(mapCpuTypes.value(_cputype, tr("Unknown")));
-
-        if (_cpusubtype) {
-            record.sName += QString("-%1").arg(_cpusubtype, 0, 16);
-        }
-
+        record.sName = XMACH::_getArch(_cputype, _cpusubtype);
         record.nOffset = _offset;
         record.nSize = _size;
         record.nAddress = -1;
