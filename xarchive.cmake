@@ -12,7 +12,6 @@ endif()
 
 set(XARCHIVE_SOURCES
     ${XARCHIVE_SOURCES}
-    ${XBINARY_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/x_ar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/x_ar.h
     ${CMAKE_CURRENT_LIST_DIR}/xapk.cpp
