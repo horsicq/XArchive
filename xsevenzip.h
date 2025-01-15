@@ -63,7 +63,7 @@ class XSevenZip : public XArchive {
 public:
 #pragma pack(push)
 #pragma pack(1)
-    struct SIGNATURERECORD {
+    struct SIGNATUREHEADER {
         quint8 kSignature[6];  // {'7','z',0xBC,0xAF,0x27,0x1C}
         quint8 Major;          // now = 0
         quint8 Minor;          // now = 4
@@ -84,7 +84,7 @@ public:
     };
 
     struct XINFO {
-        SIGNATURERECORD signatureRecord;
+        SIGNATUREHEADER signatureRecord;
         XRECORD mainXRecord;
     };
 
@@ -101,6 +101,9 @@ public:
     static QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType();
+    virtual ENDIAN getEndian();
+
+    SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
 
 private:
     QString idToSring(EIdEnum id);

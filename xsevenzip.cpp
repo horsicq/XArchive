@@ -28,7 +28,7 @@ bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (getSize() > (qint64)sizeof(SIGNATURERECORD)) {
+    if (getSize() > (qint64)sizeof(SIGNATUREHEADER)) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
         if (compareSignature(&memoryMap, "'7z'BCAF271C", 0, pPdStruct)) {
             bResult = true;
@@ -61,11 +61,11 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
     quint64 nResult = 0;
 
-    SIGNATURERECORD signatureHeader = {};
+    SIGNATUREHEADER signatureHeader = {};
 
-    if (read_array(0, (char *)&signatureHeader, sizeof(SIGNATURERECORD)) == sizeof(SIGNATURERECORD)) {
-        qint64 nCurrentOffset = sizeof(SIGNATURERECORD) + signatureHeader.NextHeaderOffset;
-        qint64 nMaxOffset = sizeof(SIGNATURERECORD) + signatureHeader.NextHeaderOffset + signatureHeader.NextHeaderSize;
+    if (read_array(0, (char *)&signatureHeader, sizeof(SIGNATUREHEADER)) == sizeof(SIGNATUREHEADER)) {
+        qint64 nCurrentOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
+        qint64 nMaxOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset + signatureHeader.NextHeaderSize;
 
         // bool bSuccess = true;
 
@@ -268,11 +268,11 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
 
     XINFO xinfo = {};
 
-    if (read_array(0, (char *)&(xinfo.signatureRecord), sizeof(SIGNATURERECORD)) == sizeof(SIGNATURERECORD))  // TODO read function
+    if (read_array(0, (char *)&(xinfo.signatureRecord), sizeof(SIGNATUREHEADER)) == sizeof(SIGNATUREHEADER))  // TODO read function
     {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
-        qint64 nCurrentOffset = sizeof(SIGNATURERECORD) + xinfo.signatureRecord.NextHeaderOffset;
+        qint64 nCurrentOffset = sizeof(SIGNATUREHEADER) + xinfo.signatureRecord.NextHeaderOffset;
 
         qint32 nXSize = getXRecord(&memoryMap, nCurrentOffset, &(xinfo.mainXRecord));
 
@@ -501,11 +501,11 @@ qint64 XSevenZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 
     qint64 nResult = 0;
 
-    SIGNATURERECORD signatureHeader = {};
+    SIGNATUREHEADER signatureHeader = {};
 
     // TODO Check
-    if (read_array(0, (char *)&signatureHeader, sizeof(SIGNATURERECORD)) == sizeof(SIGNATURERECORD)) {
-        nResult = sizeof(SIGNATURERECORD) + signatureHeader.NextHeaderOffset + signatureHeader.NextHeaderSize;
+    if (read_array(0, (char *)&signatureHeader, sizeof(SIGNATUREHEADER)) == sizeof(SIGNATUREHEADER)) {
+        nResult = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset + signatureHeader.NextHeaderSize;
     }
 
     return nResult;
@@ -524,6 +524,26 @@ QString XSevenZip::getFileFormatString()
 QString XSevenZip::getFileFormatExt()
 {
     return "7z";
+}
+
+XSevenZip::SIGNATUREHEADER XSevenZip::_read_SIGNATUREHEADER(qint64 nOffset)
+{
+    SIGNATUREHEADER result = {};
+
+    read_array(nOffset, (char *)result.kSignature, 6);
+    result.Major = read_uint8(nOffset + 6);
+    result.Minor = read_uint8(nOffset + 7);
+    result.StartHeaderCRC = read_uint32(nOffset + 8);
+    result.NextHeaderOffset = read_uint64(nOffset + 12);
+    result.NextHeaderSize = read_uint64(nOffset + 20);
+    result.NextHeaderCRC = read_uint32(nOffset + 28);
+
+    return result;
+}
+
+XBinary::ENDIAN XSevenZip::getEndian()
+{
+    return ENDIAN_LITTLE;
 }
 
 QList<XBinary::MAPMODE> XSevenZip::getMapModesList()
@@ -548,11 +568,17 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
 
     _MEMORY_MAP result = {};
 
+    result.nModuleAddress = getModuleAddress();
     result.nBinarySize = getSize();
 
-    qint32 nIndex = 0;
+    result.fileType = getFileType();
+    result.mode = getMode();
+    result.sArch = getArch();
+    result.endian = getEndian();
+    result.sType = getTypeAsString();
 
     qint64 nOffset = 0;
+    qint32 nIndex = 0;
 
     {
         _MEMORY_RECORD record = {};
@@ -560,15 +586,15 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         record.nIndex = nIndex++;
         record.type = MMT_HEADER;
         record.nOffset = nOffset;
-        record.nSize = sizeof(SIGNATURERECORD);
+        record.nSize = sizeof(SIGNATUREHEADER);
         record.nAddress = -1;
         record.sName = tr("Header");
 
         result.listRecords.append(record);
     }
 
-    qint64 nNextHeaderOffset = sizeof(SIGNATURERECORD) + read_uint32(nOffset + offsetof(SIGNATURERECORD, NextHeaderOffset));
-    qint64 nNextHeaderSize = read_uint32(nOffset + offsetof(SIGNATURERECORD, NextHeaderSize));
+    qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + read_uint32(nOffset + offsetof(SIGNATUREHEADER, NextHeaderOffset));
+    qint64 nNextHeaderSize = read_uint32(nOffset + offsetof(SIGNATUREHEADER, NextHeaderSize));
 
     if (nNextHeaderSize) {
         _MEMORY_RECORD record = {};
