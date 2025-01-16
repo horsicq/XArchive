@@ -657,127 +657,127 @@ qint32 XSevenZip::getXRecord(_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *p
 {
     qint32 nResult = 0;
 
-    if (isOffsetValid(pMemoryMap, nOffset)) {
-        PACKED pnMain = get_packedNumber(nOffset);
+    // if (isOffsetValid(pMemoryMap, nOffset)) {
+    //     PACKED_INT pnMain = get_packedNumber(nOffset);
 
-        nOffset += pnMain.nByteSize;
-        nResult += pnMain.nByteSize;
+    //     nOffset += pnMain.nByteSize;
+    //     nResult += pnMain.nByteSize;
 
-        pXRecord->nID = pnMain.nValue;
+    //     pXRecord->nID = pnMain.nValue;
 
-        if (pXRecord->nID == k7zIdHeader) {
-            PACKED pnHeader = get_packedNumber(nOffset);
+    //     if (pXRecord->nID == k7zIdHeader) {
+    //         PACKED_INT pnHeader = get_packedNumber(nOffset);
 
-            if (pnHeader.nValue == k7zIdMainStreamsInfo) {
-                XRECORD xrecord = {};
+    //         if (pnHeader.nValue == k7zIdMainStreamsInfo) {
+    //             XRECORD xrecord = {};
 
-                qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord);
+    //             qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord);
 
-                pXRecord->listRecords.append(xrecord);
+    //             pXRecord->listRecords.append(xrecord);
 
-                nOffset += nRSize;
-                nResult += nRSize;
-            }
-        } else if (pXRecord->nID == k7zIdMainStreamsInfo) {
-            PACKED pnPackInfo = get_packedNumber(nOffset);
+    //             nOffset += nRSize;
+    //             nResult += nRSize;
+    //         }
+    //     } else if (pXRecord->nID == k7zIdMainStreamsInfo) {
+    //         PACKED pnPackInfo = get_packedNumber(nOffset);
 
-            if (pnPackInfo.nValue == k7zIdPackInfo) {
-                XRECORD xrecord = {};
+    //         if (pnPackInfo.nValue == k7zIdPackInfo) {
+    //             XRECORD xrecord = {};
 
-                qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord);
+    //             qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord);
 
-                pXRecord->listRecords.append(xrecord);
+    //             pXRecord->listRecords.append(xrecord);
 
-                nOffset += nRSize;
-                nResult += nRSize;
-            }
+    //             nOffset += nRSize;
+    //             nResult += nRSize;
+    //         }
 
-            PACKED pnUnpackInfo = get_packedNumber(nOffset);
+    //         PACKED pnUnpackInfo = get_packedNumber(nOffset);
 
-            if (pnUnpackInfo.nValue == k7zIdUnpackInfo) {
-                XRECORD xrecord = {};
+    //         if (pnUnpackInfo.nValue == k7zIdUnpackInfo) {
+    //             XRECORD xrecord = {};
 
-                qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord);
+    //             qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord);
 
-                pXRecord->listRecords.append(xrecord);
+    //             pXRecord->listRecords.append(xrecord);
 
-                nOffset += nRSize;
-                nResult += nRSize;
-            }
-        } else if (pXRecord->nID == k7zIdPackInfo) {
-            PACKED pnPackPos = get_packedNumber(nOffset);
-            pXRecord->nPackPos = pnPackPos.nValue;
-            nOffset += pnPackPos.nByteSize;
-            nResult += pnPackPos.nByteSize;
+    //             nOffset += nRSize;
+    //             nResult += nRSize;
+    //         }
+    //     } else if (pXRecord->nID == k7zIdPackInfo) {
+    //         PACKED pnPackPos = get_packedNumber(nOffset);
+    //         pXRecord->nPackPos = pnPackPos.nValue;
+    //         nOffset += pnPackPos.nByteSize;
+    //         nResult += pnPackPos.nByteSize;
 
-            PACKED pnNumPackStreams = get_packedNumber(nOffset);
-            pXRecord->nNumPackStreams = pnNumPackStreams.nValue;
-            nOffset += pnNumPackStreams.nByteSize;
-            nResult += pnNumPackStreams.nByteSize;
+    //         PACKED pnNumPackStreams = get_packedNumber(nOffset);
+    //         pXRecord->nNumPackStreams = pnNumPackStreams.nValue;
+    //         nOffset += pnNumPackStreams.nByteSize;
+    //         nResult += pnNumPackStreams.nByteSize;
 
-            PACKED pnSize = get_packedNumber(nOffset);
+    //         PACKED pnSize = get_packedNumber(nOffset);
 
-            if (pnSize.nValue == k7zIdSize) {
-                XRECORD xrecord = {};
+    //         if (pnSize.nValue == k7zIdSize) {
+    //             XRECORD xrecord = {};
 
-                qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord, pXRecord->nNumPackStreams);
+    //             qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord, pXRecord->nNumPackStreams);
 
-                pXRecord->listRecords.append(xrecord);
+    //             pXRecord->listRecords.append(xrecord);
 
-                nOffset += nRSize;
-                nResult += nRSize;
-            }
+    //             nOffset += nRSize;
+    //             nResult += nRSize;
+    //         }
 
-            PACKED pnCRC = get_packedNumber(nOffset);
+    //         PACKED pnCRC = get_packedNumber(nOffset);
 
-            if (pnCRC.nValue == k7zIdCRC) {
-                //                // TODO !!!
-                //                qDebug("TODO: CRC");
-            }
+    //         if (pnCRC.nValue == k7zIdCRC) {
+    //             //                // TODO !!!
+    //             //                qDebug("TODO: CRC");
+    //         }
 
-            PACKED pnEnd = get_packedNumber(nOffset);
+    //         PACKED pnEnd = get_packedNumber(nOffset);
 
-            if (pnEnd.nValue == k7zIdEnd) {
-                nOffset += pnEnd.nByteSize;
-                nResult += pnEnd.nByteSize;
-            }
-        } else if (pXRecord->nID == k7zIdSize) {
-            for (qint64 i = 0; i < nExtra; i++) {
-                PACKED pnSize = get_packedNumber(nOffset);
+    //         if (pnEnd.nValue == k7zIdEnd) {
+    //             nOffset += pnEnd.nByteSize;
+    //             nResult += pnEnd.nByteSize;
+    //         }
+    //     } else if (pXRecord->nID == k7zIdSize) {
+    //         for (qint64 i = 0; i < nExtra; i++) {
+    //             PACKED pnSize = get_packedNumber(nOffset);
 
-                pXRecord->listSizes.append(pnSize.nValue);
-                nOffset += pnSize.nByteSize;
-                nResult += pnSize.nByteSize;
-            }
-        } else if (pXRecord->nID == k7zIdUnpackInfo) {
-            PACKED pnFolder = get_packedNumber(nOffset);
+    //             pXRecord->listSizes.append(pnSize.nValue);
+    //             nOffset += pnSize.nByteSize;
+    //             nResult += pnSize.nByteSize;
+    //         }
+    //     } else if (pXRecord->nID == k7zIdUnpackInfo) {
+    //         PACKED pnFolder = get_packedNumber(nOffset);
 
-            if (pnFolder.nValue == k7zIdFolder) {
-                XRECORD xrecord = {};
+    //         if (pnFolder.nValue == k7zIdFolder) {
+    //             XRECORD xrecord = {};
 
-                qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord);
+    //             qint32 nRSize = getXRecord(pMemoryMap, nOffset, &xrecord);
 
-                pXRecord->listRecords.append(xrecord);
+    //             pXRecord->listRecords.append(xrecord);
 
-                nOffset += nRSize;
-                nResult += nRSize;
-            }
-        } else if (pXRecord->nID == k7zIdFolder) {
-            PACKED pnNumFolders = get_packedNumber(nOffset);
-            pXRecord->nNumFolders = pnNumFolders.nValue;
-            nOffset += pnNumFolders.nByteSize;
-            nResult += pnNumFolders.nByteSize;
+    //             nOffset += nRSize;
+    //             nResult += nRSize;
+    //         }
+    //     } else if (pXRecord->nID == k7zIdFolder) {
+    //         PACKED pnNumFolders = get_packedNumber(nOffset);
+    //         pXRecord->nNumFolders = pnNumFolders.nValue;
+    //         nOffset += pnNumFolders.nByteSize;
+    //         nResult += pnNumFolders.nByteSize;
 
-            //            quint8 nExtraByte=read_uint8(nOffset);
-            //            nOffset++;
-            //            nResult++;
+    //         //            quint8 nExtraByte=read_uint8(nOffset);
+    //         //            nOffset++;
+    //         //            nResult++;
 
-            // TODO
-            //            QString _sTest=getSignature(nOffset,16);
-            //            qDebug(_sTest.toLatin1().data());
-            //            QString sTest=idToSring((XSevenZip::EIdEnum)pnPackPos.nValue);
-        }
-    }
+    //         // TODO
+    //         //            QString _sTest=getSignature(nOffset,16);
+    //         //            qDebug(_sTest.toLatin1().data());
+    //         //            QString sTest=idToSring((XSevenZip::EIdEnum)pnPackPos.nValue);
+    //     }
+    // }
 
     return nResult;
 }
@@ -786,19 +786,19 @@ quint64 XSevenZip::_readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool
 {
     quint64 nResult = 0;
 
-    if (((*pnOffset) < nMaxOffset) && (*pbSuccess)) {
-        PACKED pnValue = get_packedNumber(*pnOffset);
+    // if (((*pnOffset) < nMaxOffset) && (*pbSuccess)) {
+    //     PACKED pnValue = get_packedNumber(*pnOffset);
 
-        if (((*pnOffset) + pnValue.nByteSize) <= nMaxOffset) {
-            nResult = pnValue.nValue;
+    //     if (((*pnOffset) + pnValue.nByteSize) <= nMaxOffset) {
+    //         nResult = pnValue.nValue;
 
-            (*pnOffset) += pnValue.nByteSize;
+    //         (*pnOffset) += pnValue.nByteSize;
 
-            *pbSuccess = true;
-        }
-    } else {
-        *pbSuccess = false;
-    }
+    //         *pbSuccess = true;
+    //     }
+    // } else {
+    //     *pbSuccess = false;
+    // }
 
     return nResult;
 }

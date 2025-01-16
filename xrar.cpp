@@ -197,7 +197,7 @@ XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)
     GENERICHEADER5 result = {};
 
     qint64 nCurrentOffset = nOffset;
-    PACKED_INT packeInt = {};
+    PACKED_UINT packeInt = {};
     qint32 nByteSize = 0;
 
     result.nCRC32 = read_uint32(nCurrentOffset);
