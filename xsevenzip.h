@@ -27,6 +27,7 @@
 class XSevenZip : public XArchive {
     Q_OBJECT
 
+public:
     enum EIdEnum {
         k7zIdEnd = 0,
         k7zIdHeader,
@@ -59,8 +60,6 @@ class XSevenZip : public XArchive {
         // k7zIsReal
         // Test
     };
-
-public:
 #pragma pack(push)
 #pragma pack(1)
     struct SIGNATUREHEADER {
@@ -104,9 +103,9 @@ public:
     virtual ENDIAN getEndian();
 
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
+    static QString idToSring(EIdEnum id);
 
 private:
-    QString idToSring(EIdEnum id);
     qint32 getXRecord(XBinary::_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra = 0);
     quint64 _readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
     quint8 _readBYTE(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
