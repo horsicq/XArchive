@@ -30,8 +30,6 @@ public:
     explicit XAPKS(QIODevice *pDevice = nullptr);
 
     virtual FT getFileType();
-
-signals:
 };
 
 #endif  // XAPKS_H

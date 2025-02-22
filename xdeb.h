@@ -30,8 +30,6 @@ public:
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
-
-signals:
 };
 
 #endif  // XDEB_H
