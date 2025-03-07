@@ -22,6 +22,7 @@
 #define XJAR_H
 
 #include "xzip.h"
+#include "xjavaclass.h"
 
 class XJAR : public XZip {
     Q_OBJECT
@@ -49,7 +50,7 @@ public:
     virtual QString getArch();
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
-    static QString _getJDKVersion(quint16 nMajor, quint16 nMinor);
+
 };
 
 #endif  // XJAR_H
