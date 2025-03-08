@@ -108,40 +108,18 @@ QString XRar::blockType4ToString(BLOCKTYPE4 type)
 {
     QString sResult;
 
-    switch(type)
-    {
-        case BLOCKTYPE4_MARKER:
-            sResult = QString("Marker block");
-            break;
-        case BLOCKTYPE4_ARCHIVE:
-            sResult = QString("Archive header");
-            break;
-        case BLOCKTYPE4_FILE:
-            sResult = QString("File header");
-            break;
-        case BLOCKTYPE4_COMMENT:
-            sResult = QString("Comment header");
-            break;
-        case BLOCKTYPE4_EXTRA:
-            sResult = QString("Extra information");
-            break;
-        case BLOCKTYPE4_SUBBLOCK:
-            sResult = QString("Subblock");
-            break;
-        case BLOCKTYPE4_RECOVERY:
-            sResult = QString("Recovery record");
-            break;
-        case BLOCKTYPE4_AUTH:
-            sResult = QString("Archive authentication");
-            break;
-        case BLOCKTYPE4_SUBBLOCK_NEW:
-            sResult = QString("Subblock");
-            break;
-        case BLOCKTYPE4_END:
-            sResult = QString("End of archive");
-            break;
-        default:
-            sResult = QString("Unknown (%1)").arg(type, 0, 16);
+    switch (type) {
+        case BLOCKTYPE4_MARKER: sResult = QString("Marker block"); break;
+        case BLOCKTYPE4_ARCHIVE: sResult = QString("Archive header"); break;
+        case BLOCKTYPE4_FILE: sResult = QString("File header"); break;
+        case BLOCKTYPE4_COMMENT: sResult = QString("Comment header"); break;
+        case BLOCKTYPE4_EXTRA: sResult = QString("Extra information"); break;
+        case BLOCKTYPE4_SUBBLOCK: sResult = QString("Subblock"); break;
+        case BLOCKTYPE4_RECOVERY: sResult = QString("Recovery record"); break;
+        case BLOCKTYPE4_AUTH: sResult = QString("Archive authentication"); break;
+        case BLOCKTYPE4_SUBBLOCK_NEW: sResult = QString("Subblock"); break;
+        case BLOCKTYPE4_END: sResult = QString("End of archive"); break;
+        default: sResult = QString("Unknown (%1)").arg(type, 0, 16);
     }
 
     return sResult;
@@ -151,26 +129,13 @@ QString XRar::headerType5ToString(HEADERTYPE5 type)
 {
     QString sResult;
 
-    switch(type)
-    {
-        case HEADERTYPE5_MAIN:
-            sResult = QString("Main archive header");
-            break;
-        case HEADERTYPE5_FILE:
-            sResult = QString("File header");
-            break;
-        case HEADERTYPE5_SERVICE:
-            sResult = QString("Service header");
-            break;
-        case HEADERTYPE5_ENCRYPTION:
-            sResult = QString("Archive encryption header");
-            break;
-        case HEADERTYPE5_ENDARC:
-            sResult = QString("End of archive header");
-            break;
-        default:
-            sResult = QString("Unknown (%1)").arg(type, 0, 16);
-            break;
+    switch (type) {
+        case HEADERTYPE5_MAIN: sResult = QString("Main archive header"); break;
+        case HEADERTYPE5_FILE: sResult = QString("File header"); break;
+        case HEADERTYPE5_SERVICE: sResult = QString("Service header"); break;
+        case HEADERTYPE5_ENCRYPTION: sResult = QString("Archive encryption header"); break;
+        case HEADERTYPE5_ENDARC: sResult = QString("End of archive header"); break;
+        default: sResult = QString("Unknown (%1)").arg(type, 0, 16); break;
     }
 
     return sResult;
@@ -285,8 +250,8 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                     break;
                 }
             }
-
-        } if (nVersion == 5) {
+        }
+        if (nVersion == 5) {
             while (!(pPdStruct->bIsStop)) {
                 GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 

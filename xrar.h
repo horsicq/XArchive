@@ -36,16 +36,16 @@ class XRar : public XArchive {
     };
 
     enum BLOCKTYPE4 {
-        BLOCKTYPE4_MARKER = 0x72,           // Marker block
-        BLOCKTYPE4_ARCHIVE = 0x73,          // Archive header
-        BLOCKTYPE4_FILE = 0x74,             // File header
-        BLOCKTYPE4_COMMENT = 0x75,          // Comment header
-        BLOCKTYPE4_EXTRA = 0x76,            // Extra information
-        BLOCKTYPE4_SUBBLOCK = 0x77,         // Subblock
-        BLOCKTYPE4_RECOVERY = 0x78,         // Recovery record
-        BLOCKTYPE4_AUTH = 0x79,             // Archive authentication
-        BLOCKTYPE4_SUBBLOCK_NEW = 0x7A,     // Subblock for new-format file data
-        BLOCKTYPE4_END = 0x7B               // End of archive
+        BLOCKTYPE4_MARKER = 0x72,        // Marker block
+        BLOCKTYPE4_ARCHIVE = 0x73,       // Archive header
+        BLOCKTYPE4_FILE = 0x74,          // File header
+        BLOCKTYPE4_COMMENT = 0x75,       // Comment header
+        BLOCKTYPE4_EXTRA = 0x76,         // Extra information
+        BLOCKTYPE4_SUBBLOCK = 0x77,      // Subblock
+        BLOCKTYPE4_RECOVERY = 0x78,      // Recovery record
+        BLOCKTYPE4_AUTH = 0x79,          // Archive authentication
+        BLOCKTYPE4_SUBBLOCK_NEW = 0x7A,  // Subblock for new-format file data
+        BLOCKTYPE4_END = 0x7B            // End of archive
     };
 
     struct GENERICHEADER5 {
@@ -59,11 +59,11 @@ class XRar : public XArchive {
     };
 
     enum HEADERTYPE5 {
-        HEADERTYPE5_MAIN = 1,           // Main archive header
-        HEADERTYPE5_FILE = 2,           // File header
-        HEADERTYPE5_SERVICE = 3,        // Service header
-        HEADERTYPE5_ENCRYPTION = 4,     // Archive encryption header
-        HEADERTYPE5_ENDARC = 5,         // End of archive header
+        HEADERTYPE5_MAIN = 1,        // Main archive header
+        HEADERTYPE5_FILE = 2,        // File header
+        HEADERTYPE5_SERVICE = 3,     // Service header
+        HEADERTYPE5_ENCRYPTION = 4,  // Archive encryption header
+        HEADERTYPE5_ENDARC = 5,      // End of archive header
     };
 
 public:

@@ -50,7 +50,6 @@ public:
     virtual QString getArch();
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
-
 };
 
 #endif  // XJAR_H
