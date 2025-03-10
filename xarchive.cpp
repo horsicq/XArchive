@@ -409,10 +409,18 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 strm.total_in = 0;
                 strm.avail_out = 0;
                 // strm.ref_ptr = out;
-                ret = XCompress::lzh_decode(&strm, true);
 
-                if (!_writeToDevice((char *)strm.ref_ptr, strm.total_out, pDecompressStruct)) {
-                    ret = ARCHIVE_FATAL;
+                while (true) {
+                    ret = XCompress::lzh_decode(&strm, true);
+
+                    if (!_writeToDevice((char *)strm.ref_ptr, strm.avail_out, pDecompressStruct)) {
+                        ret = ARCHIVE_FATAL;
+                        break;
+                    }
+
+                    if (strm.avail_in == 0) {
+                        break;
+                    }
                 }
 
                 pDecompressStruct->nInSize += strm.total_in;
