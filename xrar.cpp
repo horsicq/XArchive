@@ -79,82 +79,82 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     QList<XArchive::RECORD> listResult;
 
-    // qint64 nFileHeaderSize = 0;
-    // qint32 nVersion = 0;
+    qint64 nFileHeaderSize = 0;
+    qint32 nVersion = 0;
 
-    // {
-    //     _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);  // TODO rewrite
-    //     if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
-    //         nFileHeaderSize = 7;
-    //         nVersion = 4;
-    //     } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
-    //         nFileHeaderSize = 8;
-    //         nVersion = 5;
-    //     }
-    // }
+    {
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);  // TODO rewrite
+        if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
+            nFileHeaderSize = 7;
+            nVersion = 4;
+        } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
+            nFileHeaderSize = 8;
+            nVersion = 5;
+        }
+    }
 
-    // qint64 nMaxOffset = 0;
+    qint64 nMaxOffset = 0;
 
-    // if (nFileHeaderSize) {
-    //     qint64 nCurrentOffset = nFileHeaderSize;
+    if (nFileHeaderSize) {
+        qint64 nCurrentOffset = nFileHeaderSize;
 
-    //     if (nVersion == 4) {
-    //         while (!(pPdStruct->bIsStop)) {
-    //             GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+        if (nVersion == 4) {
+            while (!(pPdStruct->bIsStop)) {
+                GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
-    //             if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
-    //                 _MEMORY_RECORD record = {};
+                if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
+                    // _MEMORY_RECORD record = {};
 
-    //                 record.nIndex = nIndex++;
-    //                 record.type = MMT_DATA;
-    //                 record.nOffset = nCurrentOffset;
-    //                 record.nSize = genericBlock.nSize;
-    //                 record.nAddress = -1;
-    //                 record.sName = blockType4ToString((BLOCKTYPE4)genericBlock.nType);
+                    // record.nIndex = nIndex++;
+                    // record.type = MMT_DATA;
+                    // record.nOffset = nCurrentOffset;
+                    // record.nSize = genericBlock.nSize;
+                    // record.nAddress = -1;
+                    // record.sName = blockType4ToString((BLOCKTYPE4)genericBlock.nType);
 
-    //                 nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericBlock.nSize);
+                    // nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericBlock.nSize);
 
-    //                 result.listRecords.append(record);
+                    // result.listRecords.append(record);
 
-    //                 nCurrentOffset += genericBlock.nSize;
-    //             } else {
-    //                 break;
-    //             }
+                    nCurrentOffset += genericBlock.nSize;
+                } else {
+                    break;
+                }
 
-    //             if (genericBlock.nType == 0x7B) {  // END
-    //                 break;
-    //             }
-    //         }
-    //     }
-    //     if (nVersion == 5) {
-    //         while (!(pPdStruct->bIsStop)) {
-    //             GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
+                if (genericBlock.nType == 0x7B) {  // END
+                    break;
+                }
+            }
+        }
+        if (nVersion == 5) {
+            while (!(pPdStruct->bIsStop)) {
+                GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 
-    //             if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
-    //                 _MEMORY_RECORD record = {};
+                if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
+                    // _MEMORY_RECORD record = {};
 
-    //                 record.nIndex = nIndex++;
-    //                 record.type = MMT_DATA;
-    //                 record.nOffset = nCurrentOffset;
-    //                 record.nSize = genericHeader.nSize;
-    //                 record.nAddress = -1;
-    //                 record.sName = headerType5ToString((HEADERTYPE5)genericHeader.nType);
+                    // record.nIndex = nIndex++;
+                    // record.type = MMT_DATA;
+                    // record.nOffset = nCurrentOffset;
+                    // record.nSize = genericHeader.nSize;
+                    // record.nAddress = -1;
+                    // record.sName = headerType5ToString((HEADERTYPE5)genericHeader.nType);
 
-    //                 nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericHeader.nSize);
+                    // nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericHeader.nSize);
 
-    //                 result.listRecords.append(record);
+                    // result.listRecords.append(record);
 
-    //                 nCurrentOffset += genericHeader.nSize;
-    //             } else {
-    //                 break;
-    //             }
+                    nCurrentOffset += genericHeader.nSize;
+                } else {
+                    break;
+                }
 
-    //             if (genericHeader.nType == 5) {  // END
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // }
+                if (genericHeader.nType == 5) {  // END
+                    break;
+                }
+            }
+        }
+    }
 
     return listResult;
 }
