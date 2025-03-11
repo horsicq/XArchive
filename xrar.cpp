@@ -67,9 +67,66 @@ QString XRar::getVersion()
 
 quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    quint64 nResult = 0;
 
-    return 0;  // TODO
+    qint64 nFileHeaderSize = 0;
+    qint32 nVersion = 0;
+
+    {
+        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);  // TODO rewrite
+        if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
+            nFileHeaderSize = 7;
+            nVersion = 4;
+        } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
+            nFileHeaderSize = 8;
+            nVersion = 5;
+        }
+    }
+
+    if (nFileHeaderSize) {
+        qint64 nCurrentOffset = nFileHeaderSize;
+
+        if (nVersion == 4) {
+            while (!(pPdStruct->bIsStop)) {
+                GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+
+                if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
+                    if (genericBlock.nType == BLOCKTYPE4_FILE) {
+                        nResult++;
+                    }
+
+                    nCurrentOffset += genericBlock.nSize;
+                } else {
+                    break;
+                }
+
+                if (genericBlock.nType == 0x7B) {  // END
+                    break;
+                }
+            }
+        }
+        if (nVersion == 5) {
+            while (!(pPdStruct->bIsStop)) {
+                GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
+
+                if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
+                    if (genericHeader.nType == HEADERTYPE5_FILE) {
+                        nResult++;
+                    }
+
+                    nCurrentOffset += genericHeader.nSize;
+                } else {
+                    break;
+                }
+
+                if (genericHeader.nType == 5) {  // END
+                    break;
+                }
+            }
+        }
+    }
+
+    return nResult;
 }
 
 QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)

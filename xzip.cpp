@@ -521,13 +521,15 @@ qint64 XZip::getFileFormatSize(PDSTRUCT *pPdStruct)
         if (nECDOffset != -1) {
             qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
-            quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
-            qint64 nStartOffset = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader));
+            if (nOffset < getSize()) {
+                quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
+                qint64 nStartOffset = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader));
 
-            if (nSignature == SIGNATURE_CFD) {
-                nResult = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
-                if (nStartOffset == 0) {
-                    break;
+                if (nSignature == SIGNATURE_CFD) {
+                    nResult = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+                    if (nStartOffset == 0) {
+                        break;
+                    }
                 }
             }
         } else {
