@@ -150,8 +150,6 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         }
     }
 
-    qint64 nMaxOffset = 0;
-
     if (nFileHeaderSize) {
         qint64 nCurrentOffset = nFileHeaderSize;
 
@@ -160,18 +158,9 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                 GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
-                    // _MEMORY_RECORD record = {};
-
-                    // record.nIndex = nIndex++;
-                    // record.type = MMT_DATA;
-                    // record.nOffset = nCurrentOffset;
-                    // record.nSize = genericBlock.nSize;
-                    // record.nAddress = -1;
-                    // record.sName = blockType4ToString((BLOCKTYPE4)genericBlock.nType);
-
-                    // nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericBlock.nSize);
-
-                    // result.listRecords.append(record);
+                    if (genericBlock.nType == BLOCKTYPE4_FILE) {
+                        // TODO
+                    }
 
                     nCurrentOffset += genericBlock.nSize;
                 } else {
@@ -188,18 +177,9 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                 GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
-                    // _MEMORY_RECORD record = {};
-
-                    // record.nIndex = nIndex++;
-                    // record.type = MMT_DATA;
-                    // record.nOffset = nCurrentOffset;
-                    // record.nSize = genericHeader.nSize;
-                    // record.nAddress = -1;
-                    // record.sName = headerType5ToString((HEADERTYPE5)genericHeader.nType);
-
-                    // nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericHeader.nSize);
-
-                    // result.listRecords.append(record);
+                    if (genericHeader.nType == HEADERTYPE5_FILE) {
+                        // TODO
+                    }
 
                     nCurrentOffset += genericHeader.nSize;
                 } else {
