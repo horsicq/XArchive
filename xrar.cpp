@@ -92,10 +92,13 @@ quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
                     if (genericBlock.nType == BLOCKTYPE4_FILE) {
-                        nResult++;
-                    }
+                        FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
 
-                    nCurrentOffset += genericBlock.nSize;
+                        nCurrentOffset += fileBlock.genericBlock4.nHeaderSize + fileBlock.packSize;
+                        nResult++;
+                    } else {
+                        nCurrentOffset += genericBlock.nHeaderSize;
+                    }
                 } else {
                     break;
                 }
@@ -114,7 +117,7 @@ quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
                         nResult++;
                     }
 
-                    nCurrentOffset += genericHeader.nSize;
+                    nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
                 } else {
                     break;
                 }
@@ -132,7 +135,13 @@ quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
-    Q_UNUSED(pPdStruct)
+
+    XBinary::PDSTRUCT pdStructEmpty = {};
+
+    if (!pPdStruct) {
+        pdStructEmpty = XBinary::createPdStruct();
+        pPdStruct = &pdStructEmpty;
+    }
 
     QList<XArchive::RECORD> listResult;
 
@@ -159,10 +168,29 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
                     if (genericBlock.nType == BLOCKTYPE4_FILE) {
-                        // TODO
-                    }
+                        FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
 
-                    nCurrentOffset += genericBlock.nSize;
+                        XArchive::RECORD record = {};
+                        record.sFileName = fileBlock4.sFileName;
+                        record.nCRC32 = fileBlock4.genericBlock4.nCRC16;
+                        record.nDataOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
+                        record.nCompressedSize = fileBlock4.packSize;
+                        record.nUncompressedSize = fileBlock4.unpSize;
+                        record.nHeaderOffset = nCurrentOffset;
+                        record.nHeaderSize = fileBlock4.genericBlock4.nHeaderSize;
+
+                        if (fileBlock4.method == RAR_METHOD_STORE) {
+                            record.compressMethod = COMPRESS_METHOD_STORE;
+                        } else {
+                            record.compressMethod = COMPRESS_METHOD_RAR;
+                        }
+
+                        listResult.append(record); // TODO large files
+
+                        nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
+                    } else {
+                        nCurrentOffset += genericBlock.nHeaderSize;
+                    }
                 } else {
                     break;
                 }
@@ -181,7 +209,7 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                         // TODO
                     }
 
-                    nCurrentOffset += genericHeader.nSize;
+                    nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;;
                 } else {
                     break;
                 }
@@ -253,6 +281,74 @@ QString XRar::headerType5ToString(HEADERTYPE5 type)
     return sResult;
 }
 
+XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
+{
+    FILEHEADER5 result = {};
+
+    // TODO
+
+    return result;
+}
+
+XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
+{
+    FILEBLOCK4 result = {};
+
+    qint64 nCurrentOffset = nOffset;
+
+    // Read header fields
+    result.genericBlock4 = readGenericBlock4(nCurrentOffset);
+    nCurrentOffset += 7;
+
+    // Continue reading file block specific fields
+    result.packSize = read_uint32(nCurrentOffset);
+    nCurrentOffset += 4;
+    result.unpSize = read_uint32(nCurrentOffset);
+    nCurrentOffset += 4;
+    result.hostOS = read_uint8(nCurrentOffset);
+    nCurrentOffset++;
+    result.fileCRC = read_uint32(nCurrentOffset);
+    nCurrentOffset += 4;
+    result.fileTime = read_uint32(nCurrentOffset);
+    nCurrentOffset += 4;
+    result.unpVer = read_uint8(nCurrentOffset);
+    nCurrentOffset++;
+    result.method = read_uint8(nCurrentOffset);
+    nCurrentOffset++;
+    result.nameSize = read_uint16(nCurrentOffset);
+    nCurrentOffset += 2;
+    result.fileAttr = read_uint32(nCurrentOffset);
+    nCurrentOffset += 4;
+
+    // Read high bits of pack/unpack size if large file flag is set
+    if (result.genericBlock4.nFlags & RAR4_FILE_LARGE) {
+        result.highPackSize = read_uint32(nCurrentOffset);
+        nCurrentOffset += 4;
+        result.highUnpSize = read_uint32(nCurrentOffset);
+        nCurrentOffset += 4;
+    } else {
+        result.highPackSize = 0;
+        result.highUnpSize = 0;
+    }
+
+    // Read filename
+    if (result.nameSize > 0) {
+        QByteArray nameData = read_array(nCurrentOffset, result.nameSize);
+        nCurrentOffset += result.nameSize;
+
+        // Handle Unicode filenames
+        if (result.genericBlock4.nFlags & RAR4_FILE_UNICODE_FILENAME) {
+            // This is a simplified approach for Unicode filename handling
+            // Real implementation would need more complex parsing of the RarUnicodeFileName format
+            result.sFileName = decodeRarUnicodeName(nameData);
+        } else {
+            result.sFileName = QString::fromLatin1(nameData);
+        }
+    }
+
+    return result;
+}
+
 XRar::GENERICBLOCK4 XRar::readGenericBlock4(qint64 nOffset)
 {
     GENERICBLOCK4 result = {};
@@ -265,16 +361,29 @@ XRar::GENERICBLOCK4 XRar::readGenericBlock4(qint64 nOffset)
     nCurrentOffset++;
     result.nFlags = read_uint16(nCurrentOffset);
     nCurrentOffset += 2;
-    result.nBlockSize = read_uint16(nCurrentOffset);
+    result.nHeaderSize = read_uint16(nCurrentOffset);
     nCurrentOffset += 2;
 
-    if ((result.nType != BLOCKTYPE4_END) && (result.nBlockSize >= 11)) {
-        result.nDataSize = read_uint32(nCurrentOffset);
-    }
-
-    result.nSize = result.nBlockSize + result.nDataSize;
+    // if ((result.nType != BLOCKTYPE4_END) && (result.nHeaderSize >= 11)) {
+    //     result.nDataSize = read_uint32(nCurrentOffset);
+    // }
 
     return result;
+}
+
+QString XRar::decodeRarUnicodeName(const QByteArray &nameData)
+{
+    // This is a complex process in RAR - simplified version here
+    // Real implementation would need to follow the RarUnicodeFileName format
+
+    // Try UTF-8 first
+    QString result = QString::fromUtf8(nameData);
+    if (!result.contains(QChar(0xFFFD))) { // No replacement character
+        return result;
+    }
+
+    // Fall back to system locale
+    return QString::fromLocal8Bit(nameData);
 }
 
 QList<XBinary::MAPMODE> XRar::getMapModesList()
@@ -340,20 +449,44 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                 GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
-                    _MEMORY_RECORD record = {};
 
-                    record.nIndex = nIndex++;
-                    record.type = MMT_DATA;
-                    record.nOffset = nCurrentOffset;
-                    record.nSize = genericBlock.nSize;
-                    record.nAddress = -1;
-                    record.sName = blockType4ToString((BLOCKTYPE4)genericBlock.nType);
+                    {
+                        _MEMORY_RECORD record = {};
 
-                    nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericBlock.nSize);
+                        record.nIndex = nIndex++;
+                        record.type = MMT_DATA;
+                        record.nOffset = nCurrentOffset;
+                        record.nSize = genericBlock.nHeaderSize;
+                        record.nAddress = -1;
+                        record.sName = blockType4ToString((BLOCKTYPE4)genericBlock.nType);
 
-                    result.listRecords.append(record);
+                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset + record.nSize);
 
-                    nCurrentOffset += genericBlock.nSize;
+                        result.listRecords.append(record);
+                    }
+
+                    nCurrentOffset += genericBlock.nHeaderSize;
+
+                    if (genericBlock.nType == BLOCKTYPE4_FILE) {
+                        FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
+
+                        {
+                            _MEMORY_RECORD record = {};
+
+                            record.nIndex = nIndex++;
+                            record.type = MMT_DATA;
+                            record.nOffset = nCurrentOffset;
+                            record.nSize = fileBlock4.packSize;
+                            record.nAddress = -1;
+                            record.sName = "FileName";
+
+                            nMaxOffset = qMax(nMaxOffset, nCurrentOffset + fileBlock4.packSize);
+
+                            result.listRecords.append(record);
+                        }
+
+                        nCurrentOffset += fileBlock4.packSize;
+                    }
                 } else {
                     break;
                 }
@@ -368,20 +501,36 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                 GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
-                    _MEMORY_RECORD record = {};
+                    {
+                        _MEMORY_RECORD record = {};
 
-                    record.nIndex = nIndex++;
-                    record.type = MMT_DATA;
-                    record.nOffset = nCurrentOffset;
-                    record.nSize = genericHeader.nSize;
-                    record.nAddress = -1;
-                    record.sName = headerType5ToString((HEADERTYPE5)genericHeader.nType);
+                        record.nIndex = nIndex++;
+                        record.type = MMT_DATA;
+                        record.nOffset = nCurrentOffset;
+                        record.nSize = genericHeader.nHeaderSize;
+                        record.nAddress = -1;
+                        record.sName = headerType5ToString((HEADERTYPE5)genericHeader.nType);
 
-                    nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericHeader.nSize);
+                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset + record.nSize);
 
-                    result.listRecords.append(record);
+                        result.listRecords.append(record);
+                    }
+                    {
+                        _MEMORY_RECORD record = {};
 
-                    nCurrentOffset += genericHeader.nSize;
+                        record.nIndex = nIndex++;
+                        record.type = MMT_DATA;
+                        record.nOffset = nCurrentOffset + genericHeader.nHeaderSize;
+                        record.nSize = genericHeader.nDataSize;
+                        record.nAddress = -1;
+                        record.sName = "DATA";
+
+                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset + record.nSize);
+
+                        result.listRecords.append(record);
+                    }
+
+                    nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
                 } else {
                     break;
                 }
@@ -419,14 +568,13 @@ XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)
 
     qint64 nCurrentOffset = nOffset;
     PACKED_UINT packeInt = {};
-    qint32 nByteSize = 0;
 
     result.nCRC32 = read_uint32(nCurrentOffset);
     nCurrentOffset += 4;
     packeInt = read_uleb128(nCurrentOffset, 4);
-    result.nHeaderSize = packeInt.nValue;
+    result._nHeaderSize = packeInt.nValue;
+    result.nHeaderSize = result._nHeaderSize + packeInt.nByteSize;
     nCurrentOffset += packeInt.nByteSize;
-    nByteSize = packeInt.nByteSize;
     packeInt = read_uleb128(nCurrentOffset, 4);
     result.nType = packeInt.nValue;
     nCurrentOffset += packeInt.nByteSize;
@@ -443,10 +591,7 @@ XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)
     if (result.nFlags & 0x0002) {
         packeInt = read_uleb128(nCurrentOffset, 8);
         result.nDataSize = packeInt.nValue;
-        nCurrentOffset += packeInt.nByteSize;
     }
-
-    result.nSize = 4 + nByteSize + result.nHeaderSize + result.nDataSize;
 
     return result;
 }

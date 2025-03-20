@@ -26,13 +26,79 @@
 class XRar : public XArchive {
     Q_OBJECT
 
+    const quint16 RAR4_FILE_LARGE = 0x0100;
+    const quint16 RAR4_FILE_UNICODE_FILENAME = 0x0200;
+    const quint16 RAR4_FILE_SALT = 0x0400;
+    const quint16 RAR4_FILE_EXT_TIME = 0x1000;
+    const quint16 RAR4_FILE_COMMENT = 0x0008;
+
+    const quint8 RAR_OS_MSDOS = 0;    // MS-DOS
+    const quint8 RAR_OS_OS2 = 1;      // OS/2
+    const quint8 RAR_OS_WIN32 = 2;    // Windows
+    const quint8 RAR_OS_UNIX = 3;     // Unix/Linux
+    const quint8 RAR_OS_MACOS = 4;    // Mac OS
+    const quint8 RAR_OS_BEOS = 5;     // BeOS
+
+    // RAR 5.0 hostOS values
+    const quint8 RAR5_OS_WINDOWS = 0; // Windows
+    const quint8 RAR5_OS_UNIX = 1;    // Unix/Linux
+
+    const quint8 RAR_METHOD_STORE = 0x30;     // Storing without compression
+    const quint8 RAR_METHOD_FASTEST = 0x31;   // Fastest compression
+    const quint8 RAR_METHOD_FAST = 0x32;      // Fast compression
+    const quint8 RAR_METHOD_NORMAL = 0x33;    // Normal compression (default)
+    const quint8 RAR_METHOD_GOOD = 0x34;      // Good compression
+    const quint8 RAR_METHOD_BEST = 0x35;      // Best compression
+
+    const quint8 RAR5_METHOD_STORE = 0x00;   // RAR 5.0 storing without compression
+    const quint8 RAR5_METHOD_FASTEST = 0x01; // RAR 5.0 fastest compression
+    const quint8 RAR5_METHOD_FAST = 0x02;    // RAR 5.0 fast compression
+    const quint8 RAR5_METHOD_NORMAL = 0x03;  // RAR 5.0 normal compression
+    const quint8 RAR5_METHOD_GOOD = 0x04;    // RAR 5.0 good compression
+    const quint8 RAR5_METHOD_BEST = 0x05;    // RAR 5.0 best compression
+
     struct GENERICBLOCK4 {
-        qint64 nSize;
         quint16 nCRC16;
         quint8 nType;
         quint16 nFlags;
-        quint16 nBlockSize;
-        quint32 nDataSize;
+        quint16 nHeaderSize;
+    };
+
+    struct FILEBLOCK4 {
+        GENERICBLOCK4 genericBlock4;
+        quint32 packSize;      // Packed file size
+        quint32 unpSize;       // Unpacked file size
+        quint8  hostOS;        // Operating system used for archiving
+        quint32 fileCRC;       // File CRC
+        quint32 fileTime;      // Date and time in standard MS-DOS format
+        quint8  unpVer;        // RAR version needed to extract file
+        quint8  method;        // Packing method
+        quint16 nameSize;      // Size of filename field
+        quint32 fileAttr;      // File attributes
+        quint32 highPackSize;  // High 4 bytes of 64-bit value of packed file size
+        quint32 highUnpSize;   // High 4 bytes of 64-bit value of unpacked file size
+        QString sFileName;
+    };
+
+    struct GENERICHEADER5 {
+        quint32 nCRC32;
+        quint64 _nHeaderSize;
+        quint64 nHeaderSize;
+        quint64 nType;
+        quint64 nFlags;
+        quint64 nExtraAreaSize;
+        quint64 nDataSize;
+    };
+
+    struct FILEHEADER5
+    {
+        quint32 nCRC32;
+        quint64 _nHeaderSize;
+        quint64 nHeaderSize;
+        quint64 nType;
+        quint64 nFlags;
+        quint64 nExtraAreaSize;
+        quint64 nDataSize;
     };
 
     enum BLOCKTYPE4 {
@@ -46,16 +112,6 @@ class XRar : public XArchive {
         BLOCKTYPE4_AUTH = 0x79,          // Archive authentication
         BLOCKTYPE4_SUBBLOCK_NEW = 0x7A,  // Subblock for new-format file data
         BLOCKTYPE4_END = 0x7B            // End of archive
-    };
-
-    struct GENERICHEADER5 {
-        qint64 nSize;
-        quint32 nCRC32;
-        quint32 nHeaderSize;
-        quint32 nType;
-        quint32 nFlags;
-        quint32 nExtraAreaSize;
-        quint64 nDataSize;
     };
 
     enum HEADERTYPE5 {
@@ -89,6 +145,9 @@ public:
 private:
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
     GENERICBLOCK4 readGenericBlock4(qint64 nOffset);
+    FILEBLOCK4 readFileBlock4(qint64 nOffset);
+    FILEHEADER5 readFileHeader5(qint64 nOffset);
+    QString decodeRarUnicodeName(const QByteArray &nameData);
 };
 
 #endif  // XRAR_H
