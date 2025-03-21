@@ -362,18 +362,15 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
 
-    XZip xzip(getDevice());
-
-    if (xzip.isValid(pPdStruct)) {
-        result.nSize = xzip.getFileFormatSize(pPdStruct);
+    if (isValid(pPdStruct)) {
+        result.nSize = getFileFormatSize(pPdStruct);
 
         if (result.nSize > 0) {
             result.bIsValid = true;
-            result.sString = "ZIP";
             result.sExt = "zip";
             result.fileType = FT_ZIP;
-            result.sVersion = xzip.getVersion();
-            result.sOptions = xzip.getOptions();
+            result.sVersion = getVersion();
+            result.sOptions = getOptions();
         }
     }
 
@@ -499,16 +496,6 @@ QString XZip::getFileFormatExt()
     return "zip";
 }
 
-QString XZip::getFileFormatString()
-{
-    QString sResult;
-
-    sResult = QString("ZIP(%1)").arg(getVersion());
-    // TODO more info, number of records
-
-    return sResult;
-}
-
 qint64 XZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     qint64 nResult = 0;
@@ -544,14 +531,6 @@ qint64 XZip::getFileFormatSize(PDSTRUCT *pPdStruct)
     }
 
     return nResult;
-}
-
-XBinary::OSINFO XZip::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pListRecords);
-    Q_UNUSED(pPdStruct);
-
-    return XBinary::getOsInfo();
 }
 
 XZip::CENTRALDIRECTORYFILEHEADER XZip::read_CENTRALDIRECTORYFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct)

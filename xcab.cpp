@@ -146,16 +146,6 @@ XBinary::FT XCab::getFileType()
     return FT_CAB;
 }
 
-QString XCab::getFileFormatString()
-{
-    QString sResult;
-
-    sResult = QString("CAB(%1)").arg(getVersion());
-    // TODO more info, number of records
-
-    return sResult;
-}
-
 QString XCab::getFileFormatExt()
 {
     return "cab";

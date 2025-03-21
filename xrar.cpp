@@ -48,21 +48,10 @@ bool XRar::isValid(QIODevice *pDevice)
 }
 
 QString XRar::getVersion()
-{
-    QString sResult;
+{    
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
-    _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
-
-    // TODO more
-    if (compareSignature(&memoryMap, "'RE~^'")) {
-        sResult = "1.4";
-    } else if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
-        sResult = "1.5-4.X";
-    } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
-        sResult = "5.X-7.X";
-    }
-
-    return sResult;
+    return getFileFormatInfo(&pdStructEmpty).sVersion;
 }
 
 quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
@@ -70,17 +59,12 @@ quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
     quint64 nResult = 0;
 
     qint64 nFileHeaderSize = 0;
-    qint32 nVersion = 0;
+    qint32 nVersion = getInternVersion(pPdStruct);
 
-    {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);  // TODO rewrite
-        if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
-            nFileHeaderSize = 7;
-            nVersion = 4;
-        } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
-            nFileHeaderSize = 8;
-            nVersion = 5;
-        }
+    if (nVersion == 4) {
+        nFileHeaderSize = 7;
+    } else if (nVersion == 5) {
+        nFileHeaderSize = 8;
     }
 
     if (nFileHeaderSize) {
@@ -146,17 +130,12 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     QList<XArchive::RECORD> listResult;
 
     qint64 nFileHeaderSize = 0;
-    qint32 nVersion = 0;
+    qint32 nVersion = getInternVersion(pPdStruct);
 
-    {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);  // TODO rewrite
-        if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
-            nFileHeaderSize = 7;
-            nVersion = 4;
-        } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
-            nFileHeaderSize = 8;
-            nVersion = 5;
-        }
+    if (nVersion == 4) {
+        nFileHeaderSize = 7;
+    } else if (nVersion == 5) {
+        nFileHeaderSize = 8;
     }
 
     if (nFileHeaderSize) {
@@ -206,7 +185,24 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
                     if (genericHeader.nType == HEADERTYPE5_FILE) {
-                        // TODO
+                        FILEHEADER5 fileHeader5 = readFileHeader5(nCurrentOffset);
+
+                        XArchive::RECORD record = {};
+                        record.sFileName = fileHeader5.sFileName;
+                        record.nCRC32 = fileHeader5.nCRC32;
+                        record.nDataOffset = nCurrentOffset + fileHeader5.nHeaderSize;
+                        record.nCompressedSize = fileHeader5.nDataSize;
+                        record.nUncompressedSize = fileHeader5.nUnpackedSize;
+                        record.nHeaderOffset = nCurrentOffset;
+                        record.nHeaderSize = fileHeader5.nHeaderSize;
+
+                        // if (fileHeader5.method == RAR_METHOD_STORE) {
+                        //     record.compressMethod = COMPRESS_METHOD_STORE;
+                        // } else {
+                        //     record.compressMethod = COMPRESS_METHOD_RAR;
+                        // }
+
+                        listResult.append(record);
                     }
 
                     nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;;
@@ -231,17 +227,7 @@ QString XRar::getFileFormatExt()
 
 qint64 XRar::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    return _calculateRawSize(pPdStruct);
-}
-
-QString XRar::getFileFormatString()
-{
-    QString sResult;
-
-    sResult = QString("RAR(%1)").arg(getVersion());
-    // TODO more info
-
-    return sResult;
+    return getFileFormatInfo(pPdStruct).nSize;
 }
 
 QString XRar::blockType4ToString(BLOCKTYPE4 type)
@@ -281,11 +267,153 @@ QString XRar::headerType5ToString(HEADERTYPE5 type)
     return sResult;
 }
 
+XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
+{
+    FILEFORMATINFO result = {};
+
+    qint32 nVersion = getInternVersion(pPdStruct);
+
+    if (nVersion) {
+        result.bIsValid = true;
+        result.sExt = getFileFormatExt();
+    }
+
+    // result.bIsValid = isValid(pPdStruct);
+
+    // if (result.bIsValid) {
+    //     result.nSize = getFileFormatSize(pPdStruct);
+
+    //     if (result.nSize > 0) {
+    //         result.fileType = getFileType();
+    //         result.sString = getFileFormatString();
+    //         result.sExt = getFileFormatExt();
+    //         result.sVersion = getVersion();
+    //         result.sOptions = getOptions();
+    //     } else {
+    //         result.bIsValid = false;
+    //     }
+    // }
+
+    return result;
+}
+
+qint32 XRar::getInternVersion(PDSTRUCT *pPdStruct)
+{
+    qint32 nResult = 0;
+
+    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+
+    // TODO more
+    if (compareSignature(&memoryMap, "'RE~^'", 0, pPdStruct)) {
+        nResult = 1; // "1.4";
+    } else if (compareSignature(&memoryMap, "'Rar!'1A0700", 0, pPdStruct)) {
+        nResult = 4; // "1.5-4.X";
+    } else if (compareSignature(&memoryMap, "'Rar!'1A070100", 0, pPdStruct)) {
+        nResult = 5; // "5.X-7.X";
+    }
+
+    return nResult;
+}
+
 XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
 {
     FILEHEADER5 result = {};
 
-    // TODO
+    qint64 nCurrentOffset = nOffset;
+    PACKED_UINT packeInt = {};
+
+    // Read the base header fields
+    result.nCRC32 = read_uint32(nCurrentOffset);
+    nCurrentOffset += 4;
+    packeInt = read_uleb128(nCurrentOffset, 4);
+    result._nHeaderSize = packeInt.nValue;
+    result.nHeaderSize = result._nHeaderSize + packeInt.nByteSize + 4;
+    nCurrentOffset += packeInt.nByteSize;
+    packeInt = read_uleb128(nCurrentOffset, 4);
+    result.nType = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+    packeInt = read_uleb128(nCurrentOffset, 4);
+    result.nFlags = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+
+    // Read optional extra area size
+    if (result.nFlags & 0x0001) {
+        packeInt = read_uleb128(nCurrentOffset, 4);
+        result.nExtraAreaSize = packeInt.nValue;
+        nCurrentOffset += packeInt.nByteSize;
+    }
+
+    // Read optional data size
+    if (result.nFlags & 0x0002) {
+        packeInt = read_uleb128(nCurrentOffset, 8);
+        result.nDataSize = packeInt.nValue;
+        nCurrentOffset += packeInt.nByteSize;
+    }
+
+    // Read file header specific fields
+    packeInt = read_uleb128(nCurrentOffset, 4);
+    result.nFileFlags = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+
+    // Read unpacked size
+    packeInt = read_uleb128(nCurrentOffset, 8);
+    result.nUnpackedSize = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+
+    // Read attributes
+    packeInt = read_uleb128(nCurrentOffset, 4);
+    result.nAttributes = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+
+    // Read mtime if present
+    if (result.nFileFlags & 0x0002) {
+        result.nMTime = read_uint32(nCurrentOffset);
+        nCurrentOffset += 4;
+    }
+
+    // Read Data CRC32 if present
+    if (result.nFileFlags & 0x0004) {
+        result.nDataCRC32 = read_uint32(nCurrentOffset);
+        nCurrentOffset += 4;
+    }
+
+    // Read compression information
+    packeInt = read_uleb128(nCurrentOffset, 4);
+    result.nCompInfo = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+
+    // Read Host OS
+    packeInt = read_uleb128(nCurrentOffset, 2);
+    result.nHostOS = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+
+    // Read Name Length
+    packeInt = read_uleb128(nCurrentOffset, 4);
+    result.nNameLength = packeInt.nValue;
+    nCurrentOffset += packeInt.nByteSize;
+
+    // Read Name
+    if (result.nNameLength > 0) {
+        result.sFileName = decodeRarUnicodeName(read_array(nCurrentOffset, result.nNameLength));
+        nCurrentOffset += result.nNameLength;
+    }
+
+    // Read Extra Area if present
+    if (result.nFlags & 0x0001 && result.nExtraAreaSize > 0) {
+        result.baExtraArea = read_array(nCurrentOffset, result.nExtraAreaSize);
+        // nCurrentOffset += result.nExtraAreaSize;
+    }
+
+    // // Read Data Area if present
+    // if (result.nFlags & 0x0002 && result.nDataSize > 0) {
+    //     // Store position of data area for later use
+    //     result.nDataAreaOffset = nCurrentOffset;
+
+    //     // Optionally read the data if needed
+    //     // Note: For large files, you might not want to read all data at once
+    //     // result.baDataArea = read_array(nCurrentOffset, result.nDataSize);
+    //     // nCurrentOffset += result.nDataSize;
+    // }
 
     return result;
 }
@@ -411,17 +539,12 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     result.nBinarySize = getSize();
 
     qint64 nFileHeaderSize = 0;
-    qint32 nVersion = 0;
+    qint32 nVersion = getInternVersion(pPdStruct);
 
-    {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);  // TODO rewrite
-        if (compareSignature(&memoryMap, "'Rar!'1A0700")) {
-            nFileHeaderSize = 7;
-            nVersion = 4;
-        } else if (compareSignature(&memoryMap, "'Rar!'1A070100")) {
-            nFileHeaderSize = 8;
-            nVersion = 5;
-        }
+    if (nVersion == 4) {
+        nFileHeaderSize = 7;
+    } else if (nVersion == 5) {
+        nFileHeaderSize = 8;
     }
 
     qint64 nMaxOffset = 0;
@@ -573,7 +696,7 @@ XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)
     nCurrentOffset += 4;
     packeInt = read_uleb128(nCurrentOffset, 4);
     result._nHeaderSize = packeInt.nValue;
-    result.nHeaderSize = result._nHeaderSize + packeInt.nByteSize;
+    result.nHeaderSize = result._nHeaderSize + packeInt.nByteSize + 4;
     nCurrentOffset += packeInt.nByteSize;
     packeInt = read_uleb128(nCurrentOffset, 4);
     result.nType = packeInt.nValue;

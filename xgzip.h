@@ -49,10 +49,7 @@ public:
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
 
     virtual QString getFileFormatExt();
-    virtual QString getFileFormatString();
     virtual FT getFileType();
-
-    virtual OSINFO getOsInfo();
 };
 
 #endif  // XGZIP_H

@@ -92,13 +92,24 @@ class XRar : public XArchive {
 
     struct FILEHEADER5
     {
-        quint32 nCRC32;
-        quint64 _nHeaderSize;
-        quint64 nHeaderSize;
-        quint64 nType;
-        quint64 nFlags;
-        quint64 nExtraAreaSize;
-        quint64 nDataSize;
+        quint32 nCRC32;            // Header CRC32
+        quint64 _nHeaderSize;      // Internal variable for header size
+        quint64 nHeaderSize;       // Size of the header
+        quint64 nType;             // Header type (2 for file header, 3 for service header)
+        quint64 nFlags;            // Common header flags
+        quint64 nExtraAreaSize;    // Size of extra area (if 0x0001 flag set)
+        quint64 nDataSize;         // Size of data area (if 0x0002 flag set)
+        quint64 nFileFlags;        // Flags specific for file/service headers
+        quint64 nUnpackedSize;     // Unpacked file or service data size
+        quint64 nAttributes;       // OS-specific file attributes
+        quint32 nMTime;            // File modification time (Unix format, if 0x0002 file flag set)
+        quint32 nDataCRC32;        // CRC32 of unpacked data (if 0x0004 file flag set)
+        quint64 nCompInfo;         // Compression algorithm information
+        quint64 nHostOS;           // Type of OS used to create the archive
+        quint64 nNameLength;       // Length of name field
+        QString sFileName;         // File or service name
+        QByteArray baExtraArea;    // Optional extra area (if 0x0001 header flag set)
+        QByteArray baDataArea;     // Optional data area (if 0x0002 header flag set)
     };
 
     enum BLOCKTYPE4 {
@@ -133,7 +144,6 @@ public:
 
     virtual QString getFileFormatExt();
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
-    virtual QString getFileFormatString();
 
     static QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
@@ -142,7 +152,10 @@ public:
     QString blockType4ToString(BLOCKTYPE4 type);
     QString headerType5ToString(HEADERTYPE5 type);
 
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
+
 private:
+    qint32 getInternVersion(PDSTRUCT *pPdStruct);
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
     GENERICBLOCK4 readGenericBlock4(qint64 nOffset);
     FILEBLOCK4 readFileBlock4(qint64 nOffset);

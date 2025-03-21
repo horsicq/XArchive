@@ -81,6 +81,16 @@ quint64 XDOS16::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return nResult;
 }
 
+QString XDOS16::getOsVersion()
+{
+    return "3.0";
+}
+
+XBinary::OSNAME XDOS16::getOsName()
+{
+    return OSNAME_MSDOS;
+}
+
 QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
@@ -212,9 +222,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
     result.fileType = getFileType();
 
     result.sArch = QString("386");
-    ;
     result.sType = typeIdToString(getType());
-    ;
     result.mode = getMode();
     result.nBinarySize = getSize();
     result.nImageSize = getImageSize();
@@ -289,20 +297,6 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
     return result;
 }
 
-XBinary::OSINFO XDOS16::getOsInfo()
-{
-    OSINFO result = {};
-
-    result.osName = OSNAME_MSDOS;
-    result.sOsVersion = "3.0";
-    result.sArch = getArch();
-    result.mode = getMode();
-    result.sType = typeIdToString(getType());
-    result.endian = getEndian();
-
-    return result;
-}
-
 XBinary::MODE XDOS16::getMode()
 {
     return MODE_16;
@@ -321,21 +315,6 @@ XBinary::ENDIAN XDOS16::getEndian()
 qint32 XDOS16::getType()
 {
     return TYPE_DOSEXTENDER;
-}
-
-QString XDOS16::getFileFormatString()
-{
-    QString sResult;
-
-    FT fileType = getFileType();
-
-    if (fileType == FT_DOS16M) {
-        sResult = "DOS16M";
-    } else if (fileType == FT_DOS4G) {
-        sResult = "DOS4G";
-    }
-
-    return sResult;
 }
 
 QString XDOS16::getFileFormatExt()

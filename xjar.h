@@ -43,8 +43,6 @@ public:
     virtual FT getFileType();
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
-    virtual OSINFO getOsInfo();
-    virtual OSINFO getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
     virtual ENDIAN getEndian();
     virtual MODE getMode();
     virtual QString getArch();

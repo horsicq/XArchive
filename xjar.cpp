@@ -64,14 +64,48 @@ XBinary::FILEFORMATINFO XJAR::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
 
-    XJAR xjar(getDevice());
+    QList<XArchive::RECORD> listArchiveRecords = getRecords(20000, pPdStruct);
 
-    if (xjar.isValid(pPdStruct)) {
+    if (isValid(&listArchiveRecords, pPdStruct)) {
         result.bIsValid = true;
-        result.nSize = xjar.getFileFormatSize(pPdStruct);
-        result.sString = "JAR";
+        result.nSize = getFileFormatSize(pPdStruct);
         result.sExt = "jar";
         result.fileType = FT_JAR;
+
+        result.osName = OSNAME_JVM;
+        result.bIsVM = true;
+
+        result.sArch = getArch();
+        result.mode = getMode();
+        result.sType = typeIdToString(getType());
+        result.endian = getEndian();
+
+        qint32 nNumberOfRecords = listArchiveRecords.count();
+
+        for (qint32 i = 0; i < nNumberOfRecords; i++) {
+            if (listArchiveRecords.at(i).sFileName.section(".", -1, -1) == "class") {
+                RECORD record = listArchiveRecords.at(i);
+                QByteArray baData = XArchive::decompress(&record, pPdStruct, 0, 0x100);
+
+                if (baData.size() > 10) {
+                    char *pData = baData.data();
+                    if (XBinary::_read_uint32(pData, true) == 0xCAFEBABE) {
+                        quint16 nMinor = XBinary::_read_uint16(pData + 4, true);
+                        quint16 nMajor = XBinary::_read_uint16(pData + 6, true);
+
+                        result.sOsVersion = XJavaClass::_getJDKVersion(nMajor, nMinor);
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (nNumberOfRecords < 20000) {
+            result.nNumberOfRecords = nNumberOfRecords;
+        } else {
+            result.nNumberOfRecords = getNumberOfRecords(pPdStruct);
+        }
     }
 
     return result;
@@ -80,51 +114,6 @@ XBinary::FILEFORMATINFO XJAR::getFileFormatInfo(PDSTRUCT *pPdStruct)
 QString XJAR::getFileFormatExt()
 {
     return "jar";
-}
-
-XBinary::OSINFO XJAR::getOsInfo()
-{
-    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
-
-    QList<XArchive::RECORD> listRecords = getRecords(20, &pdStructEmpty);
-
-    return getOsInfo(&listRecords, &pdStructEmpty);
-}
-
-XBinary::OSINFO XJAR::getOsInfo(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
-{
-    XBinary::OSINFO result = {};
-
-    result.osName = OSNAME_JVM;
-    result.bIsVM = true;
-
-    result.sArch = getArch();
-    result.mode = getMode();
-    result.sType = typeIdToString(getType());
-    result.endian = getEndian();
-
-    qint32 nNumberOfRecords = pListRecords->count();
-
-    for (qint32 i = 0; i < nNumberOfRecords; i++) {
-        if (pListRecords->at(i).sFileName.section(".", -1, -1) == "class") {
-            RECORD record = pListRecords->at(i);
-            QByteArray baData = XArchive::decompress(&record, pPdStruct, 0, 0x100);
-
-            if (baData.size() > 10) {
-                char *pData = baData.data();
-                if (XBinary::_read_uint32(pData, true) == 0xCAFEBABE) {
-                    quint16 nMinor = XBinary::_read_uint16(pData + 4, true);
-                    quint16 nMajor = XBinary::_read_uint16(pData + 6, true);
-
-                    result.sOsVersion = XJavaClass::_getJDKVersion(nMajor, nMinor);
-
-                    break;
-                }
-            }
-        }
-    }
-
-    return result;
 }
 
 XBinary::ENDIAN XJAR::getEndian()

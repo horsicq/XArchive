@@ -93,7 +93,6 @@ public:
     CFDATA readCFData(qint64 nOffset);
 
     virtual FT getFileType();
-    virtual QString getFileFormatString();
     virtual QString getFileFormatExt();
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     static QList<MAPMODE> getMapModesList();

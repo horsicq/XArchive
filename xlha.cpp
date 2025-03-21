@@ -213,16 +213,6 @@ XBinary::FT XLHA::getFileType()
     return FT_LHA;
 }
 
-QString XLHA::getFileFormatString()
-{
-    QString sResult;
-
-    sResult = QString("LHA");
-    // TODO more info
-
-    return sResult;
-}
-
 QString XLHA::getFileFormatExt()
 {
     return "lha";

@@ -35,12 +35,12 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual FT getFileType();
     virtual _MEMORY_MAP getMemoryMap(XBinary::MAPMODE mapMode = XBinary::MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
-    virtual OSINFO getOsInfo();
+    virtual OSNAME getOsName();
+    virtual QString getOsVersion();
     virtual MODE getMode();
     virtual QString getArch();
     virtual ENDIAN getEndian();
     virtual qint32 getType();
-    virtual QString getFileFormatString();
     virtual QString getFileFormatExt();
 
 signals:

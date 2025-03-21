@@ -60,11 +60,6 @@ QString XNPM::getFileFormatExt()
     return "tgz";
 }
 
-QString XNPM::getFileFormatString()
-{
-    return "NPM";
-}
-
 XBinary::FT XNPM::getFileType()
 {
     return FT_NPM;
@@ -74,28 +69,12 @@ XBinary::FILEFORMATINFO XNPM::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
 
-    XNPM xnpm(getDevice());
-
-    if (xnpm.isValid(pPdStruct)) {
+    if (isValid(pPdStruct)) {
         result.bIsValid = true;
-        result.nSize = xnpm.getFileFormatSize(pPdStruct);
-        result.sString = "NPM";
+        result.nSize =getFileFormatSize(pPdStruct);
         result.sExt = "tgz";
         result.fileType = FT_NPM;
     }
-
-    return result;
-}
-
-XBinary::OSINFO XNPM::getOsInfo()
-{
-    OSINFO result = {};
-
-    result.osName = OSNAME_MULTIPLATFORM;
-    result.sArch = getArch();
-    result.mode = getMode();
-    result.sType = typeIdToString(getType());
-    result.endian = getEndian();
 
     return result;
 }

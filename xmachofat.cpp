@@ -68,6 +68,11 @@ quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
 }
 
+XBinary::OSNAME XMACHOFat::getOsName()
+{
+    return OSNAME_MACOS;
+}
+
 QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     XBinary::PDSTRUCT pdStructEmpty = {};
@@ -114,20 +119,6 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
     return listResult;
 }
 
-XBinary::OSINFO XMACHOFat::getOsInfo()
-{
-    XBinary::OSINFO result = {};
-
-    result.osName = OSNAME_MACOS;
-
-    result.sArch = getArch();
-    result.mode = getMode();
-    result.sType = typeIdToString(getType());
-    result.endian = getEndian();
-
-    return result;
-}
-
 QString XMACHOFat::getFileFormatExt()
 {
     return "";
@@ -136,16 +127,6 @@ QString XMACHOFat::getFileFormatExt()
 qint64 XMACHOFat::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     return _calculateRawSize(pPdStruct);
-}
-
-QString XMACHOFat::getFileFormatString()
-{
-    QString sResult;
-
-    sResult = QString("MACHOFAT");
-    // TODO more info, number of records
-
-    return sResult;
 }
 
 QList<XBinary::MAPMODE> XMACHOFat::getMapModesList()

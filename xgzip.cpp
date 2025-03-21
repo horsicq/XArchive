@@ -216,30 +216,7 @@ QString XGzip::getFileFormatExt()
     return "gz";
 }
 
-QString XGzip::getFileFormatString()
-{
-    QString sResult;
-
-    sResult = QString("GZip");
-    // TODO more info
-
-    return sResult;
-}
-
 XBinary::FT XGzip::getFileType()
 {
     return FT_GZIP;
-}
-
-XBinary::OSINFO XGzip::getOsInfo()
-{
-    OSINFO result = {};
-
-    result.osName = OSNAME_MULTIPLATFORM;
-    result.sArch = getArch();
-    result.mode = getMode();
-    result.sType = typeIdToString(getType());
-    result.endian = getEndian();
-
-    return result;
 }

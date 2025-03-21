@@ -234,26 +234,18 @@ XBinary::FT XZlib::getFileType()
     return FT_ZLIB;
 }
 
-QString XZlib::getFileFormatString()
+QString XZlib::getVersion()
 {
     QString sResult;
-
-    sResult = QString("zlib");
-
-    QString sCompression;
 
     quint16 nHeader = read_uint16(0);
     // 0x0178 no compression
     if (nHeader == 0x5E78) {
-        sCompression = "fast";
+        sResult = "fast";
     } else if (nHeader == 0x9C78) {
-        sCompression = "default";
+        sResult = "default";
     } else if (nHeader == 0xDA78) {
-        sCompression = "best";
-    }
-
-    if (sCompression != "") {
-        sResult += QString("(%1)").arg(sCompression);
+        sResult = "best";
     }
 
     return sResult;

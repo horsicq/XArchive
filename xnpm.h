@@ -40,11 +40,9 @@ public:
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     virtual QString getFileFormatExt();
-    virtual QString getFileFormatString();
     virtual FT getFileType();
 
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
-    virtual OSINFO getOsInfo();
     virtual MODE getMode();
     virtual QString getArch();
     virtual qint32 getType();

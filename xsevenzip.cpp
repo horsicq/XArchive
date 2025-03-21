@@ -511,16 +511,6 @@ qint64 XSevenZip::getFileFormatSize(PDSTRUCT *pPdStruct)
     return nResult;
 }
 
-QString XSevenZip::getFileFormatString()
-{
-    QString sResult;
-
-    sResult = QString("7-Zip(%1)").arg(getVersion());
-    // TODO more info
-
-    return sResult;
-}
-
 QString XSevenZip::getFileFormatExt()
 {
     return "7z";

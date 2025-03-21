@@ -129,11 +129,6 @@ qint64 XTGZ::getFileFormatSize(PDSTRUCT *pPdStruct)
     return gzip.getFileFormatSize(pPdStruct);
 }
 
-QString XTGZ::getFileFormatString()
-{
-    return "TGZ";
-}
-
 XCompressedDevice *XTGZ::getCompressedDevice()
 {
     return g_pCompressedDevice;
