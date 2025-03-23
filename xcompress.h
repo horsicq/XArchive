@@ -211,8 +211,6 @@ public:
     static qint32 lzh_make_huffman_table(struct huffman *hf);
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct huffman *hf);
-
-
 };
 
 #endif  // XCOMPRESS_H

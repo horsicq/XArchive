@@ -32,30 +32,30 @@ class XRar : public XArchive {
     const quint16 RAR4_FILE_EXT_TIME = 0x1000;
     const quint16 RAR4_FILE_COMMENT = 0x0008;
 
-    const quint8 RAR_OS_MSDOS = 0;    // MS-DOS
-    const quint8 RAR_OS_OS2 = 1;      // OS/2
-    const quint8 RAR_OS_WIN32 = 2;    // Windows
-    const quint8 RAR_OS_UNIX = 3;     // Unix/Linux
-    const quint8 RAR_OS_MACOS = 4;    // Mac OS
-    const quint8 RAR_OS_BEOS = 5;     // BeOS
+    const quint8 RAR_OS_MSDOS = 0;  // MS-DOS
+    const quint8 RAR_OS_OS2 = 1;    // OS/2
+    const quint8 RAR_OS_WIN32 = 2;  // Windows
+    const quint8 RAR_OS_UNIX = 3;   // Unix/Linux
+    const quint8 RAR_OS_MACOS = 4;  // Mac OS
+    const quint8 RAR_OS_BEOS = 5;   // BeOS
 
     // RAR 5.0 hostOS values
-    const quint8 RAR5_OS_WINDOWS = 0; // Windows
-    const quint8 RAR5_OS_UNIX = 1;    // Unix/Linux
+    const quint8 RAR5_OS_WINDOWS = 0;  // Windows
+    const quint8 RAR5_OS_UNIX = 1;     // Unix/Linux
 
-    const quint8 RAR_METHOD_STORE = 0x30;     // Storing without compression
-    const quint8 RAR_METHOD_FASTEST = 0x31;   // Fastest compression
-    const quint8 RAR_METHOD_FAST = 0x32;      // Fast compression
-    const quint8 RAR_METHOD_NORMAL = 0x33;    // Normal compression (default)
-    const quint8 RAR_METHOD_GOOD = 0x34;      // Good compression
-    const quint8 RAR_METHOD_BEST = 0x35;      // Best compression
+    const quint8 RAR_METHOD_STORE = 0x30;    // Storing without compression
+    const quint8 RAR_METHOD_FASTEST = 0x31;  // Fastest compression
+    const quint8 RAR_METHOD_FAST = 0x32;     // Fast compression
+    const quint8 RAR_METHOD_NORMAL = 0x33;   // Normal compression (default)
+    const quint8 RAR_METHOD_GOOD = 0x34;     // Good compression
+    const quint8 RAR_METHOD_BEST = 0x35;     // Best compression
 
-    const quint8 RAR5_METHOD_STORE = 0x00;   // RAR 5.0 storing without compression
-    const quint8 RAR5_METHOD_FASTEST = 0x01; // RAR 5.0 fastest compression
-    const quint8 RAR5_METHOD_FAST = 0x02;    // RAR 5.0 fast compression
-    const quint8 RAR5_METHOD_NORMAL = 0x03;  // RAR 5.0 normal compression
-    const quint8 RAR5_METHOD_GOOD = 0x04;    // RAR 5.0 good compression
-    const quint8 RAR5_METHOD_BEST = 0x05;    // RAR 5.0 best compression
+    const quint8 RAR5_METHOD_STORE = 0x00;    // RAR 5.0 storing without compression
+    const quint8 RAR5_METHOD_FASTEST = 0x01;  // RAR 5.0 fastest compression
+    const quint8 RAR5_METHOD_FAST = 0x02;     // RAR 5.0 fast compression
+    const quint8 RAR5_METHOD_NORMAL = 0x03;   // RAR 5.0 normal compression
+    const quint8 RAR5_METHOD_GOOD = 0x04;     // RAR 5.0 good compression
+    const quint8 RAR5_METHOD_BEST = 0x05;     // RAR 5.0 best compression
 
     struct GENERICBLOCK4 {
         quint16 nCRC16;
@@ -68,11 +68,11 @@ class XRar : public XArchive {
         GENERICBLOCK4 genericBlock4;
         quint32 packSize;      // Packed file size
         quint32 unpSize;       // Unpacked file size
-        quint8  hostOS;        // Operating system used for archiving
+        quint8 hostOS;         // Operating system used for archiving
         quint32 fileCRC;       // File CRC
         quint32 fileTime;      // Date and time in standard MS-DOS format
-        quint8  unpVer;        // RAR version needed to extract file
-        quint8  method;        // Packing method
+        quint8 unpVer;         // RAR version needed to extract file
+        quint8 method;         // Packing method
         quint16 nameSize;      // Size of filename field
         quint32 fileAttr;      // File attributes
         quint32 highPackSize;  // High 4 bytes of 64-bit value of packed file size
@@ -90,26 +90,25 @@ class XRar : public XArchive {
         quint64 nDataSize;
     };
 
-    struct FILEHEADER5
-    {
-        quint32 nCRC32;            // Header CRC32
-        quint64 _nHeaderSize;      // Internal variable for header size
-        quint64 nHeaderSize;       // Size of the header
-        quint64 nType;             // Header type (2 for file header, 3 for service header)
-        quint64 nFlags;            // Common header flags
-        quint64 nExtraAreaSize;    // Size of extra area (if 0x0001 flag set)
-        quint64 nDataSize;         // Size of data area (if 0x0002 flag set)
-        quint64 nFileFlags;        // Flags specific for file/service headers
-        quint64 nUnpackedSize;     // Unpacked file or service data size
-        quint64 nAttributes;       // OS-specific file attributes
-        quint32 nMTime;            // File modification time (Unix format, if 0x0002 file flag set)
-        quint32 nDataCRC32;        // CRC32 of unpacked data (if 0x0004 file flag set)
-        quint64 nCompInfo;         // Compression algorithm information
-        quint64 nHostOS;           // Type of OS used to create the archive
-        quint64 nNameLength;       // Length of name field
-        QString sFileName;         // File or service name
-        QByteArray baExtraArea;    // Optional extra area (if 0x0001 header flag set)
-        QByteArray baDataArea;     // Optional data area (if 0x0002 header flag set)
+    struct FILEHEADER5 {
+        quint32 nCRC32;          // Header CRC32
+        quint64 _nHeaderSize;    // Internal variable for header size
+        quint64 nHeaderSize;     // Size of the header
+        quint64 nType;           // Header type (2 for file header, 3 for service header)
+        quint64 nFlags;          // Common header flags
+        quint64 nExtraAreaSize;  // Size of extra area (if 0x0001 flag set)
+        quint64 nDataSize;       // Size of data area (if 0x0002 flag set)
+        quint64 nFileFlags;      // Flags specific for file/service headers
+        quint64 nUnpackedSize;   // Unpacked file or service data size
+        quint64 nAttributes;     // OS-specific file attributes
+        quint32 nMTime;          // File modification time (Unix format, if 0x0002 file flag set)
+        quint32 nDataCRC32;      // CRC32 of unpacked data (if 0x0004 file flag set)
+        quint64 nCompInfo;       // Compression algorithm information
+        quint64 nHostOS;         // Type of OS used to create the archive
+        quint64 nNameLength;     // Length of name field
+        QString sFileName;       // File or service name
+        QByteArray baExtraArea;  // Optional extra area (if 0x0001 header flag set)
+        QByteArray baDataArea;   // Optional data area (if 0x0002 header flag set)
     };
 
     enum BLOCKTYPE4 {

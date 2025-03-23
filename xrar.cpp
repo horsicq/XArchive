@@ -48,7 +48,7 @@ bool XRar::isValid(QIODevice *pDevice)
 }
 
 QString XRar::getVersion()
-{    
+{
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     return getFileFormatInfo(&pdStructEmpty).sVersion;
@@ -164,7 +164,7 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                             record.compressMethod = COMPRESS_METHOD_RAR;
                         }
 
-                        listResult.append(record); // TODO large files
+                        listResult.append(record);  // TODO large files
 
                         nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
                     } else {
@@ -205,7 +205,8 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                         listResult.append(record);
                     }
 
-                    nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;;
+                    nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
+                    ;
                 } else {
                     break;
                 }
@@ -305,11 +306,11 @@ qint32 XRar::getInternVersion(PDSTRUCT *pPdStruct)
 
     // TODO more
     if (compareSignature(&memoryMap, "'RE~^'", 0, pPdStruct)) {
-        nResult = 1; // "1.4";
+        nResult = 1;  // "1.4";
     } else if (compareSignature(&memoryMap, "'Rar!'1A0700", 0, pPdStruct)) {
-        nResult = 4; // "1.5-4.X";
+        nResult = 4;  // "1.5-4.X";
     } else if (compareSignature(&memoryMap, "'Rar!'1A070100", 0, pPdStruct)) {
-        nResult = 5; // "5.X-7.X";
+        nResult = 5;  // "5.X-7.X";
     }
 
     return nResult;
@@ -506,7 +507,7 @@ QString XRar::decodeRarUnicodeName(const QByteArray &nameData)
 
     // Try UTF-8 first
     QString result = QString::fromUtf8(nameData);
-    if (!result.contains(QChar(0xFFFD))) { // No replacement character
+    if (!result.contains(QChar(0xFFFD))) {  // No replacement character
         return result;
     }
 
@@ -572,7 +573,6 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                 GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
-
                     {
                         _MEMORY_RECORD record = {};
 
