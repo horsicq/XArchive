@@ -363,7 +363,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                     break;
                 }
 
-                result.nSize = qMax(result.nSize, nCurrentOffset + genericHeader.nHeaderSize);
+                result.nSize = qMax(result.nSize, nCurrentOffset + (qint64)genericHeader.nHeaderSize);
 
                 if (genericHeader.nType == 5) {  // END
                     break;
