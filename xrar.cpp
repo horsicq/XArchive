@@ -206,7 +206,6 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                     }
 
                     nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
-                    ;
                 } else {
                     break;
                 }
@@ -275,25 +274,113 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
     qint32 nVersion = getInternVersion(pPdStruct);
 
     if (nVersion) {
-        result.bIsValid = true;
+        qint64 nCurrentOffset = 0;
+
+        result.nSize = 0;
+
+        bool bFile = false;
+
+        if (nVersion == 1) {
+            result.sVersion = "1.4";
+        } else if (nVersion == 4) {
+            nCurrentOffset = 7;
+            result.sVersion = "1.5-4.X";
+
+            while (!(pPdStruct->bIsStop)) {
+                GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+
+                if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
+                    if (genericBlock.nType == BLOCKTYPE4_FILE) {
+                        FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
+
+                        XArchive::RECORD record = {};
+                        record.sFileName = fileBlock4.sFileName;
+                        record.nCRC32 = fileBlock4.genericBlock4.nCRC16;
+                        record.nDataOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
+                        record.nCompressedSize = fileBlock4.packSize;
+                        record.nUncompressedSize = fileBlock4.unpSize;
+                        record.nHeaderOffset = nCurrentOffset;
+                        record.nHeaderSize = fileBlock4.genericBlock4.nHeaderSize;
+
+                        if (fileBlock4.method == RAR_METHOD_STORE) {
+                            record.compressMethod = COMPRESS_METHOD_STORE;
+                        } else {
+                            record.compressMethod = COMPRESS_METHOD_RAR;
+                        }
+
+                        result.nSize = qMax(result.nSize, record.nDataOffset + record.nCompressedSize);
+
+                        if (!bFile) {
+                            // TODO
+                            bFile = true;
+                        }
+
+                        nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
+                    } else {
+                        nCurrentOffset += genericBlock.nHeaderSize;
+                    }
+                } else {
+                    break;
+                }
+
+                result.nSize = qMax(result.nSize, nCurrentOffset + genericBlock.nHeaderSize);
+
+                if (genericBlock.nType == 0x7B) {  // END
+                    break;
+                }
+            }
+        }
+        if (nVersion == 5) {
+            nCurrentOffset = 8;
+            result.sVersion = "5.X-7.X";
+
+            while (!(pPdStruct->bIsStop)) {
+                GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
+
+                if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
+                    if (genericHeader.nType == HEADERTYPE5_FILE) {
+                        FILEHEADER5 fileHeader5 = readFileHeader5(nCurrentOffset);
+
+                        XArchive::RECORD record = {};
+                        record.sFileName = fileHeader5.sFileName;
+                        record.nCRC32 = fileHeader5.nCRC32;
+                        record.nDataOffset = nCurrentOffset + fileHeader5.nHeaderSize;
+                        record.nCompressedSize = fileHeader5.nDataSize;
+                        record.nUncompressedSize = fileHeader5.nUnpackedSize;
+                        record.nHeaderOffset = nCurrentOffset;
+                        record.nHeaderSize = fileHeader5.nHeaderSize;
+
+                        result.nSize = qMax(result.nSize, record.nDataOffset + record.nCompressedSize);
+                    }
+
+                    if (!bFile) {
+                        // TODO
+                        bFile = true;
+                    }
+
+                    nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
+                } else {
+                    break;
+                }
+
+                result.nSize = qMax(result.nSize, nCurrentOffset + genericHeader.nHeaderSize);
+
+                if (genericHeader.nType == 5) {  // END
+                    break;
+                }
+            }
+        }
+
+        if (result.nSize) {
+            result.bIsValid = true;
+        }
+
+        result.fileType = getFileType();
         result.sExt = getFileFormatExt();
+
+        result.sVersion = getVersion();
+        result.sOptions = getOptions();
     }
-
-    // result.bIsValid = isValid(pPdStruct);
-
-    // if (result.bIsValid) {
-    //     result.nSize = getFileFormatSize(pPdStruct);
-
-    //     if (result.nSize > 0) {
-    //         result.fileType = getFileType();
-    //         result.sString = getFileFormatString();
-    //         result.sExt = getFileFormatExt();
-    //         result.sVersion = getVersion();
-    //         result.sOptions = getOptions();
-    //     } else {
-    //         result.bIsValid = false;
-    //     }
-    // }
 
     return result;
 }
