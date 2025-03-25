@@ -310,7 +310,11 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                         if (!bFile) {
                             quint8 _nVer = fileBlock4.unpVer;
 
-                            if (_nVer == 29) {
+                            if (_nVer == 15) {
+                                result.sVersion = "1.5";
+                            } else if (_nVer == 20) {
+                                result.sVersion = "2.0";
+                            } else if (_nVer == 29) {
                                 result.sVersion = "2.9";
                             }
                             // TODO
@@ -352,13 +356,19 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                         // record.nUncompressedSize = fileHeader5.nUnpackedSize;
                         // record.nHeaderOffset = nCurrentOffset;
                         // record.nHeaderSize = fileHeader5.nHeaderSize;
+                        if (!bFile) {
+                            quint8 _nVer = fileHeader5.nCompInfo & 0x003f;
+
+                            if (_nVer == 0) {
+                                result.sVersion = "5.0";
+                            } else if (_nVer == 1) {
+                                result.sVersion = "7.0";
+                            }
+                            // TODO
+                            bFile = true;
+                        }
 
                         result.nSize = qMax(result.nSize, nCurrentOffset + (qint64)fileHeader5.nHeaderSize + (qint64)fileHeader5.nDataSize);
-                    }
-
-                    if (!bFile) {
-                        // TODO
-                        bFile = true;
                     }
 
                     nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
