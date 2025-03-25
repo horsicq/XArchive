@@ -293,27 +293,31 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                     if (genericBlock.nType == BLOCKTYPE4_FILE) {
                         FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
 
-                        XArchive::RECORD record = {};
-                        record.sFileName = fileBlock4.sFileName;
-                        record.nCRC32 = fileBlock4.genericBlock4.nCRC16;
-                        record.nDataOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
-                        record.nCompressedSize = fileBlock4.packSize;
-                        record.nUncompressedSize = fileBlock4.unpSize;
-                        record.nHeaderOffset = nCurrentOffset;
-                        record.nHeaderSize = fileBlock4.genericBlock4.nHeaderSize;
+                        // record.sFileName = fileBlock4.sFileName;
+                        // record.nCRC32 = fileBlock4.genericBlock4.nCRC16;
+                        // record.nDataOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
+                        // record.nCompressedSize = fileBlock4.packSize;
+                        // record.nUncompressedSize = fileBlock4.unpSize;
+                        // record.nHeaderOffset = nCurrentOffset;
+                        // record.nHeaderSize = fileBlock4.genericBlock4.nHeaderSize;
 
-                        if (fileBlock4.method == RAR_METHOD_STORE) {
-                            record.compressMethod = COMPRESS_METHOD_STORE;
-                        } else {
-                            record.compressMethod = COMPRESS_METHOD_RAR;
-                        }
-
-                        result.nSize = qMax(result.nSize, record.nDataOffset + record.nCompressedSize);
+                        // if (fileBlock4.method == RAR_METHOD_STORE) {
+                        //     record.compressMethod = COMPRESS_METHOD_STORE;
+                        // } else {
+                        //     record.compressMethod = COMPRESS_METHOD_RAR;
+                        // }
 
                         if (!bFile) {
+                            quint8 _nVer = fileBlock4.unpVer;
+
+                            if (_nVer == 29) {
+                                result.sVersion = "2.9";
+                            }
                             // TODO
                             bFile = true;
                         }
+
+                        result.nSize = qMax(result.nSize, nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize);
 
                         nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
                     } else {
@@ -341,16 +345,15 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                     if (genericHeader.nType == HEADERTYPE5_FILE) {
                         FILEHEADER5 fileHeader5 = readFileHeader5(nCurrentOffset);
 
-                        XArchive::RECORD record = {};
-                        record.sFileName = fileHeader5.sFileName;
-                        record.nCRC32 = fileHeader5.nCRC32;
-                        record.nDataOffset = nCurrentOffset + fileHeader5.nHeaderSize;
-                        record.nCompressedSize = fileHeader5.nDataSize;
-                        record.nUncompressedSize = fileHeader5.nUnpackedSize;
-                        record.nHeaderOffset = nCurrentOffset;
-                        record.nHeaderSize = fileHeader5.nHeaderSize;
+                        // record.sFileName = fileHeader5.sFileName;
+                        // record.nCRC32 = fileHeader5.nCRC32;
+                        // record.nDataOffset = nCurrentOffset + fileHeader5.nHeaderSize;
+                        // record.nCompressedSize = fileHeader5.nDataSize;
+                        // record.nUncompressedSize = fileHeader5.nUnpackedSize;
+                        // record.nHeaderOffset = nCurrentOffset;
+                        // record.nHeaderSize = fileHeader5.nHeaderSize;
 
-                        result.nSize = qMax(result.nSize, record.nDataOffset + record.nCompressedSize);
+                        result.nSize = qMax(result.nSize, nCurrentOffset + (qint64)fileHeader5.nHeaderSize + (qint64)fileHeader5.nDataSize);
                     }
 
                     if (!bFile) {
@@ -377,8 +380,6 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
         result.fileType = getFileType();
         result.sExt = getFileFormatExt();
-
-        result.sVersion = getVersion();
         result.sOptions = getOptions();
     }
 
