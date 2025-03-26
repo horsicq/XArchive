@@ -439,6 +439,12 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         if (ret == ARCHIVE_OK) {
             result = COMPRESS_RESULT_OK;
         }
+    } else if ((pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_15) || (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_20) ||
+               (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_29) || (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_50) ||
+               (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_70)) {
+
+        // TODO
+
     }
 
     return result;

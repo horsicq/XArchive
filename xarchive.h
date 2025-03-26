@@ -53,8 +53,11 @@ public:
         COMPRESS_METHOD_LZH5,
         COMPRESS_METHOD_LZH6,
         COMPRESS_METHOD_LZH7,
-        COMPRESS_METHOD_RAR,
-        COMPRESS_METHOD_RAR5
+        COMPRESS_METHOD_RAR_15,
+        COMPRESS_METHOD_RAR_20,
+        COMPRESS_METHOD_RAR_29,
+        COMPRESS_METHOD_RAR_50,
+        COMPRESS_METHOD_RAR_70,
         // TODO check more methods
     };
 

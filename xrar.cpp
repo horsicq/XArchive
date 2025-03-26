@@ -160,8 +160,14 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
                         if (fileBlock4.method == RAR_METHOD_STORE) {
                             record.compressMethod = COMPRESS_METHOD_STORE;
+                        } else if (fileBlock4.unpVer == 15) {
+                            record.compressMethod = COMPRESS_METHOD_RAR_15;
+                        } else if ((fileBlock4.unpVer == 20) || (fileBlock4.unpVer == 26)) {
+                            record.compressMethod = COMPRESS_METHOD_RAR_20;
+                        } else if (fileBlock4.unpVer == 29) {
+                            record.compressMethod = COMPRESS_METHOD_RAR_29;
                         } else {
-                            record.compressMethod = COMPRESS_METHOD_RAR;
+                            record.compressMethod = COMPRESS_METHOD_UNKNOWN;
                         }
 
                         listResult.append(record);  // TODO large files
@@ -196,11 +202,18 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                         record.nHeaderOffset = nCurrentOffset;
                         record.nHeaderSize = fileHeader5.nHeaderSize;
 
-                        // if (fileHeader5.method == RAR_METHOD_STORE) {
-                        //     record.compressMethod = COMPRESS_METHOD_STORE;
-                        // } else {
-                        //     record.compressMethod = COMPRESS_METHOD_RAR;
-                        // }
+                        quint8 _nVer = fileHeader5.nCompInfo & 0x003f;
+                        quint8 _nMethod = (fileHeader5.nCompInfo >> 7) & 7;
+
+                        if (_nMethod == RAR5_METHOD_STORE) {
+                            record.compressMethod = COMPRESS_METHOD_STORE;
+                        } else if (_nVer == 0) {
+                            record.compressMethod = COMPRESS_METHOD_RAR_50;
+                        } else if (_nVer == 1) {
+                            record.compressMethod = COMPRESS_METHOD_RAR_70;
+                        } else {
+                            record.compressMethod = COMPRESS_METHOD_UNKNOWN;
+                        }
 
                         listResult.append(record);
                     }
@@ -313,9 +326,11 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                             if (_nVer == 15) {
                                 result.sVersion = "1.5";
                             } else if (_nVer == 20) {
-                                result.sVersion = "2.0";
+                                result.sVersion = "2.X";
+                            } else if (_nVer == 26) {
+                                result.sVersion = "2.X"; // large files support
                             } else if (_nVer == 29) {
-                                result.sVersion = "2.9";
+                                result.sVersion = "3.X";
                             }
                             // TODO
                             bFile = true;
@@ -360,9 +375,9 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                             quint8 _nVer = fileHeader5.nCompInfo & 0x003f;
 
                             if (_nVer == 0) {
-                                result.sVersion = "5.0";
+                                result.sVersion = "5.X"; // 50
                             } else if (_nVer == 1) {
-                                result.sVersion = "7.0";
+                                result.sVersion = "7.X"; // 70
                             }
                             // TODO
                             bFile = true;
