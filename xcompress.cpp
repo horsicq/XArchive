@@ -90,13 +90,13 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, qint32 method)
     ds->state = 0;
     ds->pos_pt_len_size = w_bits + 1;
     ds->pos_pt_len_bits = (w_bits == 15 || w_bits == 16) ? 5 : 4;
-    ds->literal_pt_len_size = PT_BITLEN_SIZE;
+    ds->literal_pt_len_size = LZH_PT_BITLEN_SIZE;
     ds->literal_pt_len_bits = 5;
     ds->br.cache_buffer = 0;
     ds->br.cache_avail = 0;
 
-    lzh_huffman_init(&(ds->lt), LT_BITLEN_SIZE, 16);
-    lzh_huffman_init(&(ds->pt), PT_BITLEN_SIZE, 16);
+    lzh_huffman_init(&(ds->lt), LZH_LT_BITLEN_SIZE, 16);
+    lzh_huffman_init(&(ds->pt), LZH_PT_BITLEN_SIZE, 16);
     ds->lt.len_bits = 9;
 
     ds->error = 0;
@@ -104,7 +104,7 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, qint32 method)
     return true;
 }
 
-bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, qint32 tbl_bits)
+bool XCompress::lzh_huffman_init(lzh_huffman *hf, size_t len_size, qint32 tbl_bits)
 {
     qint32 bits;
 
@@ -112,13 +112,13 @@ bool XCompress::lzh_huffman_init(huffman *hf, size_t len_size, qint32 tbl_bits)
         hf->bitlen = (quint8 *)malloc(len_size * sizeof(hf->bitlen[0]));
     }
     if (hf->tbl == NULL) {
-        if (tbl_bits < HTBL_BITS) bits = tbl_bits;
-        else bits = HTBL_BITS;
+        if (tbl_bits < LZH_HTBL_BITS) bits = tbl_bits;
+        else bits = LZH_HTBL_BITS;
         hf->tbl = (quint16 *)malloc(((size_t)1 << bits) * sizeof(hf->tbl[0]));
     }
-    if (hf->tree == NULL && tbl_bits > HTBL_BITS) {
-        hf->tree_avail = 1 << (tbl_bits - HTBL_BITS + 4);
-        hf->tree = (htree_t *)malloc(hf->tree_avail * sizeof(hf->tree[0]));
+    if (hf->tree == NULL && tbl_bits > LZH_HTBL_BITS) {
+        hf->tree_avail = 1 << (tbl_bits - LZH_HTBL_BITS + 4);
+        hf->tree = (lzh_htree_t *)malloc(hf->tree_avail * sizeof(hf->tree[0]));
     }
     hf->len_size = (int)len_size;
     hf->tbl_bits = tbl_bits;
@@ -350,8 +350,8 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
 {
     struct lzh_dec *ds = strm->ds;
     struct lzh_br bre = ds->br;
-    struct huffman *lt = &(ds->lt);
-    struct huffman *pt = &(ds->pt);
+    struct lzh_huffman *lt = &(ds->lt);
+    struct lzh_huffman *pt = &(ds->pt);
     quint8 *w_buff = ds->w_buff;
     quint8 *lt_bitlen = lt->bitlen;
     quint8 *pt_bitlen = pt->bitlen;
@@ -415,7 +415,7 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
                 /* 'c' is the length of a match pattern we have
                  * already extracted, which has be stored in
                  * window(ds->w_buff). */
-                copy_len = c - (UCHAR_MAX + 1) + MINMATCH;
+                copy_len = c - (UCHAR_MAX + 1) + LZH_MINMATCH;
                 /* FALL THROUGH */
             case ST_GET_POS_1:
                 /*
@@ -576,9 +576,9 @@ void XCompress::lzh_emit_window(lzh_stream *strm, size_t s)
     strm->total_out += s;
 }
 
-qint32 XCompress::lzh_decode_huffman_tree(huffman *hf, unsigned rbits, qint32 c)
+qint32 XCompress::lzh_decode_huffman_tree(lzh_huffman *hf, unsigned rbits, qint32 c)
 {
-    struct htree_t *ht;
+    struct lzh_htree_t *ht;
     qint32 extlen;
 
     ht = hf->tree;
@@ -592,7 +592,7 @@ qint32 XCompress::lzh_decode_huffman_tree(huffman *hf, unsigned rbits, qint32 c)
     return (c);
 }
 
-qint32 XCompress::lzh_decode_huffman(huffman *hf, unsigned rbits)
+qint32 XCompress::lzh_decode_huffman(lzh_huffman *hf, unsigned rbits)
 {
     qint32 c;
     /*
@@ -605,7 +605,7 @@ qint32 XCompress::lzh_decode_huffman(huffman *hf, unsigned rbits)
     return (lzh_decode_huffman_tree(hf, rbits, c));
 }
 
-qint32 XCompress::lzh_make_fake_table(huffman *hf, quint16 c)
+qint32 XCompress::lzh_make_fake_table(lzh_huffman *hf, quint16 c)
 {
     if (c >= hf->len_size) return (0);
     hf->tbl[0] = c;
@@ -647,7 +647,7 @@ qint32 XCompress::lzh_read_pt_bitlen(lzh_stream *strm, qint32 start, qint32 end)
     return (i);
 }
 
-qint32 XCompress::lzh_make_huffman_table(huffman *hf)
+qint32 XCompress::lzh_make_huffman_table(lzh_huffman *hf)
 {
     quint16 *tbl;
     const quint8 *bitlen;
@@ -683,25 +683,25 @@ qint32 XCompress::lzh_make_huffman_table(huffman *hf)
             weight[i] >>= ebits;
         }
     }
-    if (maxbits > HTBL_BITS) {
+    if (maxbits > LZH_HTBL_BITS) {
         unsigned htbl_max;
         quint16 *p;
 
-        diffbits = maxbits - HTBL_BITS;
-        for (i = 1; i <= HTBL_BITS; i++) {
+        diffbits = maxbits - LZH_HTBL_BITS;
+        for (i = 1; i <= LZH_HTBL_BITS; i++) {
             bitptn[i] >>= diffbits;
             weight[i] >>= diffbits;
         }
-        htbl_max = bitptn[HTBL_BITS] + weight[HTBL_BITS] * hf->freq[HTBL_BITS];
+        htbl_max = bitptn[LZH_HTBL_BITS] + weight[LZH_HTBL_BITS] * hf->freq[LZH_HTBL_BITS];
         p = &(hf->tbl[htbl_max]);
-        while (p < &hf->tbl[1U << HTBL_BITS]) *p++ = 0;
+        while (p < &hf->tbl[1U << LZH_HTBL_BITS]) *p++ = 0;
     } else diffbits = 0;
     hf->shift_bits = diffbits;
 
     /*
      * Make the table.
      */
-    tbl_size = 1 << HTBL_BITS;
+    tbl_size = 1 << LZH_HTBL_BITS;
     tbl = hf->tbl;
     bitlen = hf->bitlen;
     len_avail = hf->len_avail;
@@ -711,14 +711,14 @@ qint32 XCompress::lzh_make_huffman_table(huffman *hf)
         qint32 len, cnt;
         quint16 bit;
         qint32 extlen;
-        struct htree_t *ht;
+        struct lzh_htree_t *ht;
 
         if (bitlen[i] == 0) continue;
         /* Get a bit pattern */
         len = bitlen[i];
         ptn = bitptn[len];
         cnt = weight[len];
-        if (len <= HTBL_BITS) {
+        if (len <= LZH_HTBL_BITS) {
             /* Calculate next bit pattern */
             if ((bitptn[len] = ptn + cnt) > tbl_size) return (0); /* Invalid */
             /* Update the table */
@@ -762,7 +762,7 @@ qint32 XCompress::lzh_make_huffman_table(huffman *hf)
          */
         bitptn[len] = ptn + cnt;
         bit = 1U << (diffbits - 1);
-        extlen = len - HTBL_BITS;
+        extlen = len - LZH_HTBL_BITS;
 
         p = &(tbl[ptn >> diffbits]);
         if (*p == 0) {
@@ -820,9 +820,95 @@ void XCompress::lzh_decode_free(lzh_stream *strm)
     strm->ds = NULL;
 }
 
-void XCompress::lzh_huffman_free(huffman *hf)
+void XCompress::lzh_huffman_free(lzh_huffman *hf)
 {
     free(hf->bitlen);
     free(hf->tbl);
     free(hf->tree);
+}
+
+void XCompress::rar_UnpInitData(rar_stream *strm, bool Solid)
+{
+    if (!Solid)
+    {
+      strm->OldDist[0]=strm->OldDist[1]=strm->OldDist[2]=strm->OldDist[3]=(size_t)-1;
+
+      strm->OldDistPtr=0;
+
+      strm->LastDist=(uint)-1; // Initialize it to -1 like LastDist.
+      strm->LastLength=0;
+
+      memset(&strm->BlockTables,0,sizeof(strm->BlockTables));
+      strm->UnpPtr=strm->WrPtr=0;
+      strm->PrevPtr=0;
+      strm->FirstWinDone=false;
+      strm->WriteBorder = strm->MaxWinSize;
+
+      if (strm->WriteBorder > RAR_UNPACK_MAX_WRITE) {
+          strm->WriteBorder = RAR_UNPACK_MAX_WRITE;
+      }
+    }
+    // Filters never share several solid files, so we can safely reset them
+    // even in solid archive.
+    strm->Filters.clear();
+
+    // Inp.InitBitInput();
+    strm->WrittenFileSize=0;
+    strm->ReadTop=0;
+    strm->ReadBorder=0;
+
+    memset(&strm->BlockHeader,0,sizeof(strm->BlockHeader));
+    strm->BlockHeader.BlockSize=-1;  // '-1' means not defined yet.
+    rar_UnpInitData20(strm, Solid);
+    rar_UnpInitData30(strm, Solid);
+    rar_UnpInitData50(strm, Solid);
+}
+
+void XCompress::rar_UnpInitData20(rar_stream *strm, bool Solid)
+{
+    if (!Solid)
+    {
+      strm->TablesRead2=false;
+      strm->UnpAudioBlock=false;
+      strm->UnpChannelDelta=0;
+      strm->UnpCurChannel=0;
+      strm->UnpChannels=1;
+
+      memset(strm->AudV,0,sizeof(strm->AudV));
+      memset(strm->UnpOldTable20,0,sizeof(strm->UnpOldTable20));
+      memset(strm->MD,0,sizeof(strm->MD));
+    }
+}
+
+void XCompress::rar_UnpInitData30(rar_stream *strm, bool Solid)
+{
+    if (!Solid)
+      {
+        strm->TablesRead3=false;
+        memset(strm->UnpOldTable,0,sizeof(strm->UnpOldTable));
+        strm->PPMEscChar=2;
+        strm->UnpBlockType=RAR_BLOCK_LZ;
+      }
+      rar_InitFilters30(strm, Solid);
+}
+
+void XCompress::rar_UnpInitData50(rar_stream *strm, bool Solid)
+{
+
+}
+
+void XCompress::rar_InitFilters30(rar_stream *strm, bool Solid)
+{
+    // if (!Solid)
+    //   {
+    //     strm->OldFilterLengths.clear();
+    //     strm->LastFilter=0;
+
+    //     for (size_t I=0;I<strm->Filters30.size();I++)
+    //       delete strm->Filters30[I];
+    //     strm->Filters30.clear();
+    //   }
+    //   for (size_t I=0;I<strm->PrgStack.size();I++)
+    //     delete strm->PrgStack[I];
+    //   strm->PrgStack.clear();
 }
