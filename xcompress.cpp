@@ -829,36 +829,35 @@ void XCompress::lzh_huffman_free(lzh_huffman *hf)
 
 void XCompress::rar_UnpInitData(rar_stream *strm, bool Solid)
 {
-    if (!Solid)
-    {
-      strm->OldDist[0]=strm->OldDist[1]=strm->OldDist[2]=strm->OldDist[3]=(size_t)-1;
+    if (!Solid) {
+        strm->OldDist[0] = strm->OldDist[1] = strm->OldDist[2] = strm->OldDist[3] = (size_t)-1;
 
-      strm->OldDistPtr=0;
+        strm->OldDistPtr = 0;
 
-      strm->LastDist=(uint)-1; // Initialize it to -1 like LastDist.
-      strm->LastLength=0;
+        strm->LastDist = (uint)-1;  // Initialize it to -1 like LastDist.
+        strm->LastLength = 0;
 
-      memset(&strm->BlockTables,0,sizeof(strm->BlockTables));
-      strm->UnpPtr=strm->WrPtr=0;
-      strm->PrevPtr=0;
-      strm->FirstWinDone=false;
-      strm->WriteBorder = strm->MaxWinSize;
+        memset(&strm->BlockTables, 0, sizeof(strm->BlockTables));
+        strm->UnpPtr = strm->WrPtr = 0;
+        strm->PrevPtr = 0;
+        strm->FirstWinDone = false;
+        strm->WriteBorder = strm->MaxWinSize;
 
-      if (strm->WriteBorder > RAR_UNPACK_MAX_WRITE) {
-          strm->WriteBorder = RAR_UNPACK_MAX_WRITE;
-      }
+        if (strm->WriteBorder > RAR_UNPACK_MAX_WRITE) {
+            strm->WriteBorder = RAR_UNPACK_MAX_WRITE;
+        }
     }
     // Filters never share several solid files, so we can safely reset them
     // even in solid archive.
     strm->Filters.clear();
 
     // Inp.InitBitInput();
-    strm->WrittenFileSize=0;
-    strm->ReadTop=0;
-    strm->ReadBorder=0;
+    strm->WrittenFileSize = 0;
+    strm->ReadTop = 0;
+    strm->ReadBorder = 0;
 
-    memset(&strm->BlockHeader,0,sizeof(strm->BlockHeader));
-    strm->BlockHeader.BlockSize=-1;  // '-1' means not defined yet.
+    memset(&strm->BlockHeader, 0, sizeof(strm->BlockHeader));
+    strm->BlockHeader.BlockSize = -1;  // '-1' means not defined yet.
     rar_UnpInitData20(strm, Solid);
     rar_UnpInitData30(strm, Solid);
     rar_UnpInitData50(strm, Solid);
@@ -866,35 +865,32 @@ void XCompress::rar_UnpInitData(rar_stream *strm, bool Solid)
 
 void XCompress::rar_UnpInitData20(rar_stream *strm, bool Solid)
 {
-    if (!Solid)
-    {
-      strm->TablesRead2=false;
-      strm->UnpAudioBlock=false;
-      strm->UnpChannelDelta=0;
-      strm->UnpCurChannel=0;
-      strm->UnpChannels=1;
+    if (!Solid) {
+        strm->TablesRead2 = false;
+        strm->UnpAudioBlock = false;
+        strm->UnpChannelDelta = 0;
+        strm->UnpCurChannel = 0;
+        strm->UnpChannels = 1;
 
-      memset(strm->AudV,0,sizeof(strm->AudV));
-      memset(strm->UnpOldTable20,0,sizeof(strm->UnpOldTable20));
-      memset(strm->MD,0,sizeof(strm->MD));
+        memset(strm->AudV, 0, sizeof(strm->AudV));
+        memset(strm->UnpOldTable20, 0, sizeof(strm->UnpOldTable20));
+        memset(strm->MD, 0, sizeof(strm->MD));
     }
 }
 
 void XCompress::rar_UnpInitData30(rar_stream *strm, bool Solid)
 {
-    if (!Solid)
-      {
-        strm->TablesRead3=false;
-        memset(strm->UnpOldTable,0,sizeof(strm->UnpOldTable));
-        strm->PPMEscChar=2;
-        strm->UnpBlockType=RAR_BLOCK_LZ;
-      }
-      rar_InitFilters30(strm, Solid);
+    if (!Solid) {
+        strm->TablesRead3 = false;
+        memset(strm->UnpOldTable, 0, sizeof(strm->UnpOldTable));
+        strm->PPMEscChar = 2;
+        strm->UnpBlockType = RAR_BLOCK_LZ;
+    }
+    rar_InitFilters30(strm, Solid);
 }
 
 void XCompress::rar_UnpInitData50(rar_stream *strm, bool Solid)
 {
-
 }
 
 void XCompress::rar_InitFilters30(rar_stream *strm, bool Solid)

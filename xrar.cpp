@@ -328,7 +328,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                             } else if (_nVer == 20) {
                                 result.sVersion = "2.X";
                             } else if (_nVer == 26) {
-                                result.sVersion = "2.X"; // large files support
+                                result.sVersion = "2.X";  // large files support
                             } else if (_nVer == 29) {
                                 result.sVersion = "3.X";
                             }
@@ -375,9 +375,9 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                             quint8 _nVer = fileHeader5.nCompInfo & 0x003f;
 
                             if (_nVer == 0) {
-                                result.sVersion = "5.X"; // 50
+                                result.sVersion = "5.X";  // 50
                             } else if (_nVer == 1) {
-                                result.sVersion = "7.X"; // 70
+                                result.sVersion = "7.X";  // 70
                             }
                             // TODO
                             bFile = true;
