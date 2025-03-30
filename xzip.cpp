@@ -364,13 +364,13 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
     if (isValid(pPdStruct)) {
         result.nSize = getFileFormatSize(pPdStruct);
+        result.sExt = "zip";
+        result.fileType = FT_ZIP;
+        result.sVersion = getVersion();
+        result.sOptions = getOptions();
 
         if (result.nSize > 0) {
             result.bIsValid = true;
-            result.sExt = "zip";
-            result.fileType = FT_ZIP;
-            result.sVersion = getVersion();
-            result.sOptions = getOptions();
         }
     }
 
