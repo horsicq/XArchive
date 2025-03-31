@@ -22,6 +22,7 @@
 #define XCOMPRESS_H
 
 #include <QObject>
+#include <QIODevice>
 
 #ifdef Q_OS_LINUX
 #if (QT_VERSION_MAJOR > 5)
@@ -231,6 +232,7 @@ public:
     // Write data in 4 MB or smaller blocks. Must not exceed PACK_MAX_READ,
     // so we keep the number of buffered filters in unpacker reasonable.
     static const size_t RAR_UNPACK_MAX_WRITE = 0x400000;
+    static const size_t RAR_BufferSize_MAX_SIZE=0x8000;
 
     // Decode compressed bit fields to alphabet numbers.
     struct rar_DecodeTable {
@@ -310,13 +312,65 @@ public:
         int LastChar;
     };
 
+    enum rar_VM_StandardFilters {
+      VMSF_NONE, VMSF_E8, VMSF_E8E9, VMSF_ITANIUM, VMSF_RGB, VMSF_AUDIO,
+      VMSF_DELTA
+    };
+
+    struct rar_VM_PreparedProgram
+    {
+      // VM_PreparedProgram()
+      // {
+      //   FilteredDataSize=0;
+      //   Type=VMSF_NONE;
+      // }
+      rar_VM_StandardFilters Type;
+      uint InitR[7];
+      quint8 *FilteredData;
+      uint FilteredDataSize;
+    };
+
+    struct rar_UnpackFilter30
+    {
+      unsigned int BlockStart;
+      unsigned int BlockLength;
+      bool NextWindow;
+
+      // Position of parent filter in Filters array used as prototype for filter
+      // in PrgStack array. Not defined for filters in Filters array.
+      unsigned int ParentFilter;
+
+      rar_VM_PreparedProgram Prg;
+    };
+
     enum RAR_BLOCK_TYPES {
         RAR_BLOCK_LZ,
         RAR_BLOCK_PPM
     };
 
     struct rar_stream {
+        quint8 *Window;
+
+        // FragmentedWindow FragWindow;
+        bool Fragmented;
+
+        qint64 DestUnpSize;
+
+        bool Suspended;
+        bool UnpSomeRead;
+        bool FileExtracted;
+
+        ushort ChSet[256],ChSetA[256],ChSetB[256],ChSetC[256];
+        quint8 NToPl[256],NToPlB[256],NToPlC[256];
+        uint FlagBuf,AvrPlc,AvrPlcB,AvrLn1,AvrLn2,AvrLn3;
+        int Buf60,NumHuf,StMode,LCount,FlagsCnt;
+        uint Nhfb,Nlzb,MaxDist3;
+
+        quint64 AllocWinSize;
         size_t MaxWinSize;
+        size_t MaxWinMask;
+
+        bool ExtraDist; // Allow distances up to 1 TB.
         size_t OldDist[4], OldDistPtr;
         uint LastLength;
         uint LastDist;      // LastDist is necessary only for RAR2 and older with circular OldDist array. In RAR3 last distance is always stored in OldDist[0].
@@ -359,25 +413,36 @@ public:
         // // Buffer to read VM filters code. We moved it here from AddVMCode
         // // function to reduce time spent in BitInput constructor.
         // BitInput VMCodeInp;
-        // // Filters code, one entry per filter.
-        // std::vector<UnpackFilter30 *> Filters30;
+        // Filters code, one entry per filter.
+        std::vector<rar_UnpackFilter30 *> Filters30;
 
-        // // Filters stack, several entrances of same filter are possible.
-        // std::vector<UnpackFilter30 *> PrgStack;
+        // Filters stack, several entrances of same filter are possible.
+        std::vector<rar_UnpackFilter30 *> PrgStack;
 
-        // // Lengths of preceding data blocks, one length of one last block
-        // // for every filter. Used to reduce the size required to write
-        // // the data block length if lengths are repeating.
-        // std::vector<int> OldFilterLengths;
+        // Lengths of preceding data blocks, one length of one last block
+        // for every filter. Used to reduce the size required to write
+        // the data block length if lengths are repeating.
+        std::vector<int> OldFilterLengths;
 
-        // int LastFilter;
+        int LastFilter;
+
+        // Bits
+        bool ExternalBuffer;
+        int InAddr; // Curent byte position in the buffer.
+        int InBit;  // Current bit position in the current byte.
+        quint8 *InBuf;  // Input buffer.
     };
 
+    static void rar_init(struct rar_stream *strm);
+    static void rar_InitHuff(struct rar_stream *strm);
+    static void rar_CorrHuff(struct rar_stream *strm, ushort *CharSet,quint8 *NumToPlace);
     static void rar_UnpInitData(struct rar_stream *strm, bool Solid);
+    static void rar_UnpInitData15(struct rar_stream *strm, bool Solid);
     static void rar_UnpInitData20(struct rar_stream *strm, bool Solid);
     static void rar_UnpInitData30(struct rar_stream *strm, bool Solid);
     static void rar_UnpInitData50(struct rar_stream *strm, bool Solid);
     static void rar_InitFilters30(struct rar_stream *strm, bool Solid);
+    static bool rar_UnpReadBuf(struct rar_stream *strm, QIODevice *pDevice);
 };
 
 #endif  // XCOMPRESS_H

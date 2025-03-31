@@ -442,7 +442,31 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
     } else if ((pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_15) || (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_20) ||
                (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_29) || (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_50) ||
                (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_70)) {
-        // TODO
+        XCompress::rar_stream rarStream = {};
+
+        XCompress::rar_init(&rarStream);
+
+        if (pDecompressStruct->compressMethod == COMPRESS_METHOD_RAR_15) {
+            bool bSolid = false;
+
+            XCompress::rar_UnpInitData(&rarStream, bSolid);
+            XCompress::rar_UnpInitData15(&rarStream, bSolid);
+            XCompress::rar_UnpReadBuf(&rarStream, pDecompressStruct->pSourceDevice);
+
+            // if (!bSolid)
+            // {
+            //   XCompress::rar_InitHuff(&rarStrea);
+            //   rarStream.UnpPtr=0;
+            // }
+            // else
+            //   rarStream.UnpPtr=rarStream.WrPtr;
+            // --rarStream.DestUnpSize;
+            // if (rarStream.DestUnpSize>=0)
+            // {
+            //   rarStream.GetFlagsBuf();
+            //   rarStream.FlagsCnt=8;
+            // }
+        }
     }
 
     return result;

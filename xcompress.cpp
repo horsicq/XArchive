@@ -827,6 +827,69 @@ void XCompress::lzh_huffman_free(lzh_huffman *hf)
     free(hf->tree);
 }
 
+void XCompress::rar_init(rar_stream *strm)
+{
+    // Inp(true),VMCodeInp(true)
+
+    strm->ExternalBuffer=false;
+    // getbits*() attempt to read data from InAddr, ... InAddr+8 positions.
+    // So let's allocate 8 additional bytes for situation, when we need to
+    // read only 1 byte from the last position of buffer and avoid a crash
+    // from access to next 8 bytes, which contents we do not need.
+    size_t BufSize=RAR_BufferSize_MAX_SIZE+8;
+    strm->InBuf=new quint8[BufSize];
+
+    // Ensure that we get predictable results when accessing bytes in area
+    // not filled with read data.
+    memset(strm->InBuf,0,BufSize);
+
+    strm->Window=NULL;
+    strm->Fragmented=false;
+    strm->Suspended=false;
+    strm->UnpSomeRead=false;
+    strm->ExtraDist=false;
+    // strm->MaxUserThreads=1;
+    // strm->UnpThreadPool=NULL;
+    // strm->ReadBufMT=NULL;
+    // strm->UnpThreadData=NULL;
+    strm->AllocWinSize=0;
+    strm->MaxWinSize=0;
+    strm->MaxWinMask=0;
+
+    // Perform initialization, which should be done only once for all files.
+    // It prevents crash if first unpacked file has the wrong "true" Solid flag,
+    // so first DoUnpack call is made with the wrong "true" Solid value later.
+    rar_UnpInitData(strm, false);
+    // RAR 1.5 decompression initialization
+    rar_UnpInitData15(strm, false);
+    rar_InitHuff(strm);
+}
+
+void XCompress::rar_InitHuff(rar_stream *strm)
+{
+    for (ushort I=0;I<256;I++)
+    {
+      strm->ChSet[I]=strm->ChSetB[I]=I<<8;
+      strm->ChSetA[I]=I;
+      strm->ChSetC[I]=((~I+1) & 0xff)<<8;
+    }
+    memset(strm->NToPl,0,sizeof(strm->NToPl));
+    memset(strm->NToPlB,0,sizeof(strm->NToPlB));
+    memset(strm->NToPlC,0,sizeof(strm->NToPlC));
+    rar_CorrHuff(strm, strm->ChSetB,strm->NToPlB);
+}
+
+void XCompress::rar_CorrHuff(struct rar_stream *strm, ushort *CharSet, quint8 *NumToPlace)
+{
+    int I,J;
+    for (I=7;I>=0;I--)
+      for (J=0;J<32;J++,CharSet++)
+        *CharSet=(*CharSet & ~0xff) | I;
+    memset(NumToPlace,0,sizeof(strm->NToPl));
+    for (I=6;I>=0;I--)
+      NumToPlace[I]=(7-I)*32;
+}
+
 void XCompress::rar_UnpInitData(rar_stream *strm, bool Solid)
 {
     if (!Solid) {
@@ -851,7 +914,9 @@ void XCompress::rar_UnpInitData(rar_stream *strm, bool Solid)
     // even in solid archive.
     strm->Filters.clear();
 
-    // Inp.InitBitInput();
+    strm->InAddr = 0;
+    strm->InBit = 0;
+
     strm->WrittenFileSize = 0;
     strm->ReadTop = 0;
     strm->ReadBorder = 0;
@@ -861,6 +926,22 @@ void XCompress::rar_UnpInitData(rar_stream *strm, bool Solid)
     rar_UnpInitData20(strm, Solid);
     rar_UnpInitData30(strm, Solid);
     rar_UnpInitData50(strm, Solid);
+}
+
+void XCompress::rar_UnpInitData15(rar_stream *strm, bool Solid)
+{
+    if (!Solid)
+    {
+      strm->AvrPlcB=strm->AvrLn1=strm->AvrLn2=strm->AvrLn3=strm->NumHuf=strm->Buf60=0;
+      strm->AvrPlc=0x3500;
+      strm->MaxDist3=0x2001;
+      strm->Nhfb=strm->Nlzb=0x80;
+    }
+    strm->FlagsCnt=0;
+    strm->FlagBuf=0;
+    strm->StMode=0;
+    strm->LCount=0;
+    strm->ReadTop=0;
 }
 
 void XCompress::rar_UnpInitData20(rar_stream *strm, bool Solid)
@@ -891,20 +972,60 @@ void XCompress::rar_UnpInitData30(rar_stream *strm, bool Solid)
 
 void XCompress::rar_UnpInitData50(rar_stream *strm, bool Solid)
 {
+    if (!Solid)
+      strm->TablesRead5=false;
 }
 
 void XCompress::rar_InitFilters30(rar_stream *strm, bool Solid)
 {
-    // if (!Solid)
-    //   {
-    //     strm->OldFilterLengths.clear();
-    //     strm->LastFilter=0;
+    if (!Solid)
+      {
+        strm->OldFilterLengths.clear();
+        strm->LastFilter=0;
 
-    //     for (size_t I=0;I<strm->Filters30.size();I++)
-    //       delete strm->Filters30[I];
-    //     strm->Filters30.clear();
-    //   }
-    //   for (size_t I=0;I<strm->PrgStack.size();I++)
-    //     delete strm->PrgStack[I];
-    //   strm->PrgStack.clear();
+        for (size_t I=0;I<strm->Filters30.size();I++)
+          delete strm->Filters30[I];
+        strm->Filters30.clear();
+      }
+      for (size_t I=0;I<strm->PrgStack.size();I++)
+        delete strm->PrgStack[I];
+      strm->PrgStack.clear();
+}
+
+bool XCompress::rar_UnpReadBuf(rar_stream *strm, QIODevice *pDevice)
+{
+    int DataSize=strm->ReadTop-strm->InAddr; // Data left to process.
+    if (DataSize<0)
+      return false;
+    strm->BlockHeader.BlockSize-=strm->InAddr-strm->BlockHeader.BlockStart;
+    if (strm->InAddr>RAR_BufferSize_MAX_SIZE/2)
+    {
+      // If we already processed more than half of buffer, let's move
+      // remaining data into beginning to free more space for new data
+      // and ensure that calling function does not cross the buffer border
+      // even if we did not read anything here. Also it ensures that read size
+      // is not less than CRYPT_BLOCK_SIZE, so we can align it without risk
+      // to make it zero.
+      if (DataSize>0)
+        memmove(strm->InBuf,strm->InBuf+strm->InAddr,DataSize);
+      strm->InAddr=0;
+      strm->ReadTop=DataSize;
+    }
+    else
+      DataSize=strm->ReadTop;
+    int ReadCode=0;
+    if (RAR_BufferSize_MAX_SIZE!=DataSize)
+      // ReadCode=strm->UnpIO->UnpRead(strm->InBuf+DataSize,BufferSize_MAX_SIZE-DataSize);
+        ReadCode=pDevice->read((char *)(strm->InBuf+DataSize),RAR_BufferSize_MAX_SIZE-DataSize);
+    if (ReadCode>0) // Can be also -1.
+      strm->ReadTop+=ReadCode;
+    strm->ReadBorder=strm->ReadTop-30;
+    strm->BlockHeader.BlockStart=strm->InAddr;
+    if (strm->BlockHeader.BlockSize!=-1) // '-1' means not defined yet.
+    {
+      // We may need to quit from main extraction loop and read new block header
+      // and trees earlier than data in input buffer ends.
+      strm->ReadBorder=qMin(strm->ReadBorder,strm->BlockHeader.BlockStart+strm->BlockHeader.BlockSize-1);
+    }
+    return ReadCode!=-1;
 }
