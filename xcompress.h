@@ -433,7 +433,7 @@ public:
         quint8 *InBuf;  // Input buffer.
     };
 
-    static void rar_init(struct rar_stream *strm);
+    static void rar_init(struct rar_stream *strm, quint64 WinSize, bool Solid);
     static void rar_InitHuff(struct rar_stream *strm);
     static void rar_CorrHuff(struct rar_stream *strm, ushort *CharSet,quint8 *NumToPlace);
     static void rar_UnpInitData(struct rar_stream *strm, bool Solid);
@@ -443,6 +443,17 @@ public:
     static void rar_UnpInitData50(struct rar_stream *strm, bool Solid);
     static void rar_InitFilters30(struct rar_stream *strm, bool Solid);
     static bool rar_UnpReadBuf(struct rar_stream *strm, QIODevice *pDevice);
+    static void rar_UnpWriteBuf20(struct rar_stream *strm, QIODevice *pDevice);
+    static void rar_GetFlagsBuf(struct rar_stream *strm);
+    static uint rar_DecodeNum(struct rar_stream *strm, uint Num,uint StartPos,uint *DecTab,uint *PosTab);
+    static uint rar_fgetbits(struct rar_stream *strm);
+    static void rar_faddbits(struct rar_stream *strm, uint Bits);
+    static uint rar_getbits(struct rar_stream *strm);
+    static void rar_addbits(struct rar_stream *strm, uint Bits);
+    static void rar_HuffDecode(struct rar_stream *strm);
+    static void rar_LongLZ(struct rar_stream *strm);
+    static void rar_ShortLZ(struct rar_stream *strm);
+    static void rar_CopyString15(struct rar_stream *strm,uint Distance,uint Length);
 };
 
 #endif  // XCOMPRESS_H

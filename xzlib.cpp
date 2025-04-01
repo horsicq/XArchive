@@ -53,7 +53,7 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
                     decompressStruct.pSourceDevice = &sd;
                     decompressStruct.pDestDevice = 0;
                     decompressStruct.nDecompressedOffset = 0;
-                    decompressStruct.nDecompressedSize = 0x200;
+                    decompressStruct.nDecompressedLimit = 0x200;
 
                     COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
 

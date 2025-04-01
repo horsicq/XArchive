@@ -142,7 +142,7 @@ qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
         decompressStruct.pSourceDevice = g_pSubDevice;
         decompressStruct.pDestDevice = &buffer;
         decompressStruct.nDecompressedOffset = pos();
-        decompressStruct.nDecompressedSize = nMaxSize;
+        decompressStruct.nDecompressedLimit = nMaxSize;
 
         XArchive::COMPRESS_RESULT compressResult = XArchive::_decompress(&decompressStruct);
 

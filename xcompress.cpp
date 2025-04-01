@@ -51,6 +51,44 @@ static const char bitlen_tbl[0x400] = {
     10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11,
     11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 16, 0};
 
+#define RAR_STARTL1  2
+static uint RAR_DecL1[]={0x8000,0xa000,0xc000,0xd000,0xe000,0xea00,
+                             0xee00,0xf000,0xf200,0xf200,0xffff};
+static uint RAR_PosL1[]={0,0,0,2,3,5,7,11,16,20,24,32,32};
+
+#define RAR_STARTL2  3
+static uint RAR_DecL2[]={0xa000,0xc000,0xd000,0xe000,0xea00,0xee00,
+                             0xf000,0xf200,0xf240,0xffff};
+static uint RAR_PosL2[]={0,0,0,0,5,7,9,13,18,22,26,34,36};
+
+#define RAR_STARTHF0  4
+static uint RAR_DecHf0[]={0x8000,0xc000,0xe000,0xf200,0xf200,0xf200,
+                              0xf200,0xf200,0xffff};
+static uint RAR_PosHf0[]={0,0,0,0,0,8,16,24,33,33,33,33,33};
+
+
+#define RAR_STARTHF1  5
+static uint RAR_DecHf1[]={0x2000,0xc000,0xe000,0xf000,0xf200,0xf200,
+                              0xf7e0,0xffff};
+static uint RAR_PosHf1[]={0,0,0,0,0,0,4,44,60,76,80,80,127};
+
+
+#define RAR_STARTHF2  5
+static uint RAR_DecHf2[]={0x1000,0x2400,0x8000,0xc000,0xfa00,0xffff,
+                              0xffff,0xffff};
+static uint RAR_PosHf2[]={0,0,0,0,0,0,2,7,53,117,233,0,0};
+
+
+#define RAR_STARTHF3  6
+static uint RAR_DecHf3[]={0x800,0x2400,0xee00,0xfe80,0xffff,0xffff,
+                              0xffff};
+static uint RAR_PosHf3[]={0,0,0,0,0,0,0,2,16,218,251,0,0};
+
+
+#define RAR_STARTHF4  8
+static uint RAR_DecHf4[]={0xff00,0xffff,0xffff,0xffff,0xffff,0xffff};
+static uint RAR_PosHf4[]={0,0,0,0,0,0,0,0,0,255,0,0,0};
+
 XCompress::XCompress()
 {
 }
@@ -827,7 +865,7 @@ void XCompress::lzh_huffman_free(lzh_huffman *hf)
     free(hf->tree);
 }
 
-void XCompress::rar_init(rar_stream *strm)
+void XCompress::rar_init(rar_stream *strm, quint64 WinSize, bool Solid)
 {
     // Inp(true),VMCodeInp(true)
 
@@ -863,6 +901,88 @@ void XCompress::rar_init(rar_stream *strm)
     // RAR 1.5 decompression initialization
     rar_UnpInitData15(strm, false);
     rar_InitHuff(strm);
+
+    // void Unpack::Init(uint64 WinSize,bool Solid)
+
+    // Minimum window size must be at least twice more than maximum possible
+      // size of filter block, which is 0x10000 in RAR now. If window size is
+      // smaller, we can have a block with never cleared flt->NextWindow flag
+      // in UnpWriteBuf(). Minimum window size 0x20000 would be enough, but let's
+      // use 0x40000 for extra safety and possible filter area size expansion.
+      const size_t MinAllocSize=0x40000;
+      if (WinSize<MinAllocSize)
+        WinSize=MinAllocSize;
+
+      // if (WinSize>Min(0x10000000000ULL,RAR_UNPACK_MAX_DICT)) // Window size must not exceed 1 TB.
+      //   throw std::bad_alloc();
+
+      // 32-bit build can't unpack dictionaries exceeding 32-bit even in theory.
+      // Also we've not verified if WrapUp and WrapDown work properly in 32-bit
+      // version and >2GB dictionary and if 32-bit version can handle >2GB
+      // distances. Since such version is unlikely to allocate >2GB anyway,
+      // we prohibit >2GB dictionaries for 32-bit build here.
+      // if (WinSize>0x80000000 && sizeof(size_t)<=4)
+      //   throw std::bad_alloc();
+
+      // Solid block shall use the same window size for all files.
+      // But if Window isn't initialized when Solid is set, it means that
+      // first file in solid block doesn't have the solid flag. We initialize
+      // the window anyway for such malformed archive.
+      // Non-solid files shall use their specific window sizes,
+      // so current window size and unpack routine behavior doesn't depend on
+      // previously unpacked files and their extraction order.
+      if (!Solid || strm->Window==nullptr)
+      {
+        strm->MaxWinSize=(size_t)WinSize;
+        strm->MaxWinMask=strm->MaxWinSize-1;
+      }
+
+      // Use the already allocated window when processing non-solid files
+      // with reducing dictionary sizes.
+      if (WinSize<=strm->AllocWinSize)
+        return;
+
+      // Archiving code guarantees that window size does not grow in the same
+      // solid stream. So if we are here, we are either creating a new window
+      // or increasing the size of non-solid window. So we could safely reject
+      // current window data without copying them to a new window.
+      // if (Solid && (strm->Window!=NULL || Fragmented && WinSize>FragWindow.GetWinSize()))
+      //   throw std::bad_alloc();
+
+      // Alloc.delete_l<byte>(Window); // delete Window;
+      // Window=nullptr;
+
+      strm->Window = new quint8[WinSize];
+
+      // try
+      // {
+      //   if (!Fragmented)
+      //     Window=Alloc.new_l<byte>((size_t)WinSize,false); // Window=new byte[(size_t)WinSize];
+      // }
+      // catch (std::bad_alloc) // Use the fragmented window in this case.
+      // {
+      // }
+
+      // if (Window==nullptr)
+      //   if (WinSize<0x1000000 || sizeof(size_t)>4)
+      //     throw std::bad_alloc(); // Exclude RAR4, small dictionaries and 64-bit.
+      //   else
+      //   {
+      //     if (WinSize>FragWindow.GetWinSize())
+      //       FragWindow.Init((size_t)WinSize);
+      //     Fragmented=true;
+      //   }
+
+      if (!strm->Fragmented)
+      {
+        // Clean the window to generate the same output when unpacking corrupt
+        // RAR files, which may access unused areas of sliding dictionary.
+        // 2023.10.31: We've added FirstWinDone based unused area access check
+        // in Unpack::CopyString(), so this memset might be unnecessary now.
+    //    memset(Window,0,(size_t)WinSize);
+
+        strm->AllocWinSize=WinSize;
+      }
 }
 
 void XCompress::rar_InitHuff(rar_stream *strm)
@@ -1028,4 +1148,387 @@ bool XCompress::rar_UnpReadBuf(rar_stream *strm, QIODevice *pDevice)
       strm->ReadBorder=qMin(strm->ReadBorder,strm->BlockHeader.BlockStart+strm->BlockHeader.BlockSize-1);
     }
     return ReadCode!=-1;
+}
+
+void XCompress::rar_UnpWriteBuf20(rar_stream *strm, QIODevice *pDevice)
+{
+    if (strm->UnpPtr!=strm->WrPtr)
+      strm->UnpSomeRead=true;
+    if (strm->UnpPtr<strm->WrPtr)
+    {
+      pDevice->write((char *)(&strm->Window[strm->WrPtr]),-(int)strm->WrPtr & strm->MaxWinMask);
+      pDevice->write((char *)(strm->Window),strm->UnpPtr);
+
+      // 2024.12.24: Before 7.10 we set "UnpAllBuf=true" here. It was needed for
+      // Pack::PrepareSolidAppend(). Since both UnpAllBuf and FirstWinDone
+      // variables indicate the same thing and we set FirstWinDone in other place
+      // anyway, we replaced UnpAllBuf with FirstWinDone and removed this code.
+    }
+    else
+      pDevice->write((char *)(&strm->Window[strm->WrPtr]),strm->UnpPtr-strm->WrPtr);
+    strm->WrPtr=strm->UnpPtr;
+}
+
+void XCompress::rar_GetFlagsBuf(rar_stream *strm)
+{
+    uint Flags,NewFlagsPlace;
+    uint FlagsPlace=rar_DecodeNum(strm, rar_fgetbits(strm),RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2);
+
+    // Our Huffman table stores 257 items and needs all them in other parts
+    // of code such as when StMode is on, so the first item is control item.
+    // While normally we do not use the last item to code the flags byte here,
+    // we need to check for value 256 when unpacking in case we unpack
+    // a corrupt archive.
+    if (FlagsPlace>=sizeof(strm->ChSetC)/sizeof(strm->ChSetC[0]))
+      return;
+
+    while (1)
+    {
+      Flags=strm->ChSetC[FlagsPlace];
+      strm->FlagBuf=Flags>>8;
+      NewFlagsPlace=strm->NToPlC[Flags++ & 0xff]++;
+      if ((Flags & 0xff) != 0)
+        break;
+      rar_CorrHuff(strm, strm->ChSetC,strm->NToPlC);
+    }
+
+    strm->ChSetC[FlagsPlace]=strm->ChSetC[NewFlagsPlace];
+    strm->ChSetC[NewFlagsPlace]=(ushort)Flags;
+}
+
+uint XCompress::rar_DecodeNum(rar_stream *strm, uint Num, uint StartPos, uint *DecTab, uint *PosTab)
+{
+    int I;
+    for (Num&=0xfff0,I=0;DecTab[I]<=Num;I++)
+      StartPos++;
+    rar_faddbits(strm, StartPos);
+    return(((Num-(I ? DecTab[I-1]:0))>>(16-StartPos))+PosTab[StartPos]);
+}
+
+uint XCompress::rar_fgetbits(rar_stream *strm)
+{
+    // Function wrapped version of inline getbits to reduce the code size.
+    return rar_getbits(strm);
+}
+
+void XCompress::rar_faddbits(rar_stream *strm, uint Bits)
+{
+    rar_addbits(strm, Bits);
+}
+
+uint XCompress::rar_getbits(rar_stream *strm)
+{
+    uint BitField=(uint)strm->InBuf[strm->InAddr] << 16;
+    BitField|=(uint)strm->InBuf[strm->InAddr+1] << 8;
+    BitField|=(uint)strm->InBuf[strm->InAddr+2];
+    BitField >>= (8-strm->InBit);
+
+    return BitField & 0xffff;
+}
+
+void XCompress::rar_addbits(rar_stream *strm, uint Bits)
+{
+    Bits+=strm->InBit;
+    strm->InAddr+=Bits>>3;
+    strm->InBit=Bits&7;
+}
+
+void XCompress::rar_HuffDecode(rar_stream *strm)
+{
+    uint CurByte,NewBytePlace;
+    uint Length;
+    uint Distance;
+    int BytePlace;
+
+    uint BitField=rar_fgetbits(strm);
+
+    if (strm->AvrPlc > 0x75ff)
+      BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF4,RAR_DecHf4,RAR_PosHf4);
+    else
+      if (strm->AvrPlc > 0x5dff)
+        BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF3,RAR_DecHf3,RAR_PosHf3);
+      else
+        if (strm->AvrPlc > 0x35ff)
+          BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2);
+        else
+          if (strm->AvrPlc > 0x0dff)
+            BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF1,RAR_DecHf1,RAR_PosHf1);
+          else
+            BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF0,RAR_DecHf0,RAR_PosHf0);
+    BytePlace&=0xff;
+    if (strm->StMode)
+    {
+      if (BytePlace==0 && BitField > 0xfff)
+        BytePlace=0x100;
+      if (--BytePlace==-1)
+      {
+        BitField=rar_fgetbits(strm);
+        rar_faddbits(strm, 1);
+        if (BitField & 0x8000)
+        {
+          strm->NumHuf=strm->StMode=0;
+          return;
+        }
+        else
+        {
+          Length = (BitField & 0x4000) ? 4 : 3;
+          rar_faddbits(strm, 1);
+          Distance=rar_DecodeNum(strm, rar_fgetbits(strm),RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2);
+          Distance = (Distance << 5) | (rar_fgetbits(strm) >> 11);
+          rar_faddbits(strm, 5);
+          rar_CopyString15(strm,Distance,Length);
+          return;
+        }
+      }
+    }
+    else
+      if (strm->NumHuf++ >= 16 && strm->FlagsCnt==0)
+        strm->StMode=1;
+    strm->AvrPlc += BytePlace;
+    strm->AvrPlc -= strm->AvrPlc >> 8;
+    strm->Nhfb+=16;
+    if (strm->Nhfb > 0xff)
+    {
+      strm->Nhfb=0x90;
+      strm->Nlzb >>= 1;
+    }
+
+    strm->Window[strm->UnpPtr++]=(quint8)(strm->ChSet[BytePlace]>>8);
+    --strm->DestUnpSize;
+
+    while (1)
+    {
+      CurByte=strm->ChSet[BytePlace];
+      NewBytePlace=strm->NToPl[CurByte++ & 0xff]++;
+      if ((CurByte & 0xff) > 0xa1)
+        rar_CorrHuff(strm, strm->ChSet,strm->NToPl);
+      else
+        break;
+    }
+
+    strm->ChSet[BytePlace]=strm->ChSet[NewBytePlace];
+    strm->ChSet[NewBytePlace]=(ushort)CurByte;
+}
+
+void XCompress::rar_LongLZ(rar_stream *strm)
+{
+    uint Length;
+    uint Distance;
+    uint DistancePlace,NewDistancePlace;
+    uint OldAvr2,OldAvr3;
+
+    strm->NumHuf=0;
+    strm->Nlzb+=16;
+    if (strm->Nlzb > 0xff)
+    {
+      strm->Nlzb=0x90;
+      strm->Nhfb >>= 1;
+    }
+    OldAvr2=strm->AvrLn2;
+
+    uint BitField=rar_fgetbits(strm);
+    if (strm->AvrLn2 >= 122)
+      Length=rar_DecodeNum(strm, BitField,RAR_STARTL2,RAR_DecL2,RAR_PosL2);
+    else
+      if (strm->AvrLn2 >= 64)
+        Length=rar_DecodeNum(strm, BitField,RAR_STARTL1,RAR_DecL1,RAR_PosL1);
+      else
+        if (BitField < 0x100)
+        {
+          Length=BitField;
+          rar_faddbits(strm, 16);
+        }
+        else
+        {
+          for (Length=0;((BitField<<Length)&0x8000)==0;Length++)
+            ;
+          rar_faddbits(strm, Length+1);
+        }
+
+    strm->AvrLn2 += Length;
+    strm->AvrLn2 -= strm->AvrLn2 >> 5;
+
+    BitField=rar_fgetbits(strm);
+    if (strm->AvrPlcB > 0x28ff)
+      DistancePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2);
+    else
+      if (strm->AvrPlcB > 0x6ff)
+        DistancePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF1,RAR_DecHf1,RAR_PosHf1);
+      else
+        DistancePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF0,RAR_DecHf0,RAR_PosHf0);
+
+    strm->AvrPlcB += DistancePlace;
+    strm->AvrPlcB -= strm->AvrPlcB >> 8;
+    while (1)
+    {
+      Distance = strm->ChSetB[DistancePlace & 0xff];
+      NewDistancePlace = strm->NToPlB[Distance++ & 0xff]++;
+      if (!(Distance & 0xff))
+        rar_CorrHuff(strm, strm->ChSetB,strm->NToPlB);
+      else
+        break;
+    }
+
+    strm->ChSetB[DistancePlace & 0xff]=strm->ChSetB[NewDistancePlace];
+    strm->ChSetB[NewDistancePlace]=(ushort)Distance;
+
+    Distance=((Distance & 0xff00) | (rar_fgetbits(strm) >> 8)) >> 1;
+    rar_faddbits(strm, 7);
+
+    OldAvr3=strm->AvrLn3;
+    if (Length!=1 && Length!=4)
+      if (Length==0 && Distance <= strm->MaxDist3)
+      {
+        strm->AvrLn3++;
+        strm->AvrLn3 -= strm->AvrLn3 >> 8;
+      }
+      else
+        if (strm->AvrLn3 > 0)
+          strm->AvrLn3--;
+    Length+=3;
+    if (Distance >= strm->MaxDist3)
+      Length++;
+    if (Distance <= 256)
+      Length+=8;
+    if (OldAvr3 > 0xb0 || strm->AvrPlc >= 0x2a00 && OldAvr2 < 0x40)
+      strm->MaxDist3=0x7f00;
+    else
+      strm->MaxDist3=0x2001;
+    strm->OldDist[strm->OldDistPtr++]=Distance;
+    strm->OldDistPtr = strm->OldDistPtr & 3;
+    strm->LastLength=Length;
+    strm->LastDist=Distance;
+    rar_CopyString15(strm,Distance,Length);
+}
+
+void XCompress::rar_ShortLZ(rar_stream *strm)
+{
+    static uint ShortLen1[]={1,3,4,4,5,6,7,8,8,4,4,5,6,6,4,0};
+    static uint ShortXor1[]={0,0xa0,0xd0,0xe0,0xf0,0xf8,0xfc,0xfe,
+                                     0xff,0xc0,0x80,0x90,0x98,0x9c,0xb0};
+    static uint ShortLen2[]={2,3,3,3,4,4,5,6,6,4,4,5,6,6,4,0};
+    static uint ShortXor2[]={0,0x40,0x60,0xa0,0xd0,0xe0,0xf0,0xf8,
+                                     0xfc,0xc0,0x80,0x90,0x98,0x9c,0xb0};
+
+#define GetShortLen1(pos) ((pos)==1 ? strm->Buf60+3:ShortLen1[pos])
+#define GetShortLen2(pos) ((pos)==3 ? strm->Buf60+3:ShortLen2[pos])
+
+
+    uint Length,SaveLength;
+    uint LastDistance;
+    uint Distance;
+    int DistancePlace;
+    strm->NumHuf=0;
+
+    uint BitField=rar_fgetbits(strm);
+    if (strm->LCount==2)
+    {
+      rar_faddbits(strm,1);
+      if (BitField >= 0x8000)
+      {
+        rar_CopyString15(strm,strm->LastDist,strm->LastLength);
+        return;
+      }
+      BitField <<= 1;
+      strm->LCount=0;
+    }
+
+    BitField>>=8;
+
+  //  not thread safe, replaced by GetShortLen1 and GetShortLen2 macro
+  //  ShortLen1[1]=ShortLen2[3]=Buf60+3;
+
+    if (strm->AvrLn1<37)
+    {
+      for (Length=0;;Length++)
+        if (((BitField^ShortXor1[Length]) & (~(0xff>>GetShortLen1(Length))))==0)
+          break;
+      rar_faddbits(strm,GetShortLen1(Length));
+    }
+    else
+    {
+      for (Length=0;;Length++)
+        if (((BitField^ShortXor2[Length]) & (~(0xff>>GetShortLen2(Length))))==0)
+          break;
+      rar_faddbits(strm,GetShortLen2(Length));
+    }
+
+    if (Length >= 9)
+    {
+      if (Length == 9)
+      {
+        strm->LCount++;
+        rar_CopyString15(strm, strm->LastDist,strm->LastLength);
+        return;
+      }
+      if (Length == 14)
+      {
+        strm->LCount=0;
+        Length=rar_DecodeNum(strm, rar_fgetbits(strm),RAR_STARTL2,RAR_DecL2,RAR_PosL2)+5;
+        Distance=(rar_fgetbits(strm)>>1) | 0x8000;
+        rar_faddbits(strm,15);
+        strm->LastLength=Length;
+        strm->LastDist=Distance;
+        rar_CopyString15(strm, Distance,Length);
+        return;
+      }
+
+      strm->LCount=0;
+      SaveLength=Length;
+      Distance=(uint)strm->OldDist[(strm->OldDistPtr-(Length-9)) & 3];
+      Length=rar_DecodeNum(strm,rar_fgetbits(strm),RAR_STARTL1,RAR_DecL1,RAR_PosL1)+2;
+      if (Length==0x101 && SaveLength==10)
+      {
+        strm->Buf60 ^= 1;
+        return;
+      }
+      if (Distance > 256)
+        Length++;
+      if (Distance >= strm->MaxDist3)
+        Length++;
+
+      strm->OldDist[strm->OldDistPtr++]=Distance;
+      strm->OldDistPtr = strm->OldDistPtr & 3;
+      strm->LastLength=Length;
+      strm->LastDist=Distance;
+      rar_CopyString15(strm,Distance,Length);
+      return;
+    }
+
+    strm->LCount=0;
+    strm->AvrLn1 += Length;
+    strm->AvrLn1 -= strm->AvrLn1 >> 4;
+
+    DistancePlace=rar_DecodeNum(strm, rar_fgetbits(strm),RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2) & 0xff;
+    Distance=strm->ChSetA[DistancePlace];
+    if (--DistancePlace != -1)
+    {
+      LastDistance=strm->ChSetA[DistancePlace];
+      strm->ChSetA[DistancePlace+1]=(ushort)LastDistance;
+      strm->ChSetA[DistancePlace]=(ushort)Distance;
+    }
+    Length+=2;
+    strm->OldDist[strm->OldDistPtr++] = ++Distance;
+    strm->OldDistPtr = strm->OldDistPtr & 3;
+    strm->LastLength=Length;
+    strm->LastDist=Distance;
+    rar_CopyString15(strm,Distance,Length);
+}
+
+void XCompress::rar_CopyString15(rar_stream *strm, uint Distance, uint Length)
+{
+    strm->DestUnpSize-=Length;
+    // 2024.04.18: Distance can be 0 in corrupt RAR 1.5 archives.
+    if (!strm->FirstWinDone && Distance>strm->UnpPtr || Distance>strm->MaxWinSize || Distance==0)
+      while (Length-- > 0)
+      {
+        strm->Window[strm->UnpPtr]=0;
+        strm->UnpPtr=(strm->UnpPtr+1) & strm->MaxWinMask;
+      }
+    else
+      while (Length-- > 0)
+      {
+        strm->Window[strm->UnpPtr]=strm->Window[(strm->UnpPtr-Distance) & strm->MaxWinMask];
+       strm->UnpPtr=(strm->UnpPtr+1) & strm->MaxWinMask;
+      }
 }
