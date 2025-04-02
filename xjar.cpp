@@ -83,7 +83,7 @@ XBinary::FILEFORMATINFO XJAR::getFileFormatInfo(PDSTRUCT *pPdStruct)
         qint32 nNumberOfRecords = listArchiveRecords.count();
 
         for (qint32 i = 0; i < nNumberOfRecords; i++) {
-            if (listArchiveRecords.at(i).sFileName.section(".", -1, -1) == "class") {
+            if (listArchiveRecords.at(i).spInfo.sRecordName.section(".", -1, -1) == "class") {
                 RECORD record = listArchiveRecords.at(i);
                 QByteArray baData = XArchive::decompress(&record, pPdStruct, 0, 0x100);
 

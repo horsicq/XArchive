@@ -183,15 +183,15 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                 break;
             }
 
-            record.nCRC32 = cdh.nCRC32;
-            record.nCompressedSize = cdh.nCompressedSize;
-            record.nUncompressedSize = cdh.nUncompressedSize;
-            record.compressMethod = COMPRESS_METHOD_UNKNOWN;
+            record.spInfo.nCRC32 = cdh.nCRC32;
+            record.nDataSize = cdh.nCompressedSize;
+            record.spInfo.nUncompressedSize = cdh.nUncompressedSize;
+            record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
             quint16 nZipMethod = cdh.nMethod;
 
-            record.compressMethod = zipToCompressMethod(nZipMethod);
+            record.spInfo.compressMethod = zipToCompressMethod(nZipMethod);
 
-            record.sFileName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
+            record.spInfo.sRecordName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
 
             LOCALFILEHEADER lfh = read_LOCALFILEHEADER(cdh.nOffsetToLocalFileHeader, pPdStruct);
 
@@ -237,15 +237,15 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
             RECORD record = {};
 
-            record.nCRC32 = lfh.nCRC32;
-            record.nCompressedSize = lfh.nCompressedSize;
-            record.nUncompressedSize = lfh.nUncompressedSize;
-            record.compressMethod = COMPRESS_METHOD_UNKNOWN;
+            record.spInfo.nCRC32 = lfh.nCRC32;
+            record.nDataSize = lfh.nCompressedSize;
+            record.spInfo.nUncompressedSize = lfh.nUncompressedSize;
+            record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
             quint16 nZipMethod = lfh.nMethod;
 
-            record.compressMethod = zipToCompressMethod(nZipMethod);
+            record.spInfo.compressMethod = zipToCompressMethod(nZipMethod);
 
-            record.sFileName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
+            record.spInfo.sRecordName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
 
             record.nDataOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
             record.nHeaderOffset = nOffset;
@@ -314,10 +314,10 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
                         }
 
                         for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
-                            if (pListRecords->at(i).compressMethod == XArchive::COMPRESS_METHOD_STORE) {
+                            if (pListRecords->at(i).spInfo.compressMethod == XArchive::COMPRESS_METHOD_STORE) {
                                 XArchive::RECORD record = pListRecords->at(i);
 
-                                SubDevice subDevice(pDevice, record.nDataOffset, record.nUncompressedSize);
+                                SubDevice subDevice(pDevice, record.nDataOffset, record.spInfo.nUncompressedSize);
 
                                 if (subDevice.open(QIODevice::ReadOnly)) {
                                     if (XBinary::getFileTypes(&subDevice, true).contains(FT_ZIP)) {

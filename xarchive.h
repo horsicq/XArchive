@@ -61,15 +61,18 @@ public:
         // TODO check more methods
     };
 
-    struct RECORD {
-        // TODO bIsValid !!!
-        // TODO Date
-        QString sFileName;
+    struct SPINFO {
+        QString sRecordName;
         quint32 nCRC32;
-        qint64 nDataOffset;
-        qint64 nCompressedSize;
         qint64 nUncompressedSize;
+        quint64 nWindowSize;
         COMPRESS_METHOD compressMethod;
+    };
+
+    struct RECORD {
+        SPINFO spInfo;
+        qint64 nDataOffset;
+        qint64 nDataSize;
         qint64 nHeaderOffset;
         qint64 nHeaderSize;
         qint64 nOptHeaderOffset;
@@ -102,10 +105,9 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) = 0;
 
     struct DECOMPRESSSTRUCT {
-        COMPRESS_METHOD compressMethod;
+        SPINFO spInfo;
         QIODevice *pSourceDevice;
         QIODevice *pDestDevice;
-        qint64 nKnownDecompressedSize;
         qint64 nInSize;
         qint64 nOutSize;
         qint64 nDecompressedOffset;

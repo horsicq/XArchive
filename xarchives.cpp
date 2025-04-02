@@ -297,7 +297,7 @@ bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecor
 
         XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords, pPdStruct);
 
-        if (record.sFileName != "") {
+        if (record.spInfo.sRecordName != "") {
             bResult = decompressToFile(&file, &record, sResultFileName, pPdStruct);
         }
 
@@ -324,7 +324,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
 
     for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
         XArchive::RECORD record = listRecords.at(i);
-        QString sResultFileName = sResultFileFolder + QDir::separator() + record.sFileName;
+        QString sResultFileName = sResultFileFolder + QDir::separator() + record.spInfo.sRecordName;
 
         bResult = decompressToFile(pDevice, &record, sResultFileName, pPdStruct);
 
@@ -469,10 +469,10 @@ void XArchives::_findFiles(const QString &sDirectoryName, QList<XArchive::RECORD
             if (fi.isFile()) {
                 XArchive::RECORD record = {};
 
-                record.compressMethod = XArchive::COMPRESS_METHOD_FILE;
-                record.sFileName = fi.absoluteFilePath();
-                record.nCompressedSize = fi.size();
-                record.nUncompressedSize = fi.size();
+                record.spInfo.compressMethod = XArchive::COMPRESS_METHOD_FILE;
+                record.spInfo.sRecordName = fi.absoluteFilePath();
+                record.nDataSize = fi.size();
+                record.spInfo.nUncompressedSize = fi.size();
 
                 if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
                     pListRecords->append(record);

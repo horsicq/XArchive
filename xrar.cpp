@@ -150,24 +150,25 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                         FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
 
                         XArchive::RECORD record = {};
-                        record.sFileName = fileBlock4.sFileName;
-                        record.nCRC32 = fileBlock4.genericBlock4.nCRC16;
+                        record.spInfo.sRecordName = fileBlock4.sFileName;
+                        record.spInfo.nCRC32 = fileBlock4.genericBlock4.nCRC16;
                         record.nDataOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
-                        record.nCompressedSize = fileBlock4.packSize;
-                        record.nUncompressedSize = fileBlock4.unpSize;
+                        record.nDataSize = fileBlock4.packSize;
+                        record.spInfo.nUncompressedSize = fileBlock4.unpSize;
                         record.nHeaderOffset = nCurrentOffset;
                         record.nHeaderSize = fileBlock4.genericBlock4.nHeaderSize;
 
                         if (fileBlock4.method == RAR_METHOD_STORE) {
-                            record.compressMethod = COMPRESS_METHOD_STORE;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
                         } else if (fileBlock4.unpVer == 15) {
-                            record.compressMethod = COMPRESS_METHOD_RAR_15;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_RAR_15;
+                            record.spInfo.nWindowSize = 0x10000;
                         } else if ((fileBlock4.unpVer == 20) || (fileBlock4.unpVer == 26)) {
-                            record.compressMethod = COMPRESS_METHOD_RAR_20;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_RAR_20;
                         } else if (fileBlock4.unpVer == 29) {
-                            record.compressMethod = COMPRESS_METHOD_RAR_29;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_RAR_29;
                         } else {
-                            record.compressMethod = COMPRESS_METHOD_UNKNOWN;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
                         }
 
                         listResult.append(record);  // TODO large files
@@ -194,11 +195,11 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                         FILEHEADER5 fileHeader5 = readFileHeader5(nCurrentOffset);
 
                         XArchive::RECORD record = {};
-                        record.sFileName = fileHeader5.sFileName;
-                        record.nCRC32 = fileHeader5.nCRC32;
+                        record.spInfo.sRecordName = fileHeader5.sFileName;
+                        record.spInfo.nCRC32 = fileHeader5.nCRC32;
                         record.nDataOffset = nCurrentOffset + fileHeader5.nHeaderSize;
-                        record.nCompressedSize = fileHeader5.nDataSize;
-                        record.nUncompressedSize = fileHeader5.nUnpackedSize;
+                        record.nDataSize = fileHeader5.nDataSize;
+                        record.spInfo.nUncompressedSize = fileHeader5.nUnpackedSize;
                         record.nHeaderOffset = nCurrentOffset;
                         record.nHeaderSize = fileHeader5.nHeaderSize;
 
@@ -206,13 +207,13 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                         quint8 _nMethod = (fileHeader5.nCompInfo >> 7) & 7;
 
                         if (_nMethod == RAR5_METHOD_STORE) {
-                            record.compressMethod = COMPRESS_METHOD_STORE;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
                         } else if (_nVer == 0) {
-                            record.compressMethod = COMPRESS_METHOD_RAR_50;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_RAR_50;
                         } else if (_nVer == 1) {
-                            record.compressMethod = COMPRESS_METHOD_RAR_70;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_RAR_70;
                         } else {
-                            record.compressMethod = COMPRESS_METHOD_UNKNOWN;
+                            record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
                         }
 
                         listResult.append(record);
@@ -309,15 +310,15 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                         // record.sFileName = fileBlock4.sFileName;
                         // record.nCRC32 = fileBlock4.genericBlock4.nCRC16;
                         // record.nDataOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
-                        // record.nCompressedSize = fileBlock4.packSize;
-                        // record.nUncompressedSize = fileBlock4.unpSize;
+                        // record.nDataSize = fileBlock4.packSize;
+                        // record.spInfo.nUncompressedSize = fileBlock4.unpSize;
                         // record.nHeaderOffset = nCurrentOffset;
                         // record.nHeaderSize = fileBlock4.genericBlock4.nHeaderSize;
 
                         // if (fileBlock4.method == RAR_METHOD_STORE) {
-                        //     record.compressMethod = COMPRESS_METHOD_STORE;
+                        //     record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
                         // } else {
-                        //     record.compressMethod = COMPRESS_METHOD_RAR;
+                        //     record.spInfo.compressMethod = COMPRESS_METHOD_RAR;
                         // }
 
                         if (!bFile) {
@@ -367,8 +368,8 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                         // record.sFileName = fileHeader5.sFileName;
                         // record.nCRC32 = fileHeader5.nCRC32;
                         // record.nDataOffset = nCurrentOffset + fileHeader5.nHeaderSize;
-                        // record.nCompressedSize = fileHeader5.nDataSize;
-                        // record.nUncompressedSize = fileHeader5.nUnpackedSize;
+                        // record.nDataSize = fileHeader5.nDataSize;
+                        // record.spInfo.nUncompressedSize = fileHeader5.nUnpackedSize;
                         // record.nHeaderOffset = nCurrentOffset;
                         // record.nHeaderSize = fileHeader5.nHeaderSize;
                         if (!bFile) {
@@ -701,27 +702,26 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                         result.listRecords.append(record);
                     }
 
-                    nCurrentOffset += genericBlock.nHeaderSize;
-
                     if (genericBlock.nType == BLOCKTYPE4_FILE) {
                         FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
-
                         {
                             _MEMORY_RECORD record = {};
 
                             record.nIndex = nIndex++;
                             record.type = MMT_DATA;
-                            record.nOffset = nCurrentOffset;
+                            record.nOffset = fileBlock4.genericBlock4.nHeaderSize;
                             record.nSize = fileBlock4.packSize;
                             record.nAddress = -1;
-                            record.sName = "FileName";
+                            record.sName = "DATA";
 
-                            nMaxOffset = qMax(nMaxOffset, nCurrentOffset + fileBlock4.packSize);
+                            nMaxOffset = qMax(nMaxOffset, (qint64)(fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize));
 
                             result.listRecords.append(record);
                         }
 
-                        nCurrentOffset += fileBlock4.packSize;
+                        nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
+                    } else {
+                        nCurrentOffset += genericBlock.nHeaderSize;
                     }
                 } else {
                     break;
@@ -751,7 +751,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
                         result.listRecords.append(record);
                     }
-                    {
+                    if (genericHeader.nDataSize) {
                         _MEMORY_RECORD record = {};
 
                         record.nIndex = nIndex++;

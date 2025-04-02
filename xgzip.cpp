@@ -68,22 +68,22 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     if (gzipHeader.nCompressionMethod == 8)  // TODO consts
     {
-        record.compressMethod = COMPRESS_METHOD_DEFLATE;  // TODO more
+        record.spInfo.compressMethod = COMPRESS_METHOD_DEFLATE;  // TODO more
     }
 
     nOffset += sizeof(GZIP_HEADER);
 
     if (gzipHeader.nFileFlags & 8)  // File name
     {
-        record.sFileName = read_ansiString(nOffset);
-        nOffset += record.sFileName.size() + 1;
+        record.spInfo.sRecordName = read_ansiString(nOffset);
+        nOffset += record.spInfo.sRecordName.size() + 1;
     }
 
     SubDevice sd(getDevice(), nOffset, -1);
 
     if (sd.open(QIODevice::ReadOnly)) {
         XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.compressMethod = record.compressMethod;
+        decompressStruct.spInfo.compressMethod = record.spInfo.compressMethod;
         decompressStruct.pSourceDevice = &sd;
         decompressStruct.pDestDevice = 0;
 
@@ -94,9 +94,9 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         record.nHeaderOffset = 0;
         record.nHeaderSize = nOffset;
         record.nDataOffset = nOffset;
-        record.nCompressedSize = decompressStruct.nInSize;
-        record.nUncompressedSize = decompressStruct.nOutSize;
-        record.sFileName = XBinary::getDeviceFileBaseName(getDevice());
+        record.nDataSize = decompressStruct.nInSize;
+        record.spInfo.nUncompressedSize = decompressStruct.nOutSize;
+        record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
 
         sd.close();
     }
@@ -178,7 +178,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if (sd.open(QIODevice::ReadOnly)) {
         XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.compressMethod = cm;
+        decompressStruct.spInfo.compressMethod = cm;
         decompressStruct.pSourceDevice = &sd;
         decompressStruct.pDestDevice = 0;
 

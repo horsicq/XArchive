@@ -61,11 +61,11 @@ bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
                     delete g_pSubDevice;
                 }
 
-                g_pSubDevice = new SubDevice(g_pOrigDevice, record.nDataOffset, record.nCompressedSize);
+                g_pSubDevice = new SubDevice(g_pOrigDevice, record.nDataOffset, record.nDataSize);
 
                 if (g_pSubDevice->open(QIODevice::ReadOnly)) {
-                    setSize(record.nUncompressedSize);
-                    setLayerSize(record.nUncompressedSize);
+                    setSize(record.spInfo.nUncompressedSize);
+                    setLayerSize(record.spInfo.nUncompressedSize);
                     setLayerOffset(record.nDataOffset);
                     setLayerCompressMethod(XArchive::COMPRESS_METHOD_DEFLATE);
                     g_bIsValid = true;
@@ -138,7 +138,7 @@ qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
         g_pSubDevice->seek(0);
 
         XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.compressMethod = g_compressMethod;
+        decompressStruct.spInfo.compressMethod = g_compressMethod;
         decompressStruct.pSourceDevice = g_pSubDevice;
         decompressStruct.pDestDevice = &buffer;
         decompressStruct.nDecompressedOffset = pos();

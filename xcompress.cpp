@@ -89,6 +89,8 @@ static uint RAR_PosHf3[]={0,0,0,0,0,0,0,2,16,218,251,0,0};
 static uint RAR_DecHf4[]={0xff00,0xffff,0xffff,0xffff,0xffff,0xffff};
 static uint RAR_PosHf4[]={0,0,0,0,0,0,0,0,0,255,0,0,0};
 
+#define  ASIZE(x) (sizeof(x)/sizeof(x[0]))
+
 XCompress::XCompress()
 {
 }
@@ -1531,4 +1533,279 @@ void XCompress::rar_CopyString15(rar_stream *strm, uint Distance, uint Length)
         strm->Window[strm->UnpPtr]=strm->Window[(strm->UnpPtr-Distance) & strm->MaxWinMask];
        strm->UnpPtr=(strm->UnpPtr+1) & strm->MaxWinMask;
       }
+}
+
+bool XCompress::rar_ReadTables20(rar_stream *strm, QIODevice *pDevice)
+{
+    quint8 BitLength[RAR_BC20];
+    quint8 Table[RAR_MC20*4];
+    if (strm->InAddr>strm->ReadTop-25)
+
+    if (!rar_UnpReadBuf(strm, pDevice))
+        return false;
+    uint BitField=rar_getbits(strm);
+    strm->UnpAudioBlock=(BitField & 0x8000)!=0;
+
+    if (!(BitField & 0x4000))
+      memset(strm->UnpOldTable20,0,sizeof(strm->UnpOldTable20));
+    rar_addbits(strm, 2);
+
+    uint TableSize;
+    if (strm->UnpAudioBlock)
+    {
+      strm->UnpChannels=((BitField>>12) & 3)+1;
+      if (strm->UnpCurChannel>=strm->UnpChannels)
+        strm->UnpCurChannel=0;
+      rar_addbits(strm, 2);
+      TableSize=RAR_MC20*strm->UnpChannels;
+    }
+    else
+      TableSize=RAR_NC20+RAR_DC20+RAR_RC20;
+
+    for (uint I=0;I<RAR_BC20;I++)
+    {
+      BitLength[I]=(quint8)(rar_getbits(strm) >> 12);
+      rar_addbits(strm, 4);
+    }
+    rar_MakeDecodeTables(strm, BitLength,&strm->BlockTables.BD,RAR_BC20);
+    for (uint I=0;I<TableSize;)
+    {
+      if (strm->InAddr>strm->ReadTop-5)
+        if (!rar_UnpReadBuf(strm, pDevice))
+          return false;
+      uint Number=rar_DecodeNumber(strm,&strm->BlockTables.BD);
+      if (Number<16)
+      {
+        Table[I]=(Number+strm->UnpOldTable20[I]) & 0xf;
+        I++;
+      }
+      else
+        if (Number==16)
+        {
+          uint N=(rar_getbits(strm) >> 14)+3;
+          rar_addbits(strm, 2);
+          if (I==0)
+            return false; // We cannot have "repeat previous" code at the first position.
+          else
+            while (N-- > 0 && I<TableSize)
+            {
+              Table[I]=Table[I-1];
+              I++;
+            }
+        }
+        else
+        {
+          uint N;
+          if (Number==17)
+          {
+            N=(rar_getbits(strm) >> 13)+3;
+            rar_addbits(strm, 3);
+          }
+          else
+          {
+            N=(rar_getbits(strm) >> 9)+11;
+            rar_addbits(strm, 7);
+          }
+          while (N-- > 0 && I<TableSize)
+            Table[I++]=0;
+        }
+    }
+    strm->TablesRead2=true;
+    if (strm->InAddr>strm->ReadTop)
+      return true;
+    if (strm->UnpAudioBlock)
+      for (uint I=0;I<strm->UnpChannels;I++)
+        rar_MakeDecodeTables(strm, &Table[I*RAR_MC20],&strm->MD[I],RAR_MC20);
+    else
+    {
+      rar_MakeDecodeTables(strm, &Table[0],&strm->BlockTables.LD,RAR_NC20);
+      rar_MakeDecodeTables(strm, &Table[RAR_NC20],&strm->BlockTables.DD,RAR_DC20);
+      rar_MakeDecodeTables(strm, &Table[RAR_NC20+RAR_DC20],&strm->BlockTables.RD,RAR_RC20);
+    }
+    memcpy(strm->UnpOldTable20,Table,TableSize);
+    return true;
+}
+
+void XCompress::rar_MakeDecodeTables(rar_stream *strm, quint8 *LengthTable, rar_DecodeTable *Dec, uint Size)
+{
+    // Size of alphabet and DecodePos array.
+    Dec->MaxNum=Size;
+
+    // Calculate how many entries for every bit length in LengthTable we have.
+    uint LengthCount[16];
+    memset(LengthCount,0,sizeof(LengthCount));
+    for (size_t I=0;I<Size;I++)
+      LengthCount[LengthTable[I] & 0xf]++;
+
+    // We must not calculate the number of zero length codes.
+    LengthCount[0]=0;
+
+    // Set the entire DecodeNum to zero.
+    memset(Dec->DecodeNum,0,Size*sizeof(*Dec->DecodeNum));
+
+    // Initialize not really used entry for zero length code.
+    Dec->DecodePos[0]=0;
+
+    // Start code for bit length 1 is 0.
+    Dec->DecodeLen[0]=0;
+
+    // Right aligned upper limit code for current bit length.
+    uint UpperLimit=0;
+
+    for (size_t I=1;I<16;I++)
+    {
+      // Adjust the upper limit code.
+      UpperLimit+=LengthCount[I];
+
+      // Left aligned upper limit code.
+      uint LeftAligned=UpperLimit<<(16-I);
+
+      // Prepare the upper limit code for next bit length.
+      UpperLimit*=2;
+
+      // Store the left aligned upper limit code.
+      Dec->DecodeLen[I]=(uint)LeftAligned;
+
+      // Every item of this array contains the sum of all preceding items.
+      // So it contains the start position in code list for every bit length.
+      Dec->DecodePos[I]=Dec->DecodePos[I-1]+LengthCount[I-1];
+    }
+
+    // Prepare the copy of DecodePos. We'll modify this copy below,
+    // so we cannot use the original DecodePos.
+    uint CopyDecodePos[ASIZE(Dec->DecodePos)];
+    memcpy(CopyDecodePos,Dec->DecodePos,sizeof(CopyDecodePos));
+
+    // For every bit length in the bit length table and so for every item
+    // of alphabet.
+    for (uint I=0;I<Size;I++)
+    {
+      // Get the current bit length.
+      quint8 CurBitLength=LengthTable[I] & 0xf;
+
+      if (CurBitLength!=0)
+      {
+        // Last position in code list for current bit length.
+        uint LastPos=CopyDecodePos[CurBitLength];
+
+        // Prepare the decode table, so this position in code list will be
+        // decoded to current alphabet item number.
+        Dec->DecodeNum[LastPos]=(ushort)I;
+
+        // We'll use next position number for this bit length next time.
+        // So we pass through the entire range of positions available
+        // for every bit length.
+        CopyDecodePos[CurBitLength]++;
+      }
+    }
+
+    // Define the number of bits to process in quick mode. We use more bits
+    // for larger alphabets. More bits means that more codes will be processed
+    // in quick mode, but also that more time will be spent to preparation
+    // of tables for quick decode.
+    switch (Size)
+    {
+      case RAR_NC:
+      case RAR_NC20:
+      case RAR_NC30:
+        Dec->QuickBits=RAR_MAX_QUICK_DECODE_BITS;
+        break;
+      default:
+        Dec->QuickBits=RAR_MAX_QUICK_DECODE_BITS>3 ? RAR_MAX_QUICK_DECODE_BITS-3 : 0;
+        break;
+    }
+
+    // Size of tables for quick mode.
+    uint QuickDataSize=1<<Dec->QuickBits;
+
+    // Bit length for current code, start from 1 bit codes. It is important
+    // to use 1 bit instead of 0 for minimum code length, so we are moving
+    // forward even when processing a corrupt archive.
+    uint CurBitLength=1;
+
+    // For every right aligned bit string which supports the quick decoding.
+    for (uint Code=0;Code<QuickDataSize;Code++)
+    {
+      // Left align the current code, so it will be in usual bit field format.
+      uint BitField=Code<<(16-Dec->QuickBits);
+
+      // Prepare the table for quick decoding of bit lengths.
+
+      // Find the upper limit for current bit field and adjust the bit length
+      // accordingly if necessary.
+      while (CurBitLength<ASIZE(Dec->DecodeLen) && BitField>=Dec->DecodeLen[CurBitLength])
+        CurBitLength++;
+
+      // Translation of right aligned bit string to bit length.
+      Dec->QuickLen[Code]=CurBitLength;
+
+      // Prepare the table for quick translation of position in code list
+      // to position in alphabet.
+
+      // Calculate the distance from the start code for current bit length.
+      uint Dist=BitField-Dec->DecodeLen[CurBitLength-1];
+
+      // Right align the distance.
+      Dist>>=(16-CurBitLength);
+
+      // Now we can calculate the position in the code list. It is the sum
+      // of first position for current bit length and right aligned distance
+      // between our bit field and start code for current bit length.
+      uint Pos;
+      if (CurBitLength<ASIZE(Dec->DecodePos) &&
+          (Pos=Dec->DecodePos[CurBitLength]+Dist)<Size)
+      {
+        // Define the code to alphabet number translation.
+        Dec->QuickNum[Code]=Dec->DecodeNum[Pos];
+      }
+      else
+      {
+        // Can be here for length table filled with zeroes only (empty).
+        Dec->QuickNum[Code]=0;
+      }
+    }
+}
+
+uint XCompress::rar_DecodeNumber(rar_stream *strm, rar_DecodeTable *Dec)
+{
+    // Left aligned 15 bit length raw bit field.
+     uint BitField=rar_getbits(strm) & 0xfffe;
+
+     if (BitField<Dec->DecodeLen[Dec->QuickBits])
+     {
+       uint Code=BitField>>(16-Dec->QuickBits);
+       rar_addbits(strm, Dec->QuickLen[Code]);
+       return Dec->QuickNum[Code];
+     }
+
+     // Detect the real bit length for current code.
+     uint Bits=15;
+     for (uint I=Dec->QuickBits+1;I<15;I++)
+       if (BitField<Dec->DecodeLen[I])
+       {
+         Bits=I;
+         break;
+       }
+
+     rar_addbits(strm, Bits);
+
+     // Calculate the distance from the start code for current bit length.
+     uint Dist=BitField-Dec->DecodeLen[Bits-1];
+
+     // Start codes are left aligned, but we need the normal right aligned
+     // number. So we shift the distance to the right.
+     Dist>>=(16-Bits);
+
+     // Now we can calculate the position in the code list. It is the sum
+     // of first position for current bit length and right aligned distance
+     // between our bit field and start code for current bit length.
+     uint Pos=Dec->DecodePos[Bits]+Dist;
+
+     // Out of bounds safety check required for damaged archives.
+     if (Pos>=Dec->MaxNum)
+       Pos=0;
+
+     // Convert the position in the code list to position in alphabet
+     // and return it.
+     return Dec->DecodeNum[Pos];
 }

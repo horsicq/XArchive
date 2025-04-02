@@ -49,7 +49,7 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
 
                 if (sd.open(QIODevice::ReadOnly)) {
                     XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-                    decompressStruct.compressMethod = COMPRESS_METHOD_DEFLATE;
+                    decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_DEFLATE;
                     decompressStruct.pSourceDevice = &sd;
                     decompressStruct.pDestDevice = 0;
                     decompressStruct.nDecompressedOffset = 0;
@@ -63,7 +63,7 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
                             if (buffer.open(QIODevice::ReadWrite)) {
                                 sd.reset();
                                 XArchive::DECOMPRESSSTRUCT _decompressStruct = {};
-                                _decompressStruct.compressMethod = COMPRESS_METHOD_DEFLATE;
+                                _decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_DEFLATE;
                                 _decompressStruct.pSourceDevice = &sd;
                                 _decompressStruct.pDestDevice = &buffer;
 
@@ -113,7 +113,7 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint64 nOffset = 0;
 
-    record.compressMethod = COMPRESS_METHOD_DEFLATE;
+    record.spInfo.compressMethod = COMPRESS_METHOD_DEFLATE;
 
     nOffset += 2;
 
@@ -121,7 +121,7 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     if (sd.open(QIODevice::ReadOnly)) {
         DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.compressMethod = record.compressMethod;
+        decompressStruct.spInfo.compressMethod = record.spInfo.compressMethod;
         decompressStruct.pSourceDevice = &sd;
         decompressStruct.pDestDevice = 0;
 
@@ -132,9 +132,9 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         record.nHeaderOffset = 0;
         record.nHeaderSize = nOffset;
         record.nDataOffset = nOffset;
-        record.nCompressedSize = decompressStruct.nInSize;
-        record.nUncompressedSize = decompressStruct.nOutSize;
-        record.sFileName = XBinary::getDeviceFileBaseName(getDevice());
+        record.nDataSize = decompressStruct.nInSize;
+        record.spInfo.nUncompressedSize = decompressStruct.nOutSize;
+        record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
 
         sd.close();
     }
@@ -195,7 +195,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if (sd.open(QIODevice::ReadOnly)) {
         DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.compressMethod = cm;
+        decompressStruct.spInfo.compressMethod = cm;
         decompressStruct.pSourceDevice = &sd;
         decompressStruct.pDestDevice = 0;
 

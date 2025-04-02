@@ -126,59 +126,59 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             break;
         }
 
-        record.sFileName = frecord.fileId;
-        record.sFileName.resize(sizeof(frecord.fileId));
-        record.sFileName = record.sFileName.trimmed();
+        record.spInfo.sRecordName = frecord.fileId;
+        record.spInfo.sRecordName.resize(sizeof(frecord.fileId));
+        record.spInfo.sRecordName = record.spInfo.sRecordName.trimmed();
 
-        if (record.sFileName == "//")  // Linux/GNU
+        if (record.spInfo.sRecordName == "//")  // Linux/GNU
         {
             sList = read_ansiString(nOffset + sizeof(FRECORD), nRecordSize);
         }
 
-        if (record.sFileName.section("/", 0, 0) == "#1")  // BSD style
+        if (record.spInfo.sRecordName.section("/", 0, 0) == "#1")  // BSD style
         {
-            qint32 nFileNameLength = record.sFileName.section("/", 1, 1).toInt();
+            qint32 nFileNameLength = record.spInfo.sRecordName.section("/", 1, 1).toInt();
 
-            record.sFileName = read_ansiString(nOffset + sizeof(FRECORD), nFileNameLength);  // TODO Check UTF8
+            record.spInfo.sRecordName = read_ansiString(nOffset + sizeof(FRECORD), nFileNameLength);  // TODO Check UTF8
 
             record.nDataOffset = nOffset + sizeof(FRECORD) + nFileNameLength;
-            record.nCompressedSize = nRecordSize - nFileNameLength;
-            record.nUncompressedSize = nRecordSize - nFileNameLength;
+            record.nDataSize = nRecordSize - nFileNameLength;
+            record.spInfo.nUncompressedSize = nRecordSize - nFileNameLength;
             record.nHeaderSize = record.nDataOffset - record.nHeaderOffset;
         } else {
-            qint32 nFileNameSie = record.sFileName.size();
+            qint32 nFileNameSie = record.spInfo.sRecordName.size();
 
             if (nFileNameSie >= 2)  // Linux/GNU
             {
-                if ((record.sFileName.at(0) == QChar('/')) && (record.sFileName.at(nFileNameSie - 1) != QChar('/'))) {
-                    qint32 nIndex = record.sFileName.section("/", 1, 1).toULong();
+                if ((record.spInfo.sRecordName.at(0) == QChar('/')) && (record.spInfo.sRecordName.at(nFileNameSie - 1) != QChar('/'))) {
+                    qint32 nIndex = record.spInfo.sRecordName.section("/", 1, 1).toULong();
 
                     if (nIndex < sList.size()) {
                         if (nIndex) {
-                            record.sFileName = sList.right(nIndex).section("/", 0, 0);
+                            record.spInfo.sRecordName = sList.right(nIndex).section("/", 0, 0);
                         } else {
-                            record.sFileName = sList.section("/", 0, 0);
+                            record.spInfo.sRecordName = sList.section("/", 0, 0);
                         }
                     }
-                } else if ((nFileNameSie > 2) && (record.sFileName.at(nFileNameSie - 1) == QChar('/'))) {
-                    record.sFileName.remove(nFileNameSie - 1, 1);
+                } else if ((nFileNameSie > 2) && (record.spInfo.sRecordName.at(nFileNameSie - 1) == QChar('/'))) {
+                    record.spInfo.sRecordName.remove(nFileNameSie - 1, 1);
                 }
             }
 
             record.nDataOffset = nOffset + sizeof(FRECORD);
-            record.nCompressedSize = nRecordSize;
-            record.nUncompressedSize = nRecordSize;
+            record.nDataSize = nRecordSize;
+            record.spInfo.nUncompressedSize = nRecordSize;
         }
 
-        if (record.nCompressedSize < 0) {
-            record.nCompressedSize = 0;
+        if (record.nDataSize < 0) {
+            record.nDataSize = 0;
         }
 
-        if (record.nUncompressedSize < 0) {
-            record.nUncompressedSize = 0;
+        if (record.spInfo.nUncompressedSize < 0) {
+            record.spInfo.nUncompressedSize = 0;
         }
 
-        record.compressMethod = COMPRESS_METHOD_STORE;
+        record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
 
         listRecords.append(record);
 

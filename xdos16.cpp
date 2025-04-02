@@ -107,11 +107,11 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         {
             RECORD record = {};
 
-            record.sFileName = tr("Loader");
+            record.spInfo.sRecordName = tr("Loader");
             record.nDataOffset = 0;
-            record.nCompressedSize = nSignatureOffset;
-            record.nUncompressedSize = nSignatureOffset;
-            record.compressMethod = COMPRESS_METHOD_STORE;
+            record.nDataSize = nSignatureOffset;
+            record.spInfo.nUncompressedSize = nSignatureOffset;
+            record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
 
             listResult.append(record);
         }
@@ -128,11 +128,11 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
                     RECORD record = {};
 
-                    record.sFileName = sName;
+                    record.spInfo.sRecordName = sName;
                     record.nDataOffset = nSignatureOffset;
-                    record.nCompressedSize = nNewSignatureOffset - nSignatureOffset;
-                    record.nUncompressedSize = nNewSignatureOffset - nSignatureOffset;
-                    record.compressMethod = COMPRESS_METHOD_STORE;
+                    record.nDataSize = nNewSignatureOffset - nSignatureOffset;
+                    record.spInfo.nUncompressedSize = nNewSignatureOffset - nSignatureOffset;
+                    record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
 
                     listResult.append(record);
 
@@ -142,11 +142,11 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                 } else if (nSignature == 0x5A4D) {  // MZ
                     RECORD record = {};
 
-                    record.sFileName = tr("Payload");
+                    record.spInfo.sRecordName = tr("Payload");
                     record.nDataOffset = nSignatureOffset;
-                    record.nCompressedSize = nSize - nSignatureOffset;
-                    record.nUncompressedSize = nSize - nSignatureOffset;
-                    record.compressMethod = COMPRESS_METHOD_STORE;
+                    record.nDataSize = nSize - nSignatureOffset;
+                    record.spInfo.nUncompressedSize = nSize - nSignatureOffset;
+                    record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
 
                     listResult.append(record);
 

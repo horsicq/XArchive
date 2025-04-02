@@ -105,13 +105,13 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
 
         RECORD record = {};
 
-        record.sFileName = XMACH::_getArch(_cputype, _cpusubtype);
+        record.spInfo.sRecordName = XMACH::_getArch(_cputype, _cpusubtype);
+        record.spInfo.nUncompressedSize = _size;
+        record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
         record.nHeaderOffset = nOffset;
         record.nHeaderSize = sizeof(XMACH_DEF::fat_arch);
         record.nDataOffset = _offset;
-        record.nCompressedSize = _size;
-        record.nUncompressedSize = _size;
-        record.compressMethod = COMPRESS_METHOD_STORE;
+        record.nDataSize = _size;
 
         listResult.append(record);
     }

@@ -90,24 +90,24 @@ QList<XArchive::RECORD> XLHA::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
             XArchive::RECORD record = {};
             // TODO CRC
-            record.compressMethod = COMPRESS_METHOD_LZH5;
+            record.spInfo.compressMethod = COMPRESS_METHOD_LZH5;
 
             QString sMethod = read_ansiString(nOffset + 2, 5);
 
             if (sMethod == "-lh5-") {
-                record.compressMethod = COMPRESS_METHOD_LZH5;
+                record.spInfo.compressMethod = COMPRESS_METHOD_LZH5;
             } else if (sMethod == "-lh6-") {
-                record.compressMethod = COMPRESS_METHOD_LZH6;
+                record.spInfo.compressMethod = COMPRESS_METHOD_LZH6;
             } else if (sMethod == "-lh7-") {
-                record.compressMethod = COMPRESS_METHOD_LZH7;
+                record.spInfo.compressMethod = COMPRESS_METHOD_LZH7;
             }
 
             record.nHeaderOffset = nOffset;
             record.nDataOffset = nOffset + nHeaderSize;
-            record.nUncompressedSize = nUncompressedSize;
+            record.spInfo.nUncompressedSize = nUncompressedSize;
             record.nHeaderSize = nHeaderSize;
-            record.nCompressedSize = nCompressedSize;
-            record.sFileName = sFileName;
+            record.nDataSize = nCompressedSize;
+            record.spInfo.sRecordName = sFileName;
 
             listResult.append(record);
 

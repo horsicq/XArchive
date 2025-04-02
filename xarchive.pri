@@ -57,6 +57,11 @@ SOURCES += \
     include($$PWD/../Formats/exec/xmach.pri) # MACHFAT archive contains Mach-O
 }
 
+!contains(XCONFIG, xjavaclass) {
+    XCONFIG += xjavaclass
+    include($$PWD/../Formats/formats/xjavaclass.pri)
+}
+
 !contains(XCONFIG, zlib) {
     XCONFIG += zlib
     include($$PWD/3rdparty/zlib/zlib.pri)

@@ -214,6 +214,14 @@ public:
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct lzh_huffman *hf);
 
+    static const uint RAR_NC    = 306; /* alphabet = {0, 1, 2, ..., NC - 1} */
+    static const uint RAR_DCB   = 64; // Base distance codes up to 4 GB.
+    static const uint RAR_DCX   = 80; // Extended distance codes up to 1 TB.
+    static const uint RAR_LDC   = 16;
+    static const uint RAR_RC    = 44;
+    static const uint RAR_HUFF_TABLE_SIZEB = RAR_NC + RAR_DCB + RAR_RC + RAR_LDC;
+    static const uint RAR_HUFF_TABLE_SIZEX = RAR_NC + RAR_DCX + RAR_RC + RAR_LDC;
+    static const uint RAR_BC    = 20;
     // Maximum allowed number of compressed bits processed in quick mode.
     static const uint RAR_MAX_QUICK_DECODE_BITS = 9;
     static const uint RAR_NC20 = 298; /* alphabet = {0, 1, 2, ..., NC - 1} */
@@ -454,6 +462,9 @@ public:
     static void rar_LongLZ(struct rar_stream *strm);
     static void rar_ShortLZ(struct rar_stream *strm);
     static void rar_CopyString15(struct rar_stream *strm,uint Distance,uint Length);
+    static bool rar_ReadTables20(struct rar_stream *strm, QIODevice *pDevice);
+    static void rar_MakeDecodeTables(struct rar_stream *strm, quint8 *LengthTable,rar_DecodeTable *Dec,uint Size);
+    static uint rar_DecodeNumber(struct rar_stream *strm, rar_DecodeTable *Dec);
 };
 
 #endif  // XCOMPRESS_H
