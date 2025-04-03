@@ -452,81 +452,62 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         rarStream.DestUnpSize = pDecompressStruct->spInfo.nUncompressedSize;
 
         if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_15) {
+            result = COMPRESS_RESULT_OK;
+
             XCompress::rar_UnpInitData(&rarStream, bSolid);
             XCompress::rar_UnpInitData15(&rarStream, bSolid);
             XCompress::rar_UnpReadBuf(&rarStream, pDecompressStruct->pSourceDevice);
 
-            if (!bSolid)
-            {
-              XCompress::rar_InitHuff(&rarStream);
-              rarStream.UnpPtr=0;
-            }
-            else
-              rarStream.UnpPtr=rarStream.WrPtr;
+            if (!bSolid) {
+                XCompress::rar_InitHuff(&rarStream);
+                rarStream.UnpPtr = 0;
+            } else rarStream.UnpPtr = rarStream.WrPtr;
             --rarStream.DestUnpSize;
-            if (rarStream.DestUnpSize>=0)
-            {
-              XCompress::rar_GetFlagsBuf(&rarStream);
-              rarStream.FlagsCnt=8;
+            if (rarStream.DestUnpSize >= 0) {
+                XCompress::rar_GetFlagsBuf(&rarStream);
+                rarStream.FlagsCnt = 8;
             }
 
-            while (rarStream.DestUnpSize>=0)
-            {
-              rarStream.UnpPtr&=rarStream.MaxWinMask;
+            while (rarStream.DestUnpSize >= 0) {
+                rarStream.UnpPtr &= rarStream.MaxWinMask;
 
-              rarStream.FirstWinDone|=(rarStream.PrevPtr>rarStream.UnpPtr);
-              rarStream.PrevPtr=rarStream.UnpPtr;
+                rarStream.FirstWinDone |= (rarStream.PrevPtr > rarStream.UnpPtr);
+                rarStream.PrevPtr = rarStream.UnpPtr;
 
-              if (rarStream.InAddr>rarStream.ReadTop-30 && !XCompress::rar_UnpReadBuf(&rarStream, pDecompressStruct->pSourceDevice))
-                break;
-              if (((rarStream.WrPtr-rarStream.UnpPtr) & rarStream.MaxWinMask)<270 &&rarStream. WrPtr!=rarStream.UnpPtr)
-                XCompress::rar_UnpWriteBuf20(&rarStream, pDecompressStruct->pDestDevice);
-              if (rarStream.StMode)
-              {
-                XCompress::rar_HuffDecode(&rarStream);
-                continue;
-              }
-
-              if (--rarStream.FlagsCnt < 0)
-              {
-                XCompress::rar_GetFlagsBuf(&rarStream);
-                rarStream.FlagsCnt=7;
-              }
-
-              if (rarStream.FlagBuf & 0x80)
-              {
-                rarStream.FlagBuf<<=1;
-                if (rarStream.Nlzb > rarStream.Nhfb)
-                  XCompress::rar_LongLZ(&rarStream);
-                else
-                  XCompress::rar_HuffDecode(&rarStream);
-              }
-              else
-              {
-                rarStream.FlagBuf<<=1;
-                if (--rarStream.FlagsCnt < 0)
-                {
-                  XCompress::rar_GetFlagsBuf(&rarStream);
-                  rarStream.FlagsCnt=7;
-                }
-                if (rarStream.FlagBuf & 0x80)
-                {
-                  rarStream.FlagBuf<<=1;
-                  if (rarStream.Nlzb > rarStream.Nhfb)
+                if (rarStream.InAddr > rarStream.ReadTop - 30 && !XCompress::rar_UnpReadBuf(&rarStream, pDecompressStruct->pSourceDevice)) break;
+                if (((rarStream.WrPtr - rarStream.UnpPtr) & rarStream.MaxWinMask) < 270 && rarStream.WrPtr != rarStream.UnpPtr)
+                    XCompress::rar_UnpWriteBuf20(&rarStream, pDecompressStruct->pDestDevice);
+                if (rarStream.StMode) {
                     XCompress::rar_HuffDecode(&rarStream);
-                  else
-                    XCompress::rar_LongLZ(&rarStream);
+                    continue;
                 }
-                else
-                {
-                  rarStream.FlagBuf<<=1;
-                  XCompress::rar_ShortLZ(&rarStream);
+
+                if (--rarStream.FlagsCnt < 0) {
+                    XCompress::rar_GetFlagsBuf(&rarStream);
+                    rarStream.FlagsCnt = 7;
                 }
-              }
+
+                if (rarStream.FlagBuf & 0x80) {
+                    rarStream.FlagBuf <<= 1;
+                    if (rarStream.Nlzb > rarStream.Nhfb) XCompress::rar_LongLZ(&rarStream);
+                    else XCompress::rar_HuffDecode(&rarStream);
+                } else {
+                    rarStream.FlagBuf <<= 1;
+                    if (--rarStream.FlagsCnt < 0) {
+                        XCompress::rar_GetFlagsBuf(&rarStream);
+                        rarStream.FlagsCnt = 7;
+                    }
+                    if (rarStream.FlagBuf & 0x80) {
+                        rarStream.FlagBuf <<= 1;
+                        if (rarStream.Nlzb > rarStream.Nhfb) XCompress::rar_HuffDecode(&rarStream);
+                        else XCompress::rar_LongLZ(&rarStream);
+                    } else {
+                        rarStream.FlagBuf <<= 1;
+                        XCompress::rar_ShortLZ(&rarStream);
+                    }
+                }
             }
             XCompress::rar_UnpWriteBuf20(&rarStream, pDecompressStruct->pDestDevice);
-
-            result = COMPRESS_RESULT_OK;
         } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_20) {
             result = COMPRESS_RESULT_OK;
             XCompress::rar_UnpInitData(&rarStream, bSolid);
@@ -539,7 +520,34 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             --rarStream.DestUnpSize;
 
             if (result == COMPRESS_RESULT_OK) {
+            }
+        } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_29) {
+            static unsigned char LDecode[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224};
+            static unsigned char LBits[] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5};
+            static int DDecode[XCompress::RAR_DC30];
+            static quint8 DBits[XCompress::RAR_DC30];
+            static int DBitLengthCounts[] = {4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 14, 0, 12};
+            static unsigned char SDDecode[] = {0, 4, 8, 16, 32, 64, 128, 192};
+            static unsigned char SDBits[] = {2, 2, 3, 4, 5, 6, 6, 6};
+            unsigned int Bits;
 
+            if (DDecode[1] == 0) {
+                int Dist = 0, BitLength = 0, Slot = 0;
+                for (int I = 0; I < ASIZE(DBitLengthCounts); I++, BitLength++)
+                    for (int J = 0; J < DBitLengthCounts[I]; J++, Slot++, Dist += (1 << BitLength)) {
+                        DDecode[Slot] = Dist;
+                        DBits[Slot] = BitLength;
+                    }
+            }
+
+            rarStream.FileExtracted = true;
+
+            XCompress::rar_UnpInitData(&rarStream, bSolid);
+            if (!XCompress::rar_UnpReadBuf(&rarStream, pDecompressStruct->pSourceDevice)) {
+                result = COMPRESS_RESULT_READERROR;
+            }
+            if ((!bSolid || !rarStream.TablesRead3) && !XCompress::rar_ReadTables30(&rarStream, pDecompressStruct->pSourceDevice)) {
+                result = COMPRESS_RESULT_DATAERROR;
             }
         }
     }

@@ -87,6 +87,7 @@ public:
 
 #define CACHE_TYPE quint64
 #define CACHE_BITS (8 * sizeof(CACHE_TYPE))
+#define ASIZE(x) (sizeof(x) / sizeof(x[0]))
 
     /*
      * Huffman coding.
@@ -214,14 +215,14 @@ public:
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct lzh_huffman *hf);
 
-    static const uint RAR_NC    = 306; /* alphabet = {0, 1, 2, ..., NC - 1} */
-    static const uint RAR_DCB   = 64; // Base distance codes up to 4 GB.
-    static const uint RAR_DCX   = 80; // Extended distance codes up to 1 TB.
-    static const uint RAR_LDC   = 16;
-    static const uint RAR_RC    = 44;
+    static const uint RAR_NC = 306;  /* alphabet = {0, 1, 2, ..., NC - 1} */
+    static const uint RAR_DCB = 64;  // Base distance codes up to 4 GB.
+    static const uint RAR_DCX = 80;  // Extended distance codes up to 1 TB.
+    static const uint RAR_LDC = 16;
+    static const uint RAR_RC = 44;
     static const uint RAR_HUFF_TABLE_SIZEB = RAR_NC + RAR_DCB + RAR_RC + RAR_LDC;
     static const uint RAR_HUFF_TABLE_SIZEX = RAR_NC + RAR_DCX + RAR_RC + RAR_LDC;
-    static const uint RAR_BC    = 20;
+    static const uint RAR_BC = 20;
     // Maximum allowed number of compressed bits processed in quick mode.
     static const uint RAR_MAX_QUICK_DECODE_BITS = 9;
     static const uint RAR_NC20 = 298; /* alphabet = {0, 1, 2, ..., NC - 1} */
@@ -240,7 +241,7 @@ public:
     // Write data in 4 MB or smaller blocks. Must not exceed PACK_MAX_READ,
     // so we keep the number of buffered filters in unpacker reasonable.
     static const size_t RAR_UNPACK_MAX_WRITE = 0x400000;
-    static const size_t RAR_BufferSize_MAX_SIZE=0x8000;
+    static const size_t RAR_BufferSize_MAX_SIZE = 0x8000;
 
     // Decode compressed bit fields to alphabet numbers.
     struct rar_DecodeTable {
@@ -321,34 +322,37 @@ public:
     };
 
     enum rar_VM_StandardFilters {
-      VMSF_NONE, VMSF_E8, VMSF_E8E9, VMSF_ITANIUM, VMSF_RGB, VMSF_AUDIO,
-      VMSF_DELTA
+        VMSF_NONE,
+        VMSF_E8,
+        VMSF_E8E9,
+        VMSF_ITANIUM,
+        VMSF_RGB,
+        VMSF_AUDIO,
+        VMSF_DELTA
     };
 
-    struct rar_VM_PreparedProgram
-    {
-      // VM_PreparedProgram()
-      // {
-      //   FilteredDataSize=0;
-      //   Type=VMSF_NONE;
-      // }
-      rar_VM_StandardFilters Type;
-      uint InitR[7];
-      quint8 *FilteredData;
-      uint FilteredDataSize;
+    struct rar_VM_PreparedProgram {
+        // VM_PreparedProgram()
+        // {
+        //   FilteredDataSize=0;
+        //   Type=VMSF_NONE;
+        // }
+        rar_VM_StandardFilters Type;
+        uint InitR[7];
+        quint8 *FilteredData;
+        uint FilteredDataSize;
     };
 
-    struct rar_UnpackFilter30
-    {
-      unsigned int BlockStart;
-      unsigned int BlockLength;
-      bool NextWindow;
+    struct rar_UnpackFilter30 {
+        unsigned int BlockStart;
+        unsigned int BlockLength;
+        bool NextWindow;
 
-      // Position of parent filter in Filters array used as prototype for filter
-      // in PrgStack array. Not defined for filters in Filters array.
-      unsigned int ParentFilter;
+        // Position of parent filter in Filters array used as prototype for filter
+        // in PrgStack array. Not defined for filters in Filters array.
+        unsigned int ParentFilter;
 
-      rar_VM_PreparedProgram Prg;
+        rar_VM_PreparedProgram Prg;
     };
 
     enum RAR_BLOCK_TYPES {
@@ -368,17 +372,17 @@ public:
         bool UnpSomeRead;
         bool FileExtracted;
 
-        ushort ChSet[256],ChSetA[256],ChSetB[256],ChSetC[256];
-        quint8 NToPl[256],NToPlB[256],NToPlC[256];
-        uint FlagBuf,AvrPlc,AvrPlcB,AvrLn1,AvrLn2,AvrLn3;
-        int Buf60,NumHuf,StMode,LCount,FlagsCnt;
-        uint Nhfb,Nlzb,MaxDist3;
+        ushort ChSet[256], ChSetA[256], ChSetB[256], ChSetC[256];
+        quint8 NToPl[256], NToPlB[256], NToPlC[256];
+        uint FlagBuf, AvrPlc, AvrPlcB, AvrLn1, AvrLn2, AvrLn3;
+        int Buf60, NumHuf, StMode, LCount, FlagsCnt;
+        uint Nhfb, Nlzb, MaxDist3;
 
         quint64 AllocWinSize;
         size_t MaxWinSize;
         size_t MaxWinMask;
 
-        bool ExtraDist; // Allow distances up to 1 TB.
+        bool ExtraDist;  // Allow distances up to 1 TB.
         size_t OldDist[4], OldDistPtr;
         uint LastLength;
         uint LastDist;      // LastDist is necessary only for RAR2 and older with circular OldDist array. In RAR3 last distance is always stored in OldDist[0].
@@ -436,14 +440,14 @@ public:
 
         // Bits
         bool ExternalBuffer;
-        int InAddr; // Curent byte position in the buffer.
-        int InBit;  // Current bit position in the current byte.
+        int InAddr;     // Curent byte position in the buffer.
+        int InBit;      // Current bit position in the current byte.
         quint8 *InBuf;  // Input buffer.
     };
 
     static void rar_init(struct rar_stream *strm, quint64 WinSize, bool Solid);
     static void rar_InitHuff(struct rar_stream *strm);
-    static void rar_CorrHuff(struct rar_stream *strm, ushort *CharSet,quint8 *NumToPlace);
+    static void rar_CorrHuff(struct rar_stream *strm, ushort *CharSet, quint8 *NumToPlace);
     static void rar_UnpInitData(struct rar_stream *strm, bool Solid);
     static void rar_UnpInitData15(struct rar_stream *strm, bool Solid);
     static void rar_UnpInitData20(struct rar_stream *strm, bool Solid);
@@ -452,8 +456,9 @@ public:
     static void rar_InitFilters30(struct rar_stream *strm, bool Solid);
     static bool rar_UnpReadBuf(struct rar_stream *strm, QIODevice *pDevice);
     static void rar_UnpWriteBuf20(struct rar_stream *strm, QIODevice *pDevice);
+    static bool rar_UnpReadBuf30(struct rar_stream *strm, QIODevice *pDevice);
     static void rar_GetFlagsBuf(struct rar_stream *strm);
-    static uint rar_DecodeNum(struct rar_stream *strm, uint Num,uint StartPos,uint *DecTab,uint *PosTab);
+    static uint rar_DecodeNum(struct rar_stream *strm, uint Num, uint StartPos, uint *DecTab, uint *PosTab);
     static uint rar_fgetbits(struct rar_stream *strm);
     static void rar_faddbits(struct rar_stream *strm, uint Bits);
     static uint rar_getbits(struct rar_stream *strm);
@@ -461,9 +466,10 @@ public:
     static void rar_HuffDecode(struct rar_stream *strm);
     static void rar_LongLZ(struct rar_stream *strm);
     static void rar_ShortLZ(struct rar_stream *strm);
-    static void rar_CopyString15(struct rar_stream *strm,uint Distance,uint Length);
+    static void rar_CopyString15(struct rar_stream *strm, uint Distance, uint Length);
     static bool rar_ReadTables20(struct rar_stream *strm, QIODevice *pDevice);
-    static void rar_MakeDecodeTables(struct rar_stream *strm, quint8 *LengthTable,rar_DecodeTable *Dec,uint Size);
+    static bool rar_ReadTables30(struct rar_stream *strm, QIODevice *pDevice);
+    static void rar_MakeDecodeTables(struct rar_stream *strm, quint8 *LengthTable, rar_DecodeTable *Dec, uint Size);
     static uint rar_DecodeNumber(struct rar_stream *strm, rar_DecodeTable *Dec);
 };
 

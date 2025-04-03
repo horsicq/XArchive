@@ -51,45 +51,33 @@ static const char bitlen_tbl[0x400] = {
     10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11,
     11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 16, 0};
 
-#define RAR_STARTL1  2
-static uint RAR_DecL1[]={0x8000,0xa000,0xc000,0xd000,0xe000,0xea00,
-                             0xee00,0xf000,0xf200,0xf200,0xffff};
-static uint RAR_PosL1[]={0,0,0,2,3,5,7,11,16,20,24,32,32};
+#define RAR_STARTL1 2
+static uint RAR_DecL1[] = {0x8000, 0xa000, 0xc000, 0xd000, 0xe000, 0xea00, 0xee00, 0xf000, 0xf200, 0xf200, 0xffff};
+static uint RAR_PosL1[] = {0, 0, 0, 2, 3, 5, 7, 11, 16, 20, 24, 32, 32};
 
-#define RAR_STARTL2  3
-static uint RAR_DecL2[]={0xa000,0xc000,0xd000,0xe000,0xea00,0xee00,
-                             0xf000,0xf200,0xf240,0xffff};
-static uint RAR_PosL2[]={0,0,0,0,5,7,9,13,18,22,26,34,36};
+#define RAR_STARTL2 3
+static uint RAR_DecL2[] = {0xa000, 0xc000, 0xd000, 0xe000, 0xea00, 0xee00, 0xf000, 0xf200, 0xf240, 0xffff};
+static uint RAR_PosL2[] = {0, 0, 0, 0, 5, 7, 9, 13, 18, 22, 26, 34, 36};
 
-#define RAR_STARTHF0  4
-static uint RAR_DecHf0[]={0x8000,0xc000,0xe000,0xf200,0xf200,0xf200,
-                              0xf200,0xf200,0xffff};
-static uint RAR_PosHf0[]={0,0,0,0,0,8,16,24,33,33,33,33,33};
+#define RAR_STARTHF0 4
+static uint RAR_DecHf0[] = {0x8000, 0xc000, 0xe000, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xffff};
+static uint RAR_PosHf0[] = {0, 0, 0, 0, 0, 8, 16, 24, 33, 33, 33, 33, 33};
 
+#define RAR_STARTHF1 5
+static uint RAR_DecHf1[] = {0x2000, 0xc000, 0xe000, 0xf000, 0xf200, 0xf200, 0xf7e0, 0xffff};
+static uint RAR_PosHf1[] = {0, 0, 0, 0, 0, 0, 4, 44, 60, 76, 80, 80, 127};
 
-#define RAR_STARTHF1  5
-static uint RAR_DecHf1[]={0x2000,0xc000,0xe000,0xf000,0xf200,0xf200,
-                              0xf7e0,0xffff};
-static uint RAR_PosHf1[]={0,0,0,0,0,0,4,44,60,76,80,80,127};
+#define RAR_STARTHF2 5
+static uint RAR_DecHf2[] = {0x1000, 0x2400, 0x8000, 0xc000, 0xfa00, 0xffff, 0xffff, 0xffff};
+static uint RAR_PosHf2[] = {0, 0, 0, 0, 0, 0, 2, 7, 53, 117, 233, 0, 0};
 
+#define RAR_STARTHF3 6
+static uint RAR_DecHf3[] = {0x800, 0x2400, 0xee00, 0xfe80, 0xffff, 0xffff, 0xffff};
+static uint RAR_PosHf3[] = {0, 0, 0, 0, 0, 0, 0, 2, 16, 218, 251, 0, 0};
 
-#define RAR_STARTHF2  5
-static uint RAR_DecHf2[]={0x1000,0x2400,0x8000,0xc000,0xfa00,0xffff,
-                              0xffff,0xffff};
-static uint RAR_PosHf2[]={0,0,0,0,0,0,2,7,53,117,233,0,0};
-
-
-#define RAR_STARTHF3  6
-static uint RAR_DecHf3[]={0x800,0x2400,0xee00,0xfe80,0xffff,0xffff,
-                              0xffff};
-static uint RAR_PosHf3[]={0,0,0,0,0,0,0,2,16,218,251,0,0};
-
-
-#define RAR_STARTHF4  8
-static uint RAR_DecHf4[]={0xff00,0xffff,0xffff,0xffff,0xffff,0xffff};
-static uint RAR_PosHf4[]={0,0,0,0,0,0,0,0,0,255,0,0,0};
-
-#define  ASIZE(x) (sizeof(x)/sizeof(x[0]))
+#define RAR_STARTHF4 8
+static uint RAR_DecHf4[] = {0xff00, 0xffff, 0xffff, 0xffff, 0xffff, 0xffff};
+static uint RAR_PosHf4[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0};
 
 XCompress::XCompress()
 {
@@ -871,30 +859,30 @@ void XCompress::rar_init(rar_stream *strm, quint64 WinSize, bool Solid)
 {
     // Inp(true),VMCodeInp(true)
 
-    strm->ExternalBuffer=false;
+    strm->ExternalBuffer = false;
     // getbits*() attempt to read data from InAddr, ... InAddr+8 positions.
     // So let's allocate 8 additional bytes for situation, when we need to
     // read only 1 byte from the last position of buffer and avoid a crash
     // from access to next 8 bytes, which contents we do not need.
-    size_t BufSize=RAR_BufferSize_MAX_SIZE+8;
-    strm->InBuf=new quint8[BufSize];
+    size_t BufSize = RAR_BufferSize_MAX_SIZE + 8;
+    strm->InBuf = new quint8[BufSize];
 
     // Ensure that we get predictable results when accessing bytes in area
     // not filled with read data.
-    memset(strm->InBuf,0,BufSize);
+    memset(strm->InBuf, 0, BufSize);
 
-    strm->Window=NULL;
-    strm->Fragmented=false;
-    strm->Suspended=false;
-    strm->UnpSomeRead=false;
-    strm->ExtraDist=false;
+    strm->Window = NULL;
+    strm->Fragmented = false;
+    strm->Suspended = false;
+    strm->UnpSomeRead = false;
+    strm->ExtraDist = false;
     // strm->MaxUserThreads=1;
     // strm->UnpThreadPool=NULL;
     // strm->ReadBufMT=NULL;
     // strm->UnpThreadData=NULL;
-    strm->AllocWinSize=0;
-    strm->MaxWinSize=0;
-    strm->MaxWinMask=0;
+    strm->AllocWinSize = 0;
+    strm->MaxWinSize = 0;
+    strm->MaxWinMask = 0;
 
     // Perform initialization, which should be done only once for all files.
     // It prevents crash if first unpacked file has the wrong "true" Solid flag,
@@ -907,109 +895,102 @@ void XCompress::rar_init(rar_stream *strm, quint64 WinSize, bool Solid)
     // void Unpack::Init(uint64 WinSize,bool Solid)
 
     // Minimum window size must be at least twice more than maximum possible
-      // size of filter block, which is 0x10000 in RAR now. If window size is
-      // smaller, we can have a block with never cleared flt->NextWindow flag
-      // in UnpWriteBuf(). Minimum window size 0x20000 would be enough, but let's
-      // use 0x40000 for extra safety and possible filter area size expansion.
-      const size_t MinAllocSize=0x40000;
-      if (WinSize<MinAllocSize)
-        WinSize=MinAllocSize;
+    // size of filter block, which is 0x10000 in RAR now. If window size is
+    // smaller, we can have a block with never cleared flt->NextWindow flag
+    // in UnpWriteBuf(). Minimum window size 0x20000 would be enough, but let's
+    // use 0x40000 for extra safety and possible filter area size expansion.
+    const size_t MinAllocSize = 0x40000;
+    if (WinSize < MinAllocSize) WinSize = MinAllocSize;
 
-      // if (WinSize>Min(0x10000000000ULL,RAR_UNPACK_MAX_DICT)) // Window size must not exceed 1 TB.
-      //   throw std::bad_alloc();
+    // if (WinSize>Min(0x10000000000ULL,RAR_UNPACK_MAX_DICT)) // Window size must not exceed 1 TB.
+    //   throw std::bad_alloc();
 
-      // 32-bit build can't unpack dictionaries exceeding 32-bit even in theory.
-      // Also we've not verified if WrapUp and WrapDown work properly in 32-bit
-      // version and >2GB dictionary and if 32-bit version can handle >2GB
-      // distances. Since such version is unlikely to allocate >2GB anyway,
-      // we prohibit >2GB dictionaries for 32-bit build here.
-      // if (WinSize>0x80000000 && sizeof(size_t)<=4)
-      //   throw std::bad_alloc();
+    // 32-bit build can't unpack dictionaries exceeding 32-bit even in theory.
+    // Also we've not verified if WrapUp and WrapDown work properly in 32-bit
+    // version and >2GB dictionary and if 32-bit version can handle >2GB
+    // distances. Since such version is unlikely to allocate >2GB anyway,
+    // we prohibit >2GB dictionaries for 32-bit build here.
+    // if (WinSize>0x80000000 && sizeof(size_t)<=4)
+    //   throw std::bad_alloc();
 
-      // Solid block shall use the same window size for all files.
-      // But if Window isn't initialized when Solid is set, it means that
-      // first file in solid block doesn't have the solid flag. We initialize
-      // the window anyway for such malformed archive.
-      // Non-solid files shall use their specific window sizes,
-      // so current window size and unpack routine behavior doesn't depend on
-      // previously unpacked files and their extraction order.
-      if (!Solid || strm->Window==nullptr)
-      {
-        strm->MaxWinSize=(size_t)WinSize;
-        strm->MaxWinMask=strm->MaxWinSize-1;
-      }
+    // Solid block shall use the same window size for all files.
+    // But if Window isn't initialized when Solid is set, it means that
+    // first file in solid block doesn't have the solid flag. We initialize
+    // the window anyway for such malformed archive.
+    // Non-solid files shall use their specific window sizes,
+    // so current window size and unpack routine behavior doesn't depend on
+    // previously unpacked files and their extraction order.
+    if (!Solid || strm->Window == nullptr) {
+        strm->MaxWinSize = (size_t)WinSize;
+        strm->MaxWinMask = strm->MaxWinSize - 1;
+    }
 
-      // Use the already allocated window when processing non-solid files
-      // with reducing dictionary sizes.
-      if (WinSize<=strm->AllocWinSize)
-        return;
+    // Use the already allocated window when processing non-solid files
+    // with reducing dictionary sizes.
+    if (WinSize <= strm->AllocWinSize) return;
 
-      // Archiving code guarantees that window size does not grow in the same
-      // solid stream. So if we are here, we are either creating a new window
-      // or increasing the size of non-solid window. So we could safely reject
-      // current window data without copying them to a new window.
-      // if (Solid && (strm->Window!=NULL || Fragmented && WinSize>FragWindow.GetWinSize()))
-      //   throw std::bad_alloc();
+    // Archiving code guarantees that window size does not grow in the same
+    // solid stream. So if we are here, we are either creating a new window
+    // or increasing the size of non-solid window. So we could safely reject
+    // current window data without copying them to a new window.
+    // if (Solid && (strm->Window!=NULL || Fragmented && WinSize>FragWindow.GetWinSize()))
+    //   throw std::bad_alloc();
 
-      // Alloc.delete_l<byte>(Window); // delete Window;
-      // Window=nullptr;
+    // Alloc.delete_l<byte>(Window); // delete Window;
+    // Window=nullptr;
 
-      strm->Window = new quint8[WinSize];
+    strm->Window = new quint8[WinSize];
 
-      // try
-      // {
-      //   if (!Fragmented)
-      //     Window=Alloc.new_l<byte>((size_t)WinSize,false); // Window=new byte[(size_t)WinSize];
-      // }
-      // catch (std::bad_alloc) // Use the fragmented window in this case.
-      // {
-      // }
+    // try
+    // {
+    //   if (!Fragmented)
+    //     Window=Alloc.new_l<byte>((size_t)WinSize,false); // Window=new byte[(size_t)WinSize];
+    // }
+    // catch (std::bad_alloc) // Use the fragmented window in this case.
+    // {
+    // }
 
-      // if (Window==nullptr)
-      //   if (WinSize<0x1000000 || sizeof(size_t)>4)
-      //     throw std::bad_alloc(); // Exclude RAR4, small dictionaries and 64-bit.
-      //   else
-      //   {
-      //     if (WinSize>FragWindow.GetWinSize())
-      //       FragWindow.Init((size_t)WinSize);
-      //     Fragmented=true;
-      //   }
+    // if (Window==nullptr)
+    //   if (WinSize<0x1000000 || sizeof(size_t)>4)
+    //     throw std::bad_alloc(); // Exclude RAR4, small dictionaries and 64-bit.
+    //   else
+    //   {
+    //     if (WinSize>FragWindow.GetWinSize())
+    //       FragWindow.Init((size_t)WinSize);
+    //     Fragmented=true;
+    //   }
 
-      if (!strm->Fragmented)
-      {
+    if (!strm->Fragmented) {
         // Clean the window to generate the same output when unpacking corrupt
         // RAR files, which may access unused areas of sliding dictionary.
         // 2023.10.31: We've added FirstWinDone based unused area access check
         // in Unpack::CopyString(), so this memset might be unnecessary now.
-    //    memset(Window,0,(size_t)WinSize);
+        //    memset(Window,0,(size_t)WinSize);
 
-        strm->AllocWinSize=WinSize;
-      }
+        strm->AllocWinSize = WinSize;
+    }
 }
 
 void XCompress::rar_InitHuff(rar_stream *strm)
 {
-    for (ushort I=0;I<256;I++)
-    {
-      strm->ChSet[I]=strm->ChSetB[I]=I<<8;
-      strm->ChSetA[I]=I;
-      strm->ChSetC[I]=((~I+1) & 0xff)<<8;
+    for (ushort I = 0; I < 256; I++) {
+        strm->ChSet[I] = strm->ChSetB[I] = I << 8;
+        strm->ChSetA[I] = I;
+        strm->ChSetC[I] = ((~I + 1) & 0xff) << 8;
     }
-    memset(strm->NToPl,0,sizeof(strm->NToPl));
-    memset(strm->NToPlB,0,sizeof(strm->NToPlB));
-    memset(strm->NToPlC,0,sizeof(strm->NToPlC));
-    rar_CorrHuff(strm, strm->ChSetB,strm->NToPlB);
+    memset(strm->NToPl, 0, sizeof(strm->NToPl));
+    memset(strm->NToPlB, 0, sizeof(strm->NToPlB));
+    memset(strm->NToPlC, 0, sizeof(strm->NToPlC));
+    rar_CorrHuff(strm, strm->ChSetB, strm->NToPlB);
 }
 
 void XCompress::rar_CorrHuff(struct rar_stream *strm, ushort *CharSet, quint8 *NumToPlace)
 {
-    int I,J;
-    for (I=7;I>=0;I--)
-      for (J=0;J<32;J++,CharSet++)
-        *CharSet=(*CharSet & ~0xff) | I;
-    memset(NumToPlace,0,sizeof(strm->NToPl));
-    for (I=6;I>=0;I--)
-      NumToPlace[I]=(7-I)*32;
+    int I, J;
+    for (I = 7; I >= 0; I--)
+        for (J = 0; J < 32; J++, CharSet++) *CharSet = (*CharSet & ~0xff) | I;
+    memset(NumToPlace, 0, sizeof(strm->NToPl));
+    for (I = 6; I >= 0; I--) NumToPlace[I] = (7 - I) * 32;
 }
 
 void XCompress::rar_UnpInitData(rar_stream *strm, bool Solid)
@@ -1052,18 +1033,17 @@ void XCompress::rar_UnpInitData(rar_stream *strm, bool Solid)
 
 void XCompress::rar_UnpInitData15(rar_stream *strm, bool Solid)
 {
-    if (!Solid)
-    {
-      strm->AvrPlcB=strm->AvrLn1=strm->AvrLn2=strm->AvrLn3=strm->NumHuf=strm->Buf60=0;
-      strm->AvrPlc=0x3500;
-      strm->MaxDist3=0x2001;
-      strm->Nhfb=strm->Nlzb=0x80;
+    if (!Solid) {
+        strm->AvrPlcB = strm->AvrLn1 = strm->AvrLn2 = strm->AvrLn3 = strm->NumHuf = strm->Buf60 = 0;
+        strm->AvrPlc = 0x3500;
+        strm->MaxDist3 = 0x2001;
+        strm->Nhfb = strm->Nlzb = 0x80;
     }
-    strm->FlagsCnt=0;
-    strm->FlagBuf=0;
-    strm->StMode=0;
-    strm->LCount=0;
-    strm->ReadTop=0;
+    strm->FlagsCnt = 0;
+    strm->FlagBuf = 0;
+    strm->StMode = 0;
+    strm->LCount = 0;
+    strm->ReadTop = 0;
 }
 
 void XCompress::rar_UnpInitData20(rar_stream *strm, bool Solid)
@@ -1094,117 +1074,121 @@ void XCompress::rar_UnpInitData30(rar_stream *strm, bool Solid)
 
 void XCompress::rar_UnpInitData50(rar_stream *strm, bool Solid)
 {
-    if (!Solid)
-      strm->TablesRead5=false;
+    if (!Solid) strm->TablesRead5 = false;
 }
 
 void XCompress::rar_InitFilters30(rar_stream *strm, bool Solid)
 {
-    if (!Solid)
-      {
+    if (!Solid) {
         strm->OldFilterLengths.clear();
-        strm->LastFilter=0;
+        strm->LastFilter = 0;
 
-        for (size_t I=0;I<strm->Filters30.size();I++)
-          delete strm->Filters30[I];
+        for (size_t I = 0; I < strm->Filters30.size(); I++) delete strm->Filters30[I];
         strm->Filters30.clear();
-      }
-      for (size_t I=0;I<strm->PrgStack.size();I++)
-        delete strm->PrgStack[I];
-      strm->PrgStack.clear();
+    }
+    for (size_t I = 0; I < strm->PrgStack.size(); I++) delete strm->PrgStack[I];
+    strm->PrgStack.clear();
 }
 
 bool XCompress::rar_UnpReadBuf(rar_stream *strm, QIODevice *pDevice)
 {
-    int DataSize=strm->ReadTop-strm->InAddr; // Data left to process.
-    if (DataSize<0)
-      return false;
-    strm->BlockHeader.BlockSize-=strm->InAddr-strm->BlockHeader.BlockStart;
-    if (strm->InAddr>RAR_BufferSize_MAX_SIZE/2)
+    int DataSize = strm->ReadTop - strm->InAddr;  // Data left to process.
+    if (DataSize < 0) return false;
+    strm->BlockHeader.BlockSize -= strm->InAddr - strm->BlockHeader.BlockStart;
+    if (strm->InAddr > RAR_BufferSize_MAX_SIZE / 2) {
+        // If we already processed more than half of buffer, let's move
+        // remaining data into beginning to free more space for new data
+        // and ensure that calling function does not cross the buffer border
+        // even if we did not read anything here. Also it ensures that read size
+        // is not less than CRYPT_BLOCK_SIZE, so we can align it without risk
+        // to make it zero.
+        if (DataSize > 0) memmove(strm->InBuf, strm->InBuf + strm->InAddr, DataSize);
+        strm->InAddr = 0;
+        strm->ReadTop = DataSize;
+    } else DataSize = strm->ReadTop;
+    int ReadCode = 0;
+    if (RAR_BufferSize_MAX_SIZE != DataSize)
+        // ReadCode=strm->UnpIO->UnpRead(strm->InBuf+DataSize,BufferSize_MAX_SIZE-DataSize);
+        ReadCode = pDevice->read((char *)(strm->InBuf + DataSize), RAR_BufferSize_MAX_SIZE - DataSize);
+    if (ReadCode > 0)  // Can be also -1.
+        strm->ReadTop += ReadCode;
+    strm->ReadBorder = strm->ReadTop - 30;
+    strm->BlockHeader.BlockStart = strm->InAddr;
+    if (strm->BlockHeader.BlockSize != -1)  // '-1' means not defined yet.
     {
-      // If we already processed more than half of buffer, let's move
-      // remaining data into beginning to free more space for new data
-      // and ensure that calling function does not cross the buffer border
-      // even if we did not read anything here. Also it ensures that read size
-      // is not less than CRYPT_BLOCK_SIZE, so we can align it without risk
-      // to make it zero.
-      if (DataSize>0)
-        memmove(strm->InBuf,strm->InBuf+strm->InAddr,DataSize);
-      strm->InAddr=0;
-      strm->ReadTop=DataSize;
+        // We may need to quit from main extraction loop and read new block header
+        // and trees earlier than data in input buffer ends.
+        strm->ReadBorder = qMin(strm->ReadBorder, strm->BlockHeader.BlockStart + strm->BlockHeader.BlockSize - 1);
     }
-    else
-      DataSize=strm->ReadTop;
-    int ReadCode=0;
-    if (RAR_BufferSize_MAX_SIZE!=DataSize)
-      // ReadCode=strm->UnpIO->UnpRead(strm->InBuf+DataSize,BufferSize_MAX_SIZE-DataSize);
-        ReadCode=pDevice->read((char *)(strm->InBuf+DataSize),RAR_BufferSize_MAX_SIZE-DataSize);
-    if (ReadCode>0) // Can be also -1.
-      strm->ReadTop+=ReadCode;
-    strm->ReadBorder=strm->ReadTop-30;
-    strm->BlockHeader.BlockStart=strm->InAddr;
-    if (strm->BlockHeader.BlockSize!=-1) // '-1' means not defined yet.
-    {
-      // We may need to quit from main extraction loop and read new block header
-      // and trees earlier than data in input buffer ends.
-      strm->ReadBorder=qMin(strm->ReadBorder,strm->BlockHeader.BlockStart+strm->BlockHeader.BlockSize-1);
-    }
-    return ReadCode!=-1;
+    return ReadCode != -1;
 }
 
 void XCompress::rar_UnpWriteBuf20(rar_stream *strm, QIODevice *pDevice)
 {
-    if (strm->UnpPtr!=strm->WrPtr)
-      strm->UnpSomeRead=true;
-    if (strm->UnpPtr<strm->WrPtr)
-    {
-      pDevice->write((char *)(&strm->Window[strm->WrPtr]),-(int)strm->WrPtr & strm->MaxWinMask);
-      pDevice->write((char *)(strm->Window),strm->UnpPtr);
+    if (strm->UnpPtr != strm->WrPtr) strm->UnpSomeRead = true;
+    if (strm->UnpPtr < strm->WrPtr) {
+        pDevice->write((char *)(&strm->Window[strm->WrPtr]), -(int)strm->WrPtr & strm->MaxWinMask);
+        pDevice->write((char *)(strm->Window), strm->UnpPtr);
 
-      // 2024.12.24: Before 7.10 we set "UnpAllBuf=true" here. It was needed for
-      // Pack::PrepareSolidAppend(). Since both UnpAllBuf and FirstWinDone
-      // variables indicate the same thing and we set FirstWinDone in other place
-      // anyway, we replaced UnpAllBuf with FirstWinDone and removed this code.
-    }
-    else
-      pDevice->write((char *)(&strm->Window[strm->WrPtr]),strm->UnpPtr-strm->WrPtr);
-    strm->WrPtr=strm->UnpPtr;
+        // 2024.12.24: Before 7.10 we set "UnpAllBuf=true" here. It was needed for
+        // Pack::PrepareSolidAppend(). Since both UnpAllBuf and FirstWinDone
+        // variables indicate the same thing and we set FirstWinDone in other place
+        // anyway, we replaced UnpAllBuf with FirstWinDone and removed this code.
+    } else pDevice->write((char *)(&strm->Window[strm->WrPtr]), strm->UnpPtr - strm->WrPtr);
+    strm->WrPtr = strm->UnpPtr;
+}
+
+bool XCompress::rar_UnpReadBuf30(rar_stream *strm, QIODevice *pDevice)
+{
+    int DataSize = strm->ReadTop - strm->InAddr;  // Data left to process.
+    if (DataSize < 0) return false;
+    if (strm->InAddr > RAR_BufferSize_MAX_SIZE / 2) {
+        // If we already processed more than half of buffer, let's move
+        // remaining data into beginning to free more space for new data
+        // and ensure that calling function does not cross the buffer border
+        // even if we did not read anything here. Also it ensures that read size
+        // is not less than CRYPT_BLOCK_SIZE, so we can align it without risk
+        // to make it zero.
+        if (DataSize > 0) memmove(strm->InBuf, strm->InBuf + strm->InAddr, DataSize);
+        strm->InAddr = 0;
+        strm->ReadTop = DataSize;
+    } else DataSize = strm->ReadTop;
+    int ReadCode = pDevice->read((char *)(strm->InBuf + DataSize), RAR_BufferSize_MAX_SIZE - DataSize);
+    if (ReadCode > 0) strm->ReadTop += ReadCode;
+    strm->ReadBorder = strm->ReadTop - 30;
+    return ReadCode != -1;
 }
 
 void XCompress::rar_GetFlagsBuf(rar_stream *strm)
 {
-    uint Flags,NewFlagsPlace;
-    uint FlagsPlace=rar_DecodeNum(strm, rar_fgetbits(strm),RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2);
+    uint Flags, NewFlagsPlace;
+    uint FlagsPlace = rar_DecodeNum(strm, rar_fgetbits(strm), RAR_STARTHF2, RAR_DecHf2, RAR_PosHf2);
 
     // Our Huffman table stores 257 items and needs all them in other parts
     // of code such as when StMode is on, so the first item is control item.
     // While normally we do not use the last item to code the flags byte here,
     // we need to check for value 256 when unpacking in case we unpack
     // a corrupt archive.
-    if (FlagsPlace>=sizeof(strm->ChSetC)/sizeof(strm->ChSetC[0]))
-      return;
+    if (FlagsPlace >= sizeof(strm->ChSetC) / sizeof(strm->ChSetC[0])) return;
 
-    while (1)
-    {
-      Flags=strm->ChSetC[FlagsPlace];
-      strm->FlagBuf=Flags>>8;
-      NewFlagsPlace=strm->NToPlC[Flags++ & 0xff]++;
-      if ((Flags & 0xff) != 0)
-        break;
-      rar_CorrHuff(strm, strm->ChSetC,strm->NToPlC);
+    while (1) {
+        Flags = strm->ChSetC[FlagsPlace];
+        strm->FlagBuf = Flags >> 8;
+        NewFlagsPlace = strm->NToPlC[Flags++ & 0xff]++;
+        if ((Flags & 0xff) != 0) break;
+        rar_CorrHuff(strm, strm->ChSetC, strm->NToPlC);
     }
 
-    strm->ChSetC[FlagsPlace]=strm->ChSetC[NewFlagsPlace];
-    strm->ChSetC[NewFlagsPlace]=(ushort)Flags;
+    strm->ChSetC[FlagsPlace] = strm->ChSetC[NewFlagsPlace];
+    strm->ChSetC[NewFlagsPlace] = (ushort)Flags;
 }
 
 uint XCompress::rar_DecodeNum(rar_stream *strm, uint Num, uint StartPos, uint *DecTab, uint *PosTab)
 {
     int I;
-    for (Num&=0xfff0,I=0;DecTab[I]<=Num;I++)
-      StartPos++;
+    for (Num &= 0xfff0, I = 0; DecTab[I] <= Num; I++) StartPos++;
     rar_faddbits(strm, StartPos);
-    return(((Num-(I ? DecTab[I-1]:0))>>(16-StartPos))+PosTab[StartPos]);
+    return (((Num - (I ? DecTab[I - 1] : 0)) >> (16 - StartPos)) + PosTab[StartPos]);
 }
 
 uint XCompress::rar_fgetbits(rar_stream *strm)
@@ -1220,592 +1204,568 @@ void XCompress::rar_faddbits(rar_stream *strm, uint Bits)
 
 uint XCompress::rar_getbits(rar_stream *strm)
 {
-    uint BitField=(uint)strm->InBuf[strm->InAddr] << 16;
-    BitField|=(uint)strm->InBuf[strm->InAddr+1] << 8;
-    BitField|=(uint)strm->InBuf[strm->InAddr+2];
-    BitField >>= (8-strm->InBit);
+    uint BitField = (uint)strm->InBuf[strm->InAddr] << 16;
+    BitField |= (uint)strm->InBuf[strm->InAddr + 1] << 8;
+    BitField |= (uint)strm->InBuf[strm->InAddr + 2];
+    BitField >>= (8 - strm->InBit);
 
     return BitField & 0xffff;
 }
 
 void XCompress::rar_addbits(rar_stream *strm, uint Bits)
 {
-    Bits+=strm->InBit;
-    strm->InAddr+=Bits>>3;
-    strm->InBit=Bits&7;
+    Bits += strm->InBit;
+    strm->InAddr += Bits >> 3;
+    strm->InBit = Bits & 7;
 }
 
 void XCompress::rar_HuffDecode(rar_stream *strm)
 {
-    uint CurByte,NewBytePlace;
+    uint CurByte, NewBytePlace;
     uint Length;
     uint Distance;
     int BytePlace;
 
-    uint BitField=rar_fgetbits(strm);
+    uint BitField = rar_fgetbits(strm);
 
-    if (strm->AvrPlc > 0x75ff)
-      BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF4,RAR_DecHf4,RAR_PosHf4);
-    else
-      if (strm->AvrPlc > 0x5dff)
-        BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF3,RAR_DecHf3,RAR_PosHf3);
-      else
-        if (strm->AvrPlc > 0x35ff)
-          BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2);
-        else
-          if (strm->AvrPlc > 0x0dff)
-            BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF1,RAR_DecHf1,RAR_PosHf1);
-          else
-            BytePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF0,RAR_DecHf0,RAR_PosHf0);
-    BytePlace&=0xff;
-    if (strm->StMode)
-    {
-      if (BytePlace==0 && BitField > 0xfff)
-        BytePlace=0x100;
-      if (--BytePlace==-1)
-      {
-        BitField=rar_fgetbits(strm);
-        rar_faddbits(strm, 1);
-        if (BitField & 0x8000)
-        {
-          strm->NumHuf=strm->StMode=0;
-          return;
+    if (strm->AvrPlc > 0x75ff) BytePlace = rar_DecodeNum(strm, BitField, RAR_STARTHF4, RAR_DecHf4, RAR_PosHf4);
+    else if (strm->AvrPlc > 0x5dff) BytePlace = rar_DecodeNum(strm, BitField, RAR_STARTHF3, RAR_DecHf3, RAR_PosHf3);
+    else if (strm->AvrPlc > 0x35ff) BytePlace = rar_DecodeNum(strm, BitField, RAR_STARTHF2, RAR_DecHf2, RAR_PosHf2);
+    else if (strm->AvrPlc > 0x0dff) BytePlace = rar_DecodeNum(strm, BitField, RAR_STARTHF1, RAR_DecHf1, RAR_PosHf1);
+    else BytePlace = rar_DecodeNum(strm, BitField, RAR_STARTHF0, RAR_DecHf0, RAR_PosHf0);
+    BytePlace &= 0xff;
+    if (strm->StMode) {
+        if (BytePlace == 0 && BitField > 0xfff) BytePlace = 0x100;
+        if (--BytePlace == -1) {
+            BitField = rar_fgetbits(strm);
+            rar_faddbits(strm, 1);
+            if (BitField & 0x8000) {
+                strm->NumHuf = strm->StMode = 0;
+                return;
+            } else {
+                Length = (BitField & 0x4000) ? 4 : 3;
+                rar_faddbits(strm, 1);
+                Distance = rar_DecodeNum(strm, rar_fgetbits(strm), RAR_STARTHF2, RAR_DecHf2, RAR_PosHf2);
+                Distance = (Distance << 5) | (rar_fgetbits(strm) >> 11);
+                rar_faddbits(strm, 5);
+                rar_CopyString15(strm, Distance, Length);
+                return;
+            }
         }
-        else
-        {
-          Length = (BitField & 0x4000) ? 4 : 3;
-          rar_faddbits(strm, 1);
-          Distance=rar_DecodeNum(strm, rar_fgetbits(strm),RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2);
-          Distance = (Distance << 5) | (rar_fgetbits(strm) >> 11);
-          rar_faddbits(strm, 5);
-          rar_CopyString15(strm,Distance,Length);
-          return;
-        }
-      }
-    }
-    else
-      if (strm->NumHuf++ >= 16 && strm->FlagsCnt==0)
-        strm->StMode=1;
+    } else if (strm->NumHuf++ >= 16 && strm->FlagsCnt == 0) strm->StMode = 1;
     strm->AvrPlc += BytePlace;
     strm->AvrPlc -= strm->AvrPlc >> 8;
-    strm->Nhfb+=16;
-    if (strm->Nhfb > 0xff)
-    {
-      strm->Nhfb=0x90;
-      strm->Nlzb >>= 1;
+    strm->Nhfb += 16;
+    if (strm->Nhfb > 0xff) {
+        strm->Nhfb = 0x90;
+        strm->Nlzb >>= 1;
     }
 
-    strm->Window[strm->UnpPtr++]=(quint8)(strm->ChSet[BytePlace]>>8);
+    strm->Window[strm->UnpPtr++] = (quint8)(strm->ChSet[BytePlace] >> 8);
     --strm->DestUnpSize;
 
-    while (1)
-    {
-      CurByte=strm->ChSet[BytePlace];
-      NewBytePlace=strm->NToPl[CurByte++ & 0xff]++;
-      if ((CurByte & 0xff) > 0xa1)
-        rar_CorrHuff(strm, strm->ChSet,strm->NToPl);
-      else
-        break;
+    while (1) {
+        CurByte = strm->ChSet[BytePlace];
+        NewBytePlace = strm->NToPl[CurByte++ & 0xff]++;
+        if ((CurByte & 0xff) > 0xa1) rar_CorrHuff(strm, strm->ChSet, strm->NToPl);
+        else break;
     }
 
-    strm->ChSet[BytePlace]=strm->ChSet[NewBytePlace];
-    strm->ChSet[NewBytePlace]=(ushort)CurByte;
+    strm->ChSet[BytePlace] = strm->ChSet[NewBytePlace];
+    strm->ChSet[NewBytePlace] = (ushort)CurByte;
 }
 
 void XCompress::rar_LongLZ(rar_stream *strm)
 {
     uint Length;
     uint Distance;
-    uint DistancePlace,NewDistancePlace;
-    uint OldAvr2,OldAvr3;
+    uint DistancePlace, NewDistancePlace;
+    uint OldAvr2, OldAvr3;
 
-    strm->NumHuf=0;
-    strm->Nlzb+=16;
-    if (strm->Nlzb > 0xff)
-    {
-      strm->Nlzb=0x90;
-      strm->Nhfb >>= 1;
+    strm->NumHuf = 0;
+    strm->Nlzb += 16;
+    if (strm->Nlzb > 0xff) {
+        strm->Nlzb = 0x90;
+        strm->Nhfb >>= 1;
     }
-    OldAvr2=strm->AvrLn2;
+    OldAvr2 = strm->AvrLn2;
 
-    uint BitField=rar_fgetbits(strm);
-    if (strm->AvrLn2 >= 122)
-      Length=rar_DecodeNum(strm, BitField,RAR_STARTL2,RAR_DecL2,RAR_PosL2);
-    else
-      if (strm->AvrLn2 >= 64)
-        Length=rar_DecodeNum(strm, BitField,RAR_STARTL1,RAR_DecL1,RAR_PosL1);
-      else
-        if (BitField < 0x100)
-        {
-          Length=BitField;
-          rar_faddbits(strm, 16);
-        }
-        else
-        {
-          for (Length=0;((BitField<<Length)&0x8000)==0;Length++)
+    uint BitField = rar_fgetbits(strm);
+    if (strm->AvrLn2 >= 122) Length = rar_DecodeNum(strm, BitField, RAR_STARTL2, RAR_DecL2, RAR_PosL2);
+    else if (strm->AvrLn2 >= 64) Length = rar_DecodeNum(strm, BitField, RAR_STARTL1, RAR_DecL1, RAR_PosL1);
+    else if (BitField < 0x100) {
+        Length = BitField;
+        rar_faddbits(strm, 16);
+    } else {
+        for (Length = 0; ((BitField << Length) & 0x8000) == 0; Length++)
             ;
-          rar_faddbits(strm, Length+1);
-        }
+        rar_faddbits(strm, Length + 1);
+    }
 
     strm->AvrLn2 += Length;
     strm->AvrLn2 -= strm->AvrLn2 >> 5;
 
-    BitField=rar_fgetbits(strm);
-    if (strm->AvrPlcB > 0x28ff)
-      DistancePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2);
-    else
-      if (strm->AvrPlcB > 0x6ff)
-        DistancePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF1,RAR_DecHf1,RAR_PosHf1);
-      else
-        DistancePlace=rar_DecodeNum(strm, BitField,RAR_STARTHF0,RAR_DecHf0,RAR_PosHf0);
+    BitField = rar_fgetbits(strm);
+    if (strm->AvrPlcB > 0x28ff) DistancePlace = rar_DecodeNum(strm, BitField, RAR_STARTHF2, RAR_DecHf2, RAR_PosHf2);
+    else if (strm->AvrPlcB > 0x6ff) DistancePlace = rar_DecodeNum(strm, BitField, RAR_STARTHF1, RAR_DecHf1, RAR_PosHf1);
+    else DistancePlace = rar_DecodeNum(strm, BitField, RAR_STARTHF0, RAR_DecHf0, RAR_PosHf0);
 
     strm->AvrPlcB += DistancePlace;
     strm->AvrPlcB -= strm->AvrPlcB >> 8;
-    while (1)
-    {
-      Distance = strm->ChSetB[DistancePlace & 0xff];
-      NewDistancePlace = strm->NToPlB[Distance++ & 0xff]++;
-      if (!(Distance & 0xff))
-        rar_CorrHuff(strm, strm->ChSetB,strm->NToPlB);
-      else
-        break;
+    while (1) {
+        Distance = strm->ChSetB[DistancePlace & 0xff];
+        NewDistancePlace = strm->NToPlB[Distance++ & 0xff]++;
+        if (!(Distance & 0xff)) rar_CorrHuff(strm, strm->ChSetB, strm->NToPlB);
+        else break;
     }
 
-    strm->ChSetB[DistancePlace & 0xff]=strm->ChSetB[NewDistancePlace];
-    strm->ChSetB[NewDistancePlace]=(ushort)Distance;
+    strm->ChSetB[DistancePlace & 0xff] = strm->ChSetB[NewDistancePlace];
+    strm->ChSetB[NewDistancePlace] = (ushort)Distance;
 
-    Distance=((Distance & 0xff00) | (rar_fgetbits(strm) >> 8)) >> 1;
+    Distance = ((Distance & 0xff00) | (rar_fgetbits(strm) >> 8)) >> 1;
     rar_faddbits(strm, 7);
 
-    OldAvr3=strm->AvrLn3;
-    if (Length!=1 && Length!=4)
-      if (Length==0 && Distance <= strm->MaxDist3)
-      {
-        strm->AvrLn3++;
-        strm->AvrLn3 -= strm->AvrLn3 >> 8;
-      }
-      else
-        if (strm->AvrLn3 > 0)
-          strm->AvrLn3--;
-    Length+=3;
-    if (Distance >= strm->MaxDist3)
-      Length++;
-    if (Distance <= 256)
-      Length+=8;
-    if (OldAvr3 > 0xb0 || strm->AvrPlc >= 0x2a00 && OldAvr2 < 0x40)
-      strm->MaxDist3=0x7f00;
-    else
-      strm->MaxDist3=0x2001;
-    strm->OldDist[strm->OldDistPtr++]=Distance;
+    OldAvr3 = strm->AvrLn3;
+    if (Length != 1 && Length != 4)
+        if (Length == 0 && Distance <= strm->MaxDist3) {
+            strm->AvrLn3++;
+            strm->AvrLn3 -= strm->AvrLn3 >> 8;
+        } else if (strm->AvrLn3 > 0) strm->AvrLn3--;
+    Length += 3;
+    if (Distance >= strm->MaxDist3) Length++;
+    if (Distance <= 256) Length += 8;
+    if (OldAvr3 > 0xb0 || strm->AvrPlc >= 0x2a00 && OldAvr2 < 0x40) strm->MaxDist3 = 0x7f00;
+    else strm->MaxDist3 = 0x2001;
+    strm->OldDist[strm->OldDistPtr++] = Distance;
     strm->OldDistPtr = strm->OldDistPtr & 3;
-    strm->LastLength=Length;
-    strm->LastDist=Distance;
-    rar_CopyString15(strm,Distance,Length);
+    strm->LastLength = Length;
+    strm->LastDist = Distance;
+    rar_CopyString15(strm, Distance, Length);
 }
 
 void XCompress::rar_ShortLZ(rar_stream *strm)
 {
-    static uint ShortLen1[]={1,3,4,4,5,6,7,8,8,4,4,5,6,6,4,0};
-    static uint ShortXor1[]={0,0xa0,0xd0,0xe0,0xf0,0xf8,0xfc,0xfe,
-                                     0xff,0xc0,0x80,0x90,0x98,0x9c,0xb0};
-    static uint ShortLen2[]={2,3,3,3,4,4,5,6,6,4,4,5,6,6,4,0};
-    static uint ShortXor2[]={0,0x40,0x60,0xa0,0xd0,0xe0,0xf0,0xf8,
-                                     0xfc,0xc0,0x80,0x90,0x98,0x9c,0xb0};
+    static uint ShortLen1[] = {1, 3, 4, 4, 5, 6, 7, 8, 8, 4, 4, 5, 6, 6, 4, 0};
+    static uint ShortXor1[] = {0, 0xa0, 0xd0, 0xe0, 0xf0, 0xf8, 0xfc, 0xfe, 0xff, 0xc0, 0x80, 0x90, 0x98, 0x9c, 0xb0};
+    static uint ShortLen2[] = {2, 3, 3, 3, 4, 4, 5, 6, 6, 4, 4, 5, 6, 6, 4, 0};
+    static uint ShortXor2[] = {0, 0x40, 0x60, 0xa0, 0xd0, 0xe0, 0xf0, 0xf8, 0xfc, 0xc0, 0x80, 0x90, 0x98, 0x9c, 0xb0};
 
-#define GetShortLen1(pos) ((pos)==1 ? strm->Buf60+3:ShortLen1[pos])
-#define GetShortLen2(pos) ((pos)==3 ? strm->Buf60+3:ShortLen2[pos])
+#define GetShortLen1(pos) ((pos) == 1 ? strm->Buf60 + 3 : ShortLen1[pos])
+#define GetShortLen2(pos) ((pos) == 3 ? strm->Buf60 + 3 : ShortLen2[pos])
 
-
-    uint Length,SaveLength;
+    uint Length, SaveLength;
     uint LastDistance;
     uint Distance;
     int DistancePlace;
-    strm->NumHuf=0;
+    strm->NumHuf = 0;
 
-    uint BitField=rar_fgetbits(strm);
-    if (strm->LCount==2)
-    {
-      rar_faddbits(strm,1);
-      if (BitField >= 0x8000)
-      {
-        rar_CopyString15(strm,strm->LastDist,strm->LastLength);
-        return;
-      }
-      BitField <<= 1;
-      strm->LCount=0;
+    uint BitField = rar_fgetbits(strm);
+    if (strm->LCount == 2) {
+        rar_faddbits(strm, 1);
+        if (BitField >= 0x8000) {
+            rar_CopyString15(strm, strm->LastDist, strm->LastLength);
+            return;
+        }
+        BitField <<= 1;
+        strm->LCount = 0;
     }
 
-    BitField>>=8;
+    BitField >>= 8;
 
-  //  not thread safe, replaced by GetShortLen1 and GetShortLen2 macro
-  //  ShortLen1[1]=ShortLen2[3]=Buf60+3;
+    //  not thread safe, replaced by GetShortLen1 and GetShortLen2 macro
+    //  ShortLen1[1]=ShortLen2[3]=Buf60+3;
 
-    if (strm->AvrLn1<37)
-    {
-      for (Length=0;;Length++)
-        if (((BitField^ShortXor1[Length]) & (~(0xff>>GetShortLen1(Length))))==0)
-          break;
-      rar_faddbits(strm,GetShortLen1(Length));
-    }
-    else
-    {
-      for (Length=0;;Length++)
-        if (((BitField^ShortXor2[Length]) & (~(0xff>>GetShortLen2(Length))))==0)
-          break;
-      rar_faddbits(strm,GetShortLen2(Length));
+    if (strm->AvrLn1 < 37) {
+        for (Length = 0;; Length++)
+            if (((BitField ^ ShortXor1[Length]) & (~(0xff >> GetShortLen1(Length)))) == 0) break;
+        rar_faddbits(strm, GetShortLen1(Length));
+    } else {
+        for (Length = 0;; Length++)
+            if (((BitField ^ ShortXor2[Length]) & (~(0xff >> GetShortLen2(Length)))) == 0) break;
+        rar_faddbits(strm, GetShortLen2(Length));
     }
 
-    if (Length >= 9)
-    {
-      if (Length == 9)
-      {
-        strm->LCount++;
-        rar_CopyString15(strm, strm->LastDist,strm->LastLength);
-        return;
-      }
-      if (Length == 14)
-      {
-        strm->LCount=0;
-        Length=rar_DecodeNum(strm, rar_fgetbits(strm),RAR_STARTL2,RAR_DecL2,RAR_PosL2)+5;
-        Distance=(rar_fgetbits(strm)>>1) | 0x8000;
-        rar_faddbits(strm,15);
-        strm->LastLength=Length;
-        strm->LastDist=Distance;
-        rar_CopyString15(strm, Distance,Length);
-        return;
-      }
+    if (Length >= 9) {
+        if (Length == 9) {
+            strm->LCount++;
+            rar_CopyString15(strm, strm->LastDist, strm->LastLength);
+            return;
+        }
+        if (Length == 14) {
+            strm->LCount = 0;
+            Length = rar_DecodeNum(strm, rar_fgetbits(strm), RAR_STARTL2, RAR_DecL2, RAR_PosL2) + 5;
+            Distance = (rar_fgetbits(strm) >> 1) | 0x8000;
+            rar_faddbits(strm, 15);
+            strm->LastLength = Length;
+            strm->LastDist = Distance;
+            rar_CopyString15(strm, Distance, Length);
+            return;
+        }
 
-      strm->LCount=0;
-      SaveLength=Length;
-      Distance=(uint)strm->OldDist[(strm->OldDistPtr-(Length-9)) & 3];
-      Length=rar_DecodeNum(strm,rar_fgetbits(strm),RAR_STARTL1,RAR_DecL1,RAR_PosL1)+2;
-      if (Length==0x101 && SaveLength==10)
-      {
-        strm->Buf60 ^= 1;
-        return;
-      }
-      if (Distance > 256)
-        Length++;
-      if (Distance >= strm->MaxDist3)
-        Length++;
+        strm->LCount = 0;
+        SaveLength = Length;
+        Distance = (uint)strm->OldDist[(strm->OldDistPtr - (Length - 9)) & 3];
+        Length = rar_DecodeNum(strm, rar_fgetbits(strm), RAR_STARTL1, RAR_DecL1, RAR_PosL1) + 2;
+        if (Length == 0x101 && SaveLength == 10) {
+            strm->Buf60 ^= 1;
+            return;
+        }
+        if (Distance > 256) Length++;
+        if (Distance >= strm->MaxDist3) Length++;
 
-      strm->OldDist[strm->OldDistPtr++]=Distance;
-      strm->OldDistPtr = strm->OldDistPtr & 3;
-      strm->LastLength=Length;
-      strm->LastDist=Distance;
-      rar_CopyString15(strm,Distance,Length);
-      return;
+        strm->OldDist[strm->OldDistPtr++] = Distance;
+        strm->OldDistPtr = strm->OldDistPtr & 3;
+        strm->LastLength = Length;
+        strm->LastDist = Distance;
+        rar_CopyString15(strm, Distance, Length);
+        return;
     }
 
-    strm->LCount=0;
+    strm->LCount = 0;
     strm->AvrLn1 += Length;
     strm->AvrLn1 -= strm->AvrLn1 >> 4;
 
-    DistancePlace=rar_DecodeNum(strm, rar_fgetbits(strm),RAR_STARTHF2,RAR_DecHf2,RAR_PosHf2) & 0xff;
-    Distance=strm->ChSetA[DistancePlace];
-    if (--DistancePlace != -1)
-    {
-      LastDistance=strm->ChSetA[DistancePlace];
-      strm->ChSetA[DistancePlace+1]=(ushort)LastDistance;
-      strm->ChSetA[DistancePlace]=(ushort)Distance;
+    DistancePlace = rar_DecodeNum(strm, rar_fgetbits(strm), RAR_STARTHF2, RAR_DecHf2, RAR_PosHf2) & 0xff;
+    Distance = strm->ChSetA[DistancePlace];
+    if (--DistancePlace != -1) {
+        LastDistance = strm->ChSetA[DistancePlace];
+        strm->ChSetA[DistancePlace + 1] = (ushort)LastDistance;
+        strm->ChSetA[DistancePlace] = (ushort)Distance;
     }
-    Length+=2;
+    Length += 2;
     strm->OldDist[strm->OldDistPtr++] = ++Distance;
     strm->OldDistPtr = strm->OldDistPtr & 3;
-    strm->LastLength=Length;
-    strm->LastDist=Distance;
-    rar_CopyString15(strm,Distance,Length);
+    strm->LastLength = Length;
+    strm->LastDist = Distance;
+    rar_CopyString15(strm, Distance, Length);
 }
 
 void XCompress::rar_CopyString15(rar_stream *strm, uint Distance, uint Length)
 {
-    strm->DestUnpSize-=Length;
+    strm->DestUnpSize -= Length;
     // 2024.04.18: Distance can be 0 in corrupt RAR 1.5 archives.
-    if (!strm->FirstWinDone && Distance>strm->UnpPtr || Distance>strm->MaxWinSize || Distance==0)
-      while (Length-- > 0)
-      {
-        strm->Window[strm->UnpPtr]=0;
-        strm->UnpPtr=(strm->UnpPtr+1) & strm->MaxWinMask;
-      }
+    if (!strm->FirstWinDone && Distance > strm->UnpPtr || Distance > strm->MaxWinSize || Distance == 0)
+        while (Length-- > 0) {
+            strm->Window[strm->UnpPtr] = 0;
+            strm->UnpPtr = (strm->UnpPtr + 1) & strm->MaxWinMask;
+        }
     else
-      while (Length-- > 0)
-      {
-        strm->Window[strm->UnpPtr]=strm->Window[(strm->UnpPtr-Distance) & strm->MaxWinMask];
-       strm->UnpPtr=(strm->UnpPtr+1) & strm->MaxWinMask;
-      }
+        while (Length-- > 0) {
+            strm->Window[strm->UnpPtr] = strm->Window[(strm->UnpPtr - Distance) & strm->MaxWinMask];
+            strm->UnpPtr = (strm->UnpPtr + 1) & strm->MaxWinMask;
+        }
 }
 
 bool XCompress::rar_ReadTables20(rar_stream *strm, QIODevice *pDevice)
 {
     quint8 BitLength[RAR_BC20];
-    quint8 Table[RAR_MC20*4];
-    if (strm->InAddr>strm->ReadTop-25)
+    quint8 Table[RAR_MC20 * 4];
+    if (strm->InAddr > strm->ReadTop - 25)
 
-    if (!rar_UnpReadBuf(strm, pDevice))
-        return false;
-    uint BitField=rar_getbits(strm);
-    strm->UnpAudioBlock=(BitField & 0x8000)!=0;
+        if (!rar_UnpReadBuf(strm, pDevice)) return false;
+    uint BitField = rar_getbits(strm);
+    strm->UnpAudioBlock = (BitField & 0x8000) != 0;
 
-    if (!(BitField & 0x4000))
-      memset(strm->UnpOldTable20,0,sizeof(strm->UnpOldTable20));
+    if (!(BitField & 0x4000)) memset(strm->UnpOldTable20, 0, sizeof(strm->UnpOldTable20));
     rar_addbits(strm, 2);
 
     uint TableSize;
-    if (strm->UnpAudioBlock)
-    {
-      strm->UnpChannels=((BitField>>12) & 3)+1;
-      if (strm->UnpCurChannel>=strm->UnpChannels)
-        strm->UnpCurChannel=0;
-      rar_addbits(strm, 2);
-      TableSize=RAR_MC20*strm->UnpChannels;
-    }
-    else
-      TableSize=RAR_NC20+RAR_DC20+RAR_RC20;
+    if (strm->UnpAudioBlock) {
+        strm->UnpChannels = ((BitField >> 12) & 3) + 1;
+        if (strm->UnpCurChannel >= strm->UnpChannels) strm->UnpCurChannel = 0;
+        rar_addbits(strm, 2);
+        TableSize = RAR_MC20 * strm->UnpChannels;
+    } else TableSize = RAR_NC20 + RAR_DC20 + RAR_RC20;
 
-    for (uint I=0;I<RAR_BC20;I++)
-    {
-      BitLength[I]=(quint8)(rar_getbits(strm) >> 12);
-      rar_addbits(strm, 4);
+    for (uint I = 0; I < RAR_BC20; I++) {
+        BitLength[I] = (quint8)(rar_getbits(strm) >> 12);
+        rar_addbits(strm, 4);
     }
-    rar_MakeDecodeTables(strm, BitLength,&strm->BlockTables.BD,RAR_BC20);
-    for (uint I=0;I<TableSize;)
-    {
-      if (strm->InAddr>strm->ReadTop-5)
-        if (!rar_UnpReadBuf(strm, pDevice))
-          return false;
-      uint Number=rar_DecodeNumber(strm,&strm->BlockTables.BD);
-      if (Number<16)
-      {
-        Table[I]=(Number+strm->UnpOldTable20[I]) & 0xf;
-        I++;
-      }
-      else
-        if (Number==16)
-        {
-          uint N=(rar_getbits(strm) >> 14)+3;
-          rar_addbits(strm, 2);
-          if (I==0)
-            return false; // We cannot have "repeat previous" code at the first position.
-          else
-            while (N-- > 0 && I<TableSize)
-            {
-              Table[I]=Table[I-1];
-              I++;
+    rar_MakeDecodeTables(strm, BitLength, &strm->BlockTables.BD, RAR_BC20);
+    for (uint I = 0; I < TableSize;) {
+        if (strm->InAddr > strm->ReadTop - 5)
+            if (!rar_UnpReadBuf(strm, pDevice)) return false;
+        uint Number = rar_DecodeNumber(strm, &strm->BlockTables.BD);
+        if (Number < 16) {
+            Table[I] = (Number + strm->UnpOldTable20[I]) & 0xf;
+            I++;
+        } else if (Number == 16) {
+            uint N = (rar_getbits(strm) >> 14) + 3;
+            rar_addbits(strm, 2);
+            if (I == 0) return false;  // We cannot have "repeat previous" code at the first position.
+            else
+                while (N-- > 0 && I < TableSize) {
+                    Table[I] = Table[I - 1];
+                    I++;
+                }
+        } else {
+            uint N;
+            if (Number == 17) {
+                N = (rar_getbits(strm) >> 13) + 3;
+                rar_addbits(strm, 3);
+            } else {
+                N = (rar_getbits(strm) >> 9) + 11;
+                rar_addbits(strm, 7);
             }
-        }
-        else
-        {
-          uint N;
-          if (Number==17)
-          {
-            N=(rar_getbits(strm) >> 13)+3;
-            rar_addbits(strm, 3);
-          }
-          else
-          {
-            N=(rar_getbits(strm) >> 9)+11;
-            rar_addbits(strm, 7);
-          }
-          while (N-- > 0 && I<TableSize)
-            Table[I++]=0;
+            while (N-- > 0 && I < TableSize) Table[I++] = 0;
         }
     }
-    strm->TablesRead2=true;
-    if (strm->InAddr>strm->ReadTop)
-      return true;
+    strm->TablesRead2 = true;
+    if (strm->InAddr > strm->ReadTop) return true;
     if (strm->UnpAudioBlock)
-      for (uint I=0;I<strm->UnpChannels;I++)
-        rar_MakeDecodeTables(strm, &Table[I*RAR_MC20],&strm->MD[I],RAR_MC20);
-    else
-    {
-      rar_MakeDecodeTables(strm, &Table[0],&strm->BlockTables.LD,RAR_NC20);
-      rar_MakeDecodeTables(strm, &Table[RAR_NC20],&strm->BlockTables.DD,RAR_DC20);
-      rar_MakeDecodeTables(strm, &Table[RAR_NC20+RAR_DC20],&strm->BlockTables.RD,RAR_RC20);
+        for (uint I = 0; I < strm->UnpChannels; I++) rar_MakeDecodeTables(strm, &Table[I * RAR_MC20], &strm->MD[I], RAR_MC20);
+    else {
+        rar_MakeDecodeTables(strm, &Table[0], &strm->BlockTables.LD, RAR_NC20);
+        rar_MakeDecodeTables(strm, &Table[RAR_NC20], &strm->BlockTables.DD, RAR_DC20);
+        rar_MakeDecodeTables(strm, &Table[RAR_NC20 + RAR_DC20], &strm->BlockTables.RD, RAR_RC20);
     }
-    memcpy(strm->UnpOldTable20,Table,TableSize);
+    memcpy(strm->UnpOldTable20, Table, TableSize);
+    return true;
+}
+
+bool XCompress::rar_ReadTables30(rar_stream *strm, QIODevice *pDevice)
+{
+    quint8 BitLength[RAR_BC];
+    quint8 Table[RAR_HUFF_TABLE_SIZE30];
+    if (strm->InAddr > strm->ReadTop - 25)
+        if (!rar_UnpReadBuf30(strm, pDevice)) return (false);
+    rar_faddbits(strm, (8 - strm->InBit) & 7);
+    uint BitField = rar_fgetbits(strm);
+    if (BitField & 0x8000) {
+        strm->UnpBlockType = RAR_BLOCK_PPM;
+        // return(PPM.DecodeInit(this,strm->PPMEscChar));
+    }
+    strm->UnpBlockType = RAR_BLOCK_LZ;
+
+    strm->PrevLowDist = 0;
+    strm->LowDistRepCount = 0;
+
+    if (!(BitField & 0x4000)) memset(strm->UnpOldTable, 0, sizeof(strm->UnpOldTable));
+    rar_faddbits(strm, 2);
+
+    for (uint I = 0; I < RAR_BC; I++) {
+        uint Length = (quint8)(rar_fgetbits(strm) >> 12);
+        rar_faddbits(strm, 4);
+        if (Length == 15) {
+            uint ZeroCount = (quint8)(rar_fgetbits(strm) >> 12);
+            rar_faddbits(strm, 4);
+            if (ZeroCount == 0) BitLength[I] = 15;
+            else {
+                ZeroCount += 2;
+                while (ZeroCount-- > 0 && I < ASIZE(BitLength)) BitLength[I++] = 0;
+                I--;
+            }
+        } else BitLength[I] = Length;
+    }
+    rar_MakeDecodeTables(strm, BitLength, &strm->BlockTables.BD, RAR_BC30);
+
+    const uint TableSize = RAR_HUFF_TABLE_SIZE30;
+    for (uint I = 0; I < TableSize;) {
+        if (strm->InAddr > strm->ReadTop - 5)
+            if (!rar_UnpReadBuf30(strm, pDevice)) return (false);
+        uint Number = rar_DecodeNumber(strm, &strm->BlockTables.BD);
+        if (Number < 16) {
+            Table[I] = (Number + strm->UnpOldTable[I]) & 0xf;
+            I++;
+        } else if (Number < 18) {
+            uint N;
+            if (Number == 16) {
+                N = (rar_fgetbits(strm) >> 13) + 3;
+                rar_faddbits(strm, 3);
+            } else {
+                N = (rar_fgetbits(strm) >> 9) + 11;
+                rar_faddbits(strm, 7);
+            }
+            if (I == 0) return false;  // We cannot have "repeat previous" code at the first position.
+            else
+                while (N-- > 0 && I < TableSize) {
+                    Table[I] = Table[I - 1];
+                    I++;
+                }
+        } else {
+            uint N;
+            if (Number == 18) {
+                N = (rar_fgetbits(strm) >> 13) + 3;
+                rar_faddbits(strm, 3);
+            } else {
+                N = (rar_fgetbits(strm) >> 9) + 11;
+                rar_faddbits(strm, 7);
+            }
+            while (N-- > 0 && I < TableSize) Table[I++] = 0;
+        }
+    }
+    strm->TablesRead3 = true;
+    if (strm->InAddr > strm->ReadTop) return false;
+    rar_MakeDecodeTables(strm, &Table[0], &strm->BlockTables.LD, RAR_NC30);
+    rar_MakeDecodeTables(strm, &Table[RAR_NC30], &strm->BlockTables.DD, RAR_DC30);
+    rar_MakeDecodeTables(strm, &Table[RAR_NC30 + RAR_DC30], &strm->BlockTables.LDD, RAR_LDC30);
+    rar_MakeDecodeTables(strm, &Table[RAR_NC30 + RAR_DC30 + RAR_LDC30], &strm->BlockTables.RD, RAR_RC30);
+    memcpy(strm->UnpOldTable, Table, sizeof(strm->UnpOldTable));
     return true;
 }
 
 void XCompress::rar_MakeDecodeTables(rar_stream *strm, quint8 *LengthTable, rar_DecodeTable *Dec, uint Size)
 {
     // Size of alphabet and DecodePos array.
-    Dec->MaxNum=Size;
+    Dec->MaxNum = Size;
 
     // Calculate how many entries for every bit length in LengthTable we have.
     uint LengthCount[16];
-    memset(LengthCount,0,sizeof(LengthCount));
-    for (size_t I=0;I<Size;I++)
-      LengthCount[LengthTable[I] & 0xf]++;
+    memset(LengthCount, 0, sizeof(LengthCount));
+    for (size_t I = 0; I < Size; I++) LengthCount[LengthTable[I] & 0xf]++;
 
     // We must not calculate the number of zero length codes.
-    LengthCount[0]=0;
+    LengthCount[0] = 0;
 
     // Set the entire DecodeNum to zero.
-    memset(Dec->DecodeNum,0,Size*sizeof(*Dec->DecodeNum));
+    memset(Dec->DecodeNum, 0, Size * sizeof(*Dec->DecodeNum));
 
     // Initialize not really used entry for zero length code.
-    Dec->DecodePos[0]=0;
+    Dec->DecodePos[0] = 0;
 
     // Start code for bit length 1 is 0.
-    Dec->DecodeLen[0]=0;
+    Dec->DecodeLen[0] = 0;
 
     // Right aligned upper limit code for current bit length.
-    uint UpperLimit=0;
+    uint UpperLimit = 0;
 
-    for (size_t I=1;I<16;I++)
-    {
-      // Adjust the upper limit code.
-      UpperLimit+=LengthCount[I];
+    for (size_t I = 1; I < 16; I++) {
+        // Adjust the upper limit code.
+        UpperLimit += LengthCount[I];
 
-      // Left aligned upper limit code.
-      uint LeftAligned=UpperLimit<<(16-I);
+        // Left aligned upper limit code.
+        uint LeftAligned = UpperLimit << (16 - I);
 
-      // Prepare the upper limit code for next bit length.
-      UpperLimit*=2;
+        // Prepare the upper limit code for next bit length.
+        UpperLimit *= 2;
 
-      // Store the left aligned upper limit code.
-      Dec->DecodeLen[I]=(uint)LeftAligned;
+        // Store the left aligned upper limit code.
+        Dec->DecodeLen[I] = (uint)LeftAligned;
 
-      // Every item of this array contains the sum of all preceding items.
-      // So it contains the start position in code list for every bit length.
-      Dec->DecodePos[I]=Dec->DecodePos[I-1]+LengthCount[I-1];
+        // Every item of this array contains the sum of all preceding items.
+        // So it contains the start position in code list for every bit length.
+        Dec->DecodePos[I] = Dec->DecodePos[I - 1] + LengthCount[I - 1];
     }
 
     // Prepare the copy of DecodePos. We'll modify this copy below,
     // so we cannot use the original DecodePos.
     uint CopyDecodePos[ASIZE(Dec->DecodePos)];
-    memcpy(CopyDecodePos,Dec->DecodePos,sizeof(CopyDecodePos));
+    memcpy(CopyDecodePos, Dec->DecodePos, sizeof(CopyDecodePos));
 
     // For every bit length in the bit length table and so for every item
     // of alphabet.
-    for (uint I=0;I<Size;I++)
-    {
-      // Get the current bit length.
-      quint8 CurBitLength=LengthTable[I] & 0xf;
+    for (uint I = 0; I < Size; I++) {
+        // Get the current bit length.
+        quint8 CurBitLength = LengthTable[I] & 0xf;
 
-      if (CurBitLength!=0)
-      {
-        // Last position in code list for current bit length.
-        uint LastPos=CopyDecodePos[CurBitLength];
+        if (CurBitLength != 0) {
+            // Last position in code list for current bit length.
+            uint LastPos = CopyDecodePos[CurBitLength];
 
-        // Prepare the decode table, so this position in code list will be
-        // decoded to current alphabet item number.
-        Dec->DecodeNum[LastPos]=(ushort)I;
+            // Prepare the decode table, so this position in code list will be
+            // decoded to current alphabet item number.
+            Dec->DecodeNum[LastPos] = (ushort)I;
 
-        // We'll use next position number for this bit length next time.
-        // So we pass through the entire range of positions available
-        // for every bit length.
-        CopyDecodePos[CurBitLength]++;
-      }
+            // We'll use next position number for this bit length next time.
+            // So we pass through the entire range of positions available
+            // for every bit length.
+            CopyDecodePos[CurBitLength]++;
+        }
     }
 
     // Define the number of bits to process in quick mode. We use more bits
     // for larger alphabets. More bits means that more codes will be processed
     // in quick mode, but also that more time will be spent to preparation
     // of tables for quick decode.
-    switch (Size)
-    {
-      case RAR_NC:
-      case RAR_NC20:
-      case RAR_NC30:
-        Dec->QuickBits=RAR_MAX_QUICK_DECODE_BITS;
-        break;
-      default:
-        Dec->QuickBits=RAR_MAX_QUICK_DECODE_BITS>3 ? RAR_MAX_QUICK_DECODE_BITS-3 : 0;
-        break;
+    switch (Size) {
+        case RAR_NC:
+        case RAR_NC20:
+        case RAR_NC30: Dec->QuickBits = RAR_MAX_QUICK_DECODE_BITS; break;
+        default: Dec->QuickBits = RAR_MAX_QUICK_DECODE_BITS > 3 ? RAR_MAX_QUICK_DECODE_BITS - 3 : 0; break;
     }
 
     // Size of tables for quick mode.
-    uint QuickDataSize=1<<Dec->QuickBits;
+    uint QuickDataSize = 1 << Dec->QuickBits;
 
     // Bit length for current code, start from 1 bit codes. It is important
     // to use 1 bit instead of 0 for minimum code length, so we are moving
     // forward even when processing a corrupt archive.
-    uint CurBitLength=1;
+    uint CurBitLength = 1;
 
     // For every right aligned bit string which supports the quick decoding.
-    for (uint Code=0;Code<QuickDataSize;Code++)
-    {
-      // Left align the current code, so it will be in usual bit field format.
-      uint BitField=Code<<(16-Dec->QuickBits);
+    for (uint Code = 0; Code < QuickDataSize; Code++) {
+        // Left align the current code, so it will be in usual bit field format.
+        uint BitField = Code << (16 - Dec->QuickBits);
 
-      // Prepare the table for quick decoding of bit lengths.
+        // Prepare the table for quick decoding of bit lengths.
 
-      // Find the upper limit for current bit field and adjust the bit length
-      // accordingly if necessary.
-      while (CurBitLength<ASIZE(Dec->DecodeLen) && BitField>=Dec->DecodeLen[CurBitLength])
-        CurBitLength++;
+        // Find the upper limit for current bit field and adjust the bit length
+        // accordingly if necessary.
+        while (CurBitLength < ASIZE(Dec->DecodeLen) && BitField >= Dec->DecodeLen[CurBitLength]) CurBitLength++;
 
-      // Translation of right aligned bit string to bit length.
-      Dec->QuickLen[Code]=CurBitLength;
+        // Translation of right aligned bit string to bit length.
+        Dec->QuickLen[Code] = CurBitLength;
 
-      // Prepare the table for quick translation of position in code list
-      // to position in alphabet.
+        // Prepare the table for quick translation of position in code list
+        // to position in alphabet.
 
-      // Calculate the distance from the start code for current bit length.
-      uint Dist=BitField-Dec->DecodeLen[CurBitLength-1];
+        // Calculate the distance from the start code for current bit length.
+        uint Dist = BitField - Dec->DecodeLen[CurBitLength - 1];
 
-      // Right align the distance.
-      Dist>>=(16-CurBitLength);
+        // Right align the distance.
+        Dist >>= (16 - CurBitLength);
 
-      // Now we can calculate the position in the code list. It is the sum
-      // of first position for current bit length and right aligned distance
-      // between our bit field and start code for current bit length.
-      uint Pos;
-      if (CurBitLength<ASIZE(Dec->DecodePos) &&
-          (Pos=Dec->DecodePos[CurBitLength]+Dist)<Size)
-      {
-        // Define the code to alphabet number translation.
-        Dec->QuickNum[Code]=Dec->DecodeNum[Pos];
-      }
-      else
-      {
-        // Can be here for length table filled with zeroes only (empty).
-        Dec->QuickNum[Code]=0;
-      }
+        // Now we can calculate the position in the code list. It is the sum
+        // of first position for current bit length and right aligned distance
+        // between our bit field and start code for current bit length.
+        uint Pos;
+        if (CurBitLength < ASIZE(Dec->DecodePos) && (Pos = Dec->DecodePos[CurBitLength] + Dist) < Size) {
+            // Define the code to alphabet number translation.
+            Dec->QuickNum[Code] = Dec->DecodeNum[Pos];
+        } else {
+            // Can be here for length table filled with zeroes only (empty).
+            Dec->QuickNum[Code] = 0;
+        }
     }
 }
 
 uint XCompress::rar_DecodeNumber(rar_stream *strm, rar_DecodeTable *Dec)
 {
     // Left aligned 15 bit length raw bit field.
-     uint BitField=rar_getbits(strm) & 0xfffe;
+    uint BitField = rar_getbits(strm) & 0xfffe;
 
-     if (BitField<Dec->DecodeLen[Dec->QuickBits])
-     {
-       uint Code=BitField>>(16-Dec->QuickBits);
-       rar_addbits(strm, Dec->QuickLen[Code]);
-       return Dec->QuickNum[Code];
-     }
+    if (BitField < Dec->DecodeLen[Dec->QuickBits]) {
+        uint Code = BitField >> (16 - Dec->QuickBits);
+        rar_addbits(strm, Dec->QuickLen[Code]);
+        return Dec->QuickNum[Code];
+    }
 
-     // Detect the real bit length for current code.
-     uint Bits=15;
-     for (uint I=Dec->QuickBits+1;I<15;I++)
-       if (BitField<Dec->DecodeLen[I])
-       {
-         Bits=I;
-         break;
-       }
+    // Detect the real bit length for current code.
+    uint Bits = 15;
+    for (uint I = Dec->QuickBits + 1; I < 15; I++)
+        if (BitField < Dec->DecodeLen[I]) {
+            Bits = I;
+            break;
+        }
 
-     rar_addbits(strm, Bits);
+    rar_addbits(strm, Bits);
 
-     // Calculate the distance from the start code for current bit length.
-     uint Dist=BitField-Dec->DecodeLen[Bits-1];
+    // Calculate the distance from the start code for current bit length.
+    uint Dist = BitField - Dec->DecodeLen[Bits - 1];
 
-     // Start codes are left aligned, but we need the normal right aligned
-     // number. So we shift the distance to the right.
-     Dist>>=(16-Bits);
+    // Start codes are left aligned, but we need the normal right aligned
+    // number. So we shift the distance to the right.
+    Dist >>= (16 - Bits);
 
-     // Now we can calculate the position in the code list. It is the sum
-     // of first position for current bit length and right aligned distance
-     // between our bit field and start code for current bit length.
-     uint Pos=Dec->DecodePos[Bits]+Dist;
+    // Now we can calculate the position in the code list. It is the sum
+    // of first position for current bit length and right aligned distance
+    // between our bit field and start code for current bit length.
+    uint Pos = Dec->DecodePos[Bits] + Dist;
 
-     // Out of bounds safety check required for damaged archives.
-     if (Pos>=Dec->MaxNum)
-       Pos=0;
+    // Out of bounds safety check required for damaged archives.
+    if (Pos >= Dec->MaxNum) Pos = 0;
 
-     // Convert the position in the code list to position in alphabet
-     // and return it.
-     return Dec->DecodeNum[Pos];
+    // Convert the position in the code list to position in alphabet
+    // and return it.
+    return Dec->DecodeNum[Pos];
 }
