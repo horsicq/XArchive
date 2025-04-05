@@ -301,6 +301,10 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
             result.sVersion = "1.5-4.X";
 
             while (!(pPdStruct->bIsStop)) {
+                if (nCurrentOffset >= getSize() - sizeof(GENERICBLOCK4)) {
+                    break;
+                }
+
                 GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
@@ -684,6 +688,10 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
         if (nVersion == 4) {
             while (!(pPdStruct->bIsStop)) {
+                if (nCurrentOffset >= result.nBinarySize - sizeof(GENERICBLOCK4)) {
+                    break;
+                }
+
                 GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
@@ -697,7 +705,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                         record.nAddress = -1;
                         record.sName = blockType4ToString((BLOCKTYPE4)genericBlock.nType);
 
-                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset + record.nSize);
+                        nMaxOffset = qMax(nMaxOffset, record.nOffset + record.nSize);
 
                         result.listRecords.append(record);
                     }
@@ -709,12 +717,12 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
                             record.nIndex = nIndex++;
                             record.type = MMT_DATA;
-                            record.nOffset = fileBlock4.genericBlock4.nHeaderSize;
+                            record.nOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
                             record.nSize = fileBlock4.packSize;
                             record.nAddress = -1;
                             record.sName = "DATA";
 
-                            nMaxOffset = qMax(nMaxOffset, (qint64)(fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize));
+                            nMaxOffset = qMax(nMaxOffset, record.nOffset + record.nSize);
 
                             result.listRecords.append(record);
                         }

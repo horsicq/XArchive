@@ -215,6 +215,19 @@ public:
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct lzh_huffman *hf);
 
+    // Maximum LZ match length we can encode even for short distances.
+        static const uint RAR_MAX_LZ_MATCH = 0x1001;
+
+        // We increment LZ match length for longer distances, because shortest
+        // matches are not allowed for them. Maximum length increment is 3
+        // for distances larger than 256KB (0x40000). Here we define the maximum
+        // incremented LZ match. Normally packer does not use it, but we must be
+        // ready to process it in corrupt archives.
+    static const uint RAR_MAX_INC_LZ_MATCH = RAR_MAX_LZ_MATCH + 3;
+
+    static const uint RAR_MAX3_LZ_MATCH = 0x101; // Maximum match length for RAR v3.
+    static const uint RAR_MAX3_INC_LZ_MATCH = RAR_MAX3_LZ_MATCH + 3;
+    static const uint RAR_LOW_DIST_REP_COUNT = 16;
     static const uint RAR_NC = 306;  /* alphabet = {0, 1, 2, ..., NC - 1} */
     static const uint RAR_DCB = 64;  // Base distance codes up to 4 GB.
     static const uint RAR_DCX = 80;  // Extended distance codes up to 1 TB.
@@ -467,10 +480,14 @@ public:
     static void rar_LongLZ(struct rar_stream *strm);
     static void rar_ShortLZ(struct rar_stream *strm);
     static void rar_CopyString15(struct rar_stream *strm, uint Distance, uint Length);
+    static void rar_CopyString(struct rar_stream *strm, uint Distance, uint Length);
     static bool rar_ReadTables20(struct rar_stream *strm, QIODevice *pDevice);
     static bool rar_ReadTables30(struct rar_stream *strm, QIODevice *pDevice);
     static void rar_MakeDecodeTables(struct rar_stream *strm, quint8 *LengthTable, rar_DecodeTable *Dec, uint Size);
     static uint rar_DecodeNumber(struct rar_stream *strm, rar_DecodeTable *Dec);
+    static void rar_InsertOldDist(struct rar_stream *strm, size_t Distance);
+    static size_t rar_WrapUp(struct rar_stream *strm, size_t WinPos);
+    static bool rar_ReadEndOfBlock(struct rar_stream *strm, QIODevice *pDevice);
 };
 
 #endif  // XCOMPRESS_H
