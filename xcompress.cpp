@@ -1458,15 +1458,15 @@ void XCompress::rar_CopyString15(rar_stream *strm, uint Distance, uint Length)
 
 void XCompress::rar_CopyString(rar_stream *strm, uint Distance, uint Length)
 {
-    size_t SrcPtr=strm->UnpPtr-Distance;
+    size_t SrcPtr = strm->UnpPtr - Distance;
 
-      // Perform the correction here instead of "else", so matches crossing
-      // the window beginning can also be processed by first "if" part.
-      if (Distance>strm->UnpPtr) // Unlike SrcPtr>=MaxWinSize, it catches invalid distances like 0xfffffff0 in 32-bit build.
-      {
+    // Perform the correction here instead of "else", so matches crossing
+    // the window beginning can also be processed by first "if" part.
+    if (Distance > strm->UnpPtr)  // Unlike SrcPtr>=MaxWinSize, it catches invalid distances like 0xfffffff0 in 32-bit build.
+    {
         // Same as WrapDown(SrcPtr), needed because of UnpPtr-Distance above.
         // We need the same condition below, so we expanded WrapDown() here.
-        SrcPtr+=strm->MaxWinSize;
+        SrcPtr += strm->MaxWinSize;
 
         // About Distance>MaxWinSize check.
         // SrcPtr can be >=MaxWinSize if distance exceeds MaxWinSize
@@ -1478,63 +1478,72 @@ void XCompress::rar_CopyString(rar_stream *strm, uint Distance, uint Length)
         // If first window hasn't filled yet and it points outside of window,
         // set data to 0 instead of copying preceding file data, so result doesn't
         // depend on previously extracted files in non-solid archive.
-        if (Distance>strm->MaxWinSize || !strm->FirstWinDone)
-        {
-          // Fill area of specified length with 0 instead of returning.
-          // So if only the distance is broken and rest of packed data is valid,
-          // it preserves offsets and allows to continue extraction.
-          // If we set SrcPtr to random offset instead, let's say, 0,
-          // we still will be copying preceding file data if UnpPtr is also 0.
-          while (Length-- > 0)
-          {
-            strm->Window[strm->UnpPtr]=0;
-            strm->UnpPtr=rar_WrapUp(strm, strm->UnpPtr+1);
-          }
-          return;
+        if (Distance > strm->MaxWinSize || !strm->FirstWinDone) {
+            // Fill area of specified length with 0 instead of returning.
+            // So if only the distance is broken and rest of packed data is valid,
+            // it preserves offsets and allows to continue extraction.
+            // If we set SrcPtr to random offset instead, let's say, 0,
+            // we still will be copying preceding file data if UnpPtr is also 0.
+            while (Length-- > 0) {
+                strm->Window[strm->UnpPtr] = 0;
+                strm->UnpPtr = rar_WrapUp(strm, strm->UnpPtr + 1);
+            }
+            return;
         }
-      }
+    }
 
-      if (SrcPtr<strm->MaxWinSize-RAR_MAX_INC_LZ_MATCH && strm->UnpPtr<strm->MaxWinSize-RAR_MAX_INC_LZ_MATCH)
-      {
+    if (SrcPtr < strm->MaxWinSize - RAR_MAX_INC_LZ_MATCH && strm->UnpPtr < strm->MaxWinSize - RAR_MAX_INC_LZ_MATCH) {
         // If we are not close to end of window, we do not need to waste time
         // to WrapUp and WrapDown position protection.
 
-        quint8 *Src=strm->Window+SrcPtr;
-        quint8 *Dest=strm->Window+strm->UnpPtr;
-        strm->UnpPtr+=Length;
+        quint8 *Src = strm->Window + SrcPtr;
+        quint8 *Dest = strm->Window + strm->UnpPtr;
+        strm->UnpPtr += Length;
 
-          while (Length>=8)
-          {
-            Dest[0]=Src[0];
-            Dest[1]=Src[1];
-            Dest[2]=Src[2];
-            Dest[3]=Src[3];
-            Dest[4]=Src[4];
-            Dest[5]=Src[5];
-            Dest[6]=Src[6];
-            Dest[7]=Src[7];
+        while (Length >= 8) {
+            Dest[0] = Src[0];
+            Dest[1] = Src[1];
+            Dest[2] = Src[2];
+            Dest[3] = Src[3];
+            Dest[4] = Src[4];
+            Dest[5] = Src[5];
+            Dest[6] = Src[6];
+            Dest[7] = Src[7];
 
-            Src+=8;
-            Dest+=8;
-            Length-=8;
-          }
+            Src += 8;
+            Dest += 8;
+            Length -= 8;
+        }
 
         // Unroll the loop for 0 - 7 bytes left. Note that we use nested "if"s.
-        if (Length>0) { Dest[0]=Src[0];
-        if (Length>1) { Dest[1]=Src[1];
-        if (Length>2) { Dest[2]=Src[2];
-        if (Length>3) { Dest[3]=Src[3];
-        if (Length>4) { Dest[4]=Src[4];
-        if (Length>5) { Dest[5]=Src[5];
-        if (Length>6) { Dest[6]=Src[6]; } } } } } } } // Close all nested "if"s.
-      }
-      else
-        while (Length-- > 0) // Slow copying with all possible precautions.
+        if (Length > 0) {
+            Dest[0] = Src[0];
+            if (Length > 1) {
+                Dest[1] = Src[1];
+                if (Length > 2) {
+                    Dest[2] = Src[2];
+                    if (Length > 3) {
+                        Dest[3] = Src[3];
+                        if (Length > 4) {
+                            Dest[4] = Src[4];
+                            if (Length > 5) {
+                                Dest[5] = Src[5];
+                                if (Length > 6) {
+                                    Dest[6] = Src[6];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }  // Close all nested "if"s.
+    } else
+        while (Length-- > 0)  // Slow copying with all possible precautions.
         {
-          strm->Window[strm->UnpPtr]=strm->Window[rar_WrapUp(strm, SrcPtr++)];
-          // We need to have masked UnpPtr after quit from loop, so it must not
-          // be replaced with 'Window[WrapUp(UnpPtr++)]'
-          strm->UnpPtr=rar_WrapUp(strm, strm->UnpPtr+1);
+            strm->Window[strm->UnpPtr] = strm->Window[rar_WrapUp(strm, SrcPtr++)];
+            // We need to have masked UnpPtr after quit from loop, so it must not
+            // be replaced with 'Window[WrapUp(UnpPtr++)]'
+            strm->UnpPtr = rar_WrapUp(strm, strm->UnpPtr + 1);
         }
 }
 
@@ -1858,10 +1867,10 @@ uint XCompress::rar_DecodeNumber(rar_stream *strm, rar_DecodeTable *Dec)
 
 void XCompress::rar_InsertOldDist(struct rar_stream *strm, size_t Distance)
 {
-    strm->OldDist[3]=strm->OldDist[2];
-    strm->OldDist[2]=strm->OldDist[1];
-    strm->OldDist[1]=strm->OldDist[0];
-    strm->OldDist[0]=Distance;
+    strm->OldDist[3] = strm->OldDist[2];
+    strm->OldDist[2] = strm->OldDist[1];
+    strm->OldDist[1] = strm->OldDist[0];
+    strm->OldDist[0] = Distance;
 }
 
 size_t XCompress::rar_WrapUp(rar_stream *strm, size_t WinPos)
@@ -1871,30 +1880,26 @@ size_t XCompress::rar_WrapUp(rar_stream *strm, size_t WinPos)
 
 bool XCompress::rar_ReadEndOfBlock(rar_stream *strm, QIODevice *pDevice)
 {
-    uint BitField=rar_getbits(strm);
-    bool NewTable,NewFile=false;
+    uint BitField = rar_getbits(strm);
+    bool NewTable, NewFile = false;
 
     // "1"  - no new file, new table just here.
     // "00" - new file,    no new table.
     // "01" - new file,    new table (in beginning of next file).
 
-    if ((BitField & 0x8000)!=0)
-    {
-      NewTable=true;
-      rar_addbits(strm, 1);
+    if ((BitField & 0x8000) != 0) {
+        NewTable = true;
+        rar_addbits(strm, 1);
+    } else {
+        NewFile = true;
+        NewTable = (BitField & 0x4000) != 0;
+        rar_addbits(strm, 2);
     }
-    else
-    {
-      NewFile=true;
-      NewTable=(BitField & 0x4000)!=0;
-      rar_addbits(strm, 2);
-    }
-    strm->TablesRead3=!NewTable;
+    strm->TablesRead3 = !NewTable;
 
     // Quit immediately if "new file" flag is set. If "new table" flag
     // is present, we'll read the table in beginning of next file
     // based on 'TablesRead3' 'false' value.
-    if (NewFile)
-      return false;
-    return rar_ReadTables30(strm, pDevice); // Quit only if we failed to read tables.
+    if (NewFile) return false;
+    return rar_ReadTables30(strm, pDevice);  // Quit only if we failed to read tables.
 }
