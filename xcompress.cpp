@@ -1138,6 +1138,145 @@ void XCompress::rar_UnpWriteBuf20(rar_stream *strm, QIODevice *pDevice)
     strm->WrPtr = strm->UnpPtr;
 }
 
+void XCompress::rar_UnpWriteBuf30(rar_stream *strm, QIODevice *pDevice)
+{
+    // uint WrittenBorder=(uint)strm->WrPtr;
+    // uint WriteSize=(uint)((strm->UnpPtr-WrittenBorder)&strm->MaxWinMask);
+    // for (size_t I=0;I<strm->PrgStack.size();I++)
+    // {
+    //   // Here we apply filters to data which we need to write.
+    //   // We always copy data to virtual machine memory before processing.
+    //   // We cannot process them just in place in Window buffer, because
+    //   // these data can be used for future string matches, so we must
+    //   // preserve them in original form.
+
+    //   rar_UnpackFilter30 *flt=strm->PrgStack[I];
+    //   if (flt==NULL)
+    //     continue;
+    //   if (flt->NextWindow)
+    //   {
+    //     flt->NextWindow=false;
+    //     continue;
+    //   }
+    //   unsigned int BlockStart=flt->BlockStart;
+    //   unsigned int BlockLength=flt->BlockLength;
+    //   if (((BlockStart-WrittenBorder)&strm->MaxWinMask)<WriteSize)
+    //   {
+    //     if (WrittenBorder!=BlockStart)
+    //     {
+    //       rar_UnpWriteArea(strm, pDevice, WrittenBorder,BlockStart);
+    //       WrittenBorder=BlockStart;
+    //       WriteSize=(uint)((strm->UnpPtr-WrittenBorder)&strm->MaxWinMask);
+    //     }
+    //     if (BlockLength<=WriteSize)
+    //     {
+    //       uint BlockEnd=(BlockStart+BlockLength)&strm->MaxWinMask;
+    //       if (BlockStart<BlockEnd || BlockEnd==0)
+    //         VM.SetMemory(0,strm->Window+BlockStart,BlockLength);
+    //       else
+    //       {
+    //         uint FirstPartLength=uint(strm->MaxWinSize-BlockStart);
+    //         VM.SetMemory(0,strm->Window+BlockStart,FirstPartLength);
+    //         VM.SetMemory(FirstPartLength,strm->Window,BlockEnd);
+    //       }
+
+    //       VM_PreparedProgram *ParentPrg=&strm->Filters30[flt->ParentFilter]->Prg;
+    //       VM_PreparedProgram *Prg=&flt->Prg;
+
+    //       ExecuteCode(Prg);
+
+    //       quint8 *FilteredData=Prg->FilteredData;
+    //       unsigned int FilteredDataSize=Prg->FilteredDataSize;
+
+    //       delete strm->PrgStack[I];
+    //       strm->PrgStack[I]=nullptr;
+    //       while (I+1<strm->PrgStack.size())
+    //       {
+    //         rar_UnpackFilter30 *NextFilter=strm->PrgStack[I+1];
+    //         // It is required to check NextWindow here.
+    //         if (NextFilter==NULL || NextFilter->BlockStart!=BlockStart ||
+    //             NextFilter->BlockLength!=FilteredDataSize || NextFilter->NextWindow)
+    //           break;
+
+    //         // Apply several filters to same data block.
+
+    //         VM.SetMemory(0,FilteredData,FilteredDataSize);
+
+    //         VM_PreparedProgram *ParentPrg=&strm->Filters30[NextFilter->ParentFilter]->Prg;
+    //         VM_PreparedProgram *NextPrg=&NextFilter->Prg;
+
+    //         ExecuteCode(NextPrg);
+
+    //         FilteredData=NextPrg->FilteredData;
+    //         FilteredDataSize=NextPrg->FilteredDataSize;
+    //         I++;
+    //         delete strm->PrgStack[I];
+    //         strm->PrgStack[I]=nullptr;
+    //       }
+    //       pDevice->write((char *)FilteredData,FilteredDataSize);
+    //       strm->UnpSomeRead=true;
+    //       strm->WrittenFileSize+=FilteredDataSize;
+    //       WrittenBorder=BlockEnd;
+    //       WriteSize=uint((strm->UnpPtr-WrittenBorder)&strm->MaxWinMask);
+    //     }
+    //     else
+    //     {
+    //       // Current filter intersects the window write border, so we adjust
+    //       // the window border to process this filter next time, not now.
+    //       for (size_t J=I;J<strm->PrgStack.size();J++)
+    //       {
+    //         rar_UnpackFilter30 *flt=strm->PrgStack[J];
+    //         if (flt!=nullptr && flt->NextWindow)
+    //           flt->NextWindow=false;
+    //       }
+    //       strm->WrPtr=WrittenBorder;
+    //       return;
+    //     }
+    //   }
+    // }
+
+    // rar_UnpWriteArea(strm,pDevice,WrittenBorder,strm->UnpPtr);
+    // strm->WrPtr=strm->UnpPtr;
+}
+
+void XCompress::rar_UnpWriteData(rar_stream *strm, QIODevice *pDevice, quint8 *Data, size_t Size)
+{
+    if (strm->WrittenFileSize>=strm->DestUnpSize)
+      return;
+    size_t WriteSize=Size;
+    qint64 LeftToWrite=strm->DestUnpSize-strm->WrittenFileSize;
+    if ((qint64)WriteSize>LeftToWrite)
+      WriteSize=(size_t)LeftToWrite;
+    pDevice->write((char *)Data,WriteSize);
+    strm->WrittenFileSize+=Size;
+}
+
+void XCompress::rar_UnpWriteArea(rar_stream *strm, QIODevice *pDevice, size_t StartPtr, size_t EndPtr)
+{
+    // if (EndPtr!=StartPtr)
+    //   strm->UnpSomeRead=true;
+
+    // if (strm->Fragmented)
+    // {
+    //   size_t SizeToWrite=WrapDown(EndPtr-StartPtr);
+    //   while (SizeToWrite>0)
+    //   {
+    //     size_t BlockSize=FragWindow.GetBlockSize(StartPtr,SizeToWrite);
+    //     rar_UnpWriteData(strm, pDevice, &FragWindow[StartPtr],BlockSize);
+    //     SizeToWrite-=BlockSize;
+    //     StartPtr=rar_WrapUp(strm,StartPtr+BlockSize);
+    //   }
+    // }
+    // else
+    //   if (EndPtr<StartPtr)
+    //   {
+    //     rar_UnpWriteData(strm, pDevice, strm->Window+StartPtr,strm->MaxWinSize-StartPtr);
+    //     rar_UnpWriteData(strm, pDevice, strm->Window,EndPtr);
+    //   }
+    //   else
+    //     rar_UnpWriteData(strm, pDevice, strm->Window+StartPtr,EndPtr-StartPtr);
+}
+
 bool XCompress::rar_UnpReadBuf30(rar_stream *strm, QIODevice *pDevice)
 {
     int DataSize = strm->ReadTop - strm->InAddr;  // Data left to process.
