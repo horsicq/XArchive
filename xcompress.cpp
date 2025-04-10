@@ -1465,11 +1465,14 @@ void XCompress::rar_LongLZ(rar_stream *strm)
     rar_faddbits(strm, 7);
 
     OldAvr3 = strm->AvrLn3;
-    if (Length != 1 && Length != 4)
+    if (Length != 1 && Length != 4) {
         if (Length == 0 && Distance <= strm->MaxDist3) {
             strm->AvrLn3++;
             strm->AvrLn3 -= strm->AvrLn3 >> 8;
-        } else if (strm->AvrLn3 > 0) strm->AvrLn3--;
+        } else if (strm->AvrLn3 > 0) {
+            strm->AvrLn3--;
+        }
+    }
     Length += 3;
     if (Distance >= strm->MaxDist3) Length++;
     if (Distance <= 256) Length += 8;
