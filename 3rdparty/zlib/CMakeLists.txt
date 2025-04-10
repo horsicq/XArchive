@@ -12,13 +12,20 @@ include_directories(${PROJECT_SOURCE_DIR}/src/)
 
 add_library(zlib STATIC
 ${PROJECT_SOURCE_DIR}/src/deflate.c
+${PROJECT_SOURCE_DIR}/src/deflate.h
 ${PROJECT_SOURCE_DIR}/src/inflate.c
+${PROJECT_SOURCE_DIR}/src/inflate.h
 ${PROJECT_SOURCE_DIR}/src/adler32.c
 ${PROJECT_SOURCE_DIR}/src/crc32.c
+${PROJECT_SOURCE_DIR}/src/crc32.h
 ${PROJECT_SOURCE_DIR}/src/inffast.c
+${PROJECT_SOURCE_DIR}/src/inffast.h
 ${PROJECT_SOURCE_DIR}/src/inftrees.c
+${PROJECT_SOURCE_DIR}/src/inftrees.h
 ${PROJECT_SOURCE_DIR}/src/trees.c
+${PROJECT_SOURCE_DIR}/src/trees.h
 ${PROJECT_SOURCE_DIR}/src/zutil.c
+${PROJECT_SOURCE_DIR}/src/zutil.h
 )
 
 set_target_properties(zlib PROPERTIES LINKER_LANGUAGE C)
