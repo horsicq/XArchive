@@ -471,8 +471,8 @@ public:
     static bool rar_UnpReadBuf30(struct rar_stream *strm, QIODevice *pDevice);
     static void rar_UnpWriteBuf20(struct rar_stream *strm, QIODevice *pDevice);
     static void rar_UnpWriteBuf30(struct rar_stream *strm, QIODevice *pDevice);
-    static void rar_UnpWriteArea(struct rar_stream *strm, QIODevice *pDevice, size_t StartPtr,size_t EndPtr);
-    static void rar_UnpWriteData(struct rar_stream *strm, QIODevice *pDevice, quint8 *Data,size_t Size);
+    static void rar_UnpWriteArea(struct rar_stream *strm, QIODevice *pDevice, size_t StartPtr, size_t EndPtr);
+    static void rar_UnpWriteData(struct rar_stream *strm, QIODevice *pDevice, quint8 *Data, size_t Size);
     static void rar_GetFlagsBuf(struct rar_stream *strm);
     static uint rar_DecodeNum(struct rar_stream *strm, uint Num, uint StartPos, uint *DecTab, uint *PosTab);
     static uint rar_fgetbits(struct rar_stream *strm);

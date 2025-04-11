@@ -1241,14 +1241,12 @@ void XCompress::rar_UnpWriteBuf30(rar_stream *strm, QIODevice *pDevice)
 
 void XCompress::rar_UnpWriteData(rar_stream *strm, QIODevice *pDevice, quint8 *Data, size_t Size)
 {
-    if (strm->WrittenFileSize>=strm->DestUnpSize)
-      return;
-    size_t WriteSize=Size;
-    qint64 LeftToWrite=strm->DestUnpSize-strm->WrittenFileSize;
-    if ((qint64)WriteSize>LeftToWrite)
-      WriteSize=(size_t)LeftToWrite;
-    pDevice->write((char *)Data,WriteSize);
-    strm->WrittenFileSize+=Size;
+    if (strm->WrittenFileSize >= strm->DestUnpSize) return;
+    size_t WriteSize = Size;
+    qint64 LeftToWrite = strm->DestUnpSize - strm->WrittenFileSize;
+    if ((qint64)WriteSize > LeftToWrite) WriteSize = (size_t)LeftToWrite;
+    pDevice->write((char *)Data, WriteSize);
+    strm->WrittenFileSize += Size;
 }
 
 void XCompress::rar_UnpWriteArea(rar_stream *strm, QIODevice *pDevice, size_t StartPtr, size_t EndPtr)
