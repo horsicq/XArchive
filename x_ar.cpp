@@ -62,7 +62,7 @@ quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
     nOffset += 8;
     nSize -= 8;
 
-    while ((nSize > 0) && (!(pPdStruct->bIsStop))) {
+    while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         char fileSize[16];
 
         read_array(nOffset + offsetof(FRECORD, fileSize), fileSize, 10);

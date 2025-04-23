@@ -25,11 +25,13 @@
 
 class XDEB : public X_Ar {
     Q_OBJECT
+
 public:
     explicit XDEB(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
+    virtual QString getVersion();
 };
 
 #endif  // XDEB_H

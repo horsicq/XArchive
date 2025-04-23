@@ -26,9 +26,17 @@ XDEB::XDEB(QIODevice *pDevice) : X_Ar(pDevice)
 
 bool XDEB::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-    // TODO
-    return false;
+    bool bResult = false;
+
+    X_Ar xar(getDevice());
+
+    if (xar.isValid()) {
+        QList<XArchive::RECORD> listArchiveRecords = xar.getRecords(10, pPdStruct);
+
+        bResult = isValid(&listArchiveRecords, pPdStruct);
+    }
+
+    return bResult;
 }
 
 bool XDEB::isValid(QIODevice *pDevice)
@@ -40,8 +48,22 @@ bool XDEB::isValid(QIODevice *pDevice)
 
 bool XDEB::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pListRecords)
-    Q_UNUSED(pPdStruct)
-    // TODO
-    return false;
+    return isArchiveRecordPresent("debian-binary", pListRecords, pPdStruct);
+}
+
+QString XDEB::getVersion()
+{
+    QString sResult;
+
+    QList<XArchive::RECORD> listArchiveRecords = getRecords(3, nullptr);
+
+    RECORD record = getArchiveRecord("debian-binary", &listArchiveRecords);
+
+    if (record.spInfo.nUncompressedSize < 10) {
+        QByteArray baVersion = decompress(&record);
+        sResult.append(baVersion);
+        sResult = sResult.trimmed();
+    }
+
+    return sResult;
 }
