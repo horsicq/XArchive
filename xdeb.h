@@ -32,6 +32,9 @@ public:
     static bool isValid(QIODevice *pDevice);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
     virtual QString getVersion();
+    virtual FT getFileType();
+    virtual QString getFileFormatExt();
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
 };
 
 #endif  // XDEB_H

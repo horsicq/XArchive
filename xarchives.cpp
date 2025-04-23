@@ -54,7 +54,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
         listResult = xmachofat.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_AR)) {
+    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
         X_Ar x_ar(pDevice);
         listResult = x_ar.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
@@ -108,7 +108,7 @@ QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(const QString &sDirec
     return listResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedSize)
+QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedSize)
 {
     QByteArray baResult;
 
@@ -120,7 +120,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
         baResult = xmachofat.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_AR)) {
+    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
         X_Ar x_ar(pDevice);
         baResult = x_ar.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
@@ -201,7 +201,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
         bResult = xmachofat.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_AR)) {
+    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
         X_Ar x_ar(pDevice);
         bResult = x_ar.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
@@ -243,7 +243,7 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
         bResult = xmachofat.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_AR)) {
+    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
         X_Ar x_ar(pDevice);
         bResult = x_ar.decompressToDevice(pRecord, pDestDevice, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
@@ -364,7 +364,7 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
         XMACHOFat xmachofat(pDevice);
         bResult = xmachofat.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_AR)) {
+    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
         X_Ar x_ar(pDevice);
         bResult = x_ar.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
@@ -448,6 +448,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_APK);
     result.insert(XBinary::FT_MACHOFAT);
     result.insert(XBinary::FT_AR);
+    result.insert(XBinary::FT_DEB);
     result.insert(XBinary::FT_TAR);
     result.insert(XBinary::FT_TARGZ);
     result.insert(XBinary::FT_NPM);

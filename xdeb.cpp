@@ -53,17 +53,46 @@ bool XDEB::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 
 QString XDEB::getVersion()
 {
-    QString sResult;
+    return getFileFormatInfo(nullptr).sVersion;
+}
+
+QString XDEB::getFileFormatExt()
+{
+    return "deb";
+}
+
+XBinary::FILEFORMATINFO XDEB::getFileFormatInfo(PDSTRUCT *pPdStruct)
+{
+    XBinary::FILEFORMATINFO result = {};
 
     QList<XArchive::RECORD> listArchiveRecords = getRecords(3, nullptr);
 
-    RECORD record = getArchiveRecord("debian-binary", &listArchiveRecords);
+    if (isValid(&listArchiveRecords, pPdStruct)) {
+        result.bIsValid = true;
+        result.nSize = getFileFormatSize(pPdStruct);
+        result.sExt = "apk";
+        result.fileType = FT_DEB;
 
-    if (record.spInfo.nUncompressedSize < 10) {
-        QByteArray baVersion = decompress(&record);
-        sResult.append(baVersion);
-        sResult = sResult.trimmed();
+        RECORD record = getArchiveRecord("debian-binary", &listArchiveRecords);
+
+        if (record.spInfo.nUncompressedSize < 10) {
+            QByteArray baVersion = decompress(&record);
+            result.sVersion.append(baVersion);
+            result.sVersion = result.sVersion.trimmed();
+        }
+
+        result.osName = OSNAME_DEBIANLINUX;
+
+        result.sArch = getArch();
+        result.mode = getMode();
+        result.sType = typeIdToString(getType());
+        result.endian = getEndian();
     }
 
-    return sResult;
+    return result;
+}
+
+XBinary::FT XDEB::getFileType()
+{
+    return FT_DEB;
 }
