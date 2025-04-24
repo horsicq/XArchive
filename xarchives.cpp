@@ -75,6 +75,9 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xhla(pDevice);
         listResult = xhla.getRecords(nLimit, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
+        XCFBF xcfbf(pDevice);
+        listResult = xcfbf.getRecords(nLimit, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         XDOS16 xdos16(pDevice);
         listResult = xdos16.getRecords(nLimit, pPdStruct);
@@ -138,6 +141,9 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
         baResult = xlha.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
+        XCFBF xcfbf(pDevice);
+        baResult = xcfbf.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         XDOS16 xdos16(pDevice);
         baResult = xdos16.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
@@ -219,6 +225,9 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
         bResult = xlha.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
+        XCFBF xcfbf(pDevice);
+        bResult = xcfbf.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         XDOS16 xdos16(pDevice);
         bResult = xdos16.decompressToFile(pRecord, sResultFileName, pPdStruct);
@@ -261,6 +270,9 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
         bResult = xlha.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
+        XCFBF xcfbf(pDevice);
+        bResult = xcfbf.decompressToDevice(pRecord, pDestDevice, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         XDOS16 xdos16(pDevice);
         bResult = xdos16.decompressToDevice(pRecord, pDestDevice, pPdStruct);
@@ -382,6 +394,9 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
         bResult = xlha.isArchiveRecordPresent(sRecordFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
+        XCFBF xcfbf(pDevice);
+        bResult = xcfbf.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         XDOS16 xdos16(pDevice);
         bResult = xdos16.isArchiveRecordPresent(sRecordFileName, pPdStruct);

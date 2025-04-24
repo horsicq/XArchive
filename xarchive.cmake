@@ -22,6 +22,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xcab.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcab.h
+    ${CMAKE_CURRENT_LIST_DIR}/xcfbf.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xcfbf.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompresseddevice.cpp

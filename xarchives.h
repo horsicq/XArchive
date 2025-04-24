@@ -40,6 +40,7 @@
 #include "xnpm.h"
 #include "xdeb.h"
 #include "xdos16.h"
+#include "xcfbf.h"
 
 class XArchives : public QObject {
     Q_OBJECT
