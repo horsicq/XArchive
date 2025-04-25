@@ -110,7 +110,7 @@ QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint32 nIndex = 0;
 
-    while ((nSize > 0) && (!(pPdStruct->bIsStop))) {
+    while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         RECORD record = {};
         record.nHeaderOffset = nOffset;
 
