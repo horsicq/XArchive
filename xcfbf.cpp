@@ -76,7 +76,7 @@ QString XCFBF::getFileFormatExt()
 
 quint64 XCFBF::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
-    return 0; // TODO
+    return 0;  // TODO
 }
 
 QList<XArchive::RECORD> XCFBF::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
