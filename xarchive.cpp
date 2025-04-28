@@ -831,7 +831,7 @@ XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compress
 
         result = COMPRESS_RESULT_OK;
 
-        while ((nSize > 0) && (!(pPdStruct->bIsStop))) {
+        while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
             qint64 nTemp = qMin((qint64)CHUNK, nSize);
 
             if (pSourceDevice->read(buffer, nTemp) != nTemp) {
