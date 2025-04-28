@@ -31,9 +31,8 @@ bool XAPK::isValid(PDSTRUCT *pPdStruct)
     XZip xzip(getDevice());
 
     if (xzip.isValid()) {
-        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, pPdStruct);
-
-        bResult = isValid(&listArchiveRecords, pPdStruct);
+        qint64 nECDOffset = xzip.findECDOffset(pPdStruct);
+        bResult = xzip.isAPK(nECDOffset, pPdStruct);
     }
 
     return bResult;
@@ -83,7 +82,7 @@ XBinary::FILEFORMATINFO XAPK::getFileFormatInfo(PDSTRUCT *pPdStruct)
         QByteArray baAndroidManifest = decompress(&listArchiveRecords, "AndroidManifest.xml", pPdStruct);
 
         if (baAndroidManifest.size() > 0) {
-            QString sAndroidManifest = XAndroidBinary::getDecoded(&baAndroidManifest);
+            QString sAndroidManifest = XAndroidBinary::getDecoded(&baAndroidManifest, pPdStruct);
 
             QString sCompileSdkVersion = XBinary::regExp("android:compileSdkVersion=\"(.*?)\"", sAndroidManifest, 1);
             QString sCompileSdkVersionCodename = XBinary::regExp("android:compileSdkVersionCodename=\"(.*?)\"", sAndroidManifest, 1);
@@ -186,7 +185,7 @@ XBinary::OFFSETSIZE XAPK::getSignOffsetSize()
     if ((nBlockSize1) && (nBlockSize1 == nBlockSize2)) {
         nOffset = nOffset - nBlockSize1 + 16;
 
-        qint64 nCentralDirectoryOffset = findECDOffset();
+        qint64 nCentralDirectoryOffset = findECDOffset(nullptr);
         nCentralDirectoryOffset = read_uint32(nCentralDirectoryOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
         osResult.nOffset = nOffset;
@@ -269,7 +268,7 @@ qint64 XAPK::findAPKSignBlockOffset(PDSTRUCT *pPdStruct)
 {
     qint64 nResult = -1;
 
-    qint64 nOffset = findECDOffset();
+    qint64 nOffset = findECDOffset(pPdStruct);
     nOffset = read_uint32(nOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
     nOffset = qMax((qint64)0, nOffset - 0x100);  // TODO const

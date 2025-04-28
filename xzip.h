@@ -159,10 +159,15 @@ public:
 
     CENTRALDIRECTORYFILEHEADER read_CENTRALDIRECTORYFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct);
     LOCALFILEHEADER read_LOCALFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct);
+    qint64 findECDOffset(PDSTRUCT *pPdStruct);
+
+    bool isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct);
+    bool isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct);
+    bool isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct);
 
 protected:
-    qint64 findECDOffset();
     COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);
+    bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct);
 };
 
 #endif  // XZIP_H

@@ -31,9 +31,8 @@ bool XJAR::isValid(PDSTRUCT *pPdStruct)
     XZip xzip(getDevice());
 
     if (xzip.isValid()) {
-        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, pPdStruct);
-
-        bResult = isValid(&listArchiveRecords, pPdStruct);
+        qint64 nECDOffset = xzip.findECDOffset(pPdStruct);
+        bResult = xzip.isJAR(nECDOffset, pPdStruct);
     }
 
     return bResult;
