@@ -60,6 +60,23 @@ public:
         quint32 _sectFat[109];      // [4CH,436] the SECTs of first 109 FAT sectors
     };
 
+    struct CFBF_DIRECTORY_ENTRY
+    {
+        quint16     name[32];          // Directory entry name (Unicode, max 32 chars)
+        quint16     nameLength;        // Length of the name in bytes
+        quint8      objectType;        // 1=Storage, 2=Stream, 5=Root
+        quint8      colorFlag;         // 0=Red, 1=Black (for red-black tree)
+        quint32     leftSiblingID;     // Left sibling ID in red-black tree
+        quint32     rightSiblingID;    // Right sibling ID in red-black tree
+        quint32     childID;           // Child ID in red-black tree
+        quint8      clsid[16];         // Class ID (16 bytes)
+        quint32     stateBits;         // User-defined state bits
+        quint64     creationTime;      // Creation time (64-bit value, FILETIME format)
+        quint64     modifiedTime;      // Last modification time (64-bit value, FILETIME format)
+        quint32     startSectorLocation; // Starting sector of the stream
+        quint64     streamSize;        // Size of the stream in bytes
+    };
+
     explicit XCFBF(QIODevice *pDevice = nullptr);
     ~XCFBF();
 
