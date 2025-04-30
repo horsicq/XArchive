@@ -83,13 +83,6 @@ quint64 XTGZ::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
     QList<XArchive::RECORD> result;
 
     if (g_pCompressedDevice->isOpen()) {
@@ -97,7 +90,7 @@ QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
         qint32 nNumberOfRecords = result.count();
 
-        for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+        for (qint32 i = 0; (i < nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
             result[i].nLayerOffset = g_pCompressedDevice->getLayerOffset();
             result[i].nLayerSize = g_pCompressedDevice->getLayerSize();
             result[i].layerCompressMethod = g_pCompressedDevice->getLayerCompressMethod();

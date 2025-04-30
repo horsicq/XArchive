@@ -217,3 +217,8 @@ QString XMACHOFat::typeIdToString(qint32 nType)
 
     return sResult;
 }
+
+XBinary::FT XMACHOFat::getFileType()
+{
+    return FT_MACHOFAT;
+}

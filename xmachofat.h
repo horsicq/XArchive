@@ -49,6 +49,7 @@ public:
     virtual QString getArch();
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
+    virtual FT getFileType();
 };
 
 #endif  // XMACHOFAT_H
