@@ -91,13 +91,6 @@ quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
     QList<XArchive::RECORD> listRecords;
 
     qint64 nOffset = 0;
