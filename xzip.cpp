@@ -577,12 +577,13 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
 
 bool XZip::isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
-    return _isRecordNamePresent(nECDOffset, "classes.dex", "AndroidManifest.xml", pPdStruct);;
+    return _isRecordNamePresent(nECDOffset, "classes.dex", "AndroidManifest.xml", pPdStruct);
+    ;
 }
 
 bool XZip::isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
-    return false; // TODO
+    return false;  // TODO
 }
 
 bool XZip::isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct)
