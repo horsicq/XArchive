@@ -61,13 +61,6 @@ QList<XArchive::RECORD> XLHA::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
     qint64 nFileSize = getSize();
@@ -76,7 +69,7 @@ QList<XArchive::RECORD> XLHA::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint32 nNumberOfFiles = 0;
 
-    while ((nFileSize > 0) && (!(pPdStruct->bIsStop))) {
+    while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset)) {
             qint64 nHeaderSize = read_uint8(nOffset) + 2;
             qint64 nCompressedSize = read_uint32(nOffset + 7);
