@@ -155,7 +155,7 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     qint64 nOffset = 0;
 
-    while ((nFileSize > 0) && (!(pPdStruct->bIsStop))) {
+    while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset)) {
             qint64 nHeaderSize = read_uint8(nOffset) + 2;
             qint64 nDataSize = read_uint32(nOffset + 7);
