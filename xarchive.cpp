@@ -1116,7 +1116,7 @@ XArchive::RECORD XArchive::getArchiveRecord(const QString &sRecordFileName, QLis
 
     qint32 nNumberOfArchives = pListRecords->count();
 
-    for (qint32 i = 0; (i < nNumberOfArchives) && (!(pPdStruct->bIsStop)); i++) {
+    for (qint32 i = 0; (i < nNumberOfArchives) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         if (pListRecords->at(i).spInfo.sRecordName == sRecordFileName) {
             result = pListRecords->at(i);
             break;
