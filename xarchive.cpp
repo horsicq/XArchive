@@ -1128,18 +1128,11 @@ XArchive::RECORD XArchive::getArchiveRecord(const QString &sRecordFileName, QLis
 
 XArchive::RECORD XArchive::getArchiveRecordByUUID(const QString &sUUID, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
     RECORD result = {};
 
     qint32 nNumberOfArchives = pListRecords->count();
 
-    for (qint32 i = 0; (i < nNumberOfArchives) && (!(pPdStruct->bIsStop)); i++) {
+    for (qint32 i = 0; (i < nNumberOfArchives) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         if (pListRecords->at(i).sUUID == sUUID) {
             result = pListRecords->at(i);
             break;
