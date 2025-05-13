@@ -71,7 +71,7 @@ quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
         qint64 nCurrentOffset = nFileHeaderSize;
 
         if (nVersion == 4) {
-            while (!(pPdStruct->bIsStop)) {
+            while (XBinary::isPdStructNotCanceled(pPdStruct)) {
                 GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
@@ -93,7 +93,7 @@ quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
             }
         }
         if (nVersion == 5) {
-            while (!(pPdStruct->bIsStop)) {
+            while (XBinary::isPdStructNotCanceled(pPdStruct)) {
                 GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
