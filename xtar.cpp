@@ -61,7 +61,7 @@ quint64 XTAR::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
     qint64 nOffset = 0;
 
-    while (!(pPdStruct->bIsStop)) {
+    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
         XTAR::posix_header header = read_posix_header(nOffset);
 
         if (!compareMemory(header.magic, "ustar", 6)) {
