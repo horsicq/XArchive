@@ -914,7 +914,7 @@ XArchive::COMPRESS_RESULT XArchive::_compress_deflate(QIODevice *pSourceDevice, 
                     ret = Z_ERRNO;
                     break;
                 }
-            } while ((strm.avail_out == 0) && (!(pPdStruct->bIsStop)));
+            } while ((strm.avail_out == 0) && XBinary::isPdStructNotCanceled(pPdStruct));
 
             if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
                 break;

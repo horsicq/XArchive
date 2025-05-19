@@ -334,7 +334,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
 
     qint32 nNumberOfRecords = listRecords.count();
 
-    for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+    for (qint32 i = 0; (i < nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         XArchive::RECORD record = listRecords.at(i);
         QString sResultFileName = sResultFileFolder + QDir::separator() + record.spInfo.sRecordName;
 
