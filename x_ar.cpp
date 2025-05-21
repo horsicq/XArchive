@@ -217,12 +217,6 @@ qint32 X_Ar::getType()
 
 XBinary::_MEMORY_MAP X_Ar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
     // TODO HEADER
 
     return XBinary::getMemoryMap(mapMode, pPdStruct);
