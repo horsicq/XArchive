@@ -478,7 +478,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
 
 void XArchives::_findFiles(const QString &sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!(pPdStruct->bIsStop)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((nLimit < pListRecords->count()) || (nLimit == -1)) {
             QFileInfo fi(sDirectoryName);
 
@@ -500,7 +500,7 @@ void XArchives::_findFiles(const QString &sDirectoryName, QList<XArchive::RECORD
 
                 qint32 nNumberOfFiles = eil.count();
 
-                for (qint32 i = 0; (i < nNumberOfFiles) && (!(pPdStruct->bIsStop)); i++) {
+                for (qint32 i = 0; (i < nNumberOfFiles) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
                     QString sFN = eil.at(i).fileName();
 
                     if ((sFN != ".") && (sFN != "..")) {
