@@ -76,14 +76,14 @@ public:
 #define ST_GET_POS_2 11
 #define ST_COPY_DATA 12
 
-#define ARCHIVE_EOF 1       /* Found end of archive. */
-#define ARCHIVE_OK 0        /* Operation was successful. */
-#define ARCHIVE_RETRY (-10) /* Retry might succeed. */
-#define ARCHIVE_WARN (-20)  /* Partial success. */
+#define LZH_ARCHIVE_EOF 1       /* Found end of archive. */
+#define LZH_ARCHIVE_OK 0        /* Operation was successful. */
+#define LZH_ARCHIVE_RETRY (-10) /* Retry might succeed. */
+#define LZH_ARCHIVE_WARN (-20)  /* Partial success. */
 /* For example, if write_header "fails", then you can't push data. */
-#define ARCHIVE_FAILED (-25) /* Current operation cannot complete. */
+#define LZH_ARCHIVE_FAILED (-25) /* Current operation cannot complete. */
 /* But if write_header is "fatal," then this archive is dead and useless. */
-#define ARCHIVE_FATAL (-30) /* No more operations are possible. */
+#define LZH_ARCHIVE_FATAL (-30) /* No more operations are possible. */
 
 #define CACHE_TYPE quint64
 #define CACHE_BITS (8 * sizeof(CACHE_TYPE))

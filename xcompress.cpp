@@ -190,7 +190,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                  */
                 if (!lzh_br_read_ahead_0(strm, br, 16)) {
                     if (!last) /* We need following data. */
-                        return (ARCHIVE_OK);
+                        return (LZH_ARCHIVE_OK);
                     if (lzh_br_has(br, 8)) {
                         /*
                          * It seems there are extra bits.
@@ -203,11 +203,11 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                     if (ds->w_pos > 0) {
                         lzh_emit_window(strm, ds->w_pos);
                         ds->w_pos = 0;
-                        return (ARCHIVE_OK);
+                        return (LZH_ARCHIVE_OK);
                     }
                     /* End of compressed data; we have completely
                      * handled all compressed data. */
-                    return (ARCHIVE_EOF);
+                    return (LZH_ARCHIVE_EOF);
                 }
                 ds->blocks_avail = lzh_br_bits(br, 16);
                 if (ds->blocks_avail == 0) goto failed;
@@ -227,7 +227,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                 if (!lzh_br_read_ahead(strm, br, ds->pt.len_bits)) {
                     if (last) goto failed; /* Truncated data. */
                     ds->state = ST_RD_PT_1;
-                    return (ARCHIVE_OK);
+                    return (LZH_ARCHIVE_OK);
                 }
                 ds->pt.len_avail = lzh_br_bits(br, ds->pt.len_bits);
                 lzh_br_consume(br, ds->pt.len_bits);
@@ -238,7 +238,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                     if (!lzh_br_read_ahead(strm, br, ds->pt.len_bits)) {
                         if (last) goto failed; /* Truncated data.*/
                         ds->state = ST_RD_PT_2;
-                        return (ARCHIVE_OK);
+                        return (LZH_ARCHIVE_OK);
                     }
                     if (!lzh_make_fake_table(&(ds->pt), lzh_br_bits(br, ds->pt.len_bits))) goto failed; /* Invalid data. */
                     lzh_br_consume(br, ds->pt.len_bits);
@@ -259,13 +259,13 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                     if (ds->loop < 0 || last) goto failed; /* Invalid data. */
                     /* Not completed, get following data. */
                     ds->state = ST_RD_PT_3;
-                    return (ARCHIVE_OK);
+                    return (LZH_ARCHIVE_OK);
                 }
                 /* There are some null in bitlen of the literal. */
                 if (!lzh_br_read_ahead(strm, br, 2)) {
                     if (last) goto failed; /* Truncated data. */
                     ds->state = ST_RD_PT_3;
-                    return (ARCHIVE_OK);
+                    return (LZH_ARCHIVE_OK);
                 }
                 c = lzh_br_bits(br, 2);
                 lzh_br_consume(br, 2);
@@ -279,7 +279,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                     if (ds->loop < 0 || last) goto failed; /* Invalid data. */
                     /* Not completed, get following data. */
                     ds->state = ST_RD_PT_4;
-                    return (ARCHIVE_OK);
+                    return (LZH_ARCHIVE_OK);
                 }
                 if (!lzh_make_huffman_table(&(ds->pt))) goto failed; /* Invalid data */
                 if (ds->reading_position) {
@@ -291,7 +291,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                 if (!lzh_br_read_ahead(strm, br, ds->lt.len_bits)) {
                     if (last) goto failed; /* Truncated data. */
                     ds->state = ST_RD_LITERAL_1;
-                    return (ARCHIVE_OK);
+                    return (LZH_ARCHIVE_OK);
                 }
                 ds->lt.len_avail = lzh_br_bits(br, ds->lt.len_bits);
                 lzh_br_consume(br, ds->lt.len_bits);
@@ -302,7 +302,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                     if (!lzh_br_read_ahead(strm, br, ds->lt.len_bits)) {
                         if (last) goto failed; /* Truncated data.*/
                         ds->state = ST_RD_LITERAL_2;
-                        return (ARCHIVE_OK);
+                        return (LZH_ARCHIVE_OK);
                     }
                     if (!lzh_make_fake_table(&(ds->lt), lzh_br_bits(br, ds->lt.len_bits))) goto failed; /* Invalid data */
                     lzh_br_consume(br, ds->lt.len_bits);
@@ -319,7 +319,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                         if (last) goto failed; /* Truncated data.*/
                         ds->loop = i;
                         ds->state = ST_RD_LITERAL_3;
-                        return (ARCHIVE_OK);
+                        return (LZH_ARCHIVE_OK);
                     }
                     rbits = lzh_br_bits(br, ds->pt.max_bits);
                     c = lzh_decode_huffman(&(ds->pt), rbits);
@@ -344,7 +344,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
                                 goto failed;
                             ds->loop = i;
                             ds->state = ST_RD_LITERAL_3;
-                            return (ARCHIVE_OK);
+                            return (LZH_ARCHIVE_OK);
                         }
                         lzh_br_consume(br, ds->pt.bitlen[c]);
                         c = lzh_br_bits(br, n);
@@ -371,7 +371,7 @@ qint32 XCompress::lzh_read_blocks(lzh_stream *strm, qint32 last)
         }
     }
 failed:
-    return (ds->error = ARCHIVE_FAILED);
+    return (ds->error = LZH_ARCHIVE_FAILED);
 }
 
 qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
@@ -537,13 +537,13 @@ qint32 XCompress::lzh_decode_blocks(lzh_stream *strm, qint32 last)
         }
     }
 failed:
-    return (ds->error = ARCHIVE_FAILED);
+    return (ds->error = LZH_ARCHIVE_FAILED);
 next_data:
     ds->br = bre;
     ds->blocks_avail = blocks_avail;
     ds->state = state;
     ds->w_pos = w_pos;
-    return (ARCHIVE_OK);
+    return (LZH_ARCHIVE_OK);
 }
 
 qint32 XCompress::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
@@ -1251,6 +1251,11 @@ void XCompress::rar_UnpWriteData(rar_stream *strm, QIODevice *pDevice, quint8 *D
 
 void XCompress::rar_UnpWriteArea(rar_stream *strm, QIODevice *pDevice, size_t StartPtr, size_t EndPtr)
 {
+    Q_UNUSED(strm);
+    Q_UNUSED(pDevice);
+    Q_UNUSED(StartPtr);
+    Q_UNUSED(EndPtr);
+
     // if (EndPtr!=StartPtr)
     //   strm->UnpSomeRead=true;
 

@@ -388,7 +388,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
         XCompress::lzh_stream strm = {};
 
-        qint32 ret = ARCHIVE_OK;
+        qint32 ret = LZH_ARCHIVE_OK;
 
         //        qDebug("Size: %lld", pSourceDevice->size());
 
@@ -410,11 +410,15 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 strm.avail_out = 0;
                 // strm.ref_ptr = out;
 
-                while (true) {
+                while (isPdStructNotCanceled(pPdStruct)) {
                     ret = XCompress::lzh_decode(&strm, true);
 
+                    if (ret == LZH_ARCHIVE_FAILED) {
+                        break;
+                    }
+
                     if (!_writeToDevice((char *)strm.ref_ptr, strm.avail_out, pDecompressStruct)) {
-                        ret = ARCHIVE_FATAL;
+                        ret = LZH_ARCHIVE_FATAL;
                         break;
                     }
 
@@ -436,7 +440,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
         free(pInBuffer);
 
-        if (ret == ARCHIVE_OK) {
+        if (ret == LZH_ARCHIVE_OK) {
             result = COMPRESS_RESULT_OK;
         }
     } else if ((pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_15) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_20) ||
