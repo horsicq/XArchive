@@ -85,7 +85,7 @@ QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint32 nIndex = 0;
 
-    while (!(pPdStruct->bIsStop)) {
+    while (isPdStructNotCanceled(pPdStruct)) {
         XTAR::posix_header header = read_posix_header(nOffset);
 
         if (!compareMemory(header.magic, "ustar", 6)) {
