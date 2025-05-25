@@ -583,6 +583,9 @@ bool XZip::isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 
 bool XZip::isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(nECDOffset);
+    Q_UNUSED(pPdStruct);
+
     return false;  // TODO
 }
 
