@@ -24,16 +24,70 @@ XArchives::XArchives(QObject *pParent) : QObject(pParent)
 {
 }
 
-QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fileType, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
 {
-    XBinary::PDSTRUCT pdStructEmpty = {};
+    XArchive *pResult = nullptr;
 
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
+    QSet<XBinary::FT> stFileTypes;
+
+    if (fileType == XBinary::FT_UNKNOWN) {
+        stFileTypes = XBinary::getFileTypes(pDevice, true);
+    } else {
+        stFileTypes += fileType;
     }
 
+    if (stFileTypes.contains(XArchive::FT_ZIP)) {
+        pResult = new XZip(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_JAR)) {
+        pResult = new XJAR(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_APK)) {
+        pResult = new XAPK(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_IPA)) {
+        pResult = new XIPA(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_APKS)) {
+        pResult = new XAPKS(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_7Z)) {
+        pResult = new XSevenZip(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_CAB)) {
+        pResult = new XCab(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_RAR)) {
+        pResult = new XRar(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
+        pResult = new XMACHOFat(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_AR)) {
+        pResult = new X_Ar(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_DEB)) {
+        pResult = new XDEB(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
+        pResult = new XTAR(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_NPM)) {
+        pResult = new XNPM(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
+        pResult = new XTGZ(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
+        pResult = new XGzip(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
+        pResult = new XZlib(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
+        pResult = new XLHA(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
+        pResult = new XCFBF(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
+        pResult = new XDOS16(pDevice);
+    }
+
+    return pResult;
+}
+
+QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fileType, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
+{
     QList<XArchive::RECORD> listResult;
+
+    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    listResult = pArchives->getRecords(nLimit, pPdStruct);
+    delete pArchives;
+
+    return listResult;
 
     // TODO more !!!
     // CAB RAR 7ZIP

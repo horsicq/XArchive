@@ -41,6 +41,7 @@
 #include "xdeb.h"
 #include "xdos16.h"
 #include "xcfbf.h"
+#include "xcab.h"
 
 class XArchives : public QObject {
     Q_OBJECT
@@ -48,6 +49,7 @@ class XArchives : public QObject {
 public:
     explicit XArchives(QObject *pParent = nullptr);
 
+    static XArchive *getClass(XBinary::FT fileType, QIODevice *pDevice);
     static QList<XArchive::RECORD> getRecords(QIODevice *pDevice, XBinary::FT fileType = XBinary::FT_UNKNOWN, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QList<XArchive::RECORD> getRecords(const QString &sFileName, XBinary::FT fileType = XBinary::FT_UNKNOWN, qint32 nLimit = -1,
                                               XBinary::PDSTRUCT *pPdStruct = nullptr);
