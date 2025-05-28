@@ -478,7 +478,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 rarStream.FirstWinDone |= (rarStream.PrevPtr > rarStream.UnpPtr);
                 rarStream.PrevPtr = rarStream.UnpPtr;
 
-                if (rarStream.InAddr > rarStream.ReadTop - 30 && !XCompress::rar_UnpReadBuf(&rarStream, pDecompressStruct->pSourceDevice)) break;
+                if (rarStream.Inp.InAddr > rarStream.ReadTop - 30 && !XCompress::rar_UnpReadBuf(&rarStream, pDecompressStruct->pSourceDevice)) break;
                 if (((rarStream.WrPtr - rarStream.UnpPtr) & rarStream.MaxWinMask) < 270 && rarStream.WrPtr != rarStream.UnpPtr)
                     XCompress::rar_UnpWriteBuf20(&rarStream, pDecompressStruct->pDestDevice);
                 if (rarStream.StMode) {
@@ -526,6 +526,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             if (result == COMPRESS_RESULT_OK) {
             }
         } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_29) {
+            result = COMPRESS_RESULT_OK;
+
             static unsigned char LDecode[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224};
             static unsigned char LBits[] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5};
             static int DDecode[XCompress::RAR_DC30];
@@ -554,223 +556,226 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
 
-            //             if (result == COMPRESS_RESULT_OK) {
-            //                 while (true)
-            //                 {
-            //                   rarStream.UnpPtr&=rarStream.MaxWinMask;
+            if (result == COMPRESS_RESULT_OK) {
+                while (true)
+                {
+                  rarStream.UnpPtr&=rarStream.MaxWinMask;
 
-            //                   rarStream.FirstWinDone|=(rarStream.PrevPtr>rarStream.UnpPtr);
-            //                   rarStream.PrevPtr=rarStream.UnpPtr;
+                  rarStream.FirstWinDone|=(rarStream.PrevPtr>rarStream.UnpPtr);
+                  rarStream.PrevPtr=rarStream.UnpPtr;
 
-            //                   if (rarStream.InAddr>rarStream.ReadBorder)
-            //                   {
-            //                     if (!XCompress::rar_UnpReadBuf30(&rarStream, pDecompressStruct->pSourceDevice))
-            //                       break;
-            //                   }
-            //                   if (((rarStream.WrPtr-rarStream.UnpPtr) & rarStream.MaxWinMask)<=XCompress::RAR_MAX3_INC_LZ_MATCH && rarStream.WrPtr!=rarStream.UnpPtr)
-            //                   {
-            //                     XCompress::rar_UnpReadBuf30(&rarStream, pDecompressStruct->pSourceDevice);
-            //                     if (rarStream.WrittenFileSize>rarStream.DestUnpSize)
-            //                         result = COMPRESS_RESULT_DATAERROR;
-            //                         break;
-            //                     if (rarStream.Suspended)
-            //                     {
-            //                         rarStream.FileExtracted=false;
-            //                         result = COMPRESS_RESULT_DATAERROR;
-            //                         break;
-            //                     }
-            //                   }
-            //                   if (rarStream.UnpBlockType==XCompress::RAR_BLOCK_PPM)
-            //                   {
-            // #ifdef QT_DEBUG
-            //                     qDebug("PPM");
-            // #endif
-            //                       result = COMPRESS_RESULT_DATAERROR;
-            //                       break;
-            //                     // // Here speed is critical, so we do not use SafePPMDecodeChar,
-            //                     // // because sometimes even the inline function can introduce
-            //                     // // some additional penalty.
-            //                     // int Ch=PPM.DecodeChar();
-            //                     // if (Ch==-1)              // Corrupt PPM data found.
-            //                     // {
-            //                     //   PPM.CleanUp();         // Reset possibly corrupt PPM data structures.
-            //                     //   rarStream.UnpBlockType=XCompress::RAR_BLOCK_LZ; // Set faster and more fail proof LZ mode.
-            //                     //   break;
-            //                     // }
-            //                     // if (Ch==rarStream.PPMEscChar)
-            //                     // {
-            //                     //   int NextCh=SafePPMDecodeChar();
-            //                     //   if (NextCh==0)  // End of PPM encoding.
-            //                     //   {
-            //                     //     if (!XCompress::rar_ReadTables30(&rarStream, pDecompressStruct->pSourceDevice))
-            //                     //       break;
-            //                     //     continue;
-            //                     //   }
-            //                     //   if (NextCh==-1) // Corrupt PPM data found.
-            //                     //     break;
-            //                     //   if (NextCh==2)  // End of file in PPM mode.
-            //                     //     break;
-            //                     //   if (NextCh==3)  // Read VM code.
-            //                     //   {
-            //                     //     if (!ReadVMCodePPM())
-            //                     //       break;
-            //                     //     continue;
-            //                     //   }
-            //                     //   if (NextCh==4) // LZ inside of PPM.
-            //                     //   {
-            //                     //     unsigned int Distance=0,Length;
-            //                     //     bool Failed=false;
-            //                     //     for (int I=0;I<4 && !Failed;I++)
-            //                     //     {
-            //                     //       int Ch=SafePPMDecodeChar();
-            //                     //       if (Ch==-1)
-            //                     //         Failed=true;
-            //                     //       else
-            //                     //         if (I==3)
-            //                     //           Length=(quint8)Ch;
-            //                     //         else
-            //                     //           Distance=(Distance<<8)+(quint8)Ch;
-            //                     //     }
-            //                     //     if (Failed)
-            //                     //       break;
+                  if (rarStream.Inp.InAddr>rarStream.ReadBorder)
+                  {
+                    if (!XCompress::rar_UnpReadBuf30(&rarStream, pDecompressStruct->pSourceDevice))
+                      break;
+                  }
+                  if (((rarStream.WrPtr-rarStream.UnpPtr) & rarStream.MaxWinMask)<=XCompress::RAR_MAX3_INC_LZ_MATCH && rarStream.WrPtr!=rarStream.UnpPtr)
+                  {
+                    XCompress::rar_UnpReadBuf30(&rarStream, pDecompressStruct->pSourceDevice);
+                    if (rarStream.WrittenFileSize>rarStream.DestUnpSize)
+                        result = COMPRESS_RESULT_DATAERROR;
+                        break;
+                    if (rarStream.Suspended)
+                    {
+                        rarStream.FileExtracted=false;
+                        result = COMPRESS_RESULT_DATAERROR;
+                        break;
+                    }
+                  }
+                  if (rarStream.UnpBlockType==XCompress::RAR_BLOCK_PPM)
+                  {
+#ifdef QT_DEBUG
+                    qDebug("PPM");
+#endif
+                      result = COMPRESS_RESULT_DATAERROR;
+                      break;
+                    // // Here speed is critical, so we do not use SafePPMDecodeChar,
+                    // // because sometimes even the inline function can introduce
+                    // // some additional penalty.
+                    // int Ch=PPM.DecodeChar();
+                    // if (Ch==-1)              // Corrupt PPM data found.
+                    // {
+                    //   PPM.CleanUp();         // Reset possibly corrupt PPM data structures.
+                    //   rarStream.UnpBlockType=XCompress::RAR_BLOCK_LZ; // Set faster and more fail proof LZ mode.
+                    //   break;
+                    // }
+                    // if (Ch==rarStream.PPMEscChar)
+                    // {
+                    //   int NextCh=SafePPMDecodeChar();
+                    //   if (NextCh==0)  // End of PPM encoding.
+                    //   {
+                    //     if (!XCompress::rar_ReadTables30(&rarStream, pDecompressStruct->pSourceDevice))
+                    //       break;
+                    //     continue;
+                    //   }
+                    //   if (NextCh==-1) // Corrupt PPM data found.
+                    //     break;
+                    //   if (NextCh==2)  // End of file in PPM mode.
+                    //     break;
+                    //   if (NextCh==3)  // Read VM code.
+                    //   {
+                    //     if (!ReadVMCodePPM())
+                    //       break;
+                    //     continue;
+                    //   }
+                    //   if (NextCh==4) // LZ inside of PPM.
+                    //   {
+                    //     unsigned int Distance=0,Length;
+                    //     bool Failed=false;
+                    //     for (int I=0;I<4 && !Failed;I++)
+                    //     {
+                    //       int Ch=SafePPMDecodeChar();
+                    //       if (Ch==-1)
+                    //         Failed=true;
+                    //       else
+                    //         if (I==3)
+                    //           Length=(quint8)Ch;
+                    //         else
+                    //           Distance=(Distance<<8)+(quint8)Ch;
+                    //     }
+                    //     if (Failed)
+                    //       break;
 
-            //                     //     XCompress::rar_CopyString(Length+32,Distance+2);
-            //                     //     continue;
-            //                     //   }
-            //                     //   if (NextCh==5) // One byte distance match (RLE) inside of PPM.
-            //                     //   {
-            //                     //     int Length=SafePPMDecodeChar();
-            //                     //     if (Length==-1)
-            //                     //       break;
-            //                     //     XCompress::rar_CopyString(Length+4,1);
-            //                     //     continue;
-            //                     //   }
-            //                     //   // If we are here, NextCh must be 1, what means that current byte
-            //                     //   // is equal to our 'escape' byte, so we just store it to Window.
-            //                     // }
-            //                     // rarStream.Window[rarStream.UnpPtr++]=Ch;
-            //                     // continue;
-            //                   }
+                    //     XCompress::rar_CopyString(Length+32,Distance+2);
+                    //     continue;
+                    //   }
+                    //   if (NextCh==5) // One byte distance match (RLE) inside of PPM.
+                    //   {
+                    //     int Length=SafePPMDecodeChar();
+                    //     if (Length==-1)
+                    //       break;
+                    //     XCompress::rar_CopyString(Length+4,1);
+                    //     continue;
+                    //   }
+                    //   // If we are here, NextCh must be 1, what means that current byte
+                    //   // is equal to our 'escape' byte, so we just store it to Window.
+                    // }
+                    // rarStream.Window[rarStream.UnpPtr++]=Ch;
+                    // continue;
+                  }
 
-            //                   uint Number=XCompress::rar_DecodeNumber(&rarStream,&rarStream.BlockTables.LD);
-            //                   if (Number<256)
-            //                   {
-            //                     rarStream.Window[rarStream.UnpPtr++]=(quint8)Number;
-            //                     continue;
-            //                   }
-            //                   if (Number>=271)
-            //                   {
-            //                     uint Length=LDecode[Number-=271]+3;
-            //                     if ((Bits=LBits[Number])>0)
-            //                     {
-            //                       Length+=XCompress::rar_getbits(&rarStream)>>(16-Bits);
-            //                       XCompress::rar_addbits(&rarStream, Bits);
-            //                     }
+                  uint Number=XCompress::rar_DecodeNumber(&rarStream,&rarStream.BlockTables.LD);
+                  if (Number<256)
+                  {
+                    rarStream.Window[rarStream.UnpPtr++]=(quint8)Number;
+                    continue;
+                  }
+                  if (Number>=271)
+                  {
+                    uint Length=LDecode[Number-=271]+3;
+                    if ((Bits=LBits[Number])>0)
+                    {
+                      Length+=XCompress::rar_getbits(&(rarStream.Inp))>>(16-Bits);
+                      XCompress::rar_addbits(&(rarStream.Inp), Bits);
+                    }
 
-            //                     uint DistNumber=XCompress::rar_DecodeNumber(&rarStream,&rarStream.BlockTables.DD);
-            //                     uint Distance=DDecode[DistNumber]+1;
-            //                     if ((Bits=DBits[DistNumber])>0)
-            //                     {
-            //                       if (DistNumber>9)
-            //                       {
-            //                         if (Bits>4)
-            //                         {
-            //                           Distance+=((XCompress::rar_getbits(&rarStream)>>(20-Bits))<<4);
-            //                           XCompress::rar_addbits(&rarStream, Bits-4);
-            //                         }
-            //                         if (rarStream.LowDistRepCount>0)
-            //                         {
-            //                           rarStream.LowDistRepCount--;
-            //                           Distance+=rarStream.PrevLowDist;
-            //                         }
-            //                         else
-            //                         {
-            //                           uint LowDist=XCompress::rar_DecodeNumber(&rarStream,&rarStream.BlockTables.LDD);
-            //                           if (LowDist==16)
-            //                           {
-            //                             rarStream.LowDistRepCount=XCompress::RAR_LOW_DIST_REP_COUNT-1;
-            //                             Distance+=rarStream.PrevLowDist;
-            //                           }
-            //                           else
-            //                           {
-            //                             Distance+=LowDist;
-            //                             rarStream.PrevLowDist=LowDist;
-            //                           }
-            //                         }
-            //                       }
-            //                       else
-            //                       {
-            //                         Distance+=XCompress::rar_getbits(&rarStream)>>(16-Bits);
-            //                         XCompress::rar_addbits(&rarStream, Bits);
-            //                       }
-            //                     }
+                    uint DistNumber=XCompress::rar_DecodeNumber(&rarStream,&rarStream.BlockTables.DD);
+                    uint Distance=DDecode[DistNumber]+1;
+                    if ((Bits=DBits[DistNumber])>0)
+                    {
+                      if (DistNumber>9)
+                      {
+                        if (Bits>4)
+                        {
+                          Distance+=((XCompress::rar_getbits(&(rarStream.Inp))>>(20-Bits))<<4);
+                          XCompress::rar_addbits(&(rarStream.Inp), Bits-4);
+                        }
+                        if (rarStream.LowDistRepCount>0)
+                        {
+                          rarStream.LowDistRepCount--;
+                          Distance+=rarStream.PrevLowDist;
+                        }
+                        else
+                        {
+                          uint LowDist=XCompress::rar_DecodeNumber(&rarStream,&rarStream.BlockTables.LDD);
+                          if (LowDist==16)
+                          {
+                            rarStream.LowDistRepCount=XCompress::RAR_LOW_DIST_REP_COUNT-1;
+                            Distance+=rarStream.PrevLowDist;
+                          }
+                          else
+                          {
+                            Distance+=LowDist;
+                            rarStream.PrevLowDist=LowDist;
+                          }
+                        }
+                      }
+                      else
+                      {
+                        Distance+=XCompress::rar_getbits(&(rarStream.Inp))>>(16-Bits);
+                        XCompress::rar_addbits(&(rarStream.Inp), Bits);
+                      }
+                    }
 
-            //                     if (Distance>=0x2000)
-            //                     {
-            //                       Length++;
-            //                       if (Distance>=0x40000)
-            //                         Length++;
-            //                     }
+                    if (Distance>=0x2000)
+                    {
+                      Length++;
+                      if (Distance>=0x40000)
+                        Length++;
+                    }
 
-            //                     XCompress::rar_InsertOldDist(&rarStream, Distance);
-            //                     rarStream.LastLength=Length;
-            //                     XCompress::rar_CopyString(&rarStream, Length,Distance);
-            //                     continue;
-            //                   }
-            //                   if (Number==256)
-            //                   {
-            //                     if (!XCompress::rar_ReadEndOfBlock(&rarStream, pDecompressStruct->pSourceDevice))
-            //                       break;
-            //                     continue;
-            //                   }
-            //                   if (Number==257)
-            //                   {
-            //                     if (!XCompress::rar_ReadVMCode())
-            //                       break;
-            //                     continue;
-            //                   }
-            //                   if (Number==258)
-            //                   {
-            //                     if (rarStream.LastLength!=0)
-            //                       XCompress::rar_CopyString(&rarStream, rarStream.LastLength,rarStream.OldDist[0]);
-            //                     continue;
-            //                   }
-            //                   if (Number<263)
-            //                   {
-            //                     uint DistNum=Number-259;
-            //                     uint Distance=(uint)rarStream.OldDist[DistNum];
-            //                     for (uint I=DistNum;I>0;I--)
-            //                       rarStream.OldDist[I]=rarStream.OldDist[I-1];
-            //                     rarStream.OldDist[0]=Distance;
+                    XCompress::rar_InsertOldDist(&rarStream, Distance);
+                    rarStream.LastLength=Length;
+                    XCompress::rar_CopyString(&rarStream, Length,Distance);
+                    continue;
+                  }
+                  if (Number==256)
+                  {
+                    if (!XCompress::rar_ReadEndOfBlock(&rarStream, pDecompressStruct->pSourceDevice))
+                      break;
+                    continue;
+                  }
+                  if (Number==257)
+                  {
+                    if (!XCompress::rar_ReadVMCode(&rarStream, pDecompressStruct->pSourceDevice))
+                      break;
+                    continue;
+                  }
+                  if (Number==258)
+                  {
+                    if (rarStream.LastLength!=0)
+                      XCompress::rar_CopyString(&rarStream, rarStream.LastLength,rarStream.OldDist[0]);
+                    continue;
+                  }
+                  if (Number<263)
+                  {
+                    uint DistNum=Number-259;
+                    uint Distance=(uint)rarStream.OldDist[DistNum];
+                    for (uint I=DistNum;I>0;I--)
+                      rarStream.OldDist[I]=rarStream.OldDist[I-1];
+                    rarStream.OldDist[0]=Distance;
 
-            //                     uint LengthNumber=XCompress::rar_DecodeNumber(&rarStream, &rarStream.BlockTables.RD);
-            //                     int Length=LDecode[LengthNumber]+2;
-            //                     if ((Bits=LBits[LengthNumber])>0)
-            //                     {
-            //                       Length+=XCompress::rar_getbits(&rarStream)>>(16-Bits);
-            //                       XCompress::rar_addbits(&rarStream, Bits);
-            //                     }
-            //                     rarStream.LastLength=Length;
-            //                     XCompress::rar_CopyString(&rarStream, Length,Distance);
-            //                     continue;
-            //                   }
-            //                   if (Number<272)
-            //                   {
-            //                     uint Distance=SDDecode[Number-=263]+1;
-            //                     if ((Bits=SDBits[Number])>0)
-            //                     {
-            //                       Distance+=XCompress::rar_getbits(&rarStream)>>(16-Bits);
-            //                       XCompress::rar_addbits(&rarStream, Bits);
-            //                     }
-            //                     XCompress::rar_InsertOldDist(&rarStream, Distance);
-            //                     rarStream.LastLength=2;
-            //                     XCompress::rar_CopyString(&rarStream, 2,Distance);
-            //                     continue;
-            //                   }
-            //                 }
-            //                 XCompress::rar_UnpWriteBuf30(&rarStream, pDecompressStruct->pDestDevice);
-            //             }
+                    uint LengthNumber=XCompress::rar_DecodeNumber(&rarStream, &rarStream.BlockTables.RD);
+                    int Length=LDecode[LengthNumber]+2;
+                    if ((Bits=LBits[LengthNumber])>0)
+                    {
+                      Length+=XCompress::rar_getbits(&(rarStream.Inp))>>(16-Bits);
+                      XCompress::rar_addbits(&(rarStream.Inp), Bits);
+                    }
+                    rarStream.LastLength=Length;
+                    XCompress::rar_CopyString(&rarStream, Length,Distance);
+                    continue;
+                  }
+                  if (Number<272)
+                  {
+                    uint Distance=SDDecode[Number-=263]+1;
+                    if ((Bits=SDBits[Number])>0)
+                    {
+                      Distance+=XCompress::rar_getbits(&(rarStream.Inp))>>(16-Bits);
+                      XCompress::rar_addbits(&(rarStream.Inp), Bits);
+                    }
+                    XCompress::rar_InsertOldDist(&rarStream, Distance);
+                    rarStream.LastLength=2;
+                    XCompress::rar_CopyString(&rarStream, 2,Distance);
+                    continue;
+                  }
+                }
+                XCompress::rar_UnpWriteBuf30(&rarStream, pDecompressStruct->pDestDevice);
+            }
         }
+        delete [] rarStream.Inp.InBuf;
+        delete [] rarStream.VMCodeInp.InBuf;
+        XCompress::rar_VM_final(&(rarStream.VM));
     }
 
     return result;
@@ -1030,7 +1035,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
 
     qint32 nNumberOfArchives = pListArchive->count();
 
-    for (qint32 i = 0; i < nNumberOfArchives; i++) {
+    for (qint32 i = 0; (i < nNumberOfArchives) && isPdStructNotCanceled(pPdStruct) ; i++) {
         XArchive::RECORD record = pListArchive->at(i);
 
         bool bNamePresent = XBinary::isRegExpPresent(QString("^%1").arg(sRecordFileName), record.spInfo.sRecordName);

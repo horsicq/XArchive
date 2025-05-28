@@ -23,6 +23,7 @@
 
 #include <QObject>
 #include <QIODevice>
+#include "xbinary.h"
 
 #ifdef Q_OS_LINUX
 #if (QT_VERSION_MAJOR > 5)
@@ -215,8 +216,27 @@ public:
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct lzh_huffman *hf);
 
+
+    // Maximum number of filters per entire data block. Must be at least
+    // twice more than MAX_PACK_FILTERS to store filters from two data blocks.
+    static const uint RAR_MAX_UNPACK_FILTERS = 8192;
+
+    // Maximum number of filters per entire data block for RAR3 unpack.
+    // Must be at least twice more than v3_MAX_PACK_FILTERS to store filters
+    // from two data blocks.
+    static const uint RAR_MAX3_UNPACK_FILTERS = 8192;
+
+// Limit maximum number of channels in RAR3 delta filter to some reasonable
+// value to prevent too slow processing of corrupt archives with invalid
+// channels number. Must be equal or larger than v3_MAX_FILTER_CHANNELS.
+// No need to provide it for RAR5, which uses only 5 bits to store channels.
+    static const uint RAR_MAX3_UNPACK_CHANNELS = 1024;
+
     // Maximum LZ match length we can encode even for short distances.
     static const uint RAR_MAX_LZ_MATCH = 0x1001;
+
+    static const uint RAR_VM_MEMSIZE = 0x40000;
+    static const uint RAR_VM_MEMMASK = (RAR_VM_MEMSIZE-1);
 
     // We increment LZ match length for longer distances, because shortest
     // matches are not allowed for them. Maximum length increment is 3
@@ -255,6 +275,7 @@ public:
     // so we keep the number of buffered filters in unpacker reasonable.
     static const size_t RAR_UNPACK_MAX_WRITE = 0x400000;
     static const size_t RAR_BufferSize_MAX_SIZE = 0x8000;
+    static const size_t RAR_BitInput_MAX_SIZE = 0x8000;
 
     // Decode compressed bit fields to alphabet numbers.
     struct rar_DecodeTable {
@@ -373,6 +394,19 @@ public:
         RAR_BLOCK_PPM
     };
 
+    struct rar_inp_bit {
+        // Bits
+        bool ExternalBuffer;
+        int InAddr;     // Curent byte position in the buffer.
+        int InBit;      // Current bit position in the current byte.
+        quint8 *InBuf;  // Input buffer.
+    };
+
+    struct rar_VM {
+        quint8 *Mem;
+        uint R[8];
+    };
+
     struct rar_stream {
         quint8 *Window;
 
@@ -434,10 +468,9 @@ public:
         bool TablesRead2, TablesRead3, TablesRead5;
 
         // // Virtual machine to execute filters code.
-        // RarVM VM;
+        rar_VM VM;
         // // Buffer to read VM filters code. We moved it here from AddVMCode
         // // function to reduce time spent in BitInput constructor.
-        // BitInput VMCodeInp;
         // Filters code, one entry per filter.
         std::vector<rar_UnpackFilter30 *> Filters30;
 
@@ -451,11 +484,8 @@ public:
 
         int LastFilter;
 
-        // Bits
-        bool ExternalBuffer;
-        int InAddr;     // Curent byte position in the buffer.
-        int InBit;      // Current bit position in the current byte.
-        quint8 *InBuf;  // Input buffer.
+        rar_inp_bit Inp;
+        rar_inp_bit VMCodeInp;
     };
 
     static void rar_init(struct rar_stream *strm, quint64 WinSize, bool Solid);
@@ -475,10 +505,13 @@ public:
     static void rar_UnpWriteData(struct rar_stream *strm, QIODevice *pDevice, quint8 *Data, size_t Size);
     static void rar_GetFlagsBuf(struct rar_stream *strm);
     static uint rar_DecodeNum(struct rar_stream *strm, uint Num, uint StartPos, uint *DecTab, uint *PosTab);
-    static uint rar_fgetbits(struct rar_stream *strm);
-    static void rar_faddbits(struct rar_stream *strm, uint Bits);
-    static uint rar_getbits(struct rar_stream *strm);
-    static void rar_addbits(struct rar_stream *strm, uint Bits);
+    static uint rar_fgetbits(struct rar_inp_bit *bits);
+    static void rar_faddbits(struct rar_inp_bit *bits, uint Bits);
+    static uint rar_getbits(struct rar_inp_bit *bits);
+    static void rar_addbits(struct rar_inp_bit *bits, uint Bits);
+    static void rar_InitBitInput(struct rar_inp_bit *bits);
+    static bool rar_Overflow(struct rar_inp_bit *bits, uint IncPtr) ;
+    static uint rar_VM_ReadData(struct rar_inp_bit *bits);
     static void rar_HuffDecode(struct rar_stream *strm);
     static void rar_LongLZ(struct rar_stream *strm);
     static void rar_ShortLZ(struct rar_stream *strm);
@@ -491,6 +524,19 @@ public:
     static void rar_InsertOldDist(struct rar_stream *strm, size_t Distance);
     static size_t rar_WrapUp(struct rar_stream *strm, size_t WinPos);
     static bool rar_ReadEndOfBlock(struct rar_stream *strm, QIODevice *pDevice);
+    static bool rar_ReadVMCode(struct rar_stream *strm, QIODevice *pDevice);
+    static bool rar_AddVMCode(struct rar_stream *strm, uint FirstByte,quint8 *Code,uint CodeSize);
+    static void rar_VM_Init(struct rar_VM *vm);
+    static void rar_VM_final(struct rar_VM *vm);
+    static void rar_VM_Prepare(quint8 *Code,uint CodeSize, rar_VM_PreparedProgram *Prg);
+    static void rar_VM_SetMemory(struct rar_VM *vm, size_t Pos, quint8 *Data, size_t DataSize);
+    static void rar_VM_ExecuteCode(struct rar_VM *vm, rar_VM_PreparedProgram *Prg);
+    static bool rar_VM_ExecuteStandardFilter(struct rar_VM *vm, rar_VM_StandardFilters FilterType);
+    static uint rar_CRC32(uint StartCRC,const void *Addr,size_t Size);
+    static uint rar_VM_FilterItanium_GetBits(quint8 *Data, uint BitPos, uint BitCount);
+    static void rar_VM_FilterItanium_SetBits(quint8 *Data,uint BitField,uint BitPos,uint BitCount);
+    static quint32 rar_RawGet4(const void *Data);
+    static void rar_RawPut4(quint32 Value, void *Data);
 };
 
 #endif  // XCOMPRESS_H

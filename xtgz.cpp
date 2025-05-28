@@ -107,7 +107,7 @@ QString XTGZ::getFileFormatExt()
 
 QList<XBinary::MAPMODE> XTGZ::getMapModesList()
 {
-    return XTAR::getMapModesList();
+    return XTAR().getMapModesList();
 }
 
 XBinary::FT XTGZ::getFileType()
