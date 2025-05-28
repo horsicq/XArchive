@@ -455,7 +455,7 @@ public:
         // 3
 
         int PrevLowDist, LowDistRepCount;
-        // ModelPPM PPM;
+        //rar_ModelPPM PPM;
         int PPMEscChar;
         quint8 UnpOldTable[RAR_HUFF_TABLE_SIZE30];
         int UnpBlockType;
