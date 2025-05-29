@@ -2135,7 +2135,7 @@ bool XCompress::rar_ReadVMCode(rar_stream *strm, QIODevice *pDevice)
 bool XCompress::rar_AddVMCode(rar_stream *strm, uint FirstByte, quint8 *Code, uint CodeSize)
 {
     rar_InitBitInput(&(strm->VMCodeInp));
-    memcpy(strm->VMCodeInp.InBuf,Code,qMin(RAR_BitInput_MAX_SIZE,CodeSize));
+    memcpy(strm->VMCodeInp.InBuf,Code,qMin((uint)RAR_BitInput_MAX_SIZE,CodeSize));
     rar_VM_Init(&(strm->VM));
 
     uint FiltPos;
