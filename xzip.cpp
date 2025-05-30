@@ -120,7 +120,7 @@ quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
     } else {
         qint64 nOffset = 0;
 
-        for (qint32 i = 0; (!(pPdStruct->bIsStop)); i++) {
+        for (qint32 i = 0; isPdStructNotCanceled(pPdStruct); i++) {
             quint32 nLocalSignature = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nSignature));
             quint32 nLocalFileNameSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
             quint32 nLocalExtraFieldSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));

@@ -49,9 +49,7 @@ bool XRar::isValid(QIODevice *pDevice)
 
 QString XRar::getVersion()
 {
-    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
-
-    return getFileFormatInfo(&pdStructEmpty).sVersion;
+    return getFileFormatInfo(nullptr).sVersion;
 }
 
 quint64 XRar::getNumberOfRecords(PDSTRUCT *pPdStruct)
@@ -120,13 +118,6 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
     QList<XArchive::RECORD> listResult;
 
     qint64 nFileHeaderSize = 0;
@@ -142,7 +133,7 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         qint64 nCurrentOffset = nFileHeaderSize;
 
         if (nVersion == 4) {
-            while (!(pPdStruct->bIsStop)) {
+            while (isPdStructNotCanceled(pPdStruct)) {
                 GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
                 if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
@@ -187,7 +178,7 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             }
         }
         if (nVersion == 5) {
-            while (!(pPdStruct->bIsStop)) {
+            while (isPdStructNotCanceled(pPdStruct)) {
                 GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
@@ -300,7 +291,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
             nCurrentOffset = 7;
             result.sVersion = "1.5-4.X";
 
-            while (!(pPdStruct->bIsStop)) {
+            while (isPdStructNotCanceled(pPdStruct)) {
                 if (nCurrentOffset >= getSize() - sizeof(GENERICBLOCK4)) {
                     break;
                 }
@@ -362,7 +353,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
             nCurrentOffset = 8;
             result.sVersion = "5.X-7.X";
 
-            while (!(pPdStruct->bIsStop)) {
+            while (isPdStructNotCanceled(pPdStruct)) {
                 GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
@@ -646,13 +637,6 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapMode)
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
     XBinary::_MEMORY_MAP result = {};
 
     result.nBinarySize = getSize();
@@ -687,7 +671,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         qint64 nCurrentOffset = nFileHeaderSize;
 
         if (nVersion == 4) {
-            while (!(pPdStruct->bIsStop)) {
+            while (isPdStructNotCanceled(pPdStruct)) {
                 if (nCurrentOffset >= result.nBinarySize - sizeof(GENERICBLOCK4)) {
                     break;
                 }
@@ -741,7 +725,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
             }
         }
         if (nVersion == 5) {
-            while (!(pPdStruct->bIsStop)) {
+            while (isPdStructNotCanceled(pPdStruct)) {
                 GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
