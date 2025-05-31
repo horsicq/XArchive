@@ -216,7 +216,6 @@ public:
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct lzh_huffman *hf);
 
-
     // Maximum number of filters per entire data block. Must be at least
     // twice more than MAX_PACK_FILTERS to store filters from two data blocks.
     static const uint RAR_MAX_UNPACK_FILTERS = 8192;
@@ -226,17 +225,17 @@ public:
     // from two data blocks.
     static const uint RAR_MAX3_UNPACK_FILTERS = 8192;
 
-// Limit maximum number of channels in RAR3 delta filter to some reasonable
-// value to prevent too slow processing of corrupt archives with invalid
-// channels number. Must be equal or larger than v3_MAX_FILTER_CHANNELS.
-// No need to provide it for RAR5, which uses only 5 bits to store channels.
+    // Limit maximum number of channels in RAR3 delta filter to some reasonable
+    // value to prevent too slow processing of corrupt archives with invalid
+    // channels number. Must be equal or larger than v3_MAX_FILTER_CHANNELS.
+    // No need to provide it for RAR5, which uses only 5 bits to store channels.
     static const uint RAR_MAX3_UNPACK_CHANNELS = 1024;
 
     // Maximum LZ match length we can encode even for short distances.
     static const uint RAR_MAX_LZ_MATCH = 0x1001;
 
     static const uint RAR_VM_MEMSIZE = 0x40000;
-    static const uint RAR_VM_MEMMASK = (RAR_VM_MEMSIZE-1);
+    static const uint RAR_VM_MEMMASK = (RAR_VM_MEMSIZE - 1);
 
     // We increment LZ match length for longer distances, because shortest
     // matches are not allowed for them. Maximum length increment is 3
@@ -455,7 +454,7 @@ public:
         // 3
 
         int PrevLowDist, LowDistRepCount;
-        //rar_ModelPPM PPM;
+        // rar_ModelPPM PPM;
         int PPMEscChar;
         quint8 UnpOldTable[RAR_HUFF_TABLE_SIZE30];
         int UnpBlockType;
@@ -510,7 +509,7 @@ public:
     static uint rar_getbits(struct rar_inp_bit *bits);
     static void rar_addbits(struct rar_inp_bit *bits, uint Bits);
     static void rar_InitBitInput(struct rar_inp_bit *bits);
-    static bool rar_Overflow(struct rar_inp_bit *bits, uint IncPtr) ;
+    static bool rar_Overflow(struct rar_inp_bit *bits, uint IncPtr);
     static uint rar_VM_ReadData(struct rar_inp_bit *bits);
     static void rar_HuffDecode(struct rar_stream *strm);
     static void rar_LongLZ(struct rar_stream *strm);
@@ -525,16 +524,16 @@ public:
     static size_t rar_WrapUp(struct rar_stream *strm, size_t WinPos);
     static bool rar_ReadEndOfBlock(struct rar_stream *strm, QIODevice *pDevice);
     static bool rar_ReadVMCode(struct rar_stream *strm, QIODevice *pDevice);
-    static bool rar_AddVMCode(struct rar_stream *strm, uint FirstByte,quint8 *Code,uint CodeSize);
+    static bool rar_AddVMCode(struct rar_stream *strm, uint FirstByte, quint8 *Code, uint CodeSize);
     static void rar_VM_Init(struct rar_VM *vm);
     static void rar_VM_final(struct rar_VM *vm);
-    static void rar_VM_Prepare(quint8 *Code,uint CodeSize, rar_VM_PreparedProgram *Prg);
+    static void rar_VM_Prepare(quint8 *Code, uint CodeSize, rar_VM_PreparedProgram *Prg);
     static void rar_VM_SetMemory(struct rar_VM *vm, size_t Pos, quint8 *Data, size_t DataSize);
     static void rar_VM_ExecuteCode(struct rar_VM *vm, rar_VM_PreparedProgram *Prg);
     static bool rar_VM_ExecuteStandardFilter(struct rar_VM *vm, rar_VM_StandardFilters FilterType);
-    static uint rar_CRC32(uint StartCRC,const void *Addr,size_t Size);
+    static uint rar_CRC32(uint StartCRC, const void *Addr, size_t Size);
     static uint rar_VM_FilterItanium_GetBits(quint8 *Data, uint BitPos, uint BitCount);
-    static void rar_VM_FilterItanium_SetBits(quint8 *Data,uint BitField,uint BitPos,uint BitCount);
+    static void rar_VM_FilterItanium_SetBits(quint8 *Data, uint BitField, uint BitPos, uint BitCount);
     static quint32 rar_RawGet4(const void *Data);
     static void rar_RawPut4(quint32 Value, void *Data);
 };
