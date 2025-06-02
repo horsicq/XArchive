@@ -88,7 +88,7 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
             _state.nPackPosition = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
             _state.nNumberOfPackStreams = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
 
-            for (qint32 i = 0; (i < (qint32)(_state.nNumberOfPackStreams)) && (!(pPdStruct->bIsStop)); i++) {
+            for (qint32 i = 0; (i < (qint32)(_state.nNumberOfPackStreams)) && isPdStructNotCanceled(pPdStruct); i++) {
                 quint64 nPackSize = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
                 _state.listPackSizes.append(nPackSize);
             }
