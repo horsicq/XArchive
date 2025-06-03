@@ -147,13 +147,6 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     timer.start();
 #endif
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
     QList<RECORD> listResult;
 
     qint64 nECDOffset = findECDOffset(pPdStruct);
@@ -224,7 +217,7 @@ QList<XArchive::RECORD> XZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
         qint64 nOffset = 0;
 
-        for (qint32 i = 0; i < (nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+        for (qint32 i = 0; i < (nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
             if ((nOffset + (qint64)sizeof(LOCALFILEHEADER)) > nTotalSize) {
                 break;
             }
