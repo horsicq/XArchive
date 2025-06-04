@@ -74,6 +74,10 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XCFBF(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         pResult = new XDOS16(pDevice);
+    } else {
+#ifdef QT_DEBUG
+        qDebug("XArchives::getClass: Unknown file type");
+#endif
     }
 
     return pResult;
@@ -86,56 +90,6 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
     XArchive *pArchives = XArchives::getClass(fileType, pDevice);
     listResult = pArchives->getRecords(nLimit, pPdStruct);
     delete pArchives;
-
-    return listResult;
-
-    // TODO more !!!
-    // CAB RAR 7ZIP
-    QSet<XBinary::FT> stFileTypes;
-
-    if (fileType == XBinary::FT_UNKNOWN) {
-        stFileTypes = XBinary::getFileTypes(pDevice, true);
-    } else {
-        stFileTypes += fileType;
-    }
-
-    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
-        XZip xzip(pDevice);
-        listResult = xzip.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
-        XMACHOFat xmachofat(pDevice);
-        listResult = xmachofat.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
-        XMACHOFat xmachofat(pDevice);
-        listResult = xmachofat.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
-        X_Ar x_ar(pDevice);
-        listResult = x_ar.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
-        XTAR xtar(pDevice);
-        listResult = xtar.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_NPM)) {
-        XNPM xnpm(pDevice);
-        listResult = xnpm.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
-        XTGZ xtgz(pDevice);
-        listResult = xtgz.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
-        XGzip xgzip(pDevice);
-        listResult = xgzip.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
-        XZlib xzlib(pDevice);
-        listResult = xzlib.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
-        XLHA xhla(pDevice);
-        listResult = xhla.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
-        XCFBF xcfbf(pDevice);
-        listResult = xcfbf.getRecords(nLimit, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
-        XDOS16 xdos16(pDevice);
-        listResult = xdos16.getRecords(nLimit, pPdStruct);
-    }
 
     return listResult;
 }

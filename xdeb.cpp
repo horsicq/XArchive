@@ -69,7 +69,7 @@ XBinary::FILEFORMATINFO XDEB::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
     if (isValid(&listArchiveRecords, pPdStruct)) {
         result.bIsValid = true;
-        result.nSize = getFileFormatSize(pPdStruct);
+        result.nSize = getSize();
         result.sExt = "apk";
         result.fileType = FT_DEB;
 

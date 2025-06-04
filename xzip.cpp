@@ -356,11 +356,11 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
     XBinary::FILEFORMATINFO result = {};
 
     if (isValid(pPdStruct)) {
-        result.nSize = getFileFormatSize(pPdStruct);
+        result.nSize = getSize();
         result.sExt = "zip";
         result.fileType = FT_ZIP;
         result.sVersion = getVersion();
-        result.sOptions = getOptions();
+        result.sInfo = getInfo();
 
         if (result.nSize > 0) {
             result.bIsValid = true;

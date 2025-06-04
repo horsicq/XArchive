@@ -401,7 +401,8 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
         result.fileType = getFileType();
         result.sExt = getFileFormatExt();
-        result.sOptions = getOptions();
+        result.sInfo = getInfo();
+        result.sMIME = getMIMEString();
     }
 
     return result;
