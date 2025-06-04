@@ -74,6 +74,11 @@ QString XCFBF::getFileFormatExt()
     return "";
 }
 
+QString XCFBF::getMIMEString()
+{
+    return "application/x-cfbf";
+}
+
 quint64 XCFBF::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     return 0;  // TODO
@@ -81,9 +86,77 @@ quint64 XCFBF::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XCFBF::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    QList<XArchive::RECORD> listResult;
+    QList<RECORD> listRecords;
 
-    return listResult;
+    // CFBF header is 512 bytes
+    const qint64 nHeaderSize = 512;
+    if (getSize() < nHeaderSize) {
+        return listRecords;
+    }
+
+    // Directory sector start (offset in sectors)
+    quint32 nDirSectorStart = read_uint32(0x30, false);
+    quint32 nSectorSize = 1 << read_uint16(0x1E, false);
+    if (nSectorSize == 0) {
+        nSectorSize = 512; // fallback
+    }
+
+    // Directory entries are 128 bytes each
+    const qint32 nDirEntrySize = 128;
+
+    // Calculate first directory sector offset
+    qint64 nDirOffset = nHeaderSize + (qint64)nDirSectorStart * nSectorSize;
+
+    // Prevent infinite loop in case of corruption
+    const qint32 nMaxEntries = 4096;
+    qint32 nEntriesRead = 0;
+
+    // Read directory entries
+    while (isOffsetValid(nDirOffset + nDirEntrySize * nEntriesRead) && isPdStructNotCanceled(pPdStruct)) {
+        if ((nLimit > 0) && (listRecords.size() >= nLimit)) {
+            break;
+        }
+        if (nEntriesRead >= nMaxEntries) {
+            break;
+        }
+
+        qint64 nEntryOffset = nDirOffset + nDirEntrySize * nEntriesRead;
+
+        // Name (Unicode UTF-16LE, max 32 wchar = 64 bytes, null terminated)
+        QByteArray baName = read_array(nEntryOffset, 64);
+        quint16 nNameLength = read_uint16(nEntryOffset + 64, false); // in bytes
+        QString sName;
+        if (nNameLength >= 2 && nNameLength <= 64) {
+            sName = QString::fromUtf16((ushort*)baName.constData(), (nNameLength - 2)/2);
+        }
+
+        quint8 nObjectType = read_uint8(nEntryOffset + 66);
+        // 0 = unknown, 1 = storage, 2 = stream, 5 = root storage
+
+        if (nObjectType == 0) {
+            // Reached unused entries
+            break;
+        }
+
+        quint32 nStartSector = read_uint32(nEntryOffset + 116, false);
+        quint64 nStreamSize = read_uint64(nEntryOffset + 120, false);
+
+        XArchive::RECORD record = {};
+        record.spInfo.sRecordName = sName;
+        record.spInfo.nUncompressedSize = nStreamSize;
+        record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
+        record.nDataOffset = nHeaderSize + ((qint64)nStartSector * nSectorSize);
+        record.nDataSize = nStreamSize;
+        record.nHeaderOffset = nEntryOffset;
+        record.nHeaderSize = nDirEntrySize;
+        record.sUUID = ""; // CFBF entries don’t have a UUID
+
+        listRecords.append(record);
+
+        nEntriesRead++;
+    }
+
+    return listRecords;
 }
 
 XCFBF::StructuredStorageHeader XCFBF::read_StructuredStorageHeader(qint64 nOffset, PDSTRUCT *pPdStruct)

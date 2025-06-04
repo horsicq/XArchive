@@ -88,6 +88,7 @@ public:
     virtual FT getFileType();
     virtual QString getVersion();
     virtual QString getFileFormatExt();
+    virtual QString getMIMEString();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
