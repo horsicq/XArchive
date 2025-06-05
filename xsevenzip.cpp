@@ -516,6 +516,21 @@ QString XSevenZip::getFileFormatExt()
     return "7z";
 }
 
+XBinary::MODE XSevenZip::getMode()
+{
+    return XBinary::MODE_DATA;
+}
+
+QString XSevenZip::getMIMEString()
+{
+    return "application/x-7z-compressed";
+}
+
+QString XSevenZip::getArch()
+{
+    return QString();
+}
+
 XSevenZip::SIGNATUREHEADER XSevenZip::_read_SIGNATUREHEADER(qint64 nOffset)
 {
     SIGNATUREHEADER result = {};
@@ -549,13 +564,6 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
 {
     Q_UNUSED(mapMode)
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
     _MEMORY_MAP result = {};
 
     result.nModuleAddress = getModuleAddress();
@@ -586,6 +594,19 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
     qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + read_uint32(nOffset + offsetof(SIGNATUREHEADER, NextHeaderOffset));
     qint64 nNextHeaderSize = read_uint32(nOffset + offsetof(SIGNATUREHEADER, NextHeaderSize));
 
+    if (nNextHeaderOffset - sizeof(SIGNATUREHEADER) > 0) {
+        _MEMORY_RECORD record = {};
+
+        record.nIndex = nIndex++;
+        record.type = MMT_DATA;
+        record.nOffset = sizeof(SIGNATUREHEADER);
+        record.nSize = nNextHeaderOffset - sizeof(SIGNATUREHEADER);
+        record.nAddress = -1;
+        record.sName = tr("Data");
+
+        result.listRecords.append(record);
+    }
+
     if (nNextHeaderSize) {
         _MEMORY_RECORD record = {};
 
@@ -595,6 +616,21 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         record.nSize = nNextHeaderSize;
         record.nAddress = -1;
         record.sName = tr("Header");
+
+        result.listRecords.append(record);
+    }
+
+    qint64 nOverlayOffset = nNextHeaderOffset + nNextHeaderSize;
+
+    if (nOverlayOffset > getSize()) {
+        _MEMORY_RECORD record = {};
+
+        record.nIndex = nIndex++;
+        record.type = MMT_OVERLAY;
+        record.nOffset = nOverlayOffset;
+        record.nSize = getSize() - nOverlayOffset;
+        record.nAddress = -1;
+        record.sName = tr("Overlay");
 
         result.listRecords.append(record);
     }

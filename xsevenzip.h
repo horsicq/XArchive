@@ -100,6 +100,9 @@ public:
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType();
     virtual ENDIAN getEndian();
+    virtual MODE getMode();
+    virtual QString getArch();
+    virtual QString getMIMEString();
 
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);
