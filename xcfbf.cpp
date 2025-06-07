@@ -98,7 +98,7 @@ QList<XArchive::RECORD> XCFBF::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     quint32 nDirSectorStart = read_uint32(0x30, false);
     quint32 nSectorSize = 1 << read_uint16(0x1E, false);
     if (nSectorSize == 0) {
-        nSectorSize = 512; // fallback
+        nSectorSize = 512;  // fallback
     }
 
     // Directory entries are 128 bytes each
@@ -124,10 +124,10 @@ QList<XArchive::RECORD> XCFBF::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
         // Name (Unicode UTF-16LE, max 32 wchar = 64 bytes, null terminated)
         QByteArray baName = read_array(nEntryOffset, 64);
-        quint16 nNameLength = read_uint16(nEntryOffset + 64, false); // in bytes
+        quint16 nNameLength = read_uint16(nEntryOffset + 64, false);  // in bytes
         QString sName;
         if (nNameLength >= 2 && nNameLength <= 64) {
-            sName = QString::fromUtf16((ushort*)baName.constData(), (nNameLength - 2)/2);
+            sName = QString::fromUtf16((ushort *)baName.constData(), (nNameLength - 2) / 2);
         }
 
         quint8 nObjectType = read_uint8(nEntryOffset + 66);
@@ -149,7 +149,7 @@ QList<XArchive::RECORD> XCFBF::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         record.nDataSize = nStreamSize;
         record.nHeaderOffset = nEntryOffset;
         record.nHeaderSize = nDirEntrySize;
-        record.sUUID = ""; // CFBF entries don’t have a UUID
+        record.sUUID = "";  // CFBF entries don’t have a UUID
 
         listRecords.append(record);
 
