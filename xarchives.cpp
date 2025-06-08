@@ -72,6 +72,8 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XLHA(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
         pResult = new XCFBF(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
+        pResult = new XSZDD(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         pResult = new XDOS16(pDevice);
     } else {

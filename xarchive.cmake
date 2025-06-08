@@ -56,4 +56,6 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xnpm.h
     ${CMAKE_CURRENT_LIST_DIR}/xdos16.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xdos16.h
+    ${CMAKE_CURRENT_LIST_DIR}/xszdd.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xszdd.h
 )

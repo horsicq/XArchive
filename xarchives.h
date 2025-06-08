@@ -42,6 +42,7 @@
 #include "xdos16.h"
 #include "xcfbf.h"
 #include "xcab.h"
+#include "xszdd.h"
 
 class XArchives : public QObject {
     Q_OBJECT
