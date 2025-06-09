@@ -238,6 +238,9 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
         bResult = xlha.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
+        XSZDD szdd(pDevice);
+        bResult = szdd.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
         XCFBF xcfbf(pDevice);
         bResult = xcfbf.decompressToFile(pRecord, sResultFileName, pPdStruct);
@@ -283,6 +286,9 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
         bResult = xlha.decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
+        XSZDD szdd(pDevice);
+        bResult = szdd.decompressToDevice(pRecord, pDestDevice, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
         XCFBF xcfbf(pDevice);
         bResult = xcfbf.decompressToDevice(pRecord, pDestDevice, pPdStruct);
@@ -407,6 +413,9 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
         bResult = xlha.isArchiveRecordPresent(sRecordFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
+        XSZDD szdd(pDevice);
+        bResult = szdd.isArchiveRecordPresent(sRecordFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
         XCFBF xcfbf(pDevice);
         bResult = xcfbf.isArchiveRecordPresent(sRecordFileName, pPdStruct);
@@ -483,6 +492,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_GZIP);
     result.insert(XBinary::FT_ZLIB);
     result.insert(XBinary::FT_LHA);
+    result.insert(XBinary::FT_SZDD);
     result.insert(XBinary::FT_DOS4G);
     result.insert(XBinary::FT_DOS16M);
 
