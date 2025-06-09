@@ -96,7 +96,7 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         record.nDataOffset = nOffset;
         record.nDataSize = decompressStruct.nInSize;
         record.spInfo.nUncompressedSize = decompressStruct.nOutSize;
-        record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
+        record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice()); // TODO, use from header
 
         sd.close();
     }
@@ -199,7 +199,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     result.listRecords.append(memoryRecordFooter);
 
-    result.nBinarySize = memoryRecordHeader.nSize + memoryRecord.nSize + memoryRecordFooter.nSize;
+    result.nBinarySize = memoryRecordHeader.nSize + memoryRecord.nSize + memoryRecordFooter.nSize; // TODO fix
 
     return result;
 }

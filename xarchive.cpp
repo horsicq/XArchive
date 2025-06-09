@@ -742,6 +742,67 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         delete[] rarStream.Inp.InBuf;
         delete[] rarStream.VMCodeInp.InBuf;
         XCompress::rar_VM_final(&(rarStream.VM));
+    } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZSS_SZDD) {
+        result = COMPRESS_RESULT_OK;
+
+        qint64 nCompressedOffset = 0;
+
+        char window[4096];
+        memset(window, 0x20, 4096);
+        int pos = 4096 - 16;
+
+        qint64 nUnpackedLength = pDecompressStruct->nOutSize;
+        qint64 nPackedOffset = nCompressedOffset;
+        qint64 nUnpackedOffset = 0;
+
+        XBinary binary(pDecompressStruct->pSourceDevice);
+
+        XBinary *pOutBinary = nullptr;
+
+        if (pDecompressStruct->pDestDevice) {
+            pOutBinary = new XBinary(pDecompressStruct->pDestDevice);
+        }
+
+        while ((nUnpackedOffset < nUnpackedLength) && isPdStructNotCanceled(pPdStruct)) {
+            quint8 control = binary.read_uint8(nPackedOffset++);
+            for (qint32 cbit = 0x01; (cbit & 0xFF) && isPdStructNotCanceled(pPdStruct); cbit <<= 1) {
+                if (nUnpackedOffset >= nUnpackedLength)
+                    break;
+                if (control & cbit) {
+                    // literal
+                    quint8 ch = binary.read_uint8(nPackedOffset++);
+                    window[pos++] = ch;
+                    pos &= 4095;
+
+                    if (pDecompressStruct->pDestDevice) {
+                        pOutBinary->write_uint8(ch, nUnpackedOffset);
+                    }
+                    nUnpackedOffset++;
+                } else {
+                    // match
+                    int matchpos = binary.read_uint8(nPackedOffset++);
+                    int matchlen = binary.read_uint8(nPackedOffset++);
+                    matchpos |= (matchlen & 0xF0) << 4;
+                    matchlen = (matchlen & 0x0F) + 3;
+                    for (; (matchlen--) && (nUnpackedOffset < nUnpackedLength) && isPdStructNotCanceled(pPdStruct); ) {
+                        char ch = window[matchpos++];
+                        matchpos &= 4095;
+                        window[pos++] = ch;
+                        pos &= 4095;
+                        if (pDecompressStruct->pDestDevice) {
+                            pOutBinary->write_uint8(ch, nUnpackedOffset);
+                        }
+                        nUnpackedOffset++;
+                    }
+                }
+            }
+        }
+
+        if (pDecompressStruct->pDestDevice) {
+            delete pOutBinary;
+        }
+
+        pDecompressStruct->nInSize = nPackedOffset - nCompressedOffset;
     }
 
     return result;

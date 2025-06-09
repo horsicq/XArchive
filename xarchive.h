@@ -58,6 +58,7 @@ public:
         COMPRESS_METHOD_RAR_29,
         COMPRESS_METHOD_RAR_50,
         COMPRESS_METHOD_RAR_70,
+        COMPRESS_METHOD_LZSS_SZDD
         // TODO check more methods
     };
 

@@ -151,6 +151,9 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         XLHA xlha(pDevice);
         baResult = xlha.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
+        XSZDD szdd(pDevice);
+        baResult = szdd.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
         XCFBF xcfbf(pDevice);
         baResult = xcfbf.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);

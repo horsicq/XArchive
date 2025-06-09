@@ -138,12 +138,12 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     Q_UNUSED(mapMode)
     Q_UNUSED(pPdStruct)
 
-    _MEMORY_MAP map = {};
-    map.fileType = getFileType();
-    map.mode = getMode();
-    map.endian = getEndian();
-    map.sType = typeIdToString(getType());
-    map.sArch = getArch();
+    _MEMORY_MAP result = {};
+    result.fileType = getFileType();
+    result.mode = getMode();
+    result.endian = getEndian();
+    result.sType = typeIdToString(getType());
+    result.sArch = getArch();
 
     qint32 nIndex = 0;
 
@@ -156,9 +156,34 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     recHeader.nIndex = nIndex++;
     recHeader.type = MMT_HEADER;
     recHeader.sName = tr("SZDD Header");
-    map.listRecords.append(recHeader);
+    result.listRecords.append(recHeader);
 
-    return map;
+    SubDevice sd(getDevice(), sizeof(SZDD_HEADER), -1);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+        decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_LZSS_SZDD;
+        decompressStruct.pSourceDevice = &sd;
+        decompressStruct.pDestDevice = 0;
+        decompressStruct.nOutSize = _read_SZDD_HEADER(0).uncompressed_size;
+
+        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+
+        Q_UNUSED(cr)
+
+        _MEMORY_RECORD memoryRecord = {};
+
+        memoryRecord.nOffset = sizeof(SZDD_HEADER);
+        memoryRecord.nAddress = -1;
+        memoryRecord.nSize = decompressStruct.nInSize;
+        memoryRecord.type = MMT_FILESEGMENT;
+
+        result.listRecords.append(memoryRecord);
+
+        sd.close();
+    }
+
+    return result;
 }
 
 QList<XBinary::HREGION> XSZDD::getHData(PDSTRUCT *pPdStruct)
@@ -235,31 +260,43 @@ quint64 XSZDD::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
 QList<XArchive::RECORD> XSZDD::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    QList<RECORD> records;
+    Q_UNUSED(nLimit)  // Always 1
 
-    if (nLimit == 0) return records;
-    if (!isValid(pPdStruct)) return records;
+    QList<RECORD> listResult;
 
-    SZDD_HEADER header = _read_SZDD_HEADER(0);
     RECORD record = {};
 
-    record.spInfo.sRecordName = QString(); // We don't know the original filename
-    record.spInfo.nCRC32 = 0; // Not present
-    record.spInfo.nUncompressedSize = header.uncompressed_size;
-    record.spInfo.nWindowSize = 4096;
-    record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
-    record.nDataOffset = sizeof(SZDD_HEADER);
-    record.nDataSize = getSize() - sizeof(SZDD_HEADER);
-    record.nHeaderOffset = 0;
-    record.nHeaderSize = sizeof(SZDD_HEADER);
-    record.nOptHeaderOffset = 0;
-    record.nOptHeaderSize = 0;
-    record.sUUID = generateUUID();
-    record.nLayerOffset = 0;
-    record.nLayerSize = 0;
-    record.layerCompressMethod = COMPRESS_METHOD_UNKNOWN;
+    qint64 nOffset = 0;
 
-    records.append(record);
+    nOffset += sizeof(SZDD_HEADER);
 
-    return records;
+    SubDevice sd(getDevice(), sizeof(SZDD_HEADER), -1);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+        decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_LZSS_SZDD;
+        decompressStruct.pSourceDevice = &sd;
+        decompressStruct.pDestDevice = 0;
+        decompressStruct.spInfo.nUncompressedSize = _read_SZDD_HEADER(0).uncompressed_size;
+
+        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+
+        Q_UNUSED(cr)
+
+        record.nHeaderOffset = 0;
+        record.nHeaderSize = nOffset;
+        record.nDataOffset = nOffset;
+        record.nDataSize = decompressStruct.nInSize;
+        record.spInfo.nUncompressedSize = decompressStruct.nOutSize;
+        record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
+        record.spInfo.compressMethod = COMPRESS_METHOD_LZSS_SZDD;;
+
+        sd.close();
+    }
+
+    // TODO
+
+    listResult.append(record);
+
+    return listResult;
 }
