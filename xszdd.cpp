@@ -165,7 +165,7 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_LZSS_SZDD;
         decompressStruct.pSourceDevice = &sd;
         decompressStruct.pDestDevice = 0;
-        decompressStruct.nOutSize = _read_SZDD_HEADER(0).uncompressed_size;
+        decompressStruct.spInfo.nUncompressedSize = _read_SZDD_HEADER(0).uncompressed_size;
 
         XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
 

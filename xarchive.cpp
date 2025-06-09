@@ -745,64 +745,95 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZSS_SZDD) {
         result = COMPRESS_RESULT_OK;
 
-        qint64 nCompressedOffset = 0;
-
         char window[4096];
         memset(window, 0x20, 4096);
         int pos = 4096 - 16;
 
-        qint64 nUnpackedLength = pDecompressStruct->nOutSize;
-        qint64 nPackedOffset = nCompressedOffset;
-        qint64 nUnpackedOffset = 0;
+        qint64 nUnpackedLength = pDecompressStruct->spInfo.nUncompressedSize;
 
-        XBinary binary(pDecompressStruct->pSourceDevice);
+        pDecompressStruct->nInSize = 0;
+        pDecompressStruct->nOutSize = 0;
 
-        XBinary *pOutBinary = nullptr;
+        while ((pDecompressStruct->nOutSize < nUnpackedLength) && isPdStructNotCanceled(pPdStruct)) {
+            quint8 control = 0;
 
-        if (pDecompressStruct->pDestDevice) {
-            pOutBinary = new XBinary(pDecompressStruct->pDestDevice);
-        }
+            if (pDecompressStruct->pSourceDevice->read((char *)&control, 1) != 1) {
+                result = COMPRESS_RESULT_READERROR;
+                break;
+            }
 
-        while ((nUnpackedOffset < nUnpackedLength) && isPdStructNotCanceled(pPdStruct)) {
-            quint8 control = binary.read_uint8(nPackedOffset++);
+            pDecompressStruct->nInSize++;
+
             for (qint32 cbit = 0x01; (cbit & 0xFF) && isPdStructNotCanceled(pPdStruct); cbit <<= 1) {
-                if (nUnpackedOffset >= nUnpackedLength)
+                if (pDecompressStruct->nOutSize >= nUnpackedLength)
                     break;
                 if (control & cbit) {
                     // literal
-                    quint8 ch = binary.read_uint8(nPackedOffset++);
+                    quint8 ch = 0;
+
+                    if (pDecompressStruct->pSourceDevice->read((char *)&ch, 1) != 1) {
+                        result = COMPRESS_RESULT_READERROR;
+                        break;
+                    }
+
+                    pDecompressStruct->nInSize++;
+
                     window[pos++] = ch;
                     pos &= 4095;
 
                     if (pDecompressStruct->pDestDevice) {
-                        pOutBinary->write_uint8(ch, nUnpackedOffset);
+                        if (!_writeToDevice((char *)&ch, 1, pDecompressStruct)) {
+                            result = COMPRESS_RESULT_WRITEERROR;
+                            break;
+                        }
                     }
-                    nUnpackedOffset++;
+                    pDecompressStruct->nOutSize++;
                 } else {
                     // match
-                    int matchpos = binary.read_uint8(nPackedOffset++);
-                    int matchlen = binary.read_uint8(nPackedOffset++);
+                    quint8 matchpos = 0;
+
+                    if (pDecompressStruct->pSourceDevice->read((char *)&matchpos, 1) != 1) {
+                        result = COMPRESS_RESULT_READERROR;
+                        break;
+                    }
+
+                    pDecompressStruct->nInSize++;
+
+                    quint8 matchlen = 0;
+
+                    if (pDecompressStruct->pSourceDevice->read((char *)&matchlen, 1) != 1) {
+                        result = COMPRESS_RESULT_READERROR;
+                        break;
+                    }
+
+                    pDecompressStruct->nInSize++;
+
                     matchpos |= (matchlen & 0xF0) << 4;
                     matchlen = (matchlen & 0x0F) + 3;
-                    for (; (matchlen--) && (nUnpackedOffset < nUnpackedLength) && isPdStructNotCanceled(pPdStruct); ) {
+                    for (; (matchlen--) && (pDecompressStruct->nOutSize < nUnpackedLength) && isPdStructNotCanceled(pPdStruct); ) {
                         char ch = window[matchpos++];
                         matchpos &= 4095;
                         window[pos++] = ch;
                         pos &= 4095;
                         if (pDecompressStruct->pDestDevice) {
-                            pOutBinary->write_uint8(ch, nUnpackedOffset);
+                            if (!_writeToDevice((char *)&ch, 1, pDecompressStruct)) {
+                                result = COMPRESS_RESULT_WRITEERROR;
+                                break;
+                            }
                         }
-                        nUnpackedOffset++;
+                        pDecompressStruct->nOutSize++;
+                    }
+
+                    if ((result == COMPRESS_RESULT_READERROR) || (result == COMPRESS_RESULT_WRITEERROR)) {
+                        break;
                     }
                 }
             }
-        }
 
-        if (pDecompressStruct->pDestDevice) {
-            delete pOutBinary;
+            if ((result == COMPRESS_RESULT_READERROR) || (result == COMPRESS_RESULT_WRITEERROR)) {
+                break;
+            }
         }
-
-        pDecompressStruct->nInSize = nPackedOffset - nCompressedOffset;
     }
 
     return result;
