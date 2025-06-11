@@ -255,3 +255,8 @@ QString XZlib::getFileFormatExt()
 {
     return "zlib";
 }
+
+QString XZlib::getFileFormatExtsString()
+{
+    return "Zlib (*.zlib)";
+}

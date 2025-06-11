@@ -133,6 +133,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     result.sArch = getArch();
     result.endian = getEndian();
     result.sType = getTypeAsString();
+    result.nBinarySize = getSize();
 
     _MEMORY_RECORD memoryRecordHeader = {};
     _MEMORY_RECORD memoryRecord = {};
@@ -199,7 +200,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     result.listRecords.append(memoryRecordFooter);
 
-    result.nBinarySize = memoryRecordHeader.nSize + memoryRecord.nSize + memoryRecordFooter.nSize; // TODO fix
+    _handleOverlay(&result);
 
     return result;
 }
@@ -207,6 +208,11 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 QString XGzip::getFileFormatExt()
 {
     return "gz";
+}
+
+QString XGzip::getFileFormatExtsString()
+{
+    return "GZIP (*.gz)";
 }
 
 XBinary::FT XGzip::getFileType()

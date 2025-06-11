@@ -90,6 +90,11 @@ QString XSZDD::getFileFormatExt()
     return "SZDD";
 }
 
+QString XSZDD::getFileFormatExtsString()
+{
+    return "SZDD (*.szdd)";
+}
+
 qint64 XSZDD::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -228,7 +233,7 @@ QList<XBinary::DATA_HEADER> XSZDD::getDataHeaders(const DATA_HEADERS_OPTIONS &da
             dataHeader.dhMode = dataHeadersOptions.dhMode;
             dataHeader.nSize = sizeof(SZDD_HEADER);
 
-            dataHeader.listRecords.append(getDataRecord(offsetof(SZDD_HEADER, signature), 8, "signature", VT_HEX, DRF_UNKNOWN, ENDIAN_LITTLE));
+            dataHeader.listRecords.append(getDataRecord(offsetof(SZDD_HEADER, signature), 8, "signature", VT_BYTE_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
             dataHeader.listRecords.append(getDataRecord(offsetof(SZDD_HEADER, compression_mode), 1, "compression_mode", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
             dataHeader.listRecords.append(getDataRecord(offsetof(SZDD_HEADER, missing_char), 1, "missing_char", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
             dataHeader.listRecords.append(getDataRecord(offsetof(SZDD_HEADER, uncompressed_size), 4, "uncompressed_size", VT_UINT32, DRF_UNKNOWN, ENDIAN_LITTLE));

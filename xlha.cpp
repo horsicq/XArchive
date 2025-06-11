@@ -147,9 +147,18 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         pPdStruct = &pdStructEmpty;
     }
 
+
+
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
     _MEMORY_MAP result = {};
+
+    result.nBinarySize = getSize();
+    result.fileType = getFileType();
+    result.mode = getMode();
+    result.sArch = getArch();
+    result.endian = getEndian();
+    result.sType = getTypeAsString();
 
     qint64 nFileSize = getSize();
 
@@ -196,7 +205,7 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         }
     }
 
-    result.nBinarySize = nOffset;
+    _handleOverlay(&result);
 
     return result;
 }

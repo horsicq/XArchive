@@ -51,6 +51,7 @@ public:
     virtual ENDIAN getEndian() override;
     virtual QString getArch() override;
     virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString();
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
     virtual bool isSigned() override;
     virtual OSNAME getOsName() override;

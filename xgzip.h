@@ -49,6 +49,7 @@ public:
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
 
     virtual QString getFileFormatExt();
+    virtual QString getFileFormatExtsString();
     virtual FT getFileType();
 };
 

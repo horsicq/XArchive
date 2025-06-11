@@ -489,6 +489,11 @@ QString XZip::getFileFormatExt()
     return "zip";
 }
 
+QString XZip::getFileFormatExtsString()
+{
+    return "zip,apk,apks,jar,ipa";  // TODO
+}
+
 qint64 XZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     qint64 nResult = 0;

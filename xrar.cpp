@@ -230,6 +230,11 @@ QString XRar::getFileFormatExt()
     return "rar";
 }
 
+QString XRar::getFileFormatExtsString()
+{
+    return "RAR (*.rar)";
+}
+
 qint64 XRar::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     return getFileFormatInfo(pPdStruct).nSize;
@@ -640,6 +645,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     XBinary::_MEMORY_MAP result = {};
 
+    result.fileType = getFileType();
     result.nBinarySize = getSize();
 
     qint64 nFileHeaderSize = 0;
@@ -770,17 +776,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
             }
         }
 
-        if ((nMaxOffset > 0) && (nMaxOffset < result.nBinarySize)) {
-            _MEMORY_RECORD recordOverlay = {};
-            recordOverlay.nAddress = -1;
-            recordOverlay.nOffset = nMaxOffset;
-            recordOverlay.nSize = result.nBinarySize - nMaxOffset;
-            recordOverlay.nIndex++;
-            recordOverlay.type = MMT_OVERLAY;
-            recordOverlay.sName = tr("Overlay");
-
-            result.listRecords.append(recordOverlay);
-        }
+        _handleOverlay(&result);
     }
 
     return result;

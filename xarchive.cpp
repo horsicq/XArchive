@@ -745,7 +745,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZSS_SZDD) {
         result = COMPRESS_RESULT_OK;
 
-        char window[4096];
+        quint8 window[4096];
         memset(window, 0x20, 4096);
         int pos = 4096 - 16;
 
@@ -764,7 +764,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
             pDecompressStruct->nInSize++;
 
-            for (qint32 cbit = 0x01; (cbit & 0xFF) && isPdStructNotCanceled(pPdStruct); cbit <<= 1) {
+            for (quint32 cbit = 0x01; (cbit & 0xFF) && isPdStructNotCanceled(pPdStruct); cbit <<= 1) {
                 if (pDecompressStruct->nOutSize >= nUnpackedLength)
                     break;
                 if (control & cbit) {
@@ -776,9 +776,10 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                         break;
                     }
 
+                    window[pos] = ch;
                     pDecompressStruct->nInSize++;
 
-                    window[pos++] = ch;
+                    pos++;
                     pos &= 4095;
 
                     if (pDecompressStruct->pDestDevice) {
@@ -790,38 +791,50 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                     pDecompressStruct->nOutSize++;
                 } else {
                     // match
-                    quint8 matchpos = 0;
+                    quint32 matchpos = 0;
+                    quint32 matchlen = 0;
 
-                    if (pDecompressStruct->pSourceDevice->read((char *)&matchpos, 1) != 1) {
+                    quint8 value1 = 0;
+
+                    if (pDecompressStruct->pSourceDevice->read((char *)&value1, 1) != 1) {
                         result = COMPRESS_RESULT_READERROR;
                         break;
                     }
 
+                    matchpos = value1;
+
                     pDecompressStruct->nInSize++;
 
-                    quint8 matchlen = 0;
+                    quint8 value2 = 0;
 
-                    if (pDecompressStruct->pSourceDevice->read((char *)&matchlen, 1) != 1) {
+                    if (pDecompressStruct->pSourceDevice->read((char *)&value2, 1) != 1) {
                         result = COMPRESS_RESULT_READERROR;
                         break;
                     }
 
+                    matchlen = value2;
+
                     pDecompressStruct->nInSize++;
 
-                    matchpos |= (matchlen & 0xF0) << 4;
-                    matchlen = (matchlen & 0x0F) + 3;
+                    matchpos |= (value2 & 0xF0) << 4;
+                    matchlen = (value2 & 0x0F) + 3;
+
                     for (; (matchlen--) && (pDecompressStruct->nOutSize < nUnpackedLength) && isPdStructNotCanceled(pPdStruct); ) {
-                        char ch = window[matchpos++];
-                        matchpos &= 4095;
-                        window[pos++] = ch;
-                        pos &= 4095;
+                        quint8 ch = window[matchpos];
+                        window[pos] = ch;
+
                         if (pDecompressStruct->pDestDevice) {
                             if (!_writeToDevice((char *)&ch, 1, pDecompressStruct)) {
                                 result = COMPRESS_RESULT_WRITEERROR;
                                 break;
                             }
                         }
+
                         pDecompressStruct->nOutSize++;
+                        matchpos++;
+                        matchpos &= 4095;
+                        pos++;
+                        pos &= 4095;
                     }
 
                     if ((result == COMPRESS_RESULT_READERROR) || (result == COMPRESS_RESULT_WRITEERROR)) {

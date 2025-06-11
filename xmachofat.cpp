@@ -117,6 +117,11 @@ QString XMACHOFat::getFileFormatExt()
     return "";
 }
 
+QString XMACHOFat::getFileFormatExtsString()
+{
+    return "Universal Mach-O (fat) (*.fat)";
+}
+
 qint64 XMACHOFat::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     return _calculateRawSize(pPdStruct);
@@ -186,6 +191,8 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
 
         result.listRecords.append(record);
     }
+
+    _handleOverlay(&result);
 
     return result;
 }

@@ -58,8 +58,11 @@ public:
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
+    virtual QString getFileFormatExtsString();
     virtual QList<MAPMODE> getMapModesList();
     virtual FT getFileType();
+    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    virtual QString getMIMEString();
 
 private:
     posix_header read_posix_header(qint64 nOffset);

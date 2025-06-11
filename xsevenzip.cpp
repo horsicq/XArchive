@@ -516,6 +516,11 @@ QString XSevenZip::getFileFormatExt()
     return "7z";
 }
 
+QString XSevenZip::getFileFormatExtsString()
+{
+    return "7-Zip (*.7z)";
+}
+
 XBinary::MODE XSevenZip::getMode()
 {
     return XBinary::MODE_DATA;
@@ -620,20 +625,7 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         result.listRecords.append(record);
     }
 
-    qint64 nOverlayOffset = nNextHeaderOffset + nNextHeaderSize;
-
-    if (nOverlayOffset > getSize()) {
-        _MEMORY_RECORD record = {};
-
-        record.nIndex = nIndex++;
-        record.type = MMT_OVERLAY;
-        record.nOffset = nOverlayOffset;
-        record.nSize = getSize() - nOverlayOffset;
-        record.nAddress = -1;
-        record.sName = tr("Overlay");
-
-        result.listRecords.append(record);
-    }
+    _handleOverlay(&result);
 
     return result;
 }

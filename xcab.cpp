@@ -151,6 +151,11 @@ QString XCab::getFileFormatExt()
     return "cab";
 }
 
+QString XCab::getFileFormatExtsString()
+{
+    return "CAB (*.cab)";
+}
+
 qint64 XCab::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

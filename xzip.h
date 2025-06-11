@@ -155,6 +155,7 @@ public:
     static bool addCentralDirectory(QIODevice *pDest, QList<ZIPFILE_RECORD> *pListZipFileRecords, const QString &sComment = "");
 
     virtual QString getFileFormatExt();
+    virtual QString getFileFormatExtsString();
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
 
     CENTRALDIRECTORYFILEHEADER read_CENTRALDIRECTORYFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct);

@@ -64,7 +64,7 @@ quint64 XTAR::getNumberOfRecords(PDSTRUCT *pPdStruct)
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
         XTAR::posix_header header = read_posix_header(nOffset);
 
-        if (!compareMemory(header.magic, "ustar", 6)) {
+        if (!compareMemory(header.magic, "ustar", 5)) {
             break;
         }
 
@@ -88,7 +88,7 @@ QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     while (isPdStructNotCanceled(pPdStruct)) {
         XTAR::posix_header header = read_posix_header(nOffset);
 
-        if (!compareMemory(header.magic, "ustar", 6)) {
+        if (!compareMemory(header.magic, "ustar", 5)) {
             break;
         }
 
@@ -119,6 +119,73 @@ QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 QString XTAR::getFileFormatExt()
 {
     return "tar";
+}
+
+QString XTAR::getFileFormatExtsString()
+{
+    return "TAR (*.tar)";
+}
+
+QString XTAR::getMIMEString()
+{
+    return "application/x-tar";
+}
+
+XBinary::_MEMORY_MAP XTAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(mapMode)
+    Q_UNUSED(pPdStruct)
+
+    _MEMORY_MAP result = {};
+    result.nBinarySize = getSize();
+    result.fileType = getFileType();
+    result.mode = getMode();
+    result.endian = getEndian();
+    result.sType = typeIdToString(getType());
+    result.sArch = getArch();
+
+    qint32 nIndex = 0;
+    qint64 nOffset = 0;
+
+    while (isPdStructNotCanceled(pPdStruct)) {
+        XTAR::posix_header header = read_posix_header(nOffset);
+
+        if (!compareMemory(header.magic, "ustar", 5)) {
+            break;
+        }
+
+        {
+            _MEMORY_RECORD record = {};
+            record.nAddress = -1;
+            record.segment = ADDRESS_SEGMENT_FLAT;
+            record.nOffset = nOffset;
+            record.nSize = 0x200;  // TODO const
+            record.nIndex = nIndex++;
+            record.type = MMT_HEADER;
+            record.sName = tr("Header");
+            result.listRecords.append(record);
+        }
+        {
+            _MEMORY_RECORD record = {};
+            record.nAddress = -1;
+            record.segment = ADDRESS_SEGMENT_FLAT;
+            record.nOffset = nOffset + 0x200;
+            record.nSize = align_up(QString(header.size).toULongLong(0, 8), 0x200);  // TODO const
+            record.nIndex = nIndex++;
+            record.type = MMT_DATA;
+            record.sName = header.name;
+            result.listRecords.append(record);
+        }
+
+        nIndex++;
+
+        nOffset += (0x200);
+        nOffset += align_up(QString(header.size).toULongLong(0, 8), 0x200);
+    }
+
+    _handleOverlay(&result);
+
+    return result;
 }
 
 QList<XBinary::MAPMODE> XTAR::getMapModesList()
