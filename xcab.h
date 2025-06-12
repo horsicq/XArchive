@@ -27,6 +27,13 @@ class XCab : public XArchive {
     Q_OBJECT
 
 public:
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_CFHEADER,
+        STRUCTID_CFFOLDER,
+        STRUCTID_CFFILE,
+        STRUCTID_CFDATA
+    };
 #pragma pack(push)
 #pragma pack(1)
     struct CFHEADER {
@@ -44,10 +51,10 @@ public:
         quint16 setID;        // must be the same for all cabinets in a set */
         quint16 iCabinet;     // number of this cabinet file in a set */
         // Optional
-        quint16 cbCFHeader;  // (optional) size of per-cabinet reserved area */
-        quint8 cbCFFolder;   // (optional) size of per-folder reserved area */
-        quint8 cbCFData;     // (optional) size of per-datablock reserved area */
-        // u1  abReserve[];          /* (optional) per-cabinet reserved area */
+        // quint16 cbCFHeader;  // (optional) size of per-cabinet reserved area */
+        // quint8 cbCFFolder;   // (optional) size of per-folder reserved area */
+        // quint8 cbCFData;     // (optional) size of per-datablock reserved area */
+        // // u1  abReserve[];          /* (optional) per-cabinet reserved area */
         // u1  szCabinetPrev[];      /* (optional) name of previous cabinet file */
         // u1  szDiskPrev[];         /* (optional) name of previous disk */
         // u1  szCabinetNext[];      /* (optional) name of next cabinet file */
@@ -88,7 +95,7 @@ public:
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
-    CFHEADER readCFHeader();
+    CFHEADER readCFHeader(qint64 nOffset);
     CFFOLDER readCFFolder(qint64 nOffset);
     CFDATA readCFData(qint64 nOffset);
 
@@ -98,6 +105,11 @@ public:
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     virtual QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+
+    virtual QString structIDToString(quint32 nID);
+    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
+    virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues,
+                                PDSTRUCT *pPdStruct);
 };
 
 #endif  // XCAB_H
