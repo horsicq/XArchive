@@ -145,6 +145,7 @@ public:
     //    virtual _MEMORY_MAP getMemoryMap(); // TODO
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
+    virtual bool isArchive();
 
 private:
     static bool _writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct);

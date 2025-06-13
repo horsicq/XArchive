@@ -1293,6 +1293,11 @@ QString XArchive::typeIdToString(qint32 nType)
     return sResult;
 }
 
+bool XArchive::isArchive()
+{
+    return true;
+}
+
 bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct)
 {
     bool bResult = true;

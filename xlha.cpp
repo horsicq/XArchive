@@ -31,14 +31,38 @@ bool XLHA::isValid(PDSTRUCT *pPdStruct)
     if (getSize() >= 12) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
-        if (compareSignature(&memoryMap, "....'-lh'..2d", 0, pPdStruct) || compareSignature(&memoryMap, "....'-lz'..2d", 0, pPdStruct)) {
+        if (compareSignature(&memoryMap, "....'-lh'..2d", 0, pPdStruct) || compareSignature(&memoryMap, "....'-lz'..2d", 0, pPdStruct)
+            || compareSignature(&memoryMap, "....'-pm'..2d", 0, pPdStruct)) {
             QString sMethod = read_ansiString(2, 5);
 
-            if ((sMethod == "-lz4-") || (sMethod == "-lz5-") || (sMethod == "-lzs-") || (sMethod == "-lh0-") || (sMethod == "-lh1-") || (sMethod == "-lh4-") ||
-                (sMethod == "-lh5-") || (sMethod == "-lh6-") || (sMethod == "-lh7-") || (sMethod == "-lhx-") || (sMethod == "-pm0-") || (sMethod == "-pm1-") ||
+            if ((sMethod == "-lzs-") ||
+                (sMethod == "-lz2-") ||
+                (sMethod == "-lz3-") ||
+                (sMethod == "-lz4-") ||
+                (sMethod == "-lz5-") ||
+                (sMethod == "-lz7-") ||
+                (sMethod == "-lz8-") ||
+                (sMethod == "-lh0-") ||
+                (sMethod == "-lh1-") ||
+                (sMethod == "-lh2-") ||
+                (sMethod == "-lh3-") ||
+                (sMethod == "-lh4-") ||
+                (sMethod == "-lh5-") ||
+                (sMethod == "-lh6-") ||
+                (sMethod == "-lh7-") ||
+                (sMethod == "-lh8-") ||
+                (sMethod == "-lh9-") ||
+                (sMethod == "-lha-") ||
+                (sMethod == "-lhb-") ||
+                (sMethod == "-lhc-") ||
+                (sMethod == "-lhe-") ||
+                (sMethod == "-lhd-") ||
+                (sMethod == "-lhx-") ||
+                (sMethod == "-pm0-") ||
                 (sMethod == "-pm2-")) {
                 bResult = true;
             }
+            bResult = true;
         }
     }
 
@@ -70,7 +94,7 @@ QList<XArchive::RECORD> XLHA::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     qint32 nNumberOfFiles = 0;
 
     while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset)) {
+        if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset) || compareSignature(&memoryMap, "....'-pm'..2d", nOffset)) {
             qint64 nHeaderSize = read_uint8(nOffset) + 2;
             qint64 nCompressedSize = read_uint32(nOffset + 7);
             qint64 nUncompressedSize = read_uint32(nOffset + 11);
@@ -87,7 +111,10 @@ QList<XArchive::RECORD> XLHA::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
             QString sMethod = read_ansiString(nOffset + 2, 5);
 
-            if (sMethod == "-lh5-") {
+
+            if ((sMethod == "-lh0-") || (sMethod == "-lz4-") || (sMethod == "-lhd-")) {
+                record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
+            } else if (sMethod == "-lh5-") {
                 record.spInfo.compressMethod = COMPRESS_METHOD_LZH5;
             } else if (sMethod == "-lh6-") {
                 record.spInfo.compressMethod = COMPRESS_METHOD_LZH6;
@@ -140,15 +167,6 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapMode)
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
-
-
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
     _MEMORY_MAP result = {};
@@ -165,7 +183,7 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     qint64 nOffset = 0;
 
     while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset)) {
+        if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset) || compareSignature(&memoryMap, "....'-pm'..2d", nOffset)) {
             qint64 nHeaderSize = read_uint8(nOffset) + 2;
             qint64 nDataSize = read_uint32(nOffset + 7);
             QString sFileName = read_ansiString(nOffset + 22, read_uint8(nOffset + 21));
@@ -217,5 +235,46 @@ XBinary::FT XLHA::getFileType()
 
 QString XLHA::getFileFormatExt()
 {
-    return "lha";
+    QString sResult = "lha";
+    QString _sVersion = getVersion().left(2);
+
+    if (_sVersion == "lh") {
+        sResult = "lha";
+    } else if (_sVersion == "lz") {
+        sResult = "lzs";
+    } else if (_sVersion == "pm") {
+        sResult = "pma";
+    }
+
+    return sResult;
+}
+
+QString XLHA::getFileFormatExtsString()
+{
+    return "LHA(lha, lzs, pma)";
+}
+
+QString XLHA::getMIMEString()
+{
+    return "application/x-lzh-compressed";
+}
+
+QString XLHA::getVersion()
+{
+    return read_ansiString(3, 3);
+}
+
+QString XLHA::getArch()
+{
+    return QString();
+}
+
+XBinary::ENDIAN XLHA::getEndian()
+{
+    return ENDIAN_LITTLE; // LHA is little-endian
+}
+
+XBinary::MODE XLHA::getMode()
+{
+    return MODE_DATA;
 }
