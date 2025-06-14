@@ -43,6 +43,7 @@
 #include "xcfbf.h"
 #include "xcab.h"
 #include "xszdd.h"
+#include "xbzip2.h"
 
 class XArchives : public QObject {
     Q_OBJECT

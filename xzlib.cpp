@@ -172,6 +172,14 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     }
 
     _MEMORY_MAP result = {};
+    result.fileType = getFileType();
+    result.mode = getMode();
+    result.endian = getEndian();
+    result.sType = typeIdToString(getType());
+    result.sArch = getArch();
+    result.nBinarySize = getSize();
+
+    qint32 nIndex = 0;
 
     _MEMORY_RECORD memoryRecordHeader = {};
     _MEMORY_RECORD memoryRecord = {};
@@ -188,6 +196,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     memoryRecordHeader.nSize = nOffset;
     memoryRecordHeader.sName = tr("Header");
     memoryRecordHeader.type = MMT_HEADER;
+    memoryRecordHeader.nIndex = nIndex++;
 
     result.listRecords.append(memoryRecordHeader);
 
@@ -208,6 +217,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         memoryRecord.nSize = decompressStruct.nInSize;
         memoryRecord.type = MMT_FILESEGMENT;
         memoryRecord.sName = tr("Data");
+        memoryRecord.nIndex = nIndex++;
 
         sd.close();
     }
@@ -221,10 +231,11 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     memoryRecordFooter.nSize = 4;
     memoryRecordFooter.sName = tr("Footer");
     memoryRecordFooter.type = MMT_FOOTER;
+    memoryRecordFooter.nIndex = nIndex++;
 
     result.listRecords.append(memoryRecordFooter);
 
-    result.nBinarySize = memoryRecordHeader.nSize + memoryRecord.nSize + memoryRecordFooter.nSize;
+    _handleOverlay(&result);
 
     return result;
 }

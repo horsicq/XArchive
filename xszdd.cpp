@@ -149,6 +149,7 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     result.endian = getEndian();
     result.sType = typeIdToString(getType());
     result.sArch = getArch();
+    result.nBinarySize = getSize();
 
     qint32 nIndex = 0;
 
@@ -187,6 +188,8 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
         sd.close();
     }
+
+    _handleOverlay(&result);
 
     return result;
 }

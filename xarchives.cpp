@@ -74,6 +74,8 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XCFBF(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
         pResult = new XSZDD(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_BZIP2)) {
+        pResult = new XBZIP2(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         pResult = new XDOS16(pDevice);
     } else {
@@ -232,6 +234,9 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         XGzip xgzip(pDevice);
         bResult = xgzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
+    } else if (stFileTypes.contains(XArchive::FT_BZIP2)) {
+        XBZIP2 xbzip2(pDevice);
+        bResult = xbzip2.decompressToFile(pRecord, sResultFileName, pPdStruct);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
         XZlib xzlib(pDevice);
         bResult = xzlib.decompressToFile(pRecord, sResultFileName, pPdStruct);
