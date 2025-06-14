@@ -20,11 +20,9 @@
  */
 #include "xbzip2.h"
 
-XBinary::XCONVERT _TABLE_XBZIP2_STRUCTID[] = {
-    {XBZIP2::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-    {XBZIP2::STRUCTID_BZIP2_HEADER, "BZIP2_HEADER", QObject::tr("BZip2 header")},
-    {XBZIP2::STRUCTID_BLOCK_HEADER, "BLOCK_HEADER", QObject::tr("Block header")}
-};
+XBinary::XCONVERT _TABLE_XBZIP2_STRUCTID[] = {{XBZIP2::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                              {XBZIP2::STRUCTID_BZIP2_HEADER, "BZIP2_HEADER", QObject::tr("BZip2 header")},
+                                              {XBZIP2::STRUCTID_BLOCK_HEADER, "BLOCK_HEADER", QObject::tr("Block header")}};
 
 XBZIP2::XBZIP2(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -60,7 +58,7 @@ qint32 XBZIP2::getType()
 
 XBinary::ENDIAN XBZIP2::getEndian()
 {
-    return ENDIAN_LITTLE; // BZip2 is always little-endian
+    return ENDIAN_LITTLE;  // BZip2 is always little-endian
 }
 
 QString XBZIP2::typeIdToString(qint32 nType)
@@ -68,9 +66,7 @@ QString XBZIP2::typeIdToString(qint32 nType)
     QString sResult = tr("Unknown");
 
     switch (nType) {
-        case TYPE_BZ2:
-            sResult = QString("BZ2");
-            break;
+        case TYPE_BZ2: sResult = QString("BZ2"); break;
     }
 
     return sResult;
@@ -201,8 +197,10 @@ QList<XBinary::DATA_HEADER> XBZIP2::getDataHeaders(const DATA_HEADERS_OPTIONS &d
             if (dataHeadersOptions.nID == STRUCTID_BZIP2_HEADER) {
                 dataHeader.nSize = sizeof(BZIP2_HEADER);
 
-                dataHeader.listRecords.append(getDataRecord(offsetof(BZIP2_HEADER, magic), 3, "magic", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(BZIP2_HEADER, blockSize), 1, "blockSize", VT_BYTE, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(BZIP2_HEADER, magic), 3, "magic", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(BZIP2_HEADER, blockSize), 1, "blockSize", VT_BYTE, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
             }
@@ -215,7 +213,7 @@ QList<XBinary::DATA_HEADER> XBZIP2::getDataHeaders(const DATA_HEADERS_OPTIONS &d
 quint64 XBZIP2::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    
+
     // BZip2 typically contains a single compressed stream
     return 1;
 }
@@ -223,7 +221,7 @@ quint64 XBZIP2::getNumberOfRecords(PDSTRUCT *pPdStruct)
 QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> listResult;
-    
+
     if (isPdStructNotCanceled(pPdStruct)) {
         SubDevice sd(getDevice(), 0, -1);
 
@@ -251,8 +249,8 @@ QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             sd.close();
         }
     }
-    
-    Q_UNUSED(nLimit) // We always return just one record for BZip2
+
+    Q_UNUSED(nLimit)  // We always return just one record for BZip2
 
     return listResult;
 }
@@ -260,12 +258,12 @@ QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 XBZIP2::BZIP2_HEADER XBZIP2::_read_BZIP2_HEADER(qint64 nOffset)
 {
     BZIP2_HEADER result = {};
-    
+
     // Read the magic "BZh" signature
     read_array(nOffset, (char *)&result.magic, 3);
-    
+
     // Read the block size
     result.blockSize = read_uint8(nOffset + 3);
-    
+
     return result;
 }

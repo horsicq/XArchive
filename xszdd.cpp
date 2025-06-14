@@ -20,13 +20,10 @@
  */
 #include "xszdd.h"
 
-static XBinary::XCONVERT _TABLE_XSZDD_STRUCTID[] = {
-    {XSZDD::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-    {XSZDD::STRUCTID_SZDD_HEADER, "SZDD_HEADER", QString("SZDD_HEADER")}
-};
+static XBinary::XCONVERT _TABLE_XSZDD_STRUCTID[] = {{XSZDD::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                                    {XSZDD::STRUCTID_SZDD_HEADER, "SZDD_HEADER", QString("SZDD_HEADER")}};
 
-XSZDD::XSZDD(QIODevice *pDevice)
-    : XArchive(pDevice)
+XSZDD::XSZDD(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
@@ -263,7 +260,7 @@ qint32 XSZDD::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_
 quint64 XSZDD::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    return 1; // Only one file per archive
+    return 1;  // Only one file per archive
 }
 
 QList<XArchive::RECORD> XSZDD::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
@@ -297,7 +294,8 @@ QList<XArchive::RECORD> XSZDD::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         record.nDataSize = decompressStruct.nInSize;
         record.spInfo.nUncompressedSize = decompressStruct.nOutSize;
         record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
-        record.spInfo.compressMethod = COMPRESS_METHOD_LZSS_SZDD;;
+        record.spInfo.compressMethod = COMPRESS_METHOD_LZSS_SZDD;
+        ;
 
         sd.close();
     }

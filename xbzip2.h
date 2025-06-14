@@ -33,8 +33,8 @@ public:
     };
 
     struct BZIP2_HEADER {
-        char magic[3];      // BZh
-        quint8 blockSize;   // '1' - '9' (file-level compression)
+        char magic[3];     // BZh
+        quint8 blockSize;  // '1' - '9' (file-level compression)
     };
 
     enum STRUCTID {
@@ -67,4 +67,4 @@ public:
     BZIP2_HEADER _read_BZIP2_HEADER(qint64 nOffset);
 };
 
-#endif // XBZIP2_H
+#endif  // XBZIP2_H

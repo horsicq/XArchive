@@ -34,10 +34,10 @@ public:
 #pragma pack(push)
 #pragma pack(1)
     struct SZDD_HEADER {
-        char signature[8];        // "SZDD" magic
-        quint8 compression_mode;  // Always 0x41 ("A")
-        quint8 missing_char;      // Character missing from end of filename (0=unknown)
-        quint32 uncompressed_size;// Uncompressed file size
+        char signature[8];          // "SZDD" magic
+        quint8 compression_mode;    // Always 0x41 ("A")
+        quint8 missing_char;        // Character missing from end of filename (0=unknown)
+        quint32 uncompressed_size;  // Uncompressed file size
     };
 #pragma pack(pop)
     explicit XSZDD(QIODevice *pDevice = nullptr);
@@ -75,4 +75,4 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
 };
 
-#endif // XSZDD_H
+#endif  // XSZDD_H

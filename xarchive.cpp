@@ -765,8 +765,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             pDecompressStruct->nInSize++;
 
             for (quint32 cbit = 0x01; (cbit & 0xFF) && isPdStructNotCanceled(pPdStruct); cbit <<= 1) {
-                if (pDecompressStruct->nOutSize >= nUnpackedLength)
-                    break;
+                if (pDecompressStruct->nOutSize >= nUnpackedLength) break;
                 if (control & cbit) {
                     // literal
                     quint8 ch = 0;
@@ -819,7 +818,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                     matchpos |= (value2 & 0xF0) << 4;
                     matchlen = (value2 & 0x0F) + 3;
 
-                    for (; (matchlen--) && (pDecompressStruct->nOutSize < nUnpackedLength) && isPdStructNotCanceled(pPdStruct); ) {
+                    for (; (matchlen--) && (pDecompressStruct->nOutSize < nUnpackedLength) && isPdStructNotCanceled(pPdStruct);) {
                         quint8 ch = window[matchpos];
                         window[pos] = ch;
 
