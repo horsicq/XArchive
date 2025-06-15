@@ -306,7 +306,7 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
                             bAPKS = true;
                         }
 
-                        for (qint32 i = 0; (i < nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+                        for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
                             if (pListRecords->at(i).spInfo.compressMethod == XArchive::COMPRESS_METHOD_STORE) {
                                 XArchive::RECORD record = pListRecords->at(i);
 
