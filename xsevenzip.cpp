@@ -93,7 +93,7 @@ quint64 XSevenZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
                 _state.listPackSizes.append(nPackSize);
             }
 
-            for (qint32 i = 0; (i < (qint32)(_state.nNumberOfPackStreams)) && (!(pPdStruct->bIsStop)); i++) {
+            for (qint32 i = 0; (i < (qint32)(_state.nNumberOfPackStreams)) && isPdStructNotCanceled(pPdStruct); i++) {
                 quint64 nCRC = _readIntPackedValue(&(_state.nCurrentOffset), _state.nMaxOffset, &bSuccess);
                 _state.listCRC.append(nCRC);
             }

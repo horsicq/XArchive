@@ -76,6 +76,8 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XSZDD(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_BZIP2)) {
         pResult = new XBZIP2(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_XZ)) {
+        pResult = new XXZ(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         pResult = new XDOS16(pDevice);
     } else {
@@ -127,42 +129,11 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
 {
     QByteArray baResult;
 
-    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
+    XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
 
-    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
-        XZip xzip(pDevice);
-        baResult = xzip.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
-        XMACHOFat xmachofat(pDevice);
-        baResult = xmachofat.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
-        X_Ar x_ar(pDevice);
-        baResult = x_ar.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
-        XTAR xtar(pDevice);
-        baResult = xtar.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
-        XTGZ xtgz(pDevice);
-        baResult = xtgz.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
-        XGzip xgzip(pDevice);
-        baResult = xgzip.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
-        XZlib xzlib(pDevice);
-        baResult = xzlib.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
-        XLHA xlha(pDevice);
-        baResult = xlha.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
-        XSZDD szdd(pDevice);
-        baResult = szdd.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
-        XCFBF xcfbf(pDevice);
-        baResult = xcfbf.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
-        XDOS16 xdos16(pDevice);
-        baResult = xdos16.decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
-    }
+    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    baResult = pArchives->decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+    delete pArchives;
 
     return baResult;
 }
@@ -210,49 +181,11 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 {
     bool bResult = false;
 
-    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
+    XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
 
-    // TODO more !!!
-    // 7Zip
-    // WinRAR
-    // CAB
-    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
-        XZip xzip(pDevice);
-        bResult = xzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
-        XMACHOFat xmachofat(pDevice);
-        bResult = xmachofat.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
-        X_Ar x_ar(pDevice);
-        bResult = x_ar.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
-        XTAR xtar(pDevice);
-        bResult = xtar.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
-        XTGZ xtgz(pDevice);
-        bResult = xtgz.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
-        XGzip xgzip(pDevice);
-        bResult = xgzip.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_BZIP2)) {
-        XBZIP2 xbzip2(pDevice);
-        bResult = xbzip2.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
-        XZlib xzlib(pDevice);
-        bResult = xzlib.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
-        XLHA xlha(pDevice);
-        bResult = xlha.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
-        XSZDD szdd(pDevice);
-        bResult = szdd.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
-        XCFBF xcfbf(pDevice);
-        bResult = xcfbf.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
-        XDOS16 xdos16(pDevice);
-        bResult = xdos16.decompressToFile(pRecord, sResultFileName, pPdStruct);
-    }
+    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    bResult = pArchives->decompressToFile(pRecord, sResultFileName, pPdStruct);
+    delete pArchives;
 
     return bResult;
 }
@@ -261,46 +194,11 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
 {
     bool bResult = false;
 
-    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
+    XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
 
-    // TODO more !!!
-    // 7Zip
-    // WinRAR
-    // CAB
-    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
-        XZip xzip(pDevice);
-        bResult = xzip.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
-        XMACHOFat xmachofat(pDevice);
-        bResult = xmachofat.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
-        X_Ar x_ar(pDevice);
-        bResult = x_ar.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
-        XTAR xtar(pDevice);
-        bResult = xtar.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
-        XTGZ xtgz(pDevice);
-        bResult = xtgz.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
-        XGzip xgzip(pDevice);
-        bResult = xgzip.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
-        XZlib xzlib(pDevice);
-        bResult = xzlib.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
-        XLHA xlha(pDevice);
-        bResult = xlha.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
-        XSZDD szdd(pDevice);
-        bResult = szdd.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
-        XCFBF xcfbf(pDevice);
-        bResult = xcfbf.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
-        XDOS16 xdos16(pDevice);
-        bResult = xdos16.decompressToDevice(pRecord, pDestDevice, pPdStruct);
-    }
+    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    bResult = pArchives->decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    delete pArchives;
 
     return bResult;
 }
@@ -391,43 +289,11 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
 {
     bool bResult = false;
 
-    QSet<XBinary::FT> stFileTypes = XBinary::getFileTypes(pDevice, true);
+    XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
 
-    // TODO more
-    if (stFileTypes.contains(XArchive::FT_ZIP) || stFileTypes.contains(XArchive::FT_JAR) || stFileTypes.contains(XArchive::FT_APK)) {
-        XZip xzip(pDevice);
-        bResult = xzip.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
-        XMACHOFat xmachofat(pDevice);
-        bResult = xmachofat.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_AR) || stFileTypes.contains(XArchive::FT_DEB)) {
-        X_Ar x_ar(pDevice);
-        bResult = x_ar.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
-        XTAR xtar(pDevice);
-        bResult = xtar.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ) || stFileTypes.contains(XArchive::FT_NPM)) {
-        XTGZ xtgz(pDevice);
-        bResult = xtgz.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
-        XGzip xgzip(pDevice);
-        bResult = xgzip.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
-        XZlib xzlib(pDevice);
-        bResult = xzlib.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
-        XLHA xlha(pDevice);
-        bResult = xlha.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
-        XSZDD szdd(pDevice);
-        bResult = szdd.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
-        XCFBF xcfbf(pDevice);
-        bResult = xcfbf.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
-        XDOS16 xdos16(pDevice);
-        bResult = xdos16.isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    }
+    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    bResult = pArchives->isArchiveRecordPresent(sRecordFileName, pPdStruct);
+    delete pArchives;
 
     return bResult;
 }
@@ -495,6 +361,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_TARGZ);
     result.insert(XBinary::FT_NPM);
     result.insert(XBinary::FT_GZIP);
+    result.insert(XBinary::FT_BZIP2);
     result.insert(XBinary::FT_ZLIB);
     result.insert(XBinary::FT_LHA);
     result.insert(XBinary::FT_SZDD);

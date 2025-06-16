@@ -25,6 +25,7 @@ HEADERS += \
     $$PWD/xnpm.h \
     $$PWD/xszdd.h \
     $$PWD/xbzip2.h \
+    $$PWD/xxz.h \
     $$PWD/xzlib.h
 
 SOURCES += \
@@ -51,6 +52,7 @@ SOURCES += \
     $$PWD/xnpm.cpp \
     $$PWD/xszdd.cpp \
     $$PWD/xbzip2.cpp \
+    $$PWD/xxz.cpp \
     $$PWD/xzlib.cpp
 
 !contains(XCONFIG, xbinary) {
