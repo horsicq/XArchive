@@ -94,7 +94,11 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
     QList<XArchive::RECORD> listResult;
 
     XArchive *pArchives = XArchives::getClass(fileType, pDevice);
-    listResult = pArchives->getRecords(nLimit, pPdStruct);
+
+    if (pArchives) {
+        listResult = pArchives->getRecords(nLimit, pPdStruct);
+    }
+
     delete pArchives;
 
     return listResult;
@@ -132,7 +136,11 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
     XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
 
     XArchive *pArchives = XArchives::getClass(fileType, pDevice);
-    baResult = pArchives->decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+
+    if (pArchives) {
+        baResult = pArchives->decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+    }
+
     delete pArchives;
 
     return baResult;
@@ -184,7 +192,11 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
 
     XArchive *pArchives = XArchives::getClass(fileType, pDevice);
-    bResult = pArchives->decompressToFile(pRecord, sResultFileName, pPdStruct);
+
+    if (pArchives) {
+        bResult = pArchives->decompressToFile(pRecord, sResultFileName, pPdStruct);
+    }
+
     delete pArchives;
 
     return bResult;
@@ -197,7 +209,11 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
     XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
 
     XArchive *pArchives = XArchives::getClass(fileType, pDevice);
-    bResult = pArchives->decompressToDevice(pRecord, pDestDevice, pPdStruct);
+
+    if (pArchives) {
+        bResult = pArchives->decompressToDevice(pRecord, pDestDevice, pPdStruct);
+    }
+
     delete pArchives;
 
     return bResult;
@@ -292,7 +308,11 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
     XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
 
     XArchive *pArchives = XArchives::getClass(fileType, pDevice);
-    bResult = pArchives->isArchiveRecordPresent(sRecordFileName, pPdStruct);
+
+    if (pArchives) {
+        bResult = pArchives->isArchiveRecordPresent(sRecordFileName, pPdStruct);
+    }
+
     delete pArchives;
 
     return bResult;
