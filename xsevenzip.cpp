@@ -888,12 +888,12 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
                 pState->nPackPosition = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
                 pState->nNumberOfPackStreams = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
 
-                for (qint32 i = 0; (i < (qint32)(pState->nNumberOfPackStreams)) && (!(pPdStruct->bIsStop)); i++) {
+                for (qint32 i = 0; (i < (qint32)(pState->nNumberOfPackStreams)) && isPdStructNotCanceled(pPdStruct); i++) {
                     quint64 nPackSize = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
                     pState->listPackSizes.append(nPackSize);
                 }
 
-                for (qint32 i = 0; (i < (qint32)(pState->nNumberOfPackStreams)) && (!(pPdStruct->bIsStop)); i++) {
+                for (qint32 i = 0; (i < (qint32)(pState->nNumberOfPackStreams)) && isPdStructNotCanceled(pPdStruct); i++) {
                     quint64 nCRC = _readIntPackedValue(&(pState->nCurrentOffset), pState->nMaxOffset, &bSuccess);
                     pState->listCRC.append(nCRC);
                 }
