@@ -654,7 +654,7 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
 
         qint64 nOffset = 0;
 
-        for (qint32 i = 0; i < (nNumberOfRecords) && (!(pPdStruct->bIsStop)); i++) {
+        for (qint32 i = 0; i < (nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
             if ((nOffset + (qint64)sizeof(LOCALFILEHEADER)) > nTotalSize) {
                 break;
             }
