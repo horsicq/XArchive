@@ -76,6 +76,12 @@ public:
         quint64 streamSize;           // Size of the stream in bytes
     };
 
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_StructuredStorageHeader,
+        STRUCTID_CFBF_DIRECTORY_ENTRY,
+    };
+
     explicit XCFBF(QIODevice *pDevice = nullptr);
     ~XCFBF();
 
@@ -95,6 +101,9 @@ public:
     _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
 
     StructuredStorageHeader read_StructuredStorageHeader(qint64 nOffset, PDSTRUCT *pPdStruct);
+
+    virtual QString structIDToString(quint32 nID);
+    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
 };
 
 #endif  // XCFBF_H
