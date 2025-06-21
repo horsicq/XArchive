@@ -20,17 +20,14 @@
  */
 #include "xxz.h"
 
-XBinary::XCONVERT _TABLE_XXZ_STRUCTID[] = {
-    {XXZ::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-    {XXZ::STRUCTID_STREAM_HEADER, "STREAM_HEADER", QString("Stream Header")},
-    {XXZ::STRUCTID_BLOCK_HEADER, "BLOCK_HEADER", QString("Block Header")},
-    {XXZ::STRUCTID_INDEX, "INDEX", QString("Index")},
-    {XXZ::STRUCTID_STREAM_FOOTER, "STREAM_FOOTER", QString("Stream Footer")},
-    {XXZ::STRUCTID_RECORD, "RECORD", QString("Record")}
-};
+XBinary::XCONVERT _TABLE_XXZ_STRUCTID[] = {{XXZ::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                           {XXZ::STRUCTID_STREAM_HEADER, "STREAM_HEADER", QString("Stream Header")},
+                                           {XXZ::STRUCTID_BLOCK_HEADER, "BLOCK_HEADER", QString("Block Header")},
+                                           {XXZ::STRUCTID_INDEX, "INDEX", QString("Index")},
+                                           {XXZ::STRUCTID_STREAM_FOOTER, "STREAM_FOOTER", QString("Stream Footer")},
+                                           {XXZ::STRUCTID_RECORD, "RECORD", QString("Record")}};
 
-XXZ::XXZ(QIODevice *pDevice)
-    : XArchive(pDevice)
+XXZ::XXZ(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
@@ -42,20 +39,18 @@ bool XXZ::isValid(PDSTRUCT *pPdStruct)
 {
     // Check magic bytes
     qint64 nSize = getSize();
-    if (nSize < 6)
-        return false;
+    if (nSize < 6) return false;
 
     QByteArray baMagic = read_array(0, 6, pPdStruct);
     static const quint8 XZ_MAGIC[6] = {0xFD, '7', 'z', 'X', 'Z', 0x00};
-    if (memcmp(baMagic.constData(), XZ_MAGIC, 6) != 0)
-        return false;
+    if (memcmp(baMagic.constData(), XZ_MAGIC, 6) != 0) return false;
 
     return true;
 }
 
 XBinary::FT XXZ::getFileType()
 {
-    return XBinary::FT_XZ; // Replace with FT_XZ if defined
+    return XBinary::FT_XZ;  // Replace with FT_XZ if defined
 }
 
 XBinary::MODE XXZ::getMode()
@@ -75,8 +70,7 @@ qint32 XXZ::getType()
 
 QString XXZ::typeIdToString(qint32 nType)
 {
-    if (nType == TYPE_ARCHIVE)
-        return "Archive";
+    if (nType == TYPE_ARCHIVE) return "Archive";
     return QString::number(nType);
 }
 
@@ -159,7 +153,7 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     recordHeader.nAddress = -1;
     recordHeader.segment = ADDRESS_SEGMENT_FLAT;
     recordHeader.nOffset = 0;
-    recordHeader.nSize = 12; // Stream header size
+    recordHeader.nSize = 12;  // Stream header size
     recordHeader.nIndex = nIndex++;
     recordHeader.type = MMT_HEADER;
     recordHeader.sName = tr("Stream Header");
@@ -170,7 +164,7 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     recordFooter.nAddress = -1;
     recordFooter.segment = ADDRESS_SEGMENT_FLAT;
     recordFooter.nOffset = getSize() - 12;
-    recordFooter.nSize = 12; // Stream footer size
+    recordFooter.nSize = 12;  // Stream footer size
     recordFooter.nIndex = nIndex++;
     recordFooter.type = MMT_FOOTER;
     recordFooter.sName = tr("Stream Footer");
@@ -248,15 +242,20 @@ QList<XBinary::DATA_HEADER> XXZ::getDataHeaders(const DATA_HEADERS_OPTIONS &data
 
             if (dataHeadersOptions.nID == STRUCTID_STREAM_HEADER) {
                 dataHeader.nSize = 12;
-                dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_HEADER, header_magic), 6, "header_magic", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_HEADER, stream_flags), 2, "stream_flags", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(STREAM_HEADER, header_magic), 6, "header_magic", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(STREAM_HEADER, stream_flags), 2, "stream_flags", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_HEADER, crc32), 4, "crc32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
             } else if (dataHeadersOptions.nID == STRUCTID_STREAM_FOOTER) {
                 dataHeader.nSize = 12;
                 dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_FOOTER, crc32), 4, "crc32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_FOOTER, backward_size), 4, "backward_size", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_FOOTER, stream_flags), 2, "stream_flags", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_FOOTER, footer_magic), 2, "footer_magic", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(STREAM_FOOTER, backward_size), 4, "backward_size", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(STREAM_FOOTER, stream_flags), 2, "stream_flags", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(STREAM_FOOTER, footer_magic), 2, "footer_magic", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
             }
             // TODO: Block header, Index, etc.
             listResult.append(dataHeader);
@@ -318,7 +317,7 @@ XXZ::BLOCK_HEADER XXZ::_read_BLOCK_HEADER(qint64 nOffset)
 XXZ::INDEX XXZ::_read_INDEX(qint64 nOffset)
 {
     INDEX idx = {};
-    QByteArray arr = read_array(nOffset, 2); // At least indicator and start of num_records
+    QByteArray arr = read_array(nOffset, 2);  // At least indicator and start of num_records
     if (arr.size() >= 2) {
         idx.indicator = (quint8)arr[0];
         // TODO: parse variable-length num_records
@@ -336,8 +335,7 @@ quint64 XXZ::getNumberOfRecords(PDSTRUCT *pPdStruct)
 QList<XArchive::RECORD> XXZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> list;
-    if (nLimit == 0)
-        return list;
+    if (nLimit == 0) return list;
 
     if (isValid(pPdStruct)) {
         RECORD record = {};

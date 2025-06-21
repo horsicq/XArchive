@@ -33,8 +33,7 @@ bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
         if (compareSignature(&memoryMap, "'7z'BCAF271C", 0, pPdStruct)) {
             // More checks
             SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
-            bResult = isOffsetAndSizeValid(&memoryMap, sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset,
-                                           signatureHeader.NextHeaderSize);
+            bResult = isOffsetAndSizeValid(&memoryMap, sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset, signatureHeader.NextHeaderSize);
         }
     }
 

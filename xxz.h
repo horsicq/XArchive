@@ -103,4 +103,4 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 };
 
-#endif // XXZ_H
+#endif  // XXZ_H
