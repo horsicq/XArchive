@@ -531,6 +531,11 @@ qint64 XZip::getFileFormatSize(PDSTRUCT *pPdStruct)
     return nResult;
 }
 
+QString XZip::getMIMEString()
+{
+    return "application/zip";
+}
+
 XZip::CENTRALDIRECTORYFILEHEADER XZip::read_CENTRALDIRECTORYFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     CENTRALDIRECTORYFILEHEADER result = {};
