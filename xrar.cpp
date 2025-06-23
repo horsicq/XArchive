@@ -277,6 +277,11 @@ QString XRar::headerType5ToString(HEADERTYPE5 type)
     return sResult;
 }
 
+QString XRar::getMIMEString()
+{
+    return "application/x-rar-compressed";
+}
+
 XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     FILEFORMATINFO result = {};

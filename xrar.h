@@ -154,6 +154,8 @@ public:
 
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
 
+    virtual QString getMIMEString();
+
 private:
     qint32 getInternVersion(PDSTRUCT *pPdStruct);
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
