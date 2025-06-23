@@ -28,6 +28,11 @@ class XSevenZip : public XArchive {
     Q_OBJECT
 
 public:
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_SIGNATUREHEADER,
+    };
+
     enum EIdEnum {
         k7zIdEnd = 0,
         k7zIdHeader,
@@ -107,6 +112,9 @@ public:
 
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);
+
+    virtual QString structIDToString(quint32 nID) override;
+    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
 
 private:
     qint32 getXRecord(XBinary::_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra = 0);
