@@ -539,6 +539,40 @@ QString XSevenZip::getMIMEString()
     return "application/x-7z-compressed";
 }
 
+QMap<quint64, QString> XSevenZip::getEIdEnumS()
+{
+    QMap<quint64, QString> mapResult;
+
+    mapResult.insert(0, "End");
+    mapResult.insert(1, "Header");
+    mapResult.insert(2, "ArchiveProperties");
+    mapResult.insert(3, "AdditionalStreamsInfo");
+    mapResult.insert(4, "MainStreamsInfo");
+    mapResult.insert(5, "FilesInfo");
+    mapResult.insert(6, "PackInfo");
+    mapResult.insert(7, "UnpackInfo");
+    mapResult.insert(8, "SubStreamsInfo");
+    mapResult.insert(9, "Size");
+    mapResult.insert(10, "CRC");
+    mapResult.insert(11, "Folder");
+    mapResult.insert(12, "CodersUnpackSize");
+    mapResult.insert(13, "NumUnpackStream");
+    mapResult.insert(14, "EmptyStream");
+    mapResult.insert(15, "EmptyFile");
+    mapResult.insert(16, "Anti");
+    mapResult.insert(17, "Name");
+    mapResult.insert(18, "CTime");
+    mapResult.insert(19, "ATime");
+    mapResult.insert(20, "MTime");
+    mapResult.insert(21, "WinAttrib");
+    mapResult.insert(22, "Comment");
+    mapResult.insert(23, "EncodedHeader");
+    mapResult.insert(24, "StartPos");
+    mapResult.insert(25, "Dummy");
+
+    return mapResult;
+}
+
 QString XSevenZip::getArch()
 {
     return QString();
@@ -754,6 +788,14 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                     dataRecord.valType = VT_PACKEDNUMBER; // TODO
                     dataRecord.nFlags = DRF_UNKNOWN; // TODO
                     dataRecord.endian = dataHeadersOptions.pMemoryMap->endian;
+
+                    if (szRecord.srType == SRTYPE_ID) {
+                        DATAVALUESET dataValueSet;
+                        dataValueSet.mapValues = getEIdEnumS();
+                        dataValueSet.bFlags = false;
+                        dataValueSet.nMask = 0xFFFFFFFFFFFFFFFF;
+                        dataRecord.listDataValueSets.append(dataValueSet);
+                    }
 
                     dataHeader.listRecords.append(dataRecord);
                 }
@@ -1086,11 +1128,66 @@ void XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, pPdStruct);
             _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, pPdStruct);
             // TODO
+        } else if (puTag.nValue == XSevenZip::k7zIdPackInfo) {
+            _handleNumber(pListRecords, pState, pPdStruct, "PackPosition");
+            quint64 nCount = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfPackStreams");
+
+            for (quint64 i = 0; (i < nCount) && isPdStructNotCanceled(pPdStruct); i++) {
+                _handleNumber(pListRecords, pState, pPdStruct, QString("PackSize%1").arg(i));
+            }
+            for (quint64 i = 0; (i < nCount) && isPdStructNotCanceled(pPdStruct); i++) {
+                _handleNumber(pListRecords, pState, pPdStruct, QString("CRC%1").arg(i));
+            }
+            _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, pPdStruct);
+        } else if (puTag.nValue == XSevenZip::k7zIdUnpackInfo) {
+            _handleId(pListRecords, XSevenZip::k7zIdFolder, pState, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, pPdStruct);
+        } else if (puTag.nValue == XSevenZip::k7zIdFolder) {
+            quint64 nCount = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFolders");
         }
     } else {
         pState->bIsError = true;
         pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
     }
+}
+
+quint64 XSevenZip::_handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption)
+{
+    if (isPdStructStopped(pPdStruct)) {
+        return 0;
+    }
+
+    if (pState->nCurrentOffset >= pState->nSize) {
+        return 0;
+    }
+
+    if (pState->bIsError) {
+        return 0;
+    }
+
+    quint64 nResult = 0;
+
+    XBinary::PACKED_UINT puNumber = XBinary::_read_packedNumber(pState->pData + pState->nCurrentOffset, pState->nSize - pState->nCurrentOffset);
+
+    if (puNumber.bIsValid) {
+        nResult = puNumber.nValue;
+
+        {
+            SZRECORD record = {};
+            record.nRelOffset = pState->nCurrentOffset;
+            record.nSize = puNumber.nByteSize;
+            record.varValue = puNumber.nValue;
+            record.srType = SRTYPE_NUMBER;
+            record.sName = sCaption;
+            pListRecords->append(record);
+        }
+        pState->nCurrentOffset += puNumber.nByteSize;
+    } else {
+        pState->bIsError = true;
+        pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
+    }
+
+    return nResult;
 }
 
 QList<XSevenZip::SZRECORD> XSevenZip::_handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct)

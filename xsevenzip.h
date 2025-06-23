@@ -111,6 +111,8 @@ public:
     virtual QString getArch();
     virtual QString getMIMEString();
 
+    static QMap<quint64, QString> getEIdEnumS();
+
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);
 
@@ -137,7 +139,8 @@ private:
 
     enum SRTYPE {
         SRTYPE_UNKNOWN = 0,
-        SRTYPE_ID
+        SRTYPE_ID,
+        SRTYPE_NUMBER,
     };
 
     struct SZRECORD {
@@ -159,6 +162,7 @@ private:
     quint64 _handle(STATE *pState, PDSTRUCT *pPdStruct);
     QList<SZRECORD> _handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct);
     void _handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, PDSTRUCT *pPdStruct);
+    quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption);
 };
 
 #endif  // XSEVENZIP_H
