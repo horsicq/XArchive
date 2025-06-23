@@ -20,9 +20,11 @@
  */
 #include "xsevenzip.h"
 
-XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {{XSevenZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                           {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
-};
+XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {
+                                                    {XSevenZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                                    {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
+                                                    {XSevenZip::STRUCTID_HEADER, "HEADER", QObject::tr("Header")}
+                                                };
 
 XSevenZip::XSevenZip(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -701,9 +703,8 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
         if (nStartOffset != -1) {
-            DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
-
             if (dataHeadersOptions.nID == STRUCTID_SIGNATUREHEADER) {
+                DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
                 dataHeader.nSize = sizeof(SIGNATUREHEADER);
 
                 dataHeader.listRecords.append(
@@ -720,9 +721,44 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                     getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderSize), 8, "NextHeaderSize", VT_UINT64, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderCRC), 4, "NextHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-            }
 
-            if (dataHeader.nSize) {
+                listResult.append(dataHeader);
+
+                if (dataHeadersOptions.bChildren) {
+                    qint64 nNextHeaderOffset = read_uint64(nStartOffset + offsetof(SIGNATUREHEADER, NextHeaderOffset));
+                    qint64 nNextHeaderSize = read_uint64(nStartOffset + offsetof(SIGNATUREHEADER, NextHeaderSize));
+
+                    DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+                    _dataHeadersOptions.nLocation += (sizeof(SIGNATUREHEADER) + nNextHeaderOffset);
+                    _dataHeadersOptions.nSize = nNextHeaderSize;
+                    _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+                    _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+                    _dataHeadersOptions.nID = STRUCTID_HEADER;
+                    listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+                }
+            } else if (dataHeadersOptions.nID == STRUCTID_HEADER) {
+                DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
+                dataHeader.nSize = dataHeadersOptions.nSize;
+
+                QList<XSevenZip::SZRECORD> listRecords = _handleData(nStartOffset, dataHeadersOptions.nSize, pPdStruct);
+
+                qint32 nNumberOfRecords = listRecords.count();
+
+                for (qint32 i = 0; i < nNumberOfRecords; i++) {
+                    XSevenZip::SZRECORD szRecord = listRecords.at(i);
+
+                    DATA_RECORD dataRecord = {};
+                    dataRecord.nRelOffset = szRecord.nRelOffset;
+                    dataRecord.nSize = szRecord.nSize;
+                    dataRecord.sName = szRecord.sName;
+                    dataRecord.valType = VT_PACKEDNUMBER; // TODO
+                    dataRecord.nFlags = DRF_UNKNOWN; // TODO
+                    dataRecord.endian = dataHeadersOptions.pMemoryMap->endian;
+
+                    dataHeader.listRecords.append(dataRecord);
+                }
+
+
                 listResult.append(dataHeader);
             }
         }
@@ -1013,6 +1049,78 @@ quint64 XSevenZip::_handle(STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return nResult;
+}
+
+void XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, PDSTRUCT *pPdStruct)
+{
+    if (isPdStructStopped(pPdStruct)) {
+        return;
+    }
+
+    if (pState->nCurrentOffset >= pState->nSize) {
+        return;
+    }
+
+    if (pState->bIsError) {
+        return;
+    }
+
+    XBinary::PACKED_UINT puTag = XBinary::_read_packedNumber(pState->pData + pState->nCurrentOffset, pState->nSize - pState->nCurrentOffset);
+
+    if ((puTag.bIsValid) && (puTag.nValue == id)) {
+        {
+            SZRECORD record = {};
+            record.nRelOffset = pState->nCurrentOffset;
+            record.nSize = puTag.nByteSize;
+            record.varValue = puTag.nValue;
+            record.srType = SRTYPE_ID;
+            record.sName = "k7zId";
+            pListRecords->append(record);
+        }
+        pState->nCurrentOffset += puTag.nByteSize;
+
+        if (puTag.nValue == XSevenZip::k7zIdHeader) {
+            _handleId(pListRecords, XSevenZip::k7zIdMainStreamsInfo, pState, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdFilesInfo, pState, pPdStruct);
+        } else if (puTag.nValue == XSevenZip::k7zIdMainStreamsInfo) {
+            _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, pPdStruct);
+            // TODO
+        }
+    } else {
+        pState->bIsError = true;
+        pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
+    }
+}
+
+QList<XSevenZip::SZRECORD> XSevenZip::_handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct)
+{
+    QList<XSevenZip::SZRECORD> listResult;
+
+    SZSTATE state = {};
+    state.pData = new char[nSize];
+    state.nSize = nSize;
+    state.nCurrentOffset = 0;
+    state.bIsError = false;
+
+    read_array(nOffset, state.pData, state.nSize, pPdStruct);
+
+    XBinary::PACKED_UINT puTag = XBinary::_read_packedNumber(state.pData, state.nSize - state.nCurrentOffset);
+
+    if (puTag.bIsValid) {
+        if (puTag.nValue == XSevenZip::k7zIdHeader) {
+            _handleId(&listResult, XSevenZip::k7zIdHeader, &state, pPdStruct);
+        } else if (puTag.nValue == XSevenZip::k7zIdEncodedHeader) {
+            _handleId(&listResult, XSevenZip::k7zIdEncodedHeader, &state, pPdStruct);
+        }
+    } else {
+        state.bIsError = true;
+        state.sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(state.nCurrentOffset), tr("Invalid data"));
+    }
+
+    delete [] state.pData;
+
+    return listResult;
 }
 
 // qint64 XSevenZip::getHeader(qint64 nOffset,XSevenZip::XHEADER *pHeader)

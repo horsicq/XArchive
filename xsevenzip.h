@@ -31,6 +31,7 @@ public:
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_SIGNATUREHEADER,
+        STRUCTID_HEADER
     };
 
     enum EIdEnum {
@@ -134,7 +135,30 @@ private:
         quint64 nNumberOfProperties;
     };
 
+    enum SRTYPE {
+        SRTYPE_UNKNOWN = 0,
+        SRTYPE_ID
+    };
+
+    struct SZRECORD {
+        qint32 nRelOffset;
+        qint32 nSize;
+        QString sName;
+        QVariant varValue;
+        SRTYPE srType;
+    };
+
+    struct SZSTATE {
+        char *pData;
+        qint64 nCurrentOffset;
+        qint64 nSize;
+        bool bIsError;
+        QString sErrorString;
+    };
+
     quint64 _handle(STATE *pState, PDSTRUCT *pPdStruct);
+    QList<SZRECORD> _handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct);
+    void _handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, PDSTRUCT *pPdStruct);
 };
 
 #endif  // XSEVENZIP_H
