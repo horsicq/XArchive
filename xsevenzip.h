@@ -79,20 +79,6 @@ public:
     };
 #pragma pack(pop)
 
-    struct XRECORD {
-        quint32 nID;
-        QList<XRECORD> listRecords;
-        qint64 nPackPos;
-        qint64 nNumPackStreams;
-        QList<qint64> listSizes;
-        qint64 nNumFolders;
-    };
-
-    struct XINFO {
-        SIGNATUREHEADER signatureRecord;
-        XRECORD mainXRecord;
-    };
-
     explicit XSevenZip(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
@@ -120,27 +106,12 @@ public:
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
 
 private:
-    qint32 getXRecord(XBinary::_MEMORY_MAP *pMemoryMap, qint64 nOffset, XRECORD *pXRecord, qint64 nExtra = 0);
-    quint64 _readIntPackedValue(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
-    quint8 _readBYTE(qint64 *pnOffset, qint64 nMaxOffset, bool *pbSuccess);
-
-    struct STATE {
-        qint64 nCurrentOffset;
-        qint64 nMaxOffset;
-        quint64 nPackPosition;
-        quint64 nNumberOfPackStreams;
-        QList<quint64> listPackSizes;
-        QList<quint64> listCRC;
-        QList<quint64> listUnpackSizes;
-        quint64 nNumberOfFolders;
-        quint8 nExtraByte;
-        quint64 nNumberOfProperties;
-    };
-
     enum SRTYPE {
         SRTYPE_UNKNOWN = 0,
         SRTYPE_ID,
         SRTYPE_NUMBER,
+        SRTYPE_BYTE,
+        SRTYPE_ARRAY
     };
 
     struct SZRECORD {
@@ -159,10 +130,11 @@ private:
         QString sErrorString;
     };
 
-    quint64 _handle(STATE *pState, PDSTRUCT *pPdStruct);
     QList<SZRECORD> _handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct);
     void _handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, PDSTRUCT *pPdStruct);
     quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption);
+    quint8 _handleByte(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption);
+    void _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption);
 };
 
 #endif  // XSEVENZIP_H

@@ -1,7 +1,10 @@
 INCLUDEPATH += $$PWD
 DEPENDPATH += $$PWD
+INCLUDEPATH += $$PWD/Compress
+DEPENDPATH += $$PWD/Compress
 
 HEADERS += \
+    $$PWD/Compress/xlzh.h \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
@@ -29,6 +32,7 @@ HEADERS += \
     $$PWD/xzlib.h
 
 SOURCES += \
+    $$PWD/Compress/xlzh.cpp \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \

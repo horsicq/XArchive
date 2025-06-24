@@ -1,4 +1,5 @@
 include_directories(${CMAKE_CURRENT_LIST_DIR})
+include_directories(${CMAKE_CURRENT_LIST_DIR}/Compress/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/bzip2/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/lzma/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/zlib/src/)
@@ -62,4 +63,6 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xbzip2.h
     ${CMAKE_CURRENT_LIST_DIR}/xxz.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xxz.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzh.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzh.h
 )

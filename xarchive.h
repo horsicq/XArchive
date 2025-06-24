@@ -29,6 +29,7 @@
 #include "Ppmd7.h"
 #endif
 #include "xcompress.h"
+#include "Compress/xlzh.h"
 
 class XArchive : public XBinary {
     Q_OBJECT
