@@ -30,6 +30,7 @@
 #endif
 #include "xcompress.h"
 #include "Compress/xlzh.h"
+#include "Compress/xrardecoder.h"
 
 class XArchive : public XBinary {
     Q_OBJECT

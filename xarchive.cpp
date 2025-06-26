@@ -448,6 +448,46 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_70)) {
         // TODO Check Fragmented
 
+        if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_15) {
+            XRar1Decoder decoder;
+
+            const qint32 CHUNK = DECOMPRESS_BUFFERSIZE;
+
+            char in[CHUNK];
+            char out[CHUNK];
+
+            RAR1_stream strm;
+            memset(&strm, 0, sizeof(strm));
+
+            decoder.decodeInit(&strm);
+            strm.total_in = pDecompressStruct->nInSize;
+
+            while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                qint32 nSize = pDecompressStruct->pSourceDevice->read((char *)in, CHUNK);
+
+                if (nSize) {
+                    strm.next_in = in;
+                    strm.avail_in = nSize;
+                    strm.next_out = out;
+                    strm.avail_out = CHUNK;
+                    strm.total_out = 0;
+
+                    qint32 nRet = decoder.decode(&strm);
+
+                    qint32 nTemp = CHUNK - strm.avail_out;
+
+                    if (!_writeToDevice((char *)out, nTemp, pDecompressStruct)) {
+                        nRet = Z_DATA_ERROR;
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            decoder.decodeEnd(&strm);
+        }
+
 //         bool bSolid = false;
 
 //         XCompress::rar_stream rarStream = {};
@@ -1124,7 +1164,6 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
 
             if (!decompressToFile(&record, sResultFileName, pPdStruct)) {
                 bResult = false;
-                break;
             }
         }
     }
