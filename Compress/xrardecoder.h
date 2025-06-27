@@ -147,15 +147,14 @@ enum FilterType {
 #define UNPACK_MAX_DICT 0x1000000000ULL  // 64 GB.
 
 // (int) cast before "low" added only to suppress compiler warnings.
-#define ARI_DEC_NORMALIZE(code,low,range,read)                           \
-{                                                                        \
-        while ((low^(low+range))<TOP || range<BOT && ((range=-(int)low&(BOT-1)),1)) \
-    {                                                                      \
-            code=(code << 8) | read->GetChar();                                  \
-            range <<= 8;                                                         \
-            low <<= 8;                                                           \
-    }                                                                      \
-}
+#define ARI_DEC_NORMALIZE(code, low, range, read)                                                    \
+    {                                                                                                \
+        while ((low ^ (low + range)) < TOP || range < BOT && ((range = -(int)low & (BOT - 1)), 1)) { \
+            code = (code << 8) | read->GetChar();                                                    \
+            range <<= 8;                                                                             \
+            low <<= 8;                                                                               \
+        }                                                                                            \
+    }
 
 #define VM_MEMSIZE 0x40000
 #define VM_MEMMASK (VM_MEMSIZE - 1)
@@ -714,8 +713,10 @@ private:
     };
 
     void UnpInitData30(bool Solid);
+
 public:
     void Unpack29(bool Solid, XBinary::PDSTRUCT *pPdStruct);
+
 private:
     void InitFilters30(bool Solid);
     bool ReadEndOfBlock();

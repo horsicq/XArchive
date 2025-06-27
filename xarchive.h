@@ -69,7 +69,7 @@ public:
         quint32 nCRC32;
         qint64 nUncompressedSize;
         quint64 nWindowSize;
-        bool bIsSolid; // For RAR
+        bool bIsSolid;  // For RAR
         COMPRESS_METHOD compressMethod;
     };
 
