@@ -86,7 +86,6 @@ public:
 
 #define CACHE_TYPE quint64
 #define CACHE_BITS (8 * sizeof(CACHE_TYPE))
-#define ASIZE(x) (sizeof(x) / sizeof(x[0]))
 
     /*
      * Huffman coding.

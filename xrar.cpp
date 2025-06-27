@@ -122,6 +122,7 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint64 nFileHeaderSize = 0;
     qint32 nVersion = getInternVersion(pPdStruct);
+    qint64 nTotalSize = getSize();
 
     if (nVersion == 4) {
         nFileHeaderSize = 7;
@@ -134,45 +135,49 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
         if (nVersion == 4) {
             while (isPdStructNotCanceled(pPdStruct)) {
-                GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+                if (nCurrentOffset <= (nTotalSize - sizeof(GENERICBLOCK4))) {
+                    GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
-                if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
-                    if (genericBlock.nType == BLOCKTYPE4_FILE) {
-                        FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
+                    if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
+                        if (genericBlock.nType == BLOCKTYPE4_FILE) {
+                            FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
 
-                        XArchive::RECORD record = {};
-                        record.spInfo.sRecordName = fileBlock4.sFileName;
-                        record.spInfo.nCRC32 = fileBlock4.genericBlock4.nCRC16;
-                        record.nDataOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
-                        record.nDataSize = fileBlock4.packSize;
-                        record.spInfo.nUncompressedSize = fileBlock4.unpSize;
-                        record.nHeaderOffset = nCurrentOffset;
-                        record.nHeaderSize = fileBlock4.genericBlock4.nHeaderSize;
+                            XArchive::RECORD record = {};
+                            record.spInfo.sRecordName = fileBlock4.sFileName;
+                            record.spInfo.nCRC32 = fileBlock4.genericBlock4.nCRC16;
+                            record.nDataOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
+                            record.nDataSize = fileBlock4.packSize;
+                            record.spInfo.nUncompressedSize = fileBlock4.unpSize;
+                            record.nHeaderOffset = nCurrentOffset;
+                            record.nHeaderSize = fileBlock4.genericBlock4.nHeaderSize;
 
-                        if (fileBlock4.method == RAR_METHOD_STORE) {
-                            record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
-                        } else if (fileBlock4.unpVer == 15) {
-                            record.spInfo.compressMethod = COMPRESS_METHOD_RAR_15;
-                            record.spInfo.nWindowSize = 0x10000;
-                        } else if ((fileBlock4.unpVer == 20) || (fileBlock4.unpVer == 26)) {
-                            record.spInfo.compressMethod = COMPRESS_METHOD_RAR_20;
-                        } else if (fileBlock4.unpVer == 29) {
-                            record.spInfo.compressMethod = COMPRESS_METHOD_RAR_29;
+                            if (fileBlock4.method == RAR_METHOD_STORE) {
+                                record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
+                            } else if (fileBlock4.unpVer == 15) {
+                                record.spInfo.compressMethod = COMPRESS_METHOD_RAR_15;
+                                record.spInfo.nWindowSize = 0x10000;
+                            } else if ((fileBlock4.unpVer == 20) || (fileBlock4.unpVer == 26)) {
+                                record.spInfo.compressMethod = COMPRESS_METHOD_RAR_20;
+                            } else if (fileBlock4.unpVer == 29) {
+                                record.spInfo.compressMethod = COMPRESS_METHOD_RAR_29;
+                            } else {
+                                record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
+                            }
+
+                            listResult.append(record);  // TODO large files
+
+                            nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
                         } else {
-                            record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
+                            nCurrentOffset += genericBlock.nHeaderSize;
                         }
-
-                        listResult.append(record);  // TODO large files
-
-                        nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
                     } else {
-                        nCurrentOffset += genericBlock.nHeaderSize;
+                        break;
+                    }
+
+                    if (genericBlock.nType == 0x7B) {  // END
+                        break;
                     }
                 } else {
-                    break;
-                }
-
-                if (genericBlock.nType == 0x7B) {  // END
                     break;
                 }
             }
