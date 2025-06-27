@@ -52,7 +52,6 @@ static const char bitlen_tbl[0x400] = {
 
 XLZH::XLZH(QObject *parent) : QObject(parent)
 {
-
 }
 
 bool XLZH::lzh_decode_init(lzh_stream *strm, qint32 method)
@@ -66,16 +65,16 @@ bool XLZH::lzh_decode_init(lzh_stream *strm, qint32 method)
     ds = strm->ds;
 
     switch (method) {
-    case 5:
-        w_bits = 13; /* 8KiB for window */
-        break;
-    case 6:
-        w_bits = 15; /* 32KiB for window */
-        break;
-    case 7:
-        w_bits = 16; /* 64KiB for window */
-        break;
-    default: return false; /* Not supported. */
+        case 5:
+            w_bits = 13; /* 8KiB for window */
+            break;
+        case 6:
+            w_bits = 15; /* 32KiB for window */
+            break;
+        case 7:
+            w_bits = 16; /* 64KiB for window */
+            break;
+        default: return false; /* Not supported. */
     }
     /* Expand a window size up to 128 KiB for decompressing process
      * performance whatever its original window size is. */
@@ -152,194 +151,194 @@ qint32 XLZH::lzh_read_blocks(lzh_stream *strm, qint32 last)
 
     for (;;) {
         switch (ds->state) {
-        case ST_RD_BLOCK:
-            /*
+            case ST_RD_BLOCK:
+                /*
                  * Read a block number indicates how many blocks
                  * we will handle. The block is composed of a
                  * literal and a match, sometimes a literal only
                  * in particular, there are no reference data at
                  * the beginning of the decompression.
                  */
-            if (!lzh_br_read_ahead_0(strm, br, 16)) {
-                if (!last) /* We need following data. */
-                    return (LZH_ARCHIVE_OK);
-                if (lzh_br_has(br, 8)) {
-                    /*
+                if (!lzh_br_read_ahead_0(strm, br, 16)) {
+                    if (!last) /* We need following data. */
+                        return (LZH_ARCHIVE_OK);
+                    if (lzh_br_has(br, 8)) {
+                        /*
                          * It seems there are extra bits.
                          *  1. Compressed data is broken.
                          *  2. `last' flag does not properly
                          *     set.
                          */
-                    goto failed;
-                }
-                if (ds->w_pos > 0) {
-                    lzh_emit_window(strm, ds->w_pos);
-                    ds->w_pos = 0;
-                    return (LZH_ARCHIVE_OK);
-                }
-                /* End of compressed data; we have completely
+                        goto failed;
+                    }
+                    if (ds->w_pos > 0) {
+                        lzh_emit_window(strm, ds->w_pos);
+                        ds->w_pos = 0;
+                        return (LZH_ARCHIVE_OK);
+                    }
+                    /* End of compressed data; we have completely
                      * handled all compressed data. */
-                return (LZH_ARCHIVE_EOF);
-            }
-            ds->blocks_avail = lzh_br_bits(br, 16);
-            if (ds->blocks_avail == 0) goto failed;
-            lzh_br_consume(br, 16);
-            /*
+                    return (LZH_ARCHIVE_EOF);
+                }
+                ds->blocks_avail = lzh_br_bits(br, 16);
+                if (ds->blocks_avail == 0) goto failed;
+                lzh_br_consume(br, 16);
+                /*
                  * Read a literal table compressed in huffman
                  * coding.
                  */
-            ds->pt.len_size = ds->literal_pt_len_size;
-            ds->pt.len_bits = ds->literal_pt_len_bits;
-            ds->reading_position = 0;
-            /* FALL THROUGH */
-        case ST_RD_PT_1:
-            /* Note: ST_RD_PT_1, ST_RD_PT_2 and ST_RD_PT_4 are
+                ds->pt.len_size = ds->literal_pt_len_size;
+                ds->pt.len_bits = ds->literal_pt_len_bits;
+                ds->reading_position = 0;
+                /* FALL THROUGH */
+            case ST_RD_PT_1:
+                /* Note: ST_RD_PT_1, ST_RD_PT_2 and ST_RD_PT_4 are
                  * used in reading both a literal table and a
                  * position table. */
-            if (!lzh_br_read_ahead(strm, br, ds->pt.len_bits)) {
-                if (last) goto failed; /* Truncated data. */
-                ds->state = ST_RD_PT_1;
-                return (LZH_ARCHIVE_OK);
-            }
-            ds->pt.len_avail = lzh_br_bits(br, ds->pt.len_bits);
-            lzh_br_consume(br, ds->pt.len_bits);
-            /* FALL THROUGH */
-        case ST_RD_PT_2:
-            if (ds->pt.len_avail == 0) {
-                /* There is no bitlen. */
                 if (!lzh_br_read_ahead(strm, br, ds->pt.len_bits)) {
-                    if (last) goto failed; /* Truncated data.*/
-                    ds->state = ST_RD_PT_2;
+                    if (last) goto failed; /* Truncated data. */
+                    ds->state = ST_RD_PT_1;
                     return (LZH_ARCHIVE_OK);
                 }
-                if (!lzh_make_fake_table(&(ds->pt), lzh_br_bits(br, ds->pt.len_bits))) goto failed; /* Invalid data. */
+                ds->pt.len_avail = lzh_br_bits(br, ds->pt.len_bits);
                 lzh_br_consume(br, ds->pt.len_bits);
-                if (ds->reading_position) ds->state = ST_GET_LITERAL;
-                else ds->state = ST_RD_LITERAL_1;
-                break;
-            } else if (ds->pt.len_avail > ds->pt.len_size) goto failed; /* Invalid data. */
-            ds->loop = 0;
-            memset(ds->pt.freq, 0, sizeof(ds->pt.freq));
-            if (ds->pt.len_avail < 3 || ds->pt.len_size == ds->pos_pt_len_size) {
-                ds->state = ST_RD_PT_4;
-                break;
-            }
-            /* FALL THROUGH */
-        case ST_RD_PT_3:
-            ds->loop = lzh_read_pt_bitlen(strm, ds->loop, 3);
-            if (ds->loop < 3) {
-                if (ds->loop < 0 || last) goto failed; /* Invalid data. */
-                /* Not completed, get following data. */
-                ds->state = ST_RD_PT_3;
-                return (LZH_ARCHIVE_OK);
-            }
-            /* There are some null in bitlen of the literal. */
-            if (!lzh_br_read_ahead(strm, br, 2)) {
-                if (last) goto failed; /* Truncated data. */
-                ds->state = ST_RD_PT_3;
-                return (LZH_ARCHIVE_OK);
-            }
-            c = lzh_br_bits(br, 2);
-            lzh_br_consume(br, 2);
-            if (c > ds->pt.len_avail - 3) goto failed; /* Invalid data. */
-            for (i = 3; c-- > 0;) ds->pt.bitlen[i++] = 0;
-            ds->loop = i;
-            /* FALL THROUGH */
-        case ST_RD_PT_4:
-            ds->loop = lzh_read_pt_bitlen(strm, ds->loop, ds->pt.len_avail);
-            if (ds->loop < ds->pt.len_avail) {
-                if (ds->loop < 0 || last) goto failed; /* Invalid data. */
-                /* Not completed, get following data. */
-                ds->state = ST_RD_PT_4;
-                return (LZH_ARCHIVE_OK);
-            }
-            if (!lzh_make_huffman_table(&(ds->pt))) goto failed; /* Invalid data */
-            if (ds->reading_position) {
-                ds->state = ST_GET_LITERAL;
-                break;
-            }
-            /* FALL THROUGH */
-        case ST_RD_LITERAL_1:
-            if (!lzh_br_read_ahead(strm, br, ds->lt.len_bits)) {
-                if (last) goto failed; /* Truncated data. */
-                ds->state = ST_RD_LITERAL_1;
-                return (LZH_ARCHIVE_OK);
-            }
-            ds->lt.len_avail = lzh_br_bits(br, ds->lt.len_bits);
-            lzh_br_consume(br, ds->lt.len_bits);
-            /* FALL THROUGH */
-        case ST_RD_LITERAL_2:
-            if (ds->lt.len_avail == 0) {
-                /* There is no bitlen. */
+                /* FALL THROUGH */
+            case ST_RD_PT_2:
+                if (ds->pt.len_avail == 0) {
+                    /* There is no bitlen. */
+                    if (!lzh_br_read_ahead(strm, br, ds->pt.len_bits)) {
+                        if (last) goto failed; /* Truncated data.*/
+                        ds->state = ST_RD_PT_2;
+                        return (LZH_ARCHIVE_OK);
+                    }
+                    if (!lzh_make_fake_table(&(ds->pt), lzh_br_bits(br, ds->pt.len_bits))) goto failed; /* Invalid data. */
+                    lzh_br_consume(br, ds->pt.len_bits);
+                    if (ds->reading_position) ds->state = ST_GET_LITERAL;
+                    else ds->state = ST_RD_LITERAL_1;
+                    break;
+                } else if (ds->pt.len_avail > ds->pt.len_size) goto failed; /* Invalid data. */
+                ds->loop = 0;
+                memset(ds->pt.freq, 0, sizeof(ds->pt.freq));
+                if (ds->pt.len_avail < 3 || ds->pt.len_size == ds->pos_pt_len_size) {
+                    ds->state = ST_RD_PT_4;
+                    break;
+                }
+                /* FALL THROUGH */
+            case ST_RD_PT_3:
+                ds->loop = lzh_read_pt_bitlen(strm, ds->loop, 3);
+                if (ds->loop < 3) {
+                    if (ds->loop < 0 || last) goto failed; /* Invalid data. */
+                    /* Not completed, get following data. */
+                    ds->state = ST_RD_PT_3;
+                    return (LZH_ARCHIVE_OK);
+                }
+                /* There are some null in bitlen of the literal. */
+                if (!lzh_br_read_ahead(strm, br, 2)) {
+                    if (last) goto failed; /* Truncated data. */
+                    ds->state = ST_RD_PT_3;
+                    return (LZH_ARCHIVE_OK);
+                }
+                c = lzh_br_bits(br, 2);
+                lzh_br_consume(br, 2);
+                if (c > ds->pt.len_avail - 3) goto failed; /* Invalid data. */
+                for (i = 3; c-- > 0;) ds->pt.bitlen[i++] = 0;
+                ds->loop = i;
+                /* FALL THROUGH */
+            case ST_RD_PT_4:
+                ds->loop = lzh_read_pt_bitlen(strm, ds->loop, ds->pt.len_avail);
+                if (ds->loop < ds->pt.len_avail) {
+                    if (ds->loop < 0 || last) goto failed; /* Invalid data. */
+                    /* Not completed, get following data. */
+                    ds->state = ST_RD_PT_4;
+                    return (LZH_ARCHIVE_OK);
+                }
+                if (!lzh_make_huffman_table(&(ds->pt))) goto failed; /* Invalid data */
+                if (ds->reading_position) {
+                    ds->state = ST_GET_LITERAL;
+                    break;
+                }
+                /* FALL THROUGH */
+            case ST_RD_LITERAL_1:
                 if (!lzh_br_read_ahead(strm, br, ds->lt.len_bits)) {
-                    if (last) goto failed; /* Truncated data.*/
-                    ds->state = ST_RD_LITERAL_2;
+                    if (last) goto failed; /* Truncated data. */
+                    ds->state = ST_RD_LITERAL_1;
                     return (LZH_ARCHIVE_OK);
                 }
-                if (!lzh_make_fake_table(&(ds->lt), lzh_br_bits(br, ds->lt.len_bits))) goto failed; /* Invalid data */
+                ds->lt.len_avail = lzh_br_bits(br, ds->lt.len_bits);
                 lzh_br_consume(br, ds->lt.len_bits);
-                ds->state = ST_RD_POS_DATA_1;
-                break;
-            } else if (ds->lt.len_avail > ds->lt.len_size) goto failed; /* Invalid data */
-            ds->loop = 0;
-            memset(ds->lt.freq, 0, sizeof(ds->lt.freq));
-            /* FALL THROUGH */
-        case ST_RD_LITERAL_3:
-            i = ds->loop;
-            while (i < ds->lt.len_avail) {
-                if (!lzh_br_read_ahead(strm, br, ds->pt.max_bits)) {
-                    if (last) goto failed; /* Truncated data.*/
-                    ds->loop = i;
-                    ds->state = ST_RD_LITERAL_3;
-                    return (LZH_ARCHIVE_OK);
-                }
-                rbits = lzh_br_bits(br, ds->pt.max_bits);
-                c = lzh_decode_huffman(&(ds->pt), rbits);
-                if (c > 2) {
-                    /* Note: 'c' will never be more than
-                         * eighteen since it's limited by
-                         * PT_BITLEN_SIZE, which is being set
-                         * to ds->pt.len_size through
-                         * ds->literal_pt_len_size. */
-                    lzh_br_consume(br, ds->pt.bitlen[c]);
-                    c -= 2;
-                    ds->lt.freq[c]++;
-                    ds->lt.bitlen[i++] = c;
-                } else if (c == 0) {
-                    lzh_br_consume(br, ds->pt.bitlen[c]);
-                    ds->lt.bitlen[i++] = 0;
-                } else {
-                    /* c == 1 or c == 2 */
-                    qint32 n = (c == 1) ? 4 : 9;
-                    if (!lzh_br_read_ahead(strm, br, ds->pt.bitlen[c] + n)) {
-                        if (last) /* Truncated data. */
-                            goto failed;
+                /* FALL THROUGH */
+            case ST_RD_LITERAL_2:
+                if (ds->lt.len_avail == 0) {
+                    /* There is no bitlen. */
+                    if (!lzh_br_read_ahead(strm, br, ds->lt.len_bits)) {
+                        if (last) goto failed; /* Truncated data.*/
+                        ds->state = ST_RD_LITERAL_2;
+                        return (LZH_ARCHIVE_OK);
+                    }
+                    if (!lzh_make_fake_table(&(ds->lt), lzh_br_bits(br, ds->lt.len_bits))) goto failed; /* Invalid data */
+                    lzh_br_consume(br, ds->lt.len_bits);
+                    ds->state = ST_RD_POS_DATA_1;
+                    break;
+                } else if (ds->lt.len_avail > ds->lt.len_size) goto failed; /* Invalid data */
+                ds->loop = 0;
+                memset(ds->lt.freq, 0, sizeof(ds->lt.freq));
+                /* FALL THROUGH */
+            case ST_RD_LITERAL_3:
+                i = ds->loop;
+                while (i < ds->lt.len_avail) {
+                    if (!lzh_br_read_ahead(strm, br, ds->pt.max_bits)) {
+                        if (last) goto failed; /* Truncated data.*/
                         ds->loop = i;
                         ds->state = ST_RD_LITERAL_3;
                         return (LZH_ARCHIVE_OK);
                     }
-                    lzh_br_consume(br, ds->pt.bitlen[c]);
-                    c = lzh_br_bits(br, n);
-                    lzh_br_consume(br, n);
-                    c += (n == 4) ? 3 : 20;
-                    if (i + c > ds->lt.len_avail) goto failed; /* Invalid data */
-                    memset(&(ds->lt.bitlen[i]), 0, c);
-                    i += c;
+                    rbits = lzh_br_bits(br, ds->pt.max_bits);
+                    c = lzh_decode_huffman(&(ds->pt), rbits);
+                    if (c > 2) {
+                        /* Note: 'c' will never be more than
+                         * eighteen since it's limited by
+                         * PT_BITLEN_SIZE, which is being set
+                         * to ds->pt.len_size through
+                         * ds->literal_pt_len_size. */
+                        lzh_br_consume(br, ds->pt.bitlen[c]);
+                        c -= 2;
+                        ds->lt.freq[c]++;
+                        ds->lt.bitlen[i++] = c;
+                    } else if (c == 0) {
+                        lzh_br_consume(br, ds->pt.bitlen[c]);
+                        ds->lt.bitlen[i++] = 0;
+                    } else {
+                        /* c == 1 or c == 2 */
+                        qint32 n = (c == 1) ? 4 : 9;
+                        if (!lzh_br_read_ahead(strm, br, ds->pt.bitlen[c] + n)) {
+                            if (last) /* Truncated data. */
+                                goto failed;
+                            ds->loop = i;
+                            ds->state = ST_RD_LITERAL_3;
+                            return (LZH_ARCHIVE_OK);
+                        }
+                        lzh_br_consume(br, ds->pt.bitlen[c]);
+                        c = lzh_br_bits(br, n);
+                        lzh_br_consume(br, n);
+                        c += (n == 4) ? 3 : 20;
+                        if (i + c > ds->lt.len_avail) goto failed; /* Invalid data */
+                        memset(&(ds->lt.bitlen[i]), 0, c);
+                        i += c;
+                    }
                 }
-            }
-            if (i > ds->lt.len_avail || !lzh_make_huffman_table(&(ds->lt))) goto failed; /* Invalid data */
-            /* FALL THROUGH */
-        case ST_RD_POS_DATA_1:
-            /*
+                if (i > ds->lt.len_avail || !lzh_make_huffman_table(&(ds->lt))) goto failed; /* Invalid data */
+                /* FALL THROUGH */
+            case ST_RD_POS_DATA_1:
+                /*
                  * Read a position table compressed in huffman
                  * coding.
                  */
-            ds->pt.len_size = ds->pos_pt_len_size;
-            ds->pt.len_bits = ds->pos_pt_len_bits;
-            ds->reading_position = 1;
-            ds->state = ST_RD_PT_1;
-            break;
-        case ST_GET_LITERAL: return (100);
+                ds->pt.len_size = ds->pos_pt_len_size;
+                ds->pt.len_bits = ds->pos_pt_len_bits;
+                ds->reading_position = 1;
+                ds->state = ST_RD_PT_1;
+                break;
+            case ST_GET_LITERAL: return (100);
         }
     }
 failed:
@@ -363,149 +362,149 @@ qint32 XLZH::lzh_decode_blocks(lzh_stream *strm, qint32 last)
 
     for (;;) {
         switch (state) {
-        case ST_GET_LITERAL:
-            for (;;) {
-                if (blocks_avail == 0) {
-                    /* We have decoded all blocks.
+            case ST_GET_LITERAL:
+                for (;;) {
+                    if (blocks_avail == 0) {
+                        /* We have decoded all blocks.
                          * Let's handle next blocks. */
-                    ds->state = ST_RD_BLOCK;
-                    ds->br = bre;
-                    ds->blocks_avail = 0;
-                    ds->w_pos = w_pos;
-                    ds->copy_pos = 0;
-                    return (100);
-                }
+                        ds->state = ST_RD_BLOCK;
+                        ds->br = bre;
+                        ds->blocks_avail = 0;
+                        ds->w_pos = w_pos;
+                        ds->copy_pos = 0;
+                        return (100);
+                    }
 
-                /* lzh_br_read_ahead() always try to fill the
+                    /* lzh_br_read_ahead() always try to fill the
                      * cache buffer up. In specific situation we
                      * are close to the end of the data, the cache
                      * buffer will not be full and thus we have to
                      * determine if the cache buffer has some bits
                      * as much as we need after lzh_br_read_ahead()
                      * failed. */
-                if (!lzh_br_read_ahead(strm, &bre, lt_max_bits)) {
-                    if (!last) goto next_data;
-                    /* Remaining bits are less than
+                    if (!lzh_br_read_ahead(strm, &bre, lt_max_bits)) {
+                        if (!last) goto next_data;
+                        /* Remaining bits are less than
                          * maximum bits(lt.max_bits) but maybe
                          * it still remains as much as we need,
                          * so we should try to use it with
                          * dummy bits. */
-                    c = lzh_decode_huffman(lt, lzh_br_bits_forced(&bre, lt_max_bits));
-                    lzh_br_consume(&bre, lt_bitlen[c]);
-                    if (!lzh_br_has(&bre, 0)) goto failed; /* Over read. */
-                } else {
-                    c = lzh_decode_huffman(lt, lzh_br_bits(&bre, lt_max_bits));
-                    lzh_br_consume(&bre, lt_bitlen[c]);
-                }
-                blocks_avail--;
-                if (c > UCHAR_MAX) /* Current block is a match data. */
-                    break;
-                /*
+                        c = lzh_decode_huffman(lt, lzh_br_bits_forced(&bre, lt_max_bits));
+                        lzh_br_consume(&bre, lt_bitlen[c]);
+                        if (!lzh_br_has(&bre, 0)) goto failed; /* Over read. */
+                    } else {
+                        c = lzh_decode_huffman(lt, lzh_br_bits(&bre, lt_max_bits));
+                        lzh_br_consume(&bre, lt_bitlen[c]);
+                    }
+                    blocks_avail--;
+                    if (c > UCHAR_MAX) /* Current block is a match data. */
+                        break;
+                    /*
                      * 'c' is exactly a literal code.
                      */
-                /* Save a decoded code to reference it
+                    /* Save a decoded code to reference it
                      * afterward. */
-                w_buff[w_pos] = c;
-                if (++w_pos >= w_size) {
-                    w_pos = 0;
-                    lzh_emit_window(strm, w_size);
-                    goto next_data;
+                    w_buff[w_pos] = c;
+                    if (++w_pos >= w_size) {
+                        w_pos = 0;
+                        lzh_emit_window(strm, w_size);
+                        goto next_data;
+                    }
                 }
-            }
-            /* 'c' is the length of a match pattern we have
+                /* 'c' is the length of a match pattern we have
                  * already extracted, which has be stored in
                  * window(ds->w_buff). */
-            copy_len = c - (UCHAR_MAX + 1) + LZH_MINMATCH;
-            /* FALL THROUGH */
-        case ST_GET_POS_1:
-            /*
+                copy_len = c - (UCHAR_MAX + 1) + LZH_MINMATCH;
+                /* FALL THROUGH */
+            case ST_GET_POS_1:
+                /*
                  * Get a reference position.
                  */
-            if (!lzh_br_read_ahead(strm, &bre, pt_max_bits)) {
-                if (!last) {
-                    state = ST_GET_POS_1;
-                    ds->copy_len = copy_len;
-                    goto next_data;
+                if (!lzh_br_read_ahead(strm, &bre, pt_max_bits)) {
+                    if (!last) {
+                        state = ST_GET_POS_1;
+                        ds->copy_len = copy_len;
+                        goto next_data;
+                    }
+                    copy_pos = lzh_decode_huffman(pt, lzh_br_bits_forced(&bre, pt_max_bits));
+                    lzh_br_consume(&bre, pt_bitlen[copy_pos]);
+                    if (!lzh_br_has(&bre, 0)) goto failed; /* Over read. */
+                } else {
+                    copy_pos = lzh_decode_huffman(pt, lzh_br_bits(&bre, pt_max_bits));
+                    lzh_br_consume(&bre, pt_bitlen[copy_pos]);
                 }
-                copy_pos = lzh_decode_huffman(pt, lzh_br_bits_forced(&bre, pt_max_bits));
-                lzh_br_consume(&bre, pt_bitlen[copy_pos]);
-                if (!lzh_br_has(&bre, 0)) goto failed; /* Over read. */
-            } else {
-                copy_pos = lzh_decode_huffman(pt, lzh_br_bits(&bre, pt_max_bits));
-                lzh_br_consume(&bre, pt_bitlen[copy_pos]);
-            }
-            /* FALL THROUGH */
-        case ST_GET_POS_2:
-            if (copy_pos > 1) {
-                /* We need an additional adjustment number to
+                /* FALL THROUGH */
+            case ST_GET_POS_2:
+                if (copy_pos > 1) {
+                    /* We need an additional adjustment number to
                      * the position. */
-                qint32 p = copy_pos - 1;
-                if (!lzh_br_read_ahead(strm, &bre, p)) {
-                    if (last) goto failed; /* Truncated data.*/
-                    state = ST_GET_POS_2;
-                    ds->copy_len = copy_len;
-                    ds->copy_pos = copy_pos;
-                    goto next_data;
+                    qint32 p = copy_pos - 1;
+                    if (!lzh_br_read_ahead(strm, &bre, p)) {
+                        if (last) goto failed; /* Truncated data.*/
+                        state = ST_GET_POS_2;
+                        ds->copy_len = copy_len;
+                        ds->copy_pos = copy_pos;
+                        goto next_data;
+                    }
+                    copy_pos = (1 << p) + lzh_br_bits(&bre, p);
+                    lzh_br_consume(&bre, p);
                 }
-                copy_pos = (1 << p) + lzh_br_bits(&bre, p);
-                lzh_br_consume(&bre, p);
-            }
-            /* The position is actually a distance from the last
+                /* The position is actually a distance from the last
                  * code we had extracted and thus we have to convert
                  * it to a position of the window. */
-            copy_pos = (w_pos - copy_pos - 1) & w_mask;
-            /* FALL THROUGH */
-        case ST_COPY_DATA:
-            /*
+                copy_pos = (w_pos - copy_pos - 1) & w_mask;
+                /* FALL THROUGH */
+            case ST_COPY_DATA:
+                /*
                  * Copy `copy_len' bytes as extracted data from
                  * the window into the output buffer.
                  */
-            for (;;) {
-                qint32 l;
+                for (;;) {
+                    qint32 l;
 
-                l = copy_len;
-                if (copy_pos > w_pos) {
-                    if (l > w_size - copy_pos) l = w_size - copy_pos;
-                } else {
-                    if (l > w_size - w_pos) l = w_size - w_pos;
-                }
-                if ((copy_pos + l < w_pos) || (w_pos + l < copy_pos)) {
-                    /* No overlap. */
-                    memcpy(w_buff + w_pos, w_buff + copy_pos, l);
-                } else {
-                    const quint8 *s;
-                    quint8 *d;
-                    qint32 li;
+                    l = copy_len;
+                    if (copy_pos > w_pos) {
+                        if (l > w_size - copy_pos) l = w_size - copy_pos;
+                    } else {
+                        if (l > w_size - w_pos) l = w_size - w_pos;
+                    }
+                    if ((copy_pos + l < w_pos) || (w_pos + l < copy_pos)) {
+                        /* No overlap. */
+                        memcpy(w_buff + w_pos, w_buff + copy_pos, l);
+                    } else {
+                        const quint8 *s;
+                        quint8 *d;
+                        qint32 li;
 
-                    d = w_buff + w_pos;
-                    s = w_buff + copy_pos;
-                    for (li = 0; li < l - 1;) {
-                        d[li] = s[li];
-                        li++;
-                        d[li] = s[li];
-                        li++;
+                        d = w_buff + w_pos;
+                        s = w_buff + copy_pos;
+                        for (li = 0; li < l - 1;) {
+                            d[li] = s[li];
+                            li++;
+                            d[li] = s[li];
+                            li++;
+                        }
+                        if (li < l) d[li] = s[li];
                     }
-                    if (li < l) d[li] = s[li];
-                }
-                w_pos += l;
-                if (w_pos == w_size) {
-                    w_pos = 0;
-                    lzh_emit_window(strm, w_size);
-                    if (copy_len <= l) state = ST_GET_LITERAL;
-                    else {
-                        state = ST_COPY_DATA;
-                        ds->copy_len = copy_len - l;
-                        ds->copy_pos = (copy_pos + l) & w_mask;
+                    w_pos += l;
+                    if (w_pos == w_size) {
+                        w_pos = 0;
+                        lzh_emit_window(strm, w_size);
+                        if (copy_len <= l) state = ST_GET_LITERAL;
+                        else {
+                            state = ST_COPY_DATA;
+                            ds->copy_len = copy_len - l;
+                            ds->copy_pos = (copy_pos + l) & w_mask;
+                        }
+                        goto next_data;
                     }
-                    goto next_data;
+                    if (copy_len <= l) /* A copy of current pattern ended. */
+                        break;
+                    copy_len -= l;
+                    copy_pos = (copy_pos + l) & w_mask;
                 }
-                if (copy_len <= l) /* A copy of current pattern ended. */
-                    break;
-                copy_len -= l;
-                copy_pos = (copy_pos + l) & w_mask;
-            }
-            state = ST_GET_LITERAL;
-            break;
+                state = ST_GET_LITERAL;
+                break;
         }
     }
 failed:
@@ -526,35 +525,35 @@ qint32 XLZH::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
         const qint32 x = n >> 3;
         if (strm->avail_in >= x) {
             switch (x) {
-            case 8:
-                br->cache_buffer = ((quint64)strm->next_in[0]) << 56 | ((quint64)strm->next_in[1]) << 48 | ((quint64)strm->next_in[2]) << 40 |
-                                   ((quint64)strm->next_in[3]) << 32 | ((quint32)strm->next_in[4]) << 24 | ((quint32)strm->next_in[5]) << 16 |
-                                   ((quint32)strm->next_in[6]) << 8 | (quint32)strm->next_in[7];
-                strm->next_in += 8;
-                strm->avail_in -= 8;
-                br->cache_avail += 8 * 8;
-                return (1);
-            case 7:
-                br->cache_buffer = (br->cache_buffer << 56) | ((quint64)strm->next_in[0]) << 48 | ((quint64)strm->next_in[1]) << 40 |
-                                   ((quint64)strm->next_in[2]) << 32 | ((quint32)strm->next_in[3]) << 24 | ((quint32)strm->next_in[4]) << 16 |
-                                   ((quint32)strm->next_in[5]) << 8 | (quint32)strm->next_in[6];
-                strm->next_in += 7;
-                strm->avail_in -= 7;
-                br->cache_avail += 7 * 8;
-                return (1);
-            case 6:
-                br->cache_buffer = (br->cache_buffer << 48) | ((quint64)strm->next_in[0]) << 40 | ((quint64)strm->next_in[1]) << 32 |
-                                   ((quint32)strm->next_in[2]) << 24 | ((quint32)strm->next_in[3]) << 16 | ((quint32)strm->next_in[4]) << 8 |
-                                   (quint32)strm->next_in[5];
-                strm->next_in += 6;
-                strm->avail_in -= 6;
-                br->cache_avail += 6 * 8;
-                return (1);
-            case 0:
-                /* We have enough compressed data in
+                case 8:
+                    br->cache_buffer = ((quint64)strm->next_in[0]) << 56 | ((quint64)strm->next_in[1]) << 48 | ((quint64)strm->next_in[2]) << 40 |
+                                       ((quint64)strm->next_in[3]) << 32 | ((quint32)strm->next_in[4]) << 24 | ((quint32)strm->next_in[5]) << 16 |
+                                       ((quint32)strm->next_in[6]) << 8 | (quint32)strm->next_in[7];
+                    strm->next_in += 8;
+                    strm->avail_in -= 8;
+                    br->cache_avail += 8 * 8;
+                    return (1);
+                case 7:
+                    br->cache_buffer = (br->cache_buffer << 56) | ((quint64)strm->next_in[0]) << 48 | ((quint64)strm->next_in[1]) << 40 |
+                                       ((quint64)strm->next_in[2]) << 32 | ((quint32)strm->next_in[3]) << 24 | ((quint32)strm->next_in[4]) << 16 |
+                                       ((quint32)strm->next_in[5]) << 8 | (quint32)strm->next_in[6];
+                    strm->next_in += 7;
+                    strm->avail_in -= 7;
+                    br->cache_avail += 7 * 8;
+                    return (1);
+                case 6:
+                    br->cache_buffer = (br->cache_buffer << 48) | ((quint64)strm->next_in[0]) << 40 | ((quint64)strm->next_in[1]) << 32 |
+                                       ((quint32)strm->next_in[2]) << 24 | ((quint32)strm->next_in[3]) << 16 | ((quint32)strm->next_in[4]) << 8 |
+                                       (quint32)strm->next_in[5];
+                    strm->next_in += 6;
+                    strm->avail_in -= 6;
+                    br->cache_avail += 6 * 8;
+                    return (1);
+                case 0:
+                    /* We have enough compressed data in
                      * the cache buffer.*/
-                return (1);
-            default: break;
+                    return (1);
+                default: break;
             }
         }
         if (strm->avail_in == 0) {

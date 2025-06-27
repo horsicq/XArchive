@@ -38,8 +38,7 @@
 #endif
 #endif
 
-class XLZH : public QObject
-{
+class XLZH : public QObject {
     Q_OBJECT
 public:
 // LZH
@@ -214,7 +213,6 @@ public:
     static qint32 lzh_make_huffman_table(struct lzh_huffman *hf);
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct lzh_huffman *hf);
-
 };
 
-#endif // XLZH_H
+#endif  // XLZH_H

@@ -20,11 +20,9 @@
  */
 #include "xsevenzip.h"
 
-XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {
-                                                    {XSevenZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                    {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
-                                                    {XSevenZip::STRUCTID_HEADER, "HEADER", QObject::tr("Header")}
-                                                };
+XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {{XSevenZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                                 {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
+                                                 {XSevenZip::STRUCTID_HEADER, "HEADER", QObject::tr("Header")}};
 
 XSevenZip::XSevenZip(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -312,10 +310,8 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
 
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(SIGNATUREHEADER, kSignature), 6, "kSignature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, Major), 1, "Major", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, Minor), 1, "Minor", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Major), 1, "Major", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Minor), 1, "Minor", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(SIGNATUREHEADER, StartHeaderCRC), 4, "StartHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
@@ -355,7 +351,7 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                     dataRecord.nSize = szRecord.nSize;
                     dataRecord.sName = szRecord.sName;
 
-                    dataRecord.nFlags = DRF_UNKNOWN; // TODO
+                    dataRecord.nFlags = DRF_UNKNOWN;  // TODO
                     dataRecord.endian = dataHeadersOptions.pMemoryMap->endian;
 
                     if (szRecord.srType == SRTYPE_ID) {
@@ -364,9 +360,9 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                         dataValueSet.bFlags = false;
                         dataValueSet.nMask = 0xFFFFFFFFFFFFFFFF;
                         dataRecord.listDataValueSets.append(dataValueSet);
-                        dataRecord.valType = VT_PACKEDNUMBER; // TODO
+                        dataRecord.valType = VT_PACKEDNUMBER;  // TODO
                     } else if (szRecord.srType == SRTYPE_NUMBER) {
-                        dataRecord.valType = VT_PACKEDNUMBER; // TODO
+                        dataRecord.valType = VT_PACKEDNUMBER;  // TODO
                     } else if (szRecord.srType == SRTYPE_BYTE) {
                         dataRecord.valType = VT_UINT8;
                     } else if (szRecord.srType == SRTYPE_ARRAY) {
@@ -375,7 +371,6 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
 
                     dataHeader.listRecords.append(dataRecord);
                 }
-
 
                 listResult.append(dataHeader);
             }
@@ -559,7 +554,7 @@ void XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qin
     record.sName = sCaption;
     pListRecords->append(record);
 
-    pState->nCurrentOffset+=nSize;
+    pState->nCurrentOffset += nSize;
 }
 
 QList<XSevenZip::SZRECORD> XSevenZip::_handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct)
@@ -587,7 +582,7 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(qint64 nOffset, qint64 nSize, 
         state.sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(state.nCurrentOffset), tr("Invalid data"));
     }
 
-    delete [] state.pData;
+    delete[] state.pData;
 
     return listResult;
 }

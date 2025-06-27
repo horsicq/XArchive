@@ -25,32 +25,31 @@
 #include <QIODevice>
 #include "xbinary.h"
 
-inline void RawPut4(uint Field,void *Data)
+inline void RawPut4(uint Field, void *Data)
 {
 #if defined(BIG_ENDIAN) || !defined(ALLOW_MISALIGNED)
-    quint8 *D=(quint8 *)Data;
-    D[0]=(quint8)(Field);
-    D[1]=(quint8)(Field>>8);
-    D[2]=(quint8)(Field>>16);
-    D[3]=(quint8)(Field>>24);
+    quint8 *D = (quint8 *)Data;
+    D[0] = (quint8)(Field);
+    D[1] = (quint8)(Field >> 8);
+    D[2] = (quint8)(Field >> 16);
+    D[3] = (quint8)(Field >> 24);
 #else
-    *(quint32 *)Data=(quint32)Field;
+    *(quint32 *)Data = (quint32)Field;
 #endif
 }
 
 inline quint32 RawGet4(const void *Data)
 {
 #if defined(BIG_ENDIAN) || !defined(ALLOW_MISALIGNED)
-    quint8 *D=(quint8 *)Data;
-    return D[0]+(D[1]<<8)+(D[2]<<16)+(D[3]<<24);
+    quint8 *D = (quint8 *)Data;
+    return D[0] + (D[1] << 8) + (D[2] << 16) + (D[3] << 24);
 #else
     return *(quint32 *)Data;
 #endif
 }
 // Combine pack and unpack constants to class to avoid polluting global
 // namespace with numerous short names.
-class PackDef
-{
+class PackDef {
 public:
     // Maximum LZ match length we can encode even for short distances.
     static const uint MAX_LZ_MATCH = 0x1001;
@@ -62,64 +61,71 @@ public:
     // ready to process it in corrupt archives.
     static const uint MAX_INC_LZ_MATCH = MAX_LZ_MATCH + 3;
 
-    static const uint MAX3_LZ_MATCH = 0x101; // Maximum match length for RAR v3.
+    static const uint MAX3_LZ_MATCH = 0x101;  // Maximum match length for RAR v3.
     static const uint MAX3_INC_LZ_MATCH = MAX3_LZ_MATCH + 3;
     static const uint LOW_DIST_REP_COUNT = 16;
 
-    static const uint NC    = 306; /* alphabet = {0, 1, 2, ..., NC - 1} */
-    static const uint DCB   = 64; // Base distance codes up to 4 GB.
-    static const uint DCX   = 80; // Extended distance codes up to 1 TB.
-    static const uint LDC   = 16;
-    static const uint RC    = 44;
+    static const uint NC = 306;  /* alphabet = {0, 1, 2, ..., NC - 1} */
+    static const uint DCB = 64;  // Base distance codes up to 4 GB.
+    static const uint DCX = 80;  // Extended distance codes up to 1 TB.
+    static const uint LDC = 16;
+    static const uint RC = 44;
     static const uint HUFF_TABLE_SIZEB = NC + DCB + RC + LDC;
     static const uint HUFF_TABLE_SIZEX = NC + DCX + RC + LDC;
-    static const uint BC    = 20;
+    static const uint BC = 20;
 
-    static const uint NC30  = 299; /* alphabet = {0, 1, 2, ..., NC - 1} */
-    static const uint DC30  = 60;
+    static const uint NC30 = 299; /* alphabet = {0, 1, 2, ..., NC - 1} */
+    static const uint DC30 = 60;
     static const uint LDC30 = 17;
-    static const uint RC30  = 28;
-    static const uint BC30  = 20;
+    static const uint RC30 = 28;
+    static const uint BC30 = 20;
     static const uint HUFF_TABLE_SIZE30 = NC30 + DC30 + RC30 + LDC30;
 
-    static const uint NC20  = 298; /* alphabet = {0, 1, 2, ..., NC - 1} */
-    static const uint DC20  = 48;
-    static const uint RC20  = 28;
-    static const uint BC20  = 19;
-    static const uint MC20  = 257;
+    static const uint NC20 = 298; /* alphabet = {0, 1, 2, ..., NC - 1} */
+    static const uint DC20 = 48;
+    static const uint RC20 = 28;
+    static const uint BC20 = 19;
+    static const uint MC20 = 257;
 
     // Largest alphabet size among all values listed above.
     static const uint LARGEST_TABLE_SIZE = 306;
-
 };
 
 enum FilterType {
     // These values must not be changed, because we use them directly
     // in RAR5 compression and decompression code.
-    FILTER_DELTA=0, FILTER_E8, FILTER_E8E9, FILTER_ARM,
-    FILTER_AUDIO, FILTER_RGB, FILTER_ITANIUM, FILTER_TEXT,
+    FILTER_DELTA = 0,
+    FILTER_E8,
+    FILTER_E8E9,
+    FILTER_ARM,
+    FILTER_AUDIO,
+    FILTER_RGB,
+    FILTER_ITANIUM,
+    FILTER_TEXT,
 
     // These values can be changed.
-    FILTER_LONGRANGE,FILTER_EXHAUSTIVE,FILTER_NONE
+    FILTER_LONGRANGE,
+    FILTER_EXHAUSTIVE,
+    FILTER_NONE
 };
 
 // Maximum allowed number of compressed bits processed in quick mode.
-#define MAX_QUICK_DECODE_BITS       9
+#define MAX_QUICK_DECODE_BITS 9
 
 // Maximum number of filters per entire data block. Must be at least
 // twice more than MAX_PACK_FILTERS to store filters from two data blocks.
-#define MAX_UNPACK_FILTERS       8192
+#define MAX_UNPACK_FILTERS 8192
 
 // Maximum number of filters per entire data block for RAR3 unpack.
 // Must be at least twice more than v3_MAX_PACK_FILTERS to store filters
 // from two data blocks.
-#define MAX3_UNPACK_FILTERS      8192
+#define MAX3_UNPACK_FILTERS 8192
 
 // Limit maximum number of channels in RAR3 delta filter to some reasonable
 // value to prevent too slow processing of corrupt archives with invalid
 // channels number. Must be equal or larger than v3_MAX_FILTER_CHANNELS.
 // No need to provide it for RAR5, which uses only 5 bits to store channels.
-#define MAX3_UNPACK_CHANNELS      1024
+#define MAX3_UNPACK_CHANNELS 1024
 
 // Maximum size of single filter block. We restrict it to limit memory
 // allocation. Must be equal or larger than MAX_ANALYZE_SIZE.
@@ -127,62 +133,63 @@ enum FilterType {
 
 // Write data in 4 MB or smaller blocks. Must not exceed PACK_MAX_READ,
 // so we keep the number of buffered filters in unpacker reasonable.
-#define UNPACK_MAX_WRITE      0x400000
+#define UNPACK_MAX_WRITE 0x400000
 
 // Get lowest 16 bits.
-#define GET_SHORT16(x) (sizeof(ushort)==2 ? (ushort)(x):((x)&0xffff))
-#define  ASIZE(x) (sizeof(x)/sizeof(x[0]))
+#define GET_SHORT16(x) (sizeof(ushort) == 2 ? (ushort)(x) : ((x)&0xffff))
+#define ASIZE(x) (sizeof(x) / sizeof(x[0]))
 
 // Maximum dictionary allowed by compression. Can be less than
 // maximum dictionary supported by decompression.
-#define PACK_MAX_DICT      0x1000000000ULL // 64 GB.
+#define PACK_MAX_DICT 0x1000000000ULL  // 64 GB.
 
 // Maximum dictionary allowed by decompression.
-#define UNPACK_MAX_DICT    0x1000000000ULL // 64 GB.
+#define UNPACK_MAX_DICT 0x1000000000ULL  // 64 GB.
 
-#define VM_MEMSIZE                  0x40000
-#define VM_MEMMASK           (VM_MEMSIZE-1)
+#define VM_MEMSIZE 0x40000
+#define VM_MEMMASK (VM_MEMSIZE - 1)
 
-class BitInput
-{
+class BitInput {
 public:
-    enum BufferSize {MAX_SIZE=0x8000}; // Size of input buffer.
+    enum BufferSize {
+        MAX_SIZE = 0x8000
+    };  // Size of input buffer.
 
-    int InAddr; // Curent byte position in the buffer.
-    int InBit;  // Current bit position in the current byte.
+    int InAddr;  // Curent byte position in the buffer.
+    int InBit;   // Current bit position in the current byte.
 
     bool ExternalBuffer;
+
 public:
     BitInput(bool AllocBuffer);
     ~BitInput();
 
-    quint8 *InBuf; // Dynamically allocated input buffer.
+    quint8 *InBuf;  // Dynamically allocated input buffer.
 
     void InitBitInput()
     {
-        InAddr=InBit=0;
+        InAddr = InBit = 0;
     }
 
     // Move forward by 'Bits' bits.
     void addbits(uint Bits)
     {
-        Bits+=InBit;
-        InAddr+=Bits>>3;
-        InBit=Bits&7;
+        Bits += InBit;
+        InAddr += Bits >> 3;
+        InBit = Bits & 7;
     }
 
     // Return 16 bits from current position in the buffer.
     // Bit at (InAddr,InBit) has the highest position in returning data.
     uint getbits()
     {
-        uint BitField=(uint)InBuf[InAddr] << 16;
-        BitField|=(uint)InBuf[InAddr+1] << 8;
-        BitField|=(uint)InBuf[InAddr+2];
-        BitField >>= (8-InBit);
+        uint BitField = (uint)InBuf[InAddr] << 16;
+        BitField |= (uint)InBuf[InAddr + 1] << 8;
+        BitField |= (uint)InBuf[InAddr + 2];
+        BitField >>= (8 - InBit);
 
         return BitField & 0xffff;
     }
-
 
     // Return 32 bits from current position in the buffer.
     // Bit at (InAddr,InBit) has the highest position in returning data.
@@ -211,79 +218,87 @@ public:
     // if buffer will be overflown.
     bool Overflow(uint IncPtr)
     {
-        return InAddr+IncPtr>=MAX_SIZE;
+        return InAddr + IncPtr >= MAX_SIZE;
     }
 
     void SetExternalBuffer(quint8 *Buf);
 };
 
-struct RARPPM_MEM_BLK
-{
+struct RARPPM_MEM_BLK {
     ushort Stamp, NU;
-    RARPPM_MEM_BLK* next, * prev;
-    void insertAt(RARPPM_MEM_BLK* p)
+    RARPPM_MEM_BLK *next, *prev;
+    void insertAt(RARPPM_MEM_BLK *p)
     {
-        next=(prev=p)->next;
-        p->next=next->prev=this;
+        next = (prev = p)->next;
+        p->next = next->prev = this;
     }
     void remove()
     {
-        prev->next=next;
-        next->prev=prev;
+        prev->next = next;
+        next->prev = prev;
     }
 };
 
-class SubAllocator
-{
+class SubAllocator {
 private:
-    static const int N1=4, N2=4, N3=4, N4=(128+3-1*N1-2*N2-3*N3)/4;
-    static const int N_INDEXES=N1+N2+N3+N4;
+    static const int N1 = 4, N2 = 4, N3 = 4, N4 = (128 + 3 - 1 * N1 - 2 * N2 - 3 * N3) / 4;
+    static const int N_INDEXES = N1 + N2 + N3 + N4;
 
-    struct RAR_NODE
-    {
-        RAR_NODE* next;
+    struct RAR_NODE {
+        RAR_NODE *next;
     };
 
-    inline void InsertNode(void* p,int indx);
-    inline void* RemoveNode(int indx);
+    inline void InsertNode(void *p, int indx);
+    inline void *RemoveNode(int indx);
     inline uint U2B(int NU);
-    inline void SplitBlock(void* pv,int OldIndx,int NewIndx);
+    inline void SplitBlock(void *pv, int OldIndx, int NewIndx);
     inline void GlueFreeBlocks();
-    void* AllocUnitsRare(int indx);
-    inline RARPPM_MEM_BLK* MBPtr(RARPPM_MEM_BLK *BasePtr,int Items);
+    void *AllocUnitsRare(int indx);
+    inline RARPPM_MEM_BLK *MBPtr(RARPPM_MEM_BLK *BasePtr, int Items);
 
     long SubAllocatorSize;
     quint8 Indx2Units[N_INDEXES], Units2Indx[128], GlueCount;
-    quint8 *HeapStart,*LoUnit, *HiUnit;
+    quint8 *HeapStart, *LoUnit, *HiUnit;
     struct RAR_NODE FreeList[N_INDEXES];
+
 public:
     SubAllocator();
-    ~SubAllocator() {StopSubAllocator();}
+    ~SubAllocator()
+    {
+        StopSubAllocator();
+    }
     void Clean();
     bool StartSubAllocator(int SASize);
     void StopSubAllocator();
-    void  InitSubAllocator();
-    inline void* AllocContext();
-    inline void* AllocUnits(int NU);
-    inline void* ExpandUnits(void* ptr,int OldNU);
-    inline void* ShrinkUnits(void* ptr,int OldNU,int NewNU);
-    inline void  FreeUnits(void* ptr,int OldNU);
-    long GetAllocatedMemory() {return(SubAllocatorSize);}
+    void InitSubAllocator();
+    inline void *AllocContext();
+    inline void *AllocUnits(int NU);
+    inline void *ExpandUnits(void *ptr, int OldNU);
+    inline void *ShrinkUnits(void *ptr, int OldNU, int NewNU);
+    inline void FreeUnits(void *ptr, int OldNU);
+    long GetAllocatedMemory()
+    {
+        return (SubAllocatorSize);
+    }
 
-    quint8 *pText, *UnitsStart,*HeapEnd,*FakeUnitsStart;
+    quint8 *pText, *UnitsStart, *HeapEnd, *FakeUnitsStart;
 };
 
 enum VM_StandardFilters {
-    VMSF_NONE, VMSF_E8, VMSF_E8E9, VMSF_ITANIUM, VMSF_RGB, VMSF_AUDIO,
+    VMSF_NONE,
+    VMSF_E8,
+    VMSF_E8E9,
+    VMSF_ITANIUM,
+    VMSF_RGB,
+    VMSF_AUDIO,
     VMSF_DELTA
 };
 
-struct VM_PreparedProgram
-{
+struct VM_PreparedProgram {
     VM_PreparedProgram()
     {
-        FilteredDataSize=0;
-        Type=VMSF_NONE;
+        FilteredDataSize = 0;
+        Type = VMSF_NONE;
     }
     VM_StandardFilters Type;
     uint InitR[7];
@@ -291,28 +306,27 @@ struct VM_PreparedProgram
     uint FilteredDataSize;
 };
 
-class RarVM
-{
+class RarVM {
 private:
     bool ExecuteStandardFilter(VM_StandardFilters FilterType);
-    uint FilterItanium_GetBits(quint8 *Data,uint BitPos,uint BitCount);
-    void FilterItanium_SetBits(quint8 *Data,uint BitField,uint BitPos,uint BitCount);
+    uint FilterItanium_GetBits(quint8 *Data, uint BitPos, uint BitCount);
+    void FilterItanium_SetBits(quint8 *Data, uint BitField, uint BitPos, uint BitCount);
 
     quint8 *Mem;
     uint R[8];
+
 public:
     RarVM();
     ~RarVM();
     void Init();
-    void Prepare(quint8 *Code,uint CodeSize,VM_PreparedProgram *Prg);
+    void Prepare(quint8 *Code, uint CodeSize, VM_PreparedProgram *Prg);
     void Execute(VM_PreparedProgram *Prg);
-    void SetMemory(size_t Pos,quint8 *Data,size_t DataSize);
+    void SetMemory(size_t Pos, quint8 *Data, size_t DataSize);
     static uint ReadData(BitInput &Inp);
 };
 
 // Decode compressed bit fields to alphabet numbers.
-struct DecodeTable:PackDef
-{
+struct DecodeTable : PackDef {
     // Real size of DecodeNum table.
     uint MaxNum;
 
@@ -333,13 +347,13 @@ struct DecodeTable:PackDef
 
     // Translates compressed bits (up to QuickBits length)
     // to bit length in quick mode.
-    quint8 QuickLen[1<<MAX_QUICK_DECODE_BITS];
+    quint8 QuickLen[1 << MAX_QUICK_DECODE_BITS];
 
     // Translates compressed bits (up to QuickBits length)
     // to position in alphabet in quick mode.
     // 'ushort' saves some memory and even provides a little speed gain
     // comparing to 'uint' here.
-    ushort QuickNum[1<<MAX_QUICK_DECODE_BITS];
+    ushort QuickNum[1 << MAX_QUICK_DECODE_BITS];
 
     // Translate the position in code list to position in alphabet.
     // We do not allocate it dynamically to avoid performance overhead
@@ -352,8 +366,7 @@ struct DecodeTable:PackDef
     ushort DecodeNum[LARGEST_TABLE_SIZE];
 };
 
-struct UnpackBlockHeader
-{
+struct UnpackBlockHeader {
     int BlockSize;
     int BlockBitSize;
     int BlockStart;
@@ -362,17 +375,15 @@ struct UnpackBlockHeader
     bool TablePresent;
 };
 
-struct UnpackBlockTables
-{
-    DecodeTable LD;  // Decode literals.
-    DecodeTable DD;  // Decode distances.
-    DecodeTable LDD; // Decode lower bits of distances.
-    DecodeTable RD;  // Decode repeating distances.
-    DecodeTable BD;  // Decode bit lengths in Huffman table.
+struct UnpackBlockTables {
+    DecodeTable LD;   // Decode literals.
+    DecodeTable DD;   // Decode distances.
+    DecodeTable LDD;  // Decode lower bits of distances.
+    DecodeTable RD;   // Decode repeating distances.
+    DecodeTable BD;   // Decode bit lengths in Huffman table.
 };
 
-struct UnpackFilter
-{
+struct UnpackFilter {
     // Groop 'byte' and 'bool' together to reduce the actual struct size.
     quint8 Type;
     quint8 Channels;
@@ -382,9 +393,7 @@ struct UnpackFilter
     uint BlockLength;
 };
 
-
-struct UnpackFilter30
-{
+struct UnpackFilter30 {
     unsigned int BlockStart;
     unsigned int BlockLength;
     bool NextWindow;
@@ -396,85 +405,81 @@ struct UnpackFilter30
     VM_PreparedProgram Prg;
 };
 
-
-struct AudioVariables // For RAR 2.0 archives only.
+struct AudioVariables  // For RAR 2.0 archives only.
 {
-    int K1,K2,K3,K4,K5;
-    int D1,D2,D3,D4;
+    int K1, K2, K3, K4, K5;
+    int D1, D2, D3, D4;
     int LastDelta;
     unsigned int Dif[11];
     unsigned int ByteCount;
     int LastChar;
 };
 
-
 // We can use the fragmented dictionary in case heap does not have the single
 // large enough memory block. It is slower than normal dictionary.
-class FragmentedWindow
-{
+class FragmentedWindow {
 private:
-    enum {MAX_MEM_BLOCKS=32};
+    enum {
+        MAX_MEM_BLOCKS = 32
+    };
 
     void Reset();
     quint8 *Mem[MAX_MEM_BLOCKS];
     size_t MemSize[MAX_MEM_BLOCKS];
     size_t LastAllocated;
+
 public:
     FragmentedWindow();
     ~FragmentedWindow();
     void Init(size_t WinSize);
-    quint8& operator [](size_t Item);
-    void CopyString(uint Length,size_t Distance,size_t &UnpPtr,bool FirstWinDone,size_t MaxWinSize);
-    void CopyData(quint8 *Dest,size_t WinPos,size_t Size);
-    size_t GetBlockSize(size_t StartPos,size_t RequiredSize);
-    size_t GetWinSize() {return LastAllocated;}
+    quint8 &operator[](size_t Item);
+    void CopyString(uint Length, size_t Distance, size_t &UnpPtr, bool FirstWinDone, size_t MaxWinSize);
+    void CopyData(quint8 *Dest, size_t WinPos, size_t Size);
+    size_t GetBlockSize(size_t StartPos, size_t RequiredSize);
+    size_t GetWinSize()
+    {
+        return LastAllocated;
+    }
 };
 
-struct RARPPM_DEF
-{
-    static const int INT_BITS=7, PERIOD_BITS=7, TOT_BITS=INT_BITS+PERIOD_BITS,
-        INTERVAL=1 << INT_BITS, BIN_SCALE=1 << TOT_BITS, MAX_FREQ=124;
+struct RARPPM_DEF {
+    static const int INT_BITS = 7, PERIOD_BITS = 7, TOT_BITS = INT_BITS + PERIOD_BITS, INTERVAL = 1 << INT_BITS, BIN_SCALE = 1 << TOT_BITS, MAX_FREQ = 124;
 };
 
-struct RARPPM_SEE2_CONTEXT : RARPPM_DEF
-{ // SEE-contexts for PPM-contexts with masked symbols
+struct RARPPM_SEE2_CONTEXT : RARPPM_DEF {  // SEE-contexts for PPM-contexts with masked symbols
     ushort Summ;
     quint8 Shift, Count;
     void init(int InitVal)
     {
-        Summ=InitVal << (Shift=PERIOD_BITS-4);
-        Count=4;
+        Summ = InitVal << (Shift = PERIOD_BITS - 4);
+        Count = 4;
     }
     uint getMean()
     {
-        short RetVal=GET_SHORT16(Summ) >> Shift;
+        short RetVal = GET_SHORT16(Summ) >> Shift;
         Summ -= RetVal;
-        return RetVal+(RetVal == 0);
+        return RetVal + (RetVal == 0);
     }
     void update()
     {
-        if (Shift < PERIOD_BITS && --Count == 0)
-        {
+        if (Shift < PERIOD_BITS && --Count == 0) {
             Summ += Summ;
-            Count=3 << Shift++;
+            Count = 3 << Shift++;
         }
     }
 };
-
 
 class ModelPPM;
 class rar_Unpack;
 struct RARPPM_CONTEXT;
 
-struct RARPPM_STATE
-{
+struct RARPPM_STATE {
     quint8 Symbol;
     quint8 Freq;
-    RARPPM_CONTEXT* Successor;
+    RARPPM_CONTEXT *Successor;
 };
 
-class RangeCoder
-{
+class RangeCoder {
 public:
     void InitDecoder(rar_Unpack *UnpackRead);
     inline int GetCurrentCount();
@@ -484,101 +489,96 @@ public:
     inline quint8 GetChar();
 
     uint low, code, range;
-    struct SUBRANGE
-    {
+    struct SUBRANGE {
         uint LowCount, HighCount, scale;
     } SubRange;
 
     rar_Unpack *UnpackRead;
 };
 
-class LargePageAlloc
-{
+class LargePageAlloc {
 private:
-    void* new_large(size_t Size);
+    void *new_large(size_t Size);
     bool delete_large(void *Addr);
     bool UseLargePages;
+
 public:
     LargePageAlloc();
     void AllowLargePages(bool Allow);
 
-    template <class T> T* new_l(size_t Size,bool Clear=false)
+    template <class T>
+    T *new_l(size_t Size, bool Clear = false)
     {
-        T *Allocated=(T*)new_large(Size*sizeof(T));
-        if (Allocated==nullptr)
-            Allocated=Clear ? new T[Size]{} : new T[Size];
+        T *Allocated = (T *)new_large(Size * sizeof(T));
+        if (Allocated == nullptr) Allocated = Clear ? new T[Size]{} : new T[Size];
         return Allocated;
     }
 
-    template <class T> void delete_l(T *Addr)
+    template <class T>
+    void delete_l(T *Addr)
     {
-        if (!delete_large(Addr))
-            delete[] Addr;
+        if (!delete_large(Addr)) delete[] Addr;
     }
 };
 
-struct RARPPM_CONTEXT : RARPPM_DEF
-{
+struct RARPPM_CONTEXT : RARPPM_DEF {
     ushort NumStats;
 
-    struct FreqData
-    {
+    struct FreqData {
         ushort SummFreq;
-        RARPPM_STATE  * Stats;
+        RARPPM_STATE *Stats;
     };
 
-    union
-    {
+    union {
         FreqData U;
         RARPPM_STATE OneState;
     };
 
-    RARPPM_CONTEXT* Suffix;
-    inline void encodeBinSymbol(ModelPPM *Model,int symbol);  // MaxOrder:
-    inline void encodeSymbol1(ModelPPM *Model,int symbol);    //  ABCD    context
-    inline void encodeSymbol2(ModelPPM *Model,int symbol);    //   BCD    suffix
-    inline void decodeBinSymbol(ModelPPM *Model);  //   BCDE   successor
-    inline bool decodeSymbol1(ModelPPM *Model);    // other orders:
-    inline bool decodeSymbol2(ModelPPM *Model);    //   BCD    context
-    inline void update1(ModelPPM *Model,RARPPM_STATE* p); //    CD    suffix
-    inline void update2(ModelPPM *Model,RARPPM_STATE* p); //   BCDE   successor
+    RARPPM_CONTEXT *Suffix;
+    inline void encodeBinSymbol(ModelPPM *Model, int symbol);  // MaxOrder:
+    inline void encodeSymbol1(ModelPPM *Model, int symbol);    //  ABCD    context
+    inline void encodeSymbol2(ModelPPM *Model, int symbol);    //   BCD    suffix
+    inline void decodeBinSymbol(ModelPPM *Model);              //   BCDE   successor
+    inline bool decodeSymbol1(ModelPPM *Model);                // other orders:
+    inline bool decodeSymbol2(ModelPPM *Model);                //   BCD    context
+    inline void update1(ModelPPM *Model, RARPPM_STATE *p);     //    CD    suffix
+    inline void update2(ModelPPM *Model, RARPPM_STATE *p);     //   BCDE   successor
     void rescale(ModelPPM *Model);
-    inline RARPPM_CONTEXT* createChild(ModelPPM *Model,RARPPM_STATE* pStats,RARPPM_STATE& FirstState);
-    inline RARPPM_SEE2_CONTEXT* makeEscFreq2(ModelPPM *Model,int Diff);
+    inline RARPPM_CONTEXT *createChild(ModelPPM *Model, RARPPM_STATE *pStats, RARPPM_STATE &FirstState);
+    inline RARPPM_SEE2_CONTEXT *makeEscFreq2(ModelPPM *Model, int Diff);
 };
 
-class ModelPPM : RARPPM_DEF
-{
+class ModelPPM : RARPPM_DEF {
 private:
     friend struct RARPPM_CONTEXT;
 
     RARPPM_SEE2_CONTEXT SEE2Cont[25][16], DummySEE2Cont;
 
     struct RARPPM_CONTEXT *MinContext, *MedContext, *MaxContext;
-    RARPPM_STATE* FoundState;      // found next state transition
+    RARPPM_STATE *FoundState;  // found next state transition
     int NumMasked, InitEsc, OrderFall, MaxOrder, RunLength, InitRL;
     quint8 CharMask[256], NS2Indx[256], NS2BSIndx[256], HB2Flag[256];
     quint8 EscCount, PrevSuccess, HiBitsFlag;
-    ushort BinSumm[128][64];               // binary SEE-contexts
+    ushort BinSumm[128][64];  // binary SEE-contexts
 
     RangeCoder Coder;
     SubAllocator SubAlloc;
 
     void RestartModelRare();
     void StartModelRare(int MaxOrder);
-    inline RARPPM_CONTEXT* CreateSuccessors(bool Skip,RARPPM_STATE* p1);
+    inline RARPPM_CONTEXT *CreateSuccessors(bool Skip, RARPPM_STATE *p1);
 
     inline void UpdateModel();
     inline void ClearMask();
+
 public:
     ModelPPM();
-    void CleanUp(); // reset PPM variables after data error
-    bool DecodeInit(rar_Unpack *UnpackRead,int &EscChar);
+    void CleanUp();  // reset PPM variables after data error
+    bool DecodeInit(rar_Unpack *UnpackRead, int &EscChar);
     int DecodeChar();
 };
 
-class rar_Unpack:PackDef
-{
+class rar_Unpack : PackDef {
 private:
     QIODevice *g_pDeviceInput;
     QIODevice *g_pDeviceOutput;
@@ -587,20 +587,20 @@ private:
     void Unpack5MT(bool Solid);
     bool UnpReadBuf();
     void UnpWriteBuf();
-    quint8* ApplyFilter(quint8 *Data,uint DataSize,UnpackFilter *Flt);
-    void UnpWriteArea(size_t StartPtr,size_t EndPtr);
-    void UnpWriteData(quint8 *Data,size_t Size);
-    uint SlotToLength(BitInput &Inp,uint Slot);
+    quint8 *ApplyFilter(quint8 *Data, uint DataSize, UnpackFilter *Flt);
+    void UnpWriteArea(size_t StartPtr, size_t EndPtr);
+    void UnpWriteData(quint8 *Data, size_t Size);
+    uint SlotToLength(BitInput &Inp, uint Slot);
     void UnpInitData50(bool Solid);
-    bool ReadBlockHeader(BitInput &Inp,UnpackBlockHeader &Header);
-    bool ReadTables(BitInput &Inp,UnpackBlockHeader &Header,UnpackBlockTables &Tables);
-    void MakeDecodeTables(quint8 *LengthTable,DecodeTable *Dec,uint Size);
-    uint DecodeNumber(BitInput &Inp,DecodeTable *Dec);
+    bool ReadBlockHeader(BitInput &Inp, UnpackBlockHeader &Header);
+    bool ReadTables(BitInput &Inp, UnpackBlockHeader &Header, UnpackBlockTables &Tables);
+    void MakeDecodeTables(quint8 *LengthTable, DecodeTable *Dec, uint Size);
+    uint DecodeNumber(BitInput &Inp, DecodeTable *Dec);
     inline void InsertOldDist(size_t Distance);
     void UnpInitData(bool Solid);
-    void CopyString(uint Length,size_t Distance);
+    void CopyString(uint Length, size_t Distance);
     uint ReadFilterData(BitInput &Inp);
-    bool ReadFilter(BitInput &Inp,UnpackFilter &Filter);
+    bool ReadFilter(BitInput &Inp, UnpackFilter &Filter);
     bool AddFilter(UnpackFilter &Filter);
     bool AddFilter();
     void InitFilters();
@@ -615,19 +615,19 @@ private:
     // Filters code, one entry per filter.
     std::vector<UnpackFilter> Filters;
 
-    size_t OldDist[4],OldDistPtr;
+    size_t OldDist[4], OldDistPtr;
     uint LastLength;
 
     // LastDist is necessary only for RAR2 and older with circular OldDist
     // array. In RAR3 last distance is always stored in OldDist[0].
     uint LastDist;
 
-    size_t UnpPtr; // Current position in window.
+    size_t UnpPtr;  // Current position in window.
 
-    size_t PrevPtr; // UnpPtr value for previous loop iteration.
-    bool FirstWinDone; // At least one dictionary was processed.
+    size_t PrevPtr;     // UnpPtr value for previous loop iteration.
+    bool FirstWinDone;  // At least one dictionary was processed.
 
-    size_t WrPtr; // Last written unpacked data position.
+    size_t WrPtr;  // Last written unpacked data position.
 
     // Top border of read packed data.
     int ReadTop;
@@ -640,7 +640,7 @@ private:
     UnpackBlockHeader BlockHeader;
     UnpackBlockTables BlockTables;
 
-    size_t WriteBorder; // Perform write when reaching this border.
+    size_t WriteBorder;  // Perform write when reaching this border.
 
     quint8 *Window;
 
@@ -665,27 +665,27 @@ private:
     void GetFlagsBuf();
     void UnpInitData15(bool Solid);
     void InitHuff();
-    void CorrHuff(ushort *CharSet,quint8 *NumToPlace);
-    void CopyString15(uint Distance,uint Length);
-    uint DecodeNum(uint Num,uint StartPos,uint *DecTab,uint *PosTab);
+    void CorrHuff(ushort *CharSet, quint8 *NumToPlace);
+    void CopyString15(uint Distance, uint Length);
+    uint DecodeNum(uint Num, uint StartPos, uint *DecTab, uint *PosTab);
 
-    ushort ChSet[256],ChSetA[256],ChSetB[256],ChSetC[256];
-    quint8 NToPl[256],NToPlB[256],NToPlC[256];
-    uint FlagBuf,AvrPlc,AvrPlcB,AvrLn1,AvrLn2,AvrLn3;
-    int Buf60,NumHuf,StMode,LCount,FlagsCnt;
-    uint Nhfb,Nlzb,MaxDist3;
+    ushort ChSet[256], ChSetA[256], ChSetB[256], ChSetC[256];
+    quint8 NToPl[256], NToPlB[256], NToPlC[256];
+    uint FlagBuf, AvrPlc, AvrPlcB, AvrLn1, AvrLn2, AvrLn3;
+    int Buf60, NumHuf, StMode, LCount, FlagsCnt;
+    uint Nhfb, Nlzb, MaxDist3;
     /***************************** rar_Unpack v 1.5 *********************************/
 
     /***************************** rar_Unpack v 2.0 *********************************/
     void Unpack20(bool Solid);
 
-    DecodeTable MD[4]; // Decode multimedia data, up to 4 channels.
+    DecodeTable MD[4];  // Decode multimedia data, up to 4 channels.
 
-    unsigned char UnpOldTable20[MC20*4];
+    unsigned char UnpOldTable20[MC20 * 4];
     bool UnpAudioBlock;
-    uint UnpChannels,UnpCurChannel;
+    uint UnpChannels, UnpCurChannel;
     int UnpChannelDelta;
-    void CopyString20(uint Length,uint Distance);
+    void CopyString20(uint Length, uint Distance);
     bool ReadTables20();
     void UnpWriteBuf20();
     void UnpInitData20(int Solid);
@@ -695,7 +695,10 @@ private:
     /***************************** rar_Unpack v 2.0 *********************************/
 
     /***************************** rar_Unpack v 3.0 *********************************/
-    enum BLOCK_TYPES {BLOCK_LZ,BLOCK_PPM};
+    enum BLOCK_TYPES {
+        BLOCK_LZ,
+        BLOCK_PPM
+    };
 
     void UnpInitData30(bool Solid);
     void Unpack29(bool Solid);
@@ -703,14 +706,14 @@ private:
     bool ReadEndOfBlock();
     bool ReadVMCode();
     bool ReadVMCodePPM();
-    bool AddVMCode(uint FirstByte,quint8 *Code,uint CodeSize);
+    bool AddVMCode(uint FirstByte, quint8 *Code, uint CodeSize);
     int SafePPMDecodeChar();
     bool ReadTables30();
     bool UnpReadBuf30();
     void UnpWriteBuf30();
     void ExecuteCode(VM_PreparedProgram *Prg);
 
-    int PrevLowDist,LowDistRepCount;
+    int PrevLowDist, LowDistRepCount;
 
     ModelPPM PPM;
     int PPMEscChar;
@@ -723,7 +726,7 @@ private:
     // because we can have a corrupt archive with one algorithm file
     // followed by another algorithm file with "solid" flag and we do not
     // want to reuse tables from one algorithm in another.
-    bool TablesRead2,TablesRead3,TablesRead5;
+    bool TablesRead2, TablesRead3, TablesRead5;
 
     // Virtual machine to execute filters code.
     RarVM VM;
@@ -750,30 +753,41 @@ public:
     // rar_Unpack(ComprDataIO *DataIO);
     rar_Unpack(QIODevice *pDeviceInput, QIODevice *pDeviceOut);
     ~rar_Unpack();
-    void Init(quint64 WinSize,bool Solid);
-    void AllowLargePages(bool Allow) {Alloc.AllowLargePages(Allow);}
-    void DoUnpack(uint Method,bool Solid);
-    bool IsFileExtracted() {return FileExtracted;}
-    void SetDestSize(qint64 DestSize) {DestUnpSize=DestSize;FileExtracted=false;}
-    void SetSuspended(bool Suspended) {rar_Unpack::Suspended=Suspended;}
+    void Init(quint64 WinSize, bool Solid);
+    void AllowLargePages(bool Allow)
+    {
+        Alloc.AllowLargePages(Allow);
+    }
+    void DoUnpack(uint Method, bool Solid);
+    bool IsFileExtracted()
+    {
+        return FileExtracted;
+    }
+    void SetDestSize(qint64 DestSize)
+    {
+        DestUnpSize = DestSize;
+        FileExtracted = false;
+    }
+    void SetSuspended(bool Suspended)
+    {
+        rar_Unpack::Suspended = Suspended;
+    }
 
     quint64 AllocWinSize;
     size_t MaxWinSize;
     size_t MaxWinMask;
 
-    bool ExtraDist; // Allow distances up to 1 TB.
+    bool ExtraDist;  // Allow distances up to 1 TB.
 
     quint8 GetChar()
     {
-        if (Inp.InAddr>BitInput::MAX_SIZE-30)
-        {
+        if (Inp.InAddr > BitInput::MAX_SIZE - 30) {
             UnpReadBuf();
-            if (Inp.InAddr>=BitInput::MAX_SIZE) // If nothing was read.
+            if (Inp.InAddr >= BitInput::MAX_SIZE)  // If nothing was read.
                 return 0;
         }
         return Inp.InBuf[Inp.InAddr++];
     }
-
 
     // If window position crosses the window beginning, wrap it to window end.
     // Replaces &MaxWinMask for non-power 2 window sizes.
@@ -799,4 +813,4 @@ public:
     }
 };
 
-#endif // XRARDECODER_H
+#endif  // XRARDECODER_H
