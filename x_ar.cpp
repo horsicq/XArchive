@@ -215,6 +215,11 @@ qint32 X_Ar::getType()
     return TYPE_PACKAGE;
 }
 
+QString X_Ar::getMIMEString()
+{
+    return "application/x-archive";
+}
+
 XBinary::_MEMORY_MAP X_Ar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     // TODO HEADER

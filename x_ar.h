@@ -57,6 +57,7 @@ public:
     virtual FT getFileType();
     virtual qint32 getType();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    virtual QString getMIMEString();
 
 private:
     FRECORD readFRECORD(qint64 nOffset);
