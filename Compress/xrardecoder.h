@@ -146,6 +146,17 @@ enum FilterType {
 // Maximum dictionary allowed by decompression.
 #define UNPACK_MAX_DICT 0x1000000000ULL  // 64 GB.
 
+// (int) cast before "low" added only to suppress compiler warnings.
+#define ARI_DEC_NORMALIZE(code,low,range,read)                           \
+{                                                                        \
+        while ((low^(low+range))<TOP || range<BOT && ((range=-(int)low&(BOT-1)),1)) \
+    {                                                                      \
+            code=(code << 8) | read->GetChar();                                  \
+            range <<= 8;                                                         \
+            low <<= 8;                                                           \
+    }                                                                      \
+}
+
 #define VM_MEMSIZE 0x40000
 #define VM_MEMMASK (VM_MEMSIZE - 1)
 
@@ -273,8 +284,8 @@ public:
     void InitSubAllocator();
     inline void *AllocContext();
     inline void *AllocUnits(int NU);
-    inline void *ExpandUnits(void *ptr, int OldNU);
-    inline void *ShrinkUnits(void *ptr, int OldNU, int NewNU);
+    inline void *ExpandUnits(void *OldPtr, int OldNU);
+    inline void *ShrinkUnits(void *OldPtr, int OldNU, int NewNU);
     inline void FreeUnits(void *ptr, int OldNU);
     long GetAllocatedMemory()
     {
@@ -677,8 +688,10 @@ private:
     /***************************** rar_Unpack v 1.5 *********************************/
 
     /***************************** rar_Unpack v 2.0 *********************************/
-    void Unpack20(bool Solid);
+public:
+    void Unpack20(bool Solid, XBinary::PDSTRUCT *pPdStruct);
 
+private:
     DecodeTable MD[4];  // Decode multimedia data, up to 4 channels.
 
     unsigned char UnpOldTable20[MC20 * 4];
@@ -701,7 +714,9 @@ private:
     };
 
     void UnpInitData30(bool Solid);
-    void Unpack29(bool Solid);
+public:
+    void Unpack29(bool Solid, XBinary::PDSTRUCT *pPdStruct);
+private:
     void InitFilters30(bool Solid);
     bool ReadEndOfBlock();
     bool ReadVMCode();
@@ -753,7 +768,7 @@ public:
     // rar_Unpack(ComprDataIO *DataIO);
     rar_Unpack(QIODevice *pDeviceInput, QIODevice *pDeviceOut);
     ~rar_Unpack();
-    void Init(quint64 WinSize, bool Solid);
+    qint32 Init(quint64 WinSize, bool Solid);
     void AllowLargePages(bool Allow)
     {
         Alloc.AllowLargePages(Allow);
