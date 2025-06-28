@@ -104,3 +104,8 @@ QString XNPM::typeIdToString(qint32 nType)
 
     return sResult;
 }
+
+QString XNPM::getMIMEString()
+{
+    return "application/x-npm";
+}
