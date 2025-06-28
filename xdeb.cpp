@@ -61,6 +61,11 @@ QString XDEB::getFileFormatExt()
     return "deb";
 }
 
+QString XDEB::getMIMEString()
+{
+    return "application/vnd.debian.binary-package";
+}
+
 XBinary::FILEFORMATINFO XDEB::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
