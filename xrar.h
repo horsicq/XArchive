@@ -133,6 +133,16 @@ class XRar : public XArchive {
     };
 
 public:
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_RAR14_SIGNATURE,
+        STRUCTID_RAR40_SIGNATURE,
+        STRUCTID_RAR50_SIGNATURE,
+        STRUCTID_RAR14_MAINHEADER,
+        STRUCTID_RAR40_MAINHEADER,
+        STRUCTID_RAR50_MAINHEADER,
+    };
+
     explicit XRar(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
@@ -155,6 +165,9 @@ public:
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
 
     virtual QString getMIMEString();
+
+    virtual QString structIDToString(quint32 nID);
+    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
 
 private:
     qint32 getInternVersion(PDSTRUCT *pPdStruct);

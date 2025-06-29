@@ -21,8 +21,8 @@
 #include "xbzip2.h"
 
 XBinary::XCONVERT _TABLE_XBZIP2_STRUCTID[] = {{XBZIP2::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                              {XBZIP2::STRUCTID_BZIP2_HEADER, "BZIP2_HEADER", QObject::tr("BZip2 header")},
-                                              {XBZIP2::STRUCTID_BLOCK_HEADER, "BLOCK_HEADER", QObject::tr("Block header")}};
+                                              {XBZIP2::STRUCTID_BZIP2_HEADER, "BZIP2_HEADER", QString("BZip2 header")},
+                                              {XBZIP2::STRUCTID_BLOCK_HEADER, "BLOCK_HEADER", QString("Block header")}};
 
 XBZIP2::XBZIP2(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -184,9 +184,8 @@ QList<XBinary::DATA_HEADER> XBZIP2::getDataHeaders(const DATA_HEADERS_OPTIONS &d
         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
         if (nStartOffset != -1) {
-            XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XBZIP2::structIDToString(dataHeadersOptions.nID));
-
             if (dataHeadersOptions.nID == STRUCTID_BZIP2_HEADER) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XBZIP2::structIDToString(dataHeadersOptions.nID));
                 dataHeader.nSize = sizeof(BZIP2_HEADER);
 
                 dataHeader.listRecords.append(

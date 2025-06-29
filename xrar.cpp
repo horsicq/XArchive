@@ -20,6 +20,14 @@
  */
 #include "xrar.h"
 
+XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                            {XRar::STRUCTID_RAR14_SIGNATURE, "RAR14_SIGNATURE", QString("RAR 1.4 signature")},
+                                            {XRar::STRUCTID_RAR40_SIGNATURE, "RAR40_SIGNATURE", QString("RAR 4.0 signature")},
+                                            {XRar::STRUCTID_RAR50_SIGNATURE, "RAR50_SIGNATURE", QString("RAR 5.0 signature)")},
+                                            {XRar::STRUCTID_RAR14_MAINHEADER, "RAR14_MAINHEADER", QString("RAR 1.4 main header")},
+                                            {XRar::STRUCTID_RAR40_MAINHEADER, "RAR40_MAINHEADER", QString("RAR 4.0 main header")},
+                                            {XRar::STRUCTID_RAR50_MAINHEADER, "RAR50_MAINHEADER", QString("RAR 5.0 main header")}};
+
 XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -285,6 +293,70 @@ QString XRar::headerType5ToString(HEADERTYPE5 type)
 QString XRar::getMIMEString()
 {
     return "application/x-rar-compressed";
+}
+
+QString XRar::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XRAR_STRUCTID, sizeof(_TABLE_XRAR_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::DATA_HEADER> listResult;
+
+    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+        _dataHeadersOptions.bChildren = true;
+        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+
+        qint32 nVersion = getInternVersion(pPdStruct);
+
+        if (nVersion == 1) {
+            _dataHeadersOptions.nID = STRUCTID_RAR14_SIGNATURE;
+        } else if (nVersion == 4) {
+            _dataHeadersOptions.nID = STRUCTID_RAR40_SIGNATURE;
+        } else if (nVersion == 5) {
+            _dataHeadersOptions.nID = STRUCTID_RAR50_SIGNATURE;
+        }
+
+        _dataHeadersOptions.nLocation = 0;
+        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+
+        if (isPdStructNotCanceled(pPdStruct)) {
+            listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+        }
+    } else {
+        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+
+        if (nStartOffset != -1) {
+            if (dataHeadersOptions.nID == STRUCTID_RAR14_SIGNATURE) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.listRecords.append(
+                    getDataRecord(0, 4, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
+            } else if (dataHeadersOptions.nID == STRUCTID_RAR40_SIGNATURE) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.listRecords.append(
+                    getDataRecord(0, 7, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
+            } else if (dataHeadersOptions.nID == STRUCTID_RAR50_SIGNATURE) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.listRecords.append(
+                    getDataRecord(0, 8, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
+            }
+        }
+    }
+
+    return listResult;
 }
 
 XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
