@@ -189,6 +189,11 @@ qint32 XCab::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_R
     return 0;
 }
 
+QString XCab::getMIMEString()
+{
+    return "application/vnd.ms-cab-compressed";
+}
+
 QList<XBinary::DATA_HEADER> XCab::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::DATA_HEADER> listResult;

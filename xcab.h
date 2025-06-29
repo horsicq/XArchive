@@ -110,6 +110,7 @@ public:
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
     virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues,
                                 PDSTRUCT *pPdStruct);
+    virtual QString getMIMEString();
 };
 
 #endif  // XCAB_H
