@@ -459,6 +459,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 rarUnpack.Unpack20(bIsSolid, pPdStruct);
             } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_29) {
                 rarUnpack.Unpack29(bIsSolid, pPdStruct);
+            } else if ((pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_50) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_70)) {
+                rarUnpack.Unpack5(bIsSolid, pPdStruct);
             }
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZSS_SZDD) {

@@ -40,6 +40,7 @@ public:
     virtual QString getVersion();
     virtual QString getFileFormatExt();
     virtual QString getFileFormatExtsString();
+    virtual QString getMIMEString();
 };
 
 #endif  // XZLIB_H

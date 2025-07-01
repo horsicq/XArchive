@@ -271,3 +271,8 @@ QString XZlib::getFileFormatExtsString()
 {
     return "Zlib (*.zlib)";
 }
+
+QString XZlib::getMIMEString()
+{
+    return "application/x-zlib";
+}

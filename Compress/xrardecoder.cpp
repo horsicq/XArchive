@@ -77,6 +77,181 @@ inline void _PPMD_SWAP(T &t1, T &t2)
     t2 = tmp;
 }
 
+void rar_Unpack::Unpack5(bool Solid, XBinary::PDSTRUCT *pPdStruct)
+{
+    FileExtracted=true;
+
+    if (!Suspended)
+    {
+        UnpInitData(Solid);
+        if (!UnpReadBuf())
+            return;
+
+        // Check TablesRead5 to be sure that we read tables at least once
+        // regardless of current block header TablePresent flag.
+        // So we can safefly use these tables below.
+        if (!ReadBlockHeader(Inp,BlockHeader) ||
+            !ReadTables(Inp,BlockHeader,BlockTables) || !TablesRead5)
+            return;
+    }
+
+    while (XBinary::isPdStructNotCanceled(pPdStruct))
+    {
+        UnpPtr=WrapUp(UnpPtr);
+
+        // To combine this code with WrapUp above, we also need to set FirstWinDone
+        // in CopyString. Performance gain is questionable in this case.
+        FirstWinDone|=(PrevPtr>UnpPtr);
+        PrevPtr=UnpPtr;
+
+        if (Inp.InAddr>=ReadBorder)
+        {
+            bool FileDone=false;
+
+            // We use 'while', because for empty block containing only Huffman table,
+            // we'll be on the block border once again just after reading the table.
+            while (Inp.InAddr>BlockHeader.BlockStart+BlockHeader.BlockSize-1 ||
+                   Inp.InAddr==BlockHeader.BlockStart+BlockHeader.BlockSize-1 &&
+                       Inp.InBit>=BlockHeader.BlockBitSize)
+            {
+                if (BlockHeader.LastBlockInFile)
+                {
+                    FileDone=true;
+                    break;
+                }
+                if (!ReadBlockHeader(Inp,BlockHeader) || !ReadTables(Inp,BlockHeader,BlockTables))
+                    return;
+            }
+            if (FileDone || !UnpReadBuf())
+                break;
+        }
+
+        // WriteBorder==UnpPtr means that we have MaxWinSize data ahead.
+        if (WrapDown(WriteBorder-UnpPtr)<=MAX_INC_LZ_MATCH && WriteBorder!=UnpPtr)
+        {
+            UnpWriteBuf();
+            if (WrittenFileSize>DestUnpSize)
+                return;
+            if (Suspended)
+            {
+                FileExtracted=false;
+                return;
+            }
+        }
+
+        uint MainSlot=DecodeNumber(Inp,&BlockTables.LD);
+        if (MainSlot<256)
+        {
+            if (Fragmented)
+                FragWindow[UnpPtr++]=(quint8)MainSlot;
+            else
+                Window[UnpPtr++]=(quint8)MainSlot;
+            continue;
+        }
+        if (MainSlot>=262)
+        {
+            uint Length=SlotToLength(Inp,MainSlot-262);
+
+            size_t Distance=1;
+            uint DBits,DistSlot=DecodeNumber(Inp,&BlockTables.DD);
+            if (DistSlot<4)
+            {
+                DBits=0;
+                Distance+=DistSlot;
+            }
+            else
+            {
+                DBits=DistSlot/2 - 1;
+                Distance+=size_t(2 | (DistSlot & 1)) << DBits;
+            }
+
+            if (DBits>0)
+            {
+                if (DBits>=4)
+                {
+                    if (DBits>4)
+                    {
+                        // It is also possible to always use getbits64() here.
+                        if (DBits>36)
+                            Distance+=( ( size_t(Inp.getbits64() ) >> (68-DBits) ) << 4 );
+                        else
+                            Distance+=( ( size_t(Inp.getbits32() ) >> (36-DBits) ) << 4 );
+                        Inp.addbits(DBits-4);
+                    }
+                    uint LowDist=DecodeNumber(Inp,&BlockTables.LDD);
+                    Distance+=LowDist;
+
+                    // Distance can be 0 for multiples of 4 GB as result of size_t
+                    // overflow in 32-bit build. Its lower 32-bit can also erroneously
+                    // fit into dictionary after truncating upper 32-bits. Replace such
+                    // invalid distances with -1, so CopyString sets 0 data for them.
+                    // DBits>=30 also as DistSlot>=62 indicate distances >=0x80000001.
+                    if (sizeof(Distance)==4 && DBits>=30)
+                        Distance=(size_t)-1;
+                }
+                else
+                {
+                    Distance+=Inp.getbits()>>(16-DBits);
+                    Inp.addbits(DBits);
+                }
+            }
+
+            if (Distance>0x100)
+            {
+                Length++;
+                if (Distance>0x2000)
+                {
+                    Length++;
+                    if (Distance>0x40000)
+                        Length++;
+                }
+            }
+
+            InsertOldDist(Distance);
+            LastLength=Length;
+            if (Fragmented)
+                FragWindow.CopyString(Length,Distance,UnpPtr,FirstWinDone,MaxWinSize);
+            else
+                CopyString(Length,Distance);
+            continue;
+        }
+        if (MainSlot==256)
+        {
+            UnpackFilter Filter;
+            if (!ReadFilter(Inp,Filter) || !AddFilter(Filter))
+                break;
+            continue;
+        }
+        if (MainSlot==257)
+        {
+            if (LastLength!=0)
+                if (Fragmented)
+                    FragWindow.CopyString(LastLength,OldDist[0],UnpPtr,FirstWinDone,MaxWinSize);
+                else
+                    CopyString(LastLength,OldDist[0]);
+            continue;
+        }
+        if (MainSlot<262)
+        {
+            uint DistNum=MainSlot-258;
+            size_t Distance=OldDist[DistNum];
+            for (uint I=DistNum;I>0;I--)
+                OldDist[I]=OldDist[I-1];
+            OldDist[0]=Distance;
+
+            uint LengthSlot=DecodeNumber(Inp,&BlockTables.RD);
+            uint Length=SlotToLength(Inp,LengthSlot);
+            LastLength=Length;
+            if (Fragmented)
+                FragWindow.CopyString(Length,Distance,UnpPtr,FirstWinDone,MaxWinSize);
+            else
+                CopyString(Length,Distance);
+            continue;
+        }
+    }
+    UnpWriteBuf();
+}
+
 bool rar_Unpack::UnpReadBuf()
 {
     int DataSize = ReadTop - Inp.InAddr;  // Data left to process.
@@ -328,9 +503,189 @@ void rar_Unpack::UnpWriteData(quint8 *Data, size_t Size)
     WrittenFileSize += Size;
 }
 
+uint rar_Unpack::SlotToLength(BitInput &Inp, uint Slot)
+{
+    uint LBits,Length=2;
+    if (Slot<8)
+    {
+        LBits=0;
+        Length+=Slot;
+    }
+    else
+    {
+        LBits=Slot/4-1;
+        Length+=(4 | (Slot & 3)) << LBits;
+    }
+
+    if (LBits>0)
+    {
+        Length+=Inp.getbits()>>(16-LBits);
+        Inp.addbits(LBits);
+    }
+    return Length;
+}
+
 void rar_Unpack::UnpInitData50(bool Solid)
 {
     if (!Solid) TablesRead5 = false;
+}
+
+bool rar_Unpack::ReadBlockHeader(BitInput &Inp, UnpackBlockHeader &Header)
+{
+    Header.HeaderSize=0;
+
+    if (!Inp.ExternalBuffer && Inp.InAddr>ReadTop-7)
+        if (!UnpReadBuf())
+            return false;
+    Inp.faddbits((8-Inp.InBit)&7);
+
+    quint8 BlockFlags=quint8(Inp.fgetbits()>>8);
+    Inp.faddbits(8);
+    uint ByteCount=((BlockFlags>>3)&3)+1; // Block size byte count.
+
+    if (ByteCount==4)
+        return false;
+
+    Header.HeaderSize=2+ByteCount;
+
+    Header.BlockBitSize=(BlockFlags&7)+1;
+
+    quint8 SavedCheckSum=Inp.fgetbits()>>8;
+    Inp.faddbits(8);
+
+    int BlockSize=0;
+    for (uint I=0;I<ByteCount;I++)
+    {
+        BlockSize+=(Inp.fgetbits()>>8)<<(I*8);
+        Inp.addbits(8);
+    }
+
+    Header.BlockSize=BlockSize;
+    quint8 CheckSum=quint8(0x5a^BlockFlags^BlockSize^(BlockSize>>8)^(BlockSize>>16));
+
+    // 2024.01.04: In theory the valid block can have Header.BlockSize == 0
+    // and Header.TablePresent == false in case the only block purpose is to
+    // store Header.LastBlockInFile flag if it didn't fit into previous block.
+    // So we do not reject Header.BlockSize == 0. Though currently RAR doesn't
+    // seem to issue such zero length blocks.
+    if (CheckSum!=SavedCheckSum)
+        return false;
+
+    Header.BlockStart=Inp.InAddr;
+
+    // We called Inp.faddbits(8) above, thus Header.BlockStart can't be 0 here.
+    // So there is no overflow even if Header.BlockSize is 0.
+    ReadBorder=qMin(ReadBorder,Header.BlockStart+Header.BlockSize-1);
+
+    Header.LastBlockInFile=(BlockFlags & 0x40)!=0;
+    Header.TablePresent=(BlockFlags & 0x80)!=0;
+
+    return true;
+}
+
+bool rar_Unpack::ReadTables(BitInput &Inp, UnpackBlockHeader &Header, UnpackBlockTables &Tables)
+{
+    if (!Header.TablePresent)
+        return true;
+
+    if (!Inp.ExternalBuffer && Inp.InAddr>ReadTop-25)
+        if (!UnpReadBuf())
+            return false;
+
+    quint8 BitLength[BC];
+    for (uint I=0;I<BC;I++)
+    {
+        uint Length=(quint8)(Inp.fgetbits() >> 12);
+        Inp.faddbits(4);
+        if (Length==15)
+        {
+            uint ZeroCount=(quint8)(Inp.fgetbits() >> 12);
+            Inp.faddbits(4);
+            if (ZeroCount==0)
+                BitLength[I]=15;
+            else
+            {
+                ZeroCount+=2;
+                while (ZeroCount-- > 0 && I<ASIZE(BitLength))
+                    BitLength[I++]=0;
+                I--;
+            }
+        }
+        else
+            BitLength[I]=Length;
+    }
+
+    MakeDecodeTables(BitLength,&Tables.BD,BC);
+
+    quint8 Table[HUFF_TABLE_SIZEX];
+    const uint TableSize=ExtraDist ? HUFF_TABLE_SIZEX:HUFF_TABLE_SIZEB;
+    for (uint I=0;I<TableSize;)
+    {
+        if (!Inp.ExternalBuffer && Inp.InAddr>ReadTop-5)
+            if (!UnpReadBuf())
+                return false;
+        uint Number=DecodeNumber(Inp,&Tables.BD);
+        if (Number<16)
+        {
+            Table[I]=Number;
+            I++;
+        }
+        else
+            if (Number<18)
+            {
+                uint N;
+                if (Number==16)
+                {
+                    N=(Inp.fgetbits() >> 13)+3;
+                    Inp.faddbits(3);
+                }
+                else
+                {
+                    N=(Inp.fgetbits() >> 9)+11;
+                    Inp.faddbits(7);
+                }
+                if (I==0)
+                {
+                    // We cannot have "repeat previous" code at the first position.
+                    // Multiple such codes would shift Inp position without changing I,
+                    // which can lead to reading beyond of Inp boundary in mutithreading
+                    // mode, where Inp.ExternalBuffer disables bounds check and we just
+                    // reserve a lot of buffer space to not need such check normally.
+                    return false;
+                }
+                else
+                    while (N-- > 0 && I<TableSize)
+                    {
+                        Table[I]=Table[I-1];
+                        I++;
+                    }
+            }
+            else
+            {
+                uint N;
+                if (Number==18)
+                {
+                    N=(Inp.fgetbits() >> 13)+3;
+                    Inp.faddbits(3);
+                }
+                else
+                {
+                    N=(Inp.fgetbits() >> 9)+11;
+                    Inp.faddbits(7);
+                }
+                while (N-- > 0 && I<TableSize)
+                    Table[I++]=0;
+            }
+    }
+    TablesRead5=true;
+    if (!Inp.ExternalBuffer && Inp.InAddr>ReadTop)
+        return false;
+    MakeDecodeTables(&Table[0],&Tables.LD,NC);
+    uint DCodes=ExtraDist ? DCX : DCB;
+    MakeDecodeTables(&Table[NC],&Tables.DD,DCodes);
+    MakeDecodeTables(&Table[NC+DCodes],&Tables.LDD,LDC);
+    MakeDecodeTables(&Table[NC+DCodes+LDC],&Tables.RD,RC);
+    return true;
 }
 
 void rar_Unpack::MakeDecodeTables(quint8 *LengthTable, DecodeTable *Dec, uint Size)
@@ -631,8 +986,70 @@ void rar_Unpack::CopyString(uint Length, size_t Distance)
         }
 }
 
+uint rar_Unpack::ReadFilterData(BitInput &Inp)
+{
+    quint8 ByteCount=(Inp.fgetbits()>>14)+1;
+    Inp.addbits(2);
+
+    uint Data=0;
+    for (uint I=0;I<ByteCount;I++)
+    {
+        Data+=(Inp.fgetbits()>>8)<<(I*8);
+        Inp.addbits(8);
+    }
+    return Data;
+}
+
+bool rar_Unpack::ReadFilter(BitInput &Inp, UnpackFilter &Filter)
+{
+    if (!Inp.ExternalBuffer && Inp.InAddr>ReadTop-16)
+        if (!UnpReadBuf())
+            return false;
+
+    Filter.BlockStart=ReadFilterData(Inp);
+    Filter.BlockLength=ReadFilterData(Inp);
+    if (Filter.BlockLength>MAX_FILTER_BLOCK_SIZE)
+        Filter.BlockLength=0;
+
+    Filter.Type=Inp.fgetbits()>>13;
+    Inp.faddbits(3);
+
+    if (Filter.Type==FILTER_DELTA)
+    {
+        Filter.Channels=(Inp.fgetbits()>>11)+1;
+        Inp.faddbits(5);
+    }
+
+    return true;
+}
+
+bool rar_Unpack::AddFilter(UnpackFilter &Filter)
+{
+    if (Filters.size()>=MAX_UNPACK_FILTERS)
+    {
+        UnpWriteBuf(); // Write data, apply and flush filters.
+        if (Filters.size()>=MAX_UNPACK_FILTERS)
+            InitFilters(); // Still too many filters, prevent excessive memory use.
+    }
+
+    // If distance to filter start is that large that due to circular dictionary
+    // mode now it points to old not written yet data, then we set 'NextWindow'
+    // flag and process this filter only after processing that older data.
+    Filter.NextWindow=WrPtr!=UnpPtr && WrapDown(WrPtr-UnpPtr)<=Filter.BlockStart;
+
+    // In malformed archive Filter.BlockStart can be many times larger
+    // than window size, so here we must use the reminder instead of
+    // subtracting the single window size as WrapUp can do. So the result
+    // is always within the window. Since we add and not subtract here,
+    // reminder always provides the valid result in valid archives.
+    Filter.BlockStart=(Filter.BlockStart+UnpPtr)%MaxWinSize;
+    Filters.push_back(Filter);
+    return true;
+}
+
 void rar_Unpack::InitFilters()
 {
+    Filters.clear();
 }
 
 void rar_Unpack::Unpack15(bool Solid, XBinary::PDSTRUCT *pPdStruct)
@@ -2660,6 +3077,35 @@ quint8 &FragmentedWindow::operator[](size_t Item)
     for (uint I = 1; I < ASIZE(MemSize); I++)
         if (Item < MemSize[I]) return Mem[I][Item - MemSize[I - 1]];
     return Mem[0][0];  // Must never happen;
+}
+
+void FragmentedWindow::CopyString(uint Length, size_t Distance, size_t &UnpPtr, bool FirstWinDone, size_t MaxWinSize)
+{
+    size_t SrcPtr=UnpPtr-Distance;
+    if (Distance>UnpPtr)
+    {
+        SrcPtr+=MaxWinSize;
+
+        if (Distance>MaxWinSize || !FirstWinDone)
+        {
+            while (Length-- > 0)
+            {
+                (*this)[UnpPtr]=0;
+                if (++UnpPtr>=MaxWinSize)
+                    UnpPtr-=MaxWinSize;
+            }
+            return;
+        }
+    }
+
+    while (Length-- > 0)
+    {
+        (*this)[UnpPtr]=(*this)[SrcPtr];
+        if (++SrcPtr>=MaxWinSize)
+            SrcPtr-=MaxWinSize;
+        if (++UnpPtr>=MaxWinSize)
+            UnpPtr-=MaxWinSize;
+    }
 }
 
 void FragmentedWindow::CopyData(quint8 *Dest, size_t WinPos, size_t Size)
