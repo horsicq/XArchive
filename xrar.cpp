@@ -334,22 +334,19 @@ QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
             if (dataHeadersOptions.nID == STRUCTID_RAR14_SIGNATURE) {
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
 
-                dataHeader.listRecords.append(
-                    getDataRecord(0, 4, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(0, 4, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
             } else if (dataHeadersOptions.nID == STRUCTID_RAR40_SIGNATURE) {
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
 
-                dataHeader.listRecords.append(
-                    getDataRecord(0, 7, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(0, 7, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
             } else if (dataHeadersOptions.nID == STRUCTID_RAR50_SIGNATURE) {
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
 
-                dataHeader.listRecords.append(
-                    getDataRecord(0, 8, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(0, 8, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
             }
@@ -772,7 +769,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                         _MEMORY_RECORD record = {};
 
                         record.nIndex = nIndex++;
-                        record.filePart =FILEPART_DATA;
+                        record.filePart = FILEPART_DATA;
                         record.nOffset = nCurrentOffset;
                         record.nSize = genericBlock.nHeaderSize;
                         record.nAddress = -1;
@@ -789,7 +786,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                             _MEMORY_RECORD record = {};
 
                             record.nIndex = nIndex++;
-                            record.filePart =FILEPART_DATA;
+                            record.filePart = FILEPART_DATA;
                             record.nOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
                             record.nSize = fileBlock4.packSize;
                             record.nAddress = -1;
@@ -822,7 +819,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                         _MEMORY_RECORD record = {};
 
                         record.nIndex = nIndex++;
-                        record.filePart =FILEPART_DATA;
+                        record.filePart = FILEPART_DATA;
                         record.nOffset = nCurrentOffset;
                         record.nSize = genericHeader.nHeaderSize;
                         record.nAddress = -1;
@@ -836,7 +833,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                         _MEMORY_RECORD record = {};
 
                         record.nIndex = nIndex++;
-                        record.filePart =FILEPART_DATA;
+                        record.filePart = FILEPART_DATA;
                         record.nOffset = nCurrentOffset + genericHeader.nHeaderSize;
                         record.nSize = genericHeader.nDataSize;
                         record.nAddress = -1;

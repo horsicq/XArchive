@@ -33,10 +33,9 @@ inline quint32 RawGetBE4(const quint8 *m)
 #elif defined(USE_MEM_BYTESWAP) && (defined(__clang__) || defined(__GNUC__))
     return __builtin_bswap32(*(quint32 *)m);
 #else
-    return quint32(m[0])<<24 | quint32(m[1])<<16 | quint32(m[2])<<8 | m[3];
+    return quint32(m[0]) << 24 | quint32(m[1]) << 16 | quint32(m[2]) << 8 | m[3];
 #endif
 }
-
 
 // Load 8 big endian bytes from memory and return uint64.
 inline quint64 RawGetBE8(const quint8 *m)
@@ -46,8 +45,7 @@ inline quint64 RawGetBE8(const quint8 *m)
 #elif defined(USE_MEM_BYTESWAP) && (defined(__clang__) || defined(__GNUC__))
     return quint64(*(quint64 *)m);
 #else
-    return quint64(m[0])<<56 | quint64(m[1])<<48 | quint64(m[2])<<40 | quint64(m[3])<<32 |
-           quint64(m[4])<<24 | quint64(m[5])<<16 | quint64(m[6])<<8 | m[7];
+    return quint64(m[0]) << 56 | quint64(m[1]) << 48 | quint64(m[2]) << 40 | quint64(m[3]) << 32 | quint64(m[4]) << 24 | quint64(m[5]) << 16 | quint64(m[6]) << 8 | m[7];
 #endif
 }
 
@@ -231,9 +229,9 @@ public:
     // Bit at (InAddr,InBit) has the highest position in returning data.
     uint getbits32()
     {
-        uint BitField=RawGetBE4(InBuf+InAddr);
+        uint BitField = RawGetBE4(InBuf + InAddr);
         BitField <<= InBit;
-        BitField|=(uint)InBuf[InAddr+4] >> (8-InBit);
+        BitField |= (uint)InBuf[InAddr + 4] >> (8 - InBit);
         return BitField & 0xffffffff;
     }
 
@@ -241,9 +239,9 @@ public:
     // Bit at (InAddr,InBit) has the highest position in returning data.
     quint64 getbits64()
     {
-        quint64 BitField=RawGetBE8(InBuf+InAddr);
+        quint64 BitField = RawGetBE8(InBuf + InAddr);
         BitField <<= InBit;
-        BitField|=(uint)InBuf[InAddr+8] >> (8-InBit);
+        BitField |= (uint)InBuf[InAddr + 8] >> (8 - InBit);
         return BitField;
     }
 

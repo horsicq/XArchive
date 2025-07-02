@@ -154,18 +154,18 @@ QList<XBinary::DATA_HEADER> XCFBF::getDataHeaders(const DATA_HEADERS_OPTIONS &da
 
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _abSig), 8, "_abSig", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(StructuredStorageHeader, _clsid), 16, "_clsid", VT_BYTE_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
-
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(StructuredStorageHeader, _uSectorShift), 16, "_uSectorShift", VT_DWORD_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(StructuredStorageHeader, _clsid), 16, "_clsid", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                dataHeader.listRecords.append(getDataRecord(offsetof(StructuredStorageHeader, _uSectorShift), 16, "_uSectorShift", VT_DWORD_ARRAY, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _uMinorVersion), 2, "_uMinorVersion", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _uDllVersion), 2, "_uDllVersion", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _uByteOrder), 2, "_uByteOrder", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                 dataHeader.listRecords.append(
+                dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _uSectorShift), 2, "_uSectorShift", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(getDataRecord(offsetof(StructuredStorageHeader, _uMiniSectorShift), 2, "_uMiniSectorShift", VT_UINT16, DRF_UNKNOWN,
                                                             dataHeadersOptions.pMemoryMap->endian));

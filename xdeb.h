@@ -36,7 +36,6 @@ public:
     virtual QString getFileFormatExt();
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
     virtual QString getMIMEString();
-
 };
 
 #endif  // XDEB_H

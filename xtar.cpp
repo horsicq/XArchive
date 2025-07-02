@@ -157,7 +157,7 @@ XBinary::_MEMORY_MAP XTAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         {
             _MEMORY_RECORD record = {};
             record.nAddress = -1;
-            
+
             record.nOffset = nOffset;
             record.nSize = 0x200;  // TODO const
             record.nIndex = nIndex++;
@@ -168,11 +168,11 @@ XBinary::_MEMORY_MAP XTAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         {
             _MEMORY_RECORD record = {};
             record.nAddress = -1;
-            
+
             record.nOffset = nOffset + 0x200;
             record.nSize = align_up(QString(header.size).toULongLong(0, 8), 0x200);  // TODO const
             record.nIndex = nIndex++;
-            record.filePart =FILEPART_DATA;
+            record.filePart = FILEPART_DATA;
             record.sName = header.name;
             result.listRecords.append(record);
         }

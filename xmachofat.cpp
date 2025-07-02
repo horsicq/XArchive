@@ -187,7 +187,7 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         record.nOffset = _offset;
         record.nSize = _size;
         record.nAddress = -1;
-        record.filePart= FILEPART_SEGMENT;
+        record.filePart = FILEPART_SEGMENT;
 
         result.listRecords.append(record);
     }
