@@ -241,8 +241,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
             record.nSize = nSignatureOffset;
             record.nOffset = 0;
             record.nAddress = -1;
-            record.segment = ADDRESS_SEGMENT_UNKNOWN;
-            record.type = MMT_FILESEGMENT;
+            record.filePart = FILEPART_REGION;
             record.sName = tr("Loader");
             record.nIndex = nIndex++;
 
@@ -263,8 +262,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
                     record.nSize = nNewSignatureOffset - nSignatureOffset;
                     record.nOffset = nSignatureOffset;
                     record.nAddress = -1;
-                    record.segment = ADDRESS_SEGMENT_UNKNOWN;
-                    record.type = MMT_FILESEGMENT;
+                    record.filePart = FILEPART_REGION;
                     record.sName = sName;
                     record.nIndex = nIndex++;
 
@@ -279,8 +277,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
                     record.nSize = nSize - nSignatureOffset;
                     record.nOffset = nSignatureOffset;
                     record.nAddress = -1;
-                    record.segment = ADDRESS_SEGMENT_UNKNOWN;
-                    record.type = MMT_FILESEGMENT;
+                    record.filePart = FILEPART_REGION;
                     record.sName = tr("Data");
                     record.nIndex = nIndex++;
 

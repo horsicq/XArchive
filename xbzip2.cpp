@@ -142,7 +142,7 @@ XBinary::_MEMORY_MAP XBZIP2::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         memoryRecord.nOffset = 0;
         memoryRecord.nAddress = -1;
         memoryRecord.nSize = decompressStruct.nInSize;
-        memoryRecord.type = MMT_FILESEGMENT;
+        memoryRecord.filePart = FILEPART_REGION;
         memoryRecord.nIndex = nIndex;
 
         result.listRecords.append(memoryRecord);

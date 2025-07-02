@@ -164,7 +164,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     memoryRecordHeader.nAddress = -1;
     memoryRecordHeader.nSize = nOffset;
     memoryRecordHeader.sName = tr("Header");
-    memoryRecordHeader.type = MMT_HEADER;
+    memoryRecordHeader.filePart = FILEPART_HEADER;
 
     result.listRecords.append(memoryRecordHeader);
 
@@ -183,7 +183,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         memoryRecord.nOffset = nOffset;
         memoryRecord.nAddress = -1;
         memoryRecord.nSize = decompressStruct.nInSize;
-        memoryRecord.type = MMT_FILESEGMENT;
+        memoryRecord.filePart = FILEPART_REGION;
 
         sd.close();
     }
@@ -196,7 +196,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     memoryRecordFooter.nAddress = -1;
     memoryRecordFooter.nSize = 8;
     memoryRecordFooter.sName = tr("Footer");
-    memoryRecordFooter.type = MMT_FOOTER;
+    memoryRecordFooter.filePart = FILEPART_FOOTER;
 
     result.listRecords.append(memoryRecordFooter);
 

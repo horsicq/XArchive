@@ -151,22 +151,20 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     // Header
     _MEMORY_RECORD recordHeader = {};
     recordHeader.nAddress = -1;
-    recordHeader.segment = ADDRESS_SEGMENT_FLAT;
     recordHeader.nOffset = 0;
     recordHeader.nSize = 12;  // Stream header size
     recordHeader.nIndex = nIndex++;
-    recordHeader.type = MMT_HEADER;
+    recordHeader.filePart = FILEPART_HEADER;
     recordHeader.sName = tr("Stream Header");
     result.listRecords.append(recordHeader);
 
     // Footer
     _MEMORY_RECORD recordFooter = {};
     recordFooter.nAddress = -1;
-    recordFooter.segment = ADDRESS_SEGMENT_FLAT;
     recordFooter.nOffset = getSize() - 12;
     recordFooter.nSize = 12;  // Stream footer size
     recordFooter.nIndex = nIndex++;
-    recordFooter.type = MMT_FOOTER;
+    recordFooter.filePart = FILEPART_FOOTER;
     recordFooter.sName = tr("Stream Footer");
     result.listRecords.append(recordFooter);
 
@@ -186,11 +184,10 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         if (nMaxRecordOffset < nMaxOffset) {
             _MEMORY_RECORD recordOverlay = {};
             recordOverlay.nAddress = -1;
-            recordOverlay.segment = ADDRESS_SEGMENT_FLAT;
             recordOverlay.nOffset = nMaxRecordOffset;
             recordOverlay.nSize = nMaxOffset - nMaxRecordOffset;
             recordOverlay.nIndex = nIndex++;
-            recordOverlay.type = MMT_OVERLAY;
+            recordOverlay.filePart = FILEPART_OVERLAY;
             recordOverlay.sName = tr("Overlay");
             result.listRecords.append(recordOverlay);
         }

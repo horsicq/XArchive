@@ -153,11 +153,10 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     // Add file header
     _MEMORY_RECORD recHeader = {};
     recHeader.nAddress = -1;
-    recHeader.segment = ADDRESS_SEGMENT_FLAT;
     recHeader.nOffset = 0;
     recHeader.nSize = sizeof(SZDD_HEADER);
     recHeader.nIndex = nIndex++;
-    recHeader.type = MMT_HEADER;
+    recHeader.filePart = FILEPART_HEADER;
     recHeader.sName = tr("SZDD Header");
     result.listRecords.append(recHeader);
 
@@ -179,7 +178,7 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         memoryRecord.nOffset = sizeof(SZDD_HEADER);
         memoryRecord.nAddress = -1;
         memoryRecord.nSize = decompressStruct.nInSize;
-        memoryRecord.type = MMT_FILESEGMENT;
+        memoryRecord.filePart = FILEPART_REGION;
 
         result.listRecords.append(memoryRecord);
 

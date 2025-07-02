@@ -180,7 +180,7 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                 memoryRecord.nAddress = -1;
                 memoryRecord.nSize = nHeaderSize;
                 memoryRecord.sName = tr("Header");
-                memoryRecord.type = MMT_HEADER;
+                memoryRecord.filePart = FILEPART_HEADER;
 
                 result.listRecords.append(memoryRecord);
             }
@@ -192,7 +192,7 @@ XBinary::_MEMORY_MAP XLHA::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                 memoryRecord.nAddress = -1;
                 memoryRecord.nSize = nDataSize;
                 memoryRecord.sName = sFileName;
-                memoryRecord.type = MMT_FILESEGMENT;
+                memoryRecord.filePart = FILEPART_REGION;
 
                 result.listRecords.append(memoryRecord);
             }

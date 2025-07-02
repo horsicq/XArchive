@@ -71,6 +71,7 @@ public:
         quint64 nWindowSize;
         bool bIsSolid;  // For RAR
         COMPRESS_METHOD compressMethod;
+        FT fileType;
     };
 
     struct RECORD {
@@ -83,9 +84,9 @@ public:
         qint64 nOptHeaderSize;
         QString sUUID;
         // for targz
-        qint64 nLayerOffset;
-        qint64 nLayerSize;
-        COMPRESS_METHOD layerCompressMethod;
+        // qint64 nLayerOffset;
+        // qint64 nLayerSize;
+        // COMPRESS_METHOD layerCompressMethod;
     };
 
     enum COMPRESS_RESULT {

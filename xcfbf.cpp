@@ -328,11 +328,10 @@ XBinary::_MEMORY_MAP XCFBF::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     {
         _MEMORY_RECORD recordHeader = {};
         recordHeader.nAddress = -1;
-        recordHeader.segment = ADDRESS_SEGMENT_FLAT;
         recordHeader.nOffset = nCurrentOffset;
         recordHeader.nSize = nSectSize;
         recordHeader.nIndex = nIndex++;
-        recordHeader.type = MMT_HEADER;
+        recordHeader.filePart = FILEPART_HEADER;
         recordHeader.sName = tr("Header");
 
         result.listRecords.append(recordHeader);
@@ -345,11 +344,11 @@ XBinary::_MEMORY_MAP XCFBF::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     // for (quint32 i = 0; i < nNumberOfSects; i++) {
     //     _MEMORY_RECORD recordHeader = {};
     //     recordHeader.nAddress = -1;
-    //     recordHeader.segment = ADDRESS_SEGMENT_FLAT;
+    //     recordHeader
     //     recordHeader.nOffset = nCurrentOffset;
     //     recordHeader.nSize = nSectSize;
     //     recordHeader.nIndex = nIndex++;
-    //     recordHeader.type = MMT_FILESEGMENT;
+    //     recordHeader.filePart = FILEPART_REGION;
     //     recordHeader.sName = QString("%1 %2").arg(tr("Sector"), QString::number(i));
 
     //     result.listRecords.append(recordHeader);

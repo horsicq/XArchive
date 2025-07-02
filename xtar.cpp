@@ -157,22 +157,22 @@ XBinary::_MEMORY_MAP XTAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         {
             _MEMORY_RECORD record = {};
             record.nAddress = -1;
-            record.segment = ADDRESS_SEGMENT_FLAT;
+            
             record.nOffset = nOffset;
             record.nSize = 0x200;  // TODO const
             record.nIndex = nIndex++;
-            record.type = MMT_HEADER;
+            record.filePart = FILEPART_HEADER;
             record.sName = tr("Header");
             result.listRecords.append(record);
         }
         {
             _MEMORY_RECORD record = {};
             record.nAddress = -1;
-            record.segment = ADDRESS_SEGMENT_FLAT;
+            
             record.nOffset = nOffset + 0x200;
             record.nSize = align_up(QString(header.size).toULongLong(0, 8), 0x200);  // TODO const
             record.nIndex = nIndex++;
-            record.type = MMT_DATA;
+            record.filePart =FILEPART_DATA;
             record.sName = header.name;
             result.listRecords.append(record);
         }

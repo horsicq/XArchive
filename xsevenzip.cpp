@@ -196,7 +196,7 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         _MEMORY_RECORD record = {};
 
         record.nIndex = nIndex++;
-        record.type = MMT_HEADER;
+        record.filePart = FILEPART_HEADER;
         record.nOffset = nOffset;
         record.nSize = sizeof(SIGNATUREHEADER);
         record.nAddress = -1;
@@ -212,7 +212,7 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         _MEMORY_RECORD record = {};
 
         record.nIndex = nIndex++;
-        record.type = MMT_DATA;
+        record.filePart =FILEPART_DATA;
         record.nOffset = sizeof(SIGNATUREHEADER);
         record.nSize = nNextHeaderOffset - sizeof(SIGNATUREHEADER);
         record.nAddress = -1;
@@ -225,7 +225,7 @@ XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         _MEMORY_RECORD record = {};
 
         record.nIndex = nIndex++;
-        record.type = MMT_HEADER;
+        record.filePart = FILEPART_HEADER;
         record.nOffset = nNextHeaderOffset;
         record.nSize = nNextHeaderSize;
         record.nAddress = -1;

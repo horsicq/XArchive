@@ -577,37 +577,19 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
 {
     bool bResult = false;
 
-    if (pRecord->layerCompressMethod == COMPRESS_METHOD_UNKNOWN) {
-        SubDevice sd(pSourceDevice, pRecord->nDataOffset, pRecord->nDataSize);
+    SubDevice sd(pSourceDevice, pRecord->nDataOffset, pRecord->nDataSize);
 
-        if (sd.open(QIODevice::ReadOnly)) {
-            XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-            decompressStruct.spInfo = pRecord->spInfo;
-            decompressStruct.pSourceDevice = &sd;
-            decompressStruct.pDestDevice = pDestDevice;
-            decompressStruct.nDecompressedOffset = nDecompressedOffset;
-            decompressStruct.nDecompressedLimit = nDecompressedLimit;
+    if (sd.open(QIODevice::ReadOnly)) {
+        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+        decompressStruct.spInfo = pRecord->spInfo;
+        decompressStruct.pSourceDevice = &sd;
+        decompressStruct.pDestDevice = pDestDevice;
+        decompressStruct.nDecompressedOffset = nDecompressedOffset;
+        decompressStruct.nDecompressedLimit = nDecompressedLimit;
 
-            bResult = (_decompress(&decompressStruct, pPdStruct) == COMPRESS_RESULT_OK);
+        bResult = (_decompress(&decompressStruct, pPdStruct) == COMPRESS_RESULT_OK);
 
-            sd.close();
-        }
-    } else if ((pRecord->layerCompressMethod != COMPRESS_METHOD_UNKNOWN) && (pRecord->spInfo.compressMethod == COMPRESS_METHOD_STORE)) {
-        SubDevice sd(pSourceDevice, pRecord->nLayerOffset, pRecord->nLayerSize);
-
-        if (sd.open(QIODevice::ReadOnly)) {
-            XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-            decompressStruct.spInfo.compressMethod = pRecord->layerCompressMethod;
-            decompressStruct.pSourceDevice = &sd;
-            decompressStruct.pDestDevice = pDestDevice;
-            decompressStruct.nDecompressedOffset = pRecord->nDataOffset;
-            decompressStruct.nDecompressedLimit = pRecord->spInfo.nUncompressedSize;
-
-            bResult = (_decompress(&decompressStruct, pPdStruct) == COMPRESS_RESULT_OK);
-
-            sd.close();
-        }
-        // TODO nDecompressedOffset -> Create buffer copy
+        sd.close();
     }
 
     return bResult;

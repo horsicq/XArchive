@@ -278,11 +278,10 @@ XBinary::_MEMORY_MAP XCab::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     _MEMORY_RECORD recordHeader = {};
     recordHeader.nAddress = -1;
-    recordHeader.segment = ADDRESS_SEGMENT_FLAT;
     recordHeader.nOffset = 0;
     recordHeader.nSize = nHeaderSize;
     recordHeader.nIndex = nIndex++;
-    recordHeader.type = MMT_HEADER;
+    recordHeader.filePart = FILEPART_HEADER;
     recordHeader.sName = tr("Cabinet Header");
     result.listRecords.append(recordHeader);
 

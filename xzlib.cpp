@@ -195,7 +195,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     memoryRecordHeader.nAddress = -1;
     memoryRecordHeader.nSize = nOffset;
     memoryRecordHeader.sName = tr("Header");
-    memoryRecordHeader.type = MMT_HEADER;
+    memoryRecordHeader.filePart = FILEPART_HEADER;
     memoryRecordHeader.nIndex = nIndex++;
 
     result.listRecords.append(memoryRecordHeader);
@@ -215,7 +215,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         memoryRecord.nOffset = nOffset;
         memoryRecord.nAddress = -1;
         memoryRecord.nSize = decompressStruct.nInSize;
-        memoryRecord.type = MMT_FILESEGMENT;
+        memoryRecord.filePart = FILEPART_REGION;
         memoryRecord.sName = tr("Data");
         memoryRecord.nIndex = nIndex++;
 
@@ -230,7 +230,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     memoryRecordFooter.nAddress = -1;
     memoryRecordFooter.nSize = 4;
     memoryRecordFooter.sName = tr("Footer");
-    memoryRecordFooter.type = MMT_FOOTER;
+    memoryRecordFooter.filePart = FILEPART_FOOTER;
     memoryRecordFooter.nIndex = nIndex++;
 
     result.listRecords.append(memoryRecordFooter);

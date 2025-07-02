@@ -748,7 +748,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
             _MEMORY_RECORD record = {};
 
             record.nIndex = nIndex++;
-            record.type = MMT_HEADER;
+            record.filePart = FILEPART_HEADER;
             record.nOffset = 0;
             record.nSize = nFileHeaderSize;
             record.nAddress = -1;
@@ -772,7 +772,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                         _MEMORY_RECORD record = {};
 
                         record.nIndex = nIndex++;
-                        record.type = MMT_DATA;
+                        record.filePart =FILEPART_DATA;
                         record.nOffset = nCurrentOffset;
                         record.nSize = genericBlock.nHeaderSize;
                         record.nAddress = -1;
@@ -789,7 +789,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                             _MEMORY_RECORD record = {};
 
                             record.nIndex = nIndex++;
-                            record.type = MMT_DATA;
+                            record.filePart =FILEPART_DATA;
                             record.nOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
                             record.nSize = fileBlock4.packSize;
                             record.nAddress = -1;
@@ -822,7 +822,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                         _MEMORY_RECORD record = {};
 
                         record.nIndex = nIndex++;
-                        record.type = MMT_DATA;
+                        record.filePart =FILEPART_DATA;
                         record.nOffset = nCurrentOffset;
                         record.nSize = genericHeader.nHeaderSize;
                         record.nAddress = -1;
@@ -836,7 +836,7 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
                         _MEMORY_RECORD record = {};
 
                         record.nIndex = nIndex++;
-                        record.type = MMT_DATA;
+                        record.filePart =FILEPART_DATA;
                         record.nOffset = nCurrentOffset + genericHeader.nHeaderSize;
                         record.nSize = genericHeader.nDataSize;
                         record.nAddress = -1;

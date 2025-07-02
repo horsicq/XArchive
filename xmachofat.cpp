@@ -162,7 +162,7 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         _MEMORY_RECORD record = {};
 
         record.nIndex = nIndex++;
-        record.type = MMT_HEADER;
+        record.filePart = FILEPART_HEADER;
         record.nOffset = 0;
         record.nSize = sizeof(XMACH_DEF::fat_header);
         record.nAddress = -1;
@@ -187,7 +187,7 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
         record.nOffset = _offset;
         record.nSize = _size;
         record.nAddress = -1;
-        record.type = MMT_LOADSEGMENT;
+        record.filePart= FILEPART_SEGMENT;
 
         result.listRecords.append(record);
     }
