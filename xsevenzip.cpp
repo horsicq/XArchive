@@ -315,9 +315,9 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(SIGNATUREHEADER, StartHeaderCRC), 4, "StartHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderOffset), 8, "NextHeaderOffset", VT_UINT64, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderOffset), 8, "NextHeaderOffset", VT_UINT64, DRF_OFFSET, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderSize), 8, "NextHeaderSize", VT_UINT64, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderSize), 8, "NextHeaderSize", VT_UINT64, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderCRC), 4, "NextHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
@@ -357,7 +357,7 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                     if (szRecord.srType == SRTYPE_ID) {
                         DATAVALUESET dataValueSet;
                         dataValueSet.mapValues = getEIdEnumS();
-                        dataValueSet.bFlags = false;
+                        dataValueSet.vlType = VL_TYPE_LIST;
                         dataValueSet.nMask = 0xFFFFFFFFFFFFFFFF;
                         dataRecord.listDataValueSets.append(dataValueSet);
                         dataRecord.valType = VT_PACKEDNUMBER;  // TODO
@@ -365,6 +365,8 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                         dataRecord.valType = VT_PACKEDNUMBER;  // TODO
                     } else if (szRecord.srType == SRTYPE_BYTE) {
                         dataRecord.valType = VT_UINT8;
+                    } else if (szRecord.srType == SRTYPE_UINT32) {
+                        dataRecord.valType = VT_UINT32;
                     } else if (szRecord.srType == SRTYPE_ARRAY) {
                         dataRecord.valType = VT_BYTE_ARRAY;
                     }
@@ -380,23 +382,33 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
     return listResult;
 }
 
-void XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, PDSTRUCT *pPdStruct)
+bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, qint32 nCount, bool bCheck, PDSTRUCT *pPdStruct)
 {
     if (isPdStructStopped(pPdStruct)) {
-        return;
+        return false;
     }
 
     if (pState->nCurrentOffset >= pState->nSize) {
-        return;
+        return false;
     }
 
     if (pState->bIsError) {
-        return;
+        return false;
     }
+
+    bool bResult = false;
 
     XBinary::PACKED_UINT puTag = XBinary::_read_packedNumber(pState->pData + pState->nCurrentOffset, pState->nSize - pState->nCurrentOffset);
 
-    if ((puTag.bIsValid) && (puTag.nValue == id)) {
+    bool bProcess = false;
+
+    if (puTag.bIsValid) {
+        if (puTag.nValue == id) {
+            bProcess = true;
+        }
+    }
+
+    if (bProcess) {
         {
             SZRECORD record = {};
             record.nRelOffset = pState->nCurrentOffset;
@@ -409,26 +421,22 @@ void XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         pState->nCurrentOffset += puTag.nByteSize;
 
         if (puTag.nValue == XSevenZip::k7zIdHeader) {
-            _handleId(pListRecords, XSevenZip::k7zIdMainStreamsInfo, pState, pPdStruct);
-            _handleId(pListRecords, XSevenZip::k7zIdFilesInfo, pState, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdMainStreamsInfo, pState, 1, true, pPdStruct);
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdFilesInfo, pState, 1, true, pPdStruct);
         } else if (puTag.nValue == XSevenZip::k7zIdMainStreamsInfo) {
-            _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, pPdStruct);
-            _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, pPdStruct);
-            // TODO
+            _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, 1, true, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, 1, true, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdSubStreamsInfo, pState, 1, false, pPdStruct);
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct);
         } else if (puTag.nValue == XSevenZip::k7zIdPackInfo) {
             _handleNumber(pListRecords, pState, pPdStruct, "PackPosition");
             quint64 nNumberOfPackStreams = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfPackStreams");
-
-            for (quint64 i = 0; (i < nNumberOfPackStreams) && isPdStructNotCanceled(pPdStruct); i++) {
-                _handleNumber(pListRecords, pState, pPdStruct, QString("PackSize%1").arg(i));
-            }
-            for (quint64 i = 0; (i < nNumberOfPackStreams) && isPdStructNotCanceled(pPdStruct); i++) {
-                _handleNumber(pListRecords, pState, pPdStruct, QString("CRC%1").arg(i));
-            }
-            _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdSize, pState, nNumberOfPackStreams, false, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdCRC, pState, 1, false, pPdStruct);
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct);
         } else if (puTag.nValue == XSevenZip::k7zIdUnpackInfo) {
-            _handleId(pListRecords, XSevenZip::k7zIdFolder, pState, pPdStruct);
-            _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdFolder, pState, 1, true, pPdStruct);
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct);
         } else if (puTag.nValue == XSevenZip::k7zIdFolder) {
             quint64 nNumberOfFolders = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFolders");
             quint8 nExt = _handleByte(pListRecords, pState, pPdStruct, "ExternalByte");
@@ -452,16 +460,60 @@ void XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                     quint64 nPropertySize = _handleNumber(pListRecords, pState, pPdStruct, "PropertiesSize");  // PropertiesSize
                     _handleArray(pListRecords, pState, nPropertySize, pPdStruct, "Property");
                 }
-
+            } else if (nExt == 1) {
+                _handleNumber(pListRecords, pState, pPdStruct, QString("Data Stream Index"));
             } else {
                 pState->bIsError = true;
                 pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
             }
+
+            _handleId(pListRecords, XSevenZip::k7zIdCodersUnpackSize, pState, nNumberOfFolders, false, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdCRC, pState, 1, false, pPdStruct);
+            bResult = true;
+        } else if (puTag.nValue == XSevenZip::k7zIdSubStreamsInfo) {
+            _handleId(pListRecords, XSevenZip::k7zIdCRC, pState, 1, false, pPdStruct);
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct);
+        } else if (puTag.nValue == XSevenZip::k7zIdEncodedHeader) {
+            _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, 1, true, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, 1, true, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, false, pPdStruct);
+            bResult = true;
+        } else if (puTag.nValue == XSevenZip::k7zIdSize) {
+            for (quint64 i = 0; (i < nCount) && isPdStructNotCanceled(pPdStruct); i++) {
+                _handleNumber(pListRecords, pState, pPdStruct, QString("Size%1").arg(i));
+            }
+            bResult = true;
+        } else if (puTag.nValue == XSevenZip::k7zIdCodersUnpackSize) {
+            for (quint64 i = 0; (i < nCount) && isPdStructNotCanceled(pPdStruct); i++) {
+                _handleNumber(pListRecords, pState, pPdStruct, QString("CodersUnpackSize%1").arg(i));
+            }
+            bResult = true;
+        } else if (puTag.nValue == XSevenZip::k7zIdCRC) {
+            quint64 nNumberOfCRCs = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfCRCs");
+
+            for (quint64 i = 0; (i < nNumberOfCRCs) && isPdStructNotCanceled(pPdStruct); i++) {
+                _handleUINT32(pListRecords, pState, pPdStruct, QString("CRC%1").arg(i));
+            }
+            bResult = true;
+        } else if (puTag.nValue == XSevenZip::k7zIdFilesInfo) {
+            quint64 nNumberOfFiles = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFiles");
+
+            _handleId(pListRecords, XSevenZip::k7zIdDummy, pState, 1, false, pPdStruct);
+
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct);
+        } else if (puTag.nValue == XSevenZip::k7zIdEnd) {
+            bResult = true;
         }
-    } else {
+    } else if (bCheck) {
         pState->bIsError = true;
         pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
+#ifdef QT_DEBUG
+        qDebug("Invalid value: %X", puTag.nValue);
+#endif
+        bResult = false;
     }
+
+    return bResult;
 }
 
 quint64 XSevenZip::_handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption)
@@ -532,6 +584,35 @@ quint8 XSevenZip::_handleByte(QList<SZRECORD> *pListRecords, SZSTATE *pState, PD
     return nResult;
 }
 
+quint32 XSevenZip::_handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption)
+{
+    if (isPdStructStopped(pPdStruct)) {
+        return 0;
+    }
+
+    if (pState->nCurrentOffset >= (pState->nSize - 3)) {
+        return 9;
+    }
+
+    if (pState->bIsError) {
+        return 0;
+    }
+
+    quint32 nResult = _read_uint32(pState->pData + pState->nCurrentOffset);
+
+    SZRECORD record = {};
+    record.nRelOffset = pState->nCurrentOffset;
+    record.nSize = 4;
+    record.varValue = nResult;
+    record.srType = SRTYPE_UINT32;
+    record.sName = sCaption;
+    pListRecords->append(record);
+
+    pState->nCurrentOffset += 4;
+
+    return nResult;
+}
+
 void XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption)
 {
     if (isPdStructStopped(pPdStruct)) {
@@ -550,7 +631,7 @@ void XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qin
     record.nRelOffset = pState->nCurrentOffset;
     record.nSize = nSize;
     // record.varValue = nResult;
-    record.srType = SRTYPE_BYTE;
+    record.srType = SRTYPE_ARRAY;
     record.sName = sCaption;
     pListRecords->append(record);
 
@@ -569,17 +650,8 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(qint64 nOffset, qint64 nSize, 
 
     read_array(nOffset, state.pData, state.nSize, pPdStruct);
 
-    XBinary::PACKED_UINT puTag = XBinary::_read_packedNumber(state.pData, state.nSize - state.nCurrentOffset);
-
-    if (puTag.bIsValid) {
-        if (puTag.nValue == XSevenZip::k7zIdHeader) {
-            _handleId(&listResult, XSevenZip::k7zIdHeader, &state, pPdStruct);
-        } else if (puTag.nValue == XSevenZip::k7zIdEncodedHeader) {
-            _handleId(&listResult, XSevenZip::k7zIdEncodedHeader, &state, pPdStruct);
-        }
-    } else {
-        state.bIsError = true;
-        state.sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(state.nCurrentOffset), tr("Invalid data"));
+    if (!_handleId(&listResult, XSevenZip::k7zIdHeader, &state, 1, false, pPdStruct)) {
+        _handleId(&listResult, XSevenZip::k7zIdEncodedHeader, &state, 1, true, pPdStruct);
     }
 
     delete[] state.pData;
