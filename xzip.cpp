@@ -361,10 +361,7 @@ XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
         result.fileType = FT_ZIP;
         result.sVersion = getVersion();
         result.sInfo = getInfo();
-
-        if (result.nSize > 0) {
-            result.bIsValid = true;
-        }
+        result.bIsValid = true;
     }
 
     return result;

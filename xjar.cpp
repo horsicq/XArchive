@@ -100,11 +100,11 @@ XBinary::FILEFORMATINFO XJAR::getFileFormatInfo(PDSTRUCT *pPdStruct)
             }
         }
 
-        if (nNumberOfRecords < 20000) {
-            result.nNumberOfRecords = nNumberOfRecords;
-        } else {
-            result.nNumberOfRecords = getNumberOfRecords(pPdStruct);
-        }
+        // if (nNumberOfRecords < 20000) {
+        //     result.nNumberOfRecords = nNumberOfRecords;
+        // } else {
+        //     result.nNumberOfRecords = getNumberOfRecords(pPdStruct);
+        // }
     }
 
     return result;

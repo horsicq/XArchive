@@ -359,13 +359,14 @@ QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
 XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     FILEFORMATINFO result = {};
+    result.nSize = getSize();
 
     qint32 nVersion = getInternVersion(pPdStruct);
 
     if (nVersion) {
         qint64 nCurrentOffset = 0;
 
-        result.nSize = 0;
+        qint64 nFormatSize = 0;
 
         bool bFile = false;
 
@@ -416,7 +417,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                             bFile = true;
                         }
 
-                        result.nSize = qMax(result.nSize, nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize);
+                        nFormatSize = qMax(nFormatSize, nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize);
 
                         nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
                     } else {
@@ -426,7 +427,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                     break;
                 }
 
-                result.nSize = qMax(result.nSize, nCurrentOffset + genericBlock.nHeaderSize);
+                nFormatSize = qMax(nFormatSize, nCurrentOffset + genericBlock.nHeaderSize);
 
                 if (genericBlock.nType == 0x7B) {  // END
                     break;
@@ -463,7 +464,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                             bFile = true;
                         }
 
-                        result.nSize = qMax(result.nSize, nCurrentOffset + (qint64)fileHeader5.nHeaderSize + (qint64)fileHeader5.nDataSize);
+                        nFormatSize = qMax(nFormatSize, nCurrentOffset + (qint64)fileHeader5.nHeaderSize + (qint64)fileHeader5.nDataSize);
                     }
 
                     nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
@@ -471,7 +472,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
                     break;
                 }
 
-                result.nSize = qMax(result.nSize, nCurrentOffset + (qint64)genericHeader.nHeaderSize);
+                nFormatSize = qMax(nFormatSize, nCurrentOffset + (qint64)genericHeader.nHeaderSize);
 
                 if (genericHeader.nType == 5) {  // END
                     break;
@@ -479,7 +480,7 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
             }
         }
 
-        if (result.nSize) {
+        if (nFormatSize) {
             result.bIsValid = true;
         }
 
