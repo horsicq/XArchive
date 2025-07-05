@@ -51,6 +51,7 @@ public:
     virtual QString getFileFormatExt();
     virtual QString getFileFormatExtsString();
     virtual FT getFileType();
+    virtual QString getMIMEString();
 };
 
 #endif  // XGZIP_H

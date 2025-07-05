@@ -215,6 +215,11 @@ QString XGzip::getFileFormatExtsString()
     return "GZIP (*.gz)";
 }
 
+QString XGzip::getMIMEString()
+{
+    return "application/gzip";
+}
+
 XBinary::FT XGzip::getFileType()
 {
     return FT_GZIP;

@@ -41,6 +41,7 @@ public:
     virtual QList<MAPMODE> getMapModesList();
     virtual FT getFileType();
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
+    virtual QString getMIMEString();
 
     XCompressedDevice *getCompressedDevice();
 
