@@ -24,9 +24,8 @@ XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unknown", 
                                             {XRar::STRUCTID_RAR14_SIGNATURE, "RAR14_SIGNATURE", QString("RAR 1.4 signature")},
                                             {XRar::STRUCTID_RAR40_SIGNATURE, "RAR40_SIGNATURE", QString("RAR 4.0 signature")},
                                             {XRar::STRUCTID_RAR50_SIGNATURE, "RAR50_SIGNATURE", QString("RAR 5.0 signature)")},
-                                            {XRar::STRUCTID_RAR14_MAINHEADER, "RAR14_MAINHEADER", QString("RAR 1.4 main header")},
-                                            {XRar::STRUCTID_RAR40_MAINHEADER, "RAR40_MAINHEADER", QString("RAR 4.0 main header")},
-                                            {XRar::STRUCTID_RAR50_MAINHEADER, "RAR50_MAINHEADER", QString("RAR 5.0 main header")}};
+                                            {XRar::STRUCTID_RAR40_HEADER, "RAR40_HEADER", QString("RAR 4.0 header")}};
+
 
 XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -343,6 +342,8 @@ QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                 dataHeader.listRecords.append(getDataRecord(0, 7, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
+
+
             } else if (dataHeadersOptions.nID == STRUCTID_RAR50_SIGNATURE) {
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
 
