@@ -351,22 +351,6 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
     return result;
 }
 
-XBinary::FILEFORMATINFO XZip::getFileFormatInfo(PDSTRUCT *pPdStruct)
-{
-    XBinary::FILEFORMATINFO result = {};
-
-    if (isValid(pPdStruct)) {
-        result.nSize = getSize();
-        result.sExt = "zip";
-        result.fileType = FT_ZIP;
-        result.sVersion = getVersion();
-        result.sInfo = getInfo();
-        result.bIsValid = true;
-    }
-
-    return result;
-}
-
 bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord, PDSTRUCT *pPdStruct)
 {
     XBinary::PDSTRUCT pdStructEmpty = {};
