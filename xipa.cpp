@@ -39,6 +39,11 @@ bool XIPA::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
     return false;
 }
 
+// QString XIPA::getMIMEString()
+// {
+
+// }
+
 bool XIPA::isValid(QIODevice *pDevice)
 {
     XIPA xipa(pDevice);
