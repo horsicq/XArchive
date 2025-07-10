@@ -98,6 +98,7 @@ public:
     CFHEADER readCFHeader(qint64 nOffset);
     CFFOLDER readCFFolder(qint64 nOffset);
     CFDATA readCFData(qint64 nOffset);
+    CFFILE readCFFILE(qint64 nOffset);
 
     virtual FT getFileType();
     virtual QString getFileFormatExt();

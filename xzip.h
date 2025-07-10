@@ -65,7 +65,7 @@ public:
         CMETHOD_BZIP2 = 12,
         CMETHOD_LZMA = 14,
         CMETHOD_PPMD = 98,
-        CMETHOD_LZFSE = 99,  // Apple
+        CMETHOD_LZFSE = 99,  // Apple or AES?
     };
 
 #pragma pack(push)
@@ -164,6 +164,9 @@ public:
     bool isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct);
     bool isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct);
     bool isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct);
+
+    // virtual QString structIDToString(quint32 nID);
+    // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
 
 protected:
     COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);

@@ -67,6 +67,20 @@ quint64 XCab::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return nResult;
 }
 
+XCab::CFFILE XCab::readCFFILE(qint64 nOffset)
+{
+    CFFILE result = {};
+
+    result.cbFile = read_uint16(nOffset + offsetof(CFFILE, cbFile));
+    result.uoffFolderStart = read_uint32(nOffset + offsetof(CFFILE, uoffFolderStart));
+    result.iFolder = read_uint16(nOffset + offsetof(CFFILE, iFolder));
+    result.date = read_uint32(nOffset + offsetof(CFFILE, date));
+    result.time = read_uint32(nOffset + offsetof(CFFILE, time));
+    result.attribs = read_uint16(nOffset + offsetof(CFFILE, attribs));
+
+    return result;
+}
+
 QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
@@ -222,6 +236,21 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         listResult.append(record);
     }
 
+    if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_REGION)) {
+        qint64 nOffset = cfHeader.coffFiles;
+
+        if (nFileParts & FILEPART_HEADER) {
+            XBinary::FPART record = {};
+            record.filePart = FILEPART_HEADER;
+            record.nFileOffset = nOffset;
+            record.nFileSize = sizeof(CFFILE);
+            record.nVirtualAddress = -1;
+            record.sOriginalName = tr("Data");
+
+            listResult.append(record);
+        }
+    }
+
     if (nFileParts & FILEPART_OVERLAY) {
         if (cfHeader.cbCabinet < getSize()) {
             FPART record = {};
@@ -298,6 +327,7 @@ QList<XBinary::MAPMODE> XCab::getMapModesList()
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_DATA);
+    listResult.append(MAPMODE_REGIONS);
 
     return listResult;
 }
@@ -312,6 +342,8 @@ XBinary::_MEMORY_MAP XCab::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if (mapMode == MAPMODE_DATA) {
         result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_REGIONS) {
+        result = _getMemoryMap(FILEPART_HEADER | FILEPART_REGION | FILEPART_OVERLAY, pPdStruct);
     }
 
     return result;
