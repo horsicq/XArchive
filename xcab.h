@@ -111,6 +111,8 @@ public:
     virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues,
                                 PDSTRUCT *pPdStruct);
     virtual QString getMIMEString();
+
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XCAB_H

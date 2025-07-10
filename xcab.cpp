@@ -194,6 +194,51 @@ QString XCab::getMIMEString()
     return "application/vnd.ms-cab-compressed";
 }
 
+QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::FPART> listResult;
+
+    CFHEADER cfHeader = readCFHeader(0);
+
+    if (nFileParts & FILEPART_HEADER) {
+        XBinary::FPART record = {};
+        record.filePart = FILEPART_HEADER;
+        record.nFileOffset = 0;
+        record.nFileSize = sizeof(CFHEADER);
+        record.nVirtualAddress = -1;
+        record.sOriginalName = tr("Cabinet Header");
+
+        listResult.append(record);
+    }
+
+    if (nFileParts & FILEPART_DATA) {
+        XBinary::FPART record = {};
+        record.filePart = FILEPART_DATA;
+        record.nFileOffset = 0;
+        record.nFileSize = qMax((qint64)cfHeader.cbCabinet, getSize());
+        record.nVirtualAddress = -1;
+        record.sOriginalName = tr("Data");
+
+        listResult.append(record);
+    }
+
+    if (nFileParts & FILEPART_OVERLAY) {
+        if (cfHeader.cbCabinet < getSize()) {
+            FPART record = {};
+
+            record.filePart = FILEPART_OVERLAY;
+            record.nFileOffset = cfHeader.cbCabinet;
+            record.nFileSize = getSize() - cfHeader.cbCabinet;
+            record.nVirtualAddress = -1;
+            record.sOriginalName = tr("Overlay");
+
+            listResult.append(record);
+        }
+    }
+
+    return listResult;
+}
+
 QList<XBinary::DATA_HEADER> XCab::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::DATA_HEADER> listResult;
@@ -252,38 +297,22 @@ QList<XBinary::MAPMODE> XCab::getMapModesList()
 {
     QList<MAPMODE> listResult;
 
-    listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_DATA);
 
     return listResult;
 }
 
 XBinary::_MEMORY_MAP XCab::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    _MEMORY_MAP result = {};
-    result.fileType = getFileType();
-    result.nBinarySize = getSize();
-    result.mode = getMode();
-    result.sArch = getArch();
-    result.endian = getEndian();
-    result.sType = typeIdToString(getType());
+    XBinary::_MEMORY_MAP result = {};
 
-    CFHEADER header = readCFHeader(0);
-    qint32 nIndex = 0;
-
-    // Calculate CAB header size
-    qint64 nHeaderSize = sizeof(CFHEADER);
-    if (header.flags & 0x0004) {  // TODO const
-        nHeaderSize += 4;
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_DATA;  // Default mode
     }
 
-    _MEMORY_RECORD recordHeader = {};
-    recordHeader.nAddress = -1;
-    recordHeader.nOffset = 0;
-    recordHeader.nSize = nHeaderSize;
-    recordHeader.nIndex = nIndex++;
-    recordHeader.filePart = FILEPART_HEADER;
-    recordHeader.sName = tr("Cabinet Header");
-    result.listRecords.append(recordHeader);
+    if (mapMode == MAPMODE_DATA) {
+        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    }
 
     return result;
 }
