@@ -20,6 +20,13 @@
  */
 #include "xzip.h"
 
+XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
+    {XZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+    {XZip::STRUCTID_LOCALFILEHEADER, "LocalFileHeader", QString("Local File Header")},
+    {XZip::STRUCTID_CENTRALDIRECTORYFILEHEADER, "CentralDirectoryFileHeader", QString("Central Directory File Header")},
+    {XZip::STRUCTID_ENDOFCENTRALDIRECTORYRECORD, "EndOfCentralDirectoryRecord", QString("End of Central Directory Record")},
+};
+
 XZip::XZip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -576,6 +583,11 @@ bool XZip::isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 bool XZip::isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
     return _isRecordNamePresent(nECDOffset, "META-INF/MANIFEST.MF", "", pPdStruct);
+}
+
+QString XZip::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
 bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct)

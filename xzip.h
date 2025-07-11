@@ -34,6 +34,13 @@ public:
         SIGNATURE_LFD = 0x04034B50
     };
 
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_LOCALFILEHEADER,
+        STRUCTID_CENTRALDIRECTORYFILEHEADER,
+        STRUCTID_ENDOFCENTRALDIRECTORYRECORD,
+    };
+
     //    0 - The file is stored (no compression)
     //    1 - The file is Shrunk
     //    2 - The file is Reduced with compression factor 1
@@ -165,7 +172,7 @@ public:
     bool isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct);
     bool isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct);
 
-    // virtual QString structIDToString(quint32 nID);
+    virtual QString structIDToString(quint32 nID);
     // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
 
 protected:
