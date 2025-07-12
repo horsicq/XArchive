@@ -51,6 +51,7 @@ public:
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
     virtual FT getFileType();
+    virtual QString getMIMEString();
 };
 
 #endif  // XMACHOFAT_H

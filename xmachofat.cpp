@@ -218,6 +218,11 @@ QString XMACHOFat::typeIdToString(qint32 nType)
     return sResult;
 }
 
+QString XMACHOFat::getMIMEString()
+{
+    return "application/x-mach-binary";;
+}
+
 XBinary::FT XMACHOFat::getFileType()
 {
     return FT_MACHOFAT;
