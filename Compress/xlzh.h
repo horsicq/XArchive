@@ -197,7 +197,7 @@ public:
 #define lzh_br_consume(br, n) ((br)->cache_avail -= (n))
 #define lzh_br_unconsume(br, n) ((br)->cache_avail += (n))
 
-    explicit XLZH(QObject *parent = nullptr);
+    explicit XLZH(QObject *pParent = nullptr);
 
     static bool lzh_decode_init(struct lzh_stream *strm, qint32 method);
     static bool lzh_huffman_init(struct lzh_huffman *hf, size_t len_size, qint32 tbl_bits);
