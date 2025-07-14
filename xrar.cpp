@@ -298,6 +298,33 @@ QString XRar::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XRAR_STRUCTID, sizeof(_TABLE_XRAR_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::FPART> listResult;
+
+    qint32 nInternVersion = getInternVersion(pPdStruct);
+
+    if (nFileParts & FILEPART_SIGNATURE) {
+        XBinary::FPART record = {};
+        record.filePart = FILEPART_SIGNATURE;
+        record.nFileOffset = 0;
+        if (nInternVersion == 1) {
+            record.nFileSize = 4;  // RAR 1.4
+        } else if (nInternVersion == 4) {
+            record.nFileSize = 7;  // RAR 4.0
+        } else if (nInternVersion == 5) {
+            record.nFileSize = 8;  // RAR 5.0
+        }
+        record.nFileSize = getSize();
+        record.nVirtualAddress = -1;
+        record.sOriginalName = tr("Header");
+
+        listResult.append(record);
+    }
+
+    return listResult;
+}
+
 QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::DATA_HEADER> listResult;
@@ -313,10 +340,13 @@ QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
 
         if (nVersion == 1) {
             _dataHeadersOptions.nID = STRUCTID_RAR14_SIGNATURE;
+            _dataHeadersOptions.nSize = 4;
         } else if (nVersion == 4) {
             _dataHeadersOptions.nID = STRUCTID_RAR40_SIGNATURE;
+            _dataHeadersOptions.nSize = 7;
         } else if (nVersion == 5) {
             _dataHeadersOptions.nID = STRUCTID_RAR50_SIGNATURE;
+            _dataHeadersOptions.nSize = 8;
         }
 
         _dataHeadersOptions.nLocation = 0;
