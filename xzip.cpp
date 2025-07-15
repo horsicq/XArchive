@@ -569,7 +569,6 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
 bool XZip::isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
     return _isRecordNamePresent(nECDOffset, "classes.dex", "AndroidManifest.xml", pPdStruct);
-    ;
 }
 
 bool XZip::isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct)
@@ -588,6 +587,14 @@ bool XZip::isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 QString XZip::structIDToString(quint32 nID)
 {
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::FPART> listResult;
+
+
+    return listResult;
 }
 
 bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct)
