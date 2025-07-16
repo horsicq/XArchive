@@ -43,25 +43,9 @@ public:
         // TODO more
     };
 
-    enum COMPRESS_METHOD {
-        COMPRESS_METHOD_UNKNOWN = 0,
-        COMPRESS_METHOD_STORE,
-        COMPRESS_METHOD_FILE,  // TODO Check
-        COMPRESS_METHOD_DEFLATE,
-        COMPRESS_METHOD_DEFLATE64,
-        COMPRESS_METHOD_BZIP2,
-        COMPRESS_METHOD_LZMA_ZIP,
-        COMPRESS_METHOD_PPMD,
-        COMPRESS_METHOD_LZH5,
-        COMPRESS_METHOD_LZH6,
-        COMPRESS_METHOD_LZH7,
-        COMPRESS_METHOD_RAR_15,
-        COMPRESS_METHOD_RAR_20,
-        COMPRESS_METHOD_RAR_29,
-        COMPRESS_METHOD_RAR_50,
-        COMPRESS_METHOD_RAR_70,
-        COMPRESS_METHOD_LZSS_SZDD
-        // TODO check more methods
+    struct COMPRESS_INFO {
+        COMPRESS_METHOD compressMethod;
+        QString sOptions;
     };
 
     struct SPINFO {
@@ -150,6 +134,9 @@ public:
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
     virtual bool isArchive();
+    virtual COMPRESS_METHOD getCompressMethod();
+    virtual QString getCompressOptions();
+    virtual COMPRESS_INFO getCompressInfo();
 
 private:
     static bool _writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct);

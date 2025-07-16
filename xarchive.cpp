@@ -999,6 +999,26 @@ bool XArchive::isArchive()
     return true;
 }
 
+QString XArchive::getCompressOptions()
+{
+    return "";
+}
+
+XArchive::COMPRESS_INFO XArchive::getCompressInfo()
+{
+    XArchive::COMPRESS_INFO result = {};
+
+    result.compressMethod = getCompressMethod();
+    result.sOptions = getCompressOptions();
+
+    return result;
+}
+
+XBinary::COMPRESS_METHOD XArchive::getCompressMethod()
+{
+    return COMPRESS_METHOD_UNKNOWN;
+}
+
 bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct)
 {
     bool bResult = true;
