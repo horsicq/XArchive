@@ -66,8 +66,6 @@ public:
 
     virtual QString structIDToString(quint32 nID) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
-    virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues,
-                                PDSTRUCT *pPdStruct) override;
 
     SZDD_HEADER _read_SZDD_HEADER(qint64 nOffset);
 

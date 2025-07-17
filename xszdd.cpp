@@ -244,18 +244,6 @@ QList<XBinary::DATA_HEADER> XSZDD::getDataHeaders(const DATA_HEADERS_OPTIONS &da
     return listResult;
 }
 
-qint32 XSZDD::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(nRow)
-    Q_UNUSED(locType)
-    Q_UNUSED(nLocation)
-    Q_UNUSED(dataRecordsOptions)
-    Q_UNUSED(pListValues)
-    Q_UNUSED(pPdStruct)
-    // No tables in SZDD
-    return 0;
-}
-
 quint64 XSZDD::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
