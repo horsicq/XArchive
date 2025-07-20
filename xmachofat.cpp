@@ -220,7 +220,8 @@ QString XMACHOFat::typeIdToString(qint32 nType)
 
 QString XMACHOFat::getMIMEString()
 {
-    return "application/x-mach-binary";;
+    return "application/x-mach-binary";
+    ;
 }
 
 XBinary::FT XMACHOFat::getFileType()
