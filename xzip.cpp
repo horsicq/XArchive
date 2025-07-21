@@ -125,22 +125,7 @@ quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
     if (nECDOffset != -1) {
         nResult = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
     } else {
-        qint64 nOffset = 0;
-
-        for (qint32 i = 0; isPdStructNotCanceled(pPdStruct); i++) {
-            quint32 nLocalSignature = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nSignature));
-            quint32 nLocalFileNameSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
-            quint32 nLocalExtraFieldSize = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
-            quint32 nCompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
-
-            if (nLocalSignature != SIGNATURE_LFD) {
-                break;
-            }
-
-            nResult++;
-
-            nOffset += sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
-        }
+        nResult = _getNumberOfLocalFileHeaders(0, getSize(), nullptr, pPdStruct);
     }
 
     return nResult;
@@ -862,6 +847,40 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
     }
 
     return false;
+}
+
+qint32 XZip::_getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *pnRealSize, PDSTRUCT *pPdStruct)
+{
+    qint32 nResult = 0;
+
+    if (nOffset != -1) {
+        qint64 nCurrentOffset = nOffset;
+
+        while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+            if ((nCurrentOffset + (qint64)sizeof(LOCALFILEHEADER)) > nSize) {
+                break;
+            }
+
+            quint32 nLocalSignature = read_uint32(nCurrentOffset + offsetof(LOCALFILEHEADER, nSignature));
+            quint32 nLocalFileNameSize = read_uint16(nCurrentOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
+            quint32 nLocalExtraFieldSize = read_uint16(nCurrentOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
+            quint32 nCompressedSize = read_uint32(nCurrentOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
+
+            if (nLocalSignature != SIGNATURE_LFD) {
+                break;
+            }
+
+            nResult++;
+
+            nCurrentOffset += sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
+        }
+
+        if (pnRealSize) {
+            *pnRealSize = nCurrentOffset - nOffset;
+        }
+    }
+
+    return nResult;
 }
 
 XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod)
