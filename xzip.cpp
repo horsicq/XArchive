@@ -574,6 +574,60 @@ QString XZip::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords, PDSTRUCT *pPdStruct)
+{
+    qint32 nResult = 0;
+
+    if (dataRecordsOptions.dataHeader.dsID.nID == STRUCTID_LOCALFILEHEADER) {
+        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pPdStruct);
+
+        qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, locType, nLocation);
+
+        quint32 nLocalSignature = read_uint32(nStartOffset + offsetof(LOCALFILEHEADER, nSignature));
+        quint32 nLocalFileNameSize = read_uint16(nStartOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
+        quint32 nLocalExtraFieldSize = read_uint16(nStartOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
+        quint32 nCompressedSize = read_uint32(nStartOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
+
+        if (nLocalSignature == SIGNATURE_LFD) {
+            nResult = sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
+        }
+    } else {
+        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pPdStruct);
+    }
+
+    return nResult;
+}
+
+XBinary::_MEMORY_MAP XZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
+{
+    XBinary::_MEMORY_MAP result = {};
+
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_DATA;  // Default mode
+    }
+
+    if (mapMode == MAPMODE_REGIONS) {
+        result = _getMemoryMap(FILEPART_HEADER | FILEPART_STREAM | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_STREAMS) {
+        result = _getMemoryMap(FILEPART_STREAM, pPdStruct);
+    } else if (mapMode == MAPMODE_DATA) {
+        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    }
+
+    return result;
+}
+
+QList<XBinary::MAPMODE> XZip::getMapModesList()
+{
+    QList<MAPMODE> listResult;
+
+    listResult.append(MAPMODE_DATA);
+    listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_STREAMS);
+
+    return listResult;
+}
+
 QList<XBinary::DATA_HEADER> XZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::DATA_HEADER> listResult;
@@ -756,6 +810,170 @@ QList<XBinary::DATA_HEADER> XZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
 QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::FPART> listResult;
+
+    qint64 nECDOffset = findECDOffset(pPdStruct);
+    qint64 nMaxOffset = 0;
+    qint64 nTotalSize = getSize();
+
+    if (nECDOffset != -1) {
+        if (nECDOffset <= nTotalSize - sizeof(ENDOFCENTRALDIRECTORYRECORD)) {
+            quint16 nTotalNumberOfRecords = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
+            quint32 nSizeOfCentralDirectory = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nSizeOfCentralDirectory));
+            quint32 nOffsetToCentralDirectory = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
+            qint16 nCommentLength = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+
+            nMaxOffset = qMin(nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + nCommentLength, nTotalSize);
+
+            if (nFileParts & FILEPART_HEADER) {
+                FPART record = {};
+
+                record.filePart = FILEPART_HEADER;
+                record.nFileOffset = nECDOffset;
+                record.nFileSize = nMaxOffset - nECDOffset;
+                record.nVirtualAddress = -1;
+                record.sOriginalName = "End of Central Directory Record";
+
+                listResult.append(record);
+            }
+
+            if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
+                if ((nOffsetToCentralDirectory < nECDOffset) && (nOffsetToCentralDirectory + nSizeOfCentralDirectory <= nECDOffset)) {
+                    qint64 nOffset = nOffsetToCentralDirectory;
+
+                    for (qint32 i = 0; i < nTotalNumberOfRecords && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+                        if (nOffset + sizeof(CENTRALDIRECTORYFILEHEADER) <= nTotalSize) {
+                            CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nOffset, pPdStruct);
+
+                            if (cdh.nSignature == SIGNATURE_CFD) {
+                                if (nFileParts & FILEPART_HEADER) {
+                                    FPART record = {};
+
+                                    record.filePart = FILEPART_HEADER;
+                                    record.nFileOffset = nOffset;
+                                    record.nFileSize = (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
+                                    record.nVirtualAddress = -1;
+                                    record.sOriginalName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
+
+                                    listResult.append(record);
+                                }
+
+                                qint64 nLocalOffset = cdh.nOffsetToLocalFileHeader;
+
+                                if (nLocalOffset < nECDOffset) {
+                                    LOCALFILEHEADER lfh = read_LOCALFILEHEADER(nLocalOffset, pPdStruct);
+
+                                    if (lfh.nSignature == SIGNATURE_LFD) {
+                                        if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
+                                            QString sOriginalName = read_ansiString(nLocalOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
+
+                                            if (nFileParts & FILEPART_HEADER) {
+                                                FPART record = {};
+
+                                                record.filePart = FILEPART_HEADER;
+                                                record.nFileOffset = nLocalOffset;
+                                                record.nFileSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
+                                                record.nVirtualAddress = -1;
+                                                record.sOriginalName = sOriginalName;
+
+                                                listResult.append(record);
+                                            }
+
+                                            if (nFileParts & FILEPART_STREAM) {
+                                                FPART record = {};
+
+                                                record.filePart = FILEPART_STREAM;
+                                                record.nFileOffset = nLocalOffset + sizeof(CENTRALDIRECTORYFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
+                                                record.nFileSize = cdh.nCompressedSize;
+                                                record.nVirtualAddress = -1;
+                                                record.sOriginalName = sOriginalName;
+
+                                                listResult.append(record);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            nOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
+                        }
+                    }
+                }
+            }
+        }
+
+    } else {
+        qint64 nRealSize = 0;
+        qint32 nCount = _getNumberOfLocalFileHeaders(0, nTotalSize, &nRealSize, pPdStruct);
+
+        qint64 nOffset = 0;
+
+        for (qint32 i = 0; i < nCount && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+            if (nOffset + sizeof(LOCALFILEHEADER) <= nTotalSize) {
+                LOCALFILEHEADER lfh = read_LOCALFILEHEADER(nOffset, pPdStruct);
+
+                if (lfh.nSignature == SIGNATURE_LFD) {
+                    if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
+                        QString sOriginalName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
+
+                        if (nFileParts & FILEPART_HEADER) {
+                            FPART record = {};
+
+                            record.filePart = FILEPART_HEADER;
+                            record.nFileOffset = nOffset;
+                            record.nFileSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
+                            record.nVirtualAddress = -1;
+                            record.sOriginalName = sOriginalName;
+
+                            listResult.append(record);
+                        }
+                        if (nFileParts & FILEPART_STREAM) {
+                            FPART record = {};
+
+                            record.filePart = FILEPART_STREAM;
+                            record.nFileOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;;
+                            record.nFileSize = lfh.nCompressedSize;
+                            record.nVirtualAddress = -1;
+                            record.sOriginalName = sOriginalName;
+
+                            listResult.append(record);
+                        }
+                    }
+                } else {
+                    break;
+                }
+
+                nOffset += (sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength + lfh.nCompressedSize);
+            }
+        }
+
+        nMaxOffset = nRealSize;
+    }
+
+    if (nFileParts & FILEPART_DATA) {
+        FPART record = {};
+
+        record.filePart = FILEPART_OVERLAY;
+        record.nFileOffset = 0;
+        record.nFileSize = nMaxOffset;
+        record.nVirtualAddress = -1;
+        record.sOriginalName = tr("Data");
+
+        listResult.append(record);
+    }
+
+    if (nFileParts & FILEPART_OVERLAY) {
+        if (nMaxOffset < getSize()) {
+            FPART record = {};
+
+            record.filePart = FILEPART_OVERLAY;
+            record.nFileOffset = nMaxOffset;
+            record.nFileSize = nTotalSize - nMaxOffset;
+            record.nVirtualAddress = -1;
+            record.sOriginalName = tr("Overlay");
+
+            listResult.append(record);
+        }
+    }
 
     return listResult;
 }
