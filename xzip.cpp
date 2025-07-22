@@ -822,7 +822,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             quint32 nOffsetToCentralDirectory = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
             qint16 nCommentLength = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
 
-            nMaxOffset = qMin(nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + nCommentLength, nTotalSize);
+            nMaxOffset = qMin((qint64)(nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + nCommentLength), nTotalSize);
 
             if (nFileParts & FILEPART_HEADER) {
                 FPART record = {};
