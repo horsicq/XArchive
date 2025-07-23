@@ -574,7 +574,8 @@ QString XZip::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords, PDSTRUCT *pPdStruct)
+qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+                          PDSTRUCT *pPdStruct)
 {
     qint32 nResult = 0;
 
@@ -930,7 +931,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             FPART record = {};
 
                             record.filePart = FILEPART_STREAM;
-                            record.nFileOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;;
+                            record.nFileOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
+                            ;
                             record.nFileSize = lfh.nCompressedSize;
                             record.nVirtualAddress = -1;
                             record.sOriginalName = sOriginalName;
