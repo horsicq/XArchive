@@ -888,6 +888,12 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.nVirtualAddress = -1;
                                                 record.sOriginalName = sOriginalName;
 
+                                                record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(cdh.nMethod));
+                                                record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
+                                                record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
+                                                record.mapProperties.insert(FPART_PROP_CRC, cdh.nCRC32);
+                                                // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(cdh.nLastModDate, cdh.nLastModTime));
+
                                                 listResult.append(record);
                                             }
                                         }
@@ -932,10 +938,15 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                             record.filePart = FILEPART_STREAM;
                             record.nFileOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
-                            ;
                             record.nFileSize = lfh.nCompressedSize;
                             record.nVirtualAddress = -1;
                             record.sOriginalName = sOriginalName;
+
+                            record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(lfh.nMethod));
+                            record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
+                            record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
+                            record.mapProperties.insert(FPART_PROP_CRC, lfh.nCRC32);
+                            // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(lfh.nLastModDate, lfh.nLastModTime));
 
                             listResult.append(record);
                         }
