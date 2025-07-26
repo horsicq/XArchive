@@ -538,7 +538,17 @@ XZip::LOCALFILEHEADER XZip::read_LOCALFILEHEADER(qint64 nOffset, PDSTRUCT *pPdSt
 {
     LOCALFILEHEADER result = {};
 
-    read_array(nOffset, (char *)&result, sizeof(LOCALFILEHEADER), pPdStruct);
+    result.nSignature = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nSignature));
+    result.nMinVersion = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nMinVersion));
+    result.nFlags = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFlags));
+    result.nMethod = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nMethod));
+    result.nLastModTime = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nLastModTime));
+    result.nLastModDate = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nLastModDate));
+    result.nCRC32 = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nCRC32));
+    result.nCompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
+    result.nUncompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nUncompressedSize));
+    result.nFileNameLength = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
+    result.nExtraFieldLength = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
 
     return result;
 }
