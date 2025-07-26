@@ -899,7 +899,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 FPART record = {};
 
                                                 record.filePart = FILEPART_STREAM;
-                                                record.nFileOffset = nLocalOffset + sizeof(CENTRALDIRECTORYFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
+                                                record.nFileOffset = nLocalOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
                                                 record.nFileSize = cdh.nCompressedSize;
                                                 record.nVirtualAddress = -1;
                                                 record.sOriginalName = sOriginalName;
@@ -907,7 +907,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(cdh.nMethod));
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
-                                                record.mapProperties.insert(FPART_PROP_CRC, cdh.nCRC32);
+                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                                                record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
                                                 // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(cdh.nLastModDate, cdh.nLastModTime));
 
                                                 listResult.append(record);
@@ -961,7 +962,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(lfh.nMethod));
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
-                            record.mapProperties.insert(FPART_PROP_CRC, lfh.nCRC32);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                            record.mapProperties.insert(FPART_PROP_CRC_VALUE, lfh.nCRC32);
                             // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(lfh.nLastModDate, lfh.nLastModTime));
 
                             listResult.append(record);
@@ -1149,7 +1151,7 @@ XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod)
         case CMETHOD_DEFLATE: result = COMPRESS_METHOD_DEFLATE; break;
         case CMETHOD_DEFLATE64: result = COMPRESS_METHOD_DEFLATE64; break;  // TODO
         case CMETHOD_BZIP2: result = COMPRESS_METHOD_BZIP2; break;
-        case CMETHOD_LZMA: result = COMPRESS_METHOD_LZMA_ZIP; break;
+        case CMETHOD_LZMA: result = COMPRESS_METHOD_LZMA; break;
         case CMETHOD_PPMD: result = COMPRESS_METHOD_PPMD; break;  // TODO
     }
     // TODO more methods
