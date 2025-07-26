@@ -54,6 +54,7 @@ public:
     explicit XDecompress(QObject *parent = nullptr);
     bool decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset,
                     qint64 nDecompressedLimit, XBinary::PDSTRUCT *pPdStruct);
+    bool checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct);
     bool decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct);
     bool unpackDeviceToFolder(XBinary::FT fileFormat, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct);
 

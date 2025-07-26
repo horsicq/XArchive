@@ -282,7 +282,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         } else {
             result = COMPRESS_RESULT_UNKNOWN;
         }
-    } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZMA_ZIP) {
+    } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZMA) {
         result = COMPRESS_RESULT_OK;
 
         // TODO more error codes
