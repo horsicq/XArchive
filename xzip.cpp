@@ -513,7 +513,23 @@ XZip::CENTRALDIRECTORYFILEHEADER XZip::read_CENTRALDIRECTORYFILEHEADER(qint64 nO
 {
     CENTRALDIRECTORYFILEHEADER result = {};
 
-    read_array(nOffset, (char *)&result, sizeof(CENTRALDIRECTORYFILEHEADER), pPdStruct);
+    result.nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
+    result.nVersion = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nVersion));
+    result.nMinVersion = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nMinVersion));
+    result.nFlags = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFlags));
+    result.nMethod = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nMethod));
+    result.nLastModTime = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nLastModTime));
+    result.nLastModDate = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nLastModDate));
+    result.nCRC32 = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nCRC32));
+    result.nCompressedSize = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nCompressedSize));
+    result.nUncompressedSize = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize));
+    result.nFileNameLength = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength));
+    result.nExtraFieldLength = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength));
+    result.nFileCommentLength = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength));
+    result.nStartDisk = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nStartDisk));
+    result.nInternalFileAttributes = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nInternalFileAttributes));
+    result.nExternalFileAttributes = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nExternalFileAttributes));
+    result.nOffsetToLocalFileHeader = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader));
 
     return result;
 }
