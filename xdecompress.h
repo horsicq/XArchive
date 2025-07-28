@@ -21,29 +21,13 @@
 #ifndef XDECOMPRESS_H
 #define XDECOMPRESS_H
 
+#include "xit214.h"
 #include "xformats.h"
 #include "xthreadobject.h"
 
 class XDecompress : public XThreadObject
 {
     Q_OBJECT
-
-    struct STATE {
-        QIODevice *pDeviceInput;
-        QIODevice *pDeviceOutput;
-        qint64 nInputOffset;
-        qint64 nInputLimit;
-        qint64 nDecompressedOffset;
-        qint64 nDecompressedLimit;
-        XBinary::COMPRESS_METHOD compressMethod;
-        bool bReadError;
-        bool bWriteError;
-        qint64 nCountInput;
-        qint64 nCountOutput;
-    };
-
-    qint32 _readDevice(char *pBuffer, qint32 nBufferSize, STATE *pState);
-    qint32 _writeDevice(char *pBuffer, qint32 nBufferSize, STATE *pState);
 
 public:
     enum MODE {
@@ -55,8 +39,10 @@ public:
     bool decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset,
                     qint64 nDecompressedLimit, XBinary::PDSTRUCT *pPdStruct);
     bool checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct);
-    bool decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct);
+    bool decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
     bool unpackDeviceToFolder(XBinary::FT fileFormat, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct);
+    QByteArray decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
+    qint64 getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
 
     void setData(MODE mode, XBinary::FT fileFormat, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct);
 

@@ -6,6 +6,7 @@ DEPENDPATH += $$PWD/Compress
 HEADERS += \
     $$PWD/Compress/xlzh.h \
     $$PWD/Compress/xrardecoder.h \
+    $$PWD/Compress/xit214.h \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
@@ -36,6 +37,7 @@ HEADERS += \
 SOURCES += \
     $$PWD/Compress/xlzh.cpp \
     $$PWD/Compress/xrardecoder.cpp \
+    $$PWD/Compress/xit214.cpp \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \

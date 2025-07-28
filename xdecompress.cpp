@@ -32,57 +32,6 @@ static void SzFree(ISzAllocPtr, void *address)
 
 static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 
-qint32 XDecompress::_readDevice(char *pBuffer, qint32 nBufferSize, STATE *pState)
-{
-    qint32 nRead = pState->pDeviceInput->read(pBuffer, nBufferSize);
-
-    pState->nCountInput += nRead;
-
-    if (nRead != nBufferSize) {
-        pState->bReadError = true;
-    }
-
-    return nRead;
-}
-
-qint32 XDecompress::_writeDevice(char *pBuffer, qint32 nBufferSize, STATE *pState)
-{
-    qint64 nRealSize = 0;
-    qint64 nSkip = 0;
-
-    if (pState->nDecompressedOffset == 0 && (pState->nDecompressedLimit == -1)) {
-        nRealSize = nBufferSize;
-        nSkip = 0;
-    } else if (pState->nDecompressedOffset > 0) {
-        nSkip = pState->nDecompressedOffset; // TODO fix
-        nRealSize = nBufferSize - nSkip;
-
-        if (nRealSize < 0) {
-            nRealSize = 0;
-        }
-
-        if (pState->nDecompressedLimit != -1) {
-            if ((pState->nDecompressedOffset + nRealSize) > pState->nDecompressedLimit) {
-                nRealSize = pState->nDecompressedLimit - pState->nDecompressedOffset;
-            }
-        }
-    } else {
-        nRealSize = nBufferSize;
-    }
-
-    if ((nRealSize > 0) && (pState->pDeviceOutput)) {
-        qint64 nWritten = pState->pDeviceOutput->write(pBuffer + nSkip, nRealSize);
-
-        if (nWritten != nRealSize) {
-            pState->bWriteError = true;
-        }
-    }
-
-    pState->nCountOutput += nBufferSize;
-
-    return nBufferSize;
-}
-
 XDecompress::XDecompress(QObject *parent)
     : XThreadObject(parent)
 {
@@ -94,7 +43,7 @@ XDecompress::XDecompress(QObject *parent)
 
 bool XDecompress::decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset, qint64 nDecompressedLimit, XBinary::PDSTRUCT *pPdStruct)
 {
-    STATE state = {};
+    XBinary::DECOMPRESS_STATE state = {};
     state.compressMethod = (XBinary::COMPRESS_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
     state.pDeviceInput = pDeviceInput;
     state.pDeviceOutput = pDeviceOutput;
@@ -139,14 +88,17 @@ bool XDecompress::checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBin
     return bResult;
 }
 
-bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
     if (pState->nInputOffset > 0) {
         pState->pDeviceInput->seek(pState->nInputOffset);
     }
-    pState->pDeviceOutput->seek(0);
+
+    if (pState->pDeviceOutput) {
+        pState->pDeviceOutput->seek(0);
+    }
 
     const qint32 N_BUFFER_SIZE = 0x4000;
 
@@ -157,10 +109,10 @@ bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
         for (qint64 nOffset = 0; (nOffset < pState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
             qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - nOffset), N_BUFFER_SIZE);
 
-            qint32 nRead = _readDevice(bufferIn, nBufferSize, pState);
+            qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pState);
 
             if (nRead > 0) {
-                _writeDevice(bufferIn, nRead, pState);
+                XBinary::_writeDevice(bufferIn, nRead, pState);
             } else {
                 break;
             }
@@ -181,7 +133,7 @@ bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
             do {
                 qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - pState->nCountInput), N_BUFFER_SIZE);
 
-                strm.avail_in = _readDevice(bufferIn, nBufferSize, pState);
+                strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pState);
 
                 if (strm.avail_in == 0) {
                     ret = BZ_MEM_ERROR;
@@ -206,7 +158,7 @@ bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
                     qint32 nTemp = N_BUFFER_SIZE - strm.avail_out;
 
                     if (nTemp > 0) {
-                        if (!_writeDevice((char *)bufferOut, nTemp, pState)) {
+                        if (!XBinary::_writeDevice((char *)bufferOut, nTemp, pState)) {
                             ret = BZ_MEM_ERROR;
                             break;
                         }
@@ -226,7 +178,7 @@ bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
             char header1[4] = {};
             quint8 properties[32] = {};
 
-            _readDevice(header1, sizeof(header1), pState);
+            XBinary::_readDevice(header1, sizeof(header1), pState);
             // if (header1[0] != 0x5D || header1[1] != 0x00 || header1[2] != 0x00 || header1[3] != 0x00) {
             //     emit errorMessage(tr("Invalid LZMA header"));
             //     return false;
@@ -234,7 +186,7 @@ bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
             nPropSize = header1[2];  // TODO Check
 
             if (nPropSize && (nPropSize < 30)) {
-                _readDevice((char *)properties, nPropSize, pState);
+                XBinary::_readDevice((char *)properties, nPropSize, pState);
 
                 CLzmaDec state = {};
 
@@ -252,7 +204,7 @@ bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 
                         while (bRun) {
                             qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - pState->nCountInput), N_BUFFER_SIZE);
-                            qint32 nSize = _readDevice(bufferIn, nBufferSize, pState);
+                            qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pState);
 
                             if (nSize) {
                                 qint64 nPos = 0;
@@ -268,7 +220,7 @@ bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 
                                     nPos += inProcessed;
 
-                                    if (!_writeDevice((char *)bufferOut, (qint32)outProcessed, pState)) {
+                                    if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pState)) {
                                         // result = COMPRESS_RESULT_WRITEERROR;
                                         bRun = false;
                                         break;
@@ -294,8 +246,16 @@ bool XDecompress::decompress(STATE *pState, XBinary::PDSTRUCT *pPdStruct)
                 }
             }
         }
+    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT214_8) {
+        bResult = XIT214::decompress(pState, 8, false, pPdStruct);
+    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT214_16) {
+        bResult = XIT214::decompress(pState, 16, false, pPdStruct);
+    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT215_8) {
+        bResult = XIT214::decompress(pState, 8, true, pPdStruct);
+    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT215_16) {
+        bResult = XIT214::decompress(pState, 16, true, pPdStruct);
     } else {
-        emit errorMessage(tr("Unknown compression method"));
+        emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method"), XBinary::compressMethodToString(pState->compressMethod)));
     }
 
     return bResult;
@@ -360,6 +320,59 @@ bool XDecompress::unpackDeviceToFolder(XBinary::FT fileFormat, QIODevice *pDevic
     }
 
     return bResult;
+}
+
+QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct)
+{
+    QByteArray baResult;
+
+    if (pDevice) {
+        QBuffer buffer(&baResult);
+
+        if (buffer.open(QIODevice::ReadWrite)) {
+
+            XBinary::DECOMPRESS_STATE state = {};
+            state.pDeviceInput = pDevice;
+            state.pDeviceOutput = &buffer;
+            state.nInputOffset = nOffset;
+            state.nInputLimit = nSize;
+            state.nDecompressedOffset = 0;
+            state.nDecompressedLimit = -1;
+            state.compressMethod = compressMethod;
+
+            decompress(&state, pPdStruct);
+
+            buffer.close();
+        }
+    }
+
+    return baResult;
+}
+
+qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (nSize == -1) {
+        nSize = pDevice->size() - nOffset;
+    }
+
+    qint64 nResult = 0;
+
+    if (pDevice) {
+        XBinary::DECOMPRESS_STATE state = {};
+        state.pDeviceInput = pDevice;
+        state.pDeviceOutput = nullptr;
+        state.nInputOffset = nOffset;
+        state.nInputLimit = nSize;
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
+        state.compressMethod = compressMethod;
+
+        decompress(&state, pPdStruct);
+
+        nResult = state.nCountInput;
+    }
+
+    return nResult;
 }
 
 void XDecompress::setData(MODE mode, XBinary::FT fileFormat, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
