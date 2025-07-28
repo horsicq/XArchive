@@ -23,8 +23,7 @@
 
 #include "xbinary.h"
 
-class XIT214 : public QObject
-{
+class XIT214 : public QObject {
     Q_OBJECT
 
     struct STATE {
@@ -44,4 +43,4 @@ private:
     static bool readBlock(STATE *pState, XBinary::DECOMPRESS_STATE *pDecompressState);
 };
 
-#endif // XIT214_H
+#endif  // XIT214_H

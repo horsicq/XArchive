@@ -701,10 +701,10 @@ QList<XBinary::DATA_HEADER> XZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
 
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nSignature), sizeof(quint32), "Signature", XBinary::VT_UINT32, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumber), sizeof(quint16), "DiskNumber", XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nStartDisk), sizeof(quint16), "StartDisk", XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumber), sizeof(quint16), "DiskNumber", XBinary::VT_UINT16,
+                                                            DRF_COUNT, XBinary::ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nStartDisk), sizeof(quint16), "StartDisk", XBinary::VT_UINT16,
+                                                            DRF_COUNT, XBinary::ENDIAN_LITTLE));
                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumberOfRecords), sizeof(quint16), "DiskNumberOfRecords",
                                                             XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords), sizeof(quint16), "TotalNumberOfRecords",
@@ -816,12 +816,12 @@ QList<XBinary::DATA_HEADER> XZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                 dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nCRC32), sizeof(quint32), "CRC32", XBinary::VT_UINT32, 0, XBinary::ENDIAN_LITTLE));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(LOCALFILEHEADER, nCompressedSize), sizeof(quint32), "CompressedSize", XBinary::VT_UINT32, DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nUncompressedSize), sizeof(quint32), "UncompressedSize", XBinary::VT_UINT32, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nUncompressedSize), sizeof(quint32), "UncompressedSize", XBinary::VT_UINT32,
+                                                            DRF_SIZE, XBinary::ENDIAN_LITTLE));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(LOCALFILEHEADER, nFileNameLength), sizeof(quint16), "FileNameLength", XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nExtraFieldLength), sizeof(quint16), "ExtraFieldLength", XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nExtraFieldLength), sizeof(quint16), "ExtraFieldLength", XBinary::VT_UINT16,
+                                                            DRF_COUNT, XBinary::ENDIAN_LITTLE));
                 dataHeader.listRecords.append(getDataRecord(sizeof(LOCALFILEHEADER), lfh.nFileNameLength, "FileName", XBinary::VT_CHAR_ARRAY, 0, XBinary::ENDIAN_LITTLE));
                 dataHeader.listRecords.append(
                     getDataRecord(sizeof(LOCALFILEHEADER) + lfh.nFileNameLength, lfh.nExtraFieldLength, "ExtraField", XBinary::VT_BYTE_ARRAY, 0, XBinary::ENDIAN_LITTLE));
@@ -919,7 +919,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
                                                 record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
-                                                // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(cdh.nLastModDate, cdh.nLastModTime));
+                                                // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(cdh.nLastModDate,
+                                                // cdh.nLastModTime));
 
                                                 listResult.append(record);
                                             }

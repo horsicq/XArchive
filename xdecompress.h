@@ -25,8 +25,7 @@
 #include "xformats.h"
 #include "xthreadobject.h"
 
-class XDecompress : public XThreadObject
-{
+class XDecompress : public XThreadObject {
     Q_OBJECT
 
 public:
@@ -36,8 +35,8 @@ public:
     };
 
     explicit XDecompress(QObject *parent = nullptr);
-    bool decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset,
-                    qint64 nDecompressedLimit, XBinary::PDSTRUCT *pPdStruct);
+    bool decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset, qint64 nDecompressedLimit,
+                         XBinary::PDSTRUCT *pPdStruct);
     bool checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct);
     bool decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
     bool unpackDeviceToFolder(XBinary::FT fileFormat, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct);
@@ -56,4 +55,4 @@ private:
     XBinary::PDSTRUCT *g_pPdStruct;
 };
 
-#endif // XDECOMPRESS_H
+#endif  // XDECOMPRESS_H

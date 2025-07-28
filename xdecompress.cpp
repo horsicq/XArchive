@@ -32,8 +32,7 @@ static void SzFree(ISzAllocPtr, void *address)
 
 static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 
-XDecompress::XDecompress(QObject *parent)
-    : XThreadObject(parent)
+XDecompress::XDecompress(QObject *parent) : XThreadObject(parent)
 {
     g_mode = MODE_UNKNOWN;
     g_fileFormat = XBinary::FT_UNKNOWN;
@@ -41,7 +40,8 @@ XDecompress::XDecompress(QObject *parent)
     g_pPdStruct = nullptr;
 }
 
-bool XDecompress::decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset, qint64 nDecompressedLimit, XBinary::PDSTRUCT *pPdStruct)
+bool XDecompress::decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset, qint64 nDecompressedLimit,
+                                  XBinary::PDSTRUCT *pPdStruct)
 {
     XBinary::DECOMPRESS_STATE state = {};
     state.compressMethod = (XBinary::COMPRESS_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
@@ -214,7 +214,8 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
                                     SizeT inProcessed = nSize - nPos;
                                     SizeT outProcessed = N_BUFFER_SIZE;
 
-                                    ret = LzmaDec_DecodeToBuf(&state, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
+                                    ret =
+                                        LzmaDec_DecodeToBuf(&state, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
 
                                     // TODO Check ret
 
@@ -330,7 +331,6 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
         QBuffer buffer(&baResult);
 
         if (buffer.open(QIODevice::ReadWrite)) {
-
             XBinary::DECOMPRESS_STATE state = {};
             state.pDeviceInput = pDevice;
             state.pDeviceOutput = &buffer;
