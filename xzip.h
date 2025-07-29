@@ -182,6 +182,9 @@ public:
     virtual QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
 
+    static QMap<quint64, QString> getHeaderSignatures();
+    static QMap<quint64, QString> getHeaderSignaturesS();
+
 protected:
     COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);
     bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct);

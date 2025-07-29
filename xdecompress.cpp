@@ -247,6 +247,10 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
                 }
             }
         }
+    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_DEFLATE) {
+        bResult = XDeflate::decompress(pState, pPdStruct);
+    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_DEFLATE64) {
+        bResult = XDeflate::decompress64(pState, pPdStruct);
     } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT214_8) {
         bResult = XIT214::decompress(pState, 8, false, pPdStruct);
     } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT214_16) {
@@ -256,23 +260,31 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
     } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT215_16) {
         bResult = XIT214::decompress(pState, 16, true, pPdStruct);
     } else {
+#ifdef QT_DEBUG
+        qDebug() << "Unknown compression method" << XBinary::compressMethodToString(pState->compressMethod);
+#endif
         emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method"), XBinary::compressMethodToString(pState->compressMethod)));
     }
 
     return bResult;
 }
 
-bool XDecompress::unpackDeviceToFolder(XBinary::FT fileFormat, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
+bool XDecompress::unpackDeviceToFolder(XBinary::FT fileType, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (fileType == XBinary::FT_UNKNOWN) {
+        fileType = XBinary::getPrefFileType(pDevice, true);
+    }
+
+    QList<XBinary::FPART> listParts = XFormats::getFileParts(fileType, pDevice, XBinary::FILEPART_STREAM, -1, false, -1, pPdStruct);
+
+    return unpackFilePartsToFolder(&listParts, pDevice, sFolderName, pPdStruct);
+}
+
+bool XDecompress::unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (fileFormat == XBinary::FT_UNKNOWN) {
-        fileFormat = XBinary::getPrefFileType(pDevice, true);
-    }
-
-    QList<XBinary::FPART> listParts = XFormats::getFileParts(fileFormat, pDevice, XBinary::FILEPART_STREAM, -1, false, -1, pPdStruct);
-
-    qint32 nNumberOfParts = listParts.count();
+    qint32 nNumberOfParts = pListParts->count();
 
     if (nNumberOfParts > 0) {
         if (XBinary::createDirectory(sFolderName)) {
@@ -281,9 +293,9 @@ bool XDecompress::unpackDeviceToFolder(XBinary::FT fileFormat, QIODevice *pDevic
             XBinary::setPdStructInit(pPdStruct, nGlobalIndex, nNumberOfParts);
 
             for (qint32 i = 0; (i < nNumberOfParts) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-                XBinary::setPdStructStatus(pPdStruct, nGlobalIndex, listParts.at(i).sOriginalName);
+                XBinary::setPdStructStatus(pPdStruct, nGlobalIndex, pListParts->at(i).sOriginalName);
 
-                QString sResultFileName = sFolderName + QDir::separator() + listParts.at(i).sOriginalName;
+                QString sResultFileName = sFolderName + QDir::separator() + pListParts->at(i).sOriginalName;
 
                 QFileInfo fi(sResultFileName);
                 if (XBinary::createDirectory(fi.absolutePath())) {
@@ -291,12 +303,15 @@ bool XDecompress::unpackDeviceToFolder(XBinary::FT fileFormat, QIODevice *pDevic
                     file.setFileName(sResultFileName);
 
                     if (file.open(QIODevice::ReadWrite)) {
-                        if (!decompressFPART(listParts.at(i), pDevice, &file, 0, -1, pPdStruct)) {
-                            if (!checkCRC(listParts.at(i), &file, pPdStruct)) {
-                                emit warningMessage(QString("%1: %2").arg(tr("Invalid CRC"), listParts.at(i).sOriginalName));
+                        if (!decompressFPART(pListParts->at(i), pDevice, &file, 0, -1, pPdStruct)) {
+                            if (!checkCRC(pListParts->at(i), &file, pPdStruct)) {
+#ifdef QT_DEBUG
+                                qDebug() << "Invalid CRC for" << pListParts->at(i).sOriginalName;
+#endif
+                                emit warningMessage(QString("%1: %2").arg(tr("Invalid CRC"), pListParts->at(i).sOriginalName));
                             }
                         } else {
-                            emit errorMessage(QString("%1: %2").arg(tr("Cannot decompress"), listParts.at(i).sOriginalName));
+                            emit errorMessage(QString("%1: %2").arg(tr("Cannot decompress"), pListParts->at(i).sOriginalName));
                             bResult = false;
                         }
 

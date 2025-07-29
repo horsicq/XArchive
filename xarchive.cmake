@@ -71,4 +71,6 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xrardecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xit214.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xit214.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xdeflate.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xdeflate.h
 )
