@@ -75,7 +75,7 @@ QString XZip::getVersion()
 
     if (nVersion == 0) {
         // The first record
-        nVersion = read_uint16(0 + offsetof(CENTRALDIRECTORYFILEHEADER, nVersion));
+        nVersion = read_uint16(0 + offsetof(LOCALFILEHEADER, nMinVersion));
     }
 
     if (nVersion) {
@@ -108,12 +108,37 @@ bool XZip::isEncrypted()
 
     if (!bSuccess) {
         // The first record
-        quint16 nFlags = read_uint16(offsetof(CENTRALDIRECTORYFILEHEADER, nFlags));
+        quint16 nFlags = read_uint16(offsetof(LOCALFILEHEADER, nFlags));
 
         bResult = (nFlags & 0x1);
     }
 
     return bResult;
+}
+
+QString XZip::getCompressMethodString()
+{
+    QString sResult;
+
+    qint64 nECDOffset = findECDOffset(nullptr);
+
+    quint16 nMethod = -1;
+
+    if (nECDOffset != -1) {
+        qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
+
+        quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
+
+        if (nSignature == SIGNATURE_CFD) {
+            nMethod = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nMethod));
+        }
+    } else {
+        nMethod = read_uint16(0 + offsetof(LOCALFILEHEADER, nMethod));
+    }
+
+    sResult = compressMethodToString(zipToCompressMethod(nMethod));
+
+    return sResult;
 }
 
 quint64 XZip::getNumberOfRecords(PDSTRUCT *pPdStruct)
@@ -1016,7 +1041,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     if (nFileParts & FILEPART_DATA) {
         FPART record = {};
 
-        record.filePart = FILEPART_OVERLAY;
+        record.filePart = FILEPART_DATA;
         record.nFileOffset = 0;
         record.nFileSize = nMaxOffset;
         record.nVirtualAddress = -1;

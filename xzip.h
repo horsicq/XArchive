@@ -149,6 +149,7 @@ public:
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion();
     virtual bool isEncrypted();
+    virtual QString getCompressMethodString();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 

@@ -26,6 +26,7 @@
 
 class XTGZ : public XArchive {
     Q_OBJECT
+
 public:
     explicit XTGZ(QIODevice *pDevice = nullptr);
     ~XTGZ();

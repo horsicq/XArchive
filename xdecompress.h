@@ -21,9 +21,14 @@
 #ifndef XDECOMPRESS_H
 #define XDECOMPRESS_H
 
+#include "LzmaDec.h"
+#include "bzlib.h"
+#include "zlib.h"
+
+#include "xlzh.h"
+#include "xrardecoder.h"
 #include "xit214.h"
 #include "xdeflate.h"
-#include "xformats.h"
 #include "xthreadobject.h"
 
 class XDecompress : public XThreadObject {
@@ -40,7 +45,7 @@ public:
                          XBinary::PDSTRUCT *pPdStruct);
     bool checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct);
     bool decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
-    bool unpackDeviceToFolder(XBinary::FT fileType, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct);
+    // bool unpackDeviceToFolder(XBinary::FT fileType, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct);
     bool unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct);
     QByteArray decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
     qint64 getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);

@@ -22,13 +22,14 @@
 
 XCompressedDevice::XCompressedDevice(QObject *pParent) : XIODevice(pParent)
 {
-    g_pSubDevice = nullptr;
     g_pOrigDevice = nullptr;
-    g_fileType = XBinary::FT_UNKNOWN;
+    g_pSubDevice = nullptr;
+    g_pCurrentDevice = nullptr;
+    g_pBufferDevice = nullptr;
+    g_pTempFile = nullptr;
     g_bIsValid = false;
-    g_nLayerSize = 0;
-    g_nLayerOffset = 0;
-    g_compressMethod = XArchive::COMPRESS_METHOD_UNKNOWN;
+    g_nBufferSize = 2 * 1024 * 1024; // 2 MB buffer size
+    g_pBuffer = nullptr;
 }
 
 XCompressedDevice::~XCompressedDevice()
@@ -37,47 +38,71 @@ XCompressedDevice::~XCompressedDevice()
         g_pSubDevice->close();
         delete g_pSubDevice;
     }
+
+    if (g_pBufferDevice) {
+        g_pBufferDevice->close();
+        delete g_pBufferDevice;
+    }
+
+    if (g_pTempFile) {
+        g_pTempFile->close();
+        delete g_pTempFile;
+    }
+
+    if (g_pBuffer) {
+        delete g_pBuffer;
+        g_pBuffer = nullptr;
+    }
 }
 
-bool XCompressedDevice::setData(QIODevice *pDevice, XBinary::FT fileType)
+bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
     g_pOrigDevice = pDevice;
-    g_fileType = fileType;
 
-    if (fileType == XBinary::FT_GZIP) {
-        XGzip xgzip(g_pOrigDevice);
+    if (fPart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE) != XBinary::COMPRESS_METHOD_STORE) {
+        qint64 nUncompressedSize = fPart.mapProperties.value(XBinary::FPART_PROP_COMPRESSEDSIZE, 0).toLongLong();
 
-        if (xgzip.isValid()) {
-            XBinary::PDSTRUCT pdStruct = XBinary::createPdStruct();
-            QList<XArchive::RECORD> listRecords = xgzip.getRecords(1, &pdStruct);
+        if (nUncompressedSize <= g_nBufferSize) {
+            g_pBufferDevice = new QBuffer;
+            g_pBuffer = new char[nUncompressedSize];
 
-            if (listRecords.count()) {
-                XArchive::RECORD record = listRecords.at(0);
+            if (g_pBuffer) {
+                g_pBufferDevice->setData(g_pBuffer, nUncompressedSize);
 
-                if (g_pSubDevice) {
-                    g_pSubDevice->close();
-                    delete g_pSubDevice;
+                if (g_pBufferDevice->open(QIODevice::ReadWrite)) {
+                    g_pBufferDevice->setProperty("Memory", true);
+                    g_pCurrentDevice = g_pBufferDevice;
+                    bResult = XDecompress().decompressFPART(fPart, pDevice, g_pBufferDevice, 0, -1, pPdStruct);
                 }
+            }
+        } else {
+            g_pTempFile = new QTemporaryFile;
 
-                g_pSubDevice = new SubDevice(g_pOrigDevice, record.nDataOffset, record.nDataSize);
-
-                if (g_pSubDevice->open(QIODevice::ReadOnly)) {
-                    setSize(record.spInfo.nUncompressedSize);
-                    setLayerSize(record.spInfo.nUncompressedSize);
-                    setLayerOffset(record.nDataOffset);
-                    setLayerCompressMethod(XArchive::COMPRESS_METHOD_DEFLATE);
-                    g_bIsValid = true;
-                }
+            if (g_pTempFile->open()) {
+                g_pCurrentDevice = g_pTempFile;
+                bResult = XDecompress().decompressFPART(fPart, pDevice, g_pTempFile, 0, -1, pPdStruct);
+            }
+        }
+    } else {
+        if ((fPart.nFileOffset == 0) && (pDevice->size() == fPart.nFileSize)) {
+            g_pCurrentDevice = g_pOrigDevice;
+            bResult = true;
+        } else {
+            g_pSubDevice = new SubDevice(g_pOrigDevice, fPart.nFileOffset, fPart.nFileSize);
+            if (g_pSubDevice->open(QIODevice::ReadOnly)) {
+                g_pCurrentDevice = g_pSubDevice;
+                bResult = true;
             }
         }
     }
 
-    bResult = g_bIsValid;
+    g_bIsValid = bResult;
 
     return bResult;
 }
+
 
 bool XCompressedDevice::open(OpenMode mode)
 {
@@ -90,68 +115,50 @@ bool XCompressedDevice::open(OpenMode mode)
     return bResult;
 }
 
-void XCompressedDevice::setLayerSize(qint64 nLayerSize)
-{
-    g_nLayerSize = nLayerSize;
-}
-
-qint64 XCompressedDevice::getLayerSize()
-{
-    return g_nLayerSize;
-}
-
-void XCompressedDevice::setLayerOffset(qint64 nLayerOffset)
-{
-    g_nLayerOffset = nLayerOffset;
-}
-
-qint64 XCompressedDevice::getLayerOffset()
-{
-    return g_nLayerOffset;
-}
-
-void XCompressedDevice::setLayerCompressMethod(XArchive::COMPRESS_METHOD compressMethod)
-{
-    g_compressMethod = compressMethod;
-}
-
-XArchive::COMPRESS_METHOD XCompressedDevice::getLayerCompressMethod()
-{
-    return g_compressMethod;
-}
-
 QIODevice *XCompressedDevice::getOrigDevice()
 {
     return g_pOrigDevice;
 }
 
+qint64 XCompressedDevice::size() const
+{
+    qint64 nResult = 0;
+
+    if (g_pCurrentDevice) {
+        nResult = g_pCurrentDevice->size();
+    }
+
+    return nResult;
+}
+
+bool XCompressedDevice::seek(qint64 nPos)
+{
+    bool bResult = false;
+
+    if (g_pCurrentDevice) {
+        bResult = g_pCurrentDevice->seek(nPos) && XIODevice::seek(nPos);
+    }
+
+    return bResult;
+}
+
+qint64 XCompressedDevice::pos() const
+{
+    qint64 nResult = 0;
+
+    if (g_pCurrentDevice) {
+        nResult = g_pCurrentDevice->pos();
+    }
+
+    return nResult;
+}
+
 qint64 XCompressedDevice::readData(char *pData, qint64 nMaxSize)
 {
     qint64 nResult = 0;
-    // #ifdef QT_DEBUG
-    //     qDebug("XCompressedDevice::readData: seekpos %d", (qint32)pos());
-    //     qDebug("XCompressedDevice::readData: size %d", (qint32)nMaxSize);
-    // #endif
-    QBuffer buffer;
 
-    if (buffer.open(QIODevice::ReadWrite)) {
-        g_pSubDevice->seek(0);
-
-        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.spInfo.compressMethod = g_compressMethod;
-        decompressStruct.pSourceDevice = g_pSubDevice;
-        decompressStruct.pDestDevice = &buffer;
-        decompressStruct.nDecompressedOffset = pos();
-        decompressStruct.nDecompressedLimit = nMaxSize;
-
-        XArchive::COMPRESS_RESULT compressResult = XArchive::_decompress(&decompressStruct);
-
-        if ((compressResult == XArchive::COMPRESS_RESULT_OK) && (buffer.size() == decompressStruct.nDecompressedWrote)) {
-            XBinary::_copyMemory(pData, (char *)(buffer.data().data()), decompressStruct.nDecompressedWrote);
-            nResult = decompressStruct.nDecompressedWrote;
-        }
-
-        buffer.close();
+    if (g_pCurrentDevice->seek(pos())) {
+        nResult = g_pCurrentDevice->read(pData, nMaxSize);
     }
 
     return nResult;

@@ -24,6 +24,7 @@
 #include "xiodevice.h"
 #include "subdevice.h"
 #include "xgzip.h"
+#include "xdecompress.h"
 
 class XCompressedDevice : public XIODevice {
     Q_OBJECT
@@ -32,30 +33,28 @@ public:
     explicit XCompressedDevice(QObject *pParent = nullptr);
     ~XCompressedDevice();
 
-    bool setData(QIODevice *pDevice, XBinary::FT fileType);
+    bool setData(QIODevice *pDevice, const XBinary::FPART &fPart, XBinary::PDSTRUCT *pPdStruct);
     virtual bool open(OpenMode mode);
 
-    void setLayerSize(qint64 nLayerSize);
-    qint64 getLayerSize();
-    void setLayerOffset(qint64 nLayerOffset);
-    qint64 getLayerOffset();
-    void setLayerCompressMethod(XArchive::COMPRESS_METHOD compressMethod);
-    XArchive::COMPRESS_METHOD getLayerCompressMethod();
-
     QIODevice *getOrigDevice();
+
+    virtual qint64 size() const;
+    virtual bool seek(qint64 nPos);
+    virtual qint64 pos() const;
 
 protected:
     virtual qint64 readData(char *pData, qint64 nMaxSize);
     virtual qint64 writeData(const char *pData, qint64 nMaxSize);
 
 private:
-    SubDevice *g_pSubDevice;
     QIODevice *g_pOrigDevice;
-    XBinary::FT g_fileType;
+    SubDevice *g_pSubDevice;
+    QBuffer *g_pBufferDevice;
+    QTemporaryFile *g_pTempFile;
+    QIODevice *g_pCurrentDevice;
     bool g_bIsValid;
-    qint64 g_nLayerSize;
-    qint64 g_nLayerOffset;
-    XArchive::COMPRESS_METHOD g_compressMethod;
+    qint32 g_nBufferSize;
+    char *g_pBuffer;
 };
 
 #endif  // XCOMPRESSEDDEVICE_H

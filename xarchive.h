@@ -134,9 +134,6 @@ public:
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
     virtual bool isArchive();
-    virtual COMPRESS_METHOD getCompressMethod();
-    virtual QString getCompressOptions();
-    virtual COMPRESS_INFO getCompressInfo();
 
 private:
     static bool _writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct);

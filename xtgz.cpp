@@ -58,16 +58,16 @@ bool XTGZ::isValid(QIODevice *pDevice)
 
 void XTGZ::setDevice(QIODevice *pDevice)
 {
-    g_pCompressedDevice->setData(pDevice, FT_GZIP);
+    // if (g_pCompressedDevice->setData(pDevice, )) {
+    //     if (g_pCompressedDevice->isOpen()) {
+    //         g_pCompressedDevice->close();
+    //     }
 
-    if (g_pCompressedDevice->isOpen()) {
-        g_pCompressedDevice->close();
-    }
-
-    if (g_pCompressedDevice->open(QIODevice::ReadOnly)) {
-        XBinary::setDevice(pDevice);
-        g_pXtar->setDevice(g_pCompressedDevice);
-    }
+    //     if (g_pCompressedDevice->open(QIODevice::ReadOnly)) {
+    //         XBinary::setDevice(pDevice);
+    //         g_pXtar->setDevice(g_pCompressedDevice);
+    //     }
+    // }
 }
 
 quint64 XTGZ::getNumberOfRecords(PDSTRUCT *pPdStruct)

@@ -90,7 +90,7 @@ bool XDecompress::checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBin
 
 bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    bool bResult = true;
 
     if (pState->nInputOffset > 0) {
         pState->pDeviceInput->seek(pState->nInputOffset);
@@ -269,16 +269,16 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
     return bResult;
 }
 
-bool XDecompress::unpackDeviceToFolder(XBinary::FT fileType, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
-{
-    if (fileType == XBinary::FT_UNKNOWN) {
-        fileType = XBinary::getPrefFileType(pDevice, true);
-    }
+// bool XDecompress::unpackDeviceToFolder(XBinary::FT fileType, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
+// {
+//     if (fileType == XBinary::FT_UNKNOWN) {
+//         fileType = XBinary::getPrefFileType(pDevice, true);
+//     }
 
-    QList<XBinary::FPART> listParts = XFormats::getFileParts(fileType, pDevice, XBinary::FILEPART_STREAM, -1, false, -1, pPdStruct);
+//     QList<XBinary::FPART> listParts = XFormats::getFileParts(fileType, pDevice, XBinary::FILEPART_STREAM, -1, false, -1, pPdStruct);
 
-    return unpackFilePartsToFolder(&listParts, pDevice, sFolderName, pPdStruct);
-}
+//     return unpackFilePartsToFolder(&listParts, pDevice, sFolderName, pPdStruct);
+// }
 
 bool XDecompress::unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
 {
@@ -403,9 +403,9 @@ void XDecompress::process()
 {
     if (g_mode == MODE_UNPACKDEVICETOFOLDER) {
         if (g_pDevice) {
-            if (!unpackDeviceToFolder(g_fileFormat, g_pDevice, g_sFolderName, g_pPdStruct)) {
-                emit errorMessage(tr("Cannot unpack"));
-            }
+            // if (!unpackDeviceToFolder(g_fileFormat, g_pDevice, g_sFolderName, g_pPdStruct)) {
+            //     emit errorMessage(tr("Cannot unpack"));
+            // }
         }
     }
 }
