@@ -42,8 +42,6 @@ public:
     virtual ENDIAN getEndian();
     virtual qint32 getType();
     virtual QString getFileFormatExt();
-
-signals:
 };
 
 #endif  // XDOS16_H

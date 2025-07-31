@@ -34,17 +34,14 @@ static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 
 XDecompress::XDecompress(QObject *parent) : XThreadObject(parent)
 {
-    g_mode = MODE_UNKNOWN;
-    g_fileFormat = XBinary::FT_UNKNOWN;
-    g_pDevice = nullptr;
-    g_pPdStruct = nullptr;
+
 }
 
 bool XDecompress::decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset, qint64 nDecompressedLimit,
                                   XBinary::PDSTRUCT *pPdStruct)
 {
     XBinary::DECOMPRESS_STATE state = {};
-    state.compressMethod = (XBinary::COMPRESS_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
+    state.mapProperties = fpart.mapProperties;
     state.pDeviceInput = pDeviceInput;
     state.pDeviceOutput = pDeviceOutput;
     state.nInputOffset = fpart.nFileOffset;
@@ -105,7 +102,12 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
     char bufferIn[N_BUFFER_SIZE];
     char bufferOut[N_BUFFER_SIZE];
 
-    if (pState->compressMethod == XBinary::COMPRESS_METHOD_STORE) {
+    XBinary::COMPRESS_METHOD compressMethod = (XBinary::COMPRESS_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
+
+    // state.compressMethod = (XBinary::COMPRESS_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
+    // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
+
+    if (compressMethod == XBinary::COMPRESS_METHOD_STORE) {
         for (qint64 nOffset = 0; (nOffset < pState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
             qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - nOffset), N_BUFFER_SIZE);
 
@@ -123,7 +125,7 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
 
             nOffset += nRead;
         }
-    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
         bz_stream strm = {};
         qint32 ret = BZ_MEM_ERROR;
 
@@ -172,7 +174,7 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
 
             BZ2_bzDecompressEnd(&strm);
         }
-    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
         if (pState->nInputLimit >= 4) {
             qint32 nPropSize = 0;
             char header1[4] = {};
@@ -247,38 +249,29 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
                 }
             }
         }
-    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_DEFLATE) {
-        bResult = XDeflate::decompress(pState, pPdStruct);
-    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_DEFLATE64) {
-        bResult = XDeflate::decompress64(pState, pPdStruct);
-    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT214_8) {
-        bResult = XIT214::decompress(pState, 8, false, pPdStruct);
-    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT214_16) {
-        bResult = XIT214::decompress(pState, 16, false, pPdStruct);
-    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT215_8) {
-        bResult = XIT214::decompress(pState, 8, true, pPdStruct);
-    } else if (pState->compressMethod == XBinary::COMPRESS_METHOD_IT215_16) {
-        bResult = XIT214::decompress(pState, 16, true, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE) {
+        bResult = XDeflateDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE64) {
+        bResult = XDeflateDecoder::decompress64(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IT214_8) {
+        bResult = XIT214Decoder::decompress(pState, 8, false, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IT214_16) {
+        bResult = XIT214Decoder::decompress(pState, 16, false, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IT215_8) {
+        bResult = XIT214Decoder::decompress(pState, 8, true, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IT215_16) {
+        bResult = XIT214Decoder::decompress(pState, 16, true, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED) {
+        bResult = XImplodeDecoder::decompress(pState, pPdStruct);
     } else {
 #ifdef QT_DEBUG
-        qDebug() << "Unknown compression method" << XBinary::compressMethodToString(pState->compressMethod);
+        qDebug() << "Unknown compression method" << XBinary::compressMethodToString(compressMethod);
 #endif
-        emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method"), XBinary::compressMethodToString(pState->compressMethod)));
+        emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method"), XBinary::compressMethodToString(compressMethod)));
     }
 
     return bResult;
 }
-
-// bool XDecompress::unpackDeviceToFolder(XBinary::FT fileType, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
-// {
-//     if (fileType == XBinary::FT_UNKNOWN) {
-//         fileType = XBinary::getPrefFileType(pDevice, true);
-//     }
-
-//     QList<XBinary::FPART> listParts = XFormats::getFileParts(fileType, pDevice, XBinary::FILEPART_STREAM, -1, false, -1, pPdStruct);
-
-//     return unpackFilePartsToFolder(&listParts, pDevice, sFolderName, pPdStruct);
-// }
 
 bool XDecompress::unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
 {
@@ -303,7 +296,7 @@ bool XDecompress::unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIO
                     file.setFileName(sResultFileName);
 
                     if (file.open(QIODevice::ReadWrite)) {
-                        if (!decompressFPART(pListParts->at(i), pDevice, &file, 0, -1, pPdStruct)) {
+                        if (decompressFPART(pListParts->at(i), pDevice, &file, 0, -1, pPdStruct)) {
                             if (!checkCRC(pListParts->at(i), &file, pPdStruct)) {
 #ifdef QT_DEBUG
                                 qDebug() << "Invalid CRC for" << pListParts->at(i).sOriginalName;
@@ -311,6 +304,9 @@ bool XDecompress::unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIO
                                 emit warningMessage(QString("%1: %2").arg(tr("Invalid CRC"), pListParts->at(i).sOriginalName));
                             }
                         } else {
+#ifdef QT_DEBUG
+                            qDebug() << "Cannot decompress" << pListParts->at(i).sOriginalName;
+#endif
                             emit errorMessage(QString("%1: %2").arg(tr("Cannot decompress"), pListParts->at(i).sOriginalName));
                             bResult = false;
                         }
@@ -353,7 +349,7 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
             state.nInputLimit = nSize;
             state.nDecompressedOffset = 0;
             state.nDecompressedLimit = -1;
-            state.compressMethod = compressMethod;
+            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
 
             decompress(&state, pPdStruct);
 
@@ -380,7 +376,7 @@ qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qi
         state.nInputLimit = nSize;
         state.nDecompressedOffset = 0;
         state.nDecompressedLimit = -1;
-        state.compressMethod = compressMethod;
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
 
         decompress(&state, pPdStruct);
 
@@ -390,22 +386,7 @@ qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qi
     return nResult;
 }
 
-void XDecompress::setData(MODE mode, XBinary::FT fileFormat, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct)
-{
-    g_mode = mode;
-    g_fileFormat = fileFormat;
-    g_pDevice = pDevice;
-    g_sFolderName = sFolderName;
-    g_pPdStruct = pPdStruct;
-}
-
 void XDecompress::process()
 {
-    if (g_mode == MODE_UNPACKDEVICETOFOLDER) {
-        if (g_pDevice) {
-            // if (!unpackDeviceToFolder(g_fileFormat, g_pDevice, g_sFolderName, g_pPdStruct)) {
-            //     emit errorMessage(tr("Cannot unpack"));
-            // }
-        }
-    }
+
 }

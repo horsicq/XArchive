@@ -386,7 +386,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             nMethod = 7;
         }
 
-        XLZH::lzh_stream strm = {};
+        XLZHDecoder::lzh_stream strm = {};
 
         qint32 ret = LZH_ARCHIVE_OK;
 
@@ -400,7 +400,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
         result = COMPRESS_RESULT_OK;
 
-        if (XLZH::lzh_decode_init(&strm, nMethod)) {
+        if (XLZHDecoder::lzh_decode_init(&strm, nMethod)) {
             strm.avail_in = pDecompressStruct->pSourceDevice->read((char *)pInBuffer, nBufferSize);  // We read from Device so if size < nBufferSize is OK
 
             if (strm.avail_in) {
@@ -411,7 +411,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 // strm.ref_ptr = out;
 
                 while (isPdStructNotCanceled(pPdStruct)) {
-                    ret = XLZH::lzh_decode(&strm, true);
+                    ret = XLZHDecoder::lzh_decode(&strm, true);
 
                     if (ret == LZH_ARCHIVE_FAILED) {
                         break;
@@ -435,7 +435,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 // }
             }
 
-            XLZH::lzh_decode_free(&strm);
+            XLZHDecoder::lzh_decode_free(&strm);
         }
 
         free(pInBuffer);

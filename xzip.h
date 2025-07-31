@@ -67,6 +67,7 @@ public:
 
     enum CMETHOD {
         CMETHOD_STORE = 0,
+        CMETHOD_IMPLODED = 6,
         CMETHOD_DEFLATE = 8,
         CMETHOD_DEFLATE64 = 9,
         CMETHOD_BZIP2 = 12,

@@ -120,6 +120,8 @@ QString XZip::getCompressMethodString()
 {
     QString sResult;
 
+    QSet<quint16> stMethods;
+
     qint64 nECDOffset = findECDOffset(nullptr);
 
     quint16 nMethod = -1;
@@ -127,16 +129,63 @@ QString XZip::getCompressMethodString()
     if (nECDOffset != -1) {
         qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
-        quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
+        for (int i = 0; i < 20; i++) {
+            quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
 
-        if (nSignature == SIGNATURE_CFD) {
-            nMethod = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nMethod));
+            if (nSignature == SIGNATURE_CFD) {
+                nMethod = read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nMethod));
+                quint32 nUncompressedSize = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize));
+
+                if (nUncompressedSize > 0) {
+                    stMethods.insert(nMethod);
+                }
+
+                nOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength)) +
+                            read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength)) +
+                            read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength)));
+            } else {
+                break;
+            }
         }
     } else {
-        nMethod = read_uint16(0 + offsetof(LOCALFILEHEADER, nMethod));
+        qint64 nOffset = 0;
+
+        for (int i = 0; i < 20; i++) {
+            quint32 nSignature = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nSignature));
+
+            if (nSignature == SIGNATURE_CFD) {
+                nMethod = read_uint16(nOffset + offsetof(LOCALFILEHEADER, nMethod));
+                quint32 nUncompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nUncompressedSize));
+
+                if (nUncompressedSize > 0) {
+                    stMethods.insert(nMethod);
+                }
+
+                nOffset += (sizeof(LOCALFILEHEADER) + read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength)) +
+                            read_uint16(nOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength)));
+            } else {
+                break;
+            }
+        }
     }
 
-    sResult = compressMethodToString(zipToCompressMethod(nMethod));
+    // Iterate QSet
+
+    QSetIterator<quint16> i(stMethods);
+    while (i.hasNext()) {
+        quint16 nMethod = i.next();
+        COMPRESS_METHOD cm = zipToCompressMethod(nMethod);
+
+        QString sMethod;
+
+        if (cm != COMPRESS_METHOD_UNKNOWN) {
+            sMethod = compressMethodToString(cm);
+        } else {
+            sMethod = QString("0x%1").arg(nMethod, 4, 16, QChar('0'));
+        }
+
+        sResult = XBinary::appendText(sResult, sMethod, ", ");
+    }
 
     return sResult;
 }
@@ -966,6 +1015,11 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
                                                 record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
+
+                                                if (cdh.nFlags & 0x01) record.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
+                                                if (cdh.nFlags & 0x02) record.mapProperties.insert(FPART_PROP_COMPRESSION_OPTION_0, true);
+                                                if (cdh.nFlags & 0x04) record.mapProperties.insert(FPART_PROP_COMPRESSION_OPTION_1, true);
+
                                                 // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(cdh.nLastModDate,
                                                 // cdh.nLastModTime));
 
@@ -1206,6 +1260,7 @@ XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod)
 
     switch (nZipMethod) {
         case CMETHOD_STORE: result = COMPRESS_METHOD_STORE; break;
+        case CMETHOD_IMPLODED: result = COMPRESS_METHOD_IMPLODED; break;
         case CMETHOD_DEFLATE: result = COMPRESS_METHOD_DEFLATE; break;
         case CMETHOD_DEFLATE64: result = COMPRESS_METHOD_DEFLATE64; break;  // TODO
         case CMETHOD_BZIP2: result = COMPRESS_METHOD_BZIP2; break;

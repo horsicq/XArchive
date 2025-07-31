@@ -65,12 +65,22 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xbzip2.h
     ${CMAKE_CURRENT_LIST_DIR}/xxz.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xxz.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzh.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzh.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzhdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzhdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xrardecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xrardecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xit214.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xit214.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xdeflate.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xdeflate.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xit214decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xit214decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xdeflatedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xdeflatedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/ximplodedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/ximplodedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzmadecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzmadecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xstoredecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xstoredecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xbzip2decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xbzip2decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzssdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzssdecoder.h
 )

@@ -29,7 +29,7 @@
 #include "Ppmd7.h"
 #endif
 #include "xcompress.h"
-#include "Compress/xlzh.h"
+#include "Compress/xlzhdecoder.h"
 #include "Compress/xrardecoder.h"
 
 class XArchive : public XBinary {

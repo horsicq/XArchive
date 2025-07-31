@@ -4,10 +4,15 @@ INCLUDEPATH += $$PWD/Compress
 DEPENDPATH += $$PWD/Compress
 
 HEADERS += \
-    $$PWD/Compress/xlzh.h \
+    $$PWD/Compress/xlzhdecoder.h \
     $$PWD/Compress/xrardecoder.h \
-    $$PWD/Compress/xit214.h \
-    $$PWD/Compress/xdeflate.h \
+    $$PWD/Compress/xit214decoder.h \
+    $$PWD/Compress/xdeflatedecoder.h \
+    $$PWD/Compress/ximplodedecoder.h \
+    $$PWD/Compress/xlzmadecoder.h \
+    $$PWD/Compress/xstoredecoder.h \
+    $$PWD/Compress/xbzip2decoder.h \
+    $$PWD/Compress/xlzssdecoder.h \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
@@ -36,10 +41,15 @@ HEADERS += \
     $$PWD/xzlib.h
 
 SOURCES += \
-    $$PWD/Compress/xlzh.cpp \
+    $$PWD/Compress/xlzhdecoder.cpp \
     $$PWD/Compress/xrardecoder.cpp \
-    $$PWD/Compress/xit214.cpp \
-    $$PWD/Compress/xdeflate.cpp \
+    $$PWD/Compress/xit214decoder.cpp \
+    $$PWD/Compress/xdeflatedecoder.cpp \
+    $$PWD/Compress/ximplodedecoder.cpp \
+    $$PWD/Compress/xlzmadecoder.cpp \
+    $$PWD/Compress/xstoredecoder.cpp \
+    $$PWD/Compress/xbzip2decoder.cpp \
+    $$PWD/Compress/xlzssdecoder.cpp \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \
