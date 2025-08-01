@@ -191,7 +191,8 @@ QString XCab::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XCAB_STRUCTID, sizeof(_TABLE_XCAB_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-qint32 XCab::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues, void *pUserData, PDSTRUCT *pPdStruct)
+qint32 XCab::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues, void *pUserData,
+                          PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nRow)
     Q_UNUSED(locType)

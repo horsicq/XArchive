@@ -25,8 +25,7 @@
 #include <QIODevice>
 #include "../xbinary.h"
 
-class XReduceDecoder : public QObject
-{
+class XReduceDecoder : public QObject {
     Q_OBJECT
 
 public:
@@ -35,4 +34,4 @@ public:
     static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32 nFactor, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
-#endif // XREDUCEDECODER_H
+#endif  // XREDUCEDECODER_H

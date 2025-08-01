@@ -669,8 +669,8 @@ QString XZip::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords, void *pUserData,
-                          PDSTRUCT *pPdStruct)
+qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+                          void *pUserData, PDSTRUCT *pPdStruct)
 {
     qint32 nResult = 0;
 
@@ -903,8 +903,7 @@ QList<XBinary::DATA_HEADER> XZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                                                               XBinary::ENDIAN_LITTLE, XZip::getHeaderSignaturesS(), VL_TYPE_LIST));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(LOCALFILEHEADER, nMinVersion), sizeof(quint8), "MinVersion", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nMinOS), sizeof(quint8), "MinOS", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nMinOS), sizeof(quint8), "MinOS", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
                 dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nFlags), sizeof(quint16), "Flags", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(LOCALFILEHEADER, nMethod), sizeof(quint16), "Method", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
@@ -1271,22 +1270,20 @@ XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 
         case CMETHOD_REDUCED_3: result = COMPRESS_METHOD_REDUCE_3; break;
         case CMETHOD_REDUCED_4: result = COMPRESS_METHOD_REDUCE_4; break;
 
-        case CMETHOD_IMPLODED:
-            {
-                bool b8kdict = (nFlags & 0x02) ? true : false;
-                bool b3tree = (nFlags & 0x04) ? true : false;
+        case CMETHOD_IMPLODED: {
+            bool b8kdict = (nFlags & 0x02) ? true : false;
+            bool b3tree = (nFlags & 0x04) ? true : false;
 
-                if (!b8kdict && !b3tree) {
-                    result = COMPRESS_METHOD_IMPLODED_4KDICT_2TREES;
-                } else if (!b8kdict && b3tree) {
-                    result = COMPRESS_METHOD_IMPLODED_4KDICT_3TREES;
-                } else if (b8kdict && !b3tree) {
-                    result = COMPRESS_METHOD_IMPLODED_8KDICT_2TREES;
-                } else if (b8kdict && b3tree) {
-                    result = COMPRESS_METHOD_IMPLODED_8KDICT_3TREES;
-                }
+            if (!b8kdict && !b3tree) {
+                result = COMPRESS_METHOD_IMPLODED_4KDICT_2TREES;
+            } else if (!b8kdict && b3tree) {
+                result = COMPRESS_METHOD_IMPLODED_4KDICT_3TREES;
+            } else if (b8kdict && !b3tree) {
+                result = COMPRESS_METHOD_IMPLODED_8KDICT_2TREES;
+            } else if (b8kdict && b3tree) {
+                result = COMPRESS_METHOD_IMPLODED_8KDICT_3TREES;
             }
-            break;
+        } break;
         case CMETHOD_DEFLATE: result = COMPRESS_METHOD_DEFLATE; break;
         case CMETHOD_DEFLATE64: result = COMPRESS_METHOD_DEFLATE64; break;  // TODO
         case CMETHOD_BZIP2: result = COMPRESS_METHOD_BZIP2; break;
