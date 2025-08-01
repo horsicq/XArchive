@@ -20,8 +20,7 @@
  */
 #include "xlzssdecoder.h"
 
-XLZSSDecoder::XLZSSDecoder(QObject *parent)
-    : QObject(parent)
+XLZSSDecoder::XLZSSDecoder(QObject *parent) : QObject(parent)
 {
 }
 
@@ -30,9 +29,7 @@ bool XLZSSDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBina
     bool bResult = false;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-
     }
 
     return bResult;
 }
-

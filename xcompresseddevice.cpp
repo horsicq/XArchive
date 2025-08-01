@@ -28,7 +28,7 @@ XCompressedDevice::XCompressedDevice(QObject *pParent) : XIODevice(pParent)
     g_pBufferDevice = nullptr;
     g_pTempFile = nullptr;
     g_bIsValid = false;
-    g_nBufferSize = 2 * 1024 * 1024; // 2 MB buffer size
+    g_nBufferSize = 2 * 1024 * 1024;  // 2 MB buffer size
     g_pBuffer = nullptr;
 }
 
@@ -102,7 +102,6 @@ bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart,
 
     return bResult;
 }
-
 
 bool XCompressedDevice::open(OpenMode mode)
 {

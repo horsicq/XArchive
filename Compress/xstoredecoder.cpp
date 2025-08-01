@@ -20,8 +20,7 @@
  */
 #include "xstoredecoder.h"
 
-XStoreDecoder::XStoreDecoder(QObject *parent)
-    : QObject(parent)
+XStoreDecoder::XStoreDecoder(QObject *parent) : QObject(parent)
 {
 }
 
@@ -30,7 +29,6 @@ bool XStoreDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBin
     bool bResult = false;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-
     }
 
     return bResult;

@@ -34,7 +34,6 @@ static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 
 XDecompress::XDecompress(QObject *parent) : XThreadObject(parent)
 {
-
 }
 
 bool XDecompress::decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset, qint64 nDecompressedLimit,
@@ -102,7 +101,8 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
     char bufferIn[N_BUFFER_SIZE];
     char bufferOut[N_BUFFER_SIZE];
 
-    XBinary::COMPRESS_METHOD compressMethod = (XBinary::COMPRESS_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
+    XBinary::COMPRESS_METHOD compressMethod =
+        (XBinary::COMPRESS_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
 
     // state.compressMethod = (XBinary::COMPRESS_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
     // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
@@ -388,5 +388,4 @@ qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qi
 
 void XDecompress::process()
 {
-
 }

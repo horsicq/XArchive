@@ -24,8 +24,7 @@
 #include "xbinary.h"
 #include <zutil.h>
 
-class XDeflateDecoder : public QObject
-{
+class XDeflateDecoder : public QObject {
     Q_OBJECT
 public:
     explicit XDeflateDecoder(QObject *parent = nullptr);
@@ -35,4 +34,4 @@ public:
 signals:
 };
 
-#endif // XDEFLATEDECODER_H
+#endif  // XDEFLATEDECODER_H

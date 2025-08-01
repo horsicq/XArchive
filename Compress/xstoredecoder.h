@@ -23,8 +23,7 @@
 
 #include "xbinary.h"
 
-class XStoreDecoder : public QObject
-{
+class XStoreDecoder : public QObject {
     Q_OBJECT
 
 public:
@@ -32,4 +31,4 @@ public:
     static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
-#endif // XSTOREDECODER_H
+#endif  // XSTOREDECODER_H

@@ -24,8 +24,7 @@
 #include "xbinary.h"
 #include "LzmaDec.h"
 
-class XLZMADecoder : public QObject
-{
+class XLZMADecoder : public QObject {
     Q_OBJECT
 
 public:
@@ -33,4 +32,4 @@ public:
     static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
-#endif // XLZMADECODER_H
+#endif  // XLZMADECODER_H

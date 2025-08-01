@@ -25,8 +25,7 @@
 #include <QIODevice>
 #include "../xbinary.h"
 
-class XLZSSDecoder : public QObject
-{
+class XLZSSDecoder : public QObject {
     Q_OBJECT
 
 public:
@@ -35,4 +34,4 @@ public:
     static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
-#endif // XLZSSDECODER_H
+#endif  // XLZSSDECODER_H

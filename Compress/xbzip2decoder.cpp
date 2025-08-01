@@ -24,8 +24,7 @@
 #include <bzlib.h>
 #endif
 
-XBZIP2Decoder::XBZIP2Decoder(QObject *parent)
-    : QObject(parent)
+XBZIP2Decoder::XBZIP2Decoder(QObject *parent) : QObject(parent)
 {
 }
 
@@ -34,7 +33,6 @@ bool XBZIP2Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBin
     bool bResult = false;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-
     }
 
     return bResult;

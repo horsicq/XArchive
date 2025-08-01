@@ -24,8 +24,7 @@
 #include "bzlib.h"
 #include "../xbinary.h"
 
-class XBZIP2Decoder : public QObject
-{
+class XBZIP2Decoder : public QObject {
     Q_OBJECT
 
 public:
@@ -34,4 +33,4 @@ public:
     static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
-#endif // XBZIP2DECODER_H
+#endif  // XBZIP2DECODER_H
