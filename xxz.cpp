@@ -262,7 +262,7 @@ QList<XBinary::DATA_HEADER> XXZ::getDataHeaders(const DATA_HEADERS_OPTIONS &data
     return listResult;
 }
 
-qint32 XXZ::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues, PDSTRUCT *pPdStruct)
+qint32 XXZ::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues, void *pUserData, PDSTRUCT *pPdStruct)
 {
     // No table rows defined for basic headers
     Q_UNUSED(nRow)
@@ -270,6 +270,7 @@ qint32 XXZ::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RE
     Q_UNUSED(nLocation)
     Q_UNUSED(dataRecordsOptions)
     Q_UNUSED(pListValues)
+    Q_UNUSED(pUserData)
     Q_UNUSED(pPdStruct)
     return 0;
 }

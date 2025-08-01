@@ -28,7 +28,7 @@ class XImplodeDecoder : public QObject {
 
 public:
     explicit XImplodeDecoder(QObject *parent = nullptr);
-    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, bool b8kdict, bool b3trees, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XIMPLODEDECODER_H

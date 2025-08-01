@@ -13,6 +13,8 @@ HEADERS += \
     $$PWD/Compress/xstoredecoder.h \
     $$PWD/Compress/xbzip2decoder.h \
     $$PWD/Compress/xlzssdecoder.h \
+    $$PWD/Compress/xshrinkdecoder.h \
+    $$PWD/Compress/xreducedecoder.h \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
@@ -50,6 +52,8 @@ SOURCES += \
     $$PWD/Compress/xstoredecoder.cpp \
     $$PWD/Compress/xbzip2decoder.cpp \
     $$PWD/Compress/xlzssdecoder.cpp \
+    $$PWD/Compress/xshrinkdecoder.cpp \
+    $$PWD/Compress/xreducedecoder.cpp \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \

@@ -261,8 +261,24 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
         bResult = XIT214Decoder::decompress(pState, 8, true, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_IT215_16) {
         bResult = XIT214Decoder::decompress(pState, 16, true, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED) {
-        bResult = XImplodeDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
+        bResult = XImplodeDecoder::decompress(pState, false, false, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
+        bResult = XImplodeDecoder::decompress(pState, false, true, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
+        bResult = XImplodeDecoder::decompress(pState, true, false, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
+        bResult = XImplodeDecoder::decompress(pState, true, true, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
+        bResult = XShrinkDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
+        bResult = XReduceDecoder::decompress(pState, 1, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
+        bResult = XReduceDecoder::decompress(pState, 2, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
+        bResult = XReduceDecoder::decompress(pState, 3, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
+        bResult = XReduceDecoder::decompress(pState, 4, pPdStruct);
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::compressMethodToString(compressMethod);

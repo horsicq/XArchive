@@ -883,7 +883,7 @@ XImplodeDecoder::XImplodeDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XImplodeDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XImplodeDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, bool b8kdict, bool b3trees, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = true;
 
@@ -891,8 +891,8 @@ bool XImplodeDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XB
     UI6A_OFF_T uncmpr_size = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
     UI6A_UINT16 bit_flags = 0;
 
-    if (pDecompressState->mapProperties.value(XBinary::FPART_PROP_COMPRESSION_OPTION_0, false).toBool()) bit_flags |= UI6A_FLAG_8KDICT;
-    if (pDecompressState->mapProperties.value(XBinary::FPART_PROP_COMPRESSION_OPTION_1, false).toBool()) bit_flags |= UI6A_FLAG_3TREES;
+    if (b8kdict) bit_flags |= UI6A_FLAG_8KDICT;
+    if (b3trees) bit_flags |= UI6A_FLAG_3TREES;
 
     ui6a_ctx *ui6a = NULL;
 

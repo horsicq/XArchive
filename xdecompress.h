@@ -28,6 +28,8 @@
 #include "ximplodedecoder.h"
 #include "xlzmadecoder.h"
 #include "xbzip2decoder.h"
+#include "xshrinkdecoder.h"
+#include "xreducedecoder.h"
 #include "xthreadobject.h"
 
 class XDecompress : public XThreadObject {

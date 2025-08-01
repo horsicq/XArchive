@@ -67,20 +67,26 @@ public:
 
     enum CMETHOD {
         CMETHOD_STORE = 0,
+        CMETHOD_SHRINK = 1,
+        CMETHOD_REDUCED_1 = 2,
+        CMETHOD_REDUCED_2 = 3,
+        CMETHOD_REDUCED_3 = 4,
+        CMETHOD_REDUCED_4 = 5,
         CMETHOD_IMPLODED = 6,
         CMETHOD_DEFLATE = 8,
         CMETHOD_DEFLATE64 = 9,
         CMETHOD_BZIP2 = 12,
         CMETHOD_LZMA = 14,
         CMETHOD_PPMD = 98,
-        CMETHOD_LZFSE = 99,  // Apple or AES?
+        CMETHOD_AES = 99,  // Apple or AES?
     };
 
 #pragma pack(push)
 #pragma pack(1)
     struct LOCALFILEHEADER {
         quint32 nSignature;  // SIGNATURE_LFD
-        quint16 nMinVersion;
+        quint8 nMinVersion;
+        quint8 nMinOS;
         quint16 nFlags;
         quint16 nMethod;
         quint16 nLastModTime;
@@ -108,8 +114,10 @@ public:
 
     struct CENTRALDIRECTORYFILEHEADER {
         quint32 nSignature;  // SIGNATURE_CFD
-        quint16 nVersion;
-        quint16 nMinVersion;
+        quint8 nVersion;
+        quint8 nOS;
+        quint8 nMinVersion;
+        quint8 nMinOS;
         quint16 nFlags;
         quint16 nMethod;
         quint16 nLastModTime;
@@ -132,8 +140,10 @@ public:
 
     struct ZIPFILE_RECORD {
         QString sFileName;
-        quint16 nVersion;
-        quint16 nMinVersion;
+        quint8 nVersion;
+        quint8 nOS;
+        quint8 nMinVersion;
+        quint8 nMinOS;
         quint16 nFlags;
         CMETHOD method;
         QDateTime dtTime;
@@ -179,7 +189,7 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr);
 
     virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
-                                PDSTRUCT *pPdStruct);
+                                void *pUserData, PDSTRUCT *pPdStruct);
 
     virtual QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
@@ -188,7 +198,7 @@ public:
     static QMap<quint64, QString> getHeaderSignaturesS();
 
 protected:
-    COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod);
+    COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
     bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct);
     qint32 _getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *pnRealSize, PDSTRUCT *pPdStruct);
 };

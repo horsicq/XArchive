@@ -83,4 +83,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xbzip2decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzssdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzssdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xshrinkdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xshrinkdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xreducedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xreducedecoder.h
 )
