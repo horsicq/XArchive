@@ -222,7 +222,7 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         record.nFileOffset = 0;
         record.nFileSize = sizeof(CFHEADER);
         record.nVirtualAddress = -1;
-        record.sOriginalName = tr("Cabinet Header");
+        record.sName = tr("Cabinet Header");
 
         listResult.append(record);
     }
@@ -233,7 +233,7 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         record.nFileOffset = 0;
         record.nFileSize = qMax((qint64)cfHeader.cbCabinet, getSize());
         record.nVirtualAddress = -1;
-        record.sOriginalName = tr("Data");
+        record.sName = tr("Data");
 
         listResult.append(record);
     }
@@ -247,7 +247,7 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             record.nFileOffset = nOffset;
             record.nFileSize = sizeof(CFFILE);
             record.nVirtualAddress = -1;
-            record.sOriginalName = tr("Data");
+            record.sName = tr("Data");
 
             listResult.append(record);
         }
@@ -261,7 +261,7 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             record.nFileOffset = cfHeader.cbCabinet;
             record.nFileSize = getSize() - cfHeader.cbCabinet;
             record.nVirtualAddress = -1;
-            record.sOriginalName = tr("Overlay");
+            record.sName = tr("Overlay");
 
             listResult.append(record);
         }

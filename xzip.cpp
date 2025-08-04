@@ -957,7 +957,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                 record.nFileOffset = nECDOffset;
                 record.nFileSize = nMaxOffset - nECDOffset;
                 record.nVirtualAddress = -1;
-                record.sOriginalName = "End of Central Directory Record";
+                record.sName = "End of Central Directory Record";
 
                 listResult.append(record);
             }
@@ -978,6 +978,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                     record.nFileOffset = nOffset;
                                     record.nFileSize = (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
                                     record.nVirtualAddress = -1;
+                                    record.sName = QString("%1 %2").arg(tr("Stream"), QString::number(i));
                                     record.sOriginalName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
 
                                     listResult.append(record);
@@ -990,6 +991,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                                     if (lfh.nSignature == SIGNATURE_LFD) {
                                         if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
+                                            QString sName = QString("%1 %2").arg(tr("Stream"), QString::number(i));
                                             QString sOriginalName = read_ansiString(nLocalOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
 
                                             if (nFileParts & FILEPART_HEADER) {
@@ -999,6 +1001,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.nFileOffset = nLocalOffset;
                                                 record.nFileSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
                                                 record.nVirtualAddress = -1;
+                                                record.sName = sName;
                                                 record.sOriginalName = sOriginalName;
 
                                                 listResult.append(record);
@@ -1011,6 +1014,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.nFileOffset = nLocalOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
                                                 record.nFileSize = cdh.nCompressedSize;
                                                 record.nVirtualAddress = -1;
+                                                record.sName = sName;
                                                 record.sOriginalName = sOriginalName;
 
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
@@ -1103,7 +1107,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         record.nFileOffset = 0;
         record.nFileSize = nMaxOffset;
         record.nVirtualAddress = -1;
-        record.sOriginalName = tr("Data");
+        record.sName = tr("Data");
 
         listResult.append(record);
     }
@@ -1116,7 +1120,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             record.nFileOffset = nMaxOffset;
             record.nFileSize = nTotalSize - nMaxOffset;
             record.nVirtualAddress = -1;
-            record.sOriginalName = tr("Overlay");
+            record.sName = tr("Overlay");
 
             listResult.append(record);
         }

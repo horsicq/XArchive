@@ -53,7 +53,7 @@ bool XDecompress::decompressFPART(const XBinary::FPART &fpart, QIODevice *pDevic
 
 bool XDecompress::checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    bool bResult = true;
 
     XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)fpart.mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
 
@@ -88,14 +88,6 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
 {
     bool bResult = true;
 
-    if (pState->nInputOffset > 0) {
-        pState->pDeviceInput->seek(pState->nInputOffset);
-    }
-
-    if (pState->pDeviceOutput) {
-        pState->pDeviceOutput->seek(0);
-    }
-
     const qint32 N_BUFFER_SIZE = 0x4000;
 
     char bufferIn[N_BUFFER_SIZE];
@@ -108,6 +100,14 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
     // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
 
     if (compressMethod == XBinary::COMPRESS_METHOD_STORE) {
+        if (pState->nInputOffset > 0) {
+            pState->pDeviceInput->seek(pState->nInputOffset);
+        }
+
+        if (pState->pDeviceOutput) {
+            pState->pDeviceOutput->seek(0);
+        }
+
         for (qint64 nOffset = 0; (nOffset < pState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
             qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - nOffset), N_BUFFER_SIZE);
 
@@ -126,6 +126,14 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
             nOffset += nRead;
         }
     } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
+        if (pState->nInputOffset > 0) {
+            pState->pDeviceInput->seek(pState->nInputOffset);
+        }
+
+        if (pState->pDeviceOutput) {
+            pState->pDeviceOutput->seek(0);
+        }
+
         bz_stream strm = {};
         qint32 ret = BZ_MEM_ERROR;
 
@@ -175,6 +183,14 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
             BZ2_bzDecompressEnd(&strm);
         }
     } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
+        if (pState->nInputOffset > 0) {
+            pState->pDeviceInput->seek(pState->nInputOffset);
+        }
+
+        if (pState->pDeviceOutput) {
+            pState->pDeviceOutput->seek(0);
+        }
+
         if (pState->nInputLimit >= 4) {
             qint32 nPropSize = 0;
             char header1[4] = {};
@@ -279,6 +295,8 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
         bResult = XReduceDecoder::decompress(pState, 3, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
         bResult = XReduceDecoder::decompress(pState, 4, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_ZLIB) {
+        bResult = XDeflateDecoder::decompress_zlib(pState, pPdStruct);
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::compressMethodToString(compressMethod);
@@ -302,9 +320,15 @@ bool XDecompress::unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIO
             XBinary::setPdStructInit(pPdStruct, nGlobalIndex, nNumberOfParts);
 
             for (qint32 i = 0; (i < nNumberOfParts) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-                XBinary::setPdStructStatus(pPdStruct, nGlobalIndex, pListParts->at(i).sOriginalName);
+                QString sPrefName = pListParts->at(i).sOriginalName;
 
-                QString sResultFileName = sFolderName + QDir::separator() + pListParts->at(i).sOriginalName;
+                if (sPrefName == "") {
+                    sPrefName = pListParts->at(i).sName;
+                }
+
+                XBinary::setPdStructStatus(pPdStruct, nGlobalIndex, sPrefName);
+
+                QString sResultFileName = sFolderName + QDir::separator() + sPrefName;
 
                 QFileInfo fi(sResultFileName);
                 if (XBinary::createDirectory(fi.absolutePath())) {
@@ -315,15 +339,15 @@ bool XDecompress::unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIO
                         if (decompressFPART(pListParts->at(i), pDevice, &file, 0, -1, pPdStruct)) {
                             if (!checkCRC(pListParts->at(i), &file, pPdStruct)) {
 #ifdef QT_DEBUG
-                                qDebug() << "Invalid CRC for" << pListParts->at(i).sOriginalName;
+                                qDebug() << "Invalid CRC for" << sPrefName;
 #endif
-                                emit warningMessage(QString("%1: %2").arg(tr("Invalid CRC"), pListParts->at(i).sOriginalName));
+                                emit warningMessage(QString("%1: %2").arg(tr("Invalid CRC"), sPrefName));
                             }
                         } else {
 #ifdef QT_DEBUG
-                            qDebug() << "Cannot decompress" << pListParts->at(i).sOriginalName;
+                            qDebug() << "Cannot decompress" << sPrefName;
 #endif
-                            emit errorMessage(QString("%1: %2").arg(tr("Cannot decompress"), pListParts->at(i).sOriginalName));
+                            emit errorMessage(QString("%1: %2").arg(tr("Cannot decompress"), sPrefName));
                             bResult = false;
                         }
 

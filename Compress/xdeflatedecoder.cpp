@@ -857,6 +857,14 @@ XDeflateDecoder::XDeflateDecoder(QObject *parent) : QObject(parent)
 
 bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
+    if (pDecompressState->nInputOffset > 0) {
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    }
+
+    if (pDecompressState->pDeviceOutput) {
+        pDecompressState->pDeviceOutput->seek(0);
+    }
+
     bool bResult = false;
 
     char bufferIn[N_BUFFER_SIZE];
@@ -929,6 +937,14 @@ bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XB
 
 bool XDeflateDecoder::decompress64(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
+    if (pDecompressState->nInputOffset > 0) {
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    }
+
+    if (pDecompressState->pDeviceOutput) {
+        pDecompressState->pDeviceOutput->seek(0);
+    }
+
     bool bResult = false;
 
     pDecompressState->pInputBuffer = new char[N_BUFFER_SIZE];
@@ -954,6 +970,32 @@ bool XDeflateDecoder::decompress64(XBinary::DECOMPRESS_STATE *pDecompressState, 
 
     delete[] pDecompressState->pInputBuffer;
     delete[] pDecompressState->pOutputBuffer;
+
+    return bResult;
+}
+
+bool XDeflateDecoder::decompress_zlib(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (pDecompressState->nInputOffset > 0) {
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    }
+
+    if (pDecompressState->pDeviceOutput) {
+        pDecompressState->pDeviceOutput->seek(0);
+    }
+
+    XBinary::DECOMPRESS_STATE decompressState = *pDecompressState;
+    decompressState.nInputLimit = pDecompressState->nInputLimit - 6;  // Skip zlib header and footer
+    decompressState.nInputOffset = pDecompressState->nInputOffset + 2;  // Skip zlib header
+
+    quint32 nAdler = XBinary(pDecompressState->pDeviceInput).read_uint32(pDecompressState->nInputOffset + pDecompressState->nInputLimit - 4, true);
+
+    bool bResult = decompress(&decompressState, pPdStruct);
+
+    if (bResult) {
+        quint32 _nAdler = XBinary::getAdler32(pDecompressState->pDeviceOutput, pPdStruct);
+        bResult = (nAdler == _nAdler);
+    }
 
     return bResult;
 }

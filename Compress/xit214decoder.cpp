@@ -26,6 +26,14 @@ XIT214Decoder::XIT214Decoder(QObject *parent) : QObject(parent)
 
 bool XIT214Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct)
 {
+    if (pDecompressState->nInputOffset > 0) {
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    }
+
+    if (pDecompressState->pDeviceOutput) {
+        pDecompressState->pDeviceOutput->seek(0);
+    }
+
     quint16 blklen; /* length of compressed data block in samples */
     quint16 blkpos; /* position in block */
     quint8 width;   /* actual "bit width" */

@@ -456,6 +456,14 @@ XShrinkDecoder::XShrinkDecoder(QObject *parent) : QObject(parent)
 
 bool XShrinkDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
+    if (pDecompressState->nInputOffset > 0) {
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    }
+
+    if (pDecompressState->pDeviceOutput) {
+        pDecompressState->pDeviceOutput->seek(0);
+    }
+
     bool bResult = true;
 
     ozus_ctx *ozus = NULL;

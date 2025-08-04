@@ -885,6 +885,14 @@ XImplodeDecoder::XImplodeDecoder(QObject *parent) : QObject(parent)
 
 bool XImplodeDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, bool b8kdict, bool b3trees, XBinary::PDSTRUCT *pPdStruct)
 {
+    if (pDecompressState->nInputOffset > 0) {
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    }
+
+    if (pDecompressState->pDeviceOutput) {
+        pDecompressState->pDeviceOutput->seek(0);
+    }
+
     bool bResult = true;
 
     UI6A_OFF_T cmpr_size = pDecompressState->nInputLimit;

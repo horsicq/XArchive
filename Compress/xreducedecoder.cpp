@@ -378,6 +378,14 @@ XReduceDecoder::XReduceDecoder(QObject *parent) : QObject(parent)
 
 bool XReduceDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32 nFactor, XBinary::PDSTRUCT *pPdStruct)
 {
+    if (pDecompressState->nInputOffset > 0) {
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    }
+
+    if (pDecompressState->pDeviceOutput) {
+        pDecompressState->pDeviceOutput->seek(0);
+    }
+
     bool bResult = true;
 
     ozur_ctx *ozur = NULL;

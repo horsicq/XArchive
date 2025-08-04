@@ -317,7 +317,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         }
         record.nFileSize = getSize();
         record.nVirtualAddress = -1;
-        record.sOriginalName = tr("Header");
+        record.sName = tr("Header");
 
         listResult.append(record);
     }
