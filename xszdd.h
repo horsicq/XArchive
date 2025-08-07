@@ -57,7 +57,6 @@ public:
     virtual OSNAME getOsName() override;
     virtual QString getOsVersion() override;
     virtual QString getVersion() override;
-    virtual QString getInfo() override;
     virtual bool isEncrypted() override;
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;

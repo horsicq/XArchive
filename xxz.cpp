@@ -119,11 +119,6 @@ QString XXZ::getVersion()
     return QString();
 }
 
-QString XXZ::getInfo()
-{
-    return QString();
-}
-
 bool XXZ::isEncrypted()
 {
     return false;

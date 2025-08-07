@@ -118,11 +118,6 @@ QString XSZDD::getVersion()
     return QString();
 }
 
-QString XSZDD::getInfo()
-{
-    return "";
-}
-
 bool XSZDD::isEncrypted()
 {
     return false;
