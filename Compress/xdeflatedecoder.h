@@ -31,6 +31,8 @@ public:
     static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompress64(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompress_zlib(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool compress(XBinary::DECOMPRESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct = nullptr, int nCompressionLevel = Z_DEFAULT_COMPRESSION);
+    static bool compress_zlib(XBinary::DECOMPRESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct = nullptr, int nCompressionLevel = Z_DEFAULT_COMPRESSION);
 
 signals:
 };
