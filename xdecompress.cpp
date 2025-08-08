@@ -297,6 +297,8 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
         bResult = XReduceDecoder::decompress(pState, 4, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_ZLIB) {
         bResult = XDeflateDecoder::decompress_zlib(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZW) {
+        bResult = XLZWDecoder::decompress(pState, pPdStruct);
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::compressMethodToString(compressMethod);

@@ -10,6 +10,7 @@ HEADERS += \
     $$PWD/Compress/xdeflatedecoder.h \
     $$PWD/Compress/ximplodedecoder.h \
     $$PWD/Compress/xlzmadecoder.h \
+    $$PWD/Compress/xlzwdecoder.h \
     $$PWD/Compress/xstoredecoder.h \
     $$PWD/Compress/xbzip2decoder.h \
     $$PWD/Compress/xlzssdecoder.h \
@@ -49,6 +50,7 @@ SOURCES += \
     $$PWD/Compress/xdeflatedecoder.cpp \
     $$PWD/Compress/ximplodedecoder.cpp \
     $$PWD/Compress/xlzmadecoder.cpp \
+    $$PWD/Compress/xlzwdecoder.cpp \
     $$PWD/Compress/xstoredecoder.cpp \
     $$PWD/Compress/xbzip2decoder.cpp \
     $$PWD/Compress/xlzssdecoder.cpp \
