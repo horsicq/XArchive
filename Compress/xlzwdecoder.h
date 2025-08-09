@@ -32,4 +32,4 @@ public:
     static bool decompress2(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
-#endif // XLZWDECODER_H
+#endif  // XLZWDECODER_H

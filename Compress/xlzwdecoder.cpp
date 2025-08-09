@@ -162,183 +162,185 @@
 // Suitable for common LZW streams (e.g., TIFF/PDF without predictors).
 
 namespace {
-    typedef quint16 LZW_CODE;
+typedef quint16 LZW_CODE;
 
-    const qint32 LZW_INBUF_SIZE = 1024;
-    const qint32 LZW_OUTBUF_SIZE = 4096;
+const qint32 LZW_INBUF_SIZE = 1024;
+const qint32 LZW_OUTBUF_SIZE = 4096;
 
-    const qint32 LZW_MIN_BITS = 9;
-    const qint32 LZW_MAX_BITS = 12;
-    const qint32 LZW_MAX_CODES = (1 << LZW_MAX_BITS); // 4096
+const qint32 LZW_MIN_BITS = 9;
+const qint32 LZW_MAX_BITS = 12;
+const qint32 LZW_MAX_CODES = (1 << LZW_MAX_BITS);  // 4096
 
-    const LZW_CODE LZW_CLEAR = 256;
-    const LZW_CODE LZW_EOI = 257;
-    const LZW_CODE LZW_FIRST_FREE = 258;
+const LZW_CODE LZW_CLEAR = 256;
+const LZW_CODE LZW_EOI = 257;
+const LZW_CODE LZW_FIRST_FREE = 258;
 
-    const LZW_CODE LZW_INVALID = 0xFFFF;
+const LZW_CODE LZW_INVALID = 0xFFFF;
 
-    struct dictionary_entry {
-        LZW_CODE parent; // previous code in the string (or LZW_INVALID)
-        quint8 value;    // last byte of the string for this code
-    };
+struct dictionary_entry {
+    LZW_CODE parent;  // previous code in the string (or LZW_INVALID)
+    quint8 value;     // last byte of the string for this code
+};
 
-    struct lzw_ctx {
-        // User data
-        XBinary::DECOMPRESS_STATE *state;
-        qint64 cmpr_size;   // compressed bytes limit
-        qint64 cmpr_used;   // consumed compressed bytes
-        qint64 uncmpr_goal; // optional uncompressed size (0 if unknown)
+struct lzw_ctx {
+    // User data
+    XBinary::DECOMPRESS_STATE *state;
+    qint64 cmpr_size;    // compressed bytes limit
+    qint64 cmpr_used;    // consumed compressed bytes
+    qint64 uncmpr_goal;  // optional uncompressed size (0 if unknown)
 
-        // Bit reader (MSB-first)
-        quint32 bitbuf;
-        int bitcnt; // number of valid bits in bitbuf
-        int code_bits;
+    // Bit reader (MSB-first)
+    quint32 bitbuf;
+    int bitcnt;  // number of valid bits in bitbuf
+    int code_bits;
 
-        // Dictionary
-        dictionary_entry dict[LZW_MAX_CODES];
-        LZW_CODE next_code;
+    // Dictionary
+    dictionary_entry dict[LZW_MAX_CODES];
+    LZW_CODE next_code;
 
-        // State for string expansion
-        bool have_old;
-        LZW_CODE old_code;
-        quint8 last_value; // first character of last expanded string
+    // State for string expansion
+    bool have_old;
+    LZW_CODE old_code;
+    quint8 last_value;  // first character of last expanded string
 
-        // I/O buffers
-        quint8 inbuf[LZW_INBUF_SIZE];
-        qint32 inbuf_total;
-        qint32 inbuf_pos;
+    // I/O buffers
+    quint8 inbuf[LZW_INBUF_SIZE];
+    qint32 inbuf_total;
+    qint32 inbuf_pos;
 
-        quint8 outbuf[LZW_OUTBUF_SIZE];
-        qint32 outbuf_used;
-    };
+    quint8 outbuf[LZW_OUTBUF_SIZE];
+    qint32 outbuf_used;
+};
 
-    static void lzw_reset_dict(lzw_ctx *ctx)
-    {
-        for (int i = 0; i < 256; ++i) {
-            ctx->dict[i].parent = LZW_INVALID;
-            ctx->dict[i].value = (quint8)i;
-        }
-        for (int i = 256; i < LZW_MAX_CODES; ++i) {
-            ctx->dict[i].parent = LZW_INVALID;
-            ctx->dict[i].value = 0;
-        }
-        ctx->next_code = LZW_FIRST_FREE;
-        ctx->code_bits = LZW_MIN_BITS;
-        ctx->have_old = false;
-        ctx->bitbuf = 0;
-        ctx->bitcnt = 0;
+static void lzw_reset_dict(lzw_ctx *ctx)
+{
+    for (int i = 0; i < 256; ++i) {
+        ctx->dict[i].parent = LZW_INVALID;
+        ctx->dict[i].value = (quint8)i;
     }
-
-    static qint32 lzw_cb_read(lzw_ctx *ctx, quint8 *buf, qint32 size)
-    {
-        return XBinary::_readDevice((char *)buf, size, ctx->state);
+    for (int i = 256; i < LZW_MAX_CODES; ++i) {
+        ctx->dict[i].parent = LZW_INVALID;
+        ctx->dict[i].value = 0;
     }
+    ctx->next_code = LZW_FIRST_FREE;
+    ctx->code_bits = LZW_MIN_BITS;
+    ctx->have_old = false;
+    ctx->bitbuf = 0;
+    ctx->bitcnt = 0;
+}
 
-    static void lzw_refill_inbuf(lzw_ctx *ctx)
-    {
-        ctx->inbuf_pos = 0;
-        ctx->inbuf_total = 0;
+static qint32 lzw_cb_read(lzw_ctx *ctx, quint8 *buf, qint32 size)
+{
+    return XBinary::_readDevice((char *)buf, size, ctx->state);
+}
 
-        qint64 remain = ctx->cmpr_size - ctx->cmpr_used;
-        if (remain <= 0) return;
+static void lzw_refill_inbuf(lzw_ctx *ctx)
+{
+    ctx->inbuf_pos = 0;
+    ctx->inbuf_total = 0;
 
-        qint32 to_read = (qint32)qMin<qint64>(remain, LZW_INBUF_SIZE);
-        qint32 got = lzw_cb_read(ctx, ctx->inbuf, to_read);
-        if (got > 0) {
-            ctx->inbuf_total = got;
-            ctx->cmpr_used += got;
-        }
-    }
+    qint64 remain = ctx->cmpr_size - ctx->cmpr_used;
+    if (remain <= 0) return;
 
-    static bool lzw_get_byte(lzw_ctx *ctx, quint8 *out)
-    {
-        if (ctx->inbuf_pos >= ctx->inbuf_total) {
-            lzw_refill_inbuf(ctx);
-            if (ctx->inbuf_total == 0) return false;
-        }
-        *out = ctx->inbuf[ctx->inbuf_pos++];
-        return true;
-    }
-
-    // MSB-first code reader
-    static bool lzw_get_code(lzw_ctx *ctx, LZW_CODE *pcode)
-    {
-        while (ctx->bitcnt < ctx->code_bits) {
-            quint8 b = 0;
-            if (!lzw_get_byte(ctx, &b)) {
-                return false;
-            }
-            ctx->bitbuf = (ctx->bitbuf << 8) | b;
-            ctx->bitcnt += 8;
-        }
-
-        int shift = ctx->bitcnt - ctx->code_bits;
-        quint32 mask = (1u << ctx->code_bits) - 1u;
-        quint32 code = (ctx->bitbuf >> shift) & mask;
-        ctx->bitcnt -= ctx->code_bits;
-        if (ctx->bitcnt) {
-            ctx->bitbuf &= ((1u << ctx->bitcnt) - 1u);
-        } else {
-            ctx->bitbuf = 0;
-        }
-
-        *pcode = (LZW_CODE)code;
-        return true;
-    }
-
-    static bool lzw_flush_out(lzw_ctx *ctx)
-    {
-        if (ctx->outbuf_used <= 0) return true;
-        qint32 written = XBinary::_writeDevice((char *)ctx->outbuf, ctx->outbuf_used, ctx->state);
-        ctx->outbuf_used = 0;
-        return (written > 0) && (!ctx->state->bWriteError);
-    }
-
-    static bool lzw_write(lzw_ctx *ctx, const quint8 *buf, qint32 n)
-    {
-        if (n <= 0) return true;
-        if (n > LZW_OUTBUF_SIZE) {
-            // large chunk: flush existing and write directly in pieces
-            if (!lzw_flush_out(ctx)) return false;
-            qint32 offset = 0;
-            while (offset < n) {
-                qint32 chunk = qMin(LZW_OUTBUF_SIZE, n - offset);
-                qint32 written = XBinary::_writeDevice((char *)(buf + offset), chunk, ctx->state);
-                if (written != chunk || ctx->state->bWriteError) return false;
-                offset += chunk;
-            }
-            return true;
-        }
-
-        if (ctx->outbuf_used + n > LZW_OUTBUF_SIZE) {
-            if (!lzw_flush_out(ctx)) return false;
-        }
-        memcpy(ctx->outbuf + ctx->outbuf_used, buf, (size_t)n);
-        ctx->outbuf_used += n;
-        return true;
-    }
-
-    // Expand a code into a temporary buffer (reversed), return length and first byte
-    static bool lzw_expand_code(lzw_ctx *ctx, LZW_CODE code, quint8 *tmp, qint32 tmpSize, qint32 *outLen, quint8 *pFirst)
-    {
-        qint32 pos = tmpSize;
-
-        if (code >= LZW_MAX_CODES) return false;
-
-        while (code != LZW_INVALID && pos > 0) {
-            tmp[--pos] = ctx->dict[code].value;
-            if (ctx->dict[code].parent == LZW_INVALID) break;
-            code = ctx->dict[code].parent;
-        }
-
-        if (pos == tmpSize) return false;
-        *pFirst = tmp[pos];
-        *outLen = (tmpSize - pos);
-        return true;
+    qint32 to_read = (qint32)qMin<qint64>(remain, LZW_INBUF_SIZE);
+    qint32 got = lzw_cb_read(ctx, ctx->inbuf, to_read);
+    if (got > 0) {
+        ctx->inbuf_total = got;
+        ctx->cmpr_used += got;
     }
 }
 
-XLZWDecoder::XLZWDecoder(QObject *parent) : QObject(parent) {}
+static bool lzw_get_byte(lzw_ctx *ctx, quint8 *out)
+{
+    if (ctx->inbuf_pos >= ctx->inbuf_total) {
+        lzw_refill_inbuf(ctx);
+        if (ctx->inbuf_total == 0) return false;
+    }
+    *out = ctx->inbuf[ctx->inbuf_pos++];
+    return true;
+}
+
+// MSB-first code reader
+static bool lzw_get_code(lzw_ctx *ctx, LZW_CODE *pcode)
+{
+    while (ctx->bitcnt < ctx->code_bits) {
+        quint8 b = 0;
+        if (!lzw_get_byte(ctx, &b)) {
+            return false;
+        }
+        ctx->bitbuf = (ctx->bitbuf << 8) | b;
+        ctx->bitcnt += 8;
+    }
+
+    int shift = ctx->bitcnt - ctx->code_bits;
+    quint32 mask = (1u << ctx->code_bits) - 1u;
+    quint32 code = (ctx->bitbuf >> shift) & mask;
+    ctx->bitcnt -= ctx->code_bits;
+    if (ctx->bitcnt) {
+        ctx->bitbuf &= ((1u << ctx->bitcnt) - 1u);
+    } else {
+        ctx->bitbuf = 0;
+    }
+
+    *pcode = (LZW_CODE)code;
+    return true;
+}
+
+static bool lzw_flush_out(lzw_ctx *ctx)
+{
+    if (ctx->outbuf_used <= 0) return true;
+    qint32 written = XBinary::_writeDevice((char *)ctx->outbuf, ctx->outbuf_used, ctx->state);
+    ctx->outbuf_used = 0;
+    return (written > 0) && (!ctx->state->bWriteError);
+}
+
+static bool lzw_write(lzw_ctx *ctx, const quint8 *buf, qint32 n)
+{
+    if (n <= 0) return true;
+    if (n > LZW_OUTBUF_SIZE) {
+        // large chunk: flush existing and write directly in pieces
+        if (!lzw_flush_out(ctx)) return false;
+        qint32 offset = 0;
+        while (offset < n) {
+            qint32 chunk = qMin(LZW_OUTBUF_SIZE, n - offset);
+            qint32 written = XBinary::_writeDevice((char *)(buf + offset), chunk, ctx->state);
+            if (written != chunk || ctx->state->bWriteError) return false;
+            offset += chunk;
+        }
+        return true;
+    }
+
+    if (ctx->outbuf_used + n > LZW_OUTBUF_SIZE) {
+        if (!lzw_flush_out(ctx)) return false;
+    }
+    memcpy(ctx->outbuf + ctx->outbuf_used, buf, (size_t)n);
+    ctx->outbuf_used += n;
+    return true;
+}
+
+// Expand a code into a temporary buffer (reversed), return length and first byte
+static bool lzw_expand_code(lzw_ctx *ctx, LZW_CODE code, quint8 *tmp, qint32 tmpSize, qint32 *outLen, quint8 *pFirst)
+{
+    qint32 pos = tmpSize;
+
+    if (code >= LZW_MAX_CODES) return false;
+
+    while (code != LZW_INVALID && pos > 0) {
+        tmp[--pos] = ctx->dict[code].value;
+        if (ctx->dict[code].parent == LZW_INVALID) break;
+        code = ctx->dict[code].parent;
+    }
+
+    if (pos == tmpSize) return false;
+    *pFirst = tmp[pos];
+    *outLen = (tmpSize - pos);
+    return true;
+}
+}  // namespace
+
+XLZWDecoder::XLZWDecoder(QObject *parent) : QObject(parent)
+{
+}
 
 bool XLZWDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
@@ -423,16 +425,16 @@ bool XLZWDecoder::decompress2(XBinary::DECOMPRESS_STATE *pDecompressState, XBina
     ctx.old_code = code;
     ctx.last_value = (quint8)code;
 
-    quint8 tmpbuf[8192]; // Enough for worst-case string
+    quint8 tmpbuf[8192];  // Enough for worst-case string
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (ctx.uncmpr_goal > 0 && (pDecompressState->nCountOutput >= ctx.uncmpr_goal)) {
-            break; // reached goal
+            break;  // reached goal
         }
 
         LZW_CODE inCode = 0;
         if (!lzw_get_code(&ctx, &inCode)) {
-            break; // no more data
+            break;  // no more data
         }
 
         if (inCode == LZW_CLEAR) {
