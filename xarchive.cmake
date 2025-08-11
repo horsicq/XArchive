@@ -79,6 +79,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzmadecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzwdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzwdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xascii85decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compress/xascii85decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xstoredecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xstoredecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Compress/xbzip2decoder.cpp

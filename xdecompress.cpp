@@ -20,18 +20,6 @@
  */
 #include "xdecompress.h"
 
-static void *SzAlloc(ISzAllocPtr, size_t size)
-{
-    return malloc(size);
-}
-
-static void SzFree(ISzAllocPtr, void *address)
-{
-    free(address);
-}
-
-static ISzAlloc g_Alloc = {SzAlloc, SzFree};
-
 XDecompress::XDecompress(QObject *parent) : XThreadObject(parent)
 {
 }
@@ -183,88 +171,7 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
             BZ2_bzDecompressEnd(&strm);
         }
     } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
-        if (pState->nInputOffset > 0) {
-            pState->pDeviceInput->seek(pState->nInputOffset);
-        }
-
-        if (pState->pDeviceOutput) {
-            pState->pDeviceOutput->seek(0);
-        }
-
-        if (pState->nInputLimit >= 4) {
-            qint32 nPropSize = 0;
-            char header1[4] = {};
-            quint8 properties[32] = {};
-
-            XBinary::_readDevice(header1, sizeof(header1), pState);
-            // if (header1[0] != 0x5D || header1[1] != 0x00 || header1[2] != 0x00 || header1[3] != 0x00) {
-            //     emit errorMessage(tr("Invalid LZMA header"));
-            //     return false;
-            // }
-            nPropSize = header1[2];  // TODO Check
-
-            if (nPropSize && (nPropSize < 30)) {
-                XBinary::_readDevice((char *)properties, nPropSize, pState);
-
-                CLzmaDec state = {};
-
-                SRes ret = LzmaProps_Decode(&state.prop, (Byte *)properties, nPropSize);
-
-                if (ret == 0)  // S_OK
-                {
-                    LzmaDec_Construct(&state);
-                    ret = LzmaDec_Allocate(&state, (Byte *)properties, nPropSize, &g_Alloc);
-
-                    if (ret == 0)  // S_OK
-                    {
-                        LzmaDec_Init(&state);
-                        bool bRun = true;
-
-                        while (bRun) {
-                            qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - pState->nCountInput), N_BUFFER_SIZE);
-                            qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pState);
-
-                            if (nSize) {
-                                qint64 nPos = 0;
-
-                                while (true) {
-                                    ELzmaStatus status;
-                                    SizeT inProcessed = nSize - nPos;
-                                    SizeT outProcessed = N_BUFFER_SIZE;
-
-                                    ret =
-                                        LzmaDec_DecodeToBuf(&state, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
-
-                                    // TODO Check ret
-
-                                    nPos += inProcessed;
-
-                                    if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pState)) {
-                                        // result = COMPRESS_RESULT_WRITEERROR;
-                                        bRun = false;
-                                        break;
-                                    }
-
-                                    if (status != LZMA_STATUS_NOT_FINISHED) {
-                                        if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
-                                            // result = COMPRESS_RESULT_OK;
-                                            bRun = false;
-                                        }
-
-                                        break;
-                                    }
-                                }
-                            } else {
-                                // result = COMPRESS_RESULT_READERROR;
-                                bRun = false;
-                            }
-                        }
-                    }
-
-                    LzmaDec_Free(&state, &g_Alloc);
-                }
-            }
-        }
+        bResult = XLZMADecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE) {
         bResult = XDeflateDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE64) {
@@ -297,8 +204,10 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
         bResult = XReduceDecoder::decompress(pState, 4, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_ZLIB) {
         bResult = XDeflateDecoder::decompress_zlib(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZW) {
-        bResult = XLZWDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZW_PDF) {
+        bResult = XLZWDecoder::decompress_pdf(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_ASCII85) {
+    bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::compressMethodToString(compressMethod);

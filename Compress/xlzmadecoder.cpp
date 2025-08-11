@@ -20,6 +20,18 @@
  */
 #include "xlzmadecoder.h"
 
+static void *SzAlloc(ISzAllocPtr, size_t size)
+{
+    return malloc(size);
+}
+
+static void SzFree(ISzAllocPtr, void *address)
+{
+    free(address);
+}
+
+static ISzAlloc g_Alloc = {SzAlloc, SzFree};
+
 XLZMADecoder::XLZMADecoder(QObject *parent) : QObject(parent)
 {
 }
@@ -28,7 +40,94 @@ bool XLZMADecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBina
 {
     bool bResult = false;
 
+    const qint32 N_BUFFER_SIZE = 0x4000;
+
+    char bufferIn[N_BUFFER_SIZE];
+    char bufferOut[N_BUFFER_SIZE];
+
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
+        if (pDecompressState->nInputOffset > 0) {
+            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+        }
+
+        if (pDecompressState->pDeviceOutput) {
+            pDecompressState->pDeviceOutput->seek(0);
+        }
+
+        if (pDecompressState->nInputLimit >= 4) {
+            qint32 nPropSize = 0;
+            char header1[4] = {};
+            quint8 properties[32] = {};
+
+            XBinary::_readDevice(header1, sizeof(header1), pDecompressState);
+            // if (header1[0] != 0x5D || header1[1] != 0x00 || header1[2] != 0x00 || header1[3] != 0x00) {
+            //     emit errorMessage(tr("Invalid LZMA header"));
+            //     return false;
+            // }
+            nPropSize = header1[2];  // TODO Check
+
+            if (nPropSize && (nPropSize < 30)) {
+                XBinary::_readDevice((char *)properties, nPropSize, pDecompressState);
+
+                CLzmaDec state = {};
+
+                SRes ret = LzmaProps_Decode(&state.prop, (Byte *)properties, nPropSize);
+
+                if (ret == 0)  // S_OK
+                {
+                    LzmaDec_Construct(&state);
+                    ret = LzmaDec_Allocate(&state, (Byte *)properties, nPropSize, &g_Alloc);
+
+                    if (ret == 0)  // S_OK
+                    {
+                        LzmaDec_Init(&state);
+                        bool bRun = true;
+
+                        while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                            qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
+                            qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
+
+                            if (nSize) {
+                                qint64 nPos = 0;
+
+                                while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                                    ELzmaStatus status;
+                                    SizeT inProcessed = nSize - nPos;
+                                    SizeT outProcessed = N_BUFFER_SIZE;
+
+                                    ret =
+                                        LzmaDec_DecodeToBuf(&state, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
+
+                                    // TODO Check ret
+
+                                    nPos += inProcessed;
+
+                                    if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pDecompressState)) {
+                                        // result = COMPRESS_RESULT_WRITEERROR;
+                                        bRun = false;
+                                        break;
+                                    }
+
+                                    if (status != LZMA_STATUS_NOT_FINISHED) {
+                                        if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
+                                            // result = COMPRESS_RESULT_OK;
+                                            bRun = false;
+                                        }
+
+                                        break;
+                                    }
+                                }
+                            } else {
+                                // result = COMPRESS_RESULT_READERROR;
+                                bRun = false;
+                            }
+                        }
+                    }
+
+                    LzmaDec_Free(&state, &g_Alloc);
+                }
+            }
+        }
     }
 
     return bResult;

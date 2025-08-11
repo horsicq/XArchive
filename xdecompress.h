@@ -28,6 +28,7 @@
 #include "ximplodedecoder.h"
 #include "xlzmadecoder.h"
 #include "xlzwdecoder.h"
+#include "xascii85decoder.h"
 #include "xbzip2decoder.h"
 #include "xshrinkdecoder.h"
 #include "xreducedecoder.h"
