@@ -33,6 +33,7 @@
 #include "xshrinkdecoder.h"
 #include "xreducedecoder.h"
 #include "xthreadobject.h"
+#include "xstoredecoder.h"
 
 class XDecompress : public XThreadObject {
     Q_OBJECT

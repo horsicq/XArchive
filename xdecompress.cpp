@@ -206,6 +206,7 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
         bResult = XDeflateDecoder::decompress_zlib(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_LZW_PDF) {
         bResult = XLZWDecoder::decompress_pdf(pState, pPdStruct);
+        // bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_ASCII85) {
     bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
     } else {

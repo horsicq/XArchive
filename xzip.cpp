@@ -638,6 +638,18 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 break;
             }
 
+            qint64 nOffsetToCentralDirectory = read_uint32(nCurrent + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
+
+            if (nOffsetToCentralDirectory >= nCurrent) {
+                nOffset = nCurrent + 4;
+                continue;
+            }
+
+            if (read_uint32(nOffsetToCentralDirectory + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature) != SIGNATURE_CFD)) {
+                nOffset = nCurrent + 4;
+                continue;
+            }
+
             nResult = nCurrent;
             nOffset = nCurrent + 4;  // Get the last
         }

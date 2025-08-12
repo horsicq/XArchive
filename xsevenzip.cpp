@@ -499,8 +499,15 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             quint64 nNumberOfFiles = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFiles");
 
             _handleId(pListRecords, XSevenZip::k7zIdDummy, pState, 1, false, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdName, pState, 1, true, pPdStruct);
 
             bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct);
+        } else if (puTag.nValue == XSevenZip::k7zIdDummy) {
+            quint32 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("DummySize"));
+            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("DummyArray"));
+            bResult = true;
+        } else if (puTag.nValue == XSevenZip::k7zIdName) {
+            _handleNumber(pListRecords, pState, pPdStruct, QString("NameSize"));
         } else if (puTag.nValue == XSevenZip::k7zIdEnd) {
             bResult = true;
         }
