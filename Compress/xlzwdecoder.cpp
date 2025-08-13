@@ -283,7 +283,7 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
             int length = result - 1;
             if (length > 0) {
                 if (outputDevice->write(reinterpret_cast<char *>(buffer), length) != length) {
-                    qDebug() << "Write error:" << outputDevice->errorString();
+                    // qDebug() << "Write error:" << outputDevice->errorString();
                     result = 6;
                 }
             }
