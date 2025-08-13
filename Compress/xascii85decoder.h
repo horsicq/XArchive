@@ -30,4 +30,4 @@ public:
     static bool decompress_pdf(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
-#endif // XASCII85DECODER_H
+#endif  // XASCII85DECODER_H

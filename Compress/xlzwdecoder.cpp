@@ -21,245 +21,210 @@
 #include "xlzwdecoder.h"
 #include <string.h>
 
-typedef int (*WRITEFUNC)(void *user,unsigned char *buf,int len);
-typedef int (*READFUNC)(void *user,unsigned char *buf,int len);
+typedef int (*WRITEFUNC)(void *user, unsigned char *buf, int len);
+typedef int (*READFUNC)(void *user, unsigned char *buf, int len);
 
-typedef struct LZWSTATE
-{
+typedef struct LZWSTATE {
     READFUNC read;
     WRITEFUNC write;
-    void *user_read,*user_write;
+    void *user_read, *user_write;
 
     int earlychange;
 
-    int numcodes; // currently used codes
-    int codebits; // currently used bits
-    int prefix; // current prefix (encoding) / last code (decoding)
-    unsigned int *table; // encoding: hash-table (code[12bit],prefixcode[12bit],nextbyte)[hash(prefixcode,nextbyte)]
+    int numcodes;         // currently used codes
+    int codebits;         // currently used bits
+    int prefix;           // current prefix (encoding) / last code (decoding)
+    unsigned int *table;  // encoding: hash-table (code[12bit],prefixcode[12bit],nextbyte)[hash(prefixcode,nextbyte)]
     // decoding: symbol-table (prefixcode,nextbyte)[code]
-    unsigned char *stackend,*stackptr; // for decoding.
+    unsigned char *stackend, *stackptr;  // for decoding.
 
     int bitpos;
     unsigned int bitbuf;
 } LZWSTATE;
 
 #define LZW_CLEAR 256
-#define LZW_END   257
+#define LZW_END 257
 #define LZW_START 258
-#define LZW_MINBITS  9
-#define LZW_MAXBITS 12 // max 12 because of table=32 bit
+#define LZW_MINBITS 9
+#define LZW_MAXBITS 12     // max 12 because of table=32 bit
 #define LZW_HASHSIZE 9001  // at least 1<<MAXBITS, should be prime
 
 // accessors to table[]-values
-#define NEXTBYTE(a)   ((a)&0xff)
-#define PREFIXCODE(a) ((a>>8)&0xfff)
-#define CODE(a)       ((a>>20)&0xfff) // encode only
-#define MAKETABLE(code,prefixcode,nextbyte) ( (code<<20)|(prefixcode<<8)|(nextbyte) ) // for decode: code=0
+#define NEXTBYTE(a) ((a)&0xff)
+#define PREFIXCODE(a) ((a >> 8) & 0xfff)
+#define CODE(a) ((a >> 20) & 0xfff)                                                            // encode only
+#define MAKETABLE(code, prefixcode, nextbyte) ((code << 20) | (prefixcode << 8) | (nextbyte))  // for decode: code=0
 // hash func;
-#define HASH(prefixcode,nextbyte) ( (((prefixcode<<8)|nextbyte)<<11)%LZW_HASHSIZE )
+#define HASH(prefixcode, nextbyte) ((((prefixcode << 8) | nextbyte) << 11) % LZW_HASHSIZE)
 
 void restart_lzw(LZWSTATE *state)
 {
     assert(state);
-    if (state)
-    {
-        state->numcodes=LZW_START;
-        state->codebits=LZW_MINBITS;
-        state->prefix=-1; // no prefix / clear table
-        state->stackptr=state->stackend;
+    if (state) {
+        state->numcodes = LZW_START;
+        state->codebits = LZW_MINBITS;
+        state->prefix = -1;  // no prefix / clear table
+        state->stackptr = state->stackend;
 
-        state->bitbuf=0;
-        state->bitpos=0;
+        state->bitbuf = 0;
+        state->bitpos = 0;
     }
 }
 
 void free_lzw(LZWSTATE *state)
 {
-    if (state)
-    {
-        free(state->stackend-(1<<LZW_MAXBITS)); // look at init_lzw !
+    if (state) {
+        free(state->stackend - (1 << LZW_MAXBITS));  // look at init_lzw !
         free(state->table);
         free(state);
     }
 }
 
-LZWSTATE *init_lzw(int earlychange,READFUNC rf,WRITEFUNC wf,void *user_read,void *user_write,int tablesize,unsigned char *stack)
+LZWSTATE *init_lzw(int earlychange, READFUNC rf, WRITEFUNC wf, void *user_read, void *user_write, int tablesize, unsigned char *stack)
 {
     LZWSTATE *ret;
 
-    if (earlychange<0)
-    {
-        earlychange=1; // default
+    if (earlychange < 0) {
+        earlychange = 1;  // default
     }
 
-    ret=(LZWSTATE *)malloc(sizeof(LZWSTATE));
-    if (!ret)
-    {
+    ret = (LZWSTATE *)malloc(sizeof(LZWSTATE));
+    if (!ret) {
         return 0;
     }
 
-    ret->read=rf;
-    ret->write=wf;
-    ret->user_read=user_read;
-    ret->user_write=user_write;
+    ret->read = rf;
+    ret->write = wf;
+    ret->user_read = user_read;
+    ret->user_write = user_write;
 
-    ret->earlychange=earlychange;
+    ret->earlychange = earlychange;
 
-    ret->table=(unsigned int *)malloc(tablesize*sizeof(unsigned int));
-    if (!ret->table)
-    {
+    ret->table = (unsigned int *)malloc(tablesize * sizeof(unsigned int));
+    if (!ret->table) {
         free(ret);
         return NULL;
     }
-    ret->stackend=ret->stackptr=stack+(1<<LZW_MAXBITS); // this is tricky!
+    ret->stackend = ret->stackptr = stack + (1 << LZW_MAXBITS);  // this is tricky!
 
     restart_lzw(ret);
     return ret;
 }
 
-LZWSTATE *init_lzw_read(int earlychange,READFUNC rf,void *user_read)
+LZWSTATE *init_lzw_read(int earlychange, READFUNC rf, void *user_read)
 {
     unsigned char *stack;
     assert(rf);
-    if (!rf)
-    {
+    if (!rf) {
         return 0;
     }
-    stack=(unsigned char *)malloc((1<<LZW_MAXBITS)*sizeof(unsigned char));
-    if (!stack)
-    {
+    stack = (unsigned char *)malloc((1 << LZW_MAXBITS) * sizeof(unsigned char));
+    if (!stack) {
         return NULL;
     }
-    return init_lzw(earlychange,rf,NULL,user_read,NULL,1<<LZW_MAXBITS,stack);
+    return init_lzw(earlychange, rf, NULL, user_read, NULL, 1 << LZW_MAXBITS, stack);
 }
 
 static int readbits(LZWSTATE *state)
 {
-    int ret,iA;
+    int ret, iA;
     unsigned char buf[4];
 
-    if (state->bitpos<state->codebits)   // ensure enough bits
+    if (state->bitpos < state->codebits)  // ensure enough bits
     {
-        int num=(state->codebits-state->bitpos+7)/8;
-        ret=(*state->read)(state->user_read,buf,num);
-        if (ret)
-        {
+        int num = (state->codebits - state->bitpos + 7) / 8;
+        ret = (*state->read)(state->user_read, buf, num);
+        if (ret) {
             return -1;
         }
-        for (iA=0; iA<num; iA++)
-        {
-            state->bitbuf|=buf[iA]<<(24-state->bitpos);
-            state->bitpos+=8;
+        for (iA = 0; iA < num; iA++) {
+            state->bitbuf |= buf[iA] << (24 - state->bitpos);
+            state->bitpos += 8;
         }
     }
-    state->bitpos-=state->codebits;
-    ret=state->bitbuf>>(32-state->codebits);
-    state->bitbuf<<=state->codebits;
+    state->bitpos -= state->codebits;
+    ret = state->bitbuf >> (32 - state->codebits);
+    state->bitbuf <<= state->codebits;
     return ret;
 }
 
-int decode_lzw(LZWSTATE *state,unsigned char *buf,int len)
+int decode_lzw(LZWSTATE *state, unsigned char *buf, int len)
 {
-    int outlen=0;
+    int outlen = 0;
     assert(state);
-    assert(len>=0);
+    assert(len >= 0);
 
-    while (len>0)
-    {
+    while (len > 0) {
         // first empty the stack
-        const int stacklen=state->stackend-state->stackptr;
-        if (stacklen>0)
-        {
-            if (len<stacklen)
-            {
-                memcpy(buf,state->stackptr,len*sizeof(char));
-                state->stackptr+=len;
+        const int stacklen = state->stackend - state->stackptr;
+        if (stacklen > 0) {
+            if (len < stacklen) {
+                memcpy(buf, state->stackptr, len * sizeof(char));
+                state->stackptr += len;
                 return 0;
-            }
-            else
-            {
-                memcpy(buf,state->stackptr,stacklen*sizeof(char));
-                outlen+=stacklen;
-                len-=stacklen;
-                buf+=stacklen;
-                state->stackptr=state->stackend;
-                continue; // check for len==0;
+            } else {
+                memcpy(buf, state->stackptr, stacklen * sizeof(char));
+                outlen += stacklen;
+                len -= stacklen;
+                buf += stacklen;
+                state->stackptr = state->stackend;
+                continue;  // check for len==0;
             }
         }
         // decode next code
-        int code=readbits(state);
-        if (code<0)
+        int code = readbits(state);
+        if (code < 0) {
+            return -1;  // read error
+        } else if (code == LZW_CLEAR) {
+            state->numcodes = LZW_START;
+            state->codebits = LZW_MINBITS;
+            state->prefix = -1;
+        } else if (code == LZW_END) {
+            return 1 + outlen;  // done
+        } else if (code < 256)  // not in table
         {
-            return -1; // read error
-        }
-        else if (code==LZW_CLEAR)
-        {
-            state->numcodes=LZW_START;
-            state->codebits=LZW_MINBITS;
-            state->prefix=-1;
-        }
-        else if (code==LZW_END)
-        {
-            return 1+outlen; // done
-        }
-        else if (code<256)     // not in table
-        {
-            *buf=code;
+            *buf = code;
             buf++;
             len--;
             outlen++;
-            if (state->prefix>=0)
-            {
-                state->table[state->numcodes++]=MAKETABLE(0,state->prefix,code);
+            if (state->prefix >= 0) {
+                state->table[state->numcodes++] = MAKETABLE(0, state->prefix, code);
             }
-            state->prefix=code;
-        }
-        else if (code<state->numcodes)
-        {
-            int scode=code;
-            assert(state->prefix>=0);
+            state->prefix = code;
+        } else if (code < state->numcodes) {
+            int scode = code;
+            assert(state->prefix >= 0);
             // push on stack to reverse
-            while (code>=256)
-            {
-                *--state->stackptr=NEXTBYTE(state->table[code]);
-                code=PREFIXCODE(state->table[code]);
+            while (code >= 256) {
+                *--state->stackptr = NEXTBYTE(state->table[code]);
+                code = PREFIXCODE(state->table[code]);
             }
-            *--state->stackptr=code;
+            *--state->stackptr = code;
             // add to table
-            state->table[state->numcodes++]=MAKETABLE(0,state->prefix,code);
-            state->prefix=scode;
-        }
-        else if (code==state->numcodes)
-        {
-            if (state->prefix<0)
-            {
-                return -2; // invalid code, a <256 code is required first
+            state->table[state->numcodes++] = MAKETABLE(0, state->prefix, code);
+            state->prefix = scode;
+        } else if (code == state->numcodes) {
+            if (state->prefix < 0) {
+                return -2;  // invalid code, a <256 code is required first
             }
-            code=state->prefix;
-            assert(state->stackptr==state->stackend); // the stack is empty!
-            --state->stackptr; // will be filled later: first char==last char
-            while (code>=256)
-            {
-                *--state->stackptr=NEXTBYTE(state->table[code]);
-                code=PREFIXCODE(state->table[code]);
+            code = state->prefix;
+            assert(state->stackptr == state->stackend);  // the stack is empty!
+            --state->stackptr;                           // will be filled later: first char==last char
+            while (code >= 256) {
+                *--state->stackptr = NEXTBYTE(state->table[code]);
+                code = PREFIXCODE(state->table[code]);
             }
-            *--state->stackptr=code;
-            state->stackend[-1]=code;
-            state->table[state->numcodes]=MAKETABLE(0,state->prefix,code);
-            state->prefix=state->numcodes++;
+            *--state->stackptr = code;
+            state->stackend[-1] = code;
+            state->table[state->numcodes] = MAKETABLE(0, state->prefix, code);
+            state->prefix = state->numcodes++;
+        } else {
+            return -2;  // invalid code
         }
-        else
-        {
-            return -2; // invalid code
-        }
-        if (state->numcodes==(1<<state->codebits)-state->earlychange)
-        {
-            if (state->codebits==LZW_MAXBITS)
-            {
+        if (state->numcodes == (1 << state->codebits) - state->earlychange) {
+            if (state->codebits == LZW_MAXBITS) {
                 state->numcodes--;
-            }
-            else
-            {
+            } else {
                 state->codebits++;
             }
         }
@@ -303,7 +268,7 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
 
     // Allocate buffer for decoded data
     const int BUFFER_SIZE = 4096;
-    buffer = (unsigned char*)malloc(BUFFER_SIZE);
+    buffer = (unsigned char *)malloc(BUFFER_SIZE);
     if (!buffer) {
         qDebug() << "Memory allocation failed:" << strerror(errno);
         free_lzw(lzw);
@@ -314,24 +279,23 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
     while (true) {
         result = decode_lzw(lzw, buffer, BUFFER_SIZE);
 
-        if (result > 0) {   // Decoding complete
+        if (result > 0) {  // Decoding complete
             int length = result - 1;
             if (length > 0) {
-                if (outputDevice->write(reinterpret_cast<char*>(buffer), length) != length) {
+                if (outputDevice->write(reinterpret_cast<char *>(buffer), length) != length) {
                     qDebug() << "Write error:" << outputDevice->errorString();
                     result = 6;
                 }
             }
             result = 0;  // Success
             break;
-        }
-        else if (result < 0) {
+        } else if (result < 0) {
             qDebug() << "Decoder error:" << result;
             break;
         }
 
         // Write the full buffer to output device
-        if (outputDevice->write(reinterpret_cast<char*>(buffer), BUFFER_SIZE) != BUFFER_SIZE) {
+        if (outputDevice->write(reinterpret_cast<char *>(buffer), BUFFER_SIZE) != BUFFER_SIZE) {
             qDebug() << "Write error:" << outputDevice->errorString();
             result = 6;
             break;

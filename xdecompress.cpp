@@ -208,7 +208,7 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
         bResult = XLZWDecoder::decompress_pdf(pState, pPdStruct);
         // bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_ASCII85) {
-    bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
+        bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::compressMethodToString(compressMethod);

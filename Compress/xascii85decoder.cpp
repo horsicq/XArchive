@@ -22,7 +22,8 @@
 
 // Internal helpers for ASCII85 decoding
 namespace {
-static int _ascii85_readByte(XBinary::DECOMPRESS_STATE *st) {
+static int _ascii85_readByte(XBinary::DECOMPRESS_STATE *st)
+{
     char c;
     qint64 r = st->pDeviceInput->read(&c, 1);
     if (r != 1) {
@@ -33,12 +34,15 @@ static int _ascii85_readByte(XBinary::DECOMPRESS_STATE *st) {
     return (unsigned char)c;
 }
 
-static void _ascii85_writeBytes(XBinary::DECOMPRESS_STATE *st, const unsigned char *buf, int n) {
+static void _ascii85_writeBytes(XBinary::DECOMPRESS_STATE *st, const unsigned char *buf, int n)
+{
     if (n > 0) XBinary::_writeDevice((char *)buf, n, st);
 }
 }  // namespace
 
-XASCII85Decoder::XASCII85Decoder(QObject *parent) : QObject(parent) {}
+XASCII85Decoder::XASCII85Decoder(QObject *parent) : QObject(parent)
+{
+}
 
 // ASCII85 (Adobe variant) decoder for PDF streams.
 // Supports optional PostScript style start marker "<~" (ignored if present) and terminates on standard '~>'.
@@ -75,13 +79,13 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DECOMPRESS_STATE *pDecompressState
     }
 
     unsigned char tuple[4];
-    quint64 accum = 0;          // Use 64-bit to safely detect overflow (> 0xFFFFFFFF)
-    int count = 0;              // Number of collected base85 digits (0..5)
+    quint64 accum = 0;  // Use 64-bit to safely detect overflow (> 0xFFFFFFFF)
+    int count = 0;      // Number of collected base85 digits (0..5)
     bool end = false;
 
     while (!end && !pDecompressState->bReadError && XBinary::isPdStructNotCanceled(pPdStruct) &&
            (pDecompressState->nInputLimit < 0 || pDecompressState->nCountInput < pDecompressState->nInputLimit)) {
-    int ch = _ascii85_readByte(pDecompressState);
+        int ch = _ascii85_readByte(pDecompressState);
         if (ch < 0) break;  // read error or EOF
         unsigned char c = (unsigned char)ch;
 
