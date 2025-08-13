@@ -241,17 +241,17 @@ int rdfunc_device(void *user, unsigned char *buf, int len)
 int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early = -1)
 {
     if (!inputDevice || !outputDevice) {
-        qDebug() << "Invalid device pointers";
+        // qDebug() << "Invalid device pointers";
         return 1;
     }
 
     if (!inputDevice->isOpen() || !inputDevice->isReadable()) {
-        qDebug() << "Input device is not open or not readable";
+        // qDebug() << "Input device is not open or not readable";
         return 2;
     }
 
     if (!outputDevice->isOpen() || !outputDevice->isWritable()) {
-        qDebug() << "Output device is not open or not writable";
+        // qDebug() << "Output device is not open or not writable";
         return 3;
     }
 
@@ -262,7 +262,7 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
     // Initialize LZW decoder
     lzw = init_lzw_read(early, rdfunc_device, inputDevice);
     if (!lzw) {
-        qDebug() << "Failed to initialize LZW decoder";
+        // qDebug() << "Failed to initialize LZW decoder";
         return 4;
     }
 
@@ -270,7 +270,7 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
     const int BUFFER_SIZE = 4096;
     buffer = (unsigned char *)malloc(BUFFER_SIZE);
     if (!buffer) {
-        qDebug() << "Memory allocation failed:" << strerror(errno);
+        // qDebug() << "Memory allocation failed:" << strerror(errno);
         free_lzw(lzw);
         return 5;
     }
@@ -290,13 +290,13 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
             result = 0;  // Success
             break;
         } else if (result < 0) {
-            qDebug() << "Decoder error:" << result;
+            // qDebug() << "Decoder error:" << result;
             break;
         }
 
         // Write the full buffer to output device
         if (outputDevice->write(reinterpret_cast<char *>(buffer), BUFFER_SIZE) != BUFFER_SIZE) {
-            qDebug() << "Write error:" << outputDevice->errorString();
+            // qDebug() << "Write error:" << outputDevice->errorString();
             result = 6;
             break;
         }

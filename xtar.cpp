@@ -131,20 +131,10 @@ QString XTAR::getMIMEString()
     return "application/x-tar";
 }
 
-XBinary::_MEMORY_MAP XTAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
+QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapMode)
-    Q_UNUSED(pPdStruct)
+    QList<XBinary::FPART> listResult;
 
-    _MEMORY_MAP result = {};
-    result.nBinarySize = getSize();
-    result.fileType = getFileType();
-    result.mode = getMode();
-    result.endian = getEndian();
-    result.sType = typeIdToString(getType());
-    result.sArch = getArch();
-
-    qint32 nIndex = 0;
     qint64 nOffset = 0;
 
     while (isPdStructNotCanceled(pPdStruct)) {
@@ -154,36 +144,72 @@ XBinary::_MEMORY_MAP XTAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
             break;
         }
 
-        {
-            _MEMORY_RECORD record = {};
-            record.nAddress = -1;
-
-            record.nOffset = nOffset;
-            record.nSize = 0x200;  // TODO const
-            record.nIndex = nIndex++;
+        if (nFileParts & FILEPART_HEADER) {
+            XBinary::FPART record = {};
             record.filePart = FILEPART_HEADER;
+            record.nFileOffset = nOffset;
+            record.nFileSize = 0x200;  // TODO const
+            record.nVirtualAddress = -1;
             record.sName = tr("Header");
-            result.listRecords.append(record);
+            listResult.append(record);
         }
-        {
-            _MEMORY_RECORD record = {};
-            record.nAddress = -1;
 
-            record.nOffset = nOffset + 0x200;
-            record.nSize = align_up(QString(header.size).toULongLong(0, 8), 0x200);  // TODO const
-            record.nIndex = nIndex++;
-            record.filePart = FILEPART_DATA;
+        if (nFileParts & FILEPART_STREAM) {
+            XBinary::FPART record = {};
+            record.filePart = FILEPART_STREAM;
+            record.nFileOffset = nOffset + 0x200;
+            record.nFileSize = align_up(QString(header.size).toULongLong(0, 8), 0x200);  // TODO const
+            record.nVirtualAddress = -1;
             record.sName = header.name;
-            result.listRecords.append(record);
+            record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
+            record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, record.nFileSize);
+            record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, record.nFileSize);
+            // TODO Checksum
+            listResult.append(record);
         }
-
-        nIndex++;
 
         nOffset += (0x200);
         nOffset += align_up(QString(header.size).toULongLong(0, 8), 0x200);
     }
 
-    _handleOverlay(&result);
+    if (nFileParts & FILEPART_DATA) {
+        XBinary::FPART record = {};
+        record.filePart = FILEPART_DATA;
+        record.nFileOffset = 0;
+        record.nFileSize = nOffset;  // Total size of the file
+        record.nVirtualAddress = -1;
+        record.sName = tr("Data");
+        listResult.append(record);
+    }
+
+    if ((nFileParts & FILEPART_OVERLAY) && (nOffset < getSize())) {
+        XBinary::FPART record = {};
+        record.filePart = FILEPART_OVERLAY;
+        record.nFileOffset = nOffset;
+        record.nFileSize = getSize() - nOffset;
+        record.nVirtualAddress = -1;
+        record.sName = tr("Overlay");
+        listResult.append(record);
+    }
+
+    return listResult;
+}
+
+XBinary::_MEMORY_MAP XTAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
+{
+    XBinary::_MEMORY_MAP result = {};
+
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_DATA;  // Default mode
+    }
+
+    if (mapMode == MAPMODE_REGIONS) {
+        result = _getMemoryMap(FILEPART_HEADER | FILEPART_STREAM | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_STREAMS) {
+        result = _getMemoryMap(FILEPART_STREAM, pPdStruct);
+    } else if (mapMode == MAPMODE_DATA) {
+        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    }
 
     return result;
 }
@@ -193,6 +219,8 @@ QList<XBinary::MAPMODE> XTAR::getMapModesList()
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_STREAMS);
+    listResult.append(MAPMODE_DATA);
 
     return listResult;
 }

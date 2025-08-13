@@ -63,6 +63,7 @@ public:
     virtual FT getFileType();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getMIMEString();
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr);
 
 private:
     posix_header read_posix_header(qint64 nOffset);
