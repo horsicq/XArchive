@@ -20,6 +20,9 @@
  */
 #include "xtar.h"
 
+XTAR::XCONVERT _TABLE_XTAR_STRUCTID[] = {{XTAR::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                            {XTAR::STRUCTID_POSIX_HEADER, "posix_header", QString("posix_header")}};
+
 XTAR::XTAR(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -129,6 +132,99 @@ QString XTAR::getFileFormatExtsString()
 QString XTAR::getMIMEString()
 {
     return "application/x-tar";
+}
+
+QString XTAR::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XTAR_STRUCTID, sizeof(_TABLE_XTAR_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+qint32 XTAR::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords, void *pUserData, PDSTRUCT *pPdStruct)
+{
+    qint32 nResult = 0;
+
+    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_POSIX_HEADER) {
+        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+
+        qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, locType, nLocation);
+
+        XTAR::posix_header header = read_posix_header(nStartOffset);
+
+        nResult = 0x200 + align_up(QString(header.size).toULongLong(0, 8), 0x200);
+    } else {
+        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+    }
+
+    return nResult;
+}
+
+qint32 XTAR::_getNumberOf_posix_headers(qint64 nOffset, PDSTRUCT *pPdStruct)
+{
+    qint32 nResult = 0;
+
+    while (isPdStructNotCanceled(pPdStruct)) {
+        XTAR::posix_header header = read_posix_header(nOffset);
+
+        if (!compareMemory(header.magic, "ustar", 5)) {
+            break;
+        }
+
+        nResult++;
+
+        nOffset += (0x200);
+        nOffset += align_up(QString(header.size).toULongLong(0, 8), 0x200);
+    }
+
+    return nResult;
+}
+
+QList<XBinary::DATA_HEADER> XTAR::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::DATA_HEADER> listResult;
+
+    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+        _dataHeadersOptions.bChildren = true;
+        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+        _dataHeadersOptions.nCount = _getNumberOf_posix_headers(0, pPdStruct);
+        _dataHeadersOptions.nLocation = 0;
+        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+        _dataHeadersOptions.nID = STRUCTID_POSIX_HEADER;
+
+        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+    } else {
+        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+
+        if (nStartOffset != -1) {
+            if (dataHeadersOptions.nID == STRUCTID_POSIX_HEADER) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XTAR::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.listRecords.append(getDataRecord(0, 100, "Name", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(100, 8, "Mode", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(108, 8, "UID", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(116, 8, "GID", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(124, 12, "Size", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(136, 12, "MTime", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(148, 8, "Checksum", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(156, 1, "Typeflag", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(157, 100, "Linkname", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(257, 6, "Magic", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(263, 2, "Version", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(265, 32, "Uname", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(297, 32, "Gname", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(329, 8, "Devmajor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(337, 8, "Devminor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(345, 155, "Prefix", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.nSize = 500;  // TODO const
+
+                listResult.append(dataHeader);
+            }
+        }
+    }
+
+    return listResult;
 }
 
 QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)

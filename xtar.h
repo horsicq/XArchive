@@ -50,6 +50,11 @@ class XTAR : public XArchive {
 #pragma pack(pop)
 
 public:
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_POSIX_HEADER
+    };
+
     explicit XTAR(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
@@ -64,9 +69,14 @@ public:
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getMIMEString();
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr);
+    virtual QString structIDToString(quint32 nID);
+    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
+    virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+                                void *pUserData, PDSTRUCT *pPdStruct);
 
 private:
     posix_header read_posix_header(qint64 nOffset);
+    qint32 _getNumberOf_posix_headers(qint64 nOffset, PDSTRUCT *pPdStruct);
 
 signals:
 };
