@@ -21,7 +21,7 @@
 #include "xtar.h"
 
 XTAR::XCONVERT _TABLE_XTAR_STRUCTID[] = {{XTAR::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                            {XTAR::STRUCTID_POSIX_HEADER, "posix_header", QString("posix_header")}};
+                                         {XTAR::STRUCTID_POSIX_HEADER, "posix_header", QString("posix_header")}};
 
 XTAR::XTAR(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -139,7 +139,8 @@ QString XTAR::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XTAR_STRUCTID, sizeof(_TABLE_XTAR_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-qint32 XTAR::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords, void *pUserData, PDSTRUCT *pPdStruct)
+qint32 XTAR::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+                          void *pUserData, PDSTRUCT *pPdStruct)
 {
     qint32 nResult = 0;
 
