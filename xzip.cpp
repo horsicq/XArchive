@@ -645,7 +645,9 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 continue;
             }
 
-            if (read_uint32(nOffsetToCentralDirectory + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature) != SIGNATURE_CFD)) {
+            quint32 nCFDSignature = read_uint32(nOffsetToCentralDirectory + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
+
+            if (nCFDSignature != SIGNATURE_CFD) {
                 nOffset = nCurrent + 4;
                 continue;
             }
@@ -1053,7 +1055,6 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                 }
             }
         }
-
     } else {
         qint64 nRealSize = 0;
         qint32 nCount = _getNumberOfLocalFileHeaders(0, nTotalSize, &nRealSize, pPdStruct);
