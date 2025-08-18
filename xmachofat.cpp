@@ -199,7 +199,25 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
 
 QString XMACHOFat::getArch()
 {
-    return tr("Universal");
+    QStringList listArchs;
+
+    bool bIsBigEndian = isBigEndian();
+    quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
+
+    for (quint32 i = 0; i < nNumberOfRecords; i++) {
+        qint64 nOffset = sizeof(XMACH_DEF::fat_header) + (qint64)i * sizeof(XMACH_DEF::fat_arch);
+
+        quint32 cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
+        quint32 cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
+
+        QString sArch = XMACH::_getArch(cputype, cpusubtype);
+        if (!sArch.isEmpty()) listArchs.append(sArch);
+    }
+
+    if (listArchs.isEmpty()) return tr("Universal");
+
+    listArchs.removeDuplicates();
+    return listArchs.join(", ");
 }
 
 qint32 XMACHOFat::getType()
