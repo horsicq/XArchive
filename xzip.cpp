@@ -377,20 +377,32 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
 
                 if (rec.spInfo.compressMethod == XArchive::COMPRESS_METHOD_STORE) {
                     // Skip directories
-                    if (rec.spInfo.nUncompressedSize < 4) { bAPKS = false; break; }
+                    if (rec.spInfo.nUncompressedSize < 4) {
+                        bAPKS = false;
+                        break;
+                    }
 
                     SubDevice subDevice(pDevice, rec.nDataOffset, qMin<qint64>(rec.spInfo.nUncompressedSize, 8));
-                    if (!subDevice.open(QIODevice::ReadOnly)) { bAPKS = false; break; }
+                    if (!subDevice.open(QIODevice::ReadOnly)) {
+                        bAPKS = false;
+                        break;
+                    }
 
                     char sig[4] = {0};
                     qint64 r = subDevice.read(sig, 4);
                     subDevice.close();
-                    if (r != 4) { bAPKS = false; break; }
+                    if (r != 4) {
+                        bAPKS = false;
+                        break;
+                    }
 
                     // Check for local file header 'PK\x03\x04'
                     const quint32 ZIP_LFH = 0x04034B50u;
                     quint32 v = ((quint8)sig[0]) | (((quint8)sig[1]) << 8) | (((quint8)sig[2]) << 16) | (((quint8)sig[3]) << 24);
-                    if (v != ZIP_LFH) { bAPKS = false; break; }
+                    if (v != ZIP_LFH) {
+                        bAPKS = false;
+                        break;
+                    }
                 } else {
                     bAPKS = false;
                     break;
@@ -538,8 +550,7 @@ qint64 XZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 
     const qint64 nECDOffset = findECDOffset(pPdStruct);
     if (nECDOffset != -1) {
-        qint64 nEnd = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) +
-                      read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+        qint64 nEnd = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
         // Clamp to file size for robustness
         if (nEnd > nTotalSize) nEnd = nTotalSize;
         nResult = nEnd;
