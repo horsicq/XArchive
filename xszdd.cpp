@@ -185,12 +185,6 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     return result;
 }
 
-QList<XBinary::HREGION> XSZDD::getHData(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-    return QList<HREGION>();
-}
-
 QString XSZDD::structIDToString(quint32 nID)
 {
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XSZDD_STRUCTID, sizeof(_TABLE_XSZDD_STRUCTID) / sizeof(XBinary::XCONVERT));

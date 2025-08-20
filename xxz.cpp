@@ -191,13 +191,6 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     return result;
 }
 
-QList<XBinary::HREGION> XXZ::getHData(PDSTRUCT *pPdStruct)
-{
-    // For now, return empty
-    QList<HREGION> list;
-    return list;
-}
-
 QString XXZ::structIDToString(quint32 nID)
 {
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XXZ_STRUCTID, sizeof(_TABLE_XXZ_STRUCTID) / sizeof(XBinary::XCONVERT));

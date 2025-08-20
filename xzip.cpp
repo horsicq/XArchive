@@ -325,83 +325,80 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
 {
     FT result = FT_ZIP;
 
-    bool bIsValid = isValid(pDevice);
+    if (!isValid(pDevice)) {
+        return result;
+    }
 
-    if (bIsValid) {
-        XZip xzip(pDevice);
+    // We assume pListRecords is already populated by caller for efficiency.
+    // If not, we still proceed with defaults.
+    const bool hasRecords = (pListRecords && !pListRecords->isEmpty());
 
-        if (xzip.isValid()) {
-            qint64 nSize = xzip.getFileFormatSize(pPdStruct);
+    // Fast single-pass classification using record names
+    bool seenClassesDex = false;
+    bool seenAndroidManifest = false;
+    bool seenJarManifest = false;
+    bool seenPayloadDir = false;
 
-            if (nSize) {
-                // TODO
-                if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) ||
-                    XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct)) {
-                    // result.sString = "APK";
-                    // result.sExt = "apk";
-                    result = XBinary::FT_APK;
-                } else if (XArchive::isArchiveRecordPresent("Payload/", pListRecords, pPdStruct)) {
-                    // result.sString = "IPA";
-                    // result.sExt = "ipa";
-                    result = FT_IPA;
-                } else if (XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords, pPdStruct)) {
-                    // result.sString = "JAR";
-                    // result.sExt = "jar";
-                    result = FT_JAR;
+    if (hasRecords) {
+        for (int idx = 0, n = pListRecords->count(); idx < n; ++idx) {
+            const RECORD &rec = pListRecords->at(idx);
+            const QString &name = rec.spInfo.sRecordName;
+            if (!seenClassesDex && name == QLatin1String("classes.dex")) seenClassesDex = true;
+            if (!seenAndroidManifest && name == QLatin1String("AndroidManifest.xml")) seenAndroidManifest = true;
+            if (!seenJarManifest && name == QLatin1String("META-INF/MANIFEST.MF")) seenJarManifest = true;
+            if (!seenPayloadDir && name.startsWith(QLatin1String("Payload/"))) seenPayloadDir = true;
+
+            // Early exit if APK (most common) is detected
+            if ((seenClassesDex || seenAndroidManifest)) {
+                result = FT_APK;
+                break;
+            }
+        }
+    }
+
+    if (result != FT_APK) {
+        if (seenPayloadDir) {
+            result = FT_IPA;
+        } else if (seenJarManifest) {
+            result = FT_JAR;
+        } else {
+            result = FT_ZIP;
+        }
+    }
+
+    if (bDeep && hasRecords) {
+        // Detect APKS: a ZIP where all entries are stored and (the ones we consider) are inner ZIPs.
+        if ((result != FT_JAR) && (result != FT_APK) && (result != FT_IPA)) {
+            bool bAPKS = !pListRecords->isEmpty();
+
+            for (int idx = 0, n = pListRecords->count(); idx < n; ++idx) {
+                if (!isPdStructNotCanceled(pPdStruct)) break;
+                const RECORD &rec = pListRecords->at(idx);
+
+                if (rec.spInfo.compressMethod == XArchive::COMPRESS_METHOD_STORE) {
+                    // Skip directories
+                    if (rec.spInfo.nUncompressedSize < 4) { bAPKS = false; break; }
+
+                    SubDevice subDevice(pDevice, rec.nDataOffset, qMin<qint64>(rec.spInfo.nUncompressedSize, 8));
+                    if (!subDevice.open(QIODevice::ReadOnly)) { bAPKS = false; break; }
+
+                    char sig[4] = {0};
+                    qint64 r = subDevice.read(sig, 4);
+                    subDevice.close();
+                    if (r != 4) { bAPKS = false; break; }
+
+                    // Check for local file header 'PK\x03\x04'
+                    const quint32 ZIP_LFH = 0x04034B50u;
+                    quint32 v = ((quint8)sig[0]) | (((quint8)sig[1]) << 8) | (((quint8)sig[2]) << 16) | (((quint8)sig[3]) << 24);
+                    if (v != ZIP_LFH) { bAPKS = false; break; }
                 } else {
-                    // result.sString = "ZIP";
-                    // result.sExt = "zip";
-                    result = FT_ZIP;
+                    bAPKS = false;
+                    break;
                 }
+            }
 
-                if (bDeep) {
-                    if ((result != XBinary::FT_JAR) && (result != XBinary::FT_APK) && (result != XBinary::FT_IPA)) {
-                        qint32 nNumberOfRecords = pListRecords->count();
-
-                        bool bAPKS = false;
-
-                        if (nNumberOfRecords) {
-                            bAPKS = true;
-                        }
-
-                        for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
-                            if (pListRecords->at(i).spInfo.compressMethod == XArchive::COMPRESS_METHOD_STORE) {
-                                XArchive::RECORD record = pListRecords->at(i);
-
-                                SubDevice subDevice(pDevice, record.nDataOffset, record.spInfo.nUncompressedSize);
-
-                                if (subDevice.open(QIODevice::ReadOnly)) {
-                                    if (XBinary::getFileTypes(&subDevice, true).contains(FT_ZIP)) {
-                                        bool bAPK = false;
-
-                                        if (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) ||
-                                            XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct)) {
-                                            bAPK = true;
-                                        }
-
-                                        if (!bAPK) {
-                                            bAPKS = false;
-                                        }
-                                    }
-
-                                    subDevice.close();
-                                }
-                            } else {
-                                bAPKS = false;
-                            }
-
-                            if (!bAPKS) {
-                                break;
-                            }
-                        }
-
-                        if (bAPKS) {
-                            result = FT_APKS;
-                            // result.sString = "APKS";
-                            // result.sExt = "apks";
-                        }
-                    }
-                }
+            if (bAPKS) {
+                result = FT_APKS;
             }
         }
     }
@@ -535,36 +532,22 @@ QString XZip::getFileFormatExtsString()
 
 qint64 XZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
+    // Fast path: use validated last End of Central Directory (ECD) offset.
+    const qint64 nTotalSize = getSize();
     qint64 nResult = 0;
-    // TODO the last ECD
-    qint64 nECDOffset = 0;
 
-    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        nECDOffset = find_uint32(nECDOffset, -1, SIGNATURE_ECD, false, pPdStruct);
-
-        if (nECDOffset != -1) {
-            qint64 nOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
-
-            if (nOffset < getSize()) {
-                quint32 nSignature = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nSignature));
-                qint64 nStartOffset = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader));
-
-                if (nSignature == SIGNATURE_CFD) {
-                    nResult = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
-                    if (nStartOffset == 0) {
-                        break;
-                    }
-                }
-            }
-        } else {
-            break;
-        }
-
-        nECDOffset += 4;
-    }
-
+    const qint64 nECDOffset = findECDOffset(pPdStruct);
     if (nECDOffset != -1) {
-        nResult = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) + read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+        qint64 nEnd = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD) +
+                      read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+        // Clamp to file size for robustness
+        if (nEnd > nTotalSize) nEnd = nTotalSize;
+        nResult = nEnd;
+    } else {
+        // Fallback: compute real size from Local File Headers when ECD is missing
+        qint64 nRealSize = 0;
+        _getNumberOfLocalFileHeaders(0, nTotalSize, &nRealSize, pPdStruct);
+        nResult = nRealSize;
     }
 
     return nResult;
