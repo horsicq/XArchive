@@ -71,11 +71,11 @@ XCab::CFFILE XCab::readCFFILE(qint64 nOffset)
 {
     CFFILE result = {};
 
-    result.cbFile = read_uint16(nOffset + offsetof(CFFILE, cbFile));
+    result.cbFile = read_uint32(nOffset + offsetof(CFFILE, cbFile));
     result.uoffFolderStart = read_uint32(nOffset + offsetof(CFFILE, uoffFolderStart));
     result.iFolder = read_uint16(nOffset + offsetof(CFFILE, iFolder));
-    result.date = read_uint32(nOffset + offsetof(CFFILE, date));
-    result.time = read_uint32(nOffset + offsetof(CFFILE, time));
+    result.date = read_uint16(nOffset + offsetof(CFFILE, date));
+    result.time = read_uint16(nOffset + offsetof(CFFILE, time));
     result.attribs = read_uint16(nOffset + offsetof(CFFILE, attribs));
 
     return result;
@@ -220,9 +220,9 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         XBinary::FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
-        record.nFileSize = sizeof(CFHEADER);
+    record.nFileSize = qMin<qint64>(sizeof(CFHEADER), getSize());
         record.nVirtualAddress = -1;
-        record.sName = tr("Cabinet Header");
+    record.sName = tr("Header");
 
         listResult.append(record);
     }
@@ -230,36 +230,100 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     if (nFileParts & FILEPART_DATA) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_DATA;
-        record.nFileOffset = 0;
-        record.nFileSize = qMax((qint64)cfHeader.cbCabinet, getSize());
+    record.nFileOffset = 0;
+    record.nFileSize = qMin((qint64)cfHeader.cbCabinet, getSize());
         record.nVirtualAddress = -1;
         record.sName = tr("Data");
 
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_REGION)) {
-        qint64 nOffset = cfHeader.coffFiles;
+    if (nFileParts & FILEPART_REGION) {
+        // Regions: enumerate folders, files, and data blocks
+        const qint64 fileSize = getSize();
 
-        if (nFileParts & FILEPART_HEADER) {
-            XBinary::FPART record = {};
-            record.filePart = FILEPART_HEADER;
-            record.nFileOffset = nOffset;
-            record.nFileSize = sizeof(CFFILE);
-            record.nVirtualAddress = -1;
-            record.sName = tr("Data");
+        // 1) CFFOLDER area and per-folder entries (best-effort)
+        if (cfHeader.cFolders) {
+            // Heuristic: assume folders area ends at coffFiles; derive start by subtracting cFolders*sizeof(CFFOLDER)
+            qint64 foldersEnd = qMin<qint64>(cfHeader.coffFiles, fileSize);
+            qint64 foldersStart = qMax<qint64>(0, foldersEnd - (qint64)cfHeader.cFolders * (qint64)sizeof(CFFOLDER));
 
-            listResult.append(record);
+            // Whole folders area
+            if ((foldersStart < foldersEnd) && (foldersEnd <= fileSize)) {
+                FPART area = {};
+                area.filePart = FILEPART_REGION;
+                area.nFileOffset = foldersStart;
+                area.nFileSize = foldersEnd - foldersStart;
+                area.nVirtualAddress = -1;
+                area.sName = tr("CFFOLDER area");
+                listResult.append(area);
+
+                // Individual folder records (best-effort sequential)
+                for (quint32 i = 0; i < cfHeader.cFolders; ++i) {
+                    qint64 recOff = foldersStart + (qint64)i * (qint64)sizeof(CFFOLDER);
+                    if ((recOff + (qint64)sizeof(CFFOLDER)) > fileSize) break;
+                    FPART rec = {};
+                    rec.filePart = FILEPART_REGION;
+                    rec.nFileOffset = recOff;
+                    rec.nFileSize = sizeof(CFFOLDER);
+                    rec.nVirtualAddress = -1;
+                    rec.sName = QString("%1(%2)").arg("CFFOLDER").arg(i + 1);
+                    listResult.append(rec);
+                }
+
+                // Use folder records to enumerate CFDATA blocks
+                for (quint32 i = 0; i < cfHeader.cFolders; ++i) {
+                    qint64 recOff = foldersStart + (qint64)i * (qint64)sizeof(CFFOLDER);
+                    if ((recOff + (qint64)sizeof(CFFOLDER)) > fileSize) break;
+                    CFFOLDER fol = readCFFolder(recOff);
+
+                    qint64 dataOff = fol.coffCabStart;
+                    for (quint32 j = 0; j < fol.cCFData; ++j) {
+                        if ((dataOff + (qint64)sizeof(CFDATA)) > fileSize) break;
+                        // CFDATA header entry
+                        FPART drec = {};
+                        drec.filePart = FILEPART_REGION;
+                        drec.nFileOffset = dataOff;
+                        drec.nFileSize = sizeof(CFDATA);
+                        drec.nVirtualAddress = -1;
+                        drec.sName = QString("%1(%2,%3)").arg("CFDATA").arg(i + 1).arg(j + 1);
+                        listResult.append(drec);
+
+                        // Advance to next block: header + compressed bytes
+                        CFDATA hdr = readCFData(dataOff);
+                        qint64 advance = (qint64)sizeof(CFDATA) + (qint64)hdr.cbData;
+                        if (advance <= 0) break;
+                        dataOff += advance;
+                    }
+                }
+            }
+        }
+
+        // 2) CFFILE table and per-file entries starting at coffFiles
+        if (cfHeader.coffFiles && cfHeader.cFiles) {
+            // Whole files area (size unknown if names present); add per-record entries with fixed struct size
+            for (quint32 i = 0; i < cfHeader.cFiles; ++i) {
+                qint64 recOff = (qint64)cfHeader.coffFiles + (qint64)i * (qint64)sizeof(CFFILE);
+                if ((recOff + (qint64)sizeof(CFFILE)) > fileSize) break;
+                FPART rec = {};
+                rec.filePart = FILEPART_REGION;
+                rec.nFileOffset = recOff;
+                rec.nFileSize = sizeof(CFFILE);
+                rec.nVirtualAddress = -1;
+                rec.sName = QString("%1(%2)").arg("CFFILE").arg(i + 1);
+                listResult.append(rec);
+            }
         }
     }
 
     if (nFileParts & FILEPART_OVERLAY) {
-        if (cfHeader.cbCabinet < getSize()) {
+        qint64 boundary = qMin((qint64)cfHeader.cbCabinet, getSize());
+        if (boundary < getSize()) {
             FPART record = {};
 
             record.filePart = FILEPART_OVERLAY;
-            record.nFileOffset = cfHeader.cbCabinet;
-            record.nFileSize = getSize() - cfHeader.cbCabinet;
+            record.nFileOffset = boundary;
+            record.nFileSize = getSize() - boundary;
             record.nVirtualAddress = -1;
             record.sName = tr("Overlay");
 
@@ -334,17 +398,11 @@ QList<XBinary::MAPMODE> XCab::getMapModesList()
 
 XBinary::_MEMORY_MAP XCab::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    XBinary::_MEMORY_MAP result = {};
-
-    if (mapMode == MAPMODE_UNKNOWN) {
-        mapMode = MAPMODE_DATA;  // Default mode
-    }
-
+    if (mapMode == MAPMODE_UNKNOWN) mapMode = MAPMODE_DATA;  // Default
     if (mapMode == MAPMODE_DATA) {
-        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+        return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
     } else if (mapMode == MAPMODE_REGIONS) {
-        result = _getMemoryMap(FILEPART_HEADER | FILEPART_REGION | FILEPART_OVERLAY, pPdStruct);
+        return _getMemoryMap(FILEPART_HEADER | FILEPART_REGION | FILEPART_OVERLAY, pPdStruct);
     }
-
-    return result;
+    return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
 }

@@ -106,6 +106,11 @@ public:
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     virtual QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    // Basic platform info overrides for archives
+    virtual qint64 getImageSize() override { return (qint64)readCFHeader(0).cbCabinet; }
+    virtual MODE getMode() override { return MODE_DATA; }
+    virtual QString getArch() override { return QString("Generic"); }
+    virtual ENDIAN getEndian() override { return ENDIAN_LITTLE; }
 
     virtual QString structIDToString(quint32 nID);
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
