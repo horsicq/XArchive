@@ -99,6 +99,9 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
     _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    virtual QList<MAPMODE> getMapModesList();
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr);
+    virtual qint64 getImageSize();
 
     StructuredStorageHeader read_StructuredStorageHeader(qint64 nOffset, PDSTRUCT *pPdStruct);
 

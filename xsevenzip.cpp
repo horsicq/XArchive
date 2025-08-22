@@ -169,6 +169,7 @@ QList<XBinary::MAPMODE> XSevenZip::getMapModesList()
 {
     QList<MAPMODE> listResult;
 
+    listResult.append(MAPMODE_DATA);
     listResult.append(MAPMODE_REGIONS);
 
     return listResult;
@@ -176,67 +177,13 @@ QList<XBinary::MAPMODE> XSevenZip::getMapModesList()
 
 XBinary::_MEMORY_MAP XSevenZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapMode)
-
-    _MEMORY_MAP result = {};
-
-    result.nModuleAddress = getModuleAddress();
-    result.nBinarySize = getSize();
-
-    result.fileType = getFileType();
-    result.mode = getMode();
-    result.sArch = getArch();
-    result.endian = getEndian();
-    result.sType = getTypeAsString();
-
-    qint64 nOffset = 0;
-    qint32 nIndex = 0;
-
-    {
-        _MEMORY_RECORD record = {};
-
-        record.nIndex = nIndex++;
-        record.filePart = FILEPART_HEADER;
-        record.nOffset = nOffset;
-        record.nSize = sizeof(SIGNATUREHEADER);
-        record.nAddress = -1;
-        record.sName = tr("Header");
-
-        result.listRecords.append(record);
+    if (mapMode == MAPMODE_UNKNOWN) mapMode = MAPMODE_DATA;
+    if (mapMode == MAPMODE_DATA) {
+        return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_REGIONS) {
+        return _getMemoryMap(FILEPART_HEADER | FILEPART_REGION | FILEPART_OVERLAY, pPdStruct);
     }
-
-    qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + read_uint32(nOffset + offsetof(SIGNATUREHEADER, NextHeaderOffset));
-    qint64 nNextHeaderSize = read_uint32(nOffset + offsetof(SIGNATUREHEADER, NextHeaderSize));
-
-    if (nNextHeaderOffset - sizeof(SIGNATUREHEADER) > 0) {
-        _MEMORY_RECORD record = {};
-
-        record.nIndex = nIndex++;
-        record.filePart = FILEPART_DATA;
-        record.nOffset = sizeof(SIGNATUREHEADER);
-        record.nSize = nNextHeaderOffset - sizeof(SIGNATUREHEADER);
-        record.nAddress = -1;
-        record.sName = tr("Data");
-
-        result.listRecords.append(record);
-    }
-
-    if (nNextHeaderSize) {
-        _MEMORY_RECORD record = {};
-
-        record.nIndex = nIndex++;
-        record.filePart = FILEPART_HEADER;
-        record.nOffset = nNextHeaderOffset;
-        record.nSize = nNextHeaderSize;
-        record.nAddress = -1;
-        record.sName = tr("Header");
-
-        result.listRecords.append(record);
-    }
-
-    _handleOverlay(&result);
-
-    return result;
+    return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
 }
 
 XBinary::FT XSevenZip::getFileType()
@@ -294,6 +241,7 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
         _dataHeadersOptions.bChildren = true;
         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
         _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+    _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
         _dataHeadersOptions.nID = STRUCTID_SIGNATUREHEADER;
         _dataHeadersOptions.nLocation = 0;
@@ -326,6 +274,16 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                 if (dataHeadersOptions.bChildren) {
                     qint64 nNextHeaderOffset = read_uint64(nStartOffset + offsetof(SIGNATUREHEADER, NextHeaderOffset));
                     qint64 nNextHeaderSize = read_uint64(nStartOffset + offsetof(SIGNATUREHEADER, NextHeaderSize));
+                    // Add hex for StartHeader (the 3 fields after StartHeaderCRC)
+                    {
+                        const qint64 startHeaderHexOff = nStartOffset + 12;  // bytes 12..31
+                        const qint64 startHeaderHexSize = 20;
+                        if (isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, startHeaderHexOff, startHeaderHexSize)) {
+                            DATA_HEADER hexStart = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("StartHeader (hex)"), dataHeader.dsID,
+                                                                  XBinary::STRUCTID_HEX, startHeaderHexOff, startHeaderHexSize);
+                            listResult.append(hexStart);
+                        }
+                    }
 
                     DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
                     _dataHeadersOptions.nLocation += (sizeof(SIGNATUREHEADER) + nNextHeaderOffset);
@@ -334,6 +292,16 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                     _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
                     _dataHeadersOptions.nID = STRUCTID_HEADER;
                     listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+
+                    // Add hex view for NextHeader block
+                    qint64 nNextHeaderFileOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType,
+                                                                    dataHeadersOptions.nLocation + sizeof(SIGNATUREHEADER) + nNextHeaderOffset);
+                    if ((nNextHeaderFileOffset != -1) && isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, nNextHeaderFileOffset, nNextHeaderSize) &&
+                        (nNextHeaderSize > 0)) {
+                        DATA_HEADER hexNext = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("NextHeader (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
+                                                             nNextHeaderFileOffset, nNextHeaderSize);
+                        listResult.append(hexNext);
+                    }
                 }
             } else if (dataHeadersOptions.nID == STRUCTID_HEADER) {
                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
@@ -375,11 +343,137 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                 }
 
                 listResult.append(dataHeader);
+
+                if (dataHeadersOptions.bChildren && (dataHeadersOptions.nSize > 0)) {
+                    // Also add hex view for this parsed header block
+                    DATA_HEADER hexHdr = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("Header (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
+                                                       nStartOffset, dataHeadersOptions.nSize);
+                    listResult.append(hexHdr);
+                }
             }
         }
     }
 
     return listResult;
+}
+
+QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+    QList<FPART> listResult;
+
+    const qint64 fileSize = getSize();
+    if (fileSize < (qint64)sizeof(SIGNATUREHEADER)) return listResult;
+
+    SIGNATUREHEADER sh = _read_SIGNATUREHEADER(0);
+    const qint64 base = sizeof(SIGNATUREHEADER);
+    const qint64 nextHeaderOffset = base + (qint64)sh.NextHeaderOffset;
+    const qint64 nextHeaderSize = (qint64)sh.NextHeaderSize;
+
+    if (nFileParts & FILEPART_HEADER) {
+        // Signature header
+        FPART hdr = {};
+        hdr.filePart = FILEPART_HEADER;
+        hdr.nFileOffset = 0;
+        hdr.nFileSize = qMin<qint64>((qint64)sizeof(SIGNATUREHEADER), fileSize);
+        hdr.nVirtualAddress = -1;
+        hdr.sName = tr("Header");
+        listResult.append(hdr);
+
+        // Next header block
+        if (nextHeaderSize > 0 && nextHeaderOffset >= 0 && (nextHeaderOffset + nextHeaderSize) <= fileSize) {
+            FPART nh = {};
+            nh.filePart = FILEPART_HEADER;
+            nh.nFileOffset = nextHeaderOffset;
+            nh.nFileSize = nextHeaderSize;
+            nh.nVirtualAddress = -1;
+            nh.sName = tr("Header");
+            listResult.append(nh);
+        }
+    }
+
+    if (nFileParts & FILEPART_DATA) {
+        // Packed streams between signature header and next header
+        qint64 dataOff = base;
+        qint64 dataSize = 0;
+        if (nextHeaderOffset > base) {
+            dataSize = nextHeaderOffset - base;
+        } else {
+            // If NextHeaderOffset is zero or invalid, consider everything after header as data
+            dataSize = qMax<qint64>(0, fileSize - base);
+        }
+        if (dataSize > 0) {
+            FPART data = {};
+            data.filePart = FILEPART_DATA;
+            data.nFileOffset = dataOff;
+            data.nFileSize = qMin<qint64>(dataSize, fileSize - dataOff);
+            data.nVirtualAddress = -1;
+            data.sName = tr("Data");
+            listResult.append(data);
+        }
+    }
+
+    if (nFileParts & FILEPART_REGION) {
+        // Regions view: treat signature header and next header as regions as well
+        // Signature header region
+        FPART shreg = {};
+        shreg.filePart = FILEPART_REGION;
+        shreg.nFileOffset = 0;
+        shreg.nFileSize = qMin<qint64>((qint64)sizeof(SIGNATUREHEADER), fileSize);
+        shreg.nVirtualAddress = -1;
+        shreg.sName = QString("%1").arg("SIGNATUREHEADER");
+        listResult.append(shreg);
+
+        // Data area region (if present)
+        qint64 dataStart = base;
+        qint64 dataEnd = (nextHeaderSize > 0 && nextHeaderOffset > base) ? nextHeaderOffset : fileSize;
+        if (dataEnd > dataStart) {
+            FPART dreg = {};
+            dreg.filePart = FILEPART_REGION;
+            dreg.nFileOffset = dataStart;
+            dreg.nFileSize = dataEnd - dataStart;
+            dreg.nVirtualAddress = -1;
+            dreg.sName = QString("%1").arg("PACKED_STREAMS");
+            listResult.append(dreg);
+        }
+
+        // Next header region
+        if (nextHeaderSize > 0 && (nextHeaderOffset + nextHeaderSize) <= fileSize) {
+            FPART nhreg = {};
+            nhreg.filePart = FILEPART_REGION;
+            nhreg.nFileOffset = nextHeaderOffset;
+            nhreg.nFileSize = nextHeaderSize;
+            nhreg.nVirtualAddress = -1;
+            nhreg.sName = QString("%1").arg("NEXT_HEADER");
+            listResult.append(nhreg);
+        }
+    }
+
+    if (nFileParts & FILEPART_OVERLAY) {
+        qint64 maxCovered = 0;
+        for (const auto &p : listResult) {
+            if (p.filePart != FILEPART_OVERLAY) {
+                maxCovered = qMax(maxCovered, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
+            }
+        }
+        if (maxCovered < fileSize) {
+            FPART ov = {};
+            ov.filePart = FILEPART_OVERLAY;
+            ov.nFileOffset = maxCovered;
+            ov.nFileSize = fileSize - maxCovered;
+            ov.nVirtualAddress = -1;
+            ov.sName = tr("Overlay");
+            listResult.append(ov);
+        }
+    }
+
+    return listResult;
+}
+
+qint64 XSevenZip::getImageSize()
+{
+    // Not an in-memory image; use file size
+    return getSize();
 }
 
 bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, qint32 nCount, bool bCheck, PDSTRUCT *pPdStruct)

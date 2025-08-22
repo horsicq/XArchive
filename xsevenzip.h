@@ -91,6 +91,8 @@ public:
     virtual QString getFileFormatExtsString();
     virtual QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual qint64 getImageSize() override;
     virtual FT getFileType();
     virtual ENDIAN getEndian();
     virtual MODE getMode();

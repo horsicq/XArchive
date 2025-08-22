@@ -157,8 +157,7 @@ QList<XBinary::DATA_HEADER> XCFBF::getDataHeaders(const DATA_HEADERS_OPTIONS &da
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _clsid), 16, "_clsid", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                dataHeader.listRecords.append(getDataRecord(offsetof(StructuredStorageHeader, _uSectorShift), 16, "_uSectorShift", VT_DWORD_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
+                // Note: _clsid is 16 bytes (GUID), _uSectorShift is 2 bytes, ensure correct sizes
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _uMinorVersion), 2, "_uMinorVersion", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
@@ -174,7 +173,9 @@ QList<XBinary::DATA_HEADER> XCFBF::getDataHeaders(const DATA_HEADERS_OPTIONS &da
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _ulReserved1), 4, "_ulReserved1", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(StructuredStorageHeader, _csectFat), 4, "_csectFat", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(StructuredStorageHeader, _csectDir), 4, "_csectDir", VT_UINT32, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(StructuredStorageHeader, _csectFat), 4, "_csectFat", VT_UINT32, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _sectDirStart), 4, "_sectDirStart", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
@@ -185,11 +186,11 @@ QList<XBinary::DATA_HEADER> XCFBF::getDataHeaders(const DATA_HEADERS_OPTIONS &da
                 dataHeader.listRecords.append(getDataRecord(offsetof(StructuredStorageHeader, _sectMiniFatStart), 4, "_sectMiniFatStart", VT_UINT32, DRF_UNKNOWN,
                                                             dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(StructuredStorageHeader, _csectMiniFat), 4, "_csectMiniFat", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(StructuredStorageHeader, _csectMiniFat), 4, "_csectMiniFat", VT_UINT32, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _sectDifStart), 4, "_sectDifStart", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(StructuredStorageHeader, _csectDif), 4, "_csectDif", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(StructuredStorageHeader, _csectDif), 4, "_csectDif", VT_UINT32, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(StructuredStorageHeader, _sectFat), 436, "_sectFat", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
@@ -298,65 +299,13 @@ XCFBF::StructuredStorageHeader XCFBF::read_StructuredStorageHeader(qint64 nOffse
 
 XBinary::_MEMORY_MAP XCFBF::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapMode)
-
-    qint64 nTotalSize = getSize();
-
-    _MEMORY_MAP result = {};
-
-    result.nBinarySize = nTotalSize;
-    result.fileType = getFileType();
-    result.mode = getMode();
-    result.sArch = getArch();
-    result.endian = getEndian();
-    result.sType = getTypeAsString();
-
-    StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
-
-    qint32 nIndex = 0;
-    qint32 nSectSize = 512;
-    qint32 nMiniFatSectSize = 64;
-
-    if (ssh._uSectorShift == 9) {
-        nSectSize = 512;
-    } else if (ssh._uSectorShift == 12) {
-        nSectSize = 4096;
+    if (mapMode == MAPMODE_UNKNOWN) mapMode = MAPMODE_DATA;  // Default similar to other archives
+    if (mapMode == MAPMODE_DATA) {
+        return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_REGIONS) {
+        return _getMemoryMap(FILEPART_HEADER | FILEPART_REGION | FILEPART_OVERLAY, pPdStruct);
     }
-
-    qint64 nCurrentOffset = 0;
-
-    {
-        _MEMORY_RECORD recordHeader = {};
-        recordHeader.nAddress = -1;
-        recordHeader.nOffset = nCurrentOffset;
-        recordHeader.nSize = nSectSize;
-        recordHeader.nIndex = nIndex++;
-        recordHeader.filePart = FILEPART_HEADER;
-        recordHeader.sName = tr("Header");
-
-        result.listRecords.append(recordHeader);
-    }
-
-    nCurrentOffset += nSectSize;
-
-    // quint32 nNumberOfSects = ssh._csectFat + ssh._csectDir + ssh._csectMiniFat + ssh._csectDif;
-
-    // for (quint32 i = 0; i < nNumberOfSects; i++) {
-    //     _MEMORY_RECORD recordHeader = {};
-    //     recordHeader.nAddress = -1;
-    //     recordHeader
-    //     recordHeader.nOffset = nCurrentOffset;
-    //     recordHeader.nSize = nSectSize;
-    //     recordHeader.nIndex = nIndex++;
-    //     recordHeader.filePart = FILEPART_REGION;
-    //     recordHeader.sName = QString("%1 %2").arg(tr("Sector"), QString::number(i));
-
-    //     result.listRecords.append(recordHeader);
-
-    //     nCurrentOffset += nSectSize;
-    // }
-
-    return result;
+    return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
 }
 
 XBinary::FT XCFBF::getFileType()
@@ -371,5 +320,126 @@ XBinary::ENDIAN XCFBF::getEndian()
 
 XBinary::MODE XCFBF::getMode()
 {
-    return MODE_32;
+    return MODE_DATA;
+}
+
+QList<XBinary::MAPMODE> XCFBF::getMapModesList()
+{
+    QList<MAPMODE> listResult;
+    listResult.append(MAPMODE_DATA);
+    listResult.append(MAPMODE_REGIONS);
+    return listResult;
+}
+
+qint64 XCFBF::getImageSize()
+{
+    // CFBF is not a memory image; use total file size
+    return getSize();
+}
+
+QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+    QList<FPART> listResult;
+
+    const qint64 fileSize = getSize();
+    if (fileSize < 512) return listResult;
+
+    StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
+    const qint64 sectorSize = (ssh._uSectorShift == 12) ? 4096 : 512;
+
+    if (nFileParts & FILEPART_HEADER) {
+        FPART header = {};
+        header.filePart = FILEPART_HEADER;
+        header.nFileOffset = 0;
+        header.nFileSize = qMin<qint64>(sectorSize, fileSize);
+        header.nVirtualAddress = -1;
+        header.sName = tr("Header");
+        listResult.append(header);
+    }
+
+    if (nFileParts & FILEPART_DATA) {
+        FPART data = {};
+        data.filePart = FILEPART_DATA;
+        data.nFileOffset = 0;
+        data.nFileSize = fileSize;
+        data.nVirtualAddress = -1;
+        data.sName = tr("Data");
+        listResult.append(data);
+    }
+
+    if (nFileParts & FILEPART_REGION) {
+        // Best-effort logical regions: FAT sectors, MiniFAT sectors, DIFAT sectors, Directory sectors
+        auto addRegion = [&](qint64 offset, qint64 size, const QString &name) {
+            if (offset < 0 || size <= 0) return;
+            if (offset >= fileSize) return;
+            size = qMin<qint64>(size, fileSize - offset);
+            FPART part = {};
+            part.filePart = FILEPART_REGION;
+            part.nFileOffset = offset;
+            part.nFileSize = size;
+            part.nVirtualAddress = -1;
+            part.sName = name;
+            listResult.append(part);
+        };
+
+        // Directory chain
+        if (ssh._sectDirStart != 0xFFFFFFFF && ssh._csectDir) {
+            qint64 dirOffset = sectorSize + (qint64)ssh._sectDirStart * sectorSize;
+            addRegion(dirOffset, (qint64)ssh._csectDir * sectorSize, QString("%1").arg("Directory"));
+        }
+
+        // FAT sectors: first 109 in header
+        if (ssh._csectFat) {
+            qint64 totalFat = (qint64)ssh._csectFat * sectorSize;
+            // Approximate: first entries are in header _sectFat array; actual FAT sectors are scattered, but we can mark their total range best-effort
+            // Derive first FAT sector offset from minimum non-FFFFFFFF entry
+            quint32 firstFatSect = 0xFFFFFFFF;
+            for (int i = 0; i < 109; ++i) {
+                if (ssh._sectFat[i] != 0xFFFFFFFF) {
+                    firstFatSect = qMin(firstFatSect, ssh._sectFat[i]);
+                }
+            }
+            if (firstFatSect != 0xFFFFFFFF) {
+                qint64 fatOffset = sectorSize + (qint64)firstFatSect * sectorSize;
+                addRegion(fatOffset, totalFat, QString("%1").arg("FAT"));
+            }
+        }
+
+        // MiniFAT
+        if (ssh._sectMiniFatStart != 0xFFFFFFFF && ssh._csectMiniFat) {
+            qint64 miniFatOffset = sectorSize + (qint64)ssh._sectMiniFatStart * sectorSize;
+            addRegion(miniFatOffset, (qint64)ssh._csectMiniFat * sectorSize, QString("%1").arg("MiniFAT"));
+        }
+
+        // DIFAT
+        if (ssh._sectDifStart != 0xFFFFFFFF && ssh._csectDif) {
+            qint64 difatOffset = sectorSize + (qint64)ssh._sectDifStart * sectorSize;
+            addRegion(difatOffset, (qint64)ssh._csectDif * sectorSize, QString("%1").arg("DIFAT"));
+        }
+    }
+
+    if (nFileParts & FILEPART_OVERLAY) {
+        // No strict overlay notion; keep generic: nothing after fileSize
+        // If desired, could compute highest covered end and mark the rest as overlay
+        // Here we mark nothing explicitly, consistent with other archives unless we can detect trailing data beyond header+regions
+        // Compute max covered end
+        qint64 maxCovered = 0;
+        for (const auto &p : listResult) {
+            if (p.filePart != FILEPART_OVERLAY) {
+                maxCovered = qMax(maxCovered, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
+            }
+        }
+        if (maxCovered < fileSize) {
+            FPART ov = {};
+            ov.filePart = FILEPART_OVERLAY;
+            ov.nFileOffset = maxCovered;
+            ov.nFileSize = fileSize - maxCovered;
+            ov.nVirtualAddress = -1;
+            ov.sName = tr("Overlay");
+            listResult.append(ov);
+        }
+    }
+
+    return listResult;
 }
