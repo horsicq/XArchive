@@ -241,7 +241,7 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
         _dataHeadersOptions.bChildren = true;
         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
         _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-    _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
         _dataHeadersOptions.nID = STRUCTID_SIGNATUREHEADER;
         _dataHeadersOptions.nLocation = 0;
@@ -279,8 +279,8 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                         const qint64 startHeaderHexOff = nStartOffset + 12;  // bytes 12..31
                         const qint64 startHeaderHexSize = 20;
                         if (isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, startHeaderHexOff, startHeaderHexSize)) {
-                            DATA_HEADER hexStart = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("StartHeader (hex)"), dataHeader.dsID,
-                                                                  XBinary::STRUCTID_HEX, startHeaderHexOff, startHeaderHexSize);
+                            DATA_HEADER hexStart = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("StartHeader (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
+                                                                  startHeaderHexOff, startHeaderHexSize);
                             listResult.append(hexStart);
                         }
                     }
@@ -346,8 +346,8 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
 
                 if (dataHeadersOptions.bChildren && (dataHeadersOptions.nSize > 0)) {
                     // Also add hex view for this parsed header block
-                    DATA_HEADER hexHdr = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("Header (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
-                                                       nStartOffset, dataHeadersOptions.nSize);
+                    DATA_HEADER hexHdr = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("Header (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX, nStartOffset,
+                                                        dataHeadersOptions.nSize);
                     listResult.append(hexHdr);
                 }
             }

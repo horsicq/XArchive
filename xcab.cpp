@@ -220,9 +220,9 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         XBinary::FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
-    record.nFileSize = qMin<qint64>(sizeof(CFHEADER), getSize());
+        record.nFileSize = qMin<qint64>(sizeof(CFHEADER), getSize());
         record.nVirtualAddress = -1;
-    record.sName = tr("Header");
+        record.sName = tr("Header");
 
         listResult.append(record);
     }
@@ -230,8 +230,8 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     if (nFileParts & FILEPART_DATA) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_DATA;
-    record.nFileOffset = 0;
-    record.nFileSize = qMin((qint64)cfHeader.cbCabinet, getSize());
+        record.nFileOffset = 0;
+        record.nFileSize = qMin((qint64)cfHeader.cbCabinet, getSize());
         record.nVirtualAddress = -1;
         record.sName = tr("Data");
 
