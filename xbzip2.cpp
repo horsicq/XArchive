@@ -246,6 +246,70 @@ QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     return listResult;
 }
 
+QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+    QList<FPART> listResult;
+
+    const qint64 fileSize = getSize();
+    if (fileSize <= 0) return listResult;
+
+    // Header: fixed 4 bytes ("BZh" + level)
+    if (nFileParts & FILEPART_HEADER) {
+        FPART header = {};
+        header.filePart = FILEPART_HEADER;
+        header.nFileOffset = 0;
+        header.nFileSize = qMin<qint64>(4, fileSize);
+        header.nVirtualAddress = -1;
+        header.sName = tr("Header");
+        listResult.append(header);
+    }
+
+    // Region: compressed stream area (best-effort = whole file)
+    if (nFileParts & FILEPART_REGION) {
+        FPART region = {};
+        region.filePart = FILEPART_REGION;
+        region.nFileOffset = 0;
+        region.nFileSize = fileSize;
+        region.nVirtualAddress = -1;
+        region.sName = tr("Compressed stream");
+        listResult.append(region);
+    }
+
+    // Data: entire file
+    if (nFileParts & FILEPART_DATA) {
+        FPART data = {};
+        data.filePart = FILEPART_DATA;
+        data.nFileOffset = 0;
+        data.nFileSize = fileSize;
+        data.nVirtualAddress = -1;
+        data.sName = tr("Data");
+        listResult.append(data);
+    }
+
+    // Overlay: any trailing bytes not covered (none in our simple model)
+    if (nFileParts & FILEPART_OVERLAY) {
+        qint64 maxCovered = 0;
+        for (int i = 0; i < listResult.size(); i++) {
+            const FPART &p = listResult.at(i);
+            if (p.filePart != FILEPART_OVERLAY) {
+                maxCovered = qMax(maxCovered, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
+            }
+        }
+        if (maxCovered < fileSize) {
+            FPART ov = {};
+            ov.filePart = FILEPART_OVERLAY;
+            ov.nFileOffset = maxCovered;
+            ov.nFileSize = fileSize - maxCovered;
+            ov.nVirtualAddress = -1;
+            ov.sName = tr("Overlay");
+            listResult.append(ov);
+        }
+    }
+
+    return listResult;
+}
+
 XBZIP2::BZIP2_HEADER XBZIP2::_read_BZIP2_HEADER(qint64 nOffset)
 {
     BZIP2_HEADER result = {};
