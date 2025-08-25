@@ -425,7 +425,8 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         // Here we mark nothing explicitly, consistent with other archives unless we can detect trailing data beyond header+regions
         // Compute max covered end
         qint64 maxCovered = 0;
-        for (const auto &p : listResult) {
+        for (int i = 0; i < listResult.size(); ++i) {
+            const FPART &p = listResult.at(i);
             if (p.filePart != FILEPART_OVERLAY) {
                 maxCovered = qMax(maxCovered, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
             }

@@ -451,7 +451,8 @@ QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit,
 
     if (nFileParts & FILEPART_OVERLAY) {
         qint64 maxCovered = 0;
-        for (const auto &p : listResult) {
+        for (int i = 0; i < listResult.size(); ++i) {
+            const FPART &p = listResult.at(i);
             if (p.filePart != FILEPART_OVERLAY) {
                 maxCovered = qMax(maxCovered, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
             }
