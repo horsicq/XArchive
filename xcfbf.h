@@ -80,6 +80,9 @@ public:
         STRUCTID_UNKNOWN = 0,
         STRUCTID_StructuredStorageHeader,
         STRUCTID_CFBF_DIRECTORY_ENTRY,
+        STRUCTID_FAT,
+        STRUCTID_DIFAT,
+        STRUCTID_MINIFAT,
     };
 
     explicit XCFBF(QIODevice *pDevice = nullptr);

@@ -24,6 +24,9 @@ XBinary::XCONVERT _TABLE_CFBF_STRUCTID[] = {
     {XCFBF::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
     {XCFBF::STRUCTID_StructuredStorageHeader, "StructuredStorageHeader", QString("StructuredStorageHeader")},
     {XCFBF::STRUCTID_CFBF_DIRECTORY_ENTRY, "CFBF_DIRECTORY_ENTRY", QString("CFBF_DIRECTORY_ENTRY")},
+    {XCFBF::STRUCTID_FAT, "FAT", QString("FAT")},
+    {XCFBF::STRUCTID_DIFAT, "DIFAT", QString("DIFAT")},
+    {XCFBF::STRUCTID_MINIFAT, "MINIFAT", QString("MINIFAT")},
 };
 
 XCFBF::XCFBF(QIODevice *pDevice) : XArchive(pDevice)
@@ -117,39 +120,6 @@ QList<XBinary::DATA_HEADER> XCFBF::getDataHeaders(const DATA_HEADERS_OPTIONS &da
             if (dataHeadersOptions.nID == STRUCTID_StructuredStorageHeader) {
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XCFBF::structIDToString(dataHeadersOptions.nID));
 
-                // struct StructuredStorageHeader {  // [offset from start (bytes), length (bytes)]
-                //     quint8 _abSig[8];             // [00H,08] {0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1,
-                //         // 0x1a, 0xe1} for current version
-                //     quint32 _clsid[4];            // [08H,16] reserved must be zero (WriteClassStg/
-                //         // GetClassFile uses root directory class id)
-                //     quint16 _uMinorVersion;       // [18H,02] minor version of the format: 33 is
-                //         // written by reference implementation
-                //     quint16 _uDllVersion;         // [1AH,02] major version of the dll/format: 3 for
-                //         // 512-byte sectors, 4 for 4 KB sectors
-                //     quint16 _uByteOrder;          // [1CH,02] 0xFFFE: indicates Intel byte-ordering
-                //     quint16 _uSectorShift;        // [1EH,02] size of sectors in power-of-two;
-                //         // typically 9 indicating 512-byte sectors
-                //     quint16 _uMiniSectorShift;    // [20H,02] size of mini-sectors in power-of-two;
-                //         // typically 6 indicating 64-byte mini-sectors
-                //     quint16 _usReserved;          // [22H,02] reserved, must be zero
-                //     quint32 _ulReserved1;         // [24H,04] reserved, must be zero
-                //     quint32 _csectDir;            // [28H,04] must be zero for 512-byte sectors,
-                //         // number of SECTs in directory chain for 4 KB
-                //         // sectors
-                //     quint32 _csectFat;            // [2CH,04] number of SECTs in the FAT chain
-                //     quint32 _sectDirStart;        // [30H,04] first SECT in the directory chain
-                //     quint32 _signature;           // [34H,04] signature used for transactions; must
-                //         // be zero. The reference implementation
-                //         // does not support transactions
-                //     quint32 _ulMiniSectorCutoff;  // [38H,04] maximum size for a mini stream;
-                //         // typically 4096 bytes
-                //     quint32 _sectMiniFatStart;    // [3CH,04] first SECT in the MiniFAT chain
-                //     quint32 _csectMiniFat;        // [40H,04] number of SECTs in the MiniFAT chain
-                //     quint32 _sectDifStart;        // [44H,04] first SECT in the DIFAT chain
-                //     quint32 _csectDif;            // [48H,04] number of SECTs in the DIFAT chain
-                //     quint32 _sectFat[109];        // [4CH,436] the SECTs of first 109 FAT sectors
-                // };
-
                 dataHeader.nSize = sizeof(StructuredStorageHeader);
 
                 dataHeader.listRecords.append(
@@ -197,16 +167,104 @@ QList<XBinary::DATA_HEADER> XCFBF::getDataHeaders(const DATA_HEADERS_OPTIONS &da
                 listResult.append(dataHeader);
 
                 if (dataHeadersOptions.bChildren) {
-                    // TODO
+                    // Expand children: Directory chain, FAT sectors (first 109), MiniFAT, DIFAT
+                    StructuredStorageHeader ssh = read_StructuredStorageHeader(nStartOffset, pPdStruct);
+                    const qint64 sectorSize = (ssh._uSectorShift == 12) ? 4096 : 512;
+
+                    // 1) Directory chain (as a table of directory entries)
+                    if ((ssh._sectDirStart != 0xFFFFFFFF) && (ssh._csectDir)) {
+                        DATA_HEADERS_OPTIONS _dirOptions = dataHeadersOptions;
+                        _dirOptions.dsID_parent = dataHeader.dsID;
+                        _dirOptions.dhMode = XBinary::DHMODE_TABLE;
+                        _dirOptions.nID = STRUCTID_CFBF_DIRECTORY_ENTRY;
+                        _dirOptions.locType = XBinary::LT_OFFSET;
+                        _dirOptions.nLocation = sectorSize + (qint64)ssh._sectDirStart * sectorSize;
+                        _dirOptions.nSize = (qint64)ssh._csectDir * sectorSize;
+                        _dirOptions.nCount = (qint32)(_dirOptions.nSize / 128);
+                        listResult.append(getDataHeaders(_dirOptions, pPdStruct));
+                    }
+
+                    // // 2) FAT sectors: first 109 listed in header
+                    // {
+                    //     DATA_HEADERS_OPTIONS _fatList = dataHeadersOptions;
+                    //     _fatList.dsID_parent = dataHeader.dsID;
+                    //     _fatList.dhMode = XBinary::DHMODE_HEADER;
+                    //     _fatList.nID = STRUCTID_FAT;  // custom header name below
+                    //     _fatList.locType = XBinary::LT_OFFSET;
+                    //     _fatList.nLocation = nStartOffset + offsetof(StructuredStorageHeader, _sectFat);
+
+                    //     XBinary::DATA_HEADER fatHeader = _initDataHeader(_fatList, QString("FAT sectors (first 109)"));
+                    //     fatHeader.nSize = 109 * 4;
+
+                    //     for (int i = 0; i < 109; ++i) {
+                    //         QString sField = QString("FATSector[%1]").arg(i);
+                    //         fatHeader.listRecords.append(getDataRecord(offsetof(StructuredStorageHeader, _sectFat) + i * 4, 4, sField, VT_UINT32, DRF_UNKNOWN,
+                    //                                                    dataHeadersOptions.pMemoryMap->endian));
+                    //     }
+
+                    //     listResult.append(fatHeader);
+                    // }
+
+                    // 3) MiniFAT region (best-effort contiguous range)
+                    if ((ssh._sectMiniFatStart != 0xFFFFFFFF) && (ssh._csectMiniFat)) {
+                        qint64 miniFatOffset = sectorSize + (qint64)ssh._sectMiniFatStart * sectorSize;
+                        qint64 miniFatSize = (qint64)ssh._csectMiniFat * sectorSize;
+
+                        if (isOffsetValid(miniFatOffset) && miniFatSize > 0) {
+                            DATA_HEADERS_OPTIONS _miniFat = dataHeadersOptions;
+                            _miniFat.dsID_parent = dataHeader.dsID;
+                            _miniFat.dhMode = XBinary::DHMODE_HEADER;
+                            _miniFat.nID = STRUCTID_MINIFAT;
+                            _miniFat.locType = XBinary::LT_OFFSET;
+                            _miniFat.nLocation = miniFatOffset;
+                            _miniFat.nSize = miniFatSize;
+
+                            listResult.append(getDataHeaders(_miniFat, pPdStruct));
+                        }
+                    }
+
+                    // 4) DIFAT region (best-effort contiguous range)
+                    if ((ssh._sectDifStart != 0xFFFFFFFF) && (ssh._csectDif)) {
+                        qint64 difatOffset = sectorSize + (qint64)ssh._sectDifStart * sectorSize;
+                        qint64 difatSize = (qint64)ssh._csectDif * sectorSize;
+
+                        if (isOffsetValid(difatOffset) && difatSize > 0) {
+                            DATA_HEADERS_OPTIONS _difat = dataHeadersOptions;
+                            _difat.dsID_parent = dataHeader.dsID;
+                            _difat.dhMode = XBinary::DHMODE_HEADER;
+                            _difat.nID = STRUCTID_DIFAT;
+                            _difat.locType = XBinary::LT_OFFSET;
+                            _difat.nLocation = difatOffset;
+                            _difat.nSize = difatSize;
+
+                            listResult.append(getDataHeaders(_difat, pPdStruct));
+                        }
+                    }
                 }
             } else if (dataHeadersOptions.nID == STRUCTID_CFBF_DIRECTORY_ENTRY) {
-                // TODO
+                // Render a single CFBF directory entry (128 bytes)
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XCFBF::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.nSize = 128;
+
+                // Name (UTF-16LE, 32 WCHAR -> 64 bytes)
+                dataHeader.listRecords.append(getDataRecord(0, 64, "Name", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(64, 2, "NameLength", VT_UINT16, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(66, 1, "ObjectType", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(67, 1, "ColorFlag", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(68, 4, "LeftSiblingID", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(72, 4, "RightSiblingID", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(76, 4, "ChildID", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(80, 16, "CLSID", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(96, 4, "StateBits", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(100, 8, "CreationTime", VT_UINT64, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(108, 8, "ModifiedTime", VT_UINT64, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(116, 4, "StartSectorLocation", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(120, 8, "StreamSize", VT_UINT64, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
             }
 
-            if (dataHeadersOptions.bChildren && isPdStructNotCanceled(pPdStruct)) {
-                if (dataHeadersOptions.nID == STRUCTID_StructuredStorageHeader) {
-                }
-            }
         }
     }
 
@@ -416,29 +474,6 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         if (ssh._sectDifStart != 0xFFFFFFFF && ssh._csectDif) {
             qint64 difatOffset = sectorSize + (qint64)ssh._sectDifStart * sectorSize;
             addRegion(difatOffset, (qint64)ssh._csectDif * sectorSize, QString("%1").arg("DIFAT"));
-        }
-    }
-
-    if (nFileParts & FILEPART_OVERLAY) {
-        // No strict overlay notion; keep generic: nothing after fileSize
-        // If desired, could compute highest covered end and mark the rest as overlay
-        // Here we mark nothing explicitly, consistent with other archives unless we can detect trailing data beyond header+regions
-        // Compute max covered end
-        qint64 maxCovered = 0;
-        for (int i = 0; i < listResult.size(); ++i) {
-            const FPART &p = listResult.at(i);
-            if (p.filePart != FILEPART_OVERLAY) {
-                maxCovered = qMax(maxCovered, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
-            }
-        }
-        if (maxCovered < fileSize) {
-            FPART ov = {};
-            ov.filePart = FILEPART_OVERLAY;
-            ov.nFileOffset = maxCovered;
-            ov.nFileSize = fileSize - maxCovered;
-            ov.nVirtualAddress = -1;
-            ov.sName = tr("Overlay");
-            listResult.append(ov);
         }
     }
 
