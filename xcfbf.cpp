@@ -265,7 +265,6 @@ QList<XBinary::DATA_HEADER> XCFBF::getDataHeaders(const DATA_HEADERS_OPTIONS &da
 
                 listResult.append(dataHeader);
             }
-
         }
     }
 
@@ -493,10 +492,10 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             }
 
             // First pass: locate Root Storage (ObjectType 5)
-        bool bHaveRoot = false;
-        quint32 nRootStartSector = 0;
-        quint64 nRootStreamSize = 0;
-        qint64 nFixedSize = 0;
+            bool bHaveRoot = false;
+            quint32 nRootStartSector = 0;
+            quint64 nRootStreamSize = 0;
+            qint64 nFixedSize = 0;
             for (qint32 i = 0; (i < maxEntries) && isPdStructNotCanceled(pPdStruct); i++) {
                 qint64 entryOffset = dirBaseOffset + (qint64)i * entrySize;
                 if (!isOffsetValid(entryOffset + entrySize - 1)) {
