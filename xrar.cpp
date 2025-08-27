@@ -304,22 +304,158 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
     qint32 nInternVersion = getInternVersion(pPdStruct);
 
+    if (nInternVersion == 0) {
+        return listResult;
+    }
+
+    qint64 nFileHeaderSize = 0;
+    if (nInternVersion == 4) {
+        nFileHeaderSize = 7;
+    } else if (nInternVersion == 5) {
+        nFileHeaderSize = 8;
+    } else if (nInternVersion == 1) {
+        nFileHeaderSize = 4;
+    }
+
+    qint64 nMaxOffset = 0;
+
     if (nFileParts & FILEPART_SIGNATURE) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_SIGNATURE;
         record.nFileOffset = 0;
-        if (nInternVersion == 1) {
-            record.nFileSize = 4;  // RAR 1.4
-        } else if (nInternVersion == 4) {
-            record.nFileSize = 7;  // RAR 4.0
-        } else if (nInternVersion == 5) {
-            record.nFileSize = 8;  // RAR 5.0
-        }
-        record.nFileSize = getSize();
+        record.nFileSize = nFileHeaderSize;
         record.nVirtualAddress = -1;
-        record.sName = tr("Header");
+        record.sName = tr("Signature");
 
         listResult.append(record);
+    }
+
+    if (nFileParts & (FILEPART_HEADER | FILEPART_STREAM | FILEPART_DATA | FILEPART_OVERLAY)) {
+        qint64 nCurrentOffset = nFileHeaderSize;
+        qint64 nTotalSize = getSize();
+
+        if (nInternVersion == 4) {
+            while (isPdStructNotCanceled(pPdStruct) && (nLimit == -1 || listResult.size() < nLimit)) {
+                if (nCurrentOffset >= nTotalSize - sizeof(GENERICBLOCK4)) {
+                    break;
+                }
+
+                GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+
+                if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
+                    if (nFileParts & FILEPART_HEADER) {
+                        XBinary::FPART record = {};
+                        record.filePart = FILEPART_HEADER;
+                        record.nFileOffset = nCurrentOffset;
+                        record.nFileSize = genericBlock.nHeaderSize;
+                        record.nVirtualAddress = -1;
+                        record.sName = blockType4ToString((BLOCKTYPE4)genericBlock.nType);
+
+                        listResult.append(record);
+                    }
+
+                    nMaxOffset = qMax(nMaxOffset, nCurrentOffset + genericBlock.nHeaderSize);
+
+                    if (genericBlock.nType == BLOCKTYPE4_FILE) {
+                        FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
+
+                        if (nFileParts & FILEPART_STREAM) {
+                            XBinary::FPART record = {};
+                            record.filePart = FILEPART_STREAM;
+                            record.nFileOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
+                            record.nFileSize = fileBlock4.packSize;
+                            record.nVirtualAddress = -1;
+                            record.sName = fileBlock4.sFileName.isEmpty() ? "Stream" : fileBlock4.sFileName;
+
+                            listResult.append(record);
+                        }
+
+                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize);
+
+                        nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
+                    } else {
+                        nCurrentOffset += genericBlock.nHeaderSize;
+                    }
+                } else {
+                    break;
+                }
+
+                if (genericBlock.nType == 0x7B) {  // END
+                    break;
+                }
+            }
+        } else if (nInternVersion == 5) {
+            while (isPdStructNotCanceled(pPdStruct) && (nLimit == -1 || listResult.size() < nLimit)) {
+                GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+
+                if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
+                    if (nFileParts & FILEPART_HEADER) {
+                        XBinary::FPART record = {};
+                        record.filePart = FILEPART_HEADER;
+                        record.nFileOffset = nCurrentOffset;
+                        record.nFileSize = genericHeader.nHeaderSize;
+                        record.nVirtualAddress = -1;
+                        record.sName = headerType5ToString((HEADERTYPE5)genericHeader.nType);
+
+                        listResult.append(record);
+                    }
+
+                    nMaxOffset = qMax(nMaxOffset, (qint64)(nCurrentOffset + genericHeader.nHeaderSize));
+
+                    if (genericHeader.nDataSize && (nFileParts & FILEPART_STREAM)) {
+                        XBinary::FPART record = {};
+                        record.filePart = FILEPART_STREAM;
+                        record.nFileOffset = nCurrentOffset + genericHeader.nHeaderSize;
+                        record.nFileSize = genericHeader.nDataSize;
+                        record.nVirtualAddress = -1;
+                        if (genericHeader.nType == HEADERTYPE5_FILE) {
+                            FILEHEADER5 fileHeader5 = readFileHeader5(nCurrentOffset);
+                            record.sName = fileHeader5.sFileName.isEmpty() ? "Stream" : fileHeader5.sFileName;
+                        } else {
+                            record.sName = "Stream";
+                        }
+
+                        listResult.append(record);
+                    }
+
+                    nMaxOffset = qMax(nMaxOffset, (qint64)(nCurrentOffset + genericHeader.nHeaderSize + genericHeader.nDataSize));
+
+                    nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
+                } else {
+                    break;
+                }
+
+                if (genericHeader.nType == 5) {  // END
+                    break;
+                }
+            }
+        }
+    }
+
+    nMaxOffset = qMin(nMaxOffset, getSize());
+
+    if (nFileParts & FILEPART_DATA) {
+        XBinary::FPART record = {};
+        record.filePart = FILEPART_DATA;
+        record.nFileOffset = 0;
+        record.nFileSize = nMaxOffset;
+        record.nVirtualAddress = -1;
+        record.sName = tr("Data");
+
+        listResult.append(record);
+    }
+
+    if (nFileParts & FILEPART_OVERLAY) {
+        if (nMaxOffset < getSize()) {
+            XBinary::FPART record = {};
+            record.filePart = FILEPART_OVERLAY;
+            record.nFileOffset = nMaxOffset;
+            record.nFileSize = nMaxOffset - getSize();
+            record.nVirtualAddress = -1;
+            record.sName = tr("Overlay");
+
+            listResult.append(record);
+        }
     }
 
     return listResult;
@@ -526,7 +662,7 @@ qint32 XRar::getInternVersion(PDSTRUCT *pPdStruct)
 {
     qint32 nResult = 0;
 
-    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+    _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
 
     // TODO more
     if (compareSignature(&memoryMap, "'RE~^'", 0, pPdStruct)) {
@@ -750,142 +886,18 @@ QList<XBinary::MAPMODE> XRar::getMapModesList()
 
 XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapMode)
-
     XBinary::_MEMORY_MAP result = {};
 
-    result.fileType = getFileType();
-    result.nBinarySize = getSize();
-
-    qint64 nFileHeaderSize = 0;
-    qint32 nVersion = getInternVersion(pPdStruct);
-
-    if (nVersion == 4) {
-        nFileHeaderSize = 7;
-    } else if (nVersion == 5) {
-        nFileHeaderSize = 8;
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_REGIONS;  // Default mode
     }
 
-    qint64 nMaxOffset = 0;
-
-    if (nFileHeaderSize) {
-        qint32 nIndex = 0;
-
-        {
-            _MEMORY_RECORD record = {};
-
-            record.nIndex = nIndex++;
-            record.filePart = FILEPART_HEADER;
-            record.nOffset = 0;
-            record.nSize = nFileHeaderSize;
-            record.nAddress = -1;
-            record.sName = tr("Header");
-
-            result.listRecords.append(record);
-        }
-
-        qint64 nCurrentOffset = nFileHeaderSize;
-
-        if (nVersion == 4) {
-            while (isPdStructNotCanceled(pPdStruct)) {
-                if (nCurrentOffset >= result.nBinarySize - sizeof(GENERICBLOCK4)) {
-                    break;
-                }
-
-                GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
-
-                if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
-                    {
-                        _MEMORY_RECORD record = {};
-
-                        record.nIndex = nIndex++;
-                        record.filePart = FILEPART_DATA;
-                        record.nOffset = nCurrentOffset;
-                        record.nSize = genericBlock.nHeaderSize;
-                        record.nAddress = -1;
-                        record.sName = blockType4ToString((BLOCKTYPE4)genericBlock.nType);
-
-                        nMaxOffset = qMax(nMaxOffset, record.nOffset + record.nSize);
-
-                        result.listRecords.append(record);
-                    }
-
-                    if (genericBlock.nType == BLOCKTYPE4_FILE) {
-                        FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
-                        {
-                            _MEMORY_RECORD record = {};
-
-                            record.nIndex = nIndex++;
-                            record.filePart = FILEPART_DATA;
-                            record.nOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
-                            record.nSize = fileBlock4.packSize;
-                            record.nAddress = -1;
-                            record.sName = "DATA";
-
-                            nMaxOffset = qMax(nMaxOffset, record.nOffset + record.nSize);
-
-                            result.listRecords.append(record);
-                        }
-
-                        nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
-                    } else {
-                        nCurrentOffset += genericBlock.nHeaderSize;
-                    }
-                } else {
-                    break;
-                }
-
-                if (genericBlock.nType == 0x7B) {  // END
-                    break;
-                }
-            }
-        }
-        if (nVersion == 5) {
-            while (isPdStructNotCanceled(pPdStruct)) {
-                GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
-
-                if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
-                    {
-                        _MEMORY_RECORD record = {};
-
-                        record.nIndex = nIndex++;
-                        record.filePart = FILEPART_DATA;
-                        record.nOffset = nCurrentOffset;
-                        record.nSize = genericHeader.nHeaderSize;
-                        record.nAddress = -1;
-                        record.sName = headerType5ToString((HEADERTYPE5)genericHeader.nType);
-
-                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset + record.nSize);
-
-                        result.listRecords.append(record);
-                    }
-                    if (genericHeader.nDataSize) {
-                        _MEMORY_RECORD record = {};
-
-                        record.nIndex = nIndex++;
-                        record.filePart = FILEPART_DATA;
-                        record.nOffset = nCurrentOffset + genericHeader.nHeaderSize;
-                        record.nSize = genericHeader.nDataSize;
-                        record.nAddress = -1;
-                        record.sName = "DATA";
-
-                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset + record.nSize);
-
-                        result.listRecords.append(record);
-                    }
-
-                    nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
-                } else {
-                    break;
-                }
-
-                if (genericHeader.nType == 5) {  // END
-                    break;
-                }
-            }
-        }
-
-        _handleOverlay(&result);
+    if (mapMode == MAPMODE_REGIONS) {
+        result = _getMemoryMap(FILEPART_HEADER | FILEPART_STREAM | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_STREAMS) {
+        result = _getMemoryMap(FILEPART_STREAM, pPdStruct);
+    } else if (mapMode == MAPMODE_DATA) {
+        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
     }
 
     return result;
