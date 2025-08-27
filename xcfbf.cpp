@@ -90,6 +90,7 @@ QString XCFBF::getMIMEString()
 
 quint64 XCFBF::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
     return 0;  // TODO
 }
 
@@ -362,6 +363,8 @@ XBinary::_MEMORY_MAP XCFBF::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
     } else if (mapMode == MAPMODE_REGIONS) {
         return _getMemoryMap(FILEPART_HEADER | FILEPART_REGION | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_STREAMS) {
+        return _getMemoryMap(FILEPART_HEADER | MAPMODE_STREAMS | FILEPART_OVERLAY, pPdStruct);
     }
     return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
 }
@@ -386,6 +389,7 @@ QList<XBinary::MAPMODE> XCFBF::getMapModesList()
     QList<MAPMODE> listResult;
     listResult.append(MAPMODE_DATA);
     listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_STREAMS);
     return listResult;
 }
 
@@ -397,11 +401,12 @@ qint64 XCFBF::getImageSize()
 
 QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     QList<FPART> listResult;
 
     const qint64 fileSize = getSize();
     if (fileSize < 512) return listResult;
+
+    qint64 nMaxOffset = 0;
 
     StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
     const qint64 sectorSize = (ssh._uSectorShift == 12) ? 4096 : 512;
@@ -416,37 +421,9 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         listResult.append(header);
     }
 
-    if (nFileParts & FILEPART_DATA) {
-        FPART data = {};
-        data.filePart = FILEPART_DATA;
-        data.nFileOffset = 0;
-        data.nFileSize = fileSize;
-        data.nVirtualAddress = -1;
-        data.sName = tr("Data");
-        listResult.append(data);
-    }
+    nMaxOffset = qMax(nMaxOffset, sectorSize);
 
-    if (nFileParts & FILEPART_REGION) {
-        // Best-effort logical regions: FAT sectors, MiniFAT sectors, DIFAT sectors, Directory sectors
-        auto addRegion = [&](qint64 offset, qint64 size, const QString &name) {
-            if (offset < 0 || size <= 0) return;
-            if (offset >= fileSize) return;
-            size = qMin<qint64>(size, fileSize - offset);
-            FPART part = {};
-            part.filePart = FILEPART_REGION;
-            part.nFileOffset = offset;
-            part.nFileSize = size;
-            part.nVirtualAddress = -1;
-            part.sName = name;
-            listResult.append(part);
-        };
-
-        // Directory chain
-        if (ssh._sectDirStart != 0xFFFFFFFF && ssh._csectDir) {
-            qint64 dirOffset = sectorSize + (qint64)ssh._sectDirStart * sectorSize;
-            addRegion(dirOffset, (qint64)ssh._csectDir * sectorSize, QString("%1").arg("Directory"));
-        }
-
+    {
         // FAT sectors: first 109 in header
         if (ssh._csectFat) {
             qint64 totalFat = (qint64)ssh._csectFat * sectorSize;
@@ -460,22 +437,219 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             }
             if (firstFatSect != 0xFFFFFFFF) {
                 qint64 fatOffset = sectorSize + (qint64)firstFatSect * sectorSize;
-                addRegion(fatOffset, totalFat, QString("%1").arg("FAT"));
+                if (nFileParts & FILEPART_REGION) {
+                    _addRegion(&listResult, fileSize, fatOffset, totalFat, QString("%1").arg("FAT"));
+                }
+                nMaxOffset = qMax(nMaxOffset, fatOffset + totalFat);
             }
         }
 
         // MiniFAT
         if (ssh._sectMiniFatStart != 0xFFFFFFFF && ssh._csectMiniFat) {
             qint64 miniFatOffset = sectorSize + (qint64)ssh._sectMiniFatStart * sectorSize;
-            addRegion(miniFatOffset, (qint64)ssh._csectMiniFat * sectorSize, QString("%1").arg("MiniFAT"));
+            qint64 miniFatSize = (qint64)ssh._csectMiniFat * sectorSize;
+
+            if (nFileParts & FILEPART_REGION) {
+                _addRegion(&listResult, fileSize, miniFatOffset, miniFatSize, QString("%1").arg("MiniFAT"));
+            }
+            nMaxOffset = qMax(nMaxOffset, miniFatOffset + miniFatSize);
         }
 
         // DIFAT
         if (ssh._sectDifStart != 0xFFFFFFFF && ssh._csectDif) {
             qint64 difatOffset = sectorSize + (qint64)ssh._sectDifStart * sectorSize;
-            addRegion(difatOffset, (qint64)ssh._csectDif * sectorSize, QString("%1").arg("DIFAT"));
+            qint64 difatSize = (qint64)ssh._csectDif * sectorSize;
+
+            if (nFileParts & FILEPART_REGION) {
+                _addRegion(&listResult, fileSize, difatOffset, difatSize, QString("%1").arg("DIFAT"));
+            }
+            nMaxOffset = qMax(nMaxOffset, difatOffset + difatSize);
+        }
+    }
+
+    {
+        // Best-effort: parse directory entries directly and emit stream parts.
+        // Note: CFBF streams may be fragmented; we map from the first sector linearly for UI purposes.
+        // Mini streams are mapped relative to the Root Storage stream start.
+
+        // Gather Root Storage info (needed for MiniStream base)
+        qint64 dirBaseOffset = -1;
+        qint64 dirTotalSize = 0;
+        if (ssh._sectDirStart != 0xFFFFFFFF) {
+            dirBaseOffset = sectorSize + (qint64)ssh._sectDirStart * sectorSize;
+
+            if (ssh._csectDir) {
+                dirTotalSize = (qint64)ssh._csectDir * sectorSize;
+            } else {
+                dirTotalSize = fileSize - dirBaseOffset;
+            }
+        }
+
+        if ((dirBaseOffset != -1) && (dirTotalSize >= 128)) {
+            const qint32 entrySize = 128;
+            qint32 maxEntries = (qint32)(dirTotalSize / entrySize);
+            if (maxEntries > 16384) {
+                maxEntries = 16384;  // sanity cap
+            }
+
+            // First pass: locate Root Storage (ObjectType 5)
+        bool bHaveRoot = false;
+        quint32 nRootStartSector = 0;
+        quint64 nRootStreamSize = 0;
+        qint64 nFixedSize = 0;
+            for (qint32 i = 0; (i < maxEntries) && isPdStructNotCanceled(pPdStruct); i++) {
+                qint64 entryOffset = dirBaseOffset + (qint64)i * entrySize;
+                if (!isOffsetValid(entryOffset + entrySize - 1)) {
+                    break;
+                }
+                quint8 nObjectType = read_uint8(entryOffset + 66);
+                if (nObjectType == 0) {
+                    continue;  // unused slot
+                }
+                if (nObjectType == 5) {  // Root Storage
+                    nRootStartSector = read_uint32(entryOffset + 116, false);
+                    nRootStreamSize = read_uint64(entryOffset + 120, false);
+                    bHaveRoot = true;
+                }
+
+                nFixedSize += entrySize;
+            }
+
+            nMaxOffset = qMax(nMaxOffset, dirBaseOffset + nFixedSize);
+
+            if (nFileParts & FILEPART_REGION) {
+                _addRegion(&listResult, fileSize, dirBaseOffset, nFixedSize, QString("%1").arg("Directory"));
+            }
+
+            // Mini stream parameters
+            const qint64 miniSectorSize = (ssh._uMiniSectorShift >= 4 && ssh._uMiniSectorShift <= 12) ? ((qint64)1 << ssh._uMiniSectorShift) : 64;
+            const quint64 miniCutoff = ssh._ulMiniSectorCutoff ? ssh._ulMiniSectorCutoff : 4096;
+            qint64 miniBaseOffset = -1;
+            if (bHaveRoot) {
+                miniBaseOffset = sectorSize + (qint64)nRootStartSector * sectorSize;
+            }
+
+            // Second pass: emit streams
+            qint32 nEmitted = 0;
+            for (qint32 i = 0; (i < maxEntries) && isPdStructNotCanceled(pPdStruct); i++) {
+                if ((nLimit > 0) && (nEmitted >= nLimit)) {
+                    break;
+                }
+
+                qint64 entryOffset = dirBaseOffset + (qint64)i * entrySize;
+                if (!isOffsetValid(entryOffset + entrySize - 1)) {
+                    break;
+                }
+
+                // Read object type
+                quint8 nObjectType = read_uint8(entryOffset + 66);
+                if (!((nObjectType == 2) || (nObjectType == 1) || (nObjectType == 5))) {
+                    continue;  // Streams, User Storages, Root Storage
+                }
+
+                quint32 nStartSector = read_uint32(entryOffset + 116, false);
+                quint64 nStreamSize = read_uint64(entryOffset + 120, false);
+
+                // For Root Storage, treat its stream as the MiniStream itself
+                if (nObjectType == 5) {
+                    nStartSector = nRootStartSector;
+                    nStreamSize = nRootStreamSize;
+                }
+
+                if ((nStreamSize == 0) || (nStartSector == 0xFFFFFFFF)) {
+                    continue;  // skip empty
+                }
+
+                // Only non-root entries can be mini; Root stream is stored in regular sectors
+                bool bIsMini = (nObjectType != 5) && (nStreamSize < miniCutoff) && (miniBaseOffset != -1);
+                qint64 streamOffset = -1;
+                if (bIsMini) {
+                    streamOffset = miniBaseOffset + (qint64)nStartSector * miniSectorSize;
+                } else {
+                    streamOffset = sectorSize + (qint64)nStartSector * sectorSize;
+                }
+
+                if (!isOffsetValid(streamOffset)) {
+                    continue;
+                }
+
+                qint64 clampedSize = (qint64)nStreamSize;
+                if (clampedSize > (fileSize - streamOffset)) {
+                    clampedSize = fileSize - streamOffset;
+                }
+                if (clampedSize <= 0) {
+                    continue;
+                }
+
+                if (nFileParts & FILEPART_STREAM) {
+                    // Read name
+                    QByteArray baName = read_array(entryOffset + 0, 64);
+                    quint16 nNameLength = read_uint16(entryOffset + 64, false);
+                    QString sName;
+                    if ((nNameLength >= 2) && (nNameLength <= 64)) {
+                        sName = QString::fromUtf16((ushort *)baName.constData(), (nNameLength - 2) / 2);
+                    }
+
+                    FPART part = {};
+                    part.filePart = FILEPART_STREAM;
+                    part.nFileOffset = streamOffset;
+                    part.nFileSize = clampedSize;
+                    part.nVirtualAddress = -1;
+                    part.sName = sName;
+                    listResult.append(part);
+                }
+
+                nMaxOffset = qMax(nMaxOffset, streamOffset + clampedSize);
+
+                nEmitted++;
+            }
+        }
+    }
+
+    nMaxOffset = align_up(nMaxOffset, sectorSize);
+
+    if (nFileParts & FILEPART_DATA) {
+        FPART data = {};
+        data.filePart = FILEPART_DATA;
+        data.nFileOffset = sectorSize;
+        data.nFileSize = qMin(nMaxOffset, fileSize);
+        data.nVirtualAddress = -1;
+        data.sName = tr("Data");
+        listResult.append(data);
+    }
+
+    if (nFileParts & FILEPART_OVERLAY) {
+        if (nMaxOffset < fileSize) {
+            FPART overlay = {};
+            overlay.filePart = FILEPART_OVERLAY;
+            overlay.nFileOffset = nMaxOffset;
+            overlay.nFileSize = fileSize - nMaxOffset;
+            overlay.nVirtualAddress = -1;
+            overlay.sName = tr("Overlay");
+            listResult.append(overlay);
         }
     }
 
     return listResult;
+}
+
+void XCFBF::_addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset, qint64 size, const QString &name)
+{
+    if (!pListResult) return;
+    if (offset < 0) return;
+    if (size <= 0) return;
+    if (offset >= fileSize) return;
+
+    qint64 clampedSize = size;
+    if (clampedSize > (fileSize - offset)) {
+        clampedSize = fileSize - offset;
+    }
+
+    FPART part = {};
+    part.filePart = FILEPART_REGION;
+    part.nFileOffset = offset;
+    part.nFileSize = clampedSize;
+    part.nVirtualAddress = -1;
+    part.sName = name;
+    pListResult->append(part);
 }
