@@ -241,3 +241,87 @@ X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
 
     return record;
 }
+
+QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    QList<FPART> listResult;
+
+    const qint64 fileSize = getSize();
+    if (fileSize < 8) return listResult;
+
+    qint64 nOffset = 0;
+    qint64 nSize = fileSize;
+
+    // Header magic
+    if (nFileParts & FILEPART_HEADER) {
+        FPART header = {};
+        header.filePart = FILEPART_HEADER;
+        header.nFileOffset = 0;
+        header.nFileSize = qMin<qint64>(8, fileSize);
+        header.nVirtualAddress = -1;
+        header.sName = tr("Header");
+        listResult.append(header);
+    }
+
+    nOffset += 8;
+    nSize -= 8;
+
+    if (!(nFileParts & (FILEPART_REGION | FILEPART_DATA))) {
+        return listResult;
+    }
+
+    QString sList;
+    qint32 nIndex = 0;
+
+    while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        FRECORD frecord = readFRECORD(nOffset);
+
+        QString sSize = QString(frecord.fileSize);
+        sSize.resize(sizeof(frecord.fileSize));
+        qint64 nRecordSize = sSize.trimmed().toLongLong();
+        if (nRecordSize <= 0) break;
+
+        QString sName = QString(frecord.fileId);
+        sName.resize(sizeof(frecord.fileId));
+        sName = sName.trimmed();
+
+        qint64 dataOffset = nOffset + (qint64)sizeof(FRECORD);
+        qint64 dataSize = nRecordSize;
+
+        if (sName == "//") {
+            // GNU table of long filenames; still a data region
+        } else if (sName.section('/', 0, 0) == "#1") {  // BSD style
+            qint32 nFileNameLength = sName.section('/', 1, 1).toInt();
+            dataOffset += nFileNameLength;
+            dataSize -= nFileNameLength;
+        } else if (sName.size() >= 2) {
+            if ((sName.at(0) == QChar('/')) && (sName.at(sName.size() - 1) != QChar('/'))) {
+                // Name comes from the string table; keep raw for part name
+            } else if ((sName.size() > 2) && (sName.at(sName.size() - 1) == QChar('/'))) {
+                sName.remove(sName.size() - 1, 1);
+            }
+        }
+
+        if (dataSize < 0) dataSize = 0;
+
+        if (nFileParts & FILEPART_REGION) {
+            FPART part = {};
+            part.filePart = FILEPART_REGION;
+            part.nFileOffset = dataOffset;
+            part.nFileSize = dataSize;
+            part.nVirtualAddress = -1;
+            part.sName = sName.isEmpty() ? tr("Record %1").arg(nIndex) : sName;
+            listResult.append(part);
+        }
+
+        // advance to next, 2-byte aligned
+        qint64 nAligned = S_ALIGN_UP(nRecordSize, 2);
+        nOffset += (qint64)sizeof(FRECORD) + nAligned;
+        nSize -= (qint64)sizeof(FRECORD) + nAligned;
+        nIndex++;
+
+        if ((nLimit != -1) && (nIndex >= nLimit)) break;
+    }
+
+    return listResult;
+}
