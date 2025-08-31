@@ -161,6 +161,103 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     return listResult;
 }
 
+QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+
+    QList<FPART> listResult;
+
+    const qint64 fileSize = getSize();
+
+    quint16 nCP = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cp));
+    quint16 nCblp = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cblp));
+
+    if (nCP == 0) {
+        return listResult;
+    }
+
+    qint64 nSignatureOffset = (nCP - 1) * 512 + nCblp;
+    nSignatureOffset = qBound<qint64>(0, nSignatureOffset, fileSize);
+
+    // Optional: header part (loader before first signature)
+    if ((nFileParts & FILEPART_HEADER) && (nSignatureOffset > 0)) {
+        FPART header = {};
+        header.filePart = FILEPART_HEADER;
+        header.nFileOffset = 0;
+        header.nFileSize = qMin<qint64>(nSignatureOffset, fileSize);
+        header.nVirtualAddress = -1;
+        header.sName = tr("Header");
+        listResult.append(header);
+    }
+
+    // Regions: walk BW/MF/MZ chain similar to getRecords/getMemoryMap
+    qint32 nIndex = 0;
+    qint64 nCur = nSignatureOffset;
+    if (fileSize > nCur) {
+        while (isPdStructNotCanceled(pPdStruct)) {
+            if (!isOffsetValid(nCur + 1)) break;
+            quint16 sig = read_uint16(nCur);
+
+            if (sig == 0x5742) {  // BW
+                qint64 nNext = read_uint32(nCur + offsetof(XMSDOS_DEF::dos16m_exe_header, next_header_pos));
+                QString sName = read_ansiString(nCur + offsetof(XMSDOS_DEF::dos16m_exe_header, EXP_path));
+                if ((nNext <= 0) || (nNext > fileSize)) nNext = fileSize;  // clamp
+
+                if (nFileParts & FILEPART_REGION) {
+                    FPART part = {};
+                    part.filePart = FILEPART_REGION;
+                    part.nFileOffset = nCur;
+                    part.nFileSize = qMax<qint64>(0, nNext - nCur);
+                    part.nVirtualAddress = -1;
+                    part.sName = sName.isEmpty() ? tr("Segment %1").arg(nIndex) : sName;
+                    listResult.append(part);
+                }
+
+                nCur = nNext;
+                nIndex++;
+            } else if (sig == 0x464D) {  // MF - info block, skip length at +2
+                qint64 nSkip = read_uint32(nCur + 2);
+                nCur += qMax<qint64>(0, nSkip);
+            } else if (sig == 0x5A4D) {  // MZ payload
+                if (nFileParts & (FILEPART_REGION | FILEPART_DATA)) {
+                    FPART data = {};
+                    data.filePart = (nFileParts & FILEPART_DATA) ? FILEPART_DATA : FILEPART_REGION;
+                    data.nFileOffset = nCur;
+                    data.nFileSize = qMax<qint64>(0, fileSize - nCur);
+                    data.nVirtualAddress = -1;
+                    data.sName = (data.filePart == FILEPART_DATA) ? tr("Data") : tr("Payload");
+                    listResult.append(data);
+                }
+                break;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Overlay: any tail not covered by the above when not using DATA-only
+    if ((nFileParts & FILEPART_OVERLAY) && !listResult.isEmpty()) {
+        qint64 coveredEnd = 0;
+        for (int i = 0; i < listResult.size(); i++) {
+            const FPART &p = listResult.at(i);
+            if (p.filePart != FILEPART_OVERLAY) {
+                coveredEnd = qMax(coveredEnd, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
+            }
+        }
+        if (coveredEnd < fileSize) {
+            FPART ov = {};
+            ov.filePart = FILEPART_OVERLAY;
+            ov.nFileOffset = coveredEnd;
+            ov.nFileSize = fileSize - coveredEnd;
+            ov.nVirtualAddress = -1;
+            ov.sName = tr("Overlay");
+            listResult.append(ov);
+        }
+    }
+
+    return listResult;
+}
+
 XBinary::FT XDOS16::getFileType()
 {
     XBinary::FT result = FT_UNKNOWN;
