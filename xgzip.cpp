@@ -224,3 +224,85 @@ XBinary::FT XGzip::getFileType()
 {
     return FT_GZIP;
 }
+
+QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+
+    QList<FPART> listResult;
+
+    const qint64 fileSize = getSize();
+    if (fileSize <= 0) return listResult;
+
+    qint64 nOffset = 0;
+    GZIP_HEADER gzipHeader = {};
+    if (isOffsetValid(0 + (qint64)sizeof(GZIP_HEADER) - 1)) {
+        read_array(nOffset, (char *)&gzipHeader, sizeof(GZIP_HEADER));
+    }
+
+    // Header
+    if (nFileParts & FILEPART_HEADER) {
+        // Account for optional filename if present
+        qint64 headerSize = (qint64)sizeof(GZIP_HEADER);
+        qint64 optOffset = headerSize;
+        if (gzipHeader.nFileFlags & 8) {
+            QString sFileName = read_ansiString(optOffset);
+            optOffset += sFileName.size() + 1;
+            headerSize = optOffset;
+        }
+        FPART header = {};
+        header.filePart = FILEPART_HEADER;
+        header.nFileOffset = 0;
+        header.nFileSize = qBound<qint64>(0, headerSize, fileSize);
+        header.nVirtualAddress = -1;
+        header.sName = tr("Header");
+        listResult.append(header);
+    }
+
+    // Region: compressed stream payload (best-effort)
+    if (nFileParts & FILEPART_REGION) {
+        qint64 payloadOffset = (qint64)sizeof(GZIP_HEADER);
+        if (gzipHeader.nFileFlags & 8) {
+            QString sFileName = read_ansiString(payloadOffset);
+            payloadOffset += sFileName.size() + 1;
+        }
+        qint64 payloadSize = qMax<qint64>(0, fileSize - payloadOffset);
+        // Exclude the standard 8-byte footer (CRC32 + ISIZE) if present
+        if (payloadSize >= 8) payloadSize -= 8;
+
+        FPART region = {};
+        region.filePart = FILEPART_REGION;
+        region.nFileOffset = payloadOffset;
+        region.nFileSize = payloadSize;
+        region.nVirtualAddress = -1;
+        region.sName = tr("Compressed stream");
+        listResult.append(region);
+    }
+
+    // Footer
+    if (nFileParts & FILEPART_FOOTER) {
+        if (fileSize >= 8) {
+            FPART footer = {};
+            footer.filePart = FILEPART_FOOTER;
+            footer.nFileOffset = fileSize - 8;
+            footer.nFileSize = 8;
+            footer.nVirtualAddress = -1;
+            footer.sName = tr("Footer");
+            listResult.append(footer);
+        }
+    }
+
+    // Data: entire file
+    if (nFileParts & FILEPART_DATA) {
+        FPART data = {};
+        data.filePart = FILEPART_DATA;
+        data.nFileOffset = 0;
+        data.nFileSize = fileSize;
+        data.nVirtualAddress = -1;
+        data.sName = tr("Data");
+        listResult.append(data);
+    }
+
+    Q_UNUSED(pPdStruct)
+    return listResult;
+}

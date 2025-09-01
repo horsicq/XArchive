@@ -52,6 +52,7 @@ public:
     virtual QString getFileFormatExtsString();
     virtual FT getFileType();
     virtual QString getMIMEString();
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 };
 
 #endif  // XGZIP_H
