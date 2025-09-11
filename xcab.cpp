@@ -406,3 +406,23 @@ XBinary::_MEMORY_MAP XCab::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     }
     return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
 }
+
+qint64 XCab::getImageSize()
+{
+    return (qint64)readCFHeader(0).cbCabinet;
+}
+
+XBinary::MODE XCab::getMode()
+{
+    return MODE_DATA;
+}
+
+QString XCab::getArch()
+{
+    return QString("Generic");
+}
+
+XBinary::ENDIAN XCab::getEndian()
+{
+    return ENDIAN_LITTLE;
+}

@@ -107,22 +107,10 @@ public:
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
     // Basic platform info overrides for archives
-    virtual qint64 getImageSize() override
-    {
-        return (qint64)readCFHeader(0).cbCabinet;
-    }
-    virtual MODE getMode() override
-    {
-        return MODE_DATA;
-    }
-    virtual QString getArch() override
-    {
-        return QString("Generic");
-    }
-    virtual ENDIAN getEndian() override
-    {
-        return ENDIAN_LITTLE;
-    }
+    virtual qint64 getImageSize() override;
+    virtual MODE getMode() override;
+    virtual QString getArch() override;
+    virtual ENDIAN getEndian() override;
 
     virtual QString structIDToString(quint32 nID) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
