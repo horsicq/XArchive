@@ -48,16 +48,16 @@ class X_Ar : public XArchive {
 public:
     explicit X_Ar(QIODevice *pDevice = nullptr);
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
-    virtual QString getFileFormatExt();
-    virtual QList<MAPMODE> getMapModesList();
-    virtual FT getFileType();
-    virtual qint32 getType();
-    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
-    virtual QString getMIMEString();
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
+    virtual QString getFileFormatExt() override;
+    virtual QList<MAPMODE> getMapModesList() override;
+    virtual FT getFileType() override;
+    virtual qint32 getType() override;
+    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QString getMIMEString() override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
