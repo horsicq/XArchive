@@ -29,8 +29,9 @@ class XAPKS : public XAPK {
 public:
     explicit XAPKS(QIODevice *pDevice = nullptr);
 
-    virtual FT getFileType();
-    virtual QString getFileFormatExt();
+    virtual FT getFileType() override;
+    virtual QString getFileFormatExt() override;
+    virtual QString getMIMEString() override;
 };
 
 #endif  // XAPKS_H

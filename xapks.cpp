@@ -29,6 +29,11 @@ QString XAPKS::getFileFormatExt()
     return "apks";
 }
 
+QString XAPKS::getMIMEString()
+{
+    return "application/vnd.android.package-archive";
+}
+
 XBinary::FT XAPKS::getFileType()
 {
     return FT_APKS;
