@@ -28,7 +28,7 @@ class XIPA : public XJAR {
 
 public:
     explicit XIPA(QIODevice *pDevice = nullptr);
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 

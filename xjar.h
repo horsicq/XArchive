@@ -36,18 +36,18 @@ public:
 
     explicit XJAR(QIODevice *pDevice = nullptr);
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
-    virtual FT getFileType();
-    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
-    virtual QString getFileFormatExt();
-    virtual ENDIAN getEndian();
-    virtual MODE getMode();
-    virtual QString getArch();
-    virtual qint32 getType();
-    virtual QString typeIdToString(qint32 nType);
+    virtual FT getFileType() override;
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
+    virtual QString getFileFormatExt() override;
+    virtual ENDIAN getEndian() override;
+    virtual MODE getMode() override;
+    virtual QString getArch() override;
+    virtual qint32 getType() override;
+    virtual QString typeIdToString(qint32 nType) override;
 };
 
 #endif  // XJAR_H
