@@ -37,19 +37,19 @@ public:
     };
 
     explicit XAPK(QIODevice *pDevice = nullptr);
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
-    virtual FT getFileType();
-    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
-    virtual QString getFileFormatExt();
-    virtual MODE getMode();
-    virtual QString getArch();
-    virtual qint32 getType();
-    virtual QString typeIdToString(qint32 nType);
-    virtual bool isSigned();
-    virtual OFFSETSIZE getSignOffsetSize();
+    virtual FT getFileType() override;
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
+    virtual QString getFileFormatExt() override;
+    virtual MODE getMode() override;
+    virtual QString getArch() override;
+    virtual qint32 getType() override;
+    virtual QString typeIdToString(qint32 nType) override;
+    virtual bool isSigned() override;
+    virtual OFFSETSIZE getSignOffsetSize() override;
 
     bool isAPKSignBlockPresent();  // For APK Check jar
 
