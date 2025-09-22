@@ -88,16 +88,16 @@ public:
     explicit XCFBF(QIODevice *pDevice = nullptr);
     ~XCFBF();
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
 
-    virtual QString getArch();
-    virtual MODE getMode();
-    virtual ENDIAN getEndian();
-    virtual FT getFileType();
-    virtual QString getVersion();
-    virtual QString getFileFormatExt();
-    virtual QString getMIMEString();
+    virtual QString getArch() override;
+    virtual MODE getMode() override;
+    virtual ENDIAN getEndian() override;
+    virtual FT getFileType() override;
+    virtual QString getVersion() override;
+    virtual QString getFileFormatExt() override;
+    virtual QString getMIMEString() override;
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
