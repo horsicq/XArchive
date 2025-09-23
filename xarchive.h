@@ -29,8 +29,8 @@
 #include "Ppmd7.h"
 #endif
 #include "xcompress.h"
-#include "Compress/xlzhdecoder.h"
-#include "Compress/xrardecoder.h"
+#include "Algos/xlzhdecoder.h"
+#include "Algos/xrardecoder.h"
 
 class XArchive : public XBinary {
     Q_OBJECT

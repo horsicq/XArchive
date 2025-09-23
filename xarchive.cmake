@@ -1,5 +1,5 @@
 include_directories(${CMAKE_CURRENT_LIST_DIR})
-include_directories(${CMAKE_CURRENT_LIST_DIR}/Compress/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/bzip2/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/lzma/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/zlib/src/)
@@ -65,30 +65,30 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xbzip2.h
     ${CMAKE_CURRENT_LIST_DIR}/xxz.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xxz.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzhdecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzhdecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xrardecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xrardecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xit214decoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xit214decoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xdeflatedecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xdeflatedecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/ximplodedecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/ximplodedecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzmadecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzmadecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzwdecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzwdecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xascii85decoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xascii85decoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xstoredecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xstoredecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xbzip2decoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xbzip2decoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzssdecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xlzssdecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xshrinkdecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xshrinkdecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xreducedecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Compress/xreducedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xit214decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xit214decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xdeflatedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xdeflatedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/ximplodedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/ximplodedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzmadecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzmadecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzwdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzwdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xascii85decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xascii85decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzssdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzssdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xshrinkdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xshrinkdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xreducedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xreducedecoder.h
 )

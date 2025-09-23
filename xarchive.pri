@@ -1,22 +1,22 @@
 INCLUDEPATH += $$PWD
 DEPENDPATH += $$PWD
-INCLUDEPATH += $$PWD/Compress
-DEPENDPATH += $$PWD/Compress
+INCLUDEPATH += $$PWD/Algos
+DEPENDPATH += $$PWD/Algos
 
 HEADERS += \
-    $$PWD/Compress/xlzhdecoder.h \
-    $$PWD/Compress/xrardecoder.h \
-    $$PWD/Compress/xit214decoder.h \
-    $$PWD/Compress/xdeflatedecoder.h \
-    $$PWD/Compress/ximplodedecoder.h \
-    $$PWD/Compress/xlzmadecoder.h \
-    $$PWD/Compress/xlzwdecoder.h \
-    $$PWD/Compress/xascii85decoder.h \
-    $$PWD/Compress/xstoredecoder.h \
-    $$PWD/Compress/xbzip2decoder.h \
-    $$PWD/Compress/xlzssdecoder.h \
-    $$PWD/Compress/xshrinkdecoder.h \
-    $$PWD/Compress/xreducedecoder.h \
+    $$PWD/Algos/xlzhdecoder.h \
+    $$PWD/Algos/xrardecoder.h \
+    $$PWD/Algos/xit214decoder.h \
+    $$PWD/Algos/xdeflatedecoder.h \
+    $$PWD/Algos/ximplodedecoder.h \
+    $$PWD/Algos/xlzmadecoder.h \
+    $$PWD/Algos/xlzwdecoder.h \
+    $$PWD/Algos/xascii85decoder.h \
+    $$PWD/Algos/xstoredecoder.h \
+    $$PWD/Algos/xbzip2decoder.h \
+    $$PWD/Algos/xlzssdecoder.h \
+    $$PWD/Algos/xshrinkdecoder.h \
+    $$PWD/Algos/xreducedecoder.h \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
@@ -45,19 +45,19 @@ HEADERS += \
     $$PWD/xzlib.h
 
 SOURCES += \
-    $$PWD/Compress/xlzhdecoder.cpp \
-    $$PWD/Compress/xrardecoder.cpp \
-    $$PWD/Compress/xit214decoder.cpp \
-    $$PWD/Compress/xdeflatedecoder.cpp \
-    $$PWD/Compress/ximplodedecoder.cpp \
-    $$PWD/Compress/xlzmadecoder.cpp \
-    $$PWD/Compress/xlzwdecoder.cpp \
-    $$PWD/Compress/xascii85decoder.cpp \
-    $$PWD/Compress/xstoredecoder.cpp \
-    $$PWD/Compress/xbzip2decoder.cpp \
-    $$PWD/Compress/xlzssdecoder.cpp \
-    $$PWD/Compress/xshrinkdecoder.cpp \
-    $$PWD/Compress/xreducedecoder.cpp \
+    $$PWD/Algos/xlzhdecoder.cpp \
+    $$PWD/Algos/xrardecoder.cpp \
+    $$PWD/Algos/xit214decoder.cpp \
+    $$PWD/Algos/xdeflatedecoder.cpp \
+    $$PWD/Algos/ximplodedecoder.cpp \
+    $$PWD/Algos/xlzmadecoder.cpp \
+    $$PWD/Algos/xlzwdecoder.cpp \
+    $$PWD/Algos/xascii85decoder.cpp \
+    $$PWD/Algos/xstoredecoder.cpp \
+    $$PWD/Algos/xbzip2decoder.cpp \
+    $$PWD/Algos/xlzssdecoder.cpp \
+    $$PWD/Algos/xshrinkdecoder.cpp \
+    $$PWD/Algos/xreducedecoder.cpp \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \
