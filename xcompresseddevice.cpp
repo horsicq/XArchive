@@ -74,7 +74,7 @@ bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart,
                 if (g_pBufferDevice->open(QIODevice::ReadWrite)) {
                     g_pBufferDevice->setProperty("Memory", true);
                     g_pCurrentDevice = g_pBufferDevice;
-                    bResult = XDecompress().decompressFPART(fPart, pDevice, g_pBufferDevice, 0, -1, pPdStruct);
+                    bResult = XDecompress().decompressFPART(fPart, pDevice, g_pBufferDevice, 0, -1, pPdStruct); // TODO connect signals
                 }
             }
         } else {

@@ -44,7 +44,6 @@ public:
                          XBinary::PDSTRUCT *pPdStruct);
     bool checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct);
     bool decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
-    bool unpackFilePartsToFolder(QList<XBinary::FPART> *pListParts, QIODevice *pDevice, QString sFolderName, XBinary::PDSTRUCT *pPdStruct);
     QByteArray decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
     qint64 getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
 
