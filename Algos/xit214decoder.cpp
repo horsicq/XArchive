@@ -82,7 +82,7 @@ bool XIT214Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, quin
                         width = (value < width) ? value : value + 1; /* and expand it */
                         continue;                                    /* ... next value */
                     }
-                } else if (width < 9) {                               /* method 2 (7-8 bits) */
+                } else if (width < 9) {                                      /* method 2 (7-8 bits) */
                     quint16 border = (quint16)((0xFFu >> (9 - width)) - 4u); /* lower border for width chg */
 
                     if (value > border && value <= (border + 8u)) {
