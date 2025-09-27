@@ -46,6 +46,12 @@ class X_Ar : public XArchive {
     };
 
 public:
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_FRECORD,
+        STRUCTID_SIGNATURE
+    };
+
     explicit X_Ar(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
@@ -59,6 +65,13 @@ public:
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QString getMIMEString() override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QString structIDToString(quint32 nID);
+    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
+    virtual bool readTableInit(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void **ppUserData, PDSTRUCT *pPdStruct);
+    virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+                                void *pUserData, PDSTRUCT *pPdStruct);
+    virtual void readTableFinalize(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void *pUserData, PDSTRUCT *pPdStruct);
+    quint64 _getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct);
 
 private:
     FRECORD readFRECORD(qint64 nOffset);

@@ -20,6 +20,12 @@
  */
 #include "x_ar.h"
 
+XBinary::XCONVERT _TABLE_XAr_STRUCTID[] = {
+    {X_Ar::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+    {X_Ar::STRUCTID_FRECORD, "FRECORD", QString("FRECORD")},
+    {X_Ar::STRUCTID_SIGNATURE, "Signature", QObject::tr("Signature")},
+};
+
 X_Ar::X_Ar(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -54,39 +60,7 @@ bool X_Ar::isValid(QIODevice *pDevice)
 
 quint64 X_Ar::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
-    quint64 nResult = 0;
-
-    qint64 nOffset = 0;
-    qint64 nSize = getSize();
-
-    nOffset += 8;
-    nSize -= 8;
-
-    while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        char fileSize[16];
-
-        read_array(nOffset + offsetof(FRECORD, fileSize), fileSize, 10);
-
-        QString sSize = QString(fileSize);
-
-        sSize.resize(10);
-
-        qint32 nRecordSize = sSize.trimmed().toULongLong();
-
-        if (nRecordSize == 0) {
-            break;
-        }
-
-        nOffset += sizeof(FRECORD);
-        nOffset += S_ALIGN_UP(nRecordSize, 2);
-
-        nSize -= sizeof(FRECORD);
-        nSize -= S_ALIGN_UP(nRecordSize, 2);
-
-        nResult++;
-    }
-
-    return nResult;
+    return _getNumberOfStreams(8, pPdStruct);
 }
 
 QList<XArchive::RECORD> X_Ar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
@@ -201,6 +175,8 @@ QList<XBinary::MAPMODE> X_Ar::getMapModesList()
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_STREAMS);
+    listResult.append(MAPMODE_DATA);
 
     return listResult;
 }
@@ -220,11 +196,220 @@ QString X_Ar::getMIMEString()
     return "application/x-archive";
 }
 
+QString X_Ar::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XAr_STRUCTID, sizeof(_TABLE_XAr_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+bool X_Ar::readTableInit(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void **ppUserData, PDSTRUCT *pPdStruct)
+{
+    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
+        qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, dataRecordsOptions.dataHeaderFirst.locType, dataRecordsOptions.dataHeaderFirst.nLocation);
+
+        if (nStartOffset != -1) {
+            TABLE_LIST *pTableList = new TABLE_LIST;
+            qint64 nOffset = nStartOffset;
+            qint64 nTotalSize = getSize();
+
+            while ((nOffset + (qint64)sizeof(FRECORD) <= nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+                FRECORD frecord = readFRECORD(nOffset);
+
+                // Validate member terminator
+                if (!((frecord.endChar[0] == 0x60) && (frecord.endChar[1] == 0x0a))) {
+                    break;
+                }
+
+                QString sSize = QString(frecord.fileSize);
+                sSize.resize(sizeof(frecord.fileSize));
+                qint64 nRecordSize = sSize.trimmed().toLongLong();
+                if (nRecordSize < 0) {
+                    break;
+                }
+
+                QString sName = QString(frecord.fileId);
+                sName.resize(sizeof(frecord.fileId));
+                sName = sName.trimmed();
+
+                qint64 nDataSize = nRecordSize;
+
+                // BSD style filename stored in data area immediately after header
+                if (sName.section('/', 0, 0) == "#1") {
+                    qint32 nFileNameLength = sName.section('/', 1, 1).toInt();
+                    if (nFileNameLength > 0) {
+                        if (nRecordSize >= nFileNameLength) {
+                            nDataSize = nRecordSize - (qint64)nFileNameLength;
+                        } else {
+                            // Malformed entry; avoid underflow
+                            nDataSize = 0;
+                        }
+                    }
+                }
+
+                if (nDataSize < 0) {
+                    nDataSize = 0;
+                }
+
+                XBinary::OFFSETSIZE os = {};
+                os.nOffset = nOffset;
+                os.nSize = nDataSize;
+                pTableList->listOffsetsSizes.append(os);
+
+                qint64 nStep = (qint64)sizeof(FRECORD) + (qint64)S_ALIGN_UP(nRecordSize, 2);
+                nOffset += nStep;
+            }
+
+            *ppUserData = (void *)pTableList;
+        }
+    }
+
+    return true;
+}
+
+QList<XBinary::DATA_HEADER> X_Ar::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::DATA_HEADER> listResult;
+
+    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+        _dataHeadersOptions.bChildren = true;
+        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+
+        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+        _dataHeadersOptions.nID = STRUCTID_SIGNATURE;
+        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+    } else {
+        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+
+        if (nStartOffset != -1) {
+            if (dataHeadersOptions.nID == STRUCTID_SIGNATURE) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
+                dataHeader.listRecords.append(getDataRecord(0, 8, "Magic", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.nSize = 8;
+                listResult.append(dataHeader);
+
+                DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+                _dataHeadersOptions.nLocation += 8;
+                _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+                _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+                _dataHeadersOptions.nID = STRUCTID_FRECORD;
+                _dataHeadersOptions.nCount = _getNumberOfStreams(8, pPdStruct);
+                listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+            } else if (dataHeadersOptions.nID == STRUCTID_FRECORD) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileId), sizeof(((FRECORD *)0)->fileId), "FileId", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMod), sizeof(((FRECORD *)0)->fileMod), "FileMod", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, ownerId), sizeof(((FRECORD *)0)->ownerId), "OwnerId", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, groupId), sizeof(((FRECORD *)0)->groupId), "GroupId", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMode), sizeof(((FRECORD *)0)->fileMode), "FileMode", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileSize), sizeof(((FRECORD *)0)->fileSize), "FileSize", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, endChar), sizeof(((FRECORD *)0)->endChar), "EndChar", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.nSize = sizeof(FRECORD);
+
+                listResult.append(dataHeader);
+            }
+        }
+    }
+
+    return listResult;
+}
+
+qint32 X_Ar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+                          void *pUserData, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pUserData)
+    qint32 nResult = 0;
+
+    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
+        TABLE_LIST *pTableList = (TABLE_LIST *)pUserData;
+
+        if (pTableList) {
+            if (nRow < pTableList->listOffsetsSizes.count()) {
+                OFFSETSIZE os = pTableList->listOffsetsSizes.at(nRow);
+
+                XBinary::readTableRow(nRow, LT_OFFSET, os.nOffset, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+                nResult = os.nSize;
+            }
+        }
+    } else {
+        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+    }
+
+    return nResult;
+}
+
+void X_Ar::readTableFinalize(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void *pUserData, PDSTRUCT *pPdStruct)
+{
+    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
+        TABLE_LIST *pTableList = (TABLE_LIST *)pUserData;
+
+        if (pTableList) {
+            delete pTableList;
+        }
+    }
+}
+
+quint64 X_Ar::_getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct)
+{
+    quint64 nResult = 0;
+
+    qint64 nSize = getSize() - nOffset;
+
+    while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        FRECORD frecord = readFRECORD(nOffset);
+
+        // Validate header terminator for safety
+        if (!((frecord.endChar[0] == 0x60) && (frecord.endChar[1] == 0x0a))) {
+            break;
+        }
+
+        QString sSize = QString(frecord.fileSize);
+        sSize.resize(sizeof(frecord.fileSize));
+        qint64 nRecordSize = sSize.trimmed().toLongLong();
+
+        if (nRecordSize <= 0) {
+            break;
+        }
+
+        // BSD style name: "#1/<len>" has embedded filename immediately after header
+        QString sName = QString(frecord.fileId);
+        sName.resize(sizeof(frecord.fileId));
+        sName = sName.trimmed();
+        if (sName.section('/', 0, 0) == "#1") {
+            qint32 nFileNameLength = sName.section('/', 1, 1).toInt();
+            if (nRecordSize < nFileNameLength) {
+                break;  // malformed; avoid underflow/loop
+            }
+        }
+
+        qint64 nStep = (qint64)sizeof(FRECORD) + (qint64)S_ALIGN_UP(nRecordSize, 2);
+        nOffset += nStep;
+        nSize -= nStep;
+        nResult++;
+    }
+
+    return nResult;
+}
+
 XBinary::_MEMORY_MAP X_Ar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    // TODO HEADER
+    XBinary::_MEMORY_MAP result = {};
 
-    return XBinary::getMemoryMap(mapMode, pPdStruct);
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_DATA;  // Default mode
+    }
+
+    if (mapMode == MAPMODE_REGIONS) {
+        result = _getMemoryMap(FILEPART_HEADER | FILEPART_STREAM | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_STREAMS) {
+        result = _getMemoryMap(FILEPART_STREAM, pPdStruct);
+    } else if (mapMode == MAPMODE_DATA) {
+        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    }
+
+    return result;
 }
 
 X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
@@ -266,11 +451,6 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     nOffset += 8;
     nSize -= 8;
 
-    if (!(nFileParts & (FILEPART_REGION | FILEPART_DATA))) {
-        return listResult;
-    }
-
-    QString sList;
     qint32 nIndex = 0;
 
     while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -281,36 +461,62 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         qint64 nRecordSize = sSize.trimmed().toLongLong();
         if (nRecordSize <= 0) break;
 
-        QString sName = QString(frecord.fileId);
-        sName.resize(sizeof(frecord.fileId));
-        sName = sName.trimmed();
+        QString sOriginalName = QString(frecord.fileId);
+        sOriginalName.resize(sizeof(frecord.fileId));
+        sOriginalName = sOriginalName.trimmed();
 
         qint64 dataOffset = nOffset + (qint64)sizeof(FRECORD);
         qint64 dataSize = nRecordSize;
+        qint32 nFileNameLength = 0;
 
-        if (sName == "//") {
+        if (sOriginalName == "//") {
             // GNU table of long filenames; still a data region
-        } else if (sName.section('/', 0, 0) == "#1") {  // BSD style
-            qint32 nFileNameLength = sName.section('/', 1, 1).toInt();
+        } else if (sOriginalName.section('/', 0, 0) == "#1") {  // BSD style
+            nFileNameLength = sOriginalName.section('/', 1, 1).toInt();
             dataOffset += nFileNameLength;
             dataSize -= nFileNameLength;
-        } else if (sName.size() >= 2) {
-            if ((sName.at(0) == QChar('/')) && (sName.at(sName.size() - 1) != QChar('/'))) {
+        } else if (sOriginalName.size() >= 2) {
+            if ((sOriginalName.at(0) == QChar('/')) && (sOriginalName.at(sOriginalName.size() - 1) != QChar('/'))) {
                 // Name comes from the string table; keep raw for part name
-            } else if ((sName.size() > 2) && (sName.at(sName.size() - 1) == QChar('/'))) {
-                sName.remove(sName.size() - 1, 1);
+            } else if ((sOriginalName.size() > 2) && (sOriginalName.at(sOriginalName.size() - 1) == QChar('/'))) {
+                sOriginalName.remove(sOriginalName.size() - 1, 1);
             }
         }
 
         if (dataSize < 0) dataSize = 0;
 
-        if (nFileParts & FILEPART_REGION) {
+        if (nFileParts & FILEPART_HEADER) {
+            FPART h = {};
+            h.filePart = FILEPART_HEADER;
+            h.nFileOffset = nOffset;
+            h.nFileSize = (qint64)sizeof(FRECORD) + (qint64)nFileNameLength;  // FRECORD + optional BSD filename
+            h.nVirtualAddress = -1;
+            h.sName = tr("Header");
+            listResult.append(h);
+        }
+
+        if (nFileParts & FILEPART_STREAM) {
             FPART part = {};
-            part.filePart = FILEPART_REGION;
+            part.filePart = FILEPART_STREAM;
             part.nFileOffset = dataOffset;
             part.nFileSize = dataSize;
             part.nVirtualAddress = -1;
-            part.sName = sName.isEmpty() ? tr("Record %1").arg(nIndex) : sName;
+            part.sName = tr("Record") + QString(" %1").arg(nIndex);
+            part.sOriginalName = sOriginalName;
+            // Properties: ar stores raw bytes, no compression
+            part.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
+            part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, dataSize);
+            part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, dataSize);
+            // Optional: modification time (ASCII epoch seconds in header)
+            QString sMod = QString(frecord.fileMod);
+            sMod.resize(sizeof(frecord.fileMod));
+            sMod = sMod.trimmed();
+            bool bOk = false;
+            quint64 nModSecs = sMod.toULongLong(&bOk, 10);
+            if (bOk) {
+                QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nModSecs, Qt::UTC);
+                part.mapProperties.insert(FPART_PROP_DATETIME, dt);
+            }
             listResult.append(part);
         }
 
@@ -321,6 +527,27 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         nIndex++;
 
         if ((nLimit != -1) && (nIndex >= nLimit)) break;
+    }
+    // Total parsed data area
+    if (nFileParts & FILEPART_DATA) {
+        FPART data = {};
+        data.filePart = FILEPART_DATA;
+        data.nFileOffset = 8;
+        data.nFileSize = nOffset - 8;
+        data.nVirtualAddress = -1;
+        data.sName = tr("Data");
+        listResult.append(data);
+    }
+
+    // Trailing bytes after the last record are overlay
+    if ((nFileParts & FILEPART_OVERLAY) && (nOffset < fileSize)) {
+        FPART overlay = {};
+        overlay.filePart = FILEPART_OVERLAY;
+        overlay.nFileOffset = nOffset;
+        overlay.nFileSize = fileSize - nOffset;
+        overlay.nVirtualAddress = -1;
+        overlay.sName = tr("Overlay");
+        listResult.append(overlay);
     }
 
     return listResult;

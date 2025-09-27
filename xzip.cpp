@@ -1033,8 +1033,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                                                 if (cdh.nFlags & 0x01) record.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
 
-                                                // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(cdh.nLastModDate,
-                                                // cdh.nLastModTime));
+                                                record.mapProperties.insert(FPART_PROP_DATETIME,
+                                                                            XBinary::dosDateTimeToQDateTime(cdh.nLastModDate, cdh.nLastModTime));
 
                                                 listResult.append(record);
                                             }
@@ -1088,7 +1088,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
                             record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
                             record.mapProperties.insert(FPART_PROP_CRC_VALUE, lfh.nCRC32);
-                            // record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::convertDosDateTimeToUnix(lfh.nLastModDate, lfh.nLastModTime));
+                            record.mapProperties.insert(FPART_PROP_DATETIME,
+                                                        XBinary::dosDateTimeToQDateTime(lfh.nLastModDate, lfh.nLastModTime));
 
                             listResult.append(record);
                         }
