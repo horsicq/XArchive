@@ -145,31 +145,31 @@ public:
 
     explicit XRar(QIODevice *pDevice = nullptr);
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
-    virtual QString getVersion();
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
+    virtual QString getVersion() override;
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
 
-    virtual QString getFileFormatExt();
-    virtual QString getFileFormatExtsString();
-    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
+    virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString() override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
 
-    virtual QList<MAPMODE> getMapModesList();
-    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
-    virtual FT getFileType();
+    virtual QList<MAPMODE> getMapModesList() override;
+    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual FT getFileType() override;
 
     QString blockType4ToString(BLOCKTYPE4 type);
     QString headerType5ToString(HEADERTYPE5 type);
 
-    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
 
-    virtual QString getMIMEString();
+    virtual QString getMIMEString() override;
 
-    virtual QString structIDToString(quint32 nID);
-    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
+    virtual QString structIDToString(quint32 nID) override;
+    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
 
-    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr);
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     qint32 getInternVersion(PDSTRUCT *pPdStruct);
