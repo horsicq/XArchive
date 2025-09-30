@@ -182,6 +182,7 @@ qint64 XCab::getFileFormatSize(PDSTRUCT *pPdStruct)
     qint64 nResult = 0;
 
     nResult = readCFHeader(0).cbCabinet;  // TODO check mb _getRawSize !!!
+    nResult = qMin(getSize(), nResult);
 
     return nResult;
 }
@@ -214,13 +215,16 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 {
     QList<XBinary::FPART> listResult;
 
+    qint64 nFileSize = getSize();
+    qint64 nFileFormatSize = getFileFormatSize(pPdStruct);
+
     CFHEADER cfHeader = readCFHeader(0);
 
     if (nFileParts & FILEPART_HEADER) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
-        record.nFileSize = qMin<qint64>(sizeof(CFHEADER), getSize());
+        record.nFileSize = qMin<qint64>(sizeof(CFHEADER), nFileSize);
         record.nVirtualAddress = -1;
         record.sName = tr("Header");
 
@@ -231,99 +235,104 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         XBinary::FPART record = {};
         record.filePart = FILEPART_DATA;
         record.nFileOffset = 0;
-        record.nFileSize = qMin((qint64)cfHeader.cbCabinet, getSize());
+        record.nFileSize = nFileFormatSize;
         record.nVirtualAddress = -1;
         record.sName = tr("Data");
 
         listResult.append(record);
     }
 
-    if (nFileParts & FILEPART_REGION) {
-        // Regions: enumerate folders, files, and data blocks
-        const qint64 fileSize = getSize();
+    qint64 nCurrentOffset = sizeof(CFHEADER);
 
+    if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
+        // Regions: enumerate folders, files, and data blocks
         // 1) CFFOLDER area and per-folder entries (best-effort)
         if (cfHeader.cFolders) {
-            // Heuristic: assume folders area ends at coffFiles; derive start by subtracting cFolders*sizeof(CFFOLDER)
-            qint64 foldersEnd = qMin<qint64>(cfHeader.coffFiles, fileSize);
-            qint64 foldersStart = qMax<qint64>(0, foldersEnd - (qint64)cfHeader.cFolders * (qint64)sizeof(CFFOLDER));
+            for (quint32 i = 0; i < cfHeader.cFolders; ++i) {
 
-            // Whole folders area
-            if ((foldersStart < foldersEnd) && (foldersEnd <= fileSize)) {
-                FPART area = {};
-                area.filePart = FILEPART_REGION;
-                area.nFileOffset = foldersStart;
-                area.nFileSize = foldersEnd - foldersStart;
-                area.nVirtualAddress = -1;
-                area.sName = tr("CFFOLDER area");
-                listResult.append(area);
+                if ((nCurrentOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) break;
 
-                // Individual folder records (best-effort sequential)
-                for (quint32 i = 0; i < cfHeader.cFolders; ++i) {
-                    qint64 recOff = foldersStart + (qint64)i * (qint64)sizeof(CFFOLDER);
-                    if ((recOff + (qint64)sizeof(CFFOLDER)) > fileSize) break;
+                if (nFileParts & FILEPART_HEADER) {
                     FPART rec = {};
-                    rec.filePart = FILEPART_REGION;
-                    rec.nFileOffset = recOff;
+                    rec.filePart = FILEPART_HEADER;
+                    rec.nFileOffset = nCurrentOffset;
                     rec.nFileSize = sizeof(CFFOLDER);
                     rec.nVirtualAddress = -1;
                     rec.sName = QString("%1(%2)").arg("CFFOLDER").arg(i + 1);
                     listResult.append(rec);
                 }
 
-                // Use folder records to enumerate CFDATA blocks
-                for (quint32 i = 0; i < cfHeader.cFolders; ++i) {
-                    qint64 recOff = foldersStart + (qint64)i * (qint64)sizeof(CFFOLDER);
-                    if ((recOff + (qint64)sizeof(CFFOLDER)) > fileSize) break;
-                    CFFOLDER fol = readCFFolder(recOff);
-
-                    qint64 dataOff = fol.coffCabStart;
-                    for (quint32 j = 0; j < fol.cCFData; ++j) {
-                        if ((dataOff + (qint64)sizeof(CFDATA)) > fileSize) break;
-                        // CFDATA header entry
-                        FPART drec = {};
-                        drec.filePart = FILEPART_REGION;
-                        drec.nFileOffset = dataOff;
-                        drec.nFileSize = sizeof(CFDATA);
-                        drec.nVirtualAddress = -1;
-                        drec.sName = QString("%1(%2,%3)").arg("CFDATA").arg(i + 1).arg(j + 1);
-                        listResult.append(drec);
-
-                        // Advance to next block: header + compressed bytes
-                        CFDATA hdr = readCFData(dataOff);
-                        qint64 advance = (qint64)sizeof(CFDATA) + (qint64)hdr.cbData;
-                        if (advance <= 0) break;
-                        dataOff += advance;
-                    }
-                }
+                nCurrentOffset += sizeof(CFFOLDER);
             }
+            // // Heuristic: assume folders area ends at coffFiles; derive start by subtracting cFolders*sizeof(CFFOLDER)
+            // qint64 foldersEnd = qMin<qint64>(cfHeader.coffFiles, nFileSize);
+            // qint64 foldersStart = qMax<qint64>(0, foldersEnd - (qint64)cfHeader.cFolders * (qint64)sizeof(CFFOLDER));
+
+            // // Whole folders area
+            // if ((foldersStart < foldersEnd) && (foldersEnd <= nFileSize)) {
+            //     FPART area = {};
+            //     area.filePart = FILEPART_REGION;
+            //     area.nFileOffset = foldersStart;
+            //     area.nFileSize = foldersEnd - foldersStart;
+            //     area.nVirtualAddress = -1;
+            //     area.sName = tr("CFFOLDER area");
+            //     listResult.append(area);
+
+            //     // Individual folder records (best-effort sequential)
+
+
+            //     // Use folder records to enumerate CFDATA blocks
+            //     for (quint32 i = 0; i < cfHeader.cFolders; ++i) {
+            //         qint64 recOff = foldersStart + (qint64)i * (qint64)sizeof(CFFOLDER);
+            //         if ((recOff + (qint64)sizeof(CFFOLDER)) > nFileSize) break;
+            //         CFFOLDER fol = readCFFolder(recOff);
+
+            //         qint64 dataOff = fol.coffCabStart;
+            //         for (quint32 j = 0; j < fol.cCFData; ++j) {
+            //             if ((dataOff + (qint64)sizeof(CFDATA)) > nFileSize) break;
+            //             // CFDATA header entry
+            //             FPART drec = {};
+            //             drec.filePart = FILEPART_REGION;
+            //             drec.nFileOffset = dataOff;
+            //             drec.nFileSize = sizeof(CFDATA);
+            //             drec.nVirtualAddress = -1;
+            //             drec.sName = QString("%1(%2,%3)").arg("CFDATA").arg(i + 1).arg(j + 1);
+            //             listResult.append(drec);
+
+            //             // Advance to next block: header + compressed bytes
+            //             CFDATA hdr = readCFData(dataOff);
+            //             qint64 advance = (qint64)sizeof(CFDATA) + (qint64)hdr.cbData;
+            //             if (advance <= 0) break;
+            //             dataOff += advance;
+            //         }
+            //     }
+            // }
         }
 
-        // 2) CFFILE table and per-file entries starting at coffFiles
-        if (cfHeader.coffFiles && cfHeader.cFiles) {
-            // Whole files area (size unknown if names present); add per-record entries with fixed struct size
-            for (quint32 i = 0; i < cfHeader.cFiles; ++i) {
-                qint64 recOff = (qint64)cfHeader.coffFiles + (qint64)i * (qint64)sizeof(CFFILE);
-                if ((recOff + (qint64)sizeof(CFFILE)) > fileSize) break;
-                FPART rec = {};
-                rec.filePart = FILEPART_REGION;
-                rec.nFileOffset = recOff;
-                rec.nFileSize = sizeof(CFFILE);
-                rec.nVirtualAddress = -1;
-                rec.sName = QString("%1(%2)").arg("CFFILE").arg(i + 1);
-                listResult.append(rec);
-            }
-        }
+        // // 2) CFFILE table and per-file entries starting at coffFiles
+        // if (cfHeader.coffFiles && cfHeader.cFiles) {
+        //     // Whole files area (size unknown if names present); add per-record entries with fixed struct size
+        //     for (quint32 i = 0; i < cfHeader.cFiles; ++i) {
+        //         qint64 recOff = (qint64)cfHeader.coffFiles + (qint64)i * (qint64)sizeof(CFFILE);
+        //         if ((recOff + (qint64)sizeof(CFFILE)) > nFileSize) break;
+        //         FPART rec = {};
+        //         rec.filePart = FILEPART_REGION;
+        //         rec.nFileOffset = recOff;
+        //         rec.nFileSize = sizeof(CFFILE);
+        //         rec.nVirtualAddress = -1;
+        //         rec.sName = QString("%1(%2)").arg("CFFILE").arg(i + 1);
+        //         listResult.append(rec);
+        //     }
+        // }
     }
 
     if (nFileParts & FILEPART_OVERLAY) {
-        qint64 boundary = qMin((qint64)cfHeader.cbCabinet, getSize());
-        if (boundary < getSize()) {
+        if (nFileFormatSize < nFileSize) {
             FPART record = {};
 
             record.filePart = FILEPART_OVERLAY;
-            record.nFileOffset = boundary;
-            record.nFileSize = getSize() - boundary;
+            record.nFileOffset = nFileFormatSize;
+            record.nFileSize = nFileSize - nFileFormatSize;
             record.nVirtualAddress = -1;
             record.sName = tr("Overlay");
 
@@ -379,6 +388,54 @@ QList<XBinary::DATA_HEADER> XCab::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                 // Optional fields not handled in this example
 
                 listResult.append(dataHeader);
+
+                if (dataHeadersOptions.bChildren) {
+                    CFHEADER cfHeader = readCFHeader(nStartOffset);
+                    if (cfHeader.cFolders) {
+                        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+                        _dataHeadersOptions.nLocation = nStartOffset + sizeof(CFHEADER);
+                        _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+                        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+                        _dataHeadersOptions.nCount = cfHeader.cFolders;
+                        _dataHeadersOptions.nSize = sizeof(CFFOLDER) * cfHeader.cFolders;
+                        _dataHeadersOptions.nID = STRUCTID_CFFOLDER;
+                        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+                    }
+
+                    if (cfHeader.coffFiles) {
+                        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+                        _dataHeadersOptions.nLocation = nStartOffset + cfHeader.coffFiles;
+                        _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+                        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+                        _dataHeadersOptions.nCount = cfHeader.cFiles;
+                        _dataHeadersOptions.nSize = sizeof(CFFILE) * cfHeader.cFiles;  // Names and extra fields not handled in this example
+                        _dataHeadersOptions.nID = STRUCTID_CFFILE;
+                        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+                    }
+                }
+            } else if (dataHeadersOptions.nID == STRUCTID_CFFOLDER) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XCab::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.nSize = sizeof(CFFOLDER);
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFOLDER, coffCabStart), 4, "coffCabStart", VT_UINT32, DRF_OFFSET, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFOLDER, cCFData), 2, "cCFData", VT_UINT16, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFOLDER, typeCompress), 2, "typeCompress", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
+            } else if (dataHeadersOptions.nID == STRUCTID_CFFILE) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XCab::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.nSize = sizeof(CFFILE);
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFILE, cbFile), 4, "cbFile", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFILE, uoffFolderStart), 4, "uoffFolderStart", VT_UINT32, DRF_OFFSET, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFILE, iFolder), 2, "iFolder", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFILE, date), 2, "date", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFILE, time), 2, "time", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(CFFILE, attribs), 2, "attribs", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                QString szName = read_ansiString(nStartOffset + sizeof(CFFILE), 256);  // Limit to 256 chars for safety)
+                dataHeader.listRecords.append(getDataRecord(sizeof(CFFILE), szName.size() + 1, "szName", VT_CHAR_ARRAY, DRF_VOLATILE, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
             }
         }
     }
@@ -390,21 +447,30 @@ QList<XBinary::MAPMODE> XCab::getMapModesList()
 {
     QList<MAPMODE> listResult;
 
-    listResult.append(MAPMODE_DATA);
     listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_STREAMS);
+    listResult.append(MAPMODE_DATA);
 
     return listResult;
 }
 
 XBinary::_MEMORY_MAP XCab::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    if (mapMode == MAPMODE_UNKNOWN) mapMode = MAPMODE_DATA;  // Default
-    if (mapMode == MAPMODE_DATA) {
-        return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
-    } else if (mapMode == MAPMODE_REGIONS) {
-        return _getMemoryMap(FILEPART_HEADER | FILEPART_REGION | FILEPART_OVERLAY, pPdStruct);
+    XBinary::_MEMORY_MAP result = {};
+
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_DATA;  // Default mode
     }
-    return _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+
+    if (mapMode == MAPMODE_REGIONS) {
+        result = _getMemoryMap(FILEPART_HEADER | FILEPART_STREAM | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_STREAMS) {
+        result = _getMemoryMap(FILEPART_STREAM, pPdStruct);
+    } else if (mapMode == MAPMODE_DATA) {
+        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    }
+
+    return result;
 }
 
 qint64 XCab::getImageSize()

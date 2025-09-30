@@ -89,7 +89,26 @@ QString XBZIP2::getFileFormatExtsString()
 
 qint64 XBZIP2::getFileFormatSize(XBinary::PDSTRUCT *pPdStruct)
 {
-    qint64 nResult = getSize();
+    qint64 nFileSize = getSize();
+    qint64 nResult = 0;
+
+    SubDevice sd(getDevice(), 0, nFileSize);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+        decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
+        decompressStruct.pSourceDevice = &sd;
+        decompressStruct.pDestDevice = nullptr;
+        decompressStruct.spInfo.nUncompressedSize = 0;
+
+        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+
+        if ((cr == COMPRESS_RESULT_OK) && (decompressStruct.nInSize > 0)) {
+            nResult = decompressStruct.nInSize;
+        }
+
+        sd.close();
+    }
 
     return nResult;
 }
@@ -109,50 +128,26 @@ QList<XBinary::MAPMODE> XBZIP2::getMapModesList()
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_STREAMS);
+    listResult.append(MAPMODE_DATA);
 
     return listResult;
 }
 
 XBinary::_MEMORY_MAP XBZIP2::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapMode)
+    XBinary::_MEMORY_MAP result = {};
 
-    _MEMORY_MAP result = {};
-    result.fileType = getFileType();
-    result.nBinarySize = getSize();
-    result.mode = getMode();
-    result.sArch = getArch();
-    result.endian = getEndian();
-    result.sType = typeIdToString(getType());
-
-    qint32 nIndex = 0;
-
-    SubDevice sd(getDevice(), 0, -1);
-
-    if (sd.open(QIODevice::ReadOnly)) {
-        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
-        decompressStruct.pSourceDevice = &sd;
-        decompressStruct.pDestDevice = 0;
-        decompressStruct.spInfo.nUncompressedSize = 0;
-
-        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
-
-        _MEMORY_RECORD memoryRecord = {};
-        memoryRecord.nOffset = 0;
-        memoryRecord.nAddress = -1;
-        memoryRecord.nSize = decompressStruct.nInSize;
-        memoryRecord.filePart = FILEPART_REGION;
-        memoryRecord.nIndex = nIndex;
-
-        result.listRecords.append(memoryRecord);
-
-        sd.close();
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_DATA;  // Default mode
     }
 
-    // Check for overlay
-    if (isPdStructNotCanceled(pPdStruct)) {
-        _handleOverlay(&result);
+    if (mapMode == MAPMODE_REGIONS) {
+        result = _getMemoryMap(FILEPART_HEADER | FILEPART_STREAM | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_STREAMS) {
+        result = _getMemoryMap(FILEPART_STREAM, pPdStruct);
+    } else if (mapMode == MAPMODE_DATA) {
+        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
     }
 
     return result;
@@ -191,7 +186,7 @@ QList<XBinary::DATA_HEADER> XBZIP2::getDataHeaders(const DATA_HEADERS_OPTIONS &d
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(BZIP2_HEADER, magic), 3, "magic", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(BZIP2_HEADER, blockSize), 1, "blockSize", VT_BYTE, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(BZIP2_HEADER, blockSize), 1, "blockSize", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
             }
@@ -251,29 +246,55 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     Q_UNUSED(nLimit)
     QList<FPART> listResult;
 
-    const qint64 fileSize = getSize();
-    if (fileSize <= 0) return listResult;
+    const qint64 nFileSize = getSize();
+    if (nFileSize <= 0) return listResult;
 
     // Header: fixed 4 bytes ("BZh" + level)
     if (nFileParts & FILEPART_HEADER) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
-        header.nFileSize = qMin<qint64>(4, fileSize);
+        header.nFileSize = qMin<qint64>(4, nFileSize);
         header.nVirtualAddress = -1;
         header.sName = tr("Header");
         listResult.append(header);
     }
 
-    // Region: compressed stream area (best-effort = whole file)
-    if (nFileParts & FILEPART_REGION) {
-        FPART region = {};
-        region.filePart = FILEPART_REGION;
-        region.nFileOffset = 0;
-        region.nFileSize = fileSize;
-        region.nVirtualAddress = -1;
-        region.sName = tr("Compressed stream");
-        listResult.append(region);
+    qint64 mMaxOffset = 0;
+
+    {
+        SubDevice sd(getDevice(), 0, nFileSize);
+
+        if (sd.open(QIODevice::ReadOnly)) {
+            XArchive::DECOMPRESSSTRUCT decompressStruct = {};
+            decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
+            decompressStruct.pSourceDevice = &sd;
+            decompressStruct.pDestDevice = nullptr;
+            decompressStruct.spInfo.nUncompressedSize = 0;
+
+            XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+
+            if ((cr == COMPRESS_RESULT_OK) && (decompressStruct.nInSize > 0)) {
+                mMaxOffset = decompressStruct.nInSize;
+
+                if (nFileParts & FILEPART_STREAM) {
+                    FPART region = {};
+                    region.filePart = FILEPART_STREAM;
+                    region.nFileOffset = 0;
+                    region.nFileSize = mMaxOffset;
+                    region.nVirtualAddress = -1;
+                    region.nFileSize = mMaxOffset;
+                    region.sName = tr("Compressed stream");
+                    region.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
+                    region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, decompressStruct.nOutSize);
+                    region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, decompressStruct.nInSize);
+
+                    listResult.append(region);
+                }
+            }
+
+            sd.close();
+        }
     }
 
     // Data: entire file
@@ -281,7 +302,7 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 0;
-        data.nFileSize = fileSize;
+        data.nFileSize = mMaxOffset;
         data.nVirtualAddress = -1;
         data.sName = tr("Data");
         listResult.append(data);
@@ -289,18 +310,11 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
 
     // Overlay: any trailing bytes not covered (none in our simple model)
     if (nFileParts & FILEPART_OVERLAY) {
-        qint64 maxCovered = 0;
-        for (int i = 0; i < listResult.size(); i++) {
-            const FPART &p = listResult.at(i);
-            if (p.filePart != FILEPART_OVERLAY) {
-                maxCovered = qMax(maxCovered, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
-            }
-        }
-        if (maxCovered < fileSize) {
+        if (mMaxOffset < nFileSize) {
             FPART ov = {};
             ov.filePart = FILEPART_OVERLAY;
-            ov.nFileOffset = maxCovered;
-            ov.nFileSize = fileSize - maxCovered;
+            ov.nFileOffset = mMaxOffset;
+            ov.nFileSize = nFileSize - mMaxOffset;
             ov.nVirtualAddress = -1;
             ov.sName = tr("Overlay");
             listResult.append(ov);
