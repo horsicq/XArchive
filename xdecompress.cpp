@@ -24,26 +24,40 @@ XDecompress::XDecompress(QObject *parent) : XThreadObject(parent)
 {
 }
 
-bool XDecompress::decompressFPART(const XBinary::FPART &fpart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, qint64 nDecompressedOffset, qint64 nDecompressedLimit,
-                                  XBinary::PDSTRUCT *pPdStruct)
+bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     XBinary::DECOMPRESS_STATE state = {};
-    state.mapProperties = fpart.mapProperties;
+    state.mapProperties = fPart.mapProperties;
     state.pDeviceInput = pDeviceInput;
     state.pDeviceOutput = pDeviceOutput;
-    state.nInputOffset = fpart.nFileOffset;
-    state.nInputLimit = fpart.nFileSize;
-    state.nDecompressedOffset = nDecompressedOffset;
-    state.nDecompressedLimit = nDecompressedLimit;
+    state.nInputOffset = fPart.nFileOffset;
+    state.nInputLimit = fPart.nFileSize;
+    state.nDecompressedOffset = 0;
+    state.nDecompressedLimit = -1;
 
     return decompress(&state, pPdStruct);
 }
 
-bool XDecompress::checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
+bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput,
+                                          XBinary::PDSTRUCT *pPdStruct)
+{
+    XBinary::DECOMPRESS_STATE state = {};
+    state.mapProperties = archiveRecord.mapProperties;
+    state.pDeviceInput = pDeviceInput;
+    state.pDeviceOutput = pDeviceOutput;
+    state.nInputOffset = archiveRecord.nStreamOffset;
+    state.nInputLimit = archiveRecord.nStreamSize;
+    state.nDecompressedOffset = archiveRecord.nDecompressedOffset;
+    state.nDecompressedLimit = archiveRecord.nDecompressedSize;
+
+    return decompress(&state, pPdStruct);
+}
+
+bool XDecompress::checkCRC(const QMap<XBinary::FPART_PROP, QVariant> &mapProperties, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = true;
 
-    XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)fpart.mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+    XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
 
     if (crcType != XBinary::CRC_TYPE_UNKNOWN) {
         QVariant varCRC;
@@ -54,7 +68,7 @@ bool XDecompress::checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBin
         pDevice->reset();
 
         if (crcType == XBinary::CRC_TYPE_ZIP) {
-            varCRC = fpart.mapProperties.value(XBinary::FPART_PROP_CRC_VALUE, 0).toUInt();
+            varCRC = mapProperties.value(XBinary::FPART_PROP_CRC_VALUE, 0).toUInt();
             varCRC_calc = binary._getCRC32(0, -1, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320(), pPdStruct);
         }
 
@@ -63,10 +77,10 @@ bool XDecompress::checkCRC(const XBinary::FPART &fpart, QIODevice *pDevice, XBin
         if (varCRC == varCRC_calc) {
             bResult = true;
         } else {
-            emit warningMessage(QString("%1: %2").arg(tr("Invalid CRC"), fpart.sOriginalName));
+            emit warningMessage(QString("%1").arg(tr("Invalid CRC")));
         }
     } else {
-        emit errorMessage(QString("%1: %2").arg(tr("Unknown CRC type"), fpart.sOriginalName));
+        emit errorMessage(QString("%1").arg(tr("Unknown CRC type")));
     }
 
     return bResult;
@@ -81,6 +95,14 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
     char bufferIn[N_BUFFER_SIZE];
     char bufferOut[N_BUFFER_SIZE];
 
+    if (pState->pDeviceInput) {
+        pState->pDeviceInput->seek(pState->nInputOffset);
+    }
+
+    if (pState->pDeviceOutput) {
+        pState->pDeviceOutput->seek(0);
+    }
+
     XBinary::COMPRESS_METHOD compressMethod =
         (XBinary::COMPRESS_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE).toUInt();
 
@@ -88,14 +110,6 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
     // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
 
     if (compressMethod == XBinary::COMPRESS_METHOD_STORE) {
-        if (pState->nInputOffset > 0) {
-            pState->pDeviceInput->seek(pState->nInputOffset);
-        }
-
-        if (pState->pDeviceOutput) {
-            pState->pDeviceOutput->seek(0);
-        }
-
         for (qint64 nOffset = 0; (nOffset < pState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
             qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - nOffset), N_BUFFER_SIZE);
 
@@ -114,62 +128,7 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
             nOffset += nRead;
         }
     } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
-        if (pState->nInputOffset > 0) {
-            pState->pDeviceInput->seek(pState->nInputOffset);
-        }
-
-        if (pState->pDeviceOutput) {
-            pState->pDeviceOutput->seek(0);
-        }
-
-        bz_stream strm = {};
-        qint32 ret = BZ_MEM_ERROR;
-
-        qint32 rc = BZ2_bzDecompressInit(&strm, 0, 0);
-
-        if (rc == BZ_OK) {
-            do {
-                qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - pState->nCountInput), N_BUFFER_SIZE);
-
-                strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pState);
-
-                if (strm.avail_in == 0) {
-                    ret = BZ_MEM_ERROR;
-                    break;
-                }
-
-                strm.next_in = bufferIn;
-
-                do {
-                    strm.total_in_hi32 = 0;
-                    strm.total_in_lo32 = 0;
-                    strm.total_out_hi32 = 0;
-                    strm.total_out_lo32 = 0;
-                    strm.avail_out = N_BUFFER_SIZE;
-                    strm.next_out = bufferOut;
-                    ret = BZ2_bzDecompress(&strm);
-
-                    if ((ret != BZ_STREAM_END) && (ret != BZ_OK)) {
-                        break;
-                    }
-
-                    qint32 nTemp = N_BUFFER_SIZE - strm.avail_out;
-
-                    if (nTemp > 0) {
-                        if (!XBinary::_writeDevice((char *)bufferOut, nTemp, pState)) {
-                            ret = BZ_MEM_ERROR;
-                            break;
-                        }
-                    }
-                } while (strm.avail_out == 0);
-
-                if (ret != BZ_OK) {
-                    break;
-                }
-            } while (ret != BZ_STREAM_END);
-
-            BZ2_bzDecompressEnd(&strm);
-        }
+        bResult = XBZIP2Decoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
         bResult = XLZMADecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE) {

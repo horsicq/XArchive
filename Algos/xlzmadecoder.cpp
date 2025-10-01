@@ -46,7 +46,7 @@ bool XLZMADecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBina
     char bufferOut[N_BUFFER_SIZE];
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-        if (pDecompressState->nInputOffset > 0) {
+        if (pDecompressState->pDeviceInput) {
             pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
         }
 

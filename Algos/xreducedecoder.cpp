@@ -378,7 +378,7 @@ XReduceDecoder::XReduceDecoder(QObject *parent) : QObject(parent)
 
 bool XReduceDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32 nFactor, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->nInputOffset > 0) {
+    if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
 

@@ -88,11 +88,11 @@ QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     if (g_pCompressedDevice->isOpen()) {
         result = g_pXtar->getRecords(nLimit, pPdStruct);
 
-        qint32 nNumberOfRecords = result.count();
+        // qint32 nNumberOfRecords = result.count();
 
-        for (qint32 i = 0; (i < nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-            result[i].spInfo.fileType = FT_TARGZ;
-        }
+        // for (qint32 i = 0; (i < nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        //     result[i].spInfo.fileType = FT_TARGZ;
+        // }
     }
 
     return result;

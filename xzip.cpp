@@ -987,7 +987,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                     record.nFileSize = (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
                                     record.nVirtualAddress = -1;
                                     record.sName = QString("%1 %2").arg(tr("Stream"), QString::number(i));
-                                    record.sOriginalName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
+                                    QString sOriginalName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
+                                    record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
 
                                     listResult.append(record);
                                 }
@@ -1010,7 +1011,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.nFileSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
                                                 record.nVirtualAddress = -1;
                                                 record.sName = sName;
-                                                record.sOriginalName = sOriginalName;
+                                                record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
 
                                                 listResult.append(record);
                                             }
@@ -1023,8 +1024,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.nFileSize = cdh.nCompressedSize;
                                                 record.nVirtualAddress = -1;
                                                 record.sName = sName;
-                                                record.sOriginalName = sOriginalName;
-
+                                                record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
@@ -1070,7 +1070,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.nFileOffset = nOffset;
                             record.nFileSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
                             record.nVirtualAddress = -1;
-                            record.sOriginalName = sOriginalName;
+                            record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
 
                             listResult.append(record);
                         }
@@ -1081,8 +1081,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.nFileOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
                             record.nFileSize = lfh.nCompressedSize;
                             record.nVirtualAddress = -1;
-                            record.sOriginalName = sOriginalName;
-
+                            record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
                             record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);

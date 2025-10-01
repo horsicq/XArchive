@@ -204,6 +204,14 @@ quint64 XBZIP2::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return 1;
 }
 
+qint64 XBZIP2::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    // BZip2 typically contains a single compressed stream
+    return 1;
+}
+
 QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> listResult;
@@ -284,7 +292,7 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
                     region.nFileSize = mMaxOffset;
                     region.nVirtualAddress = -1;
                     region.nFileSize = mMaxOffset;
-                    region.sName = tr("Compressed stream");
+                    region.sName = tr("Stream");
                     region.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
                     region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, decompressStruct.nOutSize);
                     region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, decompressStruct.nInSize);

@@ -64,6 +64,7 @@ public:
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 
     BZIP2_HEADER _read_BZIP2_HEADER(qint64 nOffset);
 };

@@ -26,7 +26,7 @@ XIT214Decoder::XIT214Decoder(QObject *parent) : QObject(parent)
 
 bool XIT214Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->nInputOffset > 0) {
+    if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
 

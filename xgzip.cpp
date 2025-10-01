@@ -275,7 +275,7 @@ QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         region.nFileOffset = payloadOffset;
         region.nFileSize = payloadSize;
         region.nVirtualAddress = -1;
-        region.sName = tr("Compressed stream");
+        region.sName = tr("Stream");
         listResult.append(region);
     }
 

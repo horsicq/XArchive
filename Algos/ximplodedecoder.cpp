@@ -885,7 +885,7 @@ XImplodeDecoder::XImplodeDecoder(QObject *parent) : QObject(parent)
 
 bool XImplodeDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, bool b8kdict, bool b3trees, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->nInputOffset > 0) {
+    if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
 

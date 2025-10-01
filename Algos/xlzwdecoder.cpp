@@ -320,7 +320,7 @@ bool XLZWDecoder::decompress_pdf(XBinary::DECOMPRESS_STATE *pDecompressState, XB
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) return false;
 
     // Set input device position
-    if (pDecompressState->nInputOffset > 0) {
+    if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
 

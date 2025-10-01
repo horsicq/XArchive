@@ -393,6 +393,11 @@ quint64 X_Ar::_getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct)
     return nResult;
 }
 
+qint64 X_Ar::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    return _getNumberOfStreams(8, pPdStruct);
+}
+
 XBinary::_MEMORY_MAP X_Ar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     XBinary::_MEMORY_MAP result = {};
@@ -502,7 +507,7 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             part.nFileSize = dataSize;
             part.nVirtualAddress = -1;
             part.sName = tr("Record") + QString(" %1").arg(nIndex);
-            part.sOriginalName = sOriginalName;
+            part.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
             // Properties: ar stores raw bytes, no compression
             part.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
             part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, dataSize);

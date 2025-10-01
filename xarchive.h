@@ -55,7 +55,7 @@ public:
         quint64 nWindowSize;
         bool bIsSolid;  // For RAR
         COMPRESS_METHOD compressMethod;
-        FT fileType;
+        // FT fileType;
     };
 
     struct RECORD {

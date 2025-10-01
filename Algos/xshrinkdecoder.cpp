@@ -456,7 +456,7 @@ XShrinkDecoder::XShrinkDecoder(QObject *parent) : QObject(parent)
 
 bool XShrinkDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->nInputOffset > 0) {
+    if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
 

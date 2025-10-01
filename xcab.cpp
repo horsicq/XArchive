@@ -408,7 +408,7 @@ QList<XBinary::DATA_HEADER> XCab::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                         _dataHeadersOptions.dsID_parent = dataHeader.dsID;
                         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
                         _dataHeadersOptions.nCount = cfHeader.cFiles;
-                        _dataHeadersOptions.nSize = sizeof(CFFILE) * cfHeader.cFiles;  // Names and extra fields not handled in this example
+                        _dataHeadersOptions.nSize = sizeof(CFFILE) * cfHeader.cFiles;  // TODO Names and extra fields
                         _dataHeadersOptions.nID = STRUCTID_CFFILE;
                         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
                     }

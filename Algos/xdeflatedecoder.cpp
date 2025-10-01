@@ -857,7 +857,7 @@ XDeflateDecoder::XDeflateDecoder(QObject *parent) : QObject(parent)
 
 bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->nInputOffset > 0) {
+    if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
 
@@ -937,7 +937,7 @@ bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XB
 
 bool XDeflateDecoder::decompress64(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->nInputOffset > 0) {
+    if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
 
@@ -976,7 +976,7 @@ bool XDeflateDecoder::decompress64(XBinary::DECOMPRESS_STATE *pDecompressState, 
 
 bool XDeflateDecoder::decompress_zlib(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->nInputOffset > 0) {
+    if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
 

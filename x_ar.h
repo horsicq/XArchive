@@ -73,6 +73,8 @@ public:
     virtual void readTableFinalize(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void *pUserData, PDSTRUCT *pPdStruct);
     quint64 _getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct);
 
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
+
 private:
     FRECORD readFRECORD(qint64 nOffset);
 };

@@ -38,7 +38,7 @@ bool XStoreDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBin
         pDecompressState->nCountOutput = 0;
 
         // Set input device position
-        if (pDecompressState->nInputOffset > 0) {
+        if (pDecompressState->pDeviceInput) {
             pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
         }
 
