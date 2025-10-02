@@ -150,6 +150,17 @@ XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset)
     return result;
 }
 
+XCab::CFFOLDER XCab::_read_CFFOLDER(qint64 nOffset)
+{
+    CFFOLDER result = {};
+
+    result.coffCabStart = read_uint32(nOffset + offsetof(CFFOLDER, coffCabStart));
+    result.cCFData = read_uint16(nOffset + offsetof(CFFOLDER, cCFData));
+    result.typeCompress = read_uint16(nOffset + offsetof(CFFOLDER, typeCompress));
+
+    return result;
+}
+
 XCab::CFDATA XCab::readCFData(qint64 nOffset)
 {
     CFDATA result = {};
@@ -159,6 +170,31 @@ XCab::CFDATA XCab::readCFData(qint64 nOffset)
     result.cbUncomp = read_uint16(nOffset + offsetof(CFDATA, cbUncomp));
 
     return result;
+}
+
+qint64 XCab::_getStreamSize(qint64 nOffset, qint32 nCount)
+{
+    qint64 nResult = 0;
+    qint64 nCurrentOffset = nOffset;
+    qint64 nFileSize = getSize();
+
+    for (qint32 i = 0; i < nCount; i++) {
+        if ((nCurrentOffset + (qint64)sizeof(CFDATA)) > nFileSize) {
+            break;
+        }
+
+        CFDATA cfData = readCFData(nCurrentOffset);
+        qint64 nBlockSize = (qint64)sizeof(CFDATA) + (qint64)cfData.cbData;
+
+        nResult += nBlockSize;
+        nCurrentOffset += nBlockSize;
+
+        if (nCurrentOffset > nFileSize) {
+            break;
+        }
+    }
+
+    return nResult;
 }
 
 XBinary::FT XCab::getFileType()
@@ -258,7 +294,30 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                     rec.nFileOffset = nCurrentOffset;
                     rec.nFileSize = sizeof(CFFOLDER);
                     rec.nVirtualAddress = -1;
-                    rec.sName = QString("%1(%2)").arg("CFFOLDER").arg(i + 1);
+                    rec.sName = QString("CFFOLDER(%1)").arg(i);
+                    listResult.append(rec);
+                }
+
+                if (nFileParts & FILEPART_STREAM) {
+                    CFFOLDER cfFolder = readCFFolder(nCurrentOffset);
+
+                    FPART rec = {};
+                    rec.filePart = FILEPART_STREAM;
+                    rec.nFileOffset = cfFolder.coffCabStart;
+                    rec.nFileSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
+                    rec.nVirtualAddress = -1;
+                    rec.sName = tr("Stream") + QString(" (%1)").arg(i);
+
+                    if (cfFolder.typeCompress == 0x0000) {
+                        rec.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE_CAB);
+                    } else if (cfFolder.typeCompress == 0x0001) {
+                        rec.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_MSZIP_CAB);
+                    } else if (cfFolder.typeCompress == 0x0003) {
+                        rec.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZX_CAB);
+                    } else {
+                        rec.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_UNKNOWN);
+                    }
+
                     listResult.append(rec);
                 }
 

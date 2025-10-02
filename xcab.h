@@ -119,6 +119,10 @@ public:
     virtual QString getMIMEString() override;
 
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+
+private:
+    CFFOLDER _read_CFFOLDER(qint64 nOffset);
+    qint64 _getStreamSize(qint64 nOffset, qint32 nCount);
 };
 
 #endif  // XCAB_H
