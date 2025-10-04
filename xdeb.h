@@ -28,14 +28,14 @@ class XDEB : public X_Ar {
 
 public:
     explicit XDEB(QIODevice *pDevice = nullptr);
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
     virtual QString getVersion() override;
     virtual FT getFileType() override;
     virtual QString getFileFormatExt() override;
-    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
-    virtual QString getMIMEString();
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
+    virtual QString getMIMEString() override;
 };
 
 #endif  // XDEB_H
