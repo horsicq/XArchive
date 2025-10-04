@@ -614,8 +614,8 @@ public:
 
 class rar_Unpack : PackDef {
 private:
-    QIODevice *g_pDeviceInput;
-    QIODevice *g_pDeviceOutput;
+    QIODevice *m_pDeviceInput;
+    QIODevice *m_pDeviceOutput;
 
 public:
     void Unpack5(bool Solid, XBinary::PDSTRUCT *pPdStruct);

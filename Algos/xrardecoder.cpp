@@ -226,7 +226,7 @@ bool rar_Unpack::UnpReadBuf()
         ReadTop = DataSize;
     } else DataSize = ReadTop;
     int ReadCode = 0;
-    if (BitInput::MAX_SIZE != DataSize) ReadCode = g_pDeviceInput->read((char *)(Inp.InBuf + DataSize), BitInput::MAX_SIZE - DataSize);
+    if (BitInput::MAX_SIZE != DataSize) ReadCode = m_pDeviceInput->read((char *)(Inp.InBuf + DataSize), BitInput::MAX_SIZE - DataSize);
     if (ReadCode > 0)  // Can be also -1.
         ReadTop += ReadCode;
     ReadBorder = ReadTop - 30;
@@ -304,7 +304,7 @@ void rar_Unpack::UnpWriteBuf()
 
                     Filters[I].Type = FILTER_NONE;
 
-                    if (OutMem != NULL) g_pDeviceOutput->write((char *)OutMem, BlockLength);
+                    if (OutMem != NULL) m_pDeviceOutput->write((char *)OutMem, BlockLength);
 
                     UnpSomeRead = true;
                     WrittenFileSize += BlockLength;
@@ -456,7 +456,7 @@ void rar_Unpack::UnpWriteData(quint8 *Data, size_t Size)
     size_t WriteSize = Size;
     qint64 LeftToWrite = DestUnpSize - WrittenFileSize;
     if ((qint64)WriteSize > LeftToWrite) WriteSize = (size_t)LeftToWrite;
-    g_pDeviceOutput->write((char *)Data, WriteSize);
+    m_pDeviceOutput->write((char *)Data, WriteSize);
     WrittenFileSize += Size;
 }
 
@@ -1520,14 +1520,14 @@ void rar_Unpack::UnpWriteBuf20()
 {
     if (UnpPtr != WrPtr) UnpSomeRead = true;
     if (UnpPtr < WrPtr) {
-        g_pDeviceOutput->write((char *)&Window[WrPtr], -(int)WrPtr & MaxWinMask);
-        g_pDeviceOutput->write((char *)Window, UnpPtr);
+        m_pDeviceOutput->write((char *)&Window[WrPtr], -(int)WrPtr & MaxWinMask);
+        m_pDeviceOutput->write((char *)Window, UnpPtr);
 
         // 2024.12.24: Before 7.10 we set "UnpAllBuf=true" here. It was needed for
         // Pack::PrepareSolidAppend(). Since both UnpAllBuf and FirstWinDone
         // variables indicate the same thing and we set FirstWinDone in other place
         // anyway, we replaced UnpAllBuf with FirstWinDone and removed this code.
-    } else g_pDeviceOutput->write((char *)&Window[WrPtr], UnpPtr - WrPtr);
+    } else m_pDeviceOutput->write((char *)&Window[WrPtr], UnpPtr - WrPtr);
     WrPtr = UnpPtr;
 }
 
@@ -2144,7 +2144,7 @@ bool rar_Unpack::UnpReadBuf30()
         ReadTop = DataSize;
     } else DataSize = ReadTop;
     // int ReadCode=UnpIO->UnpRead(Inp.InBuf+DataSize,BitInput::MAX_SIZE-DataSize);
-    int ReadCode = g_pDeviceInput->read((char *)(Inp.InBuf + DataSize), BitInput::MAX_SIZE - DataSize);
+    int ReadCode = m_pDeviceInput->read((char *)(Inp.InBuf + DataSize), BitInput::MAX_SIZE - DataSize);
     if (ReadCode > 0) ReadTop += ReadCode;
     ReadBorder = ReadTop - 30;
     return ReadCode != -1;
@@ -2215,7 +2215,7 @@ void rar_Unpack::UnpWriteBuf30()
                     PrgStack[I] = nullptr;
                 }
                 // UnpIO->UnpWrite(FilteredData,FilteredDataSize);
-                g_pDeviceOutput->write((char *)FilteredData, FilteredDataSize);
+                m_pDeviceOutput->write((char *)FilteredData, FilteredDataSize);
                 UnpSomeRead = true;
                 WrittenFileSize += FilteredDataSize;
                 WrittenBorder = BlockEnd;
@@ -2245,8 +2245,8 @@ void rar_Unpack::ExecuteCode(VM_PreparedProgram *Prg)
 
 rar_Unpack::rar_Unpack(QIODevice *pDeviceInput, QIODevice *pDeviceOut) : Inp(true), VMCodeInp(true)
 {
-    g_pDeviceInput = pDeviceInput;
-    g_pDeviceOutput = pDeviceOut;
+    m_pDeviceInput = pDeviceInput;
+    m_pDeviceOutput = pDeviceOut;
     // UnpIO=DataIO;
     Window = NULL;
     Fragmented = false;
