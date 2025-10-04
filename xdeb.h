@@ -31,9 +31,9 @@ public:
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
-    virtual QString getVersion();
-    virtual FT getFileType();
-    virtual QString getFileFormatExt();
+    virtual QString getVersion() override;
+    virtual FT getFileType() override;
+    virtual QString getFileFormatExt() override;
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct);
     virtual QString getMIMEString();
 };
