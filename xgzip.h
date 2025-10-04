@@ -40,18 +40,18 @@ public:
 
     explicit XGzip(QIODevice *pDevice = nullptr);
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
-    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
-    virtual QList<MAPMODE> getMapModesList();
-    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
+    virtual QList<MAPMODE> getMapModesList() override;
+    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
 
-    virtual QString getFileFormatExt();
-    virtual QString getFileFormatExtsString();
-    virtual FT getFileType();
-    virtual QString getMIMEString();
+    virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString() override;
+    virtual FT getFileType() override;
+    virtual QString getMIMEString() override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 };
 
