@@ -365,7 +365,13 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.nFileOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
                             record.nFileSize = fileBlock4.packSize;
                             record.nVirtualAddress = -1;
-                            record.sName = fileBlock4.sFileName.isEmpty() ? "Stream" : fileBlock4.sFileName;
+                            record.sName = "Stream";
+                            record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileBlock4.sFileName);
+                            // record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, fileBlock4.method);
+                            // record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
+                            // record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
+                            // record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                            // record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
 
                             listResult.append(record);
                         }
@@ -408,11 +414,11 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                         record.nFileOffset = nCurrentOffset + genericHeader.nHeaderSize;
                         record.nFileSize = genericHeader.nDataSize;
                         record.nVirtualAddress = -1;
+                        record.sName = "Stream";
                         if (genericHeader.nType == HEADERTYPE5_FILE) {
                             FILEHEADER5 fileHeader5 = readFileHeader5(nCurrentOffset);
                             record.sName = fileHeader5.sFileName.isEmpty() ? "Stream" : fileHeader5.sFileName;
-                        } else {
-                            record.sName = "Stream";
+                            record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileHeader5.sFileName);
                         }
 
                         listResult.append(record);
