@@ -31,7 +31,7 @@ bool XDEB::isValid(PDSTRUCT *pPdStruct)
     X_Ar xar(getDevice());
 
     if (xar.isValid()) {
-        QList<XArchive::RECORD> listArchiveRecords = xar.getRecords(10, pPdStruct);
+        QList<XArchive::RECORD> listArchiveRecords = xar.getRecords(10, pPdStruct); // TODO remove
 
         bResult = isValid(&listArchiveRecords, pPdStruct);
     }
@@ -75,7 +75,7 @@ XBinary::FILEFORMATINFO XDEB::getFileFormatInfo(PDSTRUCT *pPdStruct)
     if (isValid(&listArchiveRecords, pPdStruct)) {
         result.bIsValid = true;
         result.nSize = getSize();
-        result.sExt = "apk";
+        result.sExt = "deb";
         result.fileType = FT_DEB;
 
         RECORD record = getArchiveRecord("debian-binary", &listArchiveRecords);

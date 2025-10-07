@@ -359,26 +359,46 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                     if (genericBlock.nType == BLOCKTYPE4_FILE) {
                         FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
 
+                        // fileBlock4.packSize fileBlock4.highPackSize
+                        qint64 nFileSize = fileBlock4.packSize;
+                        nFileSize |= ((qint64)fileBlock4.highPackSize) << 32;
+
+                        qint64 nUnpSize = fileBlock4.unpSize;
+                        nUnpSize |= ((qint64)fileBlock4.highUnpSize) << 32;
+
                         if (nFileParts & FILEPART_STREAM) {
                             XBinary::FPART record = {};
                             record.filePart = FILEPART_STREAM;
                             record.nFileOffset = nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize;
-                            record.nFileSize = fileBlock4.packSize;
+                            record.nFileSize = nFileSize;
                             record.nVirtualAddress = -1;
                             record.sName = "Stream";
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileBlock4.sFileName);
-                            // record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, fileBlock4.method);
-                            // record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
-                            // record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
-                            // record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
-                            // record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
+                            record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nFileSize);
+                            record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUnpSize);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                            record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileBlock4.fileCRC);
+
+                            COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+
+                            if (fileBlock4.method == RAR_METHOD_STORE) {
+                                compressMethod = COMPRESS_METHOD_STORE;
+                            } else if (fileBlock4.unpVer == 15) {
+                                compressMethod = COMPRESS_METHOD_RAR_15;
+                                record.mapProperties.insert(FPART_PROP_WINDOWSIZE, 0x10000);
+                            } else if ((fileBlock4.unpVer == 20) || (fileBlock4.unpVer == 26)) {
+                                compressMethod = COMPRESS_METHOD_RAR_20;
+                            } else if (fileBlock4.unpVer == 29) {
+                                compressMethod = COMPRESS_METHOD_RAR_29;
+                            }
+
+                            record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, compressMethod);
 
                             listResult.append(record);
                         }
 
-                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset + fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize);
-
-                        nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + fileBlock4.packSize;
+                        nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + nFileSize;
+                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset);
                     } else {
                         nCurrentOffset += genericBlock.nHeaderSize;
                     }
@@ -417,16 +437,36 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                         record.sName = "Stream";
                         if (genericHeader.nType == HEADERTYPE5_FILE) {
                             FILEHEADER5 fileHeader5 = readFileHeader5(nCurrentOffset);
-                            record.sName = fileHeader5.sFileName.isEmpty() ? "Stream" : fileHeader5.sFileName;
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileHeader5.sFileName);
+                            record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, fileHeader5.nDataSize);
+                            record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, fileHeader5.nUnpackedSize);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                            record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileHeader5.nCRC32);
+
+                            quint8 _nVer = fileHeader5.nCompInfo & 0x003f;
+                            quint8 _nMethod = (fileHeader5.nCompInfo >> 7) & 7;
+
+                            COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+
+                            if (_nMethod == RAR5_METHOD_STORE) {
+                                compressMethod = COMPRESS_METHOD_STORE;
+                            } else if (_nVer == 0) {
+                                compressMethod = COMPRESS_METHOD_RAR_50;
+                            } else if (_nVer == 1) {
+                                compressMethod = COMPRESS_METHOD_RAR_70;
+                            } else {
+                                compressMethod = COMPRESS_METHOD_UNKNOWN;
+                            }
+
+                            record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, compressMethod);
                         }
 
                         listResult.append(record);
                     }
 
-                    nMaxOffset = qMax(nMaxOffset, (qint64)(nCurrentOffset + genericHeader.nHeaderSize + genericHeader.nDataSize));
-
                     nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
+
+                    nMaxOffset = qMax(nMaxOffset, nCurrentOffset);
                 } else {
                     break;
                 }
@@ -456,7 +496,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             XBinary::FPART record = {};
             record.filePart = FILEPART_OVERLAY;
             record.nFileOffset = nMaxOffset;
-            record.nFileSize = nMaxOffset - getSize();
+            record.nFileSize = getSize() - nMaxOffset;
             record.nVirtualAddress = -1;
             record.sName = tr("Overlay");
 

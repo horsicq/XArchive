@@ -55,7 +55,7 @@ bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveR
 
 bool XDecompress::checkCRC(const QMap<XBinary::FPART_PROP, QVariant> &mapProperties, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = true;
+    bool bResult = false;
 
     XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
 
@@ -105,6 +105,8 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
 
     XBinary::COMPRESS_METHOD compressMethod =
         (XBinary::COMPRESS_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE).toUInt();
+    qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
+    qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
 
     // state.compressMethod = (XBinary::COMPRESS_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
     // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
@@ -168,6 +170,29 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
         // bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_ASCII85) {
         bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
+    } else if ((compressMethod == XBinary::COMPRESS_METHOD_RAR_15) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_20) ||
+               (compressMethod == XBinary::COMPRESS_METHOD_RAR_29) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_50) ||
+               (compressMethod == XBinary::COMPRESS_METHOD_RAR_70)) {
+
+        bool bIsSolid = false;
+        rar_Unpack rarUnpack(pState->pDeviceInput, pState->pDeviceOutput);
+        qint32 nInit = rarUnpack.Init(nWindowSize, bIsSolid);
+
+        if (nInit > 0) {
+            rarUnpack.SetDestSize(nUncompressedSize);
+
+            if (compressMethod == XBinary::COMPRESS_METHOD_RAR_15) {
+                rarUnpack.Unpack15(bIsSolid, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_RAR_20) {
+                rarUnpack.Unpack20(bIsSolid, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_RAR_29) {
+                rarUnpack.Unpack29(bIsSolid, pPdStruct);
+            } else if ((compressMethod == XBinary::COMPRESS_METHOD_RAR_50) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_70)) {
+                rarUnpack.Unpack5(bIsSolid, pPdStruct);
+            }
+
+            bResult = true;
+        }
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::compressMethodToString(compressMethod);

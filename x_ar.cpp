@@ -35,7 +35,7 @@ bool X_Ar::isValid(PDSTRUCT *pPdStruct)
     // TODO more checks
     bool bResult = false;
 
-    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+    _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
 
     if (getSize() > (qint64)(8 + sizeof(RECORD)))  // TODO const
     {
