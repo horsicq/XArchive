@@ -103,6 +103,13 @@ quint64 XZlib::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return 1;  // Always 1
 }
 
+qint64 XZlib::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    return 1;  // Always 1
+}
+
 QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)  // Always 1

@@ -1269,6 +1269,19 @@ qint32 XZip::_getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *
     return nResult;
 }
 
+qint64 XZip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    qint64 nResult = 0;
+
+    qint64 nECDOffset = findECDOffset(pPdStruct);
+
+    if (nECDOffset != -1) {
+        nResult = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
+    }
+
+    return nResult;
+}
+
 XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nFlags)
 {
     COMPRESS_METHOD result = COMPRESS_METHOD_UNKNOWN;

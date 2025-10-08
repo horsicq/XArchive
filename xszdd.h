@@ -68,6 +68,7 @@ public:
 
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 };
 
 #endif  // XSZDD_H

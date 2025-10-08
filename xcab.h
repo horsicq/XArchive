@@ -119,6 +119,7 @@ public:
     virtual QString getMIMEString() override;
 
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 
 private:
     CFFOLDER _read_CFFOLDER(qint64 nOffset);

@@ -319,6 +319,13 @@ quint64 XXZ::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return 1;
 }
 
+qint64 XXZ::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    // XZ is not a multi-file archive, only one record (the whole decompressed stream)
+    Q_UNUSED(pPdStruct)
+    return 1;
+}
+
 QList<XArchive::RECORD> XXZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> list;

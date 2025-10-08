@@ -98,6 +98,7 @@ public:
     // XArchive interface
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct);
 };
 
 #endif  // XXZ_H

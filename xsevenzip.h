@@ -123,6 +123,8 @@ private:
         QString sName;
         QVariant varValue;
         SRTYPE srType;
+        VT valType;
+        quint32 nFlags;
     };
 
     struct SZSTATE {
@@ -135,7 +137,7 @@ private:
 
     QList<SZRECORD> _handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct);
     bool _handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, qint32 nCount, bool bCheck, PDSTRUCT *pPdStruct);
-    quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption);
+    quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, quint32 nFlags);
     quint8 _handleByte(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption);
     quint32 _handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption);
     void _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption);

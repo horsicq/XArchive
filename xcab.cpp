@@ -551,3 +551,14 @@ XBinary::ENDIAN XCab::getEndian()
 {
     return ENDIAN_LITTLE;
 }
+
+qint64 XCab::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    qint64 nResult = 0;
+
+    nResult = read_uint16(offsetof(CFHEADER, cFiles));
+
+    return nResult;
+}

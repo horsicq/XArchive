@@ -41,6 +41,7 @@ public:
     virtual QString getFileFormatExt();
     virtual QString getFileFormatExtsString();
     virtual QString getMIMEString();
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct);
 };
 
 #endif  // XZLIB_H

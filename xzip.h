@@ -193,6 +193,7 @@ public:
 
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 
     static QMap<quint64, QString> getHeaderSignatures();
     static QMap<quint64, QString> getHeaderSignaturesS();

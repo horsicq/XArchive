@@ -52,6 +52,13 @@ quint64 XGzip::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return 1;  // Always 1
 }
 
+qint64 XGzip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    return 1;  // Always 1
+}
+
 QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)  // Always 1
