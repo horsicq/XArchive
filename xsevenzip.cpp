@@ -24,6 +24,47 @@ XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {{XSevenZip::STRUCTID_UNKNOWN, "
                                                  {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
                                                  {XSevenZip::STRUCTID_HEADER, "HEADER", QObject::tr("Header")}};
 
+XBinary::XIDSTRING _TABLE_XSevenZip_EIdEnum[] = {
+    {XSevenZip::k7zIdEnd, "End"},
+    {XSevenZip::k7zIdHeader, "Header"},
+    {XSevenZip::k7zIdArchiveProperties, "ArchiveProperties"},
+    {XSevenZip::k7zIdAdditionalStreamsInfo, "AdditionalStreamsInfo"},
+    {XSevenZip::k7zIdMainStreamsInfo, "MainStreamsInfo"},
+    {XSevenZip::k7zIdFilesInfo, "FilesInfo"},
+    {XSevenZip::k7zIdPackInfo, "PackInfo"},
+    {XSevenZip::k7zIdUnpackInfo, "UnpackInfo"},
+    {XSevenZip::k7zIdSubStreamsInfo, "SubStreamsInfo"},
+    {XSevenZip::k7zIdSize, "Size"},
+    {XSevenZip::k7zIdCRC, "CRC"},
+    {XSevenZip::k7zIdFolder, "Folder"},
+    {XSevenZip::k7zIdCodersUnpackSize, "CodersUnpackSize"},
+    {XSevenZip::k7zIdNumUnpackStream, "NumUnpackStream"},
+    {XSevenZip::k7zIdEmptyStream, "EmptyStream"},
+    {XSevenZip::k7zIdEmptyFile, "EmptyFile"},
+    {XSevenZip::k7zIdAnti, "Anti"},
+    {XSevenZip::k7zIdName, "Name"},
+    {XSevenZip::k7zIdCTime, "CTime"},
+    {XSevenZip::k7zIdATime, "ATime"},
+    {XSevenZip::k7zIdMTime, "MTime"},
+    {XSevenZip::k7zIdWinAttrib, "WinAttrib"},
+    {XSevenZip::k7zIdComment, "Comment"},
+    {XSevenZip::k7zIdEncodedHeader, "EncodedHeader"},
+    {XSevenZip::k7zIdStartPos, "StartPos"},
+    {XSevenZip::k7zIdDummy, "Dummy"},
+};
+
+const QString XSevenZip::PREFIX_k7zId = "k7zId";
+
+QMap<quint64, QString> XSevenZip::get_k7zId()
+{
+    return XBinary::XIDSTRING_createMapPrefix(_TABLE_XSevenZip_EIdEnum, sizeof(_TABLE_XSevenZip_EIdEnum) / sizeof(XBinary::XIDSTRING), PREFIX_k7zId);
+}
+
+QMap<quint64, QString> XSevenZip::get_k7zId_s()
+{
+    return XBinary::XIDSTRING_createMap(_TABLE_XSevenZip_EIdEnum, sizeof(_TABLE_XSevenZip_EIdEnum) / sizeof(XBinary::XIDSTRING));
+}
+
 XSevenZip::XSevenZip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -106,40 +147,6 @@ QString XSevenZip::getMIMEString()
     return "application/x-7z-compressed";
 }
 
-QMap<quint64, QString> XSevenZip::getEIdEnumS()
-{
-    QMap<quint64, QString> mapResult;
-
-    mapResult.insert(0, "End");
-    mapResult.insert(1, "Header");
-    mapResult.insert(2, "ArchiveProperties");
-    mapResult.insert(3, "AdditionalStreamsInfo");
-    mapResult.insert(4, "MainStreamsInfo");
-    mapResult.insert(5, "FilesInfo");
-    mapResult.insert(6, "PackInfo");
-    mapResult.insert(7, "UnpackInfo");
-    mapResult.insert(8, "SubStreamsInfo");
-    mapResult.insert(9, "Size");
-    mapResult.insert(10, "CRC");
-    mapResult.insert(11, "Folder");
-    mapResult.insert(12, "CodersUnpackSize");
-    mapResult.insert(13, "NumUnpackStream");
-    mapResult.insert(14, "EmptyStream");
-    mapResult.insert(15, "EmptyFile");
-    mapResult.insert(16, "Anti");
-    mapResult.insert(17, "Name");
-    mapResult.insert(18, "CTime");
-    mapResult.insert(19, "ATime");
-    mapResult.insert(20, "MTime");
-    mapResult.insert(21, "WinAttrib");
-    mapResult.insert(22, "Comment");
-    mapResult.insert(23, "EncodedHeader");
-    mapResult.insert(24, "StartPos");
-    mapResult.insert(25, "Dummy");
-
-    return mapResult;
-}
-
 QString XSevenZip::getArch()
 {
     return QString();
@@ -193,38 +200,7 @@ XBinary::FT XSevenZip::getFileType()
 
 QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
 {
-    QString sResult = tr("Unknown");
-
-    switch (id) {
-        case k7zIdEnd: sResult = QString("k7zIdEnd"); break;
-        case k7zIdHeader: sResult = QString("k7zIdHeader"); break;
-        case k7zIdArchiveProperties: sResult = QString("k7zIdArchiveProperties"); break;
-        case k7zIdAdditionalStreamsInfo: sResult = QString("k7zIdAdditionalStreamsInfo"); break;
-        case k7zIdMainStreamsInfo: sResult = QString("k7zIdMainStreamsInfo"); break;
-        case k7zIdFilesInfo: sResult = QString("k7zIdFilesInfo"); break;
-        case k7zIdPackInfo: sResult = QString("k7zIdPackInfo"); break;
-        case k7zIdUnpackInfo: sResult = QString("k7zIdUnpackInfo"); break;
-        case k7zIdSubStreamsInfo: sResult = QString("k7zIdSubStreamsInfo"); break;
-        case k7zIdSize: sResult = QString("k7zIdSize"); break;
-        case k7zIdCRC: sResult = QString("k7zIdCRC"); break;
-        case k7zIdFolder: sResult = QString("k7zIdFolder"); break;
-        case k7zIdCodersUnpackSize: sResult = QString("k7zIdCodersUnpackSize"); break;
-        case k7zIdNumUnpackStream: sResult = QString("k7zIdNumUnpackStream"); break;
-        case k7zIdEmptyStream: sResult = QString("k7zIdEmptyStream"); break;
-        case k7zIdEmptyFile: sResult = QString("k7zIdEmptyFile"); break;
-        case k7zIdAnti: sResult = QString("k7zIdAnti"); break;
-        case k7zIdName: sResult = QString("k7zIdName"); break;
-        case k7zIdCTime: sResult = QString("k7zIdCTime"); break;
-        case k7zIdATime: sResult = QString("k7zIdATime"); break;
-        case k7zIdMTime: sResult = QString("k7zIdMTime"); break;
-        case k7zIdWinAttrib: sResult = QString("k7zIdWinAttrib"); break;
-        case k7zIdComment: sResult = QString("k7zIdComment"); break;
-        case k7zIdEncodedHeader: sResult = QString("k7zIdEncodedHeader"); break;
-        case k7zIdStartPos: sResult = QString("k7zIdStartPos"); break;
-        case k7zIdDummy: sResult = QString("k7zIdDummy"); break;
-    }
-
-    return sResult;
+    return XBinary::XIDSTRING_idToString((quint32)id, _TABLE_XSevenZip_EIdEnum, sizeof(_TABLE_XSevenZip_EIdEnum) / sizeof(XBinary::XIDSTRING));
 }
 
 QString XSevenZip::structIDToString(quint32 nID)
@@ -324,7 +300,7 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
 
                     if (szRecord.srType == SRTYPE_ID) {
                         DATAVALUESET dataValueSet;
-                        dataValueSet.mapValues = getEIdEnumS();
+                        dataValueSet.mapValues = get_k7zId_s();
                         dataValueSet.vlType = VL_TYPE_LIST;
                         dataValueSet.nMask = 0xFFFFFFFFFFFFFFFF;
                         dataRecord.listDataValueSets.append(dataValueSet);

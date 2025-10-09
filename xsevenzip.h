@@ -99,10 +99,13 @@ public:
     virtual QString getArch();
     virtual QString getMIMEString();
 
-    static QMap<quint64, QString> getEIdEnumS();
-
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);
+
+    static const QString PREFIX_k7zId;
+
+    static QMap<quint64, QString> get_k7zId();
+    static QMap<quint64, QString> get_k7zId_s();
 
     virtual QString structIDToString(quint32 nID) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
