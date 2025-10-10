@@ -86,6 +86,7 @@ public:
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
+    virtual QList<ARCHIVERECORD> getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
     virtual QString getFileFormatExtsString();
@@ -101,6 +102,7 @@ public:
 
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);
+    static COMPRESS_METHOD codecToCompressMethod(const QByteArray &baCodec);
 
     static const QString PREFIX_k7zId;
 
@@ -120,6 +122,22 @@ private:
         SRTYPE_ARRAY
     };
 
+    enum IMPTYPE {
+        IMPTYPE_UNKNOWN = 0,
+        IMPTYPE_NUMBEROFFILES, // Number of files in archive
+        IMPTYPE_STREAMCRC,
+        IMPTYPE_STREAMOFFSET,
+        IMPTYPE_STREAMPACKEDSIZE,
+        IMPTYPE_STREAMUNPACKEDSIZE,
+        IMPTYPE_NUMBEROFSTREAMS,
+        IMPTYPE_CODER,
+        IMPTYPE_CODERPROPERTY,
+        IMPTYPE_FILENAME,
+        IMPTYPE_FILEATTRIBUTES,
+        IMPTYPE_FILETIME,
+        IMPTYPE_FILESIZE,
+    };
+
     struct SZRECORD {
         qint32 nRelOffset;
         qint32 nSize;
@@ -128,6 +146,7 @@ private:
         SRTYPE srType;
         VT valType;
         quint32 nFlags;
+        IMPTYPE impType;
     };
 
     struct SZSTATE {
@@ -139,11 +158,11 @@ private:
     };
 
     QList<SZRECORD> _handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct);
-    bool _handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, qint32 nCount, bool bCheck, PDSTRUCT *pPdStruct);
-    quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, quint32 nFlags);
-    quint8 _handleByte(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption);
-    quint32 _handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption);
-    void _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption);
+    bool _handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, qint32 nCount, bool bCheck, PDSTRUCT *pPdStruct, IMPTYPE impType);
+    quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, quint32 nFlags, IMPTYPE impType);
+    quint8 _handleByte(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
+    quint32 _handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
+    void _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
 };
 
 #endif  // XSEVENZIP_H
