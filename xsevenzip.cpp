@@ -461,7 +461,8 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
     switch (id) {
         case XSevenZip::k7zIdHeader:
             _handleId(pListRecords, XSevenZip::k7zIdMainStreamsInfo, pState, 1, true, pPdStruct);
-            bResult = _handleId(pListRecords, XSevenZip::k7zIdFilesInfo, pState, 1, true, pPdStruct);
+            _handleId(pListRecords, XSevenZip::k7zIdFilesInfo, pState, 1, true, pPdStruct);
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, false, pPdStruct);
             break;
 
         case XSevenZip::k7zIdMainStreamsInfo:
@@ -533,8 +534,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         case XSevenZip::k7zIdEncodedHeader:
             _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, 1, true, pPdStruct);
             _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, 1, true, pPdStruct);
-            _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, false, pPdStruct);
-            bResult = true;
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, false, pPdStruct);
             break;
 
         case XSevenZip::k7zIdSize:
@@ -584,10 +584,19 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             break;
         }
 
-        case XSevenZip::k7zIdName:
-            _handleNumber(pListRecords, pState, pPdStruct, QString("NameSize"), DRF_SIZE);
-            bResult = true;
+        case XSevenZip::k7zIdName: {
+            quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("NameSize"), DRF_SIZE);
+            quint8 nExt = _handleByte(pListRecords, pState, pPdStruct, "ExternalByte");
+
+            if (nExt == 0) {
+                _handleArray(pListRecords, pState, nSize - 1, pPdStruct, QString("FileName"));
+            } else if (nExt == 1) {
+                _handleNumber(pListRecords, pState, pPdStruct, QString("DataIndex"), DRF_COUNT);
+            }
+
+            bResult = _handleId(pListRecords, XSevenZip::k7zIdDummy, pState, 1, true, pPdStruct);
             break;
+        }
 
         case XSevenZip::k7zIdEmptyStream: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("EmptyStreamSize"), DRF_SIZE);
