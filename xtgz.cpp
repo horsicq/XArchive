@@ -22,28 +22,28 @@
 
 XTGZ::XTGZ(QIODevice *pDevice)  // No need Parent constructor
 {
-    g_pXtar = new XTAR;
-    g_pCompressedDevice = new XCompressedDevice;
+    m_pXtar = new XTAR;
+    m_pCompressedDevice = new XCompressedDevice;
     XTGZ::setDevice(pDevice);
 }
 
 XTGZ::~XTGZ()
 {
-    delete g_pXtar;
+    delete m_pXtar;
 
-    if (g_pCompressedDevice->isOpen()) {
-        g_pCompressedDevice->close();
+    if (m_pCompressedDevice->isOpen()) {
+        m_pCompressedDevice->close();
     }
 
-    delete g_pCompressedDevice;
+    delete m_pCompressedDevice;
 }
 
 bool XTGZ::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (g_pCompressedDevice->isOpen()) {
-        bResult = g_pXtar->isValid(pPdStruct);
+    if (m_pCompressedDevice->isOpen()) {
+        bResult = m_pXtar->isValid(pPdStruct);
     }
 
     return bResult;
@@ -74,8 +74,8 @@ quint64 XTGZ::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     quint64 nResult = 0;
 
-    if (g_pCompressedDevice->isOpen()) {
-        nResult = g_pXtar->getNumberOfRecords(pPdStruct);
+    if (m_pCompressedDevice->isOpen()) {
+        nResult = m_pXtar->getNumberOfRecords(pPdStruct);
     }
 
     return nResult;
@@ -85,8 +85,8 @@ QList<XArchive::RECORD> XTGZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> result;
 
-    if (g_pCompressedDevice->isOpen()) {
-        result = g_pXtar->getRecords(nLimit, pPdStruct);
+    if (m_pCompressedDevice->isOpen()) {
+        result = m_pXtar->getRecords(nLimit, pPdStruct);
 
         // qint32 nNumberOfRecords = result.count();
 
@@ -115,7 +115,7 @@ XBinary::FT XTGZ::getFileType()
 
 qint64 XTGZ::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    XGzip gzip(g_pCompressedDevice->getOrigDevice());
+    XGzip gzip(m_pCompressedDevice->getOrigDevice());
 
     return gzip.getFileFormatSize(pPdStruct);
 }
@@ -127,5 +127,5 @@ QString XTGZ::getMIMEString()
 
 XCompressedDevice *XTGZ::getCompressedDevice()
 {
-    return g_pCompressedDevice;
+    return m_pCompressedDevice;
 }

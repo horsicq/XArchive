@@ -47,7 +47,7 @@ public:
     XCompressedDevice *getCompressedDevice();
 
 private:
-    XTAR *g_pXtar;
-    XCompressedDevice *g_pCompressedDevice;
+    XTAR *m_pXtar;
+    XCompressedDevice *m_pCompressedDevice;
 };
 #endif  // XTGZ_H
