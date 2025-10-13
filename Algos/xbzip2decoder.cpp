@@ -34,7 +34,6 @@ bool XBZIP2Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBin
     char bufferOut[N_BUFFER_SIZE];
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-
         if (pDecompressState->pDeviceInput) {
             pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
         }

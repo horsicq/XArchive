@@ -783,9 +783,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             break;
         }
 
-        case XSevenZip::k7zIdEnd:
-            bResult = true;
-            break;
+        case XSevenZip::k7zIdEnd: bResult = true; break;
 
         default:
             // Unhandled ID type
@@ -902,8 +900,7 @@ void XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qin
     // Validate array size
     if ((nSize < 0) || (pState->nCurrentOffset > (pState->nSize - nSize))) {
         pState->bIsError = true;
-        pState->sErrorString =
-            QString("%1: %2 (%3, size: %4)").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"), sCaption).arg(nSize);
+        pState->sErrorString = QString("%1: %2 (%3, size: %4)").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"), sCaption).arg(nSize);
 #ifdef QT_DEBUG
         qDebug("Invalid array size for '%s' at offset: 0x%llX (size: %lld, available: %lld)", qPrintable(sCaption), (qint64)pState->nCurrentOffset, nSize,
                pState->nSize - pState->nCurrentOffset);

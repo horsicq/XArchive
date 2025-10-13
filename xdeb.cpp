@@ -31,7 +31,7 @@ bool XDEB::isValid(PDSTRUCT *pPdStruct)
     X_Ar xar(getDevice());
 
     if (xar.isValid()) {
-        QList<XArchive::RECORD> listArchiveRecords = xar.getRecords(10, pPdStruct); // TODO remove
+        QList<XArchive::RECORD> listArchiveRecords = xar.getRecords(10, pPdStruct);  // TODO remove
 
         bResult = isValid(&listArchiveRecords, pPdStruct);
     }

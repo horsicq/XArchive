@@ -38,8 +38,7 @@ bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDevic
     return decompress(&state, pPdStruct);
 }
 
-bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput,
-                                          XBinary::PDSTRUCT *pPdStruct)
+bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct)
 {
     XBinary::DECOMPRESS_STATE state = {};
     state.mapProperties = archiveRecord.mapProperties;
@@ -173,7 +172,6 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
     } else if ((compressMethod == XBinary::COMPRESS_METHOD_RAR_15) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_20) ||
                (compressMethod == XBinary::COMPRESS_METHOD_RAR_29) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_50) ||
                (compressMethod == XBinary::COMPRESS_METHOD_RAR_70)) {
-
         bool bIsSolid = false;
         rar_Unpack rarUnpack(pState->pDeviceInput, pState->pDeviceOutput);
         qint32 nInit = rarUnpack.Init(nWindowSize, bIsSolid);

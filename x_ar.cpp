@@ -299,13 +299,20 @@ QList<XBinary::DATA_HEADER> X_Ar::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
             } else if (dataHeadersOptions.nID == STRUCTID_FRECORD) {
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
 
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileId), sizeof(((FRECORD *)0)->fileId), "FileId", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMod), sizeof(((FRECORD *)0)->fileMod), "FileMod", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, ownerId), sizeof(((FRECORD *)0)->ownerId), "OwnerId", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, groupId), sizeof(((FRECORD *)0)->groupId), "GroupId", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMode), sizeof(((FRECORD *)0)->fileMode), "FileMode", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileSize), sizeof(((FRECORD *)0)->fileSize), "FileSize", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, endChar), sizeof(((FRECORD *)0)->endChar), "EndChar", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileId), sizeof(((FRECORD *)0)->fileId), "FileId", VT_CHAR_ARRAY, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMod), sizeof(((FRECORD *)0)->fileMod), "FileMod", VT_CHAR_ARRAY, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, ownerId), sizeof(((FRECORD *)0)->ownerId), "OwnerId", VT_CHAR_ARRAY, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, groupId), sizeof(((FRECORD *)0)->groupId), "GroupId", VT_CHAR_ARRAY, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMode), sizeof(((FRECORD *)0)->fileMode), "FileMode", VT_CHAR_ARRAY, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileSize), sizeof(((FRECORD *)0)->fileSize), "FileSize", VT_CHAR_ARRAY, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, endChar), sizeof(((FRECORD *)0)->endChar), "EndChar", VT_BYTE_ARRAY, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.nSize = sizeof(FRECORD);
 
                 listResult.append(dataHeader);

@@ -124,7 +124,7 @@ private:
 
     enum IMPTYPE {
         IMPTYPE_UNKNOWN = 0,
-        IMPTYPE_NUMBEROFFILES, // Number of files in archive
+        IMPTYPE_NUMBEROFFILES,  // Number of files in archive
         IMPTYPE_STREAMCRC,
         IMPTYPE_STREAMOFFSET,
         IMPTYPE_STREAMPACKEDSIZE,
