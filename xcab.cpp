@@ -564,3 +564,93 @@ qint64 XCab::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
 
     return nResult;
 }
+
+QList<XBinary::ARCHIVERECORD> XCab::getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+
+    QList<XBinary::ARCHIVERECORD> listResult;
+
+    CFHEADER cfHeader = readCFHeader(0);
+    qint64 nFileSize = getSize();
+
+    // Parse folders
+    qint64 nFolderOffset = sizeof(CFHEADER);
+    QList<CFFOLDER> listFolders;
+
+    for (quint16 i = 0; i < cfHeader.cFolders; i++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            break;
+        }
+
+        if ((nFolderOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
+            break;
+        }
+
+        CFFOLDER cfFolder = readCFFolder(nFolderOffset);
+        listFolders.append(cfFolder);
+
+        nFolderOffset += sizeof(CFFOLDER);
+    }
+
+    // Parse files
+    qint64 nFileOffset = cfHeader.coffFiles;
+
+    for (quint16 i = 0; i < cfHeader.cFiles; i++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            break;
+        }
+
+        if ((nFileOffset + (qint64)sizeof(CFFILE)) > nFileSize) {
+            break;
+        }
+
+        CFFILE cfFile = readCFFILE(nFileOffset);
+        QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
+
+        if (cfFile.iFolder < (quint16)listFolders.size()) {
+            CFFOLDER cfFolder = listFolders.at(cfFile.iFolder);
+
+            XBinary::ARCHIVERECORD record = {};
+
+            record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
+            record.nStreamOffset = cfFolder.coffCabStart;
+            record.nStreamSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
+            record.nDecompressedSize = cfFile.cbFile;
+            record.nDecompressedOffset = cfFile.uoffFolderStart;
+
+            // Set compression method
+            if (cfFolder.typeCompress == 0x0000) {
+                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE_CAB);
+            } else if (cfFolder.typeCompress == 0x0001) {
+                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_MSZIP_CAB);
+            } else if (cfFolder.typeCompress == 0x0003) {
+                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_LZX_CAB);
+            } else {
+                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN);
+            }
+
+            listResult.append(record);
+        }
+
+        nFileOffset += sizeof(CFFILE) + sFileName.length() + 1;
+    }
+
+    return listResult;
+}
+
+bool XCab::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(sFolderName)
+    Q_UNUSED(pDevice)
+    Q_UNUSED(pPdStruct)
+
+    // TODO: Implement CAB archive creation
+    // This is a complex task that requires:
+    // 1. Collecting all files from the folder
+    // 2. Compressing files using MSZIP compression
+    // 3. Writing CFHEADER, CFFOLDER, CFFILE, and CFDATA structures
+    // 4. Computing checksums
+
+    return false;
+}
