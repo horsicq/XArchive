@@ -352,7 +352,7 @@ qint64 XTAR::_getSize(const posix_header &header)
     return sSizeField.toULongLong(0, 8);
 }
 
-bool XTAR::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+bool XTAR::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 

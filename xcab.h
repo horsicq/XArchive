@@ -121,7 +121,7 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
     virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<ARCHIVERECORD> getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
-    virtual bool packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, PDSTRUCT *pPdStruct) override;
+    virtual bool packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct) override;
 
 private:
     CFFOLDER _read_CFFOLDER(qint64 nOffset);
