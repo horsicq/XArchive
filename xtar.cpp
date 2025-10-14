@@ -616,6 +616,95 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
+
+        // Parse mode (octal)
+        QString sMode = QString(QByteArray(header.mode, 8)).trimmed();
+        quint32 nMode = sMode.toUInt(nullptr, 8);
+
+        // Parse uid/gid (octal)
+        QString sUid = QString(QByteArray(header.uid, 8)).trimmed();
+        quint32 nUid = sUid.toUInt(nullptr, 8);
+        QString sGid = QString(QByteArray(header.gid, 8)).trimmed();
+        quint32 nGid = sGid.toUInt(nullptr, 8);
+
+        // Size already handled
+        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nFileSize);
+
+        // Parse mtime (octal)
+        QString sMTime = QString(QByteArray(header.mtime, 12)).trimmed();
+        qint64 nMTime = sMTime.toLongLong(nullptr, 8);
+        QDateTime dateTime = QDateTime::fromSecsSinceEpoch(nMTime);
+        result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
+
+        // Parse checksum (octal)
+        QString sChecksum = QString(QByteArray(header.chksum, 8)).trimmed();
+        quint32 nChecksum = sChecksum.toUInt(nullptr, 8);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, nChecksum);
+
+        // Type flag
+        char cTypeFlag = header.typeflag[0];
+        QString sTypeFlag;
+        switch (cTypeFlag) {
+            case '0': sTypeFlag = "Regular file"; break;
+            case '1': sTypeFlag = "Hard link"; break;
+            case '2': sTypeFlag = "Symbolic link"; break;
+            case '3': sTypeFlag = "Character device"; break;
+            case '4': sTypeFlag = "Block device"; break;
+            case '5': sTypeFlag = "Directory"; break;
+            case '6': sTypeFlag = "FIFO"; break;
+            case '7': sTypeFlag = "Contiguous file"; break;
+            default: sTypeFlag = QString("Unknown (%1)").arg(cTypeFlag); break;
+        }
+        result.mapProperties.insert(XBinary::FPART_PROP_TYPE, sTypeFlag);
+
+        // Build info string
+        QString sInfo = QString("Mode: %1, UID: %2, GID: %3").arg(QString::number(nMode, 8)).arg(nUid).arg(nGid);
+
+        // Link name
+        QString sLinkName = QString::fromUtf8(header.linkname, qMin((qint32)sizeof(header.linkname), (qint32)100));
+        nNullPos = sLinkName.indexOf(QChar('\0'));
+        if (nNullPos != -1) {
+            sLinkName = sLinkName.left(nNullPos);
+        }
+        if (!sLinkName.isEmpty()) {
+            sInfo += QString(", Link: %1").arg(sLinkName);
+        }
+
+        // Uname/Gname
+        QString sUname = QString::fromUtf8(header.uname, qMin((qint32)sizeof(header.uname), (qint32)32));
+        nNullPos = sUname.indexOf(QChar('\0'));
+        if (nNullPos != -1) {
+            sUname = sUname.left(nNullPos);
+        }
+        QString sGname = QString::fromUtf8(header.gname, qMin((qint32)sizeof(header.gname), (qint32)32));
+        nNullPos = sGname.indexOf(QChar('\0'));
+        if (nNullPos != -1) {
+            sGname = sGname.left(nNullPos);
+        }
+        if (!sUname.isEmpty() || !sGname.isEmpty()) {
+            sInfo += QString(", User: %1, Group: %2").arg(sUname).arg(sGname);
+        }
+
+        // Dev major/minor (for devices)
+        if (cTypeFlag == '3' || cTypeFlag == '4') {
+            QString sDevMajor = QString(QByteArray(header.devmajor, 8)).trimmed();
+            quint32 nDevMajor = sDevMajor.toUInt(nullptr, 8);
+            QString sDevMinor = QString(QByteArray(header.devminor, 8)).trimmed();
+            quint32 nDevMinor = sDevMinor.toUInt(nullptr, 8);
+            sInfo += QString(", Device: %1,%2").arg(nDevMajor).arg(nDevMinor);
+        }
+
+        // Prefix (for long names)
+        QString sPrefix = QString::fromUtf8(header.prefix, qMin((qint32)sizeof(header.prefix), (qint32)155));
+        nNullPos = sPrefix.indexOf(QChar('\0'));
+        if (nNullPos != -1) {
+            sPrefix = sPrefix.left(nNullPos);
+        }
+        if (!sPrefix.isEmpty()) {
+            sInfo += QString(", Prefix: %1").arg(sPrefix);
+        }
+
+        result.mapProperties.insert(XBinary::FPART_PROP_INFO, sInfo);
     }
 
     return result;
