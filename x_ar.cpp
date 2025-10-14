@@ -564,3 +564,363 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
     return listResult;
 }
+
+bool X_Ar::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pOptions)
+
+    bool bResult = false;
+
+    if (!XBinary::isDirectoryExists(sFolderName)) {
+        return false;
+    }
+
+    if (!pDevice || !pDevice->isWritable()) {
+        return false;
+    }
+
+    // Write AR header
+    QByteArray baHeader = "!<arch>\n";
+    if (pDevice->write(baHeader) != baHeader.size()) {
+        return false;
+    }
+
+    QList<QString> listFiles;
+    XBinary::findFiles(sFolderName, &listFiles, true, 0, pPdStruct);
+
+    qint32 nNumberOfFiles = listFiles.count();
+
+    for (qint32 i = 0; (i < nNumberOfFiles) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        QString sFilePath = listFiles.at(i);
+
+        QFileInfo fileInfo(sFilePath);
+
+        if (fileInfo.isDir()) {
+            continue;
+        }
+
+        QString sRelativePath = sFilePath.mid(sFolderName.length());
+
+        if (sRelativePath.startsWith("/") || sRelativePath.startsWith("\\")) {
+            sRelativePath = sRelativePath.mid(1);
+        }
+
+        sRelativePath.replace("\\", "/");
+
+        qint64 nFileSize = fileInfo.size();
+        quint32 nMode = 0;
+        qint64 nMTime = fileInfo.lastModified().toSecsSinceEpoch();
+
+#ifdef Q_OS_WIN
+        nMode = 0644;  // owner read/write, group/others read
+#else
+        QFile::Permissions permissions = fileInfo.permissions();
+
+        if (permissions & QFile::ReadOwner) nMode |= 0400;
+        if (permissions & QFile::WriteOwner) nMode |= 0200;
+        if (permissions & QFile::ExeOwner) nMode |= 0100;
+        if (permissions & QFile::ReadGroup) nMode |= 0040;
+        if (permissions & QFile::WriteGroup) nMode |= 0020;
+        if (permissions & QFile::ExeGroup) nMode |= 0010;
+        if (permissions & QFile::ReadOther) nMode |= 0004;
+        if (permissions & QFile::WriteOther) nMode |= 0002;
+        if (permissions & QFile::ExeOther) nMode |= 0001;
+#endif
+
+        FRECORD header = createHeader(sRelativePath, nFileSize, nMode, nMTime);
+
+        // Write header
+        if (pDevice->write((char *)&header, sizeof(FRECORD)) != sizeof(FRECORD)) {
+            return false;
+        }
+
+        // Write file content
+        QFile file(sFilePath);
+
+        if (!file.open(QIODevice::ReadOnly)) {
+            return false;
+        }
+
+        qint64 nBytesWritten = 0;
+
+        while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
+
+            if (baBuffer.isEmpty()) {
+                file.close();
+                return false;
+            }
+
+            if (pDevice->write(baBuffer) != baBuffer.size()) {
+                file.close();
+                return false;
+            }
+
+            nBytesWritten += baBuffer.size();
+        }
+
+        file.close();
+
+        // Add padding if file size is odd
+        if (nFileSize % 2 != 0) {
+            char cPadding = '\n';
+            if (pDevice->write(&cPadding, 1) != 1) {
+                return false;
+            }
+        }
+    }
+
+    if (XBinary::isPdStructNotCanceled(pPdStruct)) {
+        bResult = true;
+    }
+
+    return bResult;
+}
+
+X_Ar::FRECORD X_Ar::createHeader(const QString &sFileName, qint64 nFileSize, quint32 nMode, qint64 nMTime)
+{
+    FRECORD header;
+
+    // Zero out the entire header
+    memset(&header, 0x20, sizeof(FRECORD));  // AR uses spaces for padding
+
+    // Copy name (max 16 bytes, space-padded)
+    QByteArray baName = sFileName.toUtf8();
+    qint32 nNameLen = qMin(baName.size(), (qint32)sizeof(header.fileId) - 1);  // Leave room for '/'
+
+    if (nNameLen > 0) {
+        memcpy(header.fileId, baName.constData(), nNameLen);
+    }
+
+    // Add trailing '/' as per AR format
+    if (nNameLen < (qint32)sizeof(header.fileId)) {
+        header.fileId[nNameLen] = '/';
+    }
+
+    // Write mtime as decimal string
+    QString sMTime = QString::number(nMTime);
+    QByteArray baMTime = sMTime.toLatin1();
+    qint32 nMTimeLen = qMin(baMTime.size(), (qint32)sizeof(header.fileMod));
+    if (nMTimeLen > 0) {
+        memcpy(header.fileMod, baMTime.constData(), nMTimeLen);
+    }
+
+    // OwnerID and GroupID (default to 0)
+    QByteArray baOwnerId = "0";
+    memcpy(header.ownerId, baOwnerId.constData(), baOwnerId.size());
+
+    QByteArray baGroupId = "0";
+    memcpy(header.groupId, baGroupId.constData(), baGroupId.size());
+
+    // File mode as octal string
+    QString sMode = QString::number(nMode, 8);
+    QByteArray baMode = sMode.toLatin1();
+    qint32 nModeLen = qMin(baMode.size(), (qint32)sizeof(header.fileMode));
+    if (nModeLen > 0) {
+        memcpy(header.fileMode, baMode.constData(), nModeLen);
+    }
+
+    // File size as decimal string
+    QString sSize = QString::number(nFileSize);
+    QByteArray baSize = sSize.toLatin1();
+    qint32 nSizeLen = qMin(baSize.size(), (qint32)sizeof(header.fileSize));
+    if (nSizeLen > 0) {
+        memcpy(header.fileSize, baSize.constData(), nSizeLen);
+    }
+
+    // End characters
+    header.endChar[0] = 0x60;
+    header.endChar[1] = 0x0a;
+
+    return header;
+}
+
+bool X_Ar::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (pState) {
+        pState->nCurrentOffset = 8;  // Start after the "!<arch>\n" signature
+        pState->nTotalSize = getSize();
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 0;
+        pState->pContext = nullptr;
+
+        // Count total number of records
+        qint64 nOffset = 8;
+        qint64 nTotalSize = pState->nTotalSize;
+
+        while ((nOffset + (qint64)sizeof(FRECORD) <= nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            FRECORD header = readFRECORD(nOffset);
+
+            // Validate header terminator
+            if (!((header.endChar[0] == 0x60) && (header.endChar[1] == 0x0a))) {
+                break;
+            }
+
+            QString sSize = QString(header.fileSize);
+            sSize.resize(sizeof(header.fileSize));
+            qint64 nFileSize = sSize.trimmed().toLongLong();
+
+            if (nFileSize < 0) {
+                break;
+            }
+
+            qint64 nRecordSize = sizeof(FRECORD) + S_ALIGN_UP(nFileSize, 2);
+
+            pState->nNumberOfRecords++;
+            nOffset += nRecordSize;
+        }
+
+        bResult = (pState->nNumberOfRecords > 0);
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    XBinary::ARCHIVERECORD result = {};
+
+    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+        FRECORD header = readFRECORD(pState->nCurrentOffset);
+
+        QString sSize = QString(header.fileSize);
+        sSize.resize(sizeof(header.fileSize));
+        qint64 nFileSize = sSize.trimmed().toLongLong();
+
+        // Extract file name
+        QString sFileName = QString::fromUtf8(header.fileId, (qint32)sizeof(header.fileId));
+        sFileName = sFileName.trimmed();
+
+        // Handle BSD-style long names
+        if (sFileName.section("/", 0, 0) == "#1") {
+            qint32 nFileNameLength = sFileName.section("/", 1, 1).toInt();
+            if (nFileNameLength > 0 && nFileNameLength <= nFileSize) {
+                sFileName = read_ansiString(pState->nCurrentOffset + sizeof(FRECORD), nFileNameLength);
+                result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD) + nFileNameLength;
+                result.nStreamSize = nFileSize - nFileNameLength;
+            } else {
+                result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD);
+                result.nStreamSize = nFileSize;
+            }
+        } else {
+            // Remove trailing '/' if present
+            if (sFileName.endsWith('/')) {
+                sFileName = sFileName.left(sFileName.length() - 1);
+            }
+
+            result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD);
+            result.nStreamSize = nFileSize;
+        }
+
+        result.nDecompressedOffset = 0;
+        result.nDecompressedSize = result.nStreamSize;
+
+        result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
+        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
+
+        // Parse file mode (octal)
+        QString sMode = QString(header.fileMode);
+        sMode.resize(sizeof(header.fileMode));
+        sMode = sMode.trimmed();
+        quint32 nMode = sMode.toUInt(nullptr, 8);
+        result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, nMode);
+
+        // Parse UID (decimal)
+        QString sUid = QString(header.ownerId);
+        sUid.resize(sizeof(header.ownerId));
+        sUid = sUid.trimmed();
+        quint32 nUid = sUid.toUInt();
+        result.mapProperties.insert(XBinary::FPART_PROP_UID, nUid);
+
+        // Parse GID (decimal)
+        QString sGid = QString(header.groupId);
+        sGid.resize(sizeof(header.groupId));
+        sGid = sGid.trimmed();
+        quint32 nGid = sGid.toUInt();
+        result.mapProperties.insert(XBinary::FPART_PROP_GID, nGid);
+
+        // Size
+        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, result.nDecompressedSize);
+        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, result.nStreamSize);
+
+        // Parse mtime (decimal)
+        QString sMTime = QString(header.fileMod);
+        sMTime.resize(sizeof(header.fileMod));
+        sMTime = sMTime.trimmed();
+        qint64 nMTime = sMTime.toLongLong();
+        QDateTime dateTime = QDateTime::fromSecsSinceEpoch(nMTime);
+        result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
+    }
+
+    return result;
+}
+
+bool X_Ar::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+        FRECORD header = readFRECORD(pState->nCurrentOffset);
+
+        QString sSize = QString(header.fileSize);
+        sSize.resize(sizeof(header.fileSize));
+        qint64 nFileSize = sSize.trimmed().toLongLong();
+
+        qint64 nDataOffset = pState->nCurrentOffset + sizeof(FRECORD);
+        qint64 nDataSize = nFileSize;
+
+        // Handle BSD-style long names
+        QString sFileName = QString::fromUtf8(header.fileId, (qint32)sizeof(header.fileId));
+        sFileName = sFileName.trimmed();
+
+        if (sFileName.section("/", 0, 0) == "#1") {
+            qint32 nFileNameLength = sFileName.section("/", 1, 1).toInt();
+            if (nFileNameLength > 0 && nFileNameLength <= nFileSize) {
+                nDataOffset += nFileNameLength;
+                nDataSize -= nFileNameLength;
+            }
+        }
+
+        // Copy data directly (no compression in AR)
+        bResult = copyDeviceMemory(getDevice(), nDataOffset, pDevice, 0, nDataSize);
+    }
+
+    return bResult;
+}
+
+bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+        FRECORD header = readFRECORD(pState->nCurrentOffset);
+
+        QString sSize = QString(header.fileSize);
+        sSize.resize(sizeof(header.fileSize));
+        qint64 nFileSize = sSize.trimmed().toLongLong();
+
+        qint64 nRecordSize = sizeof(FRECORD) + S_ALIGN_UP(nFileSize, 2);
+
+        pState->nCurrentOffset += nRecordSize;
+        pState->nCurrentIndex++;
+
+        bResult = (pState->nCurrentIndex < pState->nNumberOfRecords);
+    }
+
+    return bResult;
+}
+

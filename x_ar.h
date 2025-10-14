@@ -75,8 +75,16 @@ public:
 
     virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 
+    virtual bool packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct) override;
+
+    virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
 private:
     FRECORD readFRECORD(qint64 nOffset);
+    static FRECORD createHeader(const QString &sFileName, qint64 nFileSize, quint32 nMode, qint64 nMTime);
 };
 
 #endif  // X_AR_H
