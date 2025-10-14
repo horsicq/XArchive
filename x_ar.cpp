@@ -607,6 +607,11 @@ bool X_Ar::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, vo
 
         sRelativePath.replace("\\", "/");
 
+        // AR format traditionally stores only basenames (no directory paths)
+        // This matches the behavior of system 'ar' command
+        QFileInfo relativeFileInfo(sRelativePath);
+        QString sBaseName = relativeFileInfo.fileName();
+
         qint64 nFileSize = fileInfo.size();
         quint32 nMode = 0;
         qint64 nMTime = fileInfo.lastModified().toSecsSinceEpoch();
@@ -627,11 +632,22 @@ bool X_Ar::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, vo
         if (permissions & QFile::ExeOther) nMode |= 0001;
 #endif
 
-        FRECORD header = createHeader(sRelativePath, nFileSize, nMode, nMTime);
+        // Check if we need BSD-style long filename format
+        QByteArray baFileName = sBaseName.toUtf8();
+        bool bUseBsdFormat = (baFileName.size() > 15);
+        
+        FRECORD header = createHeader(sBaseName, nFileSize, nMode, nMTime);
 
         // Write header
         if (pDevice->write((char *)&header, sizeof(FRECORD)) != sizeof(FRECORD)) {
             return false;
+        }
+
+        // If using BSD format, write the filename first
+        if (bUseBsdFormat) {
+            if (pDevice->write(baFileName) != baFileName.size()) {
+                return false;
+            }
         }
 
         // Write file content
@@ -661,8 +677,13 @@ bool X_Ar::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, vo
 
         file.close();
 
-        // Add padding if file size is odd
-        if (nFileSize % 2 != 0) {
+        // Add padding if total size (filename + file content for BSD, or just file content for standard) is odd
+        qint64 nTotalDataSize = nFileSize;
+        if (bUseBsdFormat) {
+            nTotalDataSize += baFileName.size();
+        }
+        
+        if (nTotalDataSize % 2 != 0) {
             char cPadding = '\n';
             if (pDevice->write(&cPadding, 1) != 1) {
                 return false;
@@ -684,17 +705,35 @@ X_Ar::FRECORD X_Ar::createHeader(const QString &sFileName, qint64 nFileSize, qui
     // Zero out the entire header
     memset(&header, 0x20, sizeof(FRECORD));  // AR uses spaces for padding
 
-    // Copy name (max 16 bytes, space-padded)
     QByteArray baName = sFileName.toUtf8();
-    qint32 nNameLen = qMin(baName.size(), (qint32)sizeof(header.fileId) - 1);  // Leave room for '/'
-
-    if (nNameLen > 0) {
-        memcpy(header.fileId, baName.constData(), nNameLen);
-    }
-
-    // Add trailing '/' as per AR format
-    if (nNameLen < (qint32)sizeof(header.fileId)) {
-        header.fileId[nNameLen] = '/';
+    
+    // Check if filename fits in standard 16-byte field (minus 1 for trailing '/')
+    // If not, we'll use BSD-style format with #1/<length>
+    if (baName.size() <= 15) {
+        // Standard format: filename with trailing '/'
+        qint32 nNameLen = baName.size();
+        if (nNameLen > 0) {
+            memcpy(header.fileId, baName.constData(), nNameLen);
+        }
+        // Add trailing '/' as per AR format
+        if (nNameLen < (qint32)sizeof(header.fileId)) {
+            header.fileId[nNameLen] = '/';
+        }
+    } else {
+        // BSD-style format: #1/<length>/
+        // The actual filename will be stored at the beginning of the file data
+        QString sBsdFormat = QString("#1/%1").arg(baName.size());
+        QByteArray baBsdFormat = sBsdFormat.toLatin1();
+        qint32 nBsdLen = qMin(baBsdFormat.size(), (qint32)sizeof(header.fileId));
+        if (nBsdLen > 0) {
+            memcpy(header.fileId, baBsdFormat.constData(), nBsdLen);
+        }
+        // Add trailing '/' if there's room
+        if (nBsdLen < (qint32)sizeof(header.fileId)) {
+            header.fileId[nBsdLen] = '/';
+        }
+        // Adjust file size to include the embedded filename
+        nFileSize += baName.size();
     }
 
     // Write mtime as decimal string
