@@ -1028,7 +1028,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
-                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
                                                 record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
 
                                                 if (cdh.nFlags & 0x01) record.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
@@ -1084,7 +1084,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
-                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
                             record.mapProperties.insert(FPART_PROP_CRC_VALUE, lfh.nCRC32);
                             record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::dosDateTimeToQDateTime(lfh.nLastModDate, lfh.nLastModTime));
 

@@ -66,7 +66,7 @@ bool XDecompress::checkCRC(const QMap<XBinary::FPART_PROP, QVariant> &mapPropert
 
         pDevice->reset();
 
-        if (crcType == XBinary::CRC_TYPE_ZIP) {
+        if (crcType == XBinary::CRC_TYPE_EDB88320) {
             varCRC = mapProperties.value(XBinary::FPART_PROP_CRC_VALUE, 0).toUInt();
             varCRC_calc = binary._getCRC32(0, -1, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320(), pPdStruct);
         }

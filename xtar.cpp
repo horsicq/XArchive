@@ -620,12 +620,16 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         // Parse mode (octal)
         QString sMode = QString(QByteArray(header.mode, 8)).trimmed();
         quint32 nMode = sMode.toUInt(nullptr, 8);
+        result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, nMode);
 
         // Parse uid/gid (octal)
         QString sUid = QString(QByteArray(header.uid, 8)).trimmed();
         quint32 nUid = sUid.toUInt(nullptr, 8);
+        result.mapProperties.insert(XBinary::FPART_PROP_UID, nUid);
+        
         QString sGid = QString(QByteArray(header.gid, 8)).trimmed();
         quint32 nGid = sGid.toUInt(nullptr, 8);
+        result.mapProperties.insert(XBinary::FPART_PROP_GID, nGid);
 
         // Size already handled
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nFileSize);
@@ -640,6 +644,7 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         QString sChecksum = QString(QByteArray(header.chksum, 8)).trimmed();
         quint32 nChecksum = sChecksum.toUInt(nullptr, 8);
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, nChecksum);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
 
         // Type flag
         char cTypeFlag = header.typeflag[0];
@@ -657,9 +662,6 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         }
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, sTypeFlag);
 
-        // Build info string
-        QString sInfo = QString("Mode: %1, UID: %2, GID: %3").arg(QString::number(nMode, 8)).arg(nUid).arg(nGid);
-
         // Link name
         QString sLinkName = QString::fromUtf8(header.linkname, qMin((qint32)sizeof(header.linkname), (qint32)100));
         nNullPos = sLinkName.indexOf(QChar('\0'));
@@ -667,7 +669,7 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             sLinkName = sLinkName.left(nNullPos);
         }
         if (!sLinkName.isEmpty()) {
-            sInfo += QString(", Link: %1").arg(sLinkName);
+            result.mapProperties.insert(XBinary::FPART_PROP_LINKNAME, sLinkName);
         }
 
         // Uname/Gname
@@ -676,13 +678,17 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         if (nNullPos != -1) {
             sUname = sUname.left(nNullPos);
         }
+        if (!sUname.isEmpty()) {
+            result.mapProperties.insert(XBinary::FPART_PROP_USERNAME, sUname);
+        }
+        
         QString sGname = QString::fromUtf8(header.gname, qMin((qint32)sizeof(header.gname), (qint32)32));
         nNullPos = sGname.indexOf(QChar('\0'));
         if (nNullPos != -1) {
             sGname = sGname.left(nNullPos);
         }
-        if (!sUname.isEmpty() || !sGname.isEmpty()) {
-            sInfo += QString(", User: %1, Group: %2").arg(sUname).arg(sGname);
+        if (!sGname.isEmpty()) {
+            result.mapProperties.insert(XBinary::FPART_PROP_GROUPNAME, sGname);
         }
 
         // Dev major/minor (for devices)
@@ -691,7 +697,8 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             quint32 nDevMajor = sDevMajor.toUInt(nullptr, 8);
             QString sDevMinor = QString(QByteArray(header.devminor, 8)).trimmed();
             quint32 nDevMinor = sDevMinor.toUInt(nullptr, 8);
-            sInfo += QString(", Device: %1,%2").arg(nDevMajor).arg(nDevMinor);
+            QString sDevVersion = QString("%1,%2").arg(nDevMajor).arg(nDevMinor);
+            result.mapProperties.insert(XBinary::FPART_PROP_DEVVERSION, sDevVersion);
         }
 
         // Prefix (for long names)
@@ -701,10 +708,8 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             sPrefix = sPrefix.left(nNullPos);
         }
         if (!sPrefix.isEmpty()) {
-            sInfo += QString(", Prefix: %1").arg(sPrefix);
+            result.mapProperties.insert(XBinary::FPART_PROP_PREFIX, sPrefix);
         }
-
-        result.mapProperties.insert(XBinary::FPART_PROP_INFO, sInfo);
     }
 
     return result;

@@ -376,7 +376,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileBlock4.sFileName);
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nFileSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUnpSize);
-                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
                             record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileBlock4.fileCRC);
 
                             COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
@@ -440,7 +440,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileHeader5.sFileName);
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, fileHeader5.nDataSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, fileHeader5.nUnpackedSize);
-                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ZIP);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
                             record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileHeader5.nCRC32);
 
                             quint8 _nVer = fileHeader5.nCompInfo & 0x003f;
