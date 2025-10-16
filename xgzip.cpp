@@ -19,8 +19,17 @@
  * SOFTWARE.
  */
 #include "xgzip.h"
+#include "Algos/xdeflatedecoder.h"
+
+XBinary::XCONVERT _TABLE_XGZIP_STRUCTID[] = {{XGzip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                             {XGzip::STRUCTID_GZIP_HEADER, "GZIP_HEADER", QString("GZIP header")},
+                                             {XGzip::STRUCTID_STREAM, "STREAM", QString("Stream")}};
 
 XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
+{
+}
+
+XGzip::~XGzip()
 {
 }
 
@@ -86,23 +95,27 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         nOffset += record.spInfo.sRecordName.size() + 1;
     }
 
-    SubDevice sd(getDevice(), nOffset, -1);
+    SubDevice sd(getDevice(), nOffset, getSize() - nOffset);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.spInfo.compressMethod = record.spInfo.compressMethod;
-        decompressStruct.pSourceDevice = &sd;
-        decompressStruct.pDestDevice = 0;
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, record.spInfo.compressMethod);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = nullptr;
+        state.nInputOffset = 0;
+        state.nInputLimit = getSize() - nOffset;
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
 
-        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+        bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
-        Q_UNUSED(cr)
+        Q_UNUSED(bResult)
 
         record.nHeaderOffset = 0;
         record.nHeaderSize = nOffset;
         record.nDataOffset = nOffset;
-        record.nDataSize = decompressStruct.nInSize;
-        record.spInfo.nUncompressedSize = decompressStruct.nOutSize;
+        record.nDataSize = state.nCountInput;
+        record.spInfo.nUncompressedSize = state.nCountOutput;
         record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());  // TODO, use from header
 
         sd.close();
@@ -175,21 +188,25 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     result.listRecords.append(memoryRecordHeader);
 
-    SubDevice sd(getDevice(), nOffset, -1);
+    SubDevice sd(getDevice(), nOffset, getSize() - nOffset);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.spInfo.compressMethod = cm;
-        decompressStruct.pSourceDevice = &sd;
-        decompressStruct.pDestDevice = 0;
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, cm);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = nullptr;
+        state.nInputOffset = 0;
+        state.nInputLimit = getSize() - nOffset;
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
 
-        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+        bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
-        Q_UNUSED(cr)
+        Q_UNUSED(bResult)
 
         memoryRecord.nOffset = nOffset;
         memoryRecord.nAddress = -1;
-        memoryRecord.nSize = decompressStruct.nInSize;
+        memoryRecord.nSize = state.nCountInput;
         memoryRecord.filePart = FILEPART_REGION;
 
         sd.close();
@@ -312,4 +329,279 @@ QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 
     Q_UNUSED(pPdStruct)
     return listResult;
+}
+
+XBinary::MODE XGzip::getMode()
+{
+    return MODE_DATA;
+}
+
+qint32 XGzip::getType()
+{
+    return TYPE_GZ;
+}
+
+XBinary::ENDIAN XGzip::getEndian()
+{
+    return ENDIAN_LITTLE;  // Gzip is little-endian
+}
+
+QString XGzip::typeIdToString(qint32 nType)
+{
+    QString sResult = tr("Unknown");
+
+    switch (nType) {
+        case TYPE_GZ: sResult = QString("GZ"); break;
+    }
+
+    return sResult;
+}
+
+XBinary::OSNAME XGzip::getOsName()
+{
+    return OSNAME_MULTIPLATFORM;
+}
+
+QString XGzip::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XGZIP_STRUCTID, sizeof(_TABLE_XGZIP_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+QList<XBinary::DATA_HEADER> XGzip::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::DATA_HEADER> listResult;
+
+    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+        _dataHeadersOptions.bChildren = true;
+        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+        _dataHeadersOptions.nID = STRUCTID_GZIP_HEADER;
+        _dataHeadersOptions.nLocation = 0;
+        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+
+        if (isPdStructNotCanceled(pPdStruct)) {
+            listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+        }
+    } else {
+        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+
+        if (nStartOffset != -1) {
+            if (dataHeadersOptions.nID == STRUCTID_GZIP_HEADER) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XGzip::structIDToString(dataHeadersOptions.nID));
+                dataHeader.nSize = sizeof(GZIP_HEADER);
+
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(GZIP_HEADER, nMagic), 2, "nMagic", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(GZIP_HEADER, nCompressionMethod), 1, "nCompressionMethod", VT_UINT8, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(GZIP_HEADER, nFileFlags), 1, "nFileFlags", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(GZIP_HEADER, nTimeStamp), 4, "nTimeStamp", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(GZIP_HEADER, nCompressionFlags), 1, "nCompressionFlags", VT_UINT8, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(GZIP_HEADER, nOS), 1, "nOS", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
+            }
+        }
+    }
+
+    return listResult;
+}
+
+XGzip::GZIP_HEADER XGzip::_read_GZIP_HEADER(qint64 nOffset)
+{
+    GZIP_HEADER result = {};
+
+    read_array(nOffset, (char *)&result, sizeof(GZIP_HEADER));
+
+    return result;
+}
+
+bool XGzip::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (pState) {
+        // Validate GZIP file
+        if (!isValid(pPdStruct)) {
+            return false;
+        }
+
+        // Create and initialize context
+        GZIP_UNPACK_CONTEXT *pContext = new GZIP_UNPACK_CONTEXT;
+
+        // Read header to get metadata
+        qint64 nOffset = 0;
+        GZIP_HEADER gzipHeader = _read_GZIP_HEADER(nOffset);
+        nOffset += sizeof(GZIP_HEADER);
+
+        // Check for optional filename
+        if (gzipHeader.nFileFlags & 8) {
+            pContext->sFileName = read_ansiString(nOffset);
+            nOffset += pContext->sFileName.size() + 1;
+        } else {
+            pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+        }
+
+        pContext->nHeaderSize = nOffset;
+
+        // Decompress to get sizes
+        qint64 nFileSize = getSize();
+        SubDevice sd(getDevice(), nOffset, nFileSize - nOffset);
+
+        if (sd.open(QIODevice::ReadOnly)) {
+            XBinary::DECOMPRESS_STATE state = {};
+            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+            state.pDeviceInput = &sd;
+            state.pDeviceOutput = nullptr;
+            state.nInputOffset = 0;
+            state.nInputLimit = -1;
+            state.nDecompressedOffset = 0;
+            state.nDecompressedLimit = -1;
+
+            bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
+
+            if (bResult) {
+                pContext->nCompressedSize = state.nCountInput;
+                pContext->nUncompressedSize = state.nCountOutput;
+            } else {
+                pContext->nCompressedSize = nFileSize - nOffset;
+                pContext->nUncompressedSize = 0;
+            }
+
+            sd.close();
+        }
+
+        // Initialize state
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = getSize();
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 1;  // GZIP contains single compressed stream
+        pState->pContext = pContext;
+
+        bResult = true;
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD XGzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext) {
+        return result;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    GZIP_UNPACK_CONTEXT *pContext = (GZIP_UNPACK_CONTEXT *)pState->pContext;
+
+    // Fill ARCHIVERECORD
+    result.nStreamOffset = pContext->nHeaderSize;
+    result.nStreamSize = pContext->nCompressedSize;
+    result.nDecompressedOffset = 0;
+    result.nDecompressedSize = pContext->nUncompressedSize;
+
+    // Set properties
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+
+    return result;
+}
+
+bool XGzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    GZIP_UNPACK_CONTEXT *pContext = (GZIP_UNPACK_CONTEXT *)pState->pContext;
+
+    // Decompress entire GZIP stream to output device
+    qint64 nFileSize = getSize();
+    SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = pDevice;
+        state.nInputOffset = 0;
+        state.nInputLimit = getSize();
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
+
+        bResult = XDeflateDecoder::decompress(&state, pPdStruct);
+
+        sd.close();
+    }
+
+    return bResult;
+}
+
+bool XGzip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    // Move to next record
+    pState->nCurrentIndex++;
+
+    // GZIP has only one record, so moving to next always returns false
+    // This indicates end of archive
+    bResult = false;
+
+    return bResult;
+}
+
+bool XGzip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    // Delete format-specific context
+    if (pState->pContext) {
+        GZIP_UNPACK_CONTEXT *pContext = (GZIP_UNPACK_CONTEXT *)pState->pContext;
+        delete pContext;
+        pState->pContext = nullptr;
+    }
+
+    // Reset state fields
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+
+    return true;
 }

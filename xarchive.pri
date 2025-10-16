@@ -100,6 +100,11 @@ SOURCES += \
     include($$PWD/../Formats/formats/xjavaclass.pri)
 }
 
+!contains(XCONFIG, xpyc) {
+    XCONFIG += xpyc
+    include($$PWD/../Formats/formats/xpyc.pri)
+}
+
 !contains(XCONFIG, zlib) {
     XCONFIG += zlib
     include($$PWD/3rdparty/zlib/zlib.pri)

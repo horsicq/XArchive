@@ -112,7 +112,21 @@ public:
     virtual QString structIDToString(quint32 nID) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
 
+    // Streaming unpacking API
+    virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+    // Quick record count (if available from header)
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
+
 private:
+    struct SEVENZ_UNPACK_CONTEXT {
+        qint64 nSignatureSize;
+        QList<qint64> listRecordOffsets;
+        QList<ARCHIVERECORD> listArchiveRecords;  // Pre-parsed archive records
+    };
     enum SRTYPE {
         SRTYPE_UNKNOWN = 0,
         SRTYPE_ID,

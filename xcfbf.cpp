@@ -80,7 +80,20 @@ QString XCFBF::getVersion()
 
 QString XCFBF::getFileFormatExt()
 {
-    return "";
+    return "ole";
+}
+
+QString XCFBF::getFileFormatExtsString()
+{
+    return "CFBF (*.ole;*.doc;*.xls;*.ppt;*.msi)";
+}
+
+qint64 XCFBF::getFileFormatSize(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    // CFBF files are typically complete; return full file size
+    return getSize();
 }
 
 QString XCFBF::getMIMEString()
@@ -91,7 +104,58 @@ QString XCFBF::getMIMEString()
 quint64 XCFBF::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    return 0;  // TODO
+
+    quint64 nResult = 0;
+
+    // CFBF header is 512 bytes minimum
+    const qint64 nHeaderSize = 512;
+    if (getSize() < nHeaderSize) {
+        return 0;
+    }
+
+    // Read sector size from header
+    quint16 nSectorShift = read_uint16(0x1E, false);
+    quint32 nSectorSize = 1 << nSectorShift;
+    if (nSectorSize == 0) {
+        nSectorSize = 512;  // fallback
+    }
+
+    // Read directory sector start
+    quint32 nDirSectorStart = read_uint32(0x30, false);
+    
+    // Read number of directory sectors (for version 4, required; for version 3, may be 0)
+    quint32 nCsectDir = read_uint32(0x28, false);
+    
+    // Directory entries are 128 bytes each
+    const qint32 nDirEntrySize = 128;
+    
+    // Calculate how many entries can fit
+    if (nCsectDir > 0) {
+        // Version 4: use csectDir field
+        qint64 nDirTotalSize = (qint64)nCsectDir * nSectorSize;
+        nResult = nDirTotalSize / nDirEntrySize;
+    } else {
+        // Version 3: count entries by reading until we hit unused entries
+        qint64 nDirOffset = nHeaderSize + (qint64)nDirSectorStart * nSectorSize;
+        const qint32 nMaxEntries = 4096;  // safety limit
+        
+        for (qint32 i = 0; i < nMaxEntries; i++) {
+            qint64 nEntryOffset = nDirOffset + (qint64)i * nDirEntrySize;
+            if (!isOffsetValid(nEntryOffset + nDirEntrySize - 1)) {
+                break;
+            }
+            
+            quint8 nObjectType = read_uint8(nEntryOffset + 66);
+            if (nObjectType == 0) {
+                // Reached unused entry
+                break;
+            }
+            
+            nResult++;
+        }
+    }
+
+    return nResult;
 }
 
 QString XCFBF::structIDToString(quint32 nID)
@@ -652,3 +716,233 @@ void XCFBF::_addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset
     part.sName = name;
     pListResult->append(part);
 }
+
+bool XCFBF::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (pState) {
+        const qint64 nHeaderSize = 512;
+        const qint64 nFileSize = getSize();
+
+        if (nFileSize < nHeaderSize) {
+            return false;
+        }
+
+        // Read header
+        StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
+
+        // Create and initialize context
+        CFBF_UNPACK_CONTEXT *pContext = new CFBF_UNPACK_CONTEXT;
+        pContext->nSectorSize = (ssh._uSectorShift == 12) ? 4096 : 512;
+        pContext->nMiniSectorSize = (ssh._uMiniSectorShift >= 4 && ssh._uMiniSectorShift <= 12) ? ((qint64)1 << ssh._uMiniSectorShift) : 64;
+        pContext->nMiniCutoff = ssh._ulMiniSectorCutoff ? ssh._ulMiniSectorCutoff : 4096;
+        pContext->nRootStreamStart = 0;
+        pContext->nRootStreamSize = 0;
+
+        // Calculate directory base offset
+        if (ssh._sectDirStart != 0xFFFFFFFF) {
+            pContext->nDirBaseOffset = pContext->nSectorSize + (qint64)ssh._sectDirStart * pContext->nSectorSize;
+        } else {
+            delete pContext;
+            return false;
+        }
+
+        // Calculate directory total size
+        qint64 nDirTotalSize = 0;
+        if (ssh._csectDir) {
+            nDirTotalSize = (qint64)ssh._csectDir * pContext->nSectorSize;
+        } else {
+            nDirTotalSize = nFileSize - pContext->nDirBaseOffset;
+        }
+
+        // Initialize state
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = nFileSize;
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 0;
+        pState->pContext = pContext;
+
+        // Pre-scan directory entries
+        const qint32 nEntrySize = 128;
+        qint32 nMaxEntries = (qint32)(nDirTotalSize / nEntrySize);
+        if (nMaxEntries > 16384) {
+            nMaxEntries = 16384;  // sanity cap
+        }
+
+        // First pass: locate Root Storage and count streams
+        for (qint32 i = 0; (i < nMaxEntries) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+            qint64 nEntryOffset = pContext->nDirBaseOffset + (qint64)i * nEntrySize;
+
+            if (!isOffsetValid(nEntryOffset + nEntrySize - 1)) {
+                break;
+            }
+
+            quint8 nObjectType = read_uint8(nEntryOffset + 66);
+            if (nObjectType == 0) {
+                continue;  // unused slot
+            }
+
+            if (nObjectType == 5) {  // Root Storage
+                quint32 nRootStartSector = read_uint32(nEntryOffset + 116, false);
+                quint64 nRootStreamSize = read_uint64(nEntryOffset + 120, false);
+                pContext->nRootStreamStart = nRootStartSector;
+                pContext->nRootStreamSize = nRootStreamSize;
+            } else if (nObjectType == 2) {  // Stream
+                // Check if stream has data
+                quint32 nStartSector = read_uint32(nEntryOffset + 116, false);
+                quint64 nStreamSize = read_uint64(nEntryOffset + 120, false);
+
+                if ((nStreamSize > 0) && (nStartSector != 0xFFFFFFFF)) {
+                    pContext->listRecordOffsets.append(nEntryOffset);
+                    pState->nNumberOfRecords++;
+                }
+            }
+        }
+
+        // Set current offset to first record
+        if (pState->nNumberOfRecords > 0) {
+            pState->nCurrentOffset = pContext->listRecordOffsets.at(0);
+            bResult = true;
+        } else {
+            // No records found, clean up context
+            delete pContext;
+            pState->pContext = nullptr;
+        }
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext) {
+        return result;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    CFBF_UNPACK_CONTEXT *pContext = (CFBF_UNPACK_CONTEXT *)pState->pContext;
+    qint64 nEntryOffset = pState->nCurrentOffset;
+
+    // Read directory entry fields
+    QByteArray baName = read_array(nEntryOffset + 0, 64);
+    quint16 nNameLength = read_uint16(nEntryOffset + 64, false);
+    quint32 nStartSector = read_uint32(nEntryOffset + 116, false);
+    quint64 nStreamSize = read_uint64(nEntryOffset + 120, false);
+    quint64 nModifiedTime = read_uint64(nEntryOffset + 108, false);
+
+    // Parse name
+    QString sName;
+    if ((nNameLength >= 2) && (nNameLength <= 64)) {
+        sName = QString::fromUtf16((ushort *)baName.constData(), (nNameLength - 2) / 2);
+    }
+
+    // Determine if mini-stream
+    bool bIsMini = (nStreamSize < pContext->nMiniCutoff) && (pContext->nRootStreamStart != 0xFFFFFFFF);
+
+    // Calculate stream offset
+    qint64 nStreamOffset = -1;
+    if (bIsMini) {
+        qint64 nMiniBaseOffset = pContext->nSectorSize + (qint64)pContext->nRootStreamStart * pContext->nSectorSize;
+        nStreamOffset = nMiniBaseOffset + (qint64)nStartSector * pContext->nMiniSectorSize;
+    } else {
+        nStreamOffset = pContext->nSectorSize + (qint64)nStartSector * pContext->nSectorSize;
+    }
+
+    // Fill ARCHIVERECORD
+    result.nStreamOffset = nStreamOffset;
+    result.nStreamSize = (qint64)nStreamSize;
+    result.nDecompressedOffset = 0;
+    result.nDecompressedSize = (qint64)nStreamSize;
+
+    // Set properties
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sName);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, (qint64)nStreamSize);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nStreamSize);
+    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
+
+    // Convert FILETIME to QDateTime (if non-zero)
+    if (nModifiedTime != 0) {
+        // FILETIME is 100-nanosecond intervals since January 1, 1601
+        // Convert to Unix timestamp (seconds since January 1, 1970)
+        const quint64 nEpochDiff = 116444736000000000ULL;  // Difference between 1601 and 1970 in 100-ns intervals
+        if (nModifiedTime > nEpochDiff) {
+            qint64 nUnixTime = (nModifiedTime - nEpochDiff) / 10000000;
+            QDateTime dateTime = QDateTime::fromSecsSinceEpoch(nUnixTime, Qt::UTC);
+            result.mapProperties.insert(FPART_PROP_DATETIME, dateTime);
+        }
+    }
+
+    return result;
+}
+
+bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    // Get current record info
+    ARCHIVERECORD record = infoCurrent(pState, pPdStruct);
+
+    if (record.nStreamSize <= 0) {
+        return true;  // Empty file, success
+    }
+
+    // CFBF streams may be fragmented across sectors following FAT chain
+    // For simplicity, we assume contiguous storage (best-effort)
+    // TODO: Implement proper FAT chain following for fragmented files
+
+    if (record.nStreamOffset >= 0) {
+        // Direct copy (assumes contiguous storage)
+        bResult = copyDeviceMemory(getDevice(), record.nStreamOffset, pDevice, 0, record.nStreamSize);
+    }
+
+    return bResult;
+}
+
+bool XCFBF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    CFBF_UNPACK_CONTEXT *pContext = (CFBF_UNPACK_CONTEXT *)pState->pContext;
+
+    // Move to next record
+    pState->nCurrentIndex++;
+
+    // Check if more records available
+    if (pState->nCurrentIndex < pState->nNumberOfRecords) {
+        // Update current offset from pre-computed list
+        pState->nCurrentOffset = pContext->listRecordOffsets.at(pState->nCurrentIndex);
+        bResult = true;
+    }
+
+    return bResult;
+}
+

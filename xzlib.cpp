@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xzlib.h"
+#include "xdecompress.h"
 
 XZlib::XZlib(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -48,29 +49,37 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
                 SubDevice sd(getDevice(), 2, -1);
 
                 if (sd.open(QIODevice::ReadOnly)) {
-                    XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-                    decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_DEFLATE;
-                    decompressStruct.pSourceDevice = &sd;
-                    decompressStruct.pDestDevice = 0;
-                    decompressStruct.nDecompressedOffset = 0;
-                    decompressStruct.nDecompressedLimit = 0x200;
+                    XBinary::DECOMPRESS_STATE state = {};
+                    state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+                    state.pDeviceInput = &sd;
+                    state.pDeviceOutput = nullptr;
+                    state.nInputOffset = 0;
+                    state.nInputLimit = -1;
+                    state.nDecompressedOffset = 0;
+                    state.nDecompressedLimit = 0x200;
 
-                    COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+                    XDecompress decompressor;
+                    bool bResult1 = decompressor.decompress(&state, pPdStruct);
 
-                    if (decompressStruct.nInSize > 0) {
-                        if (!decompressStruct.bLimit) {
+                    if (state.nCountInput > 0) {
+                        if (state.nCountOutput < 0x200) {
                             QBuffer buffer;
                             if (buffer.open(QIODevice::ReadWrite)) {
                                 sd.reset();
-                                XArchive::DECOMPRESSSTRUCT _decompressStruct = {};
-                                _decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_DEFLATE;
-                                _decompressStruct.pSourceDevice = &sd;
-                                _decompressStruct.pDestDevice = &buffer;
+                                XBinary::DECOMPRESS_STATE state2 = {};
+                                state2.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+                                state2.pDeviceInput = &sd;
+                                state2.pDeviceOutput = &buffer;
+                                state2.nInputOffset = 0;
+                                state2.nInputLimit = -1;
+                                state2.nDecompressedOffset = 0;
+                                state2.nDecompressedLimit = -1;
 
-                                cr = _decompress(&_decompressStruct, pPdStruct);
+                                XDecompress decompressor2;
+                                bResult1 = decompressor2.decompress(&state2, pPdStruct);
 
-                                if (cr == COMPRESS_RESULT_OK) {
-                                    quint32 nAdler = read_uint32(2 + _decompressStruct.nInSize, true);
+                                if (bResult1) {
+                                    quint32 nAdler = read_uint32(2 + state2.nCountInput, true);
 
                                     bResult = (nAdler == XBinary::getAdler32(&buffer, pPdStruct));
                                 }
@@ -127,20 +136,25 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     SubDevice sd(getDevice(), nOffset, -1);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.spInfo.compressMethod = record.spInfo.compressMethod;
-        decompressStruct.pSourceDevice = &sd;
-        decompressStruct.pDestDevice = 0;
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, record.spInfo.compressMethod);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = nullptr;
+        state.nInputOffset = 0;
+        state.nInputLimit = -1;
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
 
-        COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+        XDecompress decompressor;
+        bool bResult = decompressor.decompress(&state, pPdStruct);
 
-        Q_UNUSED(cr)
+        Q_UNUSED(bResult)
 
         record.nHeaderOffset = 0;
         record.nHeaderSize = nOffset;
         record.nDataOffset = nOffset;
-        record.nDataSize = decompressStruct.nInSize;
-        record.spInfo.nUncompressedSize = decompressStruct.nOutSize;
+        record.nDataSize = state.nCountInput;
+        record.spInfo.nUncompressedSize = state.nCountOutput;
         record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
 
         sd.close();
@@ -210,18 +224,23 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     SubDevice sd(getDevice(), nOffset, -1);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.spInfo.compressMethod = cm;
-        decompressStruct.pSourceDevice = &sd;
-        decompressStruct.pDestDevice = 0;
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, cm);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = nullptr;
+        state.nInputOffset = 0;
+        state.nInputLimit = -1;
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
 
-        COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+        XDecompress decompressor;
+        bool bResult = decompressor.decompress(&state, pPdStruct);
 
-        Q_UNUSED(cr)
+        Q_UNUSED(bResult)
 
         memoryRecord.nOffset = nOffset;
         memoryRecord.nAddress = -1;
-        memoryRecord.nSize = decompressStruct.nInSize;
+        memoryRecord.nSize = state.nCountInput;
         memoryRecord.filePart = FILEPART_REGION;
         memoryRecord.sName = tr("Data");
         memoryRecord.nIndex = nIndex++;

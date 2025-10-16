@@ -352,126 +352,6 @@ qint64 XTAR::_getSize(const posix_header &header)
     return sSizeField.toULongLong(0, 8);
 }
 
-bool XTAR::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
-{
-    bool bResult = false;
-
-    if (!XBinary::isDirectoryExists(sFolderName)) {
-        return false;
-    }
-
-    if (!pDevice || !pDevice->isWritable()) {
-        return false;
-    }
-
-    QList<QString> listFiles;
-    XBinary::findFiles(sFolderName, &listFiles, true, 0, pPdStruct);
-
-    qint32 nNumberOfFiles = listFiles.count();
-
-    for (qint32 i = 0; (i < nNumberOfFiles) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-        QString sFilePath = listFiles.at(i);
-
-        QFileInfo fileInfo(sFilePath);
-
-        if (fileInfo.isDir()) {
-            continue;
-        }
-
-        QString sRelativePath = sFilePath.mid(sFolderName.length());
-
-        if (sRelativePath.startsWith("/") || sRelativePath.startsWith("\\")) {
-            sRelativePath = sRelativePath.mid(1);
-        }
-
-        sRelativePath.replace("\\", "/");
-
-        qint64 nFileSize = fileInfo.size();
-        quint32 nMode = 0;
-        qint64 nMTime = fileInfo.lastModified().toSecsSinceEpoch();
-
-#ifdef Q_OS_WIN
-        nMode = 00644;  // Octal: owner read/write, group/others read
-#else
-        QFile::Permissions permissions = fileInfo.permissions();
-
-        if (permissions & QFile::ReadOwner) nMode |= 0400;
-        if (permissions & QFile::WriteOwner) nMode |= 0200;
-        if (permissions & QFile::ExeOwner) nMode |= 0100;
-        if (permissions & QFile::ReadGroup) nMode |= 0040;
-        if (permissions & QFile::WriteGroup) nMode |= 0020;
-        if (permissions & QFile::ExeGroup) nMode |= 0010;
-        if (permissions & QFile::ReadOther) nMode |= 0004;
-        if (permissions & QFile::WriteOther) nMode |= 0002;
-        if (permissions & QFile::ExeOther) nMode |= 0001;
-#endif
-
-        posix_header header = createHeader(sRelativePath, "", nFileSize, nMode, nMTime);
-        
-        // Write header (500 bytes)
-        if (pDevice->write((char *)&header, sizeof(posix_header)) != sizeof(posix_header)) {
-            return false;
-        }
-        
-        // Pad header to 512 bytes
-        qint64 nHeaderPadding = 512 - sizeof(posix_header);
-        if (nHeaderPadding > 0) {
-            QByteArray baHeaderPadding(nHeaderPadding, 0);
-            if (pDevice->write(baHeaderPadding) != nHeaderPadding) {
-                return false;
-            }
-        }
-
-        QFile file(sFilePath);
-
-        if (!file.open(QIODevice::ReadOnly)) {
-            return false;
-        }
-
-        qint64 nBytesWritten = 0;
-
-        while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
-
-            if (baBuffer.isEmpty()) {
-                file.close();
-                return false;
-            }
-
-            if (pDevice->write(baBuffer) != baBuffer.size()) {
-                file.close();
-                return false;
-            }
-
-            nBytesWritten += baBuffer.size();
-        }
-
-        file.close();
-
-        qint64 nPadding = (512 - (nFileSize % 512)) % 512;
-
-        if (nPadding > 0) {
-            QByteArray baPadding(nPadding, 0);
-
-            if (pDevice->write(baPadding) != nPadding) {
-                return false;
-            }
-        }
-    }
-
-    if (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        QByteArray baTerminator(1024, 0);
-
-        if (pDevice->write(baTerminator) != 1024) {
-            return false;
-        }
-
-        bResult = true;
-    }
-
-    return bResult;
-}
-
 XTAR::posix_header XTAR::createHeader(const QString &sFileName, const QString &sBasePath, qint64 nFileSize, quint32 nMode, qint64 nMTime)
 {
     posix_header header;
@@ -751,4 +631,230 @@ bool XTAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return bResult;
+}
+
+bool XTAR::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState || !pDestDevice || !pDestDevice->isWritable()) {
+        return false;
+    }
+
+    // Set the output device in the state
+    pState->pDevice = pDestDevice;
+
+    // Initialize state
+    pState->nCurrentOffset = 0;
+    pState->nNumberOfRecords = 0;
+
+    // Store TAR options in context
+    TAR_OPTIONS *pTarOptions = new TAR_OPTIONS();
+    if (pOptions) {
+        *pTarOptions = *(static_cast<TAR_OPTIONS *>(pOptions));
+    }
+    pState->pContext = pTarOptions;
+
+    // TAR format has no signature or header - starts directly with first file header
+    return true;
+}
+
+bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pDevice) {
+        return false;
+    }
+
+    QFileInfo fileInfo(sFileName);
+
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        return false;
+    }
+
+    // Get file metadata
+    qint64 nFileSize = fileInfo.size();
+    quint32 nMode = 0;
+    qint64 nMTime = fileInfo.lastModified().toSecsSinceEpoch();
+
+#ifdef Q_OS_WIN
+    nMode = 00644;  // Octal: owner read/write, group/others read
+#else
+    QFile::Permissions permissions = fileInfo.permissions();
+
+    if (permissions & QFile::ReadOwner) nMode |= 0400;
+    if (permissions & QFile::WriteOwner) nMode |= 0200;
+    if (permissions & QFile::ExeOwner) nMode |= 0100;
+    if (permissions & QFile::ReadGroup) nMode |= 0040;
+    if (permissions & QFile::WriteGroup) nMode |= 0020;
+    if (permissions & QFile::ExeGroup) nMode |= 0010;
+    if (permissions & QFile::ReadOther) nMode |= 0004;
+    if (permissions & QFile::WriteOther) nMode |= 0002;
+    if (permissions & QFile::ExeOther) nMode |= 0001;
+#endif
+
+    // Determine file path to store in archive based on PATH_MODE
+    QString sStoredPath;
+    TAR_OPTIONS *pTarOptions = static_cast<TAR_OPTIONS *>(pState->pContext);
+    
+    if (pTarOptions) {
+        switch (pTarOptions->pathMode) {
+        case XBinary::PATH_MODE_ABSOLUTE:
+            sStoredPath = fileInfo.absoluteFilePath();
+            break;
+        case XBinary::PATH_MODE_RELATIVE:
+            if (!pTarOptions->sBasePath.isEmpty()) {
+                QDir baseDir(pTarOptions->sBasePath);
+                sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
+            } else {
+                sStoredPath = fileInfo.fileName();
+            }
+            break;
+        case XBinary::PATH_MODE_BASENAME:
+        default:
+            sStoredPath = fileInfo.fileName();
+            break;
+        }
+    } else {
+        // Default: basename only
+        sStoredPath = fileInfo.fileName();
+    }
+
+    // Create TAR header
+    posix_header header = createHeader(sStoredPath, "", nFileSize, nMode, nMTime);
+
+    // Write header (500 bytes)
+    if (pState->pDevice->write((char *)&header, sizeof(posix_header)) != sizeof(posix_header)) {
+        return false;
+    }
+
+    // Pad header to 512 bytes
+    qint64 nHeaderPadding = 512 - sizeof(posix_header);
+    if (nHeaderPadding > 0) {
+        QByteArray baHeaderPadding(nHeaderPadding, 0);
+        if (pState->pDevice->write(baHeaderPadding) != nHeaderPadding) {
+            return false;
+        }
+    }
+
+    // Open and write file data
+    QFile file(sFileName);
+
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    qint64 nBytesWritten = 0;
+
+    while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
+
+        if (baBuffer.isEmpty()) {
+            file.close();
+            return false;
+        }
+
+        if (pState->pDevice->write(baBuffer) != baBuffer.size()) {
+            file.close();
+            return false;
+        }
+
+        nBytesWritten += baBuffer.size();
+    }
+
+    file.close();
+
+    // Pad file data to 512-byte boundary
+    qint64 nPadding = (512 - (nFileSize % 512)) % 512;
+
+    if (nPadding > 0) {
+        QByteArray baPadding(nPadding, 0);
+
+        if (pState->pDevice->write(baPadding) != nPadding) {
+            return false;
+        }
+    }
+
+    // Update state
+    pState->nCurrentOffset += 512 + nBytesWritten + nPadding;
+    pState->nNumberOfRecords++;
+
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+bool XTAR::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pDevice) {
+        return false;
+    }
+
+    // Check if directory exists
+    if (!XBinary::isDirectoryExists(sDirectoryPath)) {
+        return false;
+    }
+
+    // Set base path for relative path calculation if not already set
+    TAR_OPTIONS *pTarOptions = static_cast<TAR_OPTIONS *>(pState->pContext);
+    QString sOriginalBasePath;
+    bool bRestoreBasePath = false;
+    
+    if (pTarOptions && pTarOptions->pathMode == XBinary::PATH_MODE_RELATIVE && pTarOptions->sBasePath.isEmpty()) {
+        sOriginalBasePath = pTarOptions->sBasePath;
+        pTarOptions->sBasePath = sDirectoryPath;
+        bRestoreBasePath = true;
+    }
+
+    // Enumerate all files in directory
+    QList<QString> listFiles;
+    XBinary::findFiles(sDirectoryPath, &listFiles, true, 0, pPdStruct);
+
+    qint32 nNumberOfFiles = listFiles.count();
+
+    // Add each file
+    for (qint32 i = 0; (i < nNumberOfFiles) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        QString sFilePath = listFiles.at(i);
+        QFileInfo fileInfo(sFilePath);
+
+        // Skip directories (TAR stores files only)
+        if (fileInfo.isDir()) {
+            continue;
+        }
+
+        // Add file to archive
+        if (!addFile(pState, sFilePath, pPdStruct)) {
+            if (bRestoreBasePath && pTarOptions) {
+                pTarOptions->sBasePath = sOriginalBasePath;
+            }
+            return false;
+        }
+    }
+
+    // Restore original base path if we changed it
+    if (bRestoreBasePath && pTarOptions) {
+        pTarOptions->sBasePath = sOriginalBasePath;
+    }
+
+    return true;
+}
+
+bool XTAR::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pDevice) {
+        return false;
+    }
+
+    // TAR archives end with two 512-byte blocks of zeros
+    QByteArray baZeros(1024, 0);
+
+    if (pState->pDevice->write(baZeros) != baZeros.size()) {
+        return false;
+    }
+
+    // Clean up allocated options
+    if (pState->pContext) {
+        TAR_OPTIONS *pTarOptions = static_cast<TAR_OPTIONS *>(pState->pContext);
+        delete pTarOptions;
+        pState->pContext = nullptr;
+    }
+
+    return XBinary::isPdStructNotCanceled(pPdStruct);
 }

@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xarchive.h"
+#include "xdecompress.h"
 
 #if defined(_MSC_VER)
 #if _MSC_VER > 1800                                   // TODO Check !!!
@@ -580,14 +581,17 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
     SubDevice sd(pSourceDevice, pRecord->nDataOffset, pRecord->nDataSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.spInfo = pRecord->spInfo;
-        decompressStruct.pSourceDevice = &sd;
-        decompressStruct.pDestDevice = pDestDevice;
-        decompressStruct.nDecompressedOffset = nDecompressedOffset;
-        decompressStruct.nDecompressedLimit = nDecompressedLimit;
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, pRecord->spInfo.compressMethod);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = pDestDevice;
+        state.nInputOffset = 0;
+        state.nInputLimit = -1;
+        state.nDecompressedOffset = nDecompressedOffset;
+        state.nDecompressedLimit = nDecompressedLimit;
 
-        bResult = (_decompress(&decompressStruct, pPdStruct) == COMPRESS_RESULT_OK);
+        XDecompress decompressor;
+        bResult = decompressor.decompress(&state, pPdStruct);
 
         sd.close();
     }

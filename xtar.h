@@ -49,6 +49,25 @@ class XTAR : public XArchive {
     };
 #pragma pack(pop)
 
+    enum TAR_FORMAT {
+        TAR_FORMAT_DEFAULT = 0,
+        TAR_FORMAT_POSIX,   // POSIX ustar format (default)
+        TAR_FORMAT_GNU      // GNU tar format (supports longer filenames)
+    };
+
+    struct TAR_OPTIONS {
+        TAR_FORMAT tarFormat;
+        XBinary::PATH_MODE pathMode;
+        QString sBasePath;  // Base path for relative mode
+
+        TAR_OPTIONS()
+        {
+            tarFormat = TAR_FORMAT_POSIX;
+            pathMode = XBinary::PATH_MODE_RELATIVE;
+            sBasePath = "";
+        }
+    };
+
 public:
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
@@ -74,12 +93,17 @@ public:
     virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
                                 void *pUserData, PDSTRUCT *pPdStruct) override;
 
-    virtual bool packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct) override;
-
+    // Streaming unpacking API
     virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+    // Streaming packing API
+    virtual bool initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     posix_header read_posix_header(qint64 nOffset);

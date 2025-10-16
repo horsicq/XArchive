@@ -921,6 +921,195 @@ void XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qin
     pState->nCurrentOffset += nSize;
 }
 
+// bool XSevenZip::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
+// {
+//     Q_UNUSED(sFolderName)
+//     Q_UNUSED(pDevice)
+//     Q_UNUSED(pOptions)
+//     Q_UNUSED(pPdStruct)
+
+//     // TODO: Implement 7z packing
+//     // 7z format is very complex with multiple compression methods, solid blocks, etc.
+//     // For now, return false. A proper implementation would require:
+//     // 1. Write signature header
+//     // 2. Write empty/placeholder next header
+//     // 3. Enumerate files and write them with STORE method
+//     // 4. Build archive properties structure
+//     // 5. Write next header with file metadata
+//     // 6. Update signature header with next header offset/size/CRC
+    
+//     return false;
+// }
+
+qint64 XSevenZip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    // Try to quickly get number of records from parsed header data
+    qint64 nResult = 0;
+
+    SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
+    qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
+    qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
+
+    if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
+        QList<XSevenZip::SZRECORD> listRecords = _handleData(nNextHeaderOffset, nNextHeaderSize, pPdStruct);
+
+        qint32 nNumberOfRecords = listRecords.count();
+
+        // Look for NumberOfFiles in the parsed records
+        for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
+            SZRECORD szRecord = listRecords.at(i);
+
+            if (szRecord.impType == IMPTYPE_NUMBEROFFILES) {
+                nResult = szRecord.varValue.toLongLong();
+                break;
+            }
+        }
+    }
+
+    return nResult;
+}
+
+bool XSevenZip::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (pState) {
+        // Create context
+        SEVENZ_UNPACK_CONTEXT *pContext = new SEVENZ_UNPACK_CONTEXT; // mb create finishUnpack
+        pContext->nSignatureSize = sizeof(SIGNATUREHEADER);
+        
+        // Initialize state
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = getSize();
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 0;
+        pState->pContext = pContext;
+
+        // Get archive records using existing getArchiveRecords method
+        QList<ARCHIVERECORD> listArchiveRecords = getArchiveRecords(-1, pPdStruct);
+        
+        pContext->listArchiveRecords = listArchiveRecords;
+        pState->nNumberOfRecords = listArchiveRecords.count();
+
+        // Generate offsets for each record (for streaming access)
+        for (qint32 i = 0; i < listArchiveRecords.count(); i++) {
+            pContext->listRecordOffsets.append(listArchiveRecords.at(i).nStreamOffset);
+        }
+
+        bResult = (pState->nNumberOfRecords > 0);
+        
+        if (!bResult) {
+            // No records found, clean up context
+            delete pContext;
+            pState->pContext = nullptr;
+        } else {
+            // Set current offset to first record
+            if (pContext->listRecordOffsets.count() > 0) {
+                pState->nCurrentOffset = pContext->listRecordOffsets.at(0);
+            }
+        }
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD XSevenZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+    
+    XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext) {
+        return result;
+    }
+    
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    SEVENZ_UNPACK_CONTEXT *pContext = (SEVENZ_UNPACK_CONTEXT *)pState->pContext;
+    
+    // Return pre-parsed archive record
+    if (pState->nCurrentIndex < pContext->listArchiveRecords.count()) {
+        result = pContext->listArchiveRecords.at(pState->nCurrentIndex);
+    }
+
+    return result;
+}
+
+bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+    
+    bool bResult = false;
+
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+    
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    SEVENZ_UNPACK_CONTEXT *pContext = (SEVENZ_UNPACK_CONTEXT *)pState->pContext;
+    
+    // Get current record info
+    if (pState->nCurrentIndex < pContext->listArchiveRecords.count()) {
+        ARCHIVERECORD record = pContext->listArchiveRecords.at(pState->nCurrentIndex);
+        
+        // Get compression method
+        COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+        if (record.mapProperties.contains(FPART_PROP_COMPRESSMETHOD)) {
+            compressMethod = (COMPRESS_METHOD)record.mapProperties.value(FPART_PROP_COMPRESSMETHOD).toUInt();
+        }
+        
+        // Check if we can extract
+        if (compressMethod == COMPRESS_METHOD_STORE) {
+            // No compression - direct copy
+            bResult = copyDeviceMemory(getDevice(), record.nStreamOffset, pDevice, 0, record.nStreamSize);
+        } else {
+            // TODO: Implement decompression for other methods
+            // For now, return false for compressed files
+            // A full implementation would use XDecompress or similar
+            bResult = false;
+        }
+    }
+
+    return bResult;
+}
+
+bool XSevenZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+    
+    bool bResult = false;
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+    
+    SEVENZ_UNPACK_CONTEXT *pContext = (SEVENZ_UNPACK_CONTEXT *)pState->pContext;
+    
+    // Move to next record
+    pState->nCurrentIndex++;
+    
+    // Check if more records available
+    if (pState->nCurrentIndex < pState->nNumberOfRecords) {
+        // Update current offset from pre-computed list
+        if (pState->nCurrentIndex < pContext->listRecordOffsets.count()) {
+            pState->nCurrentOffset = pContext->listRecordOffsets.at(pState->nCurrentIndex);
+        }
+        bResult = true;
+    }
+
+    return bResult;
+}
+
 QList<XSevenZip::SZRECORD> XSevenZip::_handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct)
 {
     QList<XSevenZip::SZRECORD> listResult;

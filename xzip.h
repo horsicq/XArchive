@@ -155,6 +155,22 @@ public:
         // TODO Comment!!!
     };
 
+    struct ZIP_OPTIONS {
+        XBinary::PATH_MODE pathMode;
+        QString sBasePath;        // Base path for relative path calculation
+
+        ZIP_OPTIONS()
+        {
+            pathMode = XBinary::PATH_MODE_RELATIVE;
+            sBasePath = "";
+        }
+    };
+
+    struct ZIP_PACK_CONTEXT {
+        QList<ZIPFILE_RECORD> *pListZipFileRecords;
+        ZIP_OPTIONS options;
+    };
+
     explicit XZip(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
@@ -194,6 +210,16 @@ public:
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
     virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
+
+    virtual bool initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+    virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
     static QMap<quint64, QString> getHeaderSignatures();
     static QMap<quint64, QString> getHeaderSignaturesS();

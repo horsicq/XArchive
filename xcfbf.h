@@ -97,6 +97,8 @@ public:
     virtual FT getFileType() override;
     virtual QString getVersion() override;
     virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString() override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct = nullptr) override;
     virtual QString getMIMEString() override;
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
@@ -111,7 +113,24 @@ public:
     virtual QString structIDToString(quint32 nID);
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
 
+    // Streaming unpacking API
+    virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
 private:
+    // Format-specific unpacking context
+    struct CFBF_UNPACK_CONTEXT {
+        qint64 nSectorSize;                  // Sector size (512 or 4096)
+        qint64 nMiniSectorSize;              // Mini-sector size (typically 64)
+        quint64 nMiniCutoff;                 // Mini-stream cutoff size (typically 4096)
+        qint64 nDirBaseOffset;               // Base offset of directory entries
+        qint64 nRootStreamStart;             // Root storage stream start (for mini-streams)
+        qint64 nRootStreamSize;              // Root storage stream size
+        QList<qint64> listRecordOffsets;     // Offsets to stream directory entries
+    };
+
     static void _addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset, qint64 size, const QString &name);
 };
 

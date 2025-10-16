@@ -111,6 +111,13 @@ class XRar : public XArchive {
         QByteArray baDataArea;   // Optional data area (if 0x0002 header flag set)
     };
 
+    struct RAR_UNPACK_CONTEXT {
+        qint32 nVersion;                  // RAR version (4 or 5)
+        QList<qint64> listFileOffsets;    // Offsets of file headers
+        QList<FILEBLOCK4> listFileBlocks4;  // Cache of RAR 4.x file blocks
+        QList<FILEHEADER5> listFileHeaders5;  // Cache of RAR 5.x file headers
+    };
+
     enum BLOCKTYPE4 {
         BLOCKTYPE4_MARKER = 0x72,        // Marker block
         BLOCKTYPE4_ARCHIVE = 0x73,       // Archive header
@@ -171,6 +178,12 @@ public:
 
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
+    // Streaming Unpacking API
+    virtual bool initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
+    virtual XBinary::ARCHIVERECORD infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
+    virtual bool unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutputDevice, PDSTRUCT *pPdStruct) override;
+    virtual bool moveToNext(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
+
 private:
     qint32 getInternVersion(PDSTRUCT *pPdStruct);
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
@@ -178,6 +191,10 @@ private:
     FILEBLOCK4 readFileBlock4(qint64 nOffset);
     FILEHEADER5 readFileHeader5(qint64 nOffset);
     QString decodeRarUnicodeName(const QByteArray &nameData);
+    
+    // Helper functions for packing
+    QByteArray createFileBlock4(const QString &sFileName, qint64 nFileSize, quint32 nFileCRC, quint32 nFileTime, quint32 nAttributes);
+    quint16 calculateCRC16(const QByteArray &data);
 };
 
 #endif  // XRAR_H

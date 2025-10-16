@@ -565,137 +565,184 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     return listResult;
 }
 
-bool X_Ar::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
+bool X_Ar::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pOptions)
+    Q_UNUSED(pPdStruct)
 
-    bool bResult = false;
-
-    if (!XBinary::isDirectoryExists(sFolderName)) {
+    if (!pState || !pDestDevice || !pDestDevice->isWritable()) {
         return false;
     }
 
-    if (!pDevice || !pDevice->isWritable()) {
+    // Set the output device in the state
+    pState->pDevice = pDestDevice;
+
+    // Write AR signature: "!<arch>\n"
+    QByteArray baSignature = "!<arch>\n";
+    if (pState->pDevice->write(baSignature) != baSignature.size()) {
         return false;
     }
 
-    // Write AR header
-    QByteArray baHeader = "!<arch>\n";
-    if (pDevice->write(baHeader) != baHeader.size()) {
+    // Initialize state
+    pState->nCurrentOffset = 8;  // After signature
+    pState->nNumberOfRecords = 0;
+    pState->pContext = nullptr;
+
+    return true;
+}
+
+bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pDevice) {
         return false;
     }
 
+    // Check if file exists and is readable
+    QFileInfo fileInfo(sFilePath);
+
+    if (!fileInfo.exists() || !fileInfo.isFile() || !fileInfo.isReadable()) {
+        return false;
+    }
+
+    // AR format traditionally stores only basenames (no directory paths)
+    QString sBaseName = fileInfo.fileName();
+    qint64 nFileSize = fileInfo.size();
+    quint32 nMode = 0;
+    qint64 nMTime = fileInfo.lastModified().toSecsSinceEpoch();
+
+#ifdef Q_OS_WIN
+    nMode = 0644;  // owner read/write, group/others read
+#else
+    QFile::Permissions permissions = fileInfo.permissions();
+
+    if (permissions & QFile::ReadOwner) nMode |= 0400;
+    if (permissions & QFile::WriteOwner) nMode |= 0200;
+    if (permissions & QFile::ExeOwner) nMode |= 0100;
+    if (permissions & QFile::ReadGroup) nMode |= 0040;
+    if (permissions & QFile::WriteGroup) nMode |= 0020;
+    if (permissions & QFile::ExeGroup) nMode |= 0010;
+    if (permissions & QFile::ReadOther) nMode |= 0004;
+    if (permissions & QFile::WriteOther) nMode |= 0002;
+    if (permissions & QFile::ExeOther) nMode |= 0001;
+#endif
+
+    // Check if we need BSD-style long filename format
+    QByteArray baFileName = sBaseName.toUtf8();
+    bool bUseBsdFormat = (baFileName.size() > 15);
+
+    FRECORD header = createHeader(sBaseName, nFileSize, nMode, nMTime);
+
+    // Write header
+    if (pState->pDevice->write((char *)&header, sizeof(FRECORD)) != sizeof(FRECORD)) {
+        return false;
+    }
+
+    // If using BSD format, write the filename first
+    if (bUseBsdFormat) {
+        if (pState->pDevice->write(baFileName) != baFileName.size()) {
+            return false;
+        }
+    }
+
+    // Write file content
+    QFile file(sFilePath);
+
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    qint64 nBytesWritten = 0;
+
+    while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
+
+        if (baBuffer.isEmpty()) {
+            file.close();
+            return false;
+        }
+
+        if (pState->pDevice->write(baBuffer) != baBuffer.size()) {
+            file.close();
+            return false;
+        }
+
+        nBytesWritten += baBuffer.size();
+    }
+
+    file.close();
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    // Add padding if total size (filename + file content for BSD, or just file content for standard) is odd
+    qint64 nTotalDataSize = nFileSize;
+    if (bUseBsdFormat) {
+        nTotalDataSize += baFileName.size();
+    }
+
+    if (nTotalDataSize % 2 != 0) {
+        char cPadding = '\n';
+        if (pState->pDevice->write(&cPadding, 1) != 1) {
+            return false;
+        }
+    }
+
+    // Update state
+    qint64 nRecordSize = sizeof(FRECORD) + S_ALIGN_UP(nTotalDataSize, 2);
+    pState->nCurrentOffset += nRecordSize;
+    pState->nNumberOfRecords++;
+
+    return true;
+}
+
+bool X_Ar::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pDevice) {
+        return false;
+    }
+
+    // Check if directory exists
+    if (!XBinary::isDirectoryExists(sDirectoryPath)) {
+        return false;
+    }
+
+    // Enumerate all files in directory
     QList<QString> listFiles;
-    XBinary::findFiles(sFolderName, &listFiles, true, 0, pPdStruct);
+    XBinary::findFiles(sDirectoryPath, &listFiles, true, 0, pPdStruct);
 
     qint32 nNumberOfFiles = listFiles.count();
 
+    // Add each file
     for (qint32 i = 0; (i < nNumberOfFiles) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         QString sFilePath = listFiles.at(i);
-
         QFileInfo fileInfo(sFilePath);
 
+        // Skip directories (AR stores files only)
         if (fileInfo.isDir()) {
             continue;
         }
 
-        QString sRelativePath = sFilePath.mid(sFolderName.length());
-
-        if (sRelativePath.startsWith("/") || sRelativePath.startsWith("\\")) {
-            sRelativePath = sRelativePath.mid(1);
-        }
-
-        sRelativePath.replace("\\", "/");
-
-        // AR format traditionally stores only basenames (no directory paths)
-        // This matches the behavior of system 'ar' command
-        QFileInfo relativeFileInfo(sRelativePath);
-        QString sBaseName = relativeFileInfo.fileName();
-
-        qint64 nFileSize = fileInfo.size();
-        quint32 nMode = 0;
-        qint64 nMTime = fileInfo.lastModified().toSecsSinceEpoch();
-
-#ifdef Q_OS_WIN
-        nMode = 0644;  // owner read/write, group/others read
-#else
-        QFile::Permissions permissions = fileInfo.permissions();
-
-        if (permissions & QFile::ReadOwner) nMode |= 0400;
-        if (permissions & QFile::WriteOwner) nMode |= 0200;
-        if (permissions & QFile::ExeOwner) nMode |= 0100;
-        if (permissions & QFile::ReadGroup) nMode |= 0040;
-        if (permissions & QFile::WriteGroup) nMode |= 0020;
-        if (permissions & QFile::ExeGroup) nMode |= 0010;
-        if (permissions & QFile::ReadOther) nMode |= 0004;
-        if (permissions & QFile::WriteOther) nMode |= 0002;
-        if (permissions & QFile::ExeOther) nMode |= 0001;
-#endif
-
-        // Check if we need BSD-style long filename format
-        QByteArray baFileName = sBaseName.toUtf8();
-        bool bUseBsdFormat = (baFileName.size() > 15);
-        
-        FRECORD header = createHeader(sBaseName, nFileSize, nMode, nMTime);
-
-        // Write header
-        if (pDevice->write((char *)&header, sizeof(FRECORD)) != sizeof(FRECORD)) {
+        // Add file to archive
+        if (!addFile(pState, sFilePath, pPdStruct)) {
             return false;
-        }
-
-        // If using BSD format, write the filename first
-        if (bUseBsdFormat) {
-            if (pDevice->write(baFileName) != baFileName.size()) {
-                return false;
-            }
-        }
-
-        // Write file content
-        QFile file(sFilePath);
-
-        if (!file.open(QIODevice::ReadOnly)) {
-            return false;
-        }
-
-        qint64 nBytesWritten = 0;
-
-        while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
-
-            if (baBuffer.isEmpty()) {
-                file.close();
-                return false;
-            }
-
-            if (pDevice->write(baBuffer) != baBuffer.size()) {
-                file.close();
-                return false;
-            }
-
-            nBytesWritten += baBuffer.size();
-        }
-
-        file.close();
-
-        // Add padding if total size (filename + file content for BSD, or just file content for standard) is odd
-        qint64 nTotalDataSize = nFileSize;
-        if (bUseBsdFormat) {
-            nTotalDataSize += baFileName.size();
-        }
-        
-        if (nTotalDataSize % 2 != 0) {
-            char cPadding = '\n';
-            if (pDevice->write(&cPadding, 1) != 1) {
-                return false;
-            }
         }
     }
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        bResult = true;
+    return true;
+}
+
+bool X_Ar::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState || !pState->pDevice) {
+        return false;
     }
 
-    return bResult;
+    // AR archives don't require any terminator
+    // Just ensure everything is flushed
+    return true;
 }
 
 X_Ar::FRECORD X_Ar::createHeader(const QString &sFileName, qint64 nFileSize, quint32 nMode, qint64 nMTime)

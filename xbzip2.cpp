@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xbzip2.h"
+#include "Algos/xbzip2decoder.h"
 
 XBinary::XCONVERT _TABLE_XBZIP2_STRUCTID[] = {{XBZIP2::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                               {XBZIP2::STRUCTID_BZIP2_HEADER, "BZIP2_HEADER", QString("BZip2 header")},
@@ -95,16 +96,19 @@ qint64 XBZIP2::getFileFormatSize(XBinary::PDSTRUCT *pPdStruct)
     SubDevice sd(getDevice(), 0, nFileSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-        decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
-        decompressStruct.pSourceDevice = &sd;
-        decompressStruct.pDestDevice = nullptr;
-        decompressStruct.spInfo.nUncompressedSize = 0;
+        QBuffer buffer;
+        if (buffer.open(QIODevice::WriteOnly)) {
+            XBinary::DECOMPRESS_STATE decompressState = {};
+            decompressState.pDeviceInput = &sd;
+            decompressState.pDeviceOutput = &buffer;
+            decompressState.nInputOffset = 0;
+            decompressState.nInputLimit = nFileSize;
 
-        XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+            if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
+                nResult = decompressState.nCountInput;
+            }
 
-        if ((cr == COMPRESS_RESULT_OK) && (decompressStruct.nInSize > 0)) {
-            nResult = decompressStruct.nInSize;
+            buffer.close();
         }
 
         sd.close();
@@ -220,25 +224,29 @@ QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         SubDevice sd(getDevice(), 0, -1);
 
         if (sd.open(QIODevice::ReadOnly)) {
-            XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-            decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
-            decompressStruct.pSourceDevice = &sd;
-            decompressStruct.pDestDevice = 0;
-            decompressStruct.spInfo.nUncompressedSize = 0;
+            QBuffer buffer;
+            if (buffer.open(QIODevice::WriteOnly)) {
+                XBinary::DECOMPRESS_STATE decompressState = {};
+                decompressState.pDeviceInput = &sd;
+                decompressState.pDeviceOutput = &buffer;
+                decompressState.nInputOffset = 0;
+                decompressState.nInputLimit = getSize();
 
-            XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+                if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
+                    RECORD record = {};
+                    record.nHeaderOffset = 0;
+                    record.nHeaderSize = sizeof(BZIP2_HEADER);
+                    record.nDataOffset = 0;
+                    record.nDataSize = decompressState.nCountInput;
+                    record.spInfo.nUncompressedSize = decompressState.nCountOutput;
+                    record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
+                    record.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
+                    record.sUUID = generateUUID();
+                    listResult.append(record);
+                }
 
-            Q_UNUSED(cr)
-            RECORD record = {};
-            record.nHeaderOffset = 0;
-            record.nHeaderSize = sizeof(BZIP2_HEADER);
-            record.nDataOffset = 0;
-            record.nDataSize = decompressStruct.nInSize;
-            record.spInfo.nUncompressedSize = decompressStruct.nOutSize;
-            record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
-            record.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
-            record.sUUID = generateUUID();
-            listResult.append(record);
+                buffer.close();
+            }
 
             sd.close();
         }
@@ -274,31 +282,34 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
         SubDevice sd(getDevice(), 0, nFileSize);
 
         if (sd.open(QIODevice::ReadOnly)) {
-            XArchive::DECOMPRESSSTRUCT decompressStruct = {};
-            decompressStruct.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
-            decompressStruct.pSourceDevice = &sd;
-            decompressStruct.pDestDevice = nullptr;
-            decompressStruct.spInfo.nUncompressedSize = 0;
+            QBuffer buffer;
+            if (buffer.open(QIODevice::WriteOnly)) {
+                XBinary::DECOMPRESS_STATE decompressState = {};
+                decompressState.pDeviceInput = &sd;
+                decompressState.pDeviceOutput = &buffer;
+                decompressState.nInputOffset = 0;
+                decompressState.nInputLimit = nFileSize;
 
-            XArchive::COMPRESS_RESULT cr = _decompress(&decompressStruct, pPdStruct);
+                if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
+                    mMaxOffset = decompressState.nCountInput;
 
-            if ((cr == COMPRESS_RESULT_OK) && (decompressStruct.nInSize > 0)) {
-                mMaxOffset = decompressStruct.nInSize;
+                    if (nFileParts & FILEPART_STREAM) {
+                        FPART region = {};
+                        region.filePart = FILEPART_STREAM;
+                        region.nFileOffset = 0;
+                        region.nFileSize = mMaxOffset;
+                        region.nVirtualAddress = -1;
+                        region.nFileSize = mMaxOffset;
+                        region.sName = tr("Stream");
+                        region.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
+                        region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, decompressState.nCountOutput);
+                        region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, decompressState.nCountInput);
 
-                if (nFileParts & FILEPART_STREAM) {
-                    FPART region = {};
-                    region.filePart = FILEPART_STREAM;
-                    region.nFileOffset = 0;
-                    region.nFileSize = mMaxOffset;
-                    region.nVirtualAddress = -1;
-                    region.nFileSize = mMaxOffset;
-                    region.sName = tr("Stream");
-                    region.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
-                    region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, decompressStruct.nOutSize);
-                    region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, decompressStruct.nInSize);
-
-                    listResult.append(region);
+                        listResult.append(region);
+                    }
                 }
+
+                buffer.close();
             }
 
             sd.close();
@@ -344,3 +355,172 @@ XBZIP2::BZIP2_HEADER XBZIP2::_read_BZIP2_HEADER(qint64 nOffset)
 
     return result;
 }
+
+bool XBZIP2::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (pState) {
+        // Validate BZIP2 file
+        if (!isValid(pPdStruct)) {
+            return false;
+        }
+
+        // Create and initialize context
+        BZIP2_UNPACK_CONTEXT *pContext = new BZIP2_UNPACK_CONTEXT;
+        pContext->nHeaderSize = 4;  // "BZh" + blockSize byte
+        pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+
+        // Decompress to get sizes
+        qint64 nFileSize = getSize();
+        SubDevice sd(getDevice(), 0, nFileSize);
+
+        if (sd.open(QIODevice::ReadOnly)) {
+            QBuffer buffer;
+            if (buffer.open(QIODevice::WriteOnly)) {
+                XBinary::DECOMPRESS_STATE decompressState = {};
+                decompressState.pDeviceInput = &sd;
+                decompressState.pDeviceOutput = &buffer;
+                decompressState.nInputOffset = 0;
+                decompressState.nInputLimit = nFileSize;
+
+                if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
+                    pContext->nCompressedSize = decompressState.nCountInput;
+                    pContext->nUncompressedSize = decompressState.nCountOutput;
+                } else {
+                    pContext->nCompressedSize = nFileSize;
+                    pContext->nUncompressedSize = 0;
+                }
+
+                buffer.close();
+            }
+
+            sd.close();
+        }
+
+        // Initialize state
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = getSize();
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 1;  // BZIP2 contains single compressed stream
+        pState->pContext = pContext;
+
+        bResult = true;
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD XBZIP2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext) {
+        return result;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    BZIP2_UNPACK_CONTEXT *pContext = (BZIP2_UNPACK_CONTEXT *)pState->pContext;
+
+    // Fill ARCHIVERECORD
+    result.nStreamOffset = pContext->nHeaderSize;
+    result.nStreamSize = pContext->nCompressedSize - pContext->nHeaderSize;
+    result.nDecompressedOffset = 0;
+    result.nDecompressedSize = pContext->nUncompressedSize;
+
+    // Set properties
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
+
+    return result;
+}
+
+bool XBZIP2::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    BZIP2_UNPACK_CONTEXT *pContext = (BZIP2_UNPACK_CONTEXT *)pState->pContext;
+
+    // Decompress entire BZIP2 stream to output device
+    qint64 nFileSize = getSize();
+    SubDevice sd(getDevice(), 0, nFileSize);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XBinary::DECOMPRESS_STATE decompressState = {};
+        decompressState.pDeviceInput = &sd;
+        decompressState.pDeviceOutput = pDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nFileSize;
+
+        bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
+
+        sd.close();
+    }
+
+    return bResult;
+}
+
+bool XBZIP2::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    // Move to next record
+    pState->nCurrentIndex++;
+
+    // BZIP2 has only one record, so moving to next always returns false
+    // This indicates end of archive
+    bResult = false;
+
+    return bResult;
+}
+
+bool XBZIP2::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    // Delete format-specific context
+    if (pState->pContext) {
+        BZIP2_UNPACK_CONTEXT *pContext = (BZIP2_UNPACK_CONTEXT *)pState->pContext;
+        delete pContext;
+        pState->pContext = nullptr;
+    }
+
+    // Reset state fields
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+
+    return true;
+}
+

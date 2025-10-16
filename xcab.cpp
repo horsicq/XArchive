@@ -639,19 +639,19 @@ QList<XBinary::ARCHIVERECORD> XCab::getArchiveRecords(qint32 nLimit, PDSTRUCT *p
     return listResult;
 }
 
-bool XCab::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(sFolderName)
-    Q_UNUSED(pDevice)
-    Q_UNUSED(pOptions)
-    Q_UNUSED(pPdStruct)
+// bool XCab::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
+// {
+//     Q_UNUSED(sFolderName)
+//     Q_UNUSED(pDevice)
+//     Q_UNUSED(pOptions)
+//     Q_UNUSED(pPdStruct)
 
-    // TODO: Implement CAB archive creation
-    // This is a complex task that requires:
-    // 1. Collecting all files from the folder
-    // 2. Compressing files using MSZIP compression
-    // 3. Writing CFHEADER, CFFOLDER, CFFILE, and CFDATA structures
-    // 4. Computing checksums
+//     // TODO: Implement CAB archive creation
+//     // This is a complex task that requires:
+//     // 1. Collecting all files from the folder
+//     // 2. Compressing files using MSZIP compression
+//     // 3. Writing CFHEADER, CFFOLDER, CFFILE, and CFDATA structures
+//     // 4. Computing checksums
 
-    return false;
-}
+//     return false;
+// }

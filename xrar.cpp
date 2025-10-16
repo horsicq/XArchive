@@ -828,6 +828,11 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
 XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
 {
     FILEBLOCK4 result = {};
+    
+    // Bounds check - need at least 7 + 25 = 32 bytes for basic header
+    if (nOffset < 0 || nOffset + 32 > getSize()) {
+        return result;
+    }
 
     qint64 nCurrentOffset = nOffset;
 
@@ -887,6 +892,13 @@ XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
 XRar::GENERICBLOCK4 XRar::readGenericBlock4(qint64 nOffset)
 {
     GENERICBLOCK4 result = {};
+    
+    // Bounds check
+    if (nOffset < 0 || nOffset + 7 > getSize()) {
+        result.nType = 0;
+        result.nHeaderSize = 0;
+        return result;
+    }
 
     qint64 nCurrentOffset = nOffset;
 
@@ -920,6 +932,436 @@ QString XRar::decodeRarUnicodeName(const QByteArray &nameData)
     // Fall back to system locale
     return QString::fromLocal8Bit(nameData);
 }
+
+quint16 XRar::calculateCRC16(const QByteArray &data)
+{
+    quint16 nCRC = 0;
+    const quint16 nPolynomial = 0x1021;  // CRC16-CCITT polynomial
+
+    for (qint32 i = 0; i < data.size(); i++) {
+        nCRC ^= (quint8)data[i] << 8;
+
+        for (qint32 j = 0; j < 8; j++) {
+            if (nCRC & 0x8000) {
+                nCRC = (nCRC << 1) ^ nPolynomial;
+            } else {
+                nCRC = nCRC << 1;
+            }
+        }
+    }
+
+    return nCRC;
+}
+
+QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, quint32 nFileCRC, quint32 nFileTime, quint32 nAttributes)
+{
+    QByteArray baResult;
+    QByteArray baHeader;
+    QDataStream ds(&baHeader, QIODevice::WriteOnly);
+    ds.setByteOrder(QDataStream::LittleEndian);
+
+    // Convert filename to bytes (ASCII/UTF-8)
+    QByteArray baFileName = sFileName.toUtf8();
+    quint16 nNameSize = baFileName.size();
+
+    // Build header (without CRC16 at the beginning)
+    ds << (quint8)BLOCKTYPE4_FILE;          // Type
+    ds << (quint16)0x8000;                  // Flags (0x8000 = has data)
+    
+    // Calculate header size (no high size fields for files < 4GB)
+    quint16 nHeaderSize = 7 + 25 + nNameSize;  // 7 (generic) + 25 (file-specific) + name
+    ds << nHeaderSize;
+
+    // File-specific fields
+    ds << (quint32)nFileSize;               // packSize (low 32 bits)
+    ds << (quint32)nFileSize;               // unpSize (low 32 bits)
+    ds << (quint8)RAR_OS_WIN32;             // hostOS
+    ds << nFileCRC;                         // fileCRC
+    ds << nFileTime;                        // fileTime (MS-DOS format)
+    ds << (quint8)0x14;                     // unpVer (2.0)
+    ds << (quint8)RAR_METHOD_STORE;         // method (0x30 = STORE)
+    ds << nNameSize;                        // nameSize
+    ds << nAttributes;                      // fileAttr
+
+    // Note: For files < 4GB, we don't write highPackSize/highUnpSize fields
+    // The RAR4_FILE_LARGE flag (0x0100) is not set, so reader won't expect these fields
+
+    // Append filename
+    baHeader.append(baFileName);
+
+    // Calculate CRC16 and prepend
+    quint16 nCRC16 = calculateCRC16(baHeader);
+    QByteArray baCRC;
+    QDataStream dsCRC(&baCRC, QIODevice::WriteOnly);
+    dsCRC.setByteOrder(QDataStream::LittleEndian);
+    dsCRC << nCRC16;
+
+    baResult = baCRC + baHeader;
+
+    return baResult;
+}
+
+// bool XRar::packFolderToDevice(const QString &sFolderPath, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
+// {
+//     Q_UNUSED(pOptions)
+
+//     if (!XBinary::isDirectoryExists(sFolderPath)) {
+//         return false;
+//     }
+
+//     if (!pDevice || !pDevice->isWritable()) {
+//         return false;
+//     }
+
+//     // Write RAR 4.x signature (7 bytes)
+//     QByteArray baSignature;
+//     baSignature.append((char)0x52);  // 'R'
+//     baSignature.append((char)0x61);  // 'a'
+//     baSignature.append((char)0x72);  // 'r'
+//     baSignature.append((char)0x21);  // '!'
+//     baSignature.append((char)0x1A);  // EOF
+//     baSignature.append((char)0x07);  // Version marker
+//     baSignature.append((char)0x00);  // Reserved
+
+//     if (pDevice->write(baSignature) != baSignature.size()) {
+//         return false;
+//     }
+
+//     // Write Archive Header block
+//     QByteArray baArchiveHeader;
+//     QDataStream dsArchive(&baArchiveHeader, QIODevice::WriteOnly);
+//     dsArchive.setByteOrder(QDataStream::LittleEndian);
+
+//     dsArchive << (quint8)BLOCKTYPE4_ARCHIVE;  // Type
+//     dsArchive << (quint16)0x0000;             // Flags
+//     dsArchive << (quint16)7;                  // Header size
+
+//     quint16 nArchiveCRC = calculateCRC16(baArchiveHeader);
+//     QByteArray baArchiveCRC;
+//     QDataStream dsArchiveCRC(&baArchiveCRC, QIODevice::WriteOnly);
+//     dsArchiveCRC.setByteOrder(QDataStream::LittleEndian);
+//     dsArchiveCRC << nArchiveCRC;
+
+//     if (pDevice->write(baArchiveCRC) != baArchiveCRC.size()) {
+//         return false;
+//     }
+//     if (pDevice->write(baArchiveHeader) != baArchiveHeader.size()) {
+//         return false;
+//     }
+
+//     // Get list of files recursively
+//     QList<QString> listFiles;
+//     XBinary::findFiles(sFolderPath, &listFiles, true, 0, pPdStruct);
+
+//     qint32 nNumberOfFiles = listFiles.size();
+
+//     for (qint32 i = 0; (i < nNumberOfFiles) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+//         QString sFilePath = listFiles.at(i);
+//         QString sRelativePath = sFilePath.mid(sFolderPath.length() + 1);  // Relative to folder
+        
+//         // Normalize path separators
+//         sRelativePath = sRelativePath.replace("\\", "/");
+
+//         QFile file(sFilePath);
+//         if (!file.open(QIODevice::ReadOnly)) {
+//             continue;
+//         }
+
+//         qint64 nFileSize = file.size();
+        
+//         // Calculate CRC32
+//         quint32 nFileCRC = XBinary::_getCRC32(&file);
+        
+//         // Read file data for writing
+//         file.seek(0);
+//         QByteArray baFileData = file.readAll();
+//         file.close();
+
+//         // Get file time in MS-DOS format
+//         QFileInfo fileInfo(sFilePath);
+//         QDateTime dateTime = fileInfo.lastModified();
+        
+//         // Convert QDateTime to DOS date/time format
+//         QDate date = dateTime.date();
+//         QTime time = dateTime.time();
+        
+//         quint16 nDosDate = 0;
+//         quint16 nDosTime = 0;
+        
+//         if (date.isValid()) {
+//             qint32 nYear = date.year();
+//             if (nYear >= 1980 && nYear <= 2107) {
+//                 nDosDate = (date.day() & 0x1F) | ((date.month() & 0x0F) << 5) | (((nYear - 1980) & 0x7F) << 9);
+//             }
+//         }
+        
+//         if (time.isValid()) {
+//             nDosTime = ((time.second() / 2) & 0x1F) | ((time.minute() & 0x3F) << 5) | ((time.hour() & 0x1F) << 11);
+//         }
+        
+//         // Combine DOS date and time into a single 32-bit value (time in low word, date in high word)
+//         quint32 nFileTime = (static_cast<quint32>(nDosDate) << 16) | nDosTime;
+
+//         // Get file attributes
+//         quint32 nAttributes = 0x20;  // Archive attribute
+
+//         // Create file block header
+//         QByteArray baFileBlock = createFileBlock4(sRelativePath, nFileSize, nFileCRC, nFileTime, nAttributes);
+
+//         if (pDevice->write(baFileBlock) != baFileBlock.size()) {
+//             return false;
+//         }
+
+//         // Write file data (uncompressed - STORE method)
+//         if (pDevice->write(baFileData) != baFileData.size()) {
+//             return false;
+//         }
+//     }
+
+//     // Write END block
+//     QByteArray baEndBlock;
+//     QDataStream dsEnd(&baEndBlock, QIODevice::WriteOnly);
+//     dsEnd.setByteOrder(QDataStream::LittleEndian);
+
+//     dsEnd << (quint8)BLOCKTYPE4_END;   // Type
+//     dsEnd << (quint16)0x4000;          // Flags (0x4000 = last block)
+//     dsEnd << (quint16)7;               // Header size
+
+//     quint16 nEndCRC = calculateCRC16(baEndBlock);
+//     QByteArray baEndCRC;
+//     QDataStream dsEndCRC(&baEndCRC, QIODevice::WriteOnly);
+//     dsEndCRC.setByteOrder(QDataStream::LittleEndian);
+//     dsEndCRC << nEndCRC;
+
+//     if (pDevice->write(baEndCRC) != baEndCRC.size()) {
+//         return false;
+//     }
+//     if (pDevice->write(baEndBlock) != baEndBlock.size()) {
+//         return false;
+//     }
+
+//     return true;
+// }
+
+bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+{
+    if (!pUnpackState) {
+        return false;
+    }
+
+    // Initialize state
+    pUnpackState->nCurrentOffset = 0;
+    pUnpackState->nTotalSize = getSize();
+    pUnpackState->nCurrentIndex = 0;
+    pUnpackState->nNumberOfRecords = 0;
+
+    // Create context
+    RAR_UNPACK_CONTEXT *pContext = new RAR_UNPACK_CONTEXT;
+    pContext->nVersion = getInternVersion(pPdStruct);
+
+    if (pContext->nVersion == 0) {
+        delete pContext;
+        return false;
+    }
+
+    qint64 nFileHeaderSize = (pContext->nVersion == 4) ? 7 : 8;
+    qint64 nCurrentOffset = nFileHeaderSize;
+    
+    // Skip the ARCHIVE header block for RAR4
+    if (pContext->nVersion == 4) {
+        GENERICBLOCK4 archiveBlock = readGenericBlock4(nCurrentOffset);
+        if (archiveBlock.nType == BLOCKTYPE4_ARCHIVE && archiveBlock.nHeaderSize > 0) {
+            nCurrentOffset += archiveBlock.nHeaderSize;
+        } else if (archiveBlock.nHeaderSize == 0) {
+            // Failed to read - file is too small or corrupted
+            delete pContext;
+            return false;
+        }
+    }
+
+    // Scan archive and collect file offsets
+    if (pContext->nVersion == 4) {
+        while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+            GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+            
+            // Check for read failure or invalid block
+            if (genericBlock.nHeaderSize == 0 || genericBlock.nType < 0x72 || genericBlock.nType > 0x7B) {
+                break;
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_FILE) {
+                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                
+                // Verify we read a valid block
+                if (fileBlock.genericBlock4.nHeaderSize == 0) {
+                    break;  // Failed to read file block
+                }
+                
+                pContext->listFileOffsets.append(nCurrentOffset);
+                pContext->listFileBlocks4.append(fileBlock);
+                pUnpackState->nNumberOfRecords++;
+
+                qint64 nPackSize = fileBlock.packSize;
+                if (fileBlock.genericBlock4.nFlags & RAR4_FILE_LARGE) {
+                    nPackSize |= ((qint64)fileBlock.highPackSize << 32);
+                }
+
+                nCurrentOffset += fileBlock.genericBlock4.nHeaderSize + nPackSize;
+            } else {
+                nCurrentOffset += genericBlock.nHeaderSize;
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_END) {
+                break;
+            }
+        }
+    } else if (pContext->nVersion == 5) {
+        while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+            GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+
+            if (genericHeader.nType == HEADERTYPE5_FILE) {
+                FILEHEADER5 fileHeader = readFileHeader5(nCurrentOffset);
+                pContext->listFileOffsets.append(nCurrentOffset);
+                pContext->listFileHeaders5.append(fileHeader);
+                pUnpackState->nNumberOfRecords++;
+
+                nCurrentOffset += fileHeader.nHeaderSize + fileHeader.nDataSize;
+            } else {
+                nCurrentOffset += genericHeader.nHeaderSize;
+            }
+
+            if (genericHeader.nType == HEADERTYPE5_ENDARC) {
+                break;
+            }
+        }
+    }
+
+    pUnpackState->pContext = pContext;
+    pUnpackState->nCurrentOffset = (pUnpackState->nNumberOfRecords > 0) ? pContext->listFileOffsets.at(0) : 0;
+
+    return true;
+}
+
+XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    ARCHIVERECORD record = {};
+
+    if (!pUnpackState || !pUnpackState->pContext || pUnpackState->nCurrentIndex >= pUnpackState->nNumberOfRecords) {
+        return record;
+    }
+
+    RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
+    qint32 nIndex = pUnpackState->nCurrentIndex;
+
+    if (pContext->nVersion == 4) {
+        const FILEBLOCK4 &fileBlock = pContext->listFileBlocks4.at(nIndex);
+
+        qint64 nPackSize = fileBlock.packSize;
+        qint64 nUnpSize = fileBlock.unpSize;
+
+        if (fileBlock.genericBlock4.nFlags & RAR4_FILE_LARGE) {
+            nPackSize |= ((qint64)fileBlock.highPackSize << 32);
+            nUnpSize |= ((qint64)fileBlock.highUnpSize << 32);
+        }
+
+        record.nStreamOffset = pContext->listFileOffsets.at(nIndex) + fileBlock.genericBlock4.nHeaderSize;
+        record.nStreamSize = nPackSize;
+        record.nDecompressedOffset = 0;
+        record.nDecompressedSize = nUnpSize;
+
+        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileBlock.sFileName);
+        record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, fileBlock.method);
+        record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileBlock.fileCRC);
+
+        // Extract DOS date and time from 32-bit fileTime field (date in high word, time in low word)
+        quint16 nDosTime = fileBlock.fileTime & 0xFFFF;
+        quint16 nDosDate = (fileBlock.fileTime >> 16) & 0xFFFF;
+        QDateTime dateTime = XBinary::dosDateTimeToQDateTime(nDosDate, nDosTime);
+        record.mapProperties.insert(FPART_PROP_DATETIME, dateTime);
+
+    } else if (pContext->nVersion == 5) {
+        const FILEHEADER5 &fileHeader = pContext->listFileHeaders5.at(nIndex);
+
+        record.nStreamOffset = pContext->listFileOffsets.at(nIndex) + fileHeader.nHeaderSize;
+        record.nStreamSize = fileHeader.nDataSize;
+        record.nDecompressedOffset = 0;
+        record.nDecompressedSize = fileHeader.nUnpackedSize;
+
+        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileHeader.sFileName);
+
+        quint8 nMethod = (fileHeader.nCompInfo & 0x3F);
+        record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, nMethod);
+
+        if (fileHeader.nFileFlags & 0x0004) {
+            record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileHeader.nDataCRC32);
+        }
+
+        if (fileHeader.nFileFlags & 0x0002) {
+            QDateTime dateTime = QDateTime::fromSecsSinceEpoch(fileHeader.nMTime);
+            record.mapProperties.insert(FPART_PROP_DATETIME, dateTime);
+        }
+    }
+
+    return record;
+}
+
+bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutputDevice, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pUnpackState || !pUnpackState->pContext || !pOutputDevice) {
+        return false;
+    }
+
+    if (pUnpackState->nCurrentIndex >= pUnpackState->nNumberOfRecords) {
+        return false;
+    }
+
+    ARCHIVERECORD record = infoCurrent(pUnpackState, pPdStruct);
+    quint8 nMethod = record.mapProperties.value(FPART_PROP_COMPRESSMETHOD).toUInt();
+
+    RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
+
+    // Only support STORE method (no compression)
+    if (pContext->nVersion == 4) {
+        if (nMethod != RAR_METHOD_STORE) {
+            return false;  // Compressed files not supported
+        }
+    } else if (pContext->nVersion == 5) {
+        if (nMethod != RAR5_METHOD_STORE) {
+            return false;  // Compressed files not supported
+        }
+    }
+
+    // Copy data directly from archive to output
+    qint64 nDataOffset = record.nStreamOffset;
+    qint64 nDataSize = record.nStreamSize;
+
+    bool bResult = XBinary::copyDeviceMemory(getDevice(), nDataOffset, pOutputDevice, 0, nDataSize);
+
+    return bResult;
+}
+
+bool XRar::moveToNext(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pUnpackState || !pUnpackState->pContext) {
+        return false;
+    }
+
+    pUnpackState->nCurrentIndex++;
+
+    if (pUnpackState->nCurrentIndex < pUnpackState->nNumberOfRecords) {
+        RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
+        pUnpackState->nCurrentOffset = pContext->listFileOffsets.at(pUnpackState->nCurrentIndex);
+    }
+    
+    return true;
+}
+
 
 QList<XBinary::MAPMODE> XRar::getMapModesList()
 {
