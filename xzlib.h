@@ -42,6 +42,22 @@ public:
     virtual QString getFileFormatExtsString();
     virtual QString getMIMEString();
     virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct);
+
+    // Streaming unpacking API
+    virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+private:
+    struct ZLIB_UNPACK_CONTEXT {
+        QString sFileName;
+        qint64 nHeaderSize;
+        qint64 nCompressedSize;
+        qint64 nUncompressedSize;
+        quint32 nAdler32;
+    };
 };
 
 #endif  // XZLIB_H

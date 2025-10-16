@@ -33,65 +33,16 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
 
     if (getSize() >= 6) {
         quint16 nHeader = read_uint16(0);
-        // 0x0178 no compression
+        // Check zlib header:
+        // 0x5E78 = no/low compression
+        // 0x9C78 = default compression
+        // 0xDA78 = best compression
         if (nHeader == 0x5E78) {
             bResult = true;
         } else if (nHeader == 0x9C78) {
             bResult = true;
         } else if (nHeader == 0xDA78) {
             bResult = true;
-        }
-
-        if (bResult) {
-            bResult = false;
-
-            if (getSize() >= 10) {
-                SubDevice sd(getDevice(), 2, -1);
-
-                if (sd.open(QIODevice::ReadOnly)) {
-                    XBinary::DECOMPRESS_STATE state = {};
-                    state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
-                    state.pDeviceInput = &sd;
-                    state.pDeviceOutput = nullptr;
-                    state.nInputOffset = 0;
-                    state.nInputLimit = -1;
-                    state.nDecompressedOffset = 0;
-                    state.nDecompressedLimit = 0x200;
-
-                    XDecompress decompressor;
-                    bool bResult1 = decompressor.decompress(&state, pPdStruct);
-
-                    if (state.nCountInput > 0) {
-                        if (state.nCountOutput < 0x200) {
-                            QBuffer buffer;
-                            if (buffer.open(QIODevice::ReadWrite)) {
-                                sd.reset();
-                                XBinary::DECOMPRESS_STATE state2 = {};
-                                state2.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
-                                state2.pDeviceInput = &sd;
-                                state2.pDeviceOutput = &buffer;
-                                state2.nInputOffset = 0;
-                                state2.nInputLimit = -1;
-                                state2.nDecompressedOffset = 0;
-                                state2.nDecompressedLimit = -1;
-
-                                XDecompress decompressor2;
-                                bResult1 = decompressor2.decompress(&state2, pPdStruct);
-
-                                if (bResult1) {
-                                    quint32 nAdler = read_uint32(2 + state2.nCountInput, true);
-
-                                    bResult = (nAdler == XBinary::getAdler32(&buffer, pPdStruct));
-                                }
-
-                                buffer.close();
-                            }
-                        } else {
-                            bResult = true;
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -129,7 +80,7 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     qint64 nOffset = 0;
 
-    record.spInfo.compressMethod = COMPRESS_METHOD_DEFLATE;
+    record.spInfo.compressMethod = COMPRESS_METHOD_ZLIB;
 
     nOffset += 2;
 
@@ -137,7 +88,8 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DECOMPRESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, record.spInfo.compressMethod);
+        // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = nullptr;
         state.nInputOffset = 0;
@@ -208,7 +160,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     qint64 nOffset = 0;
 
-    COMPRESS_METHOD cm = COMPRESS_METHOD_DEFLATE;
+    COMPRESS_METHOD cm = COMPRESS_METHOD_ZLIB;
 
     nOffset += 2;  // TODO consts
 
@@ -225,7 +177,8 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DECOMPRESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, cm);
+        // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = nullptr;
         state.nInputOffset = 0;
@@ -301,4 +254,195 @@ QString XZlib::getFileFormatExtsString()
 QString XZlib::getMIMEString()
 {
     return "application/x-zlib";
+}
+
+bool XZlib::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (pState) {
+        // Validate zlib file
+        if (!isValid(pPdStruct)) {
+            return false;
+        }
+
+        // Create and initialize context
+        ZLIB_UNPACK_CONTEXT *pContext = new ZLIB_UNPACK_CONTEXT;
+
+        // Zlib format: 2-byte header + DEFLATE compressed data + 4-byte Adler32
+        qint64 nOffset = 0;
+        qint64 nFileSize = getSize();
+
+        // Header size is always 2 bytes
+        pContext->nHeaderSize = 2;
+        nOffset += 2;
+
+        // Get filename from device
+        pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+
+        // Decompress to get sizes
+        SubDevice sd(getDevice(), nOffset, nFileSize - nOffset);
+
+        if (sd.open(QIODevice::ReadOnly)) {
+            XBinary::DECOMPRESS_STATE state = {};
+            // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
+            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+            state.pDeviceInput = &sd;
+            state.pDeviceOutput = nullptr;
+            state.nInputOffset = 0;
+            state.nInputLimit = -1;
+            state.nDecompressedOffset = 0;
+            state.nDecompressedLimit = -1;
+
+            bool bDecompress = XDeflateDecoder::decompress(&state, pPdStruct);
+
+            if (bDecompress) {
+                pContext->nCompressedSize = state.nCountInput;
+                pContext->nUncompressedSize = state.nCountOutput;
+
+                // Read Adler32 checksum (4 bytes after compressed data)
+                pContext->nAdler32 = read_uint32(2 + state.nCountInput, true);
+            } else {
+                pContext->nCompressedSize = nFileSize - nOffset - 4;
+                pContext->nUncompressedSize = 0;
+                pContext->nAdler32 = 0;
+            }
+
+            sd.close();
+        }
+
+        // Initialize state
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = getSize();
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 1;  // zlib contains single compressed stream
+        pState->pContext = pContext;
+
+        bResult = true;
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD XZlib::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext) {
+        return result;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    ZLIB_UNPACK_CONTEXT *pContext = (ZLIB_UNPACK_CONTEXT *)pState->pContext;
+
+    // Fill ARCHIVERECORD
+    result.nStreamOffset = pContext->nHeaderSize;
+    result.nStreamSize = pContext->nCompressedSize;
+    result.nDecompressedOffset = 0;
+    result.nDecompressedSize = pContext->nUncompressedSize;
+
+    // Set properties
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_ZLIB);
+
+    // Note: Zlib uses Adler32, but CRC_TYPE_ADLER32 is not defined in CRC_TYPE enum
+    // The Adler32 value is stored but without type specification
+    if (pContext->nAdler32 != 0) {
+        result.mapProperties.insert(FPART_PROP_CRC_VALUE, pContext->nAdler32);
+    }
+
+    return result;
+}
+
+bool XZlib::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    ZLIB_UNPACK_CONTEXT *pContext = (ZLIB_UNPACK_CONTEXT *)pState->pContext;
+
+    // Decompress entire zlib stream to output device
+    qint64 nFileSize = getSize();
+    SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XBinary::DECOMPRESS_STATE state = {};
+        // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = pDevice;
+        state.nInputOffset = 0;
+        state.nInputLimit = getSize();
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
+
+        bResult = XDeflateDecoder::decompress(&state, pPdStruct);
+
+        sd.close();
+    }
+
+    return bResult;
+}
+
+bool XZlib::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    // Move to next record
+    pState->nCurrentIndex++;
+
+    // zlib has only one record, so moving to next always returns false
+    // This indicates end of archive
+    bResult = false;
+
+    return bResult;
+}
+
+bool XZlib::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    // Delete format-specific context
+    if (pState->pContext) {
+        ZLIB_UNPACK_CONTEXT *pContext = (ZLIB_UNPACK_CONTEXT *)pState->pContext;
+        delete pContext;
+        pState->pContext = nullptr;
+    }
+
+    // Reset state fields
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+
+    return true;
 }
