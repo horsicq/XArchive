@@ -19,8 +19,14 @@
  * SOFTWARE.
  */
 #include "xzip.h"
-#include "xdecompress.h"
-#include "xdeflatedecoder.h"
+#include "Algos/xdeflatedecoder.h"
+#include "Algos/ximplodedecoder.h"
+#include "Algos/xlzmadecoder.h"
+#include "Algos/xlzwdecoder.h"
+#include "Algos/xbzip2decoder.h"
+#include "Algos/xshrinkdecoder.h"
+#include "Algos/xreducedecoder.h"
+#include "Algos/xstoredecoder.h"
 
 XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
     {XZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -1725,29 +1731,52 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
         COMPRESS_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
 
-        if (compressMethod == COMPRESS_METHOD_STORE) {
-            // No compression - direct copy
-            bResult = XBinary::copyDeviceMemory(getDevice(), nDataOffset, pDevice, 0, lfh.nCompressedSize);
-        } else {
-            // For compressed data, we need to decompress via temporary buffer
-            // Create a temporary SubDevice for the compressed data
-            SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
+        // For compressed data, we need to decompress via temporary buffer
+        // Create a temporary SubDevice for the compressed data
+        SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
 
-            if (subDevice.open(QIODevice::ReadOnly)) {
-                XBinary::DECOMPRESS_STATE state = {};
-                state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
-                state.pDeviceInput = &subDevice;
-                state.pDeviceOutput = pDevice;
-                state.nInputOffset = 0;
-                state.nInputLimit = lfh.nCompressedSize;
-                state.nDecompressedOffset = 0;
-                state.nDecompressedLimit = -1;
+        if (subDevice.open(QIODevice::ReadOnly)) {
+            XBinary::DECOMPRESS_STATE state = {};
+            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+            state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
+            state.pDeviceInput = &subDevice;
+            state.pDeviceOutput = pDevice;
+            state.nInputOffset = 0;
+            state.nInputLimit = lfh.nCompressedSize;
+            state.nDecompressedOffset = 0;
+            state.nDecompressedLimit = -1;
 
-                XDecompress decompressor;
-                bResult = decompressor.decompress(&state, pPdStruct);
-
-                subDevice.close();
+            if (compressMethod == COMPRESS_METHOD_STORE) {
+                bResult = XStoreDecoder::decompress(&state, pPdStruct);
+            } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
+                bResult = XDeflateDecoder::decompress(&state, pPdStruct);
+            } else if (compressMethod == COMPRESS_METHOD_DEFLATE64) {
+                bResult = XDeflateDecoder::decompress64(&state, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
+                bResult = XBZIP2Decoder::decompress(&state, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
+                bResult = XLZMADecoder::decompress(&state, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
+                bResult = XShrinkDecoder::decompress(&state, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
+                bResult = XReduceDecoder::decompress(&state, 1, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
+                bResult = XReduceDecoder::decompress(&state, 2, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
+                bResult = XReduceDecoder::decompress(&state, 3, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
+                bResult = XReduceDecoder::decompress(&state, 4, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
+                bResult = XImplodeDecoder::decompress(&state, false, false, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
+                bResult = XImplodeDecoder::decompress(&state, false, true, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
+                bResult = XImplodeDecoder::decompress(&state, true, false, pPdStruct);
+            } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
+                bResult = XImplodeDecoder::decompress(&state, true, true, pPdStruct);
             }
+
+            subDevice.close();
         }
     }
 

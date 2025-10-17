@@ -63,32 +63,31 @@ public:
 
     // Add more format data structs as needed
 
-    XXZ(QIODevice *pDevice = nullptr);
+    explicit XXZ(QIODevice *pDevice = nullptr);
     ~XXZ();
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
-    virtual FT getFileType();
-    virtual MODE getMode();
-    virtual QString getMIMEString();
-    virtual qint32 getType();
-    virtual QString typeIdToString(qint32 nType);
-    virtual ENDIAN getEndian();
-    virtual QString getArch();
-    virtual QString getFileFormatExt();
-    virtual QString getFileFormatExtsString();
-    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
-    virtual bool isSigned();
-    virtual OSNAME getOsName();
-    virtual QString getOsVersion();
-    virtual QString getVersion();
-    virtual bool isEncrypted();
-    virtual QList<MAPMODE> getMapModesList();
-    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
+    static bool isValid(QIODevice *pDevice);
+    virtual FT getFileType() override;
+    virtual MODE getMode() override;
+    virtual QString getMIMEString() override;
+    virtual qint32 getType() override;
+    virtual QString typeIdToString(qint32 nType) override;
+    virtual ENDIAN getEndian() override;
+    virtual QString getArch() override;
+    virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString() override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
+    virtual bool isSigned() override;
+    virtual OSNAME getOsName() override;
+    virtual QString getOsVersion() override;
+    virtual QString getVersion() override;
+    virtual bool isEncrypted() override;
+    virtual QList<MAPMODE> getMapModesList() override;
+    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
 
-    virtual QString structIDToString(quint32 nID);
-    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
-    virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues, void *pUserData,
-                                PDSTRUCT *pPdStruct);
+    virtual QString structIDToString(quint32 nID) override;
+    virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
 
     STREAM_HEADER _read_STREAM_HEADER(qint64 nOffset);
     STREAM_FOOTER _read_STREAM_FOOTER(qint64 nOffset);
@@ -96,9 +95,24 @@ public:
     INDEX _read_INDEX(qint64 nOffset);
 
     // XArchive interface
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
-    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct);
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
+
+    // Streaming unpacking API
+    virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+private:
+    struct XXZ_UNPACK_CONTEXT {
+        QString sFileName;
+        qint64 nHeaderSize;
+        qint64 nCompressedSize;
+        qint64 nUncompressedSize;
+        quint32 nCRC32;
+    };
 };
 
 #endif  // XXZ_H

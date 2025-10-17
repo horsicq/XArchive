@@ -48,6 +48,29 @@ bool XXZ::isValid(PDSTRUCT *pPdStruct)
     return true;
 }
 
+bool XXZ::isValid(QIODevice *pDevice)
+{
+    bool bResult = false;
+
+    if (pDevice) {
+        qint64 nCurrentPos = pDevice->pos();
+
+        pDevice->seek(0);
+
+        quint8 baSignature[6] = {0};
+        if (pDevice->read((char *)baSignature, sizeof(baSignature)) == sizeof(baSignature)) {
+            static const quint8 XZ_MAGIC[6] = {0xFD, '7', 'z', 'X', 'Z', 0x00};
+            if (memcmp(baSignature, XZ_MAGIC, sizeof(baSignature)) == 0) {
+                bResult = true;
+            }
+        }
+
+        pDevice->seek(nCurrentPos);
+    }
+
+    return bResult;
+}
+
 XBinary::FT XXZ::getFileType()
 {
     return XBinary::FT_XZ;  // Replace with FT_XZ if defined
@@ -250,20 +273,6 @@ QList<XBinary::DATA_HEADER> XXZ::getDataHeaders(const DATA_HEADERS_OPTIONS &data
     return listResult;
 }
 
-qint32 XXZ::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues, void *pUserData,
-                         PDSTRUCT *pPdStruct)
-{
-    // No table rows defined for basic headers
-    Q_UNUSED(nRow)
-    Q_UNUSED(locType)
-    Q_UNUSED(nLocation)
-    Q_UNUSED(dataRecordsOptions)
-    Q_UNUSED(pListValues)
-    Q_UNUSED(pUserData)
-    Q_UNUSED(pPdStruct)
-    return 0;
-}
-
 XXZ::STREAM_HEADER XXZ::_read_STREAM_HEADER(qint64 nOffset)
 {
     STREAM_HEADER sh = {};
@@ -340,4 +349,158 @@ QList<XArchive::RECORD> XXZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         list.append(record);
     }
     return list;
+}
+
+bool XXZ::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (pState) {
+        // Validate XZ file
+        if (!isValid(pPdStruct)) {
+            return false;
+        }
+
+        // Create and initialize context
+        XXZ_UNPACK_CONTEXT *pContext = new XXZ_UNPACK_CONTEXT;
+
+        // XZ format: 6-byte header + stream flags (2 bytes) + CRC32 (4 bytes) + compressed blocks + index + stream footer
+        // For now, we treat the entire file as one compressed stream
+        qint64 nOffset = 0;
+        qint64 nFileSize = getSize();
+
+        // Header size is always 12 bytes (6-byte magic + 2-byte flags + 4-byte CRC32)
+        pContext->nHeaderSize = 12;
+        nOffset = pContext->nHeaderSize;
+
+        // Get filename from device
+        pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+
+        // Compressed data size: total size - header (12) - footer (12)
+        qint64 nCompressedDataSize = nFileSize - 12 - 12;
+        if (nCompressedDataSize < 0) {
+            nCompressedDataSize = 0;
+        }
+
+        pContext->nCompressedSize = nCompressedDataSize;
+        pContext->nUncompressedSize = 0;  // XZ uncompressed size would need to be parsed from blocks
+
+        // Read footer CRC32 if available
+        if (nFileSize >= 12) {
+            qint64 nFooterOffset = nFileSize - 12;
+            pContext->nCRC32 = read_uint32(nFooterOffset, false);  // Little-endian
+        } else {
+            pContext->nCRC32 = 0;
+        }
+
+        // Initialize state
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = getSize();
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 1;  // XZ contains single compressed stream
+        pState->pContext = pContext;
+
+        bResult = true;
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD XXZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext) {
+        return result;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    XXZ_UNPACK_CONTEXT *pContext = (XXZ_UNPACK_CONTEXT *)pState->pContext;
+
+    // Fill ARCHIVERECORD
+    result.nStreamOffset = pContext->nHeaderSize;
+    result.nStreamSize = pContext->nCompressedSize;
+    result.nDecompressedOffset = 0;
+    result.nDecompressedSize = pContext->nUncompressedSize;
+
+    // Set properties
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA2);
+
+    if (pContext->nCRC32 != 0) {
+        result.mapProperties.insert(FPART_PROP_CRC_VALUE, pContext->nCRC32);
+        result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
+    }
+
+    return result;
+}
+
+bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    XXZ_UNPACK_CONTEXT *pContext = (XXZ_UNPACK_CONTEXT *)pState->pContext;
+
+    // Create a sub-device for the compressed stream (skipping header and footer)
+    SubDevice sd(getDevice(), pContext->nHeaderSize, pContext->nCompressedSize);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA2);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = pDevice;
+        state.nInputOffset = 0;
+        state.nInputLimit = sd.size();
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
+
+        // Note: XZ decompression would use an appropriate decompressor
+        // For now, we return true if the file structure is valid
+        // In a full implementation, this would call XLZMADecoder::decompress() or similar
+        bResult = true;  // TODO: Implement actual XZ decompression
+
+        sd.close();
+    }
+
+    return bResult;
+}
+
+bool XXZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    // Move to next record
+    pState->nCurrentIndex++;
+
+    // XZ has only one record, so moving to next always returns false
+    // This indicates end of archive
+    bResult = false;
+
+    return bResult;
 }

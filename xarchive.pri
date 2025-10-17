@@ -41,6 +41,7 @@ HEADERS += \
     $$PWD/xnpm.h \
     $$PWD/xszdd.h \
     $$PWD/xbzip2.h \
+    $$PWD/xlzip.h \
     $$PWD/xxz.h \
     $$PWD/xzlib.h
 
@@ -82,6 +83,7 @@ SOURCES += \
     $$PWD/xnpm.cpp \
     $$PWD/xszdd.cpp \
     $$PWD/xbzip2.cpp \
+    $$PWD/xlzip.cpp \
     $$PWD/xxz.cpp \
     $$PWD/xzlib.cpp
 

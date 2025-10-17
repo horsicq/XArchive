@@ -98,8 +98,7 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         state.nDecompressedOffset = 0;
         state.nDecompressedLimit = -1;
 
-        XDecompress decompressor;
-        bool bResult = decompressor.decompress(&state, pPdStruct);
+        bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
         Q_UNUSED(bResult)
 
@@ -187,8 +186,7 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         state.nDecompressedOffset = 0;
         state.nDecompressedLimit = -1;
 
-        XDecompress decompressor;
-        bool bResult = decompressor.decompress(&state, pPdStruct);
+        bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
         Q_UNUSED(bResult)
 

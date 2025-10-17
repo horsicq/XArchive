@@ -81,45 +81,62 @@ bool XLZMADecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBina
                     if (ret == 0)  // S_OK
                     {
                         LzmaDec_Init(&state);
-                        bool bRun = true;
+                        bResult = true;  // Assume success, set to false on error
+                        ELzmaStatus lastStatus = LZMA_STATUS_NOT_FINISHED;
 
                         while (XBinary::isPdStructNotCanceled(pPdStruct)) {
                             qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
                             qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
-                            if (nSize) {
-                                qint64 nPos = 0;
+                            // Process available input
+                            qint64 nPos = 0;
+                            bool bContinueReading = true;
 
-                                while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-                                    ELzmaStatus status;
-                                    SizeT inProcessed = nSize - nPos;
-                                    SizeT outProcessed = N_BUFFER_SIZE;
+                            while (bContinueReading && nPos < nSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+                                ELzmaStatus status;
+                                SizeT inProcessed = nSize - nPos;
+                                SizeT outProcessed = N_BUFFER_SIZE;
 
-                                    ret =
-                                        LzmaDec_DecodeToBuf(&state, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
+                                ret = LzmaDec_DecodeToBuf(&state, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
 
-                                    // TODO Check ret
+                                if (ret != 0) {  // Check for decompression error
+                                    bResult = false;
+                                    bContinueReading = false;
+                                    break;
+                                }
 
-                                    nPos += inProcessed;
+                                nPos += inProcessed;
 
+                                if (outProcessed > 0) {
                                     if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pDecompressState)) {
-                                        // result = COMPRESS_RESULT_WRITEERROR;
-                                        bRun = false;
-                                        break;
-                                    }
-
-                                    if (status != LZMA_STATUS_NOT_FINISHED) {
-                                        if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
-                                            // result = COMPRESS_RESULT_OK;
-                                            bRun = false;
-                                        }
-
+                                        bResult = false;
+                                        bContinueReading = false;
                                         break;
                                     }
                                 }
-                            } else {
-                                // result = COMPRESS_RESULT_READERROR;
-                                bRun = false;
+
+                                lastStatus = status;
+
+                                if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
+                                    // Decompression completed successfully
+                                    bContinueReading = false;
+                                    break;
+                                }
+
+                                // If we couldn't process any input, stop
+                                if (inProcessed == 0) {
+                                    break;
+                                }
+                            }
+
+                            // If we got stream end mark, stop reading more
+                            if (lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) {
+                                break;
+                            }
+
+                            // If no data was read, we're done
+                            if (nSize == 0) {
+                                break;
                             }
                         }
                     }

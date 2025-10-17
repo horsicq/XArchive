@@ -90,31 +90,7 @@ QString XBZIP2::getFileFormatExtsString()
 
 qint64 XBZIP2::getFileFormatSize(XBinary::PDSTRUCT *pPdStruct)
 {
-    qint64 nFileSize = getSize();
-    qint64 nResult = 0;
-
-    SubDevice sd(getDevice(), 0, nFileSize);
-
-    if (sd.open(QIODevice::ReadOnly)) {
-        QBuffer buffer;
-        if (buffer.open(QIODevice::WriteOnly)) {
-            XBinary::DECOMPRESS_STATE decompressState = {};
-            decompressState.pDeviceInput = &sd;
-            decompressState.pDeviceOutput = &buffer;
-            decompressState.nInputOffset = 0;
-            decompressState.nInputLimit = nFileSize;
-
-            if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
-                nResult = decompressState.nCountInput;
-            }
-
-            buffer.close();
-        }
-
-        sd.close();
-    }
-
-    return nResult;
+    return _calculateRawSize(pPdStruct);
 }
 
 QString XBZIP2::getMIMEString()

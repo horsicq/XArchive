@@ -44,23 +44,33 @@ bool XBZIP2Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBin
 
         bz_stream strm = {};
         qint32 ret = BZ_MEM_ERROR;
+        bool bReadMore = true;
 
         qint32 rc = BZ2_bzDecompressInit(&strm, 0, 0);
 
         if (rc == BZ_OK) {
             do {
-                qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
+                // Read more data only if we consumed all input
+                if (bReadMore && strm.avail_in == 0) {
+                    qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
 
-                strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
+                    if (nBufferSize > 0) {
+                        strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
-                if (strm.avail_in == 0) {
-                    ret = BZ_MEM_ERROR;
-                    break;
+                        if (strm.avail_in > 0) {
+                            strm.next_in = bufferIn;
+                        } else {
+                            // No more data available from device - signal to stop reading
+                            bReadMore = false;
+                        }
+                    } else {
+                        // nBufferSize is 0 - we've reached input limit
+                        bReadMore = false;
+                    }
                 }
 
-                strm.next_in = bufferIn;
-
-                do {
+                // If we have input or previous buffered data, decompress
+                if (strm.avail_in > 0 || bReadMore == false) {
                     strm.total_in_hi32 = 0;
                     strm.total_in_lo32 = 0;
                     strm.total_out_hi32 = 0;
@@ -81,9 +91,9 @@ bool XBZIP2Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBin
                             break;
                         }
                     }
-                } while (strm.avail_out == 0);
-
-                if (ret != BZ_OK) {
+                } else {
+                    // No input and nothing to read
+                    ret = BZ_MEM_ERROR;
                     break;
                 }
 

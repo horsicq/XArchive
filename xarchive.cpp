@@ -583,10 +583,12 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DECOMPRESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, pRecord->spInfo.compressMethod);
+        state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pRecord->spInfo.nUncompressedSize);
+        state.mapProperties.insert(XBinary::FPART_PROP_WINDOWSIZE, pRecord->spInfo.nWindowSize);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDestDevice;
         state.nInputOffset = 0;
-        state.nInputLimit = -1;
+        state.nInputLimit = pRecord->nDataSize;
         state.nDecompressedOffset = nDecompressedOffset;
         state.nDecompressedLimit = nDecompressedLimit;
 
