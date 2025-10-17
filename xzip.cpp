@@ -20,6 +20,7 @@
  */
 #include "xzip.h"
 #include "xdecompress.h"
+#include "xdeflatedecoder.h"
 
 XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
     {XZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -494,24 +495,28 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
 
         cdFileHeader.nSignature = SIGNATURE_CFD;
         cdFileHeader.nVersion = pListZipFileRecords->at(i).nVersion;
+        cdFileHeader.nOS = pListZipFileRecords->at(i).nOS;
         cdFileHeader.nMinVersion = pListZipFileRecords->at(i).nMinVersion;
+        cdFileHeader.nMinOS = pListZipFileRecords->at(i).nMinOS;
         cdFileHeader.nFlags = pListZipFileRecords->at(i).nFlags;
-        cdFileHeader.nMethod = pListZipFileRecords->at(i).method;
+        cdFileHeader.nMethod = (quint16)pListZipFileRecords->at(i).method;
         cdFileHeader.nLastModTime = 0;  // TODO
         cdFileHeader.nLastModDate = 0;  // TODO
         cdFileHeader.nCRC32 = pListZipFileRecords->at(i).nCRC32;
-        cdFileHeader.nCompressedSize = pListZipFileRecords->at(i).nCompressedSize;
-        cdFileHeader.nUncompressedSize = pListZipFileRecords->at(i).nUncompressedSize;
-        cdFileHeader.nFileNameLength = pListZipFileRecords->at(i).sFileName.size();
+        cdFileHeader.nCompressedSize = (quint32)pListZipFileRecords->at(i).nCompressedSize;
+        cdFileHeader.nUncompressedSize = (quint32)pListZipFileRecords->at(i).nUncompressedSize;
+        cdFileHeader.nFileNameLength = (quint16)pListZipFileRecords->at(i).sFileName.toUtf8().size();
         cdFileHeader.nExtraFieldLength = 0;
         cdFileHeader.nFileCommentLength = 0;
         cdFileHeader.nStartDisk = 0;
         cdFileHeader.nInternalFileAttributes = 0;
         cdFileHeader.nExternalFileAttributes = 0;
-        cdFileHeader.nOffsetToLocalFileHeader = pListZipFileRecords->at(i).nHeaderOffset;
+        cdFileHeader.nOffsetToLocalFileHeader = (quint32)pListZipFileRecords->at(i).nHeaderOffset;
 
         pDest->write((char *)&cdFileHeader, sizeof(cdFileHeader));
-        pDest->write(pListZipFileRecords->at(i).sFileName.toUtf8().data(), pListZipFileRecords->at(i).sFileName.toUtf8().size());
+        
+        QByteArray baFileName = pListZipFileRecords->at(i).sFileName.toUtf8();
+        pDest->write(baFileName.data(), baFileName.size());
     }
 
     qint64 nCentralDirectorySize = pDest->pos() - nStartPosition;
@@ -1397,7 +1402,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     zipFileRecord.nMinVersion = 0x14;
     zipFileRecord.nMinOS = 0;
     zipFileRecord.nFlags = 0;
-    zipFileRecord.method = CMETHOD_STORE;  // No compression (STORE)
+    zipFileRecord.method = pContext->options.compressMethod;  // Use compression method from options
     zipFileRecord.dtTime = fileInfo.lastModified();
     zipFileRecord.nUncompressedSize = fileInfo.size();
 
@@ -1410,22 +1415,9 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     file.close();
 
     // Convert QDateTime to DOS date/time
-    QDate date = zipFileRecord.dtTime.date();
-    QTime time = zipFileRecord.dtTime.time();
-
-    quint16 nDosDate = 0;
-    quint16 nDosTime = 0;
-
-    if (date.isValid()) {
-        qint32 nYear = date.year();
-        if (nYear >= 1980 && nYear <= 2107) {
-            nDosDate = (date.day() & 0x1F) | ((date.month() & 0x0F) << 5) | (((nYear - 1980) & 0x7F) << 9);
-        }
-    }
-
-    if (time.isValid()) {
-        nDosTime = ((time.second() / 2) & 0x1F) | ((time.minute() & 0x3F) << 5) | ((time.hour() & 0x1F) << 11);
-    }
+    QPair<quint16, quint16> dosDateTime = XBinary::qDateTimeToDosDateTime(zipFileRecord.dtTime);
+    quint16 nDosDate = dosDateTime.first;
+    quint16 nDosTime = dosDateTime.second;
 
     // Write local file header
     zipFileRecord.nHeaderOffset = pState->nCurrentOffset;
@@ -1456,7 +1448,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     pState->nCurrentOffset += sizeof(localFileHeader) + localFileHeader.nFileNameLength;
     zipFileRecord.nDataOffset = pState->nCurrentOffset;
 
-    // Write file data (no compression)
+    // Write file data (with optional compression)
     if (!file.open(QIODevice::ReadOnly)) {
         return false;
     }
@@ -1464,20 +1456,62 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     qint64 nBytesWritten = 0;
     qint64 nFileSize = fileInfo.size();
 
-    while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
+    if (zipFileRecord.method == CMETHOD_STORE) {
+        // No compression - direct copy
+        while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
 
-        if (baBuffer.isEmpty() && nBytesWritten < nFileSize) {
+            if (baBuffer.isEmpty() && nBytesWritten < nFileSize) {
+                file.close();
+                return false;
+            }
+
+            if (pState->pDevice->write(baBuffer) != baBuffer.size()) {
+                file.close();
+                return false;
+            }
+
+            nBytesWritten += baBuffer.size();
+        }
+
+        zipFileRecord.nCompressedSize = nFileSize;  // STORE: compressed = uncompressed
+    } else if (zipFileRecord.method == CMETHOD_DEFLATE) {
+        // Compress data using DEFLATE
+        QBuffer compressedBuffer;
+        compressedBuffer.open(QIODevice::WriteOnly);
+
+        XBinary::DECOMPRESS_STATE compressState = {};
+        compressState.pDeviceInput = &file;
+        compressState.pDeviceOutput = &compressedBuffer;
+        compressState.nInputOffset = 0;
+        compressState.nInputLimit = nFileSize;
+
+        qint32 nCompressionLevel = pContext->options.nCompressionLevel;
+        if (nCompressionLevel == -1) {
+            nCompressionLevel = Z_DEFAULT_COMPRESSION;
+        }
+
+        bool bCompress = XDeflateDecoder::compress(&compressState, pPdStruct, nCompressionLevel);
+
+        if (bCompress) {
+            compressedBuffer.close();
+            QByteArray baCompressed = compressedBuffer.data();
+
+            if (pState->pDevice->write(baCompressed) != baCompressed.size()) {
+                file.close();
+                return false;
+            }
+
+            nBytesWritten = compressState.nCountOutput;
+            zipFileRecord.nCompressedSize = nBytesWritten;
+        } else {
             file.close();
             return false;
         }
-
-        if (pState->pDevice->write(baBuffer) != baBuffer.size()) {
-            file.close();
-            return false;
-        }
-
-        nBytesWritten += baBuffer.size();
+    } else {
+        // Unsupported compression method
+        file.close();
+        return false;
     }
 
     file.close();
@@ -1486,11 +1520,21 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
         return false;
     }
 
-    zipFileRecord.nCompressedSize = nFileSize;  // STORE: compressed = uncompressed
+    // Update local file header with compressed size
+    localFileHeader.nCompressedSize = zipFileRecord.nCompressedSize;
+    localFileHeader.nMethod = zipFileRecord.method;
 
-    // Update state
-    pState->nCurrentOffset += nFileSize;
-    pState->nNumberOfRecords++;
+    // Write updated local file header
+    if (pState->pDevice->seek(zipFileRecord.nHeaderOffset) &&
+        pState->pDevice->write((char *)&localFileHeader, sizeof(localFileHeader)) != sizeof(localFileHeader)) {
+        return false;
+    }
+
+    // Update current offset to point to end of written data
+    pState->nCurrentOffset += zipFileRecord.nCompressedSize;
+    
+    // Seek to end of data
+    pState->pDevice->seek(pState->nCurrentOffset);
 
     // Store the record for later when writing central directory
     pListZipFileRecords->append(zipFileRecord);
@@ -1695,7 +1739,7 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 state.pDeviceInput = &subDevice;
                 state.pDeviceOutput = pDevice;
                 state.nInputOffset = 0;
-                state.nInputLimit = -1;
+                state.nInputLimit = lfh.nCompressedSize;
                 state.nDecompressedOffset = 0;
                 state.nDecompressedLimit = -1;
 

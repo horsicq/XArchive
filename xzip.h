@@ -158,11 +158,15 @@ public:
     struct ZIP_OPTIONS {
         XBinary::PATH_MODE pathMode;
         QString sBasePath;        // Base path for relative path calculation
+        CMETHOD compressMethod;   // Compression method (STORE, DEFLATE, etc.)
+        qint32 nCompressionLevel; // Compression level (0-9, -1 for default)
 
         ZIP_OPTIONS()
         {
             pathMode = XBinary::PATH_MODE_RELATIVE;
             sBasePath = "";
+            compressMethod = CMETHOD_STORE;
+            nCompressionLevel = -1; // Default compression level
         }
     };
 

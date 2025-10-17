@@ -883,7 +883,7 @@ bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XB
     if (inflateInit2(&strm, -MAX_WBITS) == Z_OK)  // -MAX_WBITS for raw data
     {
         do {
-            qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
+            qint32 nBufferSize = (pDecompressState->nInputLimit == -1) ? N_BUFFER_SIZE : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
             strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
             if (strm.avail_in == 0) {
@@ -894,13 +894,11 @@ bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XB
             strm.next_in = (quint8 *)bufferIn;
 
             do {
-                strm.total_in = 0;
-                strm.total_out = 0;
                 strm.avail_out = N_BUFFER_SIZE;
-                //                    strm.avail_out=1;
+//                    strm.avail_out=1;
                 strm.next_out = (quint8 *)bufferOut;
                 ret = inflate(&strm, Z_NO_FLUSH);
-                //                    ret=inflate(&strm,Z_SYNC_FLUSH);
+//                    ret=inflate(&strm,Z_SYNC_FLUSH);
 
                 if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT)) {
                     break;
@@ -910,15 +908,11 @@ bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XB
 
                 if (nTemp > 0) {
                     if (!XBinary::_writeDevice(bufferOut, nTemp, pDecompressState)) {
+                        ret = Z_ERRNO;
                         break;
                     }
-                } else {
-                    ret = Z_DATA_ERROR;
-                    break;
                 }
-            } while (strm.avail_out == 0);
-
-            if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
+        } while (strm.avail_out == 0);            if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
                 break;
             }
 
@@ -929,7 +923,7 @@ bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XB
 
         inflateEnd(&strm);
 
-        bResult = true;  // TODO
+        bResult = (ret == Z_STREAM_END);
     }
 
     return bResult;
@@ -1036,6 +1030,7 @@ bool XDeflateDecoder::compress(XBinary::DECOMPRESS_STATE *pCompressState, XBinar
 
         qint64 nTotalProcessed = 0;
         int flush = Z_NO_FLUSH;
+        int ret = Z_OK;
 
         do {
             // Read input data
@@ -1060,7 +1055,7 @@ bool XDeflateDecoder::compress(XBinary::DECOMPRESS_STATE *pCompressState, XBinar
                 stream.avail_out = N_BUFFER_SIZE;
                 stream.next_out = (Bytef *)outputBuffer;
 
-                int ret = deflate(&stream, flush);
+                ret = deflate(&stream, flush);
                 if (ret == Z_STREAM_ERROR) {
                     deflateEnd(&stream);
                     return false;
@@ -1077,7 +1072,8 @@ bool XDeflateDecoder::compress(XBinary::DECOMPRESS_STATE *pCompressState, XBinar
                     pCompressState->nCountOutput += nCompressed;
                 }
 
-            } while (stream.avail_out == 0);
+                // Continue until all output is consumed or stream ends
+            } while (stream.avail_out == 0 && ret != Z_STREAM_END);
 
             // Check for cancellation
             if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -1085,7 +1081,7 @@ bool XDeflateDecoder::compress(XBinary::DECOMPRESS_STATE *pCompressState, XBinar
                 return false;
             }
 
-        } while (flush != Z_FINISH);
+        } while (flush != Z_FINISH || ret != Z_STREAM_END);
 
         deflateEnd(&stream);
         bResult = !pCompressState->bReadError && !pCompressState->bWriteError;
