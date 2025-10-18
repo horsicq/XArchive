@@ -12,8 +12,7 @@ include_directories(${PROJECT_SOURCE_DIR}/src/)
 
 add_library(lzma STATIC
 ${PROJECT_SOURCE_DIR}/src/LzmaDec.c
-${PROJECT_SOURCE_DIR}/src/Ppmd7.c
-${PROJECT_SOURCE_DIR}/src/Ppmd7Dec.c
+${PROJECT_SOURCE_DIR}/src/Lzma2Dec.c
 )
 
 set_target_properties(lzma PROPERTIES LINKER_LANGUAGE C)
