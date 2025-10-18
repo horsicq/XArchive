@@ -474,10 +474,8 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
         state.nDecompressedOffset = 0;
         state.nDecompressedLimit = -1;
 
-        // Note: XZ decompression would use an appropriate decompressor
-        // For now, we return true if the file structure is valid
-        // In a full implementation, this would call XLZMADecoder::decompress() or similar
-        bResult = true;  // TODO: Implement actual XZ decompression
+        // Use XLZMADecoder to decompress LZMA2 data (used by XZ format)
+        bResult = XLZMADecoder::decompressLZMA2(&state, pPdStruct);
 
         sd.close();
     }
@@ -501,6 +499,25 @@ bool XXZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     // XZ has only one record, so moving to next always returns false
     // This indicates end of archive
     bResult = false;
+
+    return bResult;
+}
+
+bool XXZ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (!pState) {
+        return false;
+    }
+
+    if (pState->pContext) {
+        delete (XXZ_UNPACK_CONTEXT *)pState->pContext;
+        pState->pContext = nullptr;
+        bResult = true;
+    }
 
     return bResult;
 }

@@ -22,6 +22,7 @@
 #define XXZ_H
 
 #include "xarchive.h"
+#include "xlzmadecoder.h"
 
 class XXZ : public XArchive {
     Q_OBJECT
@@ -104,6 +105,7 @@ public:
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     struct XXZ_UNPACK_CONTEXT {

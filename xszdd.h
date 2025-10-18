@@ -44,6 +44,7 @@ public:
     ~XSZDD() override;
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
+    static bool isValid(QIODevice *pDevice);
     virtual FT getFileType() override;
     virtual MODE getMode() override;
     virtual QString getMIMEString() override;
@@ -51,7 +52,7 @@ public:
     virtual ENDIAN getEndian() override;
     virtual QString getArch() override;
     virtual QString getFileFormatExt() override;
-    virtual QString getFileFormatExtsString();
+    virtual QString getFileFormatExtsString() override;
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
     virtual bool isSigned() override;
     virtual OSNAME getOsName() override;
@@ -63,12 +64,29 @@ public:
 
     virtual QString structIDToString(quint32 nID) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     SZDD_HEADER _read_SZDD_HEADER(qint64 nOffset);
 
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
     virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
+
+    // Streaming unpacking API
+    virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+private:
+    // Format-specific unpacking context
+    struct SZDD_UNPACK_CONTEXT {
+        qint64 nHeaderSize;         // Size of SZDD header
+        qint64 nCompressedSize;     // Size of compressed data
+        qint64 nUncompressedSize;   // Size of uncompressed data
+        QString sFileName;          // Original file name
+    };
 };
 
 #endif  // XSZDD_H

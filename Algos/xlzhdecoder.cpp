@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xlzhdecoder.h"
+#include "xbinary.h"
 
 static const quint16 cache_masks[] = {0x0000, 0x0001, 0x0003, 0x0007, 0x000F, 0x001F, 0x003F, 0x007F, 0x00FF, 0x01FF,
                                       0x03FF, 0x07FF, 0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
@@ -825,3 +826,104 @@ void XLZHDecoder::lzh_huffman_free(lzh_huffman *hf)
     free(hf->tbl);
     free(hf->tree);
 }
+
+bool XLZHDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32 nMethod, XBinary::PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
+        return false;
+    }
+
+    const qint32 N_BUFFER_SIZE = 0x10000;  // 64KB buffer
+
+    quint8 *pBufferIn = new quint8[N_BUFFER_SIZE];
+    quint8 *pBufferOut = new quint8[N_BUFFER_SIZE];
+
+    if (!pBufferIn || !pBufferOut) {
+        delete[] pBufferIn;
+        delete[] pBufferOut;
+        return false;
+    }
+
+    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    pDecompressState->pDeviceOutput->seek(0);
+
+    lzh_stream strm = {};
+    qint32 nResult = LZH_ARCHIVE_OK;
+
+    if (!lzh_decode_init(&strm, nMethod)) {
+        delete[] pBufferIn;
+        delete[] pBufferOut;
+        return false;
+    }
+
+    qint64 nBytesProcessed = 0;
+    qint64 nOutputWritten = 0;
+    qint64 nInputLimit = pDecompressState->nInputLimit;
+
+    while ((nBytesProcessed < nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qint32 nReadSize = qMin((qint32)(nInputLimit - nBytesProcessed), N_BUFFER_SIZE);
+        qint32 nBytesRead = pDecompressState->pDeviceInput->read((char *)pBufferIn, nReadSize);
+
+        if (nBytesRead <= 0) {
+            break;
+        }
+
+        strm.next_in = pBufferIn;
+        strm.avail_in = nBytesRead;
+        strm.total_in = 0;
+
+        while ((strm.avail_in > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            nResult = lzh_decode(&strm, false);
+
+            if (nResult == LZH_ARCHIVE_FAILED) {
+                pDecompressState->bReadError = true;
+                break;
+            }
+
+            if (strm.avail_out > 0) {
+                qint64 nWriteSize = qMin((qint64)strm.avail_out, (qint64)(N_BUFFER_SIZE));
+
+                if (nOutputWritten + nWriteSize > pDecompressState->nDecompressedLimit && pDecompressState->nDecompressedLimit != -1) {
+                    nWriteSize = pDecompressState->nDecompressedLimit - nOutputWritten;
+                }
+
+                if (nWriteSize > 0) {
+                    qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)strm.ref_ptr, nWriteSize);
+
+                    if (nWritten != nWriteSize) {
+                        pDecompressState->bWriteError = true;
+                        break;
+                    }
+
+                    nOutputWritten += nWritten;
+                    strm.avail_out = 0;
+                }
+
+                if (nOutputWritten >= pDecompressState->nDecompressedLimit && pDecompressState->nDecompressedLimit != -1) {
+                    break;
+                }
+            }
+        }
+
+        nBytesProcessed += nBytesRead;
+
+        if (pDecompressState->bReadError || pDecompressState->bWriteError || nResult == LZH_ARCHIVE_FAILED) {
+            break;
+        }
+    }
+
+    pDecompressState->nCountInput = nBytesProcessed;
+    pDecompressState->nCountOutput = nOutputWritten;
+
+    lzh_decode_free(&strm);
+
+    delete[] pBufferIn;
+    delete[] pBufferOut;
+
+    bResult = (!pDecompressState->bReadError && !pDecompressState->bWriteError && nResult != LZH_ARCHIVE_FAILED);
+
+    return bResult;
+}
+

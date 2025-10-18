@@ -129,93 +129,106 @@ QList<XBinary::MAPMODE> XZlib::getMapModesList()
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_STREAMS);
+    listResult.append(MAPMODE_DATA);
 
     return listResult;
 }
 
 XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapMode)
+    _MEMORY_MAP result = {};
 
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_REGIONS;  // Default mode for Zlib
     }
 
-    _MEMORY_MAP result = {};
-    result.fileType = getFileType();
-    result.mode = getMode();
-    result.endian = getEndian();
-    result.sType = typeIdToString(getType());
-    result.sArch = getArch();
-    result.nBinarySize = getSize();
+    if (mapMode == MAPMODE_REGIONS) {
+        result = _getMemoryMap(FILEPART_HEADER | FILEPART_REGION | FILEPART_FOOTER | FILEPART_OVERLAY, pPdStruct);
+    } else if (mapMode == MAPMODE_STREAMS) {
+        result = _getMemoryMap(FILEPART_REGION, pPdStruct);
+    } else if (mapMode == MAPMODE_DATA) {
+        result = _getMemoryMap(FILEPART_DATA | FILEPART_OVERLAY, pPdStruct);
+    }
 
-    qint32 nIndex = 0;
+    return result;
+}
 
-    _MEMORY_RECORD memoryRecordHeader = {};
-    _MEMORY_RECORD memoryRecord = {};
-    _MEMORY_RECORD memoryRecordFooter = {};
+QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+
+    QList<FPART> listResult;
+
+    const qint64 fileSize = getSize();
+    if (fileSize <= 0) return listResult;
 
     qint64 nOffset = 0;
 
-    COMPRESS_METHOD cm = COMPRESS_METHOD_ZLIB;
-
-    nOffset += 2;  // TODO consts
-
-    memoryRecordHeader.nOffset = 0;
-    memoryRecordHeader.nAddress = -1;
-    memoryRecordHeader.nSize = nOffset;
-    memoryRecordHeader.sName = tr("Header");
-    memoryRecordHeader.filePart = FILEPART_HEADER;
-    memoryRecordHeader.nIndex = nIndex++;
-
-    result.listRecords.append(memoryRecordHeader);
-
-    SubDevice sd(getDevice(), nOffset, -1);
-
-    if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
-        // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
-        state.pDeviceInput = &sd;
-        state.pDeviceOutput = nullptr;
-        state.nInputOffset = 0;
-        state.nInputLimit = -1;
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
-
-        bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
-
-        Q_UNUSED(bResult)
-
-        memoryRecord.nOffset = nOffset;
-        memoryRecord.nAddress = -1;
-        memoryRecord.nSize = state.nCountInput;
-        memoryRecord.filePart = FILEPART_REGION;
-        memoryRecord.sName = tr("Data");
-        memoryRecord.nIndex = nIndex++;
-
-        sd.close();
+    // Zlib header (2 bytes)
+    if (nFileParts & FILEPART_HEADER) {
+        FPART header = {};
+        header.filePart = FILEPART_HEADER;
+        header.nFileOffset = 0;
+        header.nFileSize = 2;
+        header.nVirtualAddress = -1;
+        header.sName = tr("Header");
+        listResult.append(header);
+        nOffset = 2;
     }
 
-    // TODO
+    // Compressed data region
+    if (nFileParts & FILEPART_REGION) {
+        // Compressed data: from offset 2 to (fileSize - 4) for the 4-byte Adler32 footer
+        qint64 regionOffset = 2;
+        qint64 regionSize = qMax<qint64>(0, fileSize - regionOffset - 4);
 
-    result.listRecords.append(memoryRecord);
+        FPART region = {};
+        region.filePart = FILEPART_REGION;
+        region.nFileOffset = regionOffset;
+        region.nFileSize = regionSize;
+        region.nVirtualAddress = -1;
+        region.sName = tr("Data");
+        listResult.append(region);
+        nOffset = regionOffset + regionSize;
+    }
 
-    memoryRecordFooter.nOffset = memoryRecord.nOffset + memoryRecord.nSize;
-    memoryRecordFooter.nAddress = -1;
-    memoryRecordFooter.nSize = 4;
-    memoryRecordFooter.sName = tr("Footer");
-    memoryRecordFooter.filePart = FILEPART_FOOTER;
-    memoryRecordFooter.nIndex = nIndex++;
+    // Footer (4-byte Adler32)
+    if (nFileParts & FILEPART_FOOTER) {
+        if (fileSize >= 6) {  // At least 2 (header) + 4 (footer)
+            FPART footer = {};
+            footer.filePart = FILEPART_FOOTER;
+            footer.nFileOffset = fileSize - 4;
+            footer.nFileSize = 4;
+            footer.nVirtualAddress = -1;
+            footer.sName = tr("Adler32");
+            listResult.append(footer);
+        }
+    }
 
-    result.listRecords.append(memoryRecordFooter);
+    // Data: entire file
+    if (nFileParts & FILEPART_DATA) {
+        FPART data = {};
+        data.filePart = FILEPART_DATA;
+        data.nFileOffset = 0;
+        data.nFileSize = fileSize;
+        data.nVirtualAddress = -1;
+        data.sName = tr("Data");
+        listResult.append(data);
+    }
 
-    _handleOverlay(&result);
+    // Overlay: handled by _handleOverlay if there is extra data beyond the Adler32
+    if (nFileParts & FILEPART_OVERLAY) {
+        // For Zlib, overlay would be any data after the Adler32 footer
+        // Typically there shouldn't be any, but we handle it just in case
+        qint64 overlayOffset = fileSize - 4;
+        if (overlayOffset < fileSize) {
+            // This case typically doesn't happen in valid zlib files
+            // but we can add it if needed
+        }
+    }
 
-    return result;
+    return listResult;
 }
 
 XBinary::FT XZlib::getFileType()

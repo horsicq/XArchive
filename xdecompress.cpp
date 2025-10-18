@@ -169,6 +169,12 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
         // bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_ASCII85) {
         bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZH5) {
+        bResult = XLZHDecoder::decompress(pState, 5, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZH6) {
+        bResult = XLZHDecoder::decompress(pState, 6, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZH7) {
+        bResult = XLZHDecoder::decompress(pState, 7, pPdStruct);
     } else if ((compressMethod == XBinary::COMPRESS_METHOD_RAR_15) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_20) ||
                (compressMethod == XBinary::COMPRESS_METHOD_RAR_29) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_50) ||
                (compressMethod == XBinary::COMPRESS_METHOD_RAR_70)) {

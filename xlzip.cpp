@@ -372,12 +372,39 @@ XBinary::ARCHIVERECORD XLzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pState)
-    Q_UNUSED(pDevice)
-    Q_UNUSED(pPdStruct)
+    bool bResult = false;
 
-    // Decompression would go here if a decoder is available
-    return false;
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    LZIP_UNPACK_CONTEXT *pContext = (LZIP_UNPACK_CONTEXT *)pState->pContext;
+
+    // Decompress entire lzip stream to output device
+    qint64 nFileSize = getSize();
+    SubDevice sd(getDevice(), pContext->nHeaderSize, pContext->nCompressedSize);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA);
+        state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = pDevice;
+        state.nInputOffset = 0;
+        state.nInputLimit = -1;
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
+
+        bResult = XLZMADecoder::decompress(&state, pPdStruct);
+
+        sd.close();
+    }
+
+    return bResult;
 }
 
 bool XLzip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

@@ -29,25 +29,33 @@ class XTGZ : public XArchive {
 
 public:
     explicit XTGZ(QIODevice *pDevice = nullptr);
-    ~XTGZ();
+    virtual ~XTGZ();
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
 
     void setDevice(QIODevice *pDevice);
 
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
-    virtual QString getFileFormatExt();
-    virtual QList<MAPMODE> getMapModesList();
-    virtual FT getFileType();
-    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
-    virtual QString getMIMEString();
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<RECORD> getRecords(qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QString getFileFormatExt() override;
+    virtual QList<MAPMODE> getMapModesList() override;
+    virtual FT getFileType() override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QString getMIMEString() override;
+
+    virtual bool initUnpack(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pUnpackState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
 
     XCompressedDevice *getCompressedDevice();
 
 private:
+    void _closeResources();
+
     XTAR *m_pXtar;
     XCompressedDevice *m_pCompressedDevice;
+    QIODevice *m_pDevice;
 };
 #endif  // XTGZ_H

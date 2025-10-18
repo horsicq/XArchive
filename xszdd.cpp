@@ -19,7 +19,7 @@
  * SOFTWARE.
  */
 #include "xszdd.h"
-#include "xdecompress.h"
+#include "Algos/xlzssdecoder.h"
 
 static XBinary::XCONVERT _TABLE_XSZDD_STRUCTID[] = {{XSZDD::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                     {XSZDD::STRUCTID_SZDD_HEADER, "SZDD_HEADER", QString("SZDD_HEADER")}};
@@ -32,12 +32,19 @@ XSZDD::~XSZDD()
 {
 }
 
+bool XSZDD::isValid(QIODevice *pDevice)
+{
+    XSZDD xszdd(pDevice);
+
+    return xszdd.isValid();
+}
+
 bool XSZDD::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
     if (getSize() > (qint64)sizeof(SZDD_HEADER)) {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
         if (compareSignature(&memoryMap, "'SZDD'88F027'3A'", 0, pPdStruct)) {
             bResult = true;
         }
@@ -169,8 +176,7 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         state.nDecompressedOffset = 0;
         state.nDecompressedLimit = -1;
 
-        XDecompress decompressor;
-        bool bResult = decompressor.decompress(&state, pPdStruct);
+        bool bResult = XLZSSDecoder::decompress(&state, pPdStruct);
 
         Q_UNUSED(bResult)
 
@@ -276,8 +282,7 @@ QList<XArchive::RECORD> XSZDD::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         state.nDecompressedOffset = 0;
         state.nDecompressedLimit = -1;
 
-        XDecompress decompressor;
-        bool bResult = decompressor.decompress(&state, pPdStruct);
+        bool bResult = XLZSSDecoder::decompress(&state, pPdStruct);
 
         Q_UNUSED(bResult)
 
@@ -298,4 +303,223 @@ QList<XArchive::RECORD> XSZDD::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     listResult.append(record);
 
     return listResult;
+}
+
+QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+
+    QList<FPART> listResult;
+
+    if (nFileParts & FILEPART_HEADER) {
+        FPART record = {};
+
+        record.filePart = FILEPART_HEADER;
+        record.nFileOffset = 0;
+        record.nFileSize = sizeof(SZDD_HEADER);
+        record.nVirtualAddress = -1;
+        record.sName = tr("Header");
+
+        listResult.append(record);
+    }
+
+    qint64 nTotalSize = getSize();
+    qint64 nDataOffset = sizeof(SZDD_HEADER);
+
+    if (nFileParts & FILEPART_REGION) {
+        if (nDataOffset < nTotalSize) {
+            FPART record = {};
+
+            record.filePart = FILEPART_REGION;
+            record.nFileOffset = nDataOffset;
+            record.nFileSize = nTotalSize - nDataOffset;
+            record.nVirtualAddress = -1;
+            record.sName = tr("Compressed Data");
+
+
+            listResult.append(record);
+        }
+    }
+
+    return listResult;
+}
+
+bool XSZDD::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (pState) {
+        // Validate SZDD file
+        if (!isValid(pPdStruct)) {
+            return false;
+        }
+
+        // Create and initialize context
+        SZDD_UNPACK_CONTEXT *pContext = new SZDD_UNPACK_CONTEXT;
+
+        // Read header
+        qint64 nOffset = 0;
+        SZDD_HEADER szddHeader = _read_SZDD_HEADER(nOffset);
+        nOffset += sizeof(SZDD_HEADER);
+
+        pContext->nHeaderSize = nOffset;
+        pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+        pContext->nUncompressedSize = szddHeader.uncompressed_size;
+
+        // Decompress to get actual compressed size
+        qint64 nFileSize = getSize();
+        SubDevice sd(getDevice(), nOffset, nFileSize - nOffset);
+
+        if (sd.open(QIODevice::ReadOnly)) {
+            XBinary::DECOMPRESS_STATE state = {};
+            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZSS_SZDD);
+            state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+            state.pDeviceInput = &sd;
+            state.pDeviceOutput = nullptr;
+            state.nInputOffset = 0;
+            state.nInputLimit = -1;
+            state.nDecompressedOffset = 0;
+            state.nDecompressedLimit = -1;
+
+            bool bDecompressResult = XLZSSDecoder::decompress(&state, pPdStruct);
+
+            if (bDecompressResult) {
+                pContext->nCompressedSize = state.nCountInput;
+                pContext->nUncompressedSize = state.nCountOutput;
+            } else {
+                pContext->nCompressedSize = nFileSize - nOffset;
+                pContext->nUncompressedSize = 0;
+            }
+
+            sd.close();
+        }
+
+        // Initialize state
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = getSize();
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 1;  // SZDD contains single compressed stream
+        pState->pContext = pContext;
+
+        bResult = true;
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD XSZDD::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext) {
+        return result;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    SZDD_UNPACK_CONTEXT *pContext = (SZDD_UNPACK_CONTEXT *)pState->pContext;
+
+    // Fill ARCHIVERECORD
+    result.nStreamOffset = pContext->nHeaderSize;
+    result.nStreamSize = pContext->nCompressedSize;
+    result.nDecompressedOffset = 0;
+    result.nDecompressedSize = pContext->nUncompressedSize;
+
+    // Set properties
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZSS_SZDD);
+
+    return result;
+}
+
+bool XSZDD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    SZDD_UNPACK_CONTEXT *pContext = (SZDD_UNPACK_CONTEXT *)pState->pContext;
+
+    // Decompress entire SZDD stream to output device
+    qint64 nFileSize = getSize();
+    SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        XBinary::DECOMPRESS_STATE state = {};
+        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZSS_SZDD);
+        state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+        state.pDeviceInput = &sd;
+        state.pDeviceOutput = pDevice;
+        state.nInputOffset = 0;
+        state.nInputLimit = -1;
+        state.nDecompressedOffset = 0;
+        state.nDecompressedLimit = -1;
+
+        bResult = XLZSSDecoder::decompress(&state, pPdStruct);
+
+        sd.close();
+    }
+
+    return bResult;
+}
+
+bool XSZDD::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    // Move to next record
+    pState->nCurrentIndex++;
+
+    // SZDD has only one record, so moving to next always returns false
+    // This indicates end of archive
+    bResult = false;
+
+    return bResult;
+}
+
+bool XSZDD::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    // Delete format-specific context
+    if (pState->pContext) {
+        SZDD_UNPACK_CONTEXT *pContext = (SZDD_UNPACK_CONTEXT *)pState->pContext;
+        delete pContext;
+        pState->pContext = nullptr;
+    }
+
+    // Reset state fields
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+
+    return true;
 }

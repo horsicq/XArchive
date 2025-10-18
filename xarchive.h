@@ -31,6 +31,11 @@
 #include "xcompress.h"
 #include "Algos/xlzhdecoder.h"
 #include "Algos/xrardecoder.h"
+#include "Algos/xstoredecoder.h"
+#include "Algos/xdeflatedecoder.h"
+#include "Algos/xbzip2decoder.h"
+#include "Algos/xlzmadecoder.h"
+#include "Algos/xlzssdecoder.h"
 
 class XArchive : public XBinary {
     Q_OBJECT

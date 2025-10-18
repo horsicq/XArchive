@@ -149,3 +149,102 @@ bool XLZMADecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBina
 
     return bResult;
 }
+
+bool XLZMADecoder::decompressLZMA2(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    const qint32 N_BUFFER_SIZE = 0x4000;
+
+    char bufferIn[N_BUFFER_SIZE];
+    char bufferOut[N_BUFFER_SIZE];
+
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
+        if (pDecompressState->pDeviceInput) {
+            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+        }
+
+        if (pDecompressState->pDeviceOutput) {
+            pDecompressState->pDeviceOutput->seek(0);
+        }
+
+        if (pDecompressState->nInputLimit >= 1) {
+            // Read LZMA2 properties (1 byte)
+            char propByte = 0;
+            qint32 nPropsRead = XBinary::_readDevice(&propByte, 1, pDecompressState);
+
+            if (nPropsRead == 1) {
+                // LZMA2 state
+                CLzma2Dec state = {};
+                SRes ret = Lzma2Dec_Allocate(&state, (Byte)propByte, &g_Alloc);
+
+                if (ret == 0)  // S_OK
+                {
+                    Lzma2Dec_Init(&state);
+                    bResult = true;  // Assume success, set to false on error
+                    ELzmaStatus lastStatus = LZMA_STATUS_NOT_FINISHED;
+
+                    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                        qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
+                        qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
+
+                        // Process available input
+                        qint64 nPos = 0;
+                        bool bContinueReading = true;
+
+                        while (bContinueReading && nPos < nSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+                            ELzmaStatus status;
+                            SizeT inProcessed = nSize - nPos;
+                            SizeT outProcessed = N_BUFFER_SIZE;
+
+                            ret = Lzma2Dec_DecodeToBuf(&state, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
+
+                            if (ret != 0) {  // Check for decompression error
+                                bResult = false;
+                                bContinueReading = false;
+                                break;
+                            }
+
+                            nPos += inProcessed;
+
+                            if (outProcessed > 0) {
+                                if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pDecompressState)) {
+                                    bResult = false;
+                                    bContinueReading = false;
+                                    break;
+                                }
+                            }
+
+                            lastStatus = status;
+
+                            if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
+                                // Decompression completed successfully
+                                bContinueReading = false;
+                                break;
+                            }
+
+                            // If we couldn't process any input, stop
+                            if (inProcessed == 0) {
+                                break;
+                            }
+                        }
+
+                        // If we got stream end mark, stop reading more
+                        if (lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) {
+                            break;
+                        }
+
+                        // If no data was read, we're done
+                        if (nSize == 0) {
+                            break;
+                        }
+                    }
+
+                    Lzma2Dec_Free(&state, &g_Alloc);
+                }
+            }
+        }
+    }
+
+    return bResult;
+}

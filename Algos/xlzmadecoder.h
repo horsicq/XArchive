@@ -23,6 +23,7 @@
 
 #include "xbinary.h"
 #include "LzmaDec.h"
+#include "Lzma2Dec.h"
 
 class XLZMADecoder : public QObject {
     Q_OBJECT
@@ -30,6 +31,7 @@ class XLZMADecoder : public QObject {
 public:
     explicit XLZMADecoder(QObject *parent = nullptr);
     static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompressLZMA2(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XLZMADECODER_H

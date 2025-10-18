@@ -42,6 +42,7 @@ public:
     virtual QString getFileFormatExtsString();
     virtual QString getMIMEString();
     virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct);
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Streaming unpacking API
     virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;

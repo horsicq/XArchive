@@ -66,38 +66,23 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 
     if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_STORE) {
-        const qint32 CHUNK = DECOMPRESS_BUFFERSIZE;
-        char buffer[CHUNK];
-        qint64 nSize = pDecompressStruct->pSourceDevice->size();
+        XBinary::DECOMPRESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
 
-        result = COMPRESS_RESULT_OK;
-
-        while (nSize > 0) {
-            qint64 nTemp = qMin((qint64)CHUNK, nSize);
-
-            if (pDecompressStruct->pSourceDevice->read(buffer, nTemp) != nTemp) {
-                result = COMPRESS_RESULT_READERROR;
-                break;
-            }
-
-            if (!_writeToDevice((char *)buffer, nTemp, pDecompressStruct)) {
-                result = COMPRESS_RESULT_WRITEERROR;
-                break;
-            }
-
-            if (pPdStruct->bIsStop) {
-                break;
-            }
-
-            nSize -= nTemp;
-            pDecompressStruct->nInSize += nTemp;
-            pDecompressStruct->nOutSize += nTemp;
-
-            if ((pDecompressStruct->nDecompressedLimit != -1) &&
-                ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedLimit) < pDecompressStruct->nOutSize)) {
-                pDecompressStruct->bLimit = true;
-                break;
-            }
+        if (XStoreDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
+            result = COMPRESS_RESULT_OK;
+        } else {
+            result = decompressState.bReadError ? COMPRESS_RESULT_READERROR : COMPRESS_RESULT_DATAERROR;
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_PPMD) {
         // TODO Check
@@ -126,258 +111,83 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         }
 #endif
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_DEFLATE) {
-        const qint32 CHUNK = DECOMPRESS_BUFFERSIZE;
+        XBinary::DECOMPRESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
 
-        unsigned char in[CHUNK];
-        unsigned char out[CHUNK];
-
-        z_stream strm;
-
-        strm.zalloc = nullptr;
-        strm.zfree = nullptr;
-        strm.opaque = nullptr;
-        strm.avail_in = 0;
-        strm.next_in = nullptr;
-
-        qint32 ret = Z_OK;
-        result = COMPRESS_RESULT_OK;
-
-        if (inflateInit2(&strm, -MAX_WBITS) == Z_OK)  // -MAX_WBITS for raw data
-        {
-            do {
-                strm.avail_in = pDecompressStruct->pSourceDevice->read((char *)in, CHUNK);
-
-                if (strm.avail_in == 0) {
-                    ret = Z_ERRNO;
-                    break;
-                }
-
-                strm.next_in = in;
-
-                do {
-                    strm.total_in = 0;
-                    strm.total_out = 0;
-                    strm.avail_out = CHUNK;
-                    //                    strm.avail_out=1;
-                    strm.next_out = out;
-                    ret = inflate(&strm, Z_NO_FLUSH);
-                    //                    ret=inflate(&strm,Z_SYNC_FLUSH);
-
-                    if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT)) {
-                        break;
-                    }
-
-                    qint32 nTemp = CHUNK - strm.avail_out;
-
-                    if (!_writeToDevice((char *)out, nTemp, pDecompressStruct)) {
-                        ret = Z_DATA_ERROR;
-                        break;
-                    }
-
-                    pDecompressStruct->nInSize += strm.total_in;
-                    pDecompressStruct->nOutSize += strm.total_out;
-
-                    if ((pDecompressStruct->nDecompressedLimit != -1) &&
-                        ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedLimit) < pDecompressStruct->nOutSize)) {
-                        pDecompressStruct->bLimit = true;
-                        ret = Z_STREAM_END;
-                        break;
-                    }
-                } while (strm.avail_out == 0);
-
-                if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
-                    break;
-                }
-
-                if (pPdStruct->bIsStop) {
-                    break;
-                }
-            } while (ret != Z_STREAM_END);
-
-            inflateEnd(&strm);
-
-            if ((ret == Z_OK) || (ret == Z_STREAM_END))  // TODO Check Z_OK
-            {
-                result = COMPRESS_RESULT_OK;
-            } else if (ret == Z_BUF_ERROR) {
-                result = COMPRESS_RESULT_BUFFERERROR;
-            } else if (ret == Z_MEM_ERROR) {
-                result = COMPRESS_RESULT_MEMORYERROR;
-            } else if (ret == Z_DATA_ERROR) {
-                result = COMPRESS_RESULT_DATAERROR;
+        if (XDeflateDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
+            result = COMPRESS_RESULT_OK;
+        } else {
+            if (decompressState.bReadError) {
+                result = COMPRESS_RESULT_READERROR;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
             } else {
-                result = COMPRESS_RESULT_UNKNOWN;
+                result = COMPRESS_RESULT_DATAERROR;
             }
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_BZIP2) {
-        const qint32 CHUNK = DECOMPRESS_BUFFERSIZE;
+        XBinary::DECOMPRESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
 
-        char in[CHUNK];
-        char out[CHUNK];
-
-        bz_stream strm = {};
-        qint32 ret = BZ_MEM_ERROR;
-        result = COMPRESS_RESULT_OK;
-
-        qint32 rc = BZ2_bzDecompressInit(&strm, 0, 0);
-
-        if (rc == BZ_OK) {
-            do {
-                strm.avail_in = pDecompressStruct->pSourceDevice->read((char *)in, CHUNK);
-
-                if (strm.avail_in == 0) {
-                    ret = BZ_MEM_ERROR;
-                    break;
-                }
-
-                strm.next_in = in;
-
-                do {
-                    strm.total_in_hi32 = 0;
-                    strm.total_in_lo32 = 0;
-                    strm.total_out_hi32 = 0;
-                    strm.total_out_lo32 = 0;
-                    strm.avail_out = CHUNK;
-                    strm.next_out = out;
-                    ret = BZ2_bzDecompress(&strm);
-
-                    if ((ret != BZ_STREAM_END) && (ret != BZ_OK)) {
-                        break;
-                    }
-
-                    qint32 nTemp = CHUNK - strm.avail_out;
-
-                    if (!_writeToDevice((char *)out, nTemp, pDecompressStruct)) {
-                        ret = BZ_MEM_ERROR;
-                        break;
-                    }
-
-                    pDecompressStruct->nInSize += strm.total_in_lo32;
-                    pDecompressStruct->nOutSize += strm.total_out_lo32;
-
-                    if ((pDecompressStruct->nDecompressedLimit != -1) &&
-                        ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedLimit) < pDecompressStruct->nOutSize)) {
-                        pDecompressStruct->bLimit = true;
-                        ret = BZ_STREAM_END;
-                        break;
-                    }
-                } while (strm.avail_out == 0);
-
-                if (ret != BZ_OK) {
-                    break;
-                }
-
-                if (pPdStruct->bIsStop) {
-                    break;
-                }
-            } while (ret != BZ_STREAM_END);
-
-            BZ2_bzDecompressEnd(&strm);
-        }
-
-        // TODO more error codes
-        if ((ret == BZ_OK) || (ret == BZ_STREAM_END)) {
+        if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
             result = COMPRESS_RESULT_OK;
-        } else if (ret == BZ_MEM_ERROR) {
-            result = COMPRESS_RESULT_DATAERROR;
         } else {
-            result = COMPRESS_RESULT_UNKNOWN;
+            if (decompressState.bReadError) {
+                result = COMPRESS_RESULT_READERROR;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
+            } else {
+                result = COMPRESS_RESULT_DATAERROR;
+            }
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZMA) {
-        result = COMPRESS_RESULT_OK;
+        XBinary::DECOMPRESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
 
-        // TODO more error codes
-        qint32 nPropSize = 0;
-        char header1[4] = {};
-        quint8 properties[32] = {};
-
-        pDecompressStruct->pSourceDevice->read(header1, sizeof(header1));
-        nPropSize = header1[2];  // TODO Check
-
-        if (nPropSize && (nPropSize < 30)) {
-            pDecompressStruct->pSourceDevice->read((char *)properties, nPropSize);
-
-            CLzmaDec state = {};
-
-            SRes ret = LzmaProps_Decode(&state.prop, (Byte *)properties, nPropSize);
-
-            if (ret == 0)  // S_OK
-            {
-                LzmaDec_Construct(&state);
-                ret = LzmaDec_Allocate(&state, (Byte *)properties, nPropSize, &g_Alloc);
-
-                if (ret == 0)  // S_OK
-                {
-                    LzmaDec_Init(&state);
-
-                    const qint32 CHUNK = DECOMPRESS_BUFFERSIZE;
-
-                    char in[CHUNK];
-                    char out[CHUNK];
-
-                    bool bRun = true;
-
-                    while (bRun) {
-                        qint32 nSize = pDecompressStruct->pSourceDevice->read((char *)in, CHUNK);
-
-                        if (nSize) {
-                            qint64 nPos = 0;
-
-                            while (true) {
-                                ELzmaStatus status;
-                                SizeT inProcessed = nSize - nPos;
-                                SizeT outProcessed = CHUNK;
-
-                                ret = LzmaDec_DecodeToBuf(&state, (Byte *)out, &outProcessed, (Byte *)(in + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
-
-                                // TODO Check ret
-
-                                nPos += inProcessed;
-
-                                if (!_writeToDevice((char *)out, (qint32)outProcessed, pDecompressStruct)) {
-                                    result = COMPRESS_RESULT_WRITEERROR;
-                                    bRun = false;
-                                    break;
-                                }
-
-                                if (status != LZMA_STATUS_NOT_FINISHED) {
-                                    if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
-                                        result = COMPRESS_RESULT_OK;
-                                        bRun = false;
-                                    }
-
-                                    break;
-                                }
-
-                                pDecompressStruct->nInSize += inProcessed;
-                                pDecompressStruct->nOutSize += outProcessed;
-
-                                if ((pDecompressStruct->nDecompressedLimit != -1) &&
-                                    ((pDecompressStruct->nDecompressedOffset + pDecompressStruct->nDecompressedLimit) < pDecompressStruct->nOutSize)) {
-                                    pDecompressStruct->bLimit = true;
-                                    result = COMPRESS_RESULT_OK;
-                                    bRun = false;
-                                    break;
-                                }
-                            }
-                        } else {
-                            result = COMPRESS_RESULT_READERROR;
-                            bRun = false;
-                        }
-
-                        if (pPdStruct->bIsStop) {
-                            bRun = false;
-                        }
-                    }
-                }
-
-                LzmaDec_Free(&state, &g_Alloc);
+        if (XLZMADecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
+            result = COMPRESS_RESULT_OK;
+        } else {
+            if (decompressState.bReadError) {
+                result = COMPRESS_RESULT_READERROR;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
+            } else {
+                result = COMPRESS_RESULT_DATAERROR;
             }
         }
     } else if ((pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH5) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH6) ||
                (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH7)) {
         qint32 nMethod = 5;
-        qint32 nBufferSize = 1U << 17;
 
         if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH5) {
             nMethod = 5;
@@ -387,62 +197,29 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             nMethod = 7;
         }
 
-        XLZHDecoder::lzh_stream strm = {};
+        XBinary::DECOMPRESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, pDecompressStruct->spInfo.compressMethod);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
 
-        qint32 ret = LZH_ARCHIVE_OK;
-
-        //        qDebug("Size: %lld", pSourceDevice->size());
-
-        //        if (pSourceDevice->size() > 25000) {
-        //            ret = ARCHIVE_OK;
-        //        }
-
-        unsigned char *pInBuffer = (unsigned char *)malloc(nBufferSize);
-
-        result = COMPRESS_RESULT_OK;
-
-        if (XLZHDecoder::lzh_decode_init(&strm, nMethod)) {
-            strm.avail_in = pDecompressStruct->pSourceDevice->read((char *)pInBuffer, nBufferSize);  // We read from Device so if size < nBufferSize is OK
-
-            if (strm.avail_in) {
-                strm.next_in = pInBuffer;
-
-                strm.total_in = 0;
-                strm.avail_out = 0;
-                // strm.ref_ptr = out;
-
-                while (isPdStructNotCanceled(pPdStruct)) {
-                    ret = XLZHDecoder::lzh_decode(&strm, true);
-
-                    if (ret == LZH_ARCHIVE_FAILED) {
-                        break;
-                    }
-
-                    if (!_writeToDevice((char *)strm.ref_ptr, strm.avail_out, pDecompressStruct)) {
-                        ret = LZH_ARCHIVE_FATAL;
-                        break;
-                    }
-
-                    if (strm.avail_in == 0) {
-                        break;
-                    }
-                }
-
-                pDecompressStruct->nInSize += strm.total_in;
-                pDecompressStruct->nOutSize += strm.total_out;
-
-                // if ((nDecompressedSize != -1) && ((nDecompressedOffset + nDecompressedSize) < *pnOutSize)) {
-                //     break;
-                // }
-            }
-
-            XLZHDecoder::lzh_decode_free(&strm);
-        }
-
-        free(pInBuffer);
-
-        if (ret == LZH_ARCHIVE_OK) {
+        if (XLZHDecoder::decompress(&decompressState, nMethod, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
             result = COMPRESS_RESULT_OK;
+        } else {
+            if (decompressState.bReadError) {
+                result = COMPRESS_RESULT_READERROR;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
+            } else {
+                result = COMPRESS_RESULT_DATAERROR;
+            }
         }
     } else if ((pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_15) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_20) ||
                (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_29) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_50) ||
@@ -465,107 +242,28 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             }
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZSS_SZDD) {
-        result = COMPRESS_RESULT_OK;
+        XBinary::DECOMPRESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZSS_SZDD);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
 
-        quint8 window[4096];
-        memset(window, 0x20, 4096);
-        int pos = 4096 - 16;
-
-        qint64 nUnpackedLength = pDecompressStruct->spInfo.nUncompressedSize;
-
-        pDecompressStruct->nInSize = 0;
-        pDecompressStruct->nOutSize = 0;
-
-        while ((pDecompressStruct->nOutSize < nUnpackedLength) && isPdStructNotCanceled(pPdStruct)) {
-            quint8 control = 0;
-
-            if (pDecompressStruct->pSourceDevice->read((char *)&control, 1) != 1) {
+        if (XLZSSDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
+            result = COMPRESS_RESULT_OK;
+        } else {
+            if (decompressState.bReadError) {
                 result = COMPRESS_RESULT_READERROR;
-                break;
-            }
-
-            pDecompressStruct->nInSize++;
-
-            for (quint32 cbit = 0x01; (cbit & 0xFF) && isPdStructNotCanceled(pPdStruct); cbit <<= 1) {
-                if (pDecompressStruct->nOutSize >= nUnpackedLength) break;
-                if (control & cbit) {
-                    // literal
-                    quint8 ch = 0;
-
-                    if (pDecompressStruct->pSourceDevice->read((char *)&ch, 1) != 1) {
-                        result = COMPRESS_RESULT_READERROR;
-                        break;
-                    }
-
-                    window[pos] = ch;
-                    pDecompressStruct->nInSize++;
-
-                    pos++;
-                    pos &= 4095;
-
-                    if (pDecompressStruct->pDestDevice) {
-                        if (!_writeToDevice((char *)&ch, 1, pDecompressStruct)) {
-                            result = COMPRESS_RESULT_WRITEERROR;
-                            break;
-                        }
-                    }
-                    pDecompressStruct->nOutSize++;
-                } else {
-                    // match
-                    quint32 matchpos = 0;
-                    quint32 matchlen = 0;
-
-                    quint8 value1 = 0;
-
-                    if (pDecompressStruct->pSourceDevice->read((char *)&value1, 1) != 1) {
-                        result = COMPRESS_RESULT_READERROR;
-                        break;
-                    }
-
-                    matchpos = value1;
-
-                    pDecompressStruct->nInSize++;
-
-                    quint8 value2 = 0;
-
-                    if (pDecompressStruct->pSourceDevice->read((char *)&value2, 1) != 1) {
-                        result = COMPRESS_RESULT_READERROR;
-                        break;
-                    }
-
-                    matchlen = value2;
-
-                    pDecompressStruct->nInSize++;
-
-                    matchpos |= (value2 & 0xF0) << 4;
-                    matchlen = (value2 & 0x0F) + 3;
-
-                    for (; (matchlen--) && (pDecompressStruct->nOutSize < nUnpackedLength) && isPdStructNotCanceled(pPdStruct);) {
-                        quint8 ch = window[matchpos];
-                        window[pos] = ch;
-
-                        if (pDecompressStruct->pDestDevice) {
-                            if (!_writeToDevice((char *)&ch, 1, pDecompressStruct)) {
-                                result = COMPRESS_RESULT_WRITEERROR;
-                                break;
-                            }
-                        }
-
-                        pDecompressStruct->nOutSize++;
-                        matchpos++;
-                        matchpos &= 4095;
-                        pos++;
-                        pos &= 4095;
-                    }
-
-                    if ((result == COMPRESS_RESULT_READERROR) || (result == COMPRESS_RESULT_WRITEERROR)) {
-                        break;
-                    }
-                }
-            }
-
-            if ((result == COMPRESS_RESULT_READERROR) || (result == COMPRESS_RESULT_WRITEERROR)) {
-                break;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
+            } else {
+                result = COMPRESS_RESULT_DATAERROR;
             }
         }
     }
