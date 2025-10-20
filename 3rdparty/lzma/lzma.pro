@@ -21,9 +21,7 @@ unix:macx {
 
 SOURCES += \
     $$PWD/src/LzmaDec.c \
-    $$PWD/src/Lzma2Dec.c \
-    $$PWD/src/Ppmd7.c \
-    $$PWD/src/Ppmd7Dec.c
+    $$PWD/src/Lzma2Dec.c
 
 TARGETLIB_PATH = $$PWD
 
