@@ -793,7 +793,8 @@ private:
 
 public:
     // rar_Unpack(ComprDataIO *DataIO);
-    rar_Unpack(QIODevice *pDeviceInput, QIODevice *pDeviceOut);
+    rar_Unpack();
+    void setDevices(QIODevice *pDeviceInput, QIODevice *pDeviceOut);
     ~rar_Unpack();
     qint32 Init(quint64 WinSize, bool Solid);
     void AllowLargePages(bool Allow)

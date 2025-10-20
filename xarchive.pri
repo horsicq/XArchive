@@ -23,6 +23,7 @@ HEADERS += \
     $$PWD/xarchive.h \
     $$PWD/xcab.h \
     $$PWD/xcfbf.h \
+    $$PWD/xcpio.h \
     $$PWD/xcompress.h \
     $$PWD/xdecompress.h \
     $$PWD/xcompresseddevice.h \
@@ -30,11 +31,13 @@ HEADERS += \
     $$PWD/xdos16.h \
     $$PWD/xgzip.h \
     $$PWD/xipa.h \
+    $$PWD/xiso9660.h \
     $$PWD/xjar.h \
     $$PWD/xlha.h \
     $$PWD/xmachofat.h \
     $$PWD/xrar.h \
     $$PWD/xsevenzip.h \
+    $$PWD/xsquashfs.h \
     $$PWD/xtar.h \
     $$PWD/xtgz.h \
     $$PWD/xzip.h \
@@ -65,6 +68,7 @@ SOURCES += \
     $$PWD/xarchive.cpp \
     $$PWD/xcab.cpp \
     $$PWD/xcfbf.cpp \
+    $$PWD/xcpio.cpp \
     $$PWD/xcompress.cpp \
     $$PWD/xdecompress.cpp \
     $$PWD/xcompresseddevice.cpp \
@@ -72,11 +76,13 @@ SOURCES += \
     $$PWD/xdos16.cpp \
     $$PWD/xgzip.cpp \
     $$PWD/xipa.cpp \
+    $$PWD/xiso9660.cpp \
     $$PWD/xjar.cpp \
     $$PWD/xlha.cpp \
     $$PWD/xmachofat.cpp \
     $$PWD/xrar.cpp \
     $$PWD/xsevenzip.cpp \
+    $$PWD/xsquashfs.cpp \
     $$PWD/xtar.cpp \
     $$PWD/xtgz.cpp \
     $$PWD/xzip.cpp \

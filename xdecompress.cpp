@@ -179,7 +179,8 @@ bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUC
                (compressMethod == XBinary::COMPRESS_METHOD_RAR_29) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_50) ||
                (compressMethod == XBinary::COMPRESS_METHOD_RAR_70)) {
         bool bIsSolid = false;
-        rar_Unpack rarUnpack(pState->pDeviceInput, pState->pDeviceOutput);
+        rar_Unpack rarUnpack;
+        rarUnpack.setDevices(pState->pDeviceInput, pState->pDeviceOutput);
         qint32 nInit = rarUnpack.Init(nWindowSize, bIsSolid);
 
         if (nInit > 0) {

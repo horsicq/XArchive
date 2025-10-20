@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xrar.h"
+#include "Algos/xrardecoder.h"
 
 XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                             {XRar::STRUCTID_RAR14_SIGNATURE, "RAR14_SIGNATURE", QString("RAR 1.4 signature")},
@@ -140,6 +141,12 @@ QList<XArchive::RECORD> XRar::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         qint64 nCurrentOffset = nFileHeaderSize;
 
         if (nVersion == 4) {
+            // Skip the ARCHIVE header block for RAR4 - SAME AS IN initUnpack()
+            GENERICBLOCK4 archiveBlock = readGenericBlock4(nCurrentOffset);
+            if (archiveBlock.nType == BLOCKTYPE4_ARCHIVE && archiveBlock.nHeaderSize > 0) {
+                nCurrentOffset += archiveBlock.nHeaderSize;
+            }
+
             while (isPdStructNotCanceled(pPdStruct)) {
                 if (nCurrentOffset <= (nTotalSize - sizeof(GENERICBLOCK4))) {
                     GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
@@ -373,26 +380,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.nFileSize = nFileSize;
                             record.nVirtualAddress = -1;
                             record.sName = "Stream";
-                            record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileBlock4.sFileName);
-                            record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nFileSize);
-                            record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUnpSize);
-                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
-                            record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileBlock4.fileCRC);
-
-                            COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
-
-                            if (fileBlock4.method == RAR_METHOD_STORE) {
-                                compressMethod = COMPRESS_METHOD_STORE;
-                            } else if (fileBlock4.unpVer == 15) {
-                                compressMethod = COMPRESS_METHOD_RAR_15;
-                                record.mapProperties.insert(FPART_PROP_WINDOWSIZE, 0x10000);
-                            } else if ((fileBlock4.unpVer == 20) || (fileBlock4.unpVer == 26)) {
-                                compressMethod = COMPRESS_METHOD_RAR_20;
-                            } else if (fileBlock4.unpVer == 29) {
-                                compressMethod = COMPRESS_METHOD_RAR_29;
-                            }
-
-                            record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, compressMethod);
+                            record.mapProperties = _readProperties(fileBlock4);
 
                             listResult.append(record);
                         }
@@ -437,28 +425,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                         record.sName = "Stream";
                         if (genericHeader.nType == HEADERTYPE5_FILE) {
                             FILEHEADER5 fileHeader5 = readFileHeader5(nCurrentOffset);
-                            record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileHeader5.sFileName);
-                            record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, fileHeader5.nDataSize);
-                            record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, fileHeader5.nUnpackedSize);
-                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
-                            record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileHeader5.nCRC32);
-
-                            quint8 _nVer = fileHeader5.nCompInfo & 0x003f;
-                            quint8 _nMethod = (fileHeader5.nCompInfo >> 7) & 7;
-
-                            COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
-
-                            if (_nMethod == RAR5_METHOD_STORE) {
-                                compressMethod = COMPRESS_METHOD_STORE;
-                            } else if (_nVer == 0) {
-                                compressMethod = COMPRESS_METHOD_RAR_50;
-                            } else if (_nVer == 1) {
-                                compressMethod = COMPRESS_METHOD_RAR_70;
-                            } else {
-                                compressMethod = COMPRESS_METHOD_UNKNOWN;
-                            }
-
-                            record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, compressMethod);
+                            record.mapProperties = _readProperties(fileHeader5);
                         }
 
                         listResult.append(record);
@@ -1167,13 +1134,28 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
     qint64 nFileHeaderSize = (pContext->nVersion == 4) ? 7 : 8;
     qint64 nCurrentOffset = nFileHeaderSize;
     
+#ifdef QT_DEBUG
+    qDebug() << "XRar::initUnpack() - Version:" << pContext->nVersion << "FileHeaderSize:" << nFileHeaderSize << "ArchiveSize:" << pUnpackState->nTotalSize;
+#endif
+    
     // Skip the ARCHIVE header block for RAR4
     if (pContext->nVersion == 4) {
         GENERICBLOCK4 archiveBlock = readGenericBlock4(nCurrentOffset);
+#ifdef QT_DEBUG
+        qDebug() << "XRar::initUnpack() - ARCHIVE Block - Type: 0x" + QString::number(archiveBlock.nType, 16) 
+                 << "Size:" << archiveBlock.nHeaderSize << "Flags: 0x" + QString::number(archiveBlock.nFlags, 16);
+#endif
+        
         if (archiveBlock.nType == BLOCKTYPE4_ARCHIVE && archiveBlock.nHeaderSize > 0) {
             nCurrentOffset += archiveBlock.nHeaderSize;
+#ifdef QT_DEBUG
+            qDebug() << "XRar::initUnpack() - ARCHIVE Block processed, next offset:" << nCurrentOffset;
+#endif
         } else if (archiveBlock.nHeaderSize == 0) {
             // Failed to read - file is too small or corrupted
+#ifdef QT_DEBUG
+            qDebug() << "XRar::initUnpack() - ERROR: ARCHIVE Block header size is 0";
+#endif
             delete pContext;
             return false;
         }
@@ -1181,11 +1163,29 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 
     // Scan archive and collect file offsets
     if (pContext->nVersion == 4) {
+        qint32 nBlockCount = 0;
         while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+            if (nCurrentOffset >= pUnpackState->nTotalSize) {
+#ifdef QT_DEBUG
+                qDebug() << "XRar::initUnpack() - Reached end of file at offset:" << nCurrentOffset;
+#endif
+                break;
+            }
+            
             GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+            
+#ifdef QT_DEBUG
+            qDebug() << "XRar::initUnpack() - Block #" << nBlockCount << "at offset:" << nCurrentOffset 
+                     << "Type: 0x" + QString::number(genericBlock.nType, 16) 
+                     << "Size:" << genericBlock.nHeaderSize << "Flags: 0x" + QString::number(genericBlock.nFlags, 16);
+#endif
             
             // Check for read failure or invalid block
             if (genericBlock.nHeaderSize == 0 || genericBlock.nType < 0x72 || genericBlock.nType > 0x7B) {
+#ifdef QT_DEBUG
+                qDebug() << "XRar::initUnpack() - Invalid block: HeaderSize=" << genericBlock.nHeaderSize 
+                         << "Type=0x" + QString::number(genericBlock.nType, 16);
+#endif
                 break;
             }
 
@@ -1194,8 +1194,16 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
                 
                 // Verify we read a valid block
                 if (fileBlock.genericBlock4.nHeaderSize == 0) {
+#ifdef QT_DEBUG
+                    qDebug() << "XRar::initUnpack() - Failed to read FILE block at offset:" << nCurrentOffset;
+#endif
                     break;  // Failed to read file block
                 }
+                
+#ifdef QT_DEBUG
+                qDebug() << "XRar::initUnpack() - Found FILE: " << fileBlock.sFileName 
+                         << "Size:" << fileBlock.unpSize << "Packed:" << fileBlock.packSize;
+#endif
                 
                 pContext->listFileOffsets.append(nCurrentOffset);
                 pContext->listFileBlocks4.append(fileBlock);
@@ -1212,9 +1220,17 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
             }
 
             if (genericBlock.nType == BLOCKTYPE4_END) {
+#ifdef QT_DEBUG
+                qDebug() << "XRar::initUnpack() - Found END block";
+#endif
                 break;
             }
+            
+            nBlockCount++;
         }
+#ifdef QT_DEBUG
+        qDebug() << "XRar::initUnpack() - Total blocks processed:" << nBlockCount << "Files found:" << pUnpackState->nNumberOfRecords;
+#endif
     } else if (pContext->nVersion == 5) {
         while (XBinary::isPdStructNotCanceled(pPdStruct)) {
             GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
@@ -1271,15 +1287,7 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
         record.nDecompressedOffset = 0;
         record.nDecompressedSize = nUnpSize;
 
-        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileBlock.sFileName);
-        record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, fileBlock.method);
-        record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileBlock.fileCRC);
-
-        // Extract DOS date and time from 32-bit fileTime field (date in high word, time in low word)
-        quint16 nDosTime = fileBlock.fileTime & 0xFFFF;
-        quint16 nDosDate = (fileBlock.fileTime >> 16) & 0xFFFF;
-        QDateTime dateTime = XBinary::dosDateTimeToQDateTime(nDosDate, nDosTime);
-        record.mapProperties.insert(FPART_PROP_DATETIME, dateTime);
+        record.mapProperties = _readProperties(fileBlock);
 
     } else if (pContext->nVersion == 5) {
         const FILEHEADER5 &fileHeader = pContext->listFileHeaders5.at(nIndex);
@@ -1289,19 +1297,7 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
         record.nDecompressedOffset = 0;
         record.nDecompressedSize = fileHeader.nUnpackedSize;
 
-        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, fileHeader.sFileName);
-
-        quint8 nMethod = (fileHeader.nCompInfo & 0x3F);
-        record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, nMethod);
-
-        if (fileHeader.nFileFlags & 0x0004) {
-            record.mapProperties.insert(FPART_PROP_CRC_VALUE, fileHeader.nDataCRC32);
-        }
-
-        if (fileHeader.nFileFlags & 0x0002) {
-            QDateTime dateTime = QDateTime::fromSecsSinceEpoch(fileHeader.nMTime);
-            record.mapProperties.insert(FPART_PROP_DATETIME, dateTime);
-        }
+        record.mapProperties = _readProperties(fileHeader);
     }
 
     return record;
@@ -1320,26 +1316,53 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
     }
 
     ARCHIVERECORD record = infoCurrent(pUnpackState, pPdStruct);
-    quint8 nMethod = record.mapProperties.value(FPART_PROP_COMPRESSMETHOD).toUInt();
+    COMPRESS_METHOD compressMethod = (COMPRESS_METHOD)record.mapProperties.value(FPART_PROP_COMPRESSMETHOD).toUInt();
+
 
     RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
 
-    // Only support STORE method (no compression)
-    if (pContext->nVersion == 4) {
-        if (nMethod != RAR_METHOD_STORE) {
-            return false;  // Compressed files not supported
+    bool bResult = false;
+    // For solid archives: first file is not solid (bIsSolid=false), subsequent files are solid (bIsSolid=true)
+    bool bIsSolid = (pUnpackState->nCurrentIndex > 0);
+
+    SubDevice sd(getDevice(), record.nStreamOffset, record.nStreamSize);
+
+    if (sd.open(QIODevice::ReadOnly)) {
+        if (compressMethod == COMPRESS_METHOD_STORE) {
+            qint64 nDataOffset = record.nStreamOffset;
+            qint64 nDataSize = record.nStreamSize;
+
+            bResult = XBinary::copyDeviceMemory(getDevice(), nDataOffset, pOutputDevice, 0, nDataSize); // TODO
+        } else if ((compressMethod == COMPRESS_METHOD_RAR_15) ||
+                   (compressMethod == COMPRESS_METHOD_RAR_20) ||
+                   (compressMethod == COMPRESS_METHOD_RAR_29) ||
+                   (compressMethod == COMPRESS_METHOD_RAR_50) ||
+                   (compressMethod == COMPRESS_METHOD_RAR_70)) {
+
+            qint32 nWindowSize = record.mapProperties.value(FPART_PROP_WINDOWSIZE).toInt();
+
+            pContext->rarUnpacker.setDevices(&sd, pOutputDevice);
+            qint32 nInit = pContext->rarUnpacker.Init(nWindowSize, bIsSolid);
+
+            if (nInit > 0) {
+                if (compressMethod == COMPRESS_METHOD_RAR_15) {
+                    pContext->rarUnpacker.Unpack15(bIsSolid, pPdStruct);
+                    bResult = true;
+                } else if (compressMethod == COMPRESS_METHOD_RAR_20) {
+                    pContext->rarUnpacker.Unpack20(bIsSolid, pPdStruct);
+                    bResult = true;
+                } else if (compressMethod == COMPRESS_METHOD_RAR_29) {
+                    pContext->rarUnpacker.Unpack29(bIsSolid, pPdStruct);
+                    bResult = true;
+                } else if ((compressMethod == COMPRESS_METHOD_RAR_50) || (compressMethod == COMPRESS_METHOD_RAR_70)) {
+                    pContext->rarUnpacker.Unpack5(bIsSolid, pPdStruct);
+                    bResult = true;
+                }
+            }
         }
-    } else if (pContext->nVersion == 5) {
-        if (nMethod != RAR5_METHOD_STORE) {
-            return false;  // Compressed files not supported
-        }
+
+        sd.close();
     }
-
-    // Copy data directly from archive to output
-    qint64 nDataOffset = record.nStreamOffset;
-    qint64 nDataSize = record.nStreamSize;
-
-    bool bResult = XBinary::copyDeviceMemory(getDevice(), nDataOffset, pOutputDevice, 0, nDataSize);
 
     return bResult;
 }
@@ -1357,9 +1380,86 @@ bool XRar::moveToNext(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
     if (pUnpackState->nCurrentIndex < pUnpackState->nNumberOfRecords) {
         RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
         pUnpackState->nCurrentOffset = pContext->listFileOffsets.at(pUnpackState->nCurrentIndex);
+
+        return true;
+    } else {
+        return false;
     }
-    
-    return true;
+}
+
+QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEBLOCK4 &fileBlock4)
+{
+    QMap<XBinary::FPART_PROP, QVariant> mapResult;
+
+    qint64 nPackSize = fileBlock4.packSize;
+    qint64 nUnpSize = fileBlock4.unpSize;
+
+    if (fileBlock4.genericBlock4.nFlags & RAR4_FILE_LARGE) {
+        nPackSize |= ((qint64)fileBlock4.highPackSize << 32);
+        nUnpSize |= ((qint64)fileBlock4.highUnpSize << 32);
+    }
+
+    mapResult.insert(XBinary::FPART_PROP_ORIGINALNAME, fileBlock4.sFileName);
+    mapResult.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nPackSize);
+    mapResult.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUnpSize);
+    mapResult.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
+    mapResult.insert(XBinary::FPART_PROP_CRC_VALUE, fileBlock4.fileCRC);
+
+    COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+
+    if (fileBlock4.method == RAR_METHOD_STORE) {
+        compressMethod = COMPRESS_METHOD_STORE;
+    } else if (fileBlock4.unpVer == 15) {
+        compressMethod = COMPRESS_METHOD_RAR_15;
+        mapResult.insert(XBinary::FPART_PROP_WINDOWSIZE, 0x10000);
+    } else if ((fileBlock4.unpVer == 20) || (fileBlock4.unpVer == 26)) {
+        compressMethod = COMPRESS_METHOD_RAR_20;
+    } else if (fileBlock4.unpVer == 29) {
+        compressMethod = COMPRESS_METHOD_RAR_29;
+    }
+
+    mapResult.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+
+    // Extract DOS date and time from 32-bit fileTime field (date in high word, time in low word)
+    quint16 nDosTime = fileBlock4.fileTime & 0xFFFF;
+    quint16 nDosDate = (fileBlock4.fileTime >> 16) & 0xFFFF;
+    QDateTime dateTime = XBinary::dosDateTimeToQDateTime(nDosDate, nDosTime);
+    mapResult.insert(XBinary::FPART_PROP_DATETIME, dateTime);
+
+    return mapResult;
+}
+
+QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fileHeader5)
+{
+    QMap<XBinary::FPART_PROP, QVariant> mapResult;
+
+    mapResult.insert(XBinary::FPART_PROP_ORIGINALNAME, fileHeader5.sFileName);
+    mapResult.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, fileHeader5.nDataSize);
+    mapResult.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, fileHeader5.nUnpackedSize);
+    mapResult.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
+    mapResult.insert(XBinary::FPART_PROP_CRC_VALUE, fileHeader5.nCRC32);
+
+    quint8 nVer = fileHeader5.nCompInfo & 0x003f;
+    quint8 nMethod = (fileHeader5.nCompInfo >> 7) & 7;
+
+    COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+
+    if (nMethod == RAR5_METHOD_STORE) {
+        compressMethod = COMPRESS_METHOD_STORE;
+    } else if (nVer == 0) {
+        compressMethod = COMPRESS_METHOD_RAR_50;
+    } else if (nVer == 1) {
+        compressMethod = COMPRESS_METHOD_RAR_70;
+    }
+
+    mapResult.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+
+    if (fileHeader5.nFileFlags & 0x0002) {
+        QDateTime dateTime = QDateTime::fromSecsSinceEpoch(fileHeader5.nMTime);
+        mapResult.insert(XBinary::FPART_PROP_DATETIME, dateTime);
+    }
+
+    return mapResult;
 }
 
 

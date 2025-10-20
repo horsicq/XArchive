@@ -225,7 +225,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_29) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_50) ||
                (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_70)) {
         bool bIsSolid = false;
-        rar_Unpack rarUnpack(pDecompressStruct->pSourceDevice, pDecompressStruct->pDestDevice);
+        rar_Unpack rarUnpack;
+        rarUnpack.setDevices(pDecompressStruct->pSourceDevice, pDecompressStruct->pDestDevice);
         qint32 nInit = rarUnpack.Init(pDecompressStruct->spInfo.nWindowSize, bIsSolid);
 
         if (nInit > 0) {

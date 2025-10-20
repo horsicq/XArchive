@@ -25,6 +25,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xcab.h
     ${CMAKE_CURRENT_LIST_DIR}/xcfbf.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcfbf.h
+    ${CMAKE_CURRENT_LIST_DIR}/xcpio.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xcpio.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.h
     ${CMAKE_CURRENT_LIST_DIR}/xdecompress.cpp
@@ -37,6 +39,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xgzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xipa.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xipa.h
+    ${CMAKE_CURRENT_LIST_DIR}/xiso9660.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xiso9660.h
     ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xjar.h
     ${CMAKE_CURRENT_LIST_DIR}/xlha.cpp
@@ -47,6 +51,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xrar.h
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.h
+    ${CMAKE_CURRENT_LIST_DIR}/xsquashfs.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xsquashfs.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xtar.h
     ${CMAKE_CURRENT_LIST_DIR}/xtgz.cpp

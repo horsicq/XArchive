@@ -24,10 +24,13 @@
 // TODO more
 #include "x_ar.h"
 #include "xcab.h"
+#include "xcpio.h"
 #include "xgzip.h"
+#include "xiso9660.h"
 #include "xmachofat.h"
 #include "xrar.h"
 #include "xsevenzip.h"
+#include "xsquashfs.h"
 #include "xzip.h"
 #include "xzlib.h"
 #include "xlha.h"

@@ -78,6 +78,12 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XBZIP2(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_XZ)) {
         pResult = new XXZ(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_CPIO)) {
+        pResult = new XCPIO(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_SQUASHFS)) {
+        pResult = new XSquashfs(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_ISO9660)) {
+        pResult = new XISO9660(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_AR)) {
         pResult = new X_Ar(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {

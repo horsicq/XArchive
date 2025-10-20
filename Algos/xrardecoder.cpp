@@ -2243,10 +2243,14 @@ void rar_Unpack::ExecuteCode(VM_PreparedProgram *Prg)
     VM.Execute(Prg);
 }
 
-rar_Unpack::rar_Unpack(QIODevice *pDeviceInput, QIODevice *pDeviceOut) : Inp(true), VMCodeInp(true)
+void rar_Unpack::setDevices(QIODevice *pDeviceInput, QIODevice *pDeviceOut)
 {
     m_pDeviceInput = pDeviceInput;
     m_pDeviceOutput = pDeviceOut;
+}
+
+rar_Unpack::rar_Unpack() : Inp(true), VMCodeInp(true)
+{
     // UnpIO=DataIO;
     Window = NULL;
     Fragmented = false;
