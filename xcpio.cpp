@@ -157,11 +157,79 @@ QString XCPIO::structIDToString(quint32 nID)
 
 QList<XBinary::DATA_HEADER> XCPIO::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(dataHeadersOptions)
-    Q_UNUSED(pPdStruct)
-
     QList<DATA_HEADER> listResult;
-    // TODO: Implement data header extraction
+
+    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+        _dataHeadersOptions.bChildren = true;
+        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+
+        CPIO_FORMAT format = _detectFormat(0);
+        if (format == CPIO_FORMAT_NEWC || format == CPIO_FORMAT_CRC) {
+            _dataHeadersOptions.nID = (format == CPIO_FORMAT_NEWC) ? STRUCTID_NEWC_HEADER : STRUCTID_CRC_HEADER;
+        } else if (format == CPIO_FORMAT_ODC) {
+            _dataHeadersOptions.nID = STRUCTID_ODC_HEADER;
+        }
+
+        _dataHeadersOptions.nLocation = 0;
+        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+        _dataHeadersOptions.nCount = getNumberOfRecords(pPdStruct);
+
+        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+    } else {
+        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+
+        if (nStartOffset != -1) {
+            CPIO_FORMAT format = _detectFormat(nStartOffset);
+
+            if (format == CPIO_FORMAT_NEWC || format == CPIO_FORMAT_CRC) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XCPIO::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.nSize = sizeof(CPIO_NEWC_HEADER);
+
+                dataHeader.listRecords.append(getDataRecord(0, 6, "Magic", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(6, 8, "Inode", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(14, 8, "Mode", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(22, 8, "UID", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(30, 8, "GID", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(38, 8, "Nlink", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(46, 8, "MTime", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(54, 8, "Filesize", VT_CHAR_ARRAY, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(62, 8, "DevMajor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(70, 8, "DevMinor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(78, 8, "RDevMajor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(86, 8, "RDevMinor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(94, 8, "Namesize", VT_CHAR_ARRAY, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(102, 8, "Check", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
+            } else if (format == CPIO_FORMAT_ODC) {
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XCPIO::structIDToString(dataHeadersOptions.nID));
+
+                dataHeader.nSize = sizeof(CPIO_ODC_HEADER);
+
+                dataHeader.listRecords.append(getDataRecord(0, 6, "Magic", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(6, 6, "Inode", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(12, 6, "Mode", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(18, 6, "UID", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(24, 6, "GID", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(30, 6, "Nlink", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(36, 11, "MTime", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(47, 11, "Filesize", VT_CHAR_ARRAY, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(58, 6, "DevMajor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(64, 6, "DevMinor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(70, 6, "RDevMajor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(76, 6, "RDevMinor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(82, 6, "Namesize", VT_CHAR_ARRAY, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(88, 11, "Check", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
+            }
+        }
+    }
+
     return listResult;
 }
 
