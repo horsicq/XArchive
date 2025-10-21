@@ -19,6 +19,8 @@
  * SOFTWARE.
  */
 #include "xsevenzip.h"
+#include "xdecompress.h"
+#include <QBuffer>
 
 XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {{XSevenZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                  {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
@@ -120,87 +122,97 @@ QList<XBinary::ARCHIVERECORD> XSevenZip::getArchiveRecords(qint32 nLimit, PDSTRU
     qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
 
     if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
-        QList<XSevenZip::SZRECORD> listRecords = _handleData(nNextHeaderOffset, nNextHeaderSize, pPdStruct);
+        char *pData = new char[nNextHeaderSize];
+        qint64 nBytesRead = read_array(nNextHeaderOffset, pData, nNextHeaderSize, pPdStruct);
+        
+        if (nBytesRead == nNextHeaderSize) {
+            QList<XSevenZip::SZRECORD> listRecords = _handleData(pData, nNextHeaderSize, pPdStruct, true);
 
-        qint32 nNumberOfRecords = listRecords.count();
+            qint32 nNumberOfRecords = listRecords.count();
 
-        if (nNumberOfRecords > 0) {
-            SZRECORD firstRecord = listRecords.at(0);
+            if (nNumberOfRecords > 0) {
+                SZRECORD firstRecord = listRecords.at(0);
 
-            // Check if the first id is Header
-            if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdHeader)) {
-                QList<quint32> listCRC;
-                QList<qint32> listFileSizes;
-                QList<QString> listFileNames;
-                // Standard header - find NumberOfFiles
-                for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
-                    SZRECORD szRecord = listRecords.at(i);
+                // Check if the first id is Header
+                if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdHeader)) {
+                    QList<quint32> listCRC;
+                    QList<qint32> listFilePackedSizes;
+                    QList<qint32> listFileUnpackedSizes;
+                    QList<QString> listFileNames;
+                    // Standard header - find NumberOfFiles
+                    for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
+                        SZRECORD szRecord = listRecords.at(i);
 
-                    if (szRecord.impType == IMPTYPE_FILENAME) {
-                        // QString sFileName = szRecord.varValue.toString();
-                        QString sFileName = "TST";
-                        listFileNames.append(sFileName);
-                    } else if (szRecord.impType == IMPTYPE_STREAMCRC) {
-                        listCRC.append(szRecord.varValue.toUInt());
-                    } else if (szRecord.impType == IMPTYPE_FILESIZE) {
-                        listFileSizes.append(szRecord.varValue.toInt());
+                        if (szRecord.impType == IMPTYPE_FILENAME) {
+                            // QString sFileName = szRecord.varValue.toString();
+                            QString sFileName = "TST";
+                            listFileNames.append(sFileName);
+                        } else if (szRecord.impType == IMPTYPE_STREAMCRC) {
+                            listCRC.append(szRecord.varValue.toUInt());
+                        } else if (szRecord.impType == IMPTYPE_FILEPACKEDSIZE) {
+                            listFilePackedSizes.append(szRecord.varValue.toInt());
+                        } else if (szRecord.impType == IMPTYPE_FILEUNPACKEDSIZE) {
+                            listFileUnpackedSizes.append(szRecord.varValue.toInt());
+                        }
                     }
-                }
 
-                qint32 nNumberOfFiles = listFileNames.count();
+                    qint32 nNumberOfFiles = listFileNames.count();
 
-                for (qint32 i = 0; (i < nNumberOfFiles) && isPdStructNotCanceled(pPdStruct); i++) {
-                    XBinary::ARCHIVERECORD record = {};
-                    record.mapProperties.insert(FPART_PROP_ORIGINALNAME, listFileNames.at(i));
+                    for (qint32 i = 0; (i < nNumberOfFiles) && isPdStructNotCanceled(pPdStruct); i++) {
+                        XBinary::ARCHIVERECORD record = {};
+                        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, listFileNames.at(i));
 
-                    listResult.append(record);
-                }
-            } else if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdEncodedHeader)) {
-                // Encoded header - extract information to decode it
-                COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
-                qint64 nStreamOffset = 0;
-                qint64 nStreamPackedSize = 0;
-                qint64 nStreamUnpackedSize = 0;
-                QByteArray baProperty;
-                quint32 nStreamCRC = 0;
-
-                // Parse the records to extract encoded header information
-                for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
-                    SZRECORD szRecord = listRecords.at(i);
-
-                    if (szRecord.impType == IMPTYPE_STREAMOFFSET) {
-                        nStreamOffset = szRecord.varValue.toLongLong();
-                    } else if (szRecord.impType == IMPTYPE_STREAMPACKEDSIZE) {
-                        nStreamPackedSize = szRecord.varValue.toLongLong();
-                    } else if (szRecord.impType == IMPTYPE_STREAMUNPACKEDSIZE) {
-                        nStreamUnpackedSize = szRecord.varValue.toLongLong();
-                    } else if (szRecord.impType == IMPTYPE_CODER) {
-                        compressMethod = codecToCompressMethod(szRecord.varValue.toByteArray());
-                    } else if (szRecord.impType == IMPTYPE_CODERPROPERTY) {
-                        baProperty = szRecord.varValue.toByteArray();
-                    } else if (szRecord.impType == IMPTYPE_STREAMCRC) {
-                        nStreamCRC = szRecord.varValue.toUInt();
+                        listResult.append(record);
                     }
+                } else if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdEncodedHeader)) {
+                    // Encoded header - extract information to decode it
+                    COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+                    qint64 nStreamOffset = 0;
+                    qint64 nStreamPackedSize = 0;
+                    qint64 nStreamUnpackedSize = 0;
+                    QByteArray baProperty;
+                    quint32 nStreamCRC = 0;
+
+                    // Parse the records to extract encoded header information
+                    for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
+                        SZRECORD szRecord = listRecords.at(i);
+
+                        if (szRecord.impType == IMPTYPE_STREAMOFFSET) {
+                            nStreamOffset = szRecord.varValue.toLongLong();
+                        } else if (szRecord.impType == IMPTYPE_STREAMPACKEDSIZE) {
+                            nStreamPackedSize = szRecord.varValue.toLongLong();
+                        } else if (szRecord.impType == IMPTYPE_STREAMUNPACKEDSIZE) {
+                            nStreamUnpackedSize = szRecord.varValue.toLongLong();
+                        } else if (szRecord.impType == IMPTYPE_CODER) {
+                            compressMethod = codecToCompressMethod(szRecord.varValue.toByteArray());
+                        } else if (szRecord.impType == IMPTYPE_CODERPROPERTY) {
+                            baProperty = szRecord.varValue.toByteArray();
+                        } else if (szRecord.impType == IMPTYPE_STREAMCRC) {
+                            nStreamCRC = szRecord.varValue.toUInt();
+                        }
+                    }
+
+                    // Use XDecompress::decompressFPART to decode the encoded header
+                    XBinary::FPART fpart = {};
+                    fpart.filePart = XBinary::FILEPART_DATA;
+                    fpart.nFileOffset = sizeof(SIGNATUREHEADER) + nStreamOffset;
+                    fpart.nFileSize = nStreamPackedSize;
+                    fpart.sName = "EncodedHeader";
+                    // fpart.compressMethod = compressMethod;
+                    // fpart.nUncompressedSize = nUnpackedSize;
+                    // fpart.properties.insert("Codec", baCodec);
+                    // fpart.nCRC32 = nCRC;
+
+                    // QByteArray baDecompressedData = XDecompress::decompressFPART(this, &fpart, pPdStruct);
+
+                    // TODO: Decode the encoded header using the extracted information
+                    // For now, return 0 as decoding is not yet implemented
+                    // nResult = 0;
                 }
-
-                // Use XDecompress::decompressFPART to decode the encoded header
-                XBinary::FPART fpart = {};
-                fpart.filePart = XBinary::FILEPART_DATA;
-                fpart.nFileOffset = sizeof(SIGNATUREHEADER) + nStreamOffset;
-                fpart.nFileSize = nStreamPackedSize;
-                fpart.sName = "EncodedHeader";
-                // fpart.compressMethod = compressMethod;
-                // fpart.nUncompressedSize = nUnpackedSize;
-                // fpart.properties.insert("Codec", baCodec);
-                // fpart.nCRC32 = nCRC;
-
-                // QByteArray baDecompressedData = XDecompress::decompressFPART(this, &fpart, pPdStruct);
-
-                // TODO: Decode the encoded header using the extracted information
-                // For now, return 0 as decoding is not yet implemented
-                // nResult = 0;
             }
         }
+        
+        delete[] pData;
     }
 
     return listResult;
@@ -310,7 +322,7 @@ XBinary::COMPRESS_METHOD XSevenZip::codecToCompressMethod(const QByteArray &baCo
         } else if (baCodec.startsWith(QByteArray("\x03\x01\x01", 3))) {
             result = COMPRESS_METHOD_LZMA;  // LZMA
         } else if (baCodec.startsWith(QByteArray("\x21", 1))) {
-            result = COMPRESS_METHOD_LZMA;  // LZMA2
+            result = COMPRESS_METHOD_LZMA2;  // LZMA2
         } else if (baCodec.startsWith(QByteArray("\x04\x01\x08", 3))) {
             result = COMPRESS_METHOD_DEFLATE;  // Deflate
         } else if (baCodec.startsWith(QByteArray("\x04\x01\x09", 3))) {
@@ -405,7 +417,13 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
                 dataHeader.nSize = dataHeadersOptions.nSize;
 
-                QList<XSevenZip::SZRECORD> listRecords = _handleData(nStartOffset, dataHeadersOptions.nSize, pPdStruct);
+                char *pData = new char[dataHeadersOptions.nSize];
+                qint64 nBytesRead = read_array(nStartOffset, pData, dataHeadersOptions.nSize, pPdStruct);
+                
+                QList<XSevenZip::SZRECORD> listRecords;
+                if (nBytesRead == dataHeadersOptions.nSize) {
+                    listRecords = _handleData(pData, dataHeadersOptions.nSize, pPdStruct, false);
+                }
 
                 qint32 nNumberOfRecords = listRecords.count();
 
@@ -439,6 +457,8 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                                                         dataHeadersOptions.nSize);
                     listResult.append(hexHdr);
                 }
+                
+                delete[] pData;
             }
         }
     }
@@ -916,6 +936,7 @@ void XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qin
     record.valType = VT_BYTE_ARRAY;
     record.impType = impType;
     record.sName = sCaption;
+    record.varValue = QByteArray(pState->pData + pState->nCurrentOffset, nSize);
     pListRecords->append(record);
 
     pState->nCurrentOffset += nSize;
@@ -951,19 +972,26 @@ qint64 XSevenZip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
     qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
 
     if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
-        QList<XSevenZip::SZRECORD> listRecords = _handleData(nNextHeaderOffset, nNextHeaderSize, pPdStruct);
+        char *pData = new char[nNextHeaderSize];
+        qint64 nBytesRead = read_array(nNextHeaderOffset, pData, nNextHeaderSize, pPdStruct);
+        
+        if (nBytesRead == nNextHeaderSize) {
+            QList<XSevenZip::SZRECORD> listRecords = _handleData(pData, nNextHeaderSize, pPdStruct, true);
 
-        qint32 nNumberOfRecords = listRecords.count();
+            qint32 nNumberOfRecords = listRecords.count();
 
-        // Look for NumberOfFiles in the parsed records
-        for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
-            SZRECORD szRecord = listRecords.at(i);
+            // Look for NumberOfFiles in the parsed records
+            for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
+                SZRECORD szRecord = listRecords.at(i);
 
-            if (szRecord.impType == IMPTYPE_NUMBEROFFILES) {
-                nResult = szRecord.varValue.toLongLong();
-                break;
+                if (szRecord.impType == IMPTYPE_NUMBEROFFILES) {
+                    nResult = szRecord.varValue.toLongLong();
+                    break;
+                }
             }
         }
+        
+        delete[] pData;
     }
 
     return nResult;
@@ -1110,32 +1138,22 @@ bool XSevenZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-QList<XSevenZip::SZRECORD> XSevenZip::_handleData(qint64 nOffset, qint64 nSize, PDSTRUCT *pPdStruct)
+QList<XSevenZip::SZRECORD> XSevenZip::_handleData(char *pData, qint64 nSize, PDSTRUCT *pPdStruct, bool bUnpack)
 {
     QList<XSevenZip::SZRECORD> listResult;
 
     // Validate input parameters
-    if ((nSize <= 0) || isPdStructStopped(pPdStruct)) {
+    if ((nSize <= 0) || (pData == nullptr) || isPdStructStopped(pPdStruct)) {
         return listResult;
     }
 
     // Initialize state
     SZSTATE state = {};
-    state.pData = new char[nSize];
+    state.pData = pData;
     state.nSize = nSize;
     state.nCurrentOffset = 0;
     state.bIsError = false;
     state.sErrorString = QString();
-
-    // Read data from file
-    qint64 nBytesRead = read_array(nOffset, state.pData, state.nSize, pPdStruct);
-    if (nBytesRead != state.nSize) {
-#ifdef QT_DEBUG
-        qDebug("Failed to read expected data: read %lld bytes, expected %lld at offset 0x%llX", nBytesRead, state.nSize, nOffset);
-#endif
-        delete[] state.pData;
-        return listResult;
-    }
 
     // Try to parse as standard header first, then try encoded header
     if (!_handleId(&listResult, XSevenZip::k7zIdHeader, &state, 1, false, pPdStruct, IMPTYPE_UNKNOWN)) {
@@ -1144,17 +1162,198 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(qint64 nOffset, qint64 nSize, 
         state.bIsError = false;
         state.sErrorString = QString();
 
-        _handleId(&listResult, XSevenZip::k7zIdEncodedHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-    }
+        QList<XSevenZip::SZRECORD> _listResult;
+        _handleId(&_listResult, XSevenZip::k7zIdEncodedHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
 
-    // Log error if parsing failed
+        qint32 nNumberOfRecords = _listResult.count();
+
+        COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+        qint64 nStreamOffset = 0;
+        qint64 nStreamPackedSize = 0;
+        qint64 nStreamUnpackedSize = 0;
+        QByteArray baProperty;
+        quint32 nStreamCRC = 0;
+
+        // Parse the records to extract encoded header information
+        for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
+            SZRECORD szRecord = _listResult.at(i);
+
+            if (szRecord.impType == IMPTYPE_STREAMOFFSET) {
+                nStreamOffset = szRecord.varValue.toLongLong();
+            } else if (szRecord.impType == IMPTYPE_STREAMPACKEDSIZE) {
+                nStreamPackedSize = szRecord.varValue.toLongLong();
+            } else if (szRecord.impType == IMPTYPE_STREAMUNPACKEDSIZE) {
+                nStreamUnpackedSize = szRecord.varValue.toLongLong();
+            } else if (szRecord.impType == IMPTYPE_CODER) {
+                compressMethod = codecToCompressMethod(szRecord.varValue.toByteArray());
+            } else if (szRecord.impType == IMPTYPE_CODERPROPERTY) {
+                baProperty = szRecord.varValue.toByteArray();
+            } else if (szRecord.impType == IMPTYPE_STREAMCRC) {
+                nStreamCRC = szRecord.varValue.toUInt();
+            }
+        }
+
+        if (compressMethod != COMPRESS_METHOD_UNKNOWN) {
+            QByteArray baCompressedData = read_array(sizeof(SIGNATUREHEADER) + nStreamOffset, nStreamPackedSize, pPdStruct);
+            QByteArray baDecompressedData;
+
+            QBuffer bufferIn;
+            bufferIn.setBuffer(&baCompressedData);
+
+            QBuffer bufferOut;
+            bufferOut.setBuffer(&baDecompressedData);
+
+            if (bufferIn.open(QIODevice::ReadOnly) && bufferOut.open(QIODevice::WriteOnly)) {
+                DECOMPRESS_STATE decompressState = {};
+                decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+                decompressState.pDeviceInput = &bufferIn;
+                decompressState.pDeviceOutput = &bufferOut;
+                decompressState.nInputOffset = 0;
+                decompressState.nInputLimit = nStreamPackedSize;
+                decompressState.nDecompressedOffset = 0;
+                decompressState.nDecompressedLimit = -1;
+                decompressState.nCountInput = 0;
+                decompressState.nCountOutput = 0;
+
+
+                bool bDecompressResult = false;
+
+                if (compressMethod == COMPRESS_METHOD_LZMA) {
+                    bDecompressResult = XLZMADecoder::decompress(&decompressState, baProperty, pPdStruct);
+                } else if (compressMethod == COMPRESS_METHOD_LZMA2) {
+                    bDecompressResult = XLZMADecoder::decompressLZMA2(&decompressState, baProperty, pPdStruct);
+                } else {
 #ifdef QT_DEBUG
-    if (state.bIsError && !state.sErrorString.isEmpty()) {
-        qDebug("Error parsing 7z header data: %s", qPrintable(state.sErrorString));
-    }
+                    qDebug("Unsupported compression method for encoded header: %d", compressMethod);
+#endif
+                }
+
+                bufferIn.close();
+                bufferOut.close();
+
+                // Process decompressed data if decompression was successful
+                if (bDecompressResult && baDecompressedData.size() > 0) {
+                    // Verify CRC if available
+                    quint32 nCalculatedCRC = XBinary::_getCRC32(baDecompressedData, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320());
+                    if ((nStreamCRC != 0) && (nCalculatedCRC != nStreamCRC)) {
+                        state.bIsError = true;
+                        state.sErrorString = tr("CRC mismatch for decompressed header data");
+#ifdef QT_DEBUG
+                        qDebug("Decompression CRC check failed. Expected: 0x%08X, Got: 0x%08X",
+                               nStreamCRC, nCalculatedCRC);
+#endif
+                    } else {
+                        // Parse the decompressed header data
+                        XSevenZip::SZSTATE stateDecompressed = {};
+                        stateDecompressed.pData = baDecompressedData.data();
+                        stateDecompressed.nSize = baDecompressedData.size();
+                        stateDecompressed.nCurrentOffset = 0;
+                        stateDecompressed.bIsError = false;
+                        stateDecompressed.sErrorString = QString();
+
+#ifdef QT_DEBUG
+                        qDebug("Decompressed %lld bytes successfully. Parsing as 7z header...", baDecompressedData.size());
 #endif
 
-    delete[] state.pData;
+                        _handleId(&listResult, XSevenZip::k7zIdHeader, &stateDecompressed, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
+                    }
+                } else {
+                    state.bIsError = true;
+                    if (!bDecompressResult) {
+                        state.sErrorString = tr("Failed to decompress encoded header: LZMA decompression failed");
+#ifdef QT_DEBUG
+                        qDebug("XLZMADecoder::decompress() failed. Compressed size: %lld, Method: %d, Property size: %d",
+                               nStreamPackedSize, compressMethod, baProperty.size());
+#endif
+                    } else {
+                        state.sErrorString = tr("Decompressed data is empty");
+#ifdef QT_DEBUG
+                        qDebug("Decompression succeeded but output is empty");
+#endif
+                    }
+                }
+            } else {
+                state.bIsError = true;
+                state.sErrorString = tr("Failed to open buffers for decompression");
+            }
+        }
+
+        // Log error if parsing failed
+#ifdef QT_DEBUG
+        if (state.bIsError && !state.sErrorString.isEmpty()) {
+            qDebug("Error parsing 7z header data: %s", qPrintable(state.sErrorString));
+        }
+
+        // Debug log all SZRECORD entries
+        qint32 nTotalRecords = _listResult.count();
+        qDebug("=== 7z Header Parse Results ===");
+        qDebug("Total Records: %d", nTotalRecords);
+        qDebug("Data Size: 0x%llX bytes", (qint64)nSize);
+        qDebug("Parse Error: %s", state.bIsError ? "Yes" : "No");
+        if (state.bIsError && !state.sErrorString.isEmpty()) {
+            qDebug("Error Details: %s", qPrintable(state.sErrorString));
+        }
+        qDebug("================================");
+
+        for (qint32 i = 0; i < nTotalRecords; i++) {
+            const SZRECORD &record = _listResult.at(i);
+
+            QString sRecordType;
+            switch (record.srType) {
+            case SRTYPE_UNKNOWN: sRecordType = "UNKNOWN"; break;
+            case SRTYPE_ID: sRecordType = "ID"; break;
+            case SRTYPE_NUMBER: sRecordType = "NUMBER"; break;
+            case SRTYPE_BYTE: sRecordType = "BYTE"; break;
+            case SRTYPE_UINT32: sRecordType = "UINT32"; break;
+            case SRTYPE_ARRAY: sRecordType = "ARRAY"; break;
+            default: sRecordType = QString("UNKNOWN(%1)").arg(record.srType); break;
+            }
+
+            QString sImpType;
+            switch (record.impType) {
+            case IMPTYPE_UNKNOWN: sImpType = "UNKNOWN"; break;
+            case IMPTYPE_NUMBEROFFILES: sImpType = "NUMBEROFFILES"; break;
+            case IMPTYPE_STREAMCRC: sImpType = "STREAMCRC"; break;
+            case IMPTYPE_STREAMOFFSET: sImpType = "STREAMOFFSET"; break;
+            case IMPTYPE_STREAMPACKEDSIZE: sImpType = "STREAMPACKEDSIZE"; break;
+            case IMPTYPE_STREAMUNPACKEDSIZE: sImpType = "STREAMUNPACKEDSIZE"; break;
+            case IMPTYPE_NUMBEROFSTREAMS: sImpType = "NUMBEROFSTREAMS"; break;
+            case IMPTYPE_CODER: sImpType = "CODER"; break;
+            case IMPTYPE_CODERPROPERTY: sImpType = "CODERPROPERTY"; break;
+            case IMPTYPE_FILENAME: sImpType = "FILENAME"; break;
+            case IMPTYPE_FILEATTRIBUTES: sImpType = "FILEATTRIBUTES"; break;
+            case IMPTYPE_FILETIME: sImpType = "FILETIME"; break;
+            case IMPTYPE_FILEPACKEDSIZE: sImpType = "FILEPACKEDSIZE"; break;
+            case IMPTYPE_FILEUNPACKEDSIZE: sImpType = "FILEUNPACKEDSIZE"; break;
+            default: sImpType = QString("UNKNOWN(%1)").arg(record.impType); break;
+            }
+
+            QString sValue;
+            if (record.srType == SRTYPE_ARRAY) {
+                sValue = QString("[Array, size=0x%1]").arg(record.nSize, 0, 16);
+            } else if (record.valType == VT_PACKEDNUMBER || record.valType == VT_UINT32 || record.valType == VT_UINT8) {
+                sValue = QString("0x%1 (%2)").arg(record.varValue.toULongLong(), 0, 16).arg(record.varValue.toULongLong());
+            } else if (record.valType == VT_BYTE_ARRAY) {
+                QByteArray ba = record.varValue.toByteArray();
+                sValue = QString("[ByteArray, size=%1, hex:%2...]").arg(ba.size()).arg(QString(ba.left(8).toHex()).toUpper());
+            } else if (record.valType == VT_CHAR_ARRAY) {
+                sValue = record.varValue.toString();
+            } else {
+                sValue = record.varValue.toString();
+            }
+
+            qDebug("[%03d] Offset: 0x%04X, Size: %3d bytes, Type: %-10s, ImpType: %-20s, Name: %-30s, Value: %s",
+                   i,
+                   record.nRelOffset,
+                   record.nSize,
+                   qPrintable(sRecordType),
+                   qPrintable(sImpType),
+                   qPrintable(record.sName),
+                   qPrintable(sValue));
+        }
+        qDebug("================================");
+#endif
+    }
 
     return listResult;
 }
