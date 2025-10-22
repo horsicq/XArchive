@@ -1215,7 +1215,6 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(char *pData, qint64 nSize, PDS
                 decompressState.nCountInput = 0;
                 decompressState.nCountOutput = 0;
 
-
                 bool bDecompressResult = false;
 
                 if (compressMethod == COMPRESS_METHOD_LZMA) {
@@ -1235,6 +1234,7 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(char *pData, qint64 nSize, PDS
                 if (bDecompressResult && baDecompressedData.size() > 0) {
                     // Verify CRC if available
                     quint32 nCalculatedCRC = XBinary::_getCRC32(baDecompressedData, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320());
+                    nCalculatedCRC ^= 0xFFFFFFFF;  // Finalize the CRC
                     if ((nStreamCRC != 0) && (nCalculatedCRC != nStreamCRC)) {
                         state.bIsError = true;
                         state.sErrorString = tr("CRC mismatch for decompressed header data");
