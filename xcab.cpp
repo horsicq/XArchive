@@ -83,27 +83,69 @@ XCab::CFFILE XCab::readCFFILE(qint64 nOffset)
 
 QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     Q_UNUSED(pPdStruct)
 
     QList<XArchive::RECORD> listResult;
 
-    qint64 nOffset = 0;  // TODO
-
     CFHEADER cfHeader = readCFHeader(0);
+    qint64 nFileSize = getSize();
 
-    nOffset += sizeof(CFHEADER) - 4;
+    // Parse folders
+    QList<CFFOLDER> listFolders;
+    qint64 nCurrentOffset = sizeof(CFHEADER);
 
-    // if (cfHeader.flags & 0x0004)  // TODO const
-    // {
-    //     nOffset += 4;
+    for (quint16 i = 0; i < cfHeader.cFolders; i++) {
+        if (nCurrentOffset + (qint64)sizeof(CFFOLDER) > nFileSize) {
+            break;
+        }
 
-    //     nOffset += cfHeader.cbCFHeader;
-    // }
+        CFFOLDER cfFolder = readCFFolder(nCurrentOffset);
+        listFolders.append(cfFolder);
 
-    // CFFOLDER cfFolder=readCFFolder(nOffset);
+        nCurrentOffset += sizeof(CFFOLDER);
+    }
 
-    // TODO
+    // Parse files
+    qint64 nFileOffset = cfHeader.coffFiles;
+
+    for (quint16 i = 0; i < cfHeader.cFiles; i++) {
+        if (nFileOffset + (qint64)sizeof(CFFILE) > nFileSize) {
+            break;
+        }
+
+        CFFILE cfFile = readCFFILE(nFileOffset);
+        QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
+
+        if (cfFile.iFolder < (quint16)listFolders.size()) {
+            CFFOLDER cfFolder = listFolders.at(cfFile.iFolder);
+
+            XArchive::RECORD record = {};
+
+            record.spInfo.sRecordName = sFileName;
+            record.spInfo.nUncompressedSize = cfFile.cbFile;
+            record.nDataOffset = cfFolder.coffCabStart;
+            record.nDataSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
+
+            // // Set compression method
+            // if (cfFolder.typeCompress == 0x0000) {
+            //     record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
+            // } else if (cfFolder.typeCompress == 0x0001) {
+            //     record.spInfo.compressMethod = COMPRESS_METHOD_MSZIP;
+            // } else if (cfFolder.typeCompress == 0x0003) {
+            //     record.spInfo.compressMethod = COMPRESS_METHOD_LZX;
+            // } else {
+            //     record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
+            // }
+
+            listResult.append(record);
+        }
+
+        nFileOffset += sizeof(CFFILE) + sFileName.length() + 1;
+
+        if (nLimit != -1 && listResult.size() >= nLimit) {
+            break;
+        }
+    }
 
     return listResult;
 }
@@ -637,6 +679,615 @@ QList<XBinary::ARCHIVERECORD> XCab::getArchiveRecords(qint32 nLimit, PDSTRUCT *p
     }
 
     return listResult;
+}
+
+// Helper methods for writing CAB structures
+bool XCab::writeCFHeader(QIODevice *pDevice, const CFHEADER &cfHeader)
+{
+    if (!pDevice || !pDevice->isWritable()) {
+        return false;
+    }
+
+    // Write signature
+    if (pDevice->write((const char*)&cfHeader.signature, 4) != 4) return false;
+
+    // Write reserved fields
+    quint32 reserved = 0;
+    if (pDevice->write((const char*)&reserved, 4) != 4) return false; // reserved1
+    if (pDevice->write((const char*)&cfHeader.cbCabinet, 4) != 4) return false;
+    if (pDevice->write((const char*)&reserved, 4) != 4) return false; // reserved2
+    if (pDevice->write((const char*)&cfHeader.coffFiles, 4) != 4) return false;
+    if (pDevice->write((const char*)&reserved, 4) != 4) return false; // reserved3
+
+    // Write version and counts
+    if (pDevice->write((const char*)&cfHeader.versionMinor, 1) != 1) return false;
+    if (pDevice->write((const char*)&cfHeader.versionMajor, 1) != 1) return false;
+    if (pDevice->write((const char*)&cfHeader.cFolders, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfHeader.cFiles, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfHeader.flags, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfHeader.setID, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfHeader.iCabinet, 2) != 2) return false;
+
+    return true;
+}
+
+bool XCab::writeCFFolder(QIODevice *pDevice, const CFFOLDER &cfFolder)
+{
+    if (!pDevice || !pDevice->isWritable()) {
+        return false;
+    }
+
+    if (pDevice->write((const char*)&cfFolder.coffCabStart, 4) != 4) return false;
+    if (pDevice->write((const char*)&cfFolder.cCFData, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfFolder.typeCompress, 2) != 2) return false;
+
+    return true;
+}
+
+bool XCab::writeCFFILE(QIODevice *pDevice, const CFFILE &cfFile, const QString &sFileName)
+{
+    if (!pDevice || !pDevice->isWritable()) {
+        return false;
+    }
+
+    if (pDevice->write((const char*)&cfFile.cbFile, 4) != 4) return false;
+    if (pDevice->write((const char*)&cfFile.uoffFolderStart, 4) != 4) return false;
+    if (pDevice->write((const char*)&cfFile.iFolder, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfFile.date, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfFile.time, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfFile.attribs, 2) != 2) return false;
+
+    // Write filename as ANSI string
+    QByteArray baFileName = sFileName.toLocal8Bit();
+    if (pDevice->write(baFileName.constData(), baFileName.size() + 1) != baFileName.size() + 1) return false;
+
+    return true;
+}
+
+bool XCab::writeCFData(QIODevice *pDevice, const CFDATA &cfData, const QByteArray &baData)
+{
+    if (!pDevice || !pDevice->isWritable()) {
+        return false;
+    }
+
+    if (pDevice->write((const char*)&cfData.csum, 4) != 4) return false;
+    if (pDevice->write((const char*)&cfData.cbData, 2) != 2) return false;
+    if (pDevice->write((const char*)&cfData.cbUncomp, 2) != 2) return false;
+    if (pDevice->write(baData.constData(), baData.size()) != baData.size()) return false;
+
+    return true;
+}
+
+// Streaming unpacking API implementation
+bool XCab::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (!pState) {
+        return false;
+    }
+
+    // Read CAB header
+    CFHEADER cfHeader = readCFHeader(0);
+    if (cfHeader.signature[0] != 'M' || cfHeader.signature[1] != 'S' ||
+        cfHeader.signature[2] != 'C' || cfHeader.signature[3] != 'F') {
+        return false; // Invalid CAB signature
+    }
+
+    // Create unpack context
+    CAB_UNPACK_CONTEXT *pContext = new CAB_UNPACK_CONTEXT;
+    pContext->nCurrentFileIndex = 0;
+
+    // Parse folders
+    qint64 nFolderOffset = sizeof(CFHEADER);
+    qint64 nFileSize = getSize();
+
+    for (quint16 i = 0; i < cfHeader.cFolders; i++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            delete pContext;
+            return false;
+        }
+
+        if ((nFolderOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
+            delete pContext;
+            return false;
+        }
+
+        CFFOLDER cfFolder = readCFFolder(nFolderOffset);
+        pContext->listFolders.append(cfFolder);
+        nFolderOffset += sizeof(CFFOLDER);
+    }
+
+    // Parse file offsets
+    qint64 nFileOffset = cfHeader.coffFiles;
+
+    for (quint16 i = 0; i < cfHeader.cFiles; i++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            delete pContext;
+            return false;
+        }
+
+        if ((nFileOffset + (qint64)sizeof(CFFILE)) > nFileSize) {
+            delete pContext;
+            return false;
+        }
+
+        pContext->listFileOffsets.append(nFileOffset);
+
+        // Skip to next file entry
+        CFFILE cfFile = readCFFILE(nFileOffset);
+        QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
+        nFileOffset += sizeof(CFFILE) + sFileName.length() + 1;
+    }
+
+    // Initialize state
+    pState->nCurrentOffset = cfHeader.coffFiles; // Start at first file
+    pState->nTotalSize = getSize();
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = cfHeader.cFiles;
+    pState->pContext = pContext;
+
+    return true;
+}
+
+XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext) {
+        return result;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
+    qint64 nFileOffset = pContext->listFileOffsets.at(pState->nCurrentIndex);
+
+    CFFILE cfFile = readCFFILE(nFileOffset);
+    QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
+
+    if (cfFile.iFolder < (quint16)pContext->listFolders.size()) {
+        CFFOLDER cfFolder = pContext->listFolders.at(cfFile.iFolder);
+
+        result.nStreamOffset = cfFolder.coffCabStart;
+        result.nStreamSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
+        result.nDecompressedOffset = cfFile.uoffFolderStart;
+        result.nDecompressedSize = cfFile.cbFile;
+
+        result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sFileName);
+        result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)cfFile.cbFile);
+
+        // Set compression method
+        if (cfFolder.typeCompress == 0x0000) {
+            result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE_CAB);
+        } else if (cfFolder.typeCompress == 0x0001) {
+            result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_MSZIP_CAB);
+        } else if (cfFolder.typeCompress == 0x0003) {
+            result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZX_CAB);
+        } else {
+            result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_UNKNOWN);
+        }
+
+        // Convert DOS date/time to QDateTime
+        // QDateTime dateTime = XBinary::dosDateTimeToQt((quint32)cfFile.date | ((quint32)cfFile.time << 16));
+        // result.mapProperties.insert(FPART_PROP_DATETIME, dateTime);
+
+        result.mapProperties.insert(FPART_PROP_FILEMODE, (quint32)cfFile.attribs);
+    }
+
+    return result;
+}
+
+bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
+    qint64 nFileOffset = pContext->listFileOffsets.at(pState->nCurrentIndex);
+
+    CFFILE cfFile = readCFFILE(nFileOffset);
+
+    if (cfFile.iFolder >= (quint16)pContext->listFolders.size()) {
+        return false;
+    }
+
+    CFFOLDER cfFolder = pContext->listFolders.at(cfFile.iFolder);
+
+    // For now, only support STORE method (no compression)
+    if (cfFolder.typeCompress != 0x0000) {
+        return false; // Compressed CAB files not yet supported
+    }
+
+    // Calculate offset within the compressed stream
+    qint64 nDataOffset = cfFolder.coffCabStart;
+    qint64 nCurrentUncompressedOffset = 0;
+    qint64 nTargetOffset = cfFile.uoffFolderStart;
+    qint64 nRemainingSize = cfFile.cbFile;
+
+    // Find the correct data block
+    for (quint16 i = 0; i < cfFolder.cCFData && nRemainingSize > 0; i++) {
+        if ((nDataOffset + (qint64)sizeof(CFDATA)) > getSize()) {
+            break;
+        }
+
+        CFDATA cfData = readCFData(nDataOffset);
+
+        if (nCurrentUncompressedOffset + cfData.cbUncomp <= nTargetOffset) {
+            // Skip this block entirely
+            nCurrentUncompressedOffset += cfData.cbUncomp;
+            nDataOffset += sizeof(CFDATA) + cfData.cbData;
+            continue;
+        }
+
+        // This block contains data we need
+        qint64 nBlockStart = nTargetOffset - nCurrentUncompressedOffset;
+        qint64 nCopySize = qMin(nRemainingSize, (qint64)cfData.cbUncomp - nBlockStart);
+
+        if (nCopySize > 0) {
+            qint64 nSourceOffset = nDataOffset + sizeof(CFDATA) + nBlockStart;
+            if (!copyDeviceMemory(getDevice(), nSourceOffset, pDevice, 0, nCopySize)) {
+                return false;
+            }
+        }
+
+        nTargetOffset += nCopySize;
+        nRemainingSize -= nCopySize;
+        nCurrentUncompressedOffset += cfData.cbUncomp;
+        nDataOffset += sizeof(CFDATA) + cfData.cbData;
+    }
+
+    return nRemainingSize == 0;
+}
+
+bool XCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex + 1 >= pState->nNumberOfRecords) {
+        return false; // No more records
+    }
+
+    CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
+    pState->nCurrentIndex++;
+
+    if (pState->nCurrentIndex < pState->nNumberOfRecords) {
+        pState->nCurrentOffset = pContext->listFileOffsets.at(pState->nCurrentIndex);
+        return true;
+    }
+
+    return false;
+}
+
+bool XCab::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    if (pState->pContext) {
+        CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
+        delete pContext;
+        pState->pContext = nullptr;
+    }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+
+    return true;
+}
+
+// Streaming packing API implementation
+bool XCab::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pOptions)
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    if (!pState || !pDestDevice || !pDestDevice->isWritable()) {
+        return false;
+    }
+
+    // Create pack context
+    CAB_PACK_CONTEXT *pContext = new CAB_PACK_CONTEXT;
+    pContext->nCurrentOffset = 0;
+    pContext->nCompressionType = 0x0000; // STORE method by default
+
+    // Write CAB signature
+    QByteArray baSignature("MSCF");
+    baSignature.append(4, '\0'); // reserved1
+    baSignature.append(4, '\0'); // cbCabinet (will be updated later)
+    baSignature.append(4, '\0'); // reserved2
+    baSignature.append(4, '\0'); // coffFiles (will be updated later)
+    baSignature.append(4, '\0'); // reserved3
+    baSignature.append((char)0x03); // versionMinor
+    baSignature.append((char)0x01); // versionMajor
+    baSignature.append(2, '\0'); // cFolders (will be updated later)
+    baSignature.append(2, '\0'); // cFiles (will be updated later)
+    baSignature.append(2, '\0'); // flags
+    baSignature.append(2, '\0'); // setID
+    baSignature.append(2, '\0'); // iCabinet
+
+    if (pDestDevice->write(baSignature) != baSignature.size()) {
+        delete pContext;
+        return false;
+    }
+
+    pContext->nCurrentOffset = baSignature.size();
+
+    // Initialize state
+    pState->pDevice = pDestDevice;
+    pState->nCurrentOffset = pContext->nCurrentOffset;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = pContext;
+
+    return true;
+}
+
+bool XCab::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pContext || !pState->pDevice) {
+        return false;
+    }
+
+    CAB_PACK_CONTEXT *pContext = (CAB_PACK_CONTEXT *)pState->pContext;
+
+    // Open file
+    QFile file(sFileName);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    // Get file info
+    QFileInfo fileInfo(sFileName);
+    qint64 nFileSize = fileInfo.size();
+    QString sBaseName = fileInfo.fileName();
+
+    // Read file data
+    QByteArray baFileData = file.readAll();
+    file.close();
+
+    if (baFileData.size() != nFileSize) {
+        return false;
+    }
+
+    // Create file entry
+    CFFILE cfFile = {};
+    cfFile.cbFile = nFileSize;
+    cfFile.uoffFolderStart = 0; // Will be updated when folder is finalized
+    cfFile.iFolder = 0; // Single folder for simplicity
+    cfFile.attribs = 0x20; // Archive attribute
+
+    // Convert file time to DOS format
+    QDateTime dateTime = fileInfo.lastModified();
+    // quint32 nDosTime = XBinary::qtToDosDateTime(dateTime);
+    // cfFile.date = nDosTime & 0xFFFF;
+    // cfFile.time = (nDosTime >> 16) & 0xFFFF;
+
+    // For STORE method, create a single data block
+    CFDATA cfData = {};
+    cfData.csum = 0; // TODO: Calculate checksum
+    cfData.cbData = nFileSize;
+    cfData.cbUncomp = nFileSize;
+
+    // Write data block
+    qint64 nDataOffset = pState->nCurrentOffset;
+    if (!writeCFData(pState->pDevice, cfData, baFileData)) {
+        return false;
+    }
+
+    pState->nCurrentOffset += sizeof(CFDATA) + nFileSize;
+
+    // Add to context
+    pContext->listFiles.append(cfFile);
+    pContext->listDataBlocks.append(baFileData);
+
+    // Update folder info
+    if (pContext->listFolders.isEmpty()) {
+        CFFOLDER cfFolder = {};
+        cfFolder.coffCabStart = nDataOffset;
+        cfFolder.cCFData = 1;
+        cfFolder.typeCompress = pContext->nCompressionType;
+        pContext->listFolders.append(cfFolder);
+    } else {
+        pContext->listFolders[0].cCFData++;
+    }
+
+    pState->nNumberOfRecords++;
+
+    return true;
+}
+
+bool XCab::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pContext || !pState->pDevice || !pDevice) {
+        return false;
+    }
+
+    CAB_PACK_CONTEXT *pContext = (CAB_PACK_CONTEXT *)pState->pContext;
+
+    // Get device size
+    qint64 nDeviceSize = pDevice->size();
+    if (nDeviceSize < 0) {
+        return false;
+    }
+
+    // Read device data
+    pDevice->seek(0);
+    QByteArray baDeviceData = pDevice->readAll();
+
+    if (baDeviceData.size() != nDeviceSize) {
+        return false;
+    }
+
+    // Create file entry with default name
+    QString sDefaultName = QString("stream_%1.dat").arg(pState->nNumberOfRecords);
+
+    CFFILE cfFile = {};
+    cfFile.cbFile = nDeviceSize;
+    cfFile.uoffFolderStart = 0; // Will be updated
+    cfFile.iFolder = 0;
+    cfFile.attribs = 0x20;
+
+    // Current time for device
+    QDateTime dateTime = QDateTime::currentDateTime();
+    // quint32 nDosTime = XBinary::qtToDosDateTime(dateTime);
+    // cfFile.date = nDosTime & 0xFFFF;
+    // cfFile.time = (nDosTime >> 16) & 0xFFFF;
+
+    // Create data block
+    CFDATA cfData = {};
+    cfData.csum = 0; // TODO: Calculate checksum
+    cfData.cbData = nDeviceSize;
+    cfData.cbUncomp = nDeviceSize;
+
+    // Write data block
+    qint64 nDataOffset = pState->nCurrentOffset;
+    if (!writeCFData(pState->pDevice, cfData, baDeviceData)) {
+        return false;
+    }
+
+    pState->nCurrentOffset += sizeof(CFDATA) + nDeviceSize;
+
+    // Add to context
+    pContext->listFiles.append(cfFile);
+    pContext->listDataBlocks.append(baDeviceData);
+
+    // Update folder
+    if (pContext->listFolders.isEmpty()) {
+        CFFOLDER cfFolder = {};
+        cfFolder.coffCabStart = nDataOffset;
+        cfFolder.cCFData = 1;
+        cfFolder.typeCompress = pContext->nCompressionType;
+        pContext->listFolders.append(cfFolder);
+    } else {
+        pContext->listFolders[0].cCFData++;
+    }
+
+    pState->nNumberOfRecords++;
+
+    return true;
+}
+
+bool XCab::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    // Check if directory exists
+    if (!XBinary::isDirectoryExists(sDirectoryPath)) {
+        return false;
+    }
+
+    // Enumerate all files in directory
+    QList<QString> listFiles;
+    XBinary::findFiles(sDirectoryPath, &listFiles, true, 0, pPdStruct);
+
+    // Add each file
+    for (qint32 i = 0; i < listFiles.count() && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        QString sFilePath = listFiles.at(i);
+        QFileInfo fileInfo(sFilePath);
+
+        // Skip directories
+        if (fileInfo.isDir()) {
+            continue;
+        }
+
+        // Add file to archive
+        if (!addFile(pState, sFilePath, pPdStruct)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool XCab::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState || !pState->pContext || !pState->pDevice) {
+        return false;
+    }
+
+    CAB_PACK_CONTEXT *pContext = (CAB_PACK_CONTEXT *)pState->pContext;
+
+    // Write folders
+    qint64 nFoldersOffset = pState->nCurrentOffset;
+    for (const CFFOLDER &cfFolder : pContext->listFolders) {
+        if (!writeCFFolder(pState->pDevice, cfFolder)) {
+            delete pContext;
+            return false;
+        }
+        pState->nCurrentOffset += sizeof(CFFOLDER);
+    }
+
+    // Write files
+    qint64 nFilesOffset = pState->nCurrentOffset;
+    for (qint32 i = 0; i < pContext->listFiles.size(); i++) {
+        const CFFILE &cfFile = pContext->listFiles.at(i);
+        QString sFileName = QString("file_%1.dat").arg(i); // TODO: Store actual filenames
+
+        if (!writeCFFILE(pState->pDevice, cfFile, sFileName)) {
+            delete pContext;
+            return false;
+        }
+
+        pState->nCurrentOffset += sizeof(CFFILE) + sFileName.length() + 1;
+    }
+
+    // Update header with correct offsets and counts
+    pState->pDevice->seek(0);
+
+    CFHEADER cfHeader = {};
+    cfHeader.signature[0] = 'M'; cfHeader.signature[1] = 'S';
+    cfHeader.signature[2] = 'C'; cfHeader.signature[3] = 'F';
+    cfHeader.cbCabinet = pState->nCurrentOffset;
+    cfHeader.coffFiles = nFilesOffset;
+    cfHeader.versionMinor = 0x03;
+    cfHeader.versionMajor = 0x01;
+    cfHeader.cFolders = pContext->listFolders.size();
+    cfHeader.cFiles = pContext->listFiles.size();
+    cfHeader.flags = 0;
+    cfHeader.setID = 0;
+    cfHeader.iCabinet = 0;
+
+    if (!writeCFHeader(pState->pDevice, cfHeader)) {
+        delete pContext;
+        return false;
+    }
+
+    // Clean up
+    delete pContext;
+    pState->pContext = nullptr;
+
+    return true;
 }
 
 // bool XCab::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)

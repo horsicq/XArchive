@@ -87,6 +87,21 @@ public:
     };
 #pragma pack(pop)
 
+    // Format-specific context structures
+    struct CAB_UNPACK_CONTEXT {
+        QList<qint64> listFileOffsets;    // Offsets of CFFILE entries
+        QList<CFFOLDER> listFolders;      // Folder information
+        qint32 nCurrentFileIndex;         // Current file being processed
+    };
+
+    struct CAB_PACK_CONTEXT {
+        QList<CFFOLDER> listFolders;      // Folders being created
+        QList<CFFILE> listFiles;          // Files being added
+        QList<QByteArray> listDataBlocks; // Compressed data blocks
+        qint64 nCurrentOffset;            // Current write offset
+        quint16 nCompressionType;         // Compression type (0=STORE, 1=MSZIP, 3=LZX)
+    };
+
     explicit XCab(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
@@ -99,6 +114,12 @@ public:
     CFFOLDER readCFFolder(qint64 nOffset);
     CFDATA readCFData(qint64 nOffset);
     CFFILE readCFFILE(qint64 nOffset);
+
+    // Helper methods for writing CAB structures
+    bool writeCFHeader(QIODevice *pDevice, const CFHEADER &cfHeader);
+    bool writeCFFolder(QIODevice *pDevice, const CFFOLDER &cfFolder);
+    bool writeCFFILE(QIODevice *pDevice, const CFFILE &cfFile, const QString &sFileName);
+    bool writeCFData(QIODevice *pDevice, const CFDATA &cfData, const QByteArray &baData);
 
     virtual FT getFileType() override;
     virtual QString getFileFormatExt() override;
@@ -121,6 +142,20 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
     virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<ARCHIVERECORD> getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
+
+    // Streaming unpacking API
+    virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+    // Streaming packing API
+    virtual bool initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     CFFOLDER _read_CFFOLDER(qint64 nOffset);
