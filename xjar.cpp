@@ -20,6 +20,10 @@
  */
 #include "xjar.h"
 
+XBinary::XCONVERT _TABLE_XJAR_STRUCTID[] = {
+    {XJAR::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+};
+
 XJAR::XJAR(QIODevice *pDevice) : XZip(pDevice)
 {
 }
@@ -144,4 +148,9 @@ QString XJAR::typeIdToString(qint32 nType)
     }
 
     return sResult;
+}
+
+QString XJAR::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XJAR_STRUCTID, sizeof(_TABLE_XJAR_STRUCTID) / sizeof(XBinary::XCONVERT));
 }

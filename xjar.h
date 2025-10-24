@@ -28,6 +28,10 @@ class XJAR : public XZip {
     Q_OBJECT
 
 public:
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+    };
+
     enum TYPE {
         TYPE_UNKNOWN = 0,
         TYPE_PACKAGE,
@@ -48,6 +52,7 @@ public:
     virtual QString getArch() override;
     virtual qint32 getType() override;
     virtual QString typeIdToString(qint32 nType) override;
+    virtual QString structIDToString(quint32 nID) override;
 };
 
 #endif  // XJAR_H
