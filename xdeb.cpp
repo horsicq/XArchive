@@ -20,6 +20,10 @@
  */
 #include "xdeb.h"
 
+XBinary::XCONVERT _TABLE_XDEB_STRUCTID[] = {
+    {XDEB::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+};
+
 XDEB::XDEB(QIODevice *pDevice) : X_Ar(pDevice)
 {
 }
@@ -100,4 +104,9 @@ XBinary::FILEFORMATINFO XDEB::getFileFormatInfo(PDSTRUCT *pPdStruct)
 XBinary::FT XDEB::getFileType()
 {
     return FT_DEB;
+}
+
+QString XDEB::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XDEB_STRUCTID, sizeof(_TABLE_XDEB_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
