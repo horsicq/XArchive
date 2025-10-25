@@ -20,6 +20,10 @@
  */
 #include "xnpm.h"
 
+XBinary::XCONVERT _TABLE_XNPM_STRUCTID[] = {
+    {XNPM::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+};
+
 XNPM::XNPM(QIODevice *pDevice) : XTGZ(pDevice)
 {
 }
@@ -108,4 +112,9 @@ QString XNPM::typeIdToString(qint32 nType)
 QString XNPM::getMIMEString()
 {
     return "application/x-npm";
+}
+
+QString XNPM::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XNPM_STRUCTID, sizeof(_TABLE_XNPM_STRUCTID) / sizeof(XBinary::XCONVERT));
 }

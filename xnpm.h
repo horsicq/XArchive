@@ -27,6 +27,10 @@ class XNPM : public XTGZ {
     Q_OBJECT
 
 public:
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+    };
+
     enum TYPE {
         TYPE_UNKNOWN = 0,
         TYPE_PACKAGE,
@@ -48,6 +52,7 @@ public:
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
     virtual QString getMIMEString();
+    virtual QString structIDToString(quint32 nID);
 };
 
 #endif  // XNPM_H
