@@ -20,6 +20,12 @@
  */
 #include "xmachofat.h"
 
+XBinary::XCONVERT _TABLE_XMACHOFAT_STRUCTID[] = {
+    {XMACHOFat::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+    {XMACHOFat::STRUCTID_HEADER, "HEADER", QObject::tr("Header")},
+    {XMACHOFat::STRUCTID_ARCHITECTURE, "ARCHITECTURE", QObject::tr("Architecture")},
+};
+
 XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -30,10 +36,39 @@ bool XMACHOFat::isValid(PDSTRUCT *pPdStruct)
 
     bool bResult = false;
 
-    quint32 nMagic = read_uint32(0);
+    if (getSize() >= sizeof(XMACH_DEF::fat_header)) {
+        quint32 nMagic = read_uint32(0);
 
-    if ((nMagic == XMACH_DEF::S_FAT_MAGIC) || (nMagic == XMACH_DEF::S_FAT_CIGAM)) {
-        bResult = (getNumberOfRecords(pPdStruct) < 10);  // TODO Check !!!
+        if ((nMagic == XMACH_DEF::S_FAT_MAGIC) || (nMagic == XMACH_DEF::S_FAT_CIGAM)) {
+            quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
+
+            // Check for reasonable number of architectures (typically 1-10)
+            if ((nNumberOfRecords > 0) && (nNumberOfRecords <= 20)) {
+                // Verify that all architecture records fit within the file
+                qint64 nRequiredSize = sizeof(XMACH_DEF::fat_header) + (qint64)nNumberOfRecords * sizeof(XMACH_DEF::fat_arch);
+
+                if (getSize() >= nRequiredSize) {
+                    bResult = true;
+
+                    // Additional validation: check that offsets and sizes are reasonable
+                    bool bIsBigEndian = isBigEndian();
+                    qint64 nFileSize = getSize();
+
+                    for (quint32 i = 0; i < nNumberOfRecords; i++) {
+                        qint64 nOffset = sizeof(XMACH_DEF::fat_header) + (qint64)i * sizeof(XMACH_DEF::fat_arch);
+
+                        quint32 nArchOffset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
+                        quint32 nArchSize = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
+
+                        // Check that the architecture data fits within the file
+                        if ((qint64)nArchOffset + (qint64)nArchSize > nFileSize) {
+                            bResult = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     return bResult;
@@ -65,7 +100,13 @@ quint64 XMACHOFat::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    return read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
+    quint64 nResult = 0;
+
+    if (getSize() >= sizeof(XMACH_DEF::fat_header)) {
+        nResult = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
+    }
+
+    return nResult;
 }
 
 XBinary::OSNAME XMACHOFat::getOsName()
@@ -83,18 +124,31 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
         nNumberOfRecords = qMin(nNumberOfRecords, nLimit);
     }
 
+    if (nNumberOfRecords < 0) {
+        return listResult;  // Invalid number of records
+    }
+
     bool bIsBigEndian = isBigEndian();
+    qint64 nFileSize = getSize();
 
     QMap<quint64, QString> mapCpuTypes = XMACH::getHeaderCpuTypesS();
 
     for (qint32 i = 0; (i < nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         qint64 nOffset = sizeof(XMACH_DEF::fat_header) + i * sizeof(XMACH_DEF::fat_arch);
 
+        if (nOffset + (qint64)sizeof(XMACH_DEF::fat_arch) > nFileSize) {
+            break;  // Prevent reading beyond file bounds
+        }
+
         quint32 _cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
         quint32 _cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
         quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
         quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
-        //        quint32 _align=read_uint32(nOffset+offsetof(XMACH_DEF::fat_arch,align),bIsBigEndian);
+
+        // Validate that the architecture data is within file bounds
+        if ((qint64)_offset + (qint64)_size > nFileSize) {
+            continue;  // Skip invalid records
+        }
 
         RECORD record = {};
 
@@ -138,61 +192,63 @@ QList<XBinary::MAPMODE> XMACHOFat::getMapModesList()
 
 XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapMode)
-
-    XBinary::PDSTRUCT pdStructEmpty = {};
-
-    if (!pPdStruct) {
-        pdStructEmpty = XBinary::createPdStruct();
-        pPdStruct = &pdStructEmpty;
-    }
-
-    Q_UNUSED(pPdStruct)
-
     XBinary::_MEMORY_MAP result = {};
 
-    result.endian = getEndian();
-    result.nBinarySize = getSize();
-
-    bool bIsBigEndian = (result.endian == ENDIAN_BIG);
-
-    qint32 nIndex = 0;
-
-    {
-        _MEMORY_RECORD record = {};
-
-        record.nIndex = nIndex++;
-        record.filePart = FILEPART_HEADER;
-        record.nOffset = 0;
-        record.nSize = sizeof(XMACH_DEF::fat_header);
-        record.nAddress = -1;
-        record.sName = tr("Header");
-
-        result.listRecords.append(record);
+    if (mapMode == MAPMODE_UNKNOWN) {
+        mapMode = MAPMODE_REGIONS;  // Default mode
     }
 
-    quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
+    if (mapMode == MAPMODE_REGIONS) {
+        XBinary::PDSTRUCT pdStructEmpty = {};
 
-    for (qint32 i = 0; i < (qint32)nNumberOfRecords; i++) {
-        _MEMORY_RECORD record = {};
+        if (!pPdStruct) {
+            pdStructEmpty = XBinary::createPdStruct();
+            pPdStruct = &pdStructEmpty;
+        }
 
-        qint64 nOffset = sizeof(XMACH_DEF::fat_header) + i * sizeof(XMACH_DEF::fat_arch);
+        result.endian = getEndian();
+        result.nBinarySize = getSize();
 
-        quint32 _cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
-        quint32 _cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
-        quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
-        quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
+        bool bIsBigEndian = (result.endian == ENDIAN_BIG);
 
-        record.sName = XMACH::_getArch(_cputype, _cpusubtype);
-        record.nOffset = _offset;
-        record.nSize = _size;
-        record.nAddress = -1;
-        record.filePart = FILEPART_SEGMENT;
+        qint32 nIndex = 0;
 
-        result.listRecords.append(record);
+        {
+            _MEMORY_RECORD record = {};
+
+            record.nIndex = nIndex++;
+            record.filePart = FILEPART_HEADER;
+            record.nOffset = 0;
+            record.nSize = sizeof(XMACH_DEF::fat_header);
+            record.nAddress = -1;
+            record.sName = tr("Header");
+
+            result.listRecords.append(record);
+        }
+
+        quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
+
+        for (qint32 i = 0; i < (qint32)nNumberOfRecords; i++) {
+            _MEMORY_RECORD record = {};
+
+            qint64 nOffset = sizeof(XMACH_DEF::fat_header) + i * sizeof(XMACH_DEF::fat_arch);
+
+            quint32 _cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
+            quint32 _cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
+            quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
+            quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
+
+            record.sName = XMACH::_getArch(_cputype, _cpusubtype);
+            record.nOffset = _offset;
+            record.nSize = _size;
+            record.nAddress = -1;
+            record.filePart = FILEPART_SEGMENT;
+
+            result.listRecords.append(record);
+        }
+
+        _handleOverlay(&result);
     }
-
-    _handleOverlay(&result);
 
     return result;
 }
@@ -201,17 +257,22 @@ QString XMACHOFat::getArch()
 {
     QStringList listArchs;
 
-    bool bIsBigEndian = isBigEndian();
-    quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
+    if (getSize() >= sizeof(XMACH_DEF::fat_header)) {
+        bool bIsBigEndian = isBigEndian();
+        quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
+        qint64 nFileSize = getSize();
 
-    for (quint32 i = 0; i < nNumberOfRecords; i++) {
-        qint64 nOffset = sizeof(XMACH_DEF::fat_header) + (qint64)i * sizeof(XMACH_DEF::fat_arch);
+        for (quint32 i = 0; i < nNumberOfRecords; i++) {
+            qint64 nOffset = sizeof(XMACH_DEF::fat_header) + (qint64)i * sizeof(XMACH_DEF::fat_arch);
 
-        quint32 cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
-        quint32 cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
+            if (nOffset + (qint64)sizeof(XMACH_DEF::fat_arch) <= nFileSize) {
+                quint32 cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
+                quint32 cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
 
-        QString sArch = XMACH::_getArch(cputype, cpusubtype);
-        if (!sArch.isEmpty()) listArchs.append(sArch);
+                QString sArch = XMACH::_getArch(cputype, cpusubtype);
+                if (!sArch.isEmpty()) listArchs.append(sArch);
+            }
+        }
     }
 
     if (listArchs.isEmpty()) return tr("Universal");
@@ -245,4 +306,19 @@ QString XMACHOFat::getMIMEString()
 XBinary::FT XMACHOFat::getFileType()
 {
     return FT_MACHOFAT;
+}
+
+XBinary::MODE XMACHOFat::getMode()
+{
+    return MODE_ARCHIVE;
+}
+
+bool XMACHOFat::isArchive()
+{
+    return true;
+}
+
+QString XMACHOFat::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XMACHOFAT_STRUCTID, sizeof(_TABLE_XMACHOFAT_STRUCTID) / sizeof(XBinary::XCONVERT));
 }

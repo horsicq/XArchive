@@ -28,6 +28,17 @@ class XMACHOFat : public XArchive {
     Q_OBJECT
 
 public:
+    /*!
+        \brief XMACHOFat class for handling Universal Mach-O (fat) binary files
+        Universal Mach-O files contain multiple architecture-specific Mach-O binaries
+        in a single file, allowing for multi-architecture support on macOS.
+    */
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_HEADER,
+        STRUCTID_ARCHITECTURE
+    };
+
     enum TYPE {
         TYPE_UNKNOWN = 0,
         TYPE_BUNDLE,
@@ -48,10 +59,13 @@ public:
     virtual QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getArch();
+    virtual MODE getMode();
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
     virtual FT getFileType();
     virtual QString getMIMEString();
+    virtual bool isArchive();
+    virtual QString structIDToString(quint32 nID);
 };
 
 #endif  // XMACHOFAT_H
