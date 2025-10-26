@@ -317,3 +317,138 @@ QString XMACHOFat::structIDToString(quint32 nID)
 {
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XMACHOFAT_STRUCTID, sizeof(_TABLE_XMACHOFAT_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
+
+qint64 XMACHOFat::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+{
+    return (qint64)getNumberOfRecords(pPdStruct);
+}
+
+XMACH_DEF::fat_header XMACHOFat::read_fat_header()
+{
+    XMACH_DEF::fat_header result = {};
+
+    if (getSize() >= sizeof(XMACH_DEF::fat_header)) {
+        bool bIsBigEndian = isBigEndian();
+
+        result.magic = read_uint32(offsetof(XMACH_DEF::fat_header, magic), bIsBigEndian);
+        result.nfat_arch = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
+    }
+
+    return result;
+}
+
+XMACH_DEF::fat_arch XMACHOFat::read_fat_arch(qint32 nIndex)
+{
+    XMACH_DEF::fat_arch result = {};
+
+    qint64 nOffset = sizeof(XMACH_DEF::fat_header) + (qint64)nIndex * sizeof(XMACH_DEF::fat_arch);
+
+    if (nOffset + (qint64)sizeof(XMACH_DEF::fat_arch) <= getSize()) {
+        bool bIsBigEndian = isBigEndian();
+
+        result.cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
+        result.cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
+        result.offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
+        result.size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
+        result.align = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, align), bIsBigEndian);
+    }
+
+    return result;
+}
+
+QList<XMACH_DEF::fat_arch> XMACHOFat::read_fat_arch_list(PDSTRUCT *pPdStruct)
+{
+    QList<XMACH_DEF::fat_arch> listResult;
+
+    qint32 nNumberOfRecords = (qint32)getNumberOfRecords(pPdStruct);
+
+    if (nNumberOfRecords > 0) {
+        for (qint32 i = 0; (i < nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+            XMACH_DEF::fat_arch fatArch = read_fat_arch(i);
+            listResult.append(fatArch);
+        }
+    }
+
+    return listResult;
+}
+
+QMap<quint64, QString> XMACHOFat::getHeaderMagics()
+{
+    QMap<quint64, QString> mapResult;
+
+    mapResult.insert(XMACH_DEF::S_FAT_MAGIC, "FAT_MAGIC");
+    mapResult.insert(XMACH_DEF::S_FAT_CIGAM, "FAT_CIGAM");
+
+    return mapResult;
+}
+
+QMap<quint64, QString> XMACHOFat::getHeaderMagicsS()
+{
+    QMap<quint64, QString> mapResult;
+
+    mapResult.insert(XMACH_DEF::S_FAT_MAGIC, "Universal Mach-O (Big Endian)");
+    mapResult.insert(XMACH_DEF::S_FAT_CIGAM, "Universal Mach-O (Little Endian)");
+
+    return mapResult;
+}
+
+QString XMACHOFat::getArchitectureString(qint32 nIndex)
+{
+    QString sResult;
+
+    XMACH_DEF::fat_arch fatArch = read_fat_arch(nIndex);
+
+    if (fatArch.cputype != 0) {
+        sResult = XMACH::_getArch(fatArch.cputype, fatArch.cpusubtype);
+    }
+
+    return sResult;
+}
+
+qint64 XMACHOFat::getArchitectureOffset(qint32 nIndex)
+{
+    qint64 nResult = -1;
+
+    XMACH_DEF::fat_arch fatArch = read_fat_arch(nIndex);
+
+    if (fatArch.cputype != 0) {
+        nResult = fatArch.offset;
+    }
+
+    return nResult;
+}
+
+qint64 XMACHOFat::getArchitectureSize(qint32 nIndex)
+{
+    qint64 nResult = 0;
+
+    XMACH_DEF::fat_arch fatArch = read_fat_arch(nIndex);
+
+    if (fatArch.cputype != 0) {
+        nResult = fatArch.size;
+    }
+
+    return nResult;
+}
+
+bool XMACHOFat::isArchitectureValid(qint32 nIndex)
+{
+    bool bResult = false;
+
+    qint64 nOffset = sizeof(XMACH_DEF::fat_header) + (qint64)nIndex * sizeof(XMACH_DEF::fat_arch);
+
+    if (nOffset + (qint64)sizeof(XMACH_DEF::fat_arch) <= getSize()) {
+        XMACH_DEF::fat_arch fatArch = read_fat_arch(nIndex);
+
+        if (fatArch.cputype != 0) {
+            qint64 nFileSize = getSize();
+
+            // Verify that the architecture data fits within the file
+            if ((qint64)fatArch.offset + (qint64)fatArch.size <= nFileSize) {
+                bResult = true;
+            }
+        }
+    }
+
+    return bResult;
+}

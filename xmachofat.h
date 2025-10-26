@@ -65,6 +65,19 @@ public:
     virtual QString getMIMEString();
     virtual bool isArchive();
     virtual QString structIDToString(quint32 nID);
+    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
+
+    XMACH_DEF::fat_header read_fat_header();
+    XMACH_DEF::fat_arch read_fat_arch(qint32 nIndex);
+    QList<XMACH_DEF::fat_arch> read_fat_arch_list(PDSTRUCT *pPdStruct);
+
+    static QMap<quint64, QString> getHeaderMagics();
+    static QMap<quint64, QString> getHeaderMagicsS();
+    
+    QString getArchitectureString(qint32 nIndex);
+    qint64 getArchitectureOffset(qint32 nIndex);
+    qint64 getArchitectureSize(qint32 nIndex);
+    bool isArchitectureValid(qint32 nIndex);
 };
 
 #endif  // XMACHOFAT_H
