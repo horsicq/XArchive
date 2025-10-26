@@ -59,7 +59,6 @@ public:
     virtual QList<MAPMODE> getMapModesList();
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getArch();
-    virtual MODE getMode();
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);
     virtual FT getFileType();

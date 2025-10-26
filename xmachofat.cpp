@@ -308,11 +308,6 @@ XBinary::FT XMACHOFat::getFileType()
     return FT_MACHOFAT;
 }
 
-XBinary::MODE XMACHOFat::getMode()
-{
-    return MODE_ARCHIVE;
-}
-
 bool XMACHOFat::isArchive()
 {
     return true;
