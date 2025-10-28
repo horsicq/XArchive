@@ -27,6 +27,7 @@
 #include "Algos/xshrinkdecoder.h"
 #include "Algos/xreducedecoder.h"
 #include "Algos/xstoredecoder.h"
+#include "Algos/xzipcryptodecoder.h"
 
 XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
     {XZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -516,7 +517,7 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
         cdFileHeader.nFileCommentLength = 0;
         cdFileHeader.nStartDisk = 0;
         cdFileHeader.nInternalFileAttributes = 0;
-        cdFileHeader.nExternalFileAttributes = 0;
+        cdFileHeader.nExternalFileAttributes = pListZipFileRecords->at(i).nExternalFileAttributes;
         cdFileHeader.nOffsetToLocalFileHeader = (quint32)pListZipFileRecords->at(i).nHeaderOffset;
 
         pDest->write((char *)&cdFileHeader, sizeof(cdFileHeader));
@@ -633,12 +634,29 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
     qint64 nResult = -1;
     qint64 nSize = getSize();
 
+    // qDebug() << "findECDOffset: File size =" << nSize << "Device:" << (getDevice() ? "SET" : "NULL");
+
     if (nSize >= 22)  // 22 is minimum size [0x50,0x4B,0x05,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
     {
         qint64 nOffset = qMax((qint64)0, nSize - 0x1000);  // TODO const
 
+        // qDebug() << "findECDOffset: Starting search from offset" << nOffset;
+        
+        // Debug: Read and print last 30 bytes of file
+        // if (nSize >= 30) {
+        //     QByteArray lastBytes = read_array(nSize - 30, 30);
+        //     qDebug() << "findECDOffset: Last 30 bytes of file:";
+        //     QString sHex;
+        //     for (int i = 0; i < lastBytes.size(); i++) {
+        //         sHex += QString("%1 ").arg((quint8)lastBytes[i], 2, 16, QChar('0')).toUpper();
+        //     }
+        //     qDebug() << sHex;
+        // }
+
         while (XBinary::isPdStructNotCanceled(pPdStruct)) {
             qint64 nCurrent = find_uint32(nOffset, -1, SIGNATURE_ECD, false, pPdStruct);
+
+            // qDebug() << "findECDOffset: find_uint32 returned" << nCurrent;
 
             if (nCurrent == -1) {
                 break;
@@ -1411,6 +1429,10 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     zipFileRecord.method = pContext->options.compressMethod;  // Use compression method from options
     zipFileRecord.dtTime = fileInfo.lastModified();
     zipFileRecord.nUncompressedSize = fileInfo.size();
+    
+    // Get file permissions and convert to external attributes
+    QFile::Permissions permissions = fileInfo.permissions();
+    zipFileRecord.nExternalFileAttributes = filePermissionsToExternalAttributes(permissions);
 
     // Calculate CRC32
     QFile file(sFilePath);
@@ -1715,6 +1737,32 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         if (dateTime.isValid()) {
             result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
         }
+        
+        // Get external file attributes from central directory
+        qint64 nECDOffset = findECDOffset(pPdStruct);
+        
+        if (nECDOffset != -1) {
+            qint64 nCentralDirOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
+            
+            // Scan central directory to find matching record
+            qint32 nNumberOfRecords = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
+            
+            for (qint32 i = 0; i < nNumberOfRecords; i++) {
+                CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nCentralDirOffset, pPdStruct);
+                
+                if (cdh.nSignature != SIGNATURE_CFD) {
+                    break;
+                }
+                
+                // Check if this central directory entry matches current local file header
+                if (cdh.nOffsetToLocalFileHeader == pState->nCurrentOffset) {
+                    result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, cdh.nExternalFileAttributes);
+                    break;
+                }
+                
+                nCentralDirOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
+            }
+        }
     }
 
     return result;
@@ -1731,52 +1779,146 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
         COMPRESS_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
 
-        // For compressed data, we need to decompress via temporary buffer
-        // Create a temporary SubDevice for the compressed data
-        SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
+        // Check if file is encrypted
+        bool bIsEncrypted = (lfh.nFlags & 0x01) != 0;
 
-        if (subDevice.open(QIODevice::ReadOnly)) {
-            XBinary::DECOMPRESS_STATE state = {};
-            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
-            state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
-            state.pDeviceInput = &subDevice;
-            state.pDeviceOutput = pDevice;
-            state.nInputOffset = 0;
-            state.nInputLimit = lfh.nCompressedSize;
-            state.nDecompressedOffset = 0;
-            state.nDecompressedLimit = -1;
-
-            if (compressMethod == COMPRESS_METHOD_STORE) {
-                bResult = XStoreDecoder::decompress(&state, pPdStruct);
-            } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
-                bResult = XDeflateDecoder::decompress(&state, pPdStruct);
-            } else if (compressMethod == COMPRESS_METHOD_DEFLATE64) {
-                bResult = XDeflateDecoder::decompress64(&state, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
-                bResult = XBZIP2Decoder::decompress(&state, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
-                bResult = XLZMADecoder::decompress(&state, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
-                bResult = XShrinkDecoder::decompress(&state, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
-                bResult = XReduceDecoder::decompress(&state, 1, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
-                bResult = XReduceDecoder::decompress(&state, 2, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
-                bResult = XReduceDecoder::decompress(&state, 3, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
-                bResult = XReduceDecoder::decompress(&state, 4, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
-                bResult = XImplodeDecoder::decompress(&state, false, false, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
-                bResult = XImplodeDecoder::decompress(&state, false, true, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
-                bResult = XImplodeDecoder::decompress(&state, true, false, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
-                bResult = XImplodeDecoder::decompress(&state, true, true, pPdStruct);
+        if (bIsEncrypted) {
+            // Handle encrypted data with ZipCrypto
+            // Get password from unpack state context
+            QString sPassword;
+            if (pState->pContext) {
+                QVariantMap *pMapContext = (QVariantMap *)pState->pContext;
+                if (pMapContext->contains("password")) {
+                    sPassword = pMapContext->value("password").toString();
+                }
             }
 
-            subDevice.close();
+            if (sPassword.isEmpty()) {
+                // No password provided - cannot decrypt
+                return false;
+            }
+
+            // Create a temporary SubDevice for the encrypted compressed data
+            SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
+
+            if (subDevice.open(QIODevice::ReadOnly)) {
+                // First decrypt to a temporary buffer
+                QBuffer decryptedBuffer; // TODO buffer size
+                decryptedBuffer.open(QIODevice::WriteOnly);
+
+                XBinary::DECOMPRESS_STATE decryptState = {};
+                decryptState.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, lfh.nCRC32);
+                decryptState.pDeviceInput = &subDevice;
+                decryptState.pDeviceOutput = &decryptedBuffer;
+                decryptState.nInputOffset = 0;
+                decryptState.nInputLimit = lfh.nCompressedSize;
+                decryptState.nDecompressedOffset = 0;
+                decryptState.nDecompressedLimit = -1;
+
+                bool bDecrypted = XZipCryptoDecoder::decompress(&decryptState, sPassword, pPdStruct);
+
+                subDevice.close();
+
+                if (bDecrypted) {
+                    // Now decompress the decrypted data
+                    decryptedBuffer.close();
+                    QByteArray baDecrypted = decryptedBuffer.data();
+                    QBuffer decryptedSource;
+                    decryptedSource.setData(baDecrypted);
+                    decryptedSource.open(QIODevice::ReadOnly);
+
+                    XBinary::DECOMPRESS_STATE decompressState = {};
+                    decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+                    decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
+                    decompressState.pDeviceInput = &decryptedSource;
+                    decompressState.pDeviceOutput = pDevice;
+                    decompressState.nInputOffset = 0;
+                    decompressState.nInputLimit = baDecrypted.size();
+                    decompressState.nDecompressedOffset = 0;
+                    decompressState.nDecompressedLimit = -1;
+
+                    if (compressMethod == COMPRESS_METHOD_STORE) {
+                        bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
+                    } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
+                        bResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
+                    } else if (compressMethod == COMPRESS_METHOD_DEFLATE64) {
+                        bResult = XDeflateDecoder::decompress64(&decompressState, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
+                        bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
+                        bResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
+                        bResult = XShrinkDecoder::decompress(&decompressState, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
+                        bResult = XReduceDecoder::decompress(&decompressState, 1, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
+                        bResult = XReduceDecoder::decompress(&decompressState, 2, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
+                        bResult = XReduceDecoder::decompress(&decompressState, 3, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
+                        bResult = XReduceDecoder::decompress(&decompressState, 4, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
+                        bResult = XImplodeDecoder::decompress(&decompressState, false, false, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
+                        bResult = XImplodeDecoder::decompress(&decompressState, false, true, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
+                        bResult = XImplodeDecoder::decompress(&decompressState, true, false, pPdStruct);
+                    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
+                        bResult = XImplodeDecoder::decompress(&decompressState, true, true, pPdStruct);
+                    }
+
+                    decryptedSource.close();
+                }
+            }
+        } else {
+            // Unencrypted data - original flow
+            // For compressed data, we need to decompress via temporary buffer
+            // Create a temporary SubDevice for the compressed data
+            SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
+
+            if (subDevice.open(QIODevice::ReadOnly)) {
+                XBinary::DECOMPRESS_STATE state = {};
+                state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+                state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
+                state.pDeviceInput = &subDevice;
+                state.pDeviceOutput = pDevice;
+                state.nInputOffset = 0;
+                state.nInputLimit = lfh.nCompressedSize;
+                state.nDecompressedOffset = 0;
+                state.nDecompressedLimit = -1;
+
+                if (compressMethod == COMPRESS_METHOD_STORE) {
+                    bResult = XStoreDecoder::decompress(&state, pPdStruct);
+                } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
+                    bResult = XDeflateDecoder::decompress(&state, pPdStruct);
+                } else if (compressMethod == COMPRESS_METHOD_DEFLATE64) {
+                    bResult = XDeflateDecoder::decompress64(&state, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
+                    bResult = XBZIP2Decoder::decompress(&state, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
+                    bResult = XLZMADecoder::decompress(&state, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
+                    bResult = XShrinkDecoder::decompress(&state, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
+                    bResult = XReduceDecoder::decompress(&state, 1, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
+                    bResult = XReduceDecoder::decompress(&state, 2, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
+                    bResult = XReduceDecoder::decompress(&state, 3, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
+                    bResult = XReduceDecoder::decompress(&state, 4, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
+                    bResult = XImplodeDecoder::decompress(&state, false, false, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
+                    bResult = XImplodeDecoder::decompress(&state, false, true, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
+                    bResult = XImplodeDecoder::decompress(&state, true, false, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
+                    bResult = XImplodeDecoder::decompress(&state, true, true, pPdStruct);
+                }
+
+                subDevice.close();
+            }
         }
     }
 
@@ -1801,5 +1943,108 @@ bool XZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return bResult;
+}
+
+bool XZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (pState && pState->pContext) {
+        QVariantMap *pMapContext = (QVariantMap *)pState->pContext;
+        delete pMapContext;
+        pState->pContext = nullptr;
+    }
+
+    return true;
+}
+
+void XZip::setUnpackPassword(UNPACK_STATE *pState, const QString &sPassword)
+{
+    if (pState) {
+        if (!pState->pContext) {
+            pState->pContext = new QVariantMap();
+        }
+        
+        QVariantMap *pMapContext = (QVariantMap *)pState->pContext;
+        pMapContext->insert("password", sPassword);
+    }
+}
+
+quint32 XZip::filePermissionsToExternalAttributes(QFile::Permissions permissions)
+{
+    quint32 nResult = 0;
+
+    // Unix file permissions format (stored in high 16 bits)
+    // Format: 0xFFFF0000 where the high word contains Unix mode
+    quint16 nUnixMode = 0;
+
+    // File type (regular file)
+    nUnixMode |= 0x8000;  // S_IFREG
+
+    // Owner permissions
+    if (permissions & QFile::ReadOwner) nUnixMode |= 0x0100;   // S_IRUSR
+    if (permissions & QFile::WriteOwner) nUnixMode |= 0x0080;  // S_IWUSR
+    if (permissions & QFile::ExeOwner) nUnixMode |= 0x0040;    // S_IXUSR
+
+    // Group permissions
+    if (permissions & QFile::ReadGroup) nUnixMode |= 0x0020;   // S_IRGRP
+    if (permissions & QFile::WriteGroup) nUnixMode |= 0x0010;  // S_IWGRP
+    if (permissions & QFile::ExeGroup) nUnixMode |= 0x0008;    // S_IXGRP
+
+    // Other permissions
+    if (permissions & QFile::ReadOther) nUnixMode |= 0x0004;   // S_IROTH
+    if (permissions & QFile::WriteOther) nUnixMode |= 0x0002;  // S_IWOTH
+    if (permissions & QFile::ExeOther) nUnixMode |= 0x0001;    // S_IXOTH
+
+    // Store Unix mode in high 16 bits
+    nResult = ((quint32)nUnixMode) << 16;
+
+    // Low 16 bits: DOS attributes (optional)
+    // Bit 0: Read-only
+    // Bit 1: Hidden
+    // Bit 2: System
+    // Bit 5: Archive
+    if (!(permissions & QFile::WriteOwner)) {
+        nResult |= 0x01;  // Read-only
+    }
+    nResult |= 0x20;  // Archive bit
+
+    return nResult;
+}
+
+QFile::Permissions XZip::externalAttributesToFilePermissions(quint32 nExternalAttributes)
+{
+    QFile::Permissions permissions = QFile::Permissions();
+
+    // Extract Unix mode from high 16 bits
+    quint16 nUnixMode = (quint16)((nExternalAttributes >> 16) & 0xFFFF);
+
+    if (nUnixMode != 0) {
+        // Owner permissions
+        if (nUnixMode & 0x0100) permissions |= QFile::ReadOwner;   // S_IRUSR
+        if (nUnixMode & 0x0080) permissions |= QFile::WriteOwner;  // S_IWUSR
+        if (nUnixMode & 0x0040) permissions |= QFile::ExeOwner;    // S_IXUSR
+
+        // Group permissions
+        if (nUnixMode & 0x0020) permissions |= QFile::ReadGroup;   // S_IRGRP
+        if (nUnixMode & 0x0010) permissions |= QFile::WriteGroup;  // S_IWGRP
+        if (nUnixMode & 0x0008) permissions |= QFile::ExeGroup;    // S_IXGRP
+
+        // Other permissions
+        if (nUnixMode & 0x0004) permissions |= QFile::ReadOther;   // S_IROTH
+        if (nUnixMode & 0x0002) permissions |= QFile::WriteOther;  // S_IWOTH
+        if (nUnixMode & 0x0001) permissions |= QFile::ExeOther;    // S_IXOTH
+    } else {
+        // Fallback: use DOS attributes from low 16 bits
+        bool bReadOnly = (nExternalAttributes & 0x01) != 0;
+        
+        if (bReadOnly) {
+            permissions = QFile::ReadOwner | QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther;
+        } else {
+            permissions = QFile::ReadOwner | QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther | QFile::WriteOwner | QFile::WriteUser;
+        }
+    }
+
+    return permissions;
 }
 

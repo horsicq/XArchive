@@ -152,6 +152,7 @@ public:
         qint64 nUncompressedSize;
         qint64 nHeaderOffset;
         qint64 nDataOffset;
+        quint32 nExternalFileAttributes;
         // TODO Comment!!!
     };
 
@@ -224,9 +225,15 @@ public:
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+    static void setUnpackPassword(UNPACK_STATE *pState, const QString &sPassword);
 
     static QMap<quint64, QString> getHeaderSignatures();
     static QMap<quint64, QString> getHeaderSignaturesS();
+
+    static quint32 filePermissionsToExternalAttributes(QFile::Permissions permissions);
+    static QFile::Permissions externalAttributesToFilePermissions(quint32 nExternalAttributes);
 
 protected:
     COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
