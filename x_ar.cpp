@@ -753,7 +753,7 @@ X_Ar::FRECORD X_Ar::createHeader(const QString &sFileName, qint64 nFileSize, qui
     memset(&header, 0x20, sizeof(FRECORD));  // AR uses spaces for padding
 
     QByteArray baName = sFileName.toUtf8();
-    
+
     // Check if filename fits in standard 16-byte field (minus 1 for trailing '/')
     // If not, we'll use BSD-style format with #1/<length>
     if (baName.size() <= 15) {
@@ -1009,4 +1009,3 @@ bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return bResult;
 }
-

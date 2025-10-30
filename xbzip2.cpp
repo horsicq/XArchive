@@ -499,4 +499,3 @@ bool XBZIP2::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return true;
 }
-

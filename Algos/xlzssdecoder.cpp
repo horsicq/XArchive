@@ -46,9 +46,9 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
         }
 
         // LZSS parameters for SZDD format
-        const qint32 N_WINDOW_SIZE = 4096;      // Size of sliding window
-        const qint32 N_MATCH_MIN_LENGTH = 3;    // Minimum match length
-        const qint32 N_MATCH_MAX_LENGTH = 18;   // Maximum match length (3 + 15)
+        const qint32 N_WINDOW_SIZE = 4096;     // Size of sliding window
+        const qint32 N_MATCH_MIN_LENGTH = 3;   // Minimum match length
+        const qint32 N_MATCH_MAX_LENGTH = 18;  // Maximum match length (3 + 15)
 
         // Allocate sliding window buffer
         char *pWindowBuffer = new char[N_WINDOW_SIZE];
@@ -119,7 +119,7 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
                 // Decode position and length
                 // Typically: position (12 bits) and length (4 bits)
                 quint16 nEncoded = (quint8)bytePos[0] | ((quint8)bytePos[1] << 8);
-                quint16 nPos = (nEncoded >> 4) & 0xFFF;    // 12-bit position
+                quint16 nPos = (nEncoded >> 4) & 0xFFF;                 // 12-bit position
                 quint16 nLen = (nEncoded & 0x0F) + N_MATCH_MIN_LENGTH;  // 4-bit length + 3
 
                 // Copy match from window to output

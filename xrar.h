@@ -112,9 +112,9 @@ class XRar : public XArchive {
     };
 
     struct RAR_UNPACK_CONTEXT {
-        qint32 nVersion;                  // RAR version (4 or 5)
-        QList<qint64> listFileOffsets;    // Offsets of file headers
-        QList<FILEBLOCK4> listFileBlocks4;  // Cache of RAR 4.x file blocks
+        qint32 nVersion;                      // RAR version (4 or 5)
+        QList<qint64> listFileOffsets;        // Offsets of file headers
+        QList<FILEBLOCK4> listFileBlocks4;    // Cache of RAR 4.x file blocks
         QList<FILEHEADER5> listFileHeaders5;  // Cache of RAR 5.x file headers
         rar_Unpack rarUnpacker;
     };
@@ -192,11 +192,11 @@ private:
     FILEBLOCK4 readFileBlock4(qint64 nOffset);
     FILEHEADER5 readFileHeader5(qint64 nOffset);
     QString decodeRarUnicodeName(const QByteArray &nameData);
-    
+
     // Helper functions for property extraction
     QMap<XBinary::FPART_PROP, QVariant> _readProperties(const FILEBLOCK4 &fileBlock4);
     QMap<XBinary::FPART_PROP, QVariant> _readProperties(const FILEHEADER5 &fileHeader5);
-    
+
     // Helper functions for packing
     QByteArray createFileBlock4(const QString &sFileName, qint64 nFileSize, quint32 nFileCRC, quint32 nFileTime, quint32 nAttributes);
     quint16 calculateCRC16(const QByteArray &data);

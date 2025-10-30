@@ -37,18 +37,23 @@ class XZipAESDecoder : public QObject {
 public:
     explicit XZipAESDecoder(QObject *pParent = nullptr);
 
-    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::CRYPTO_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::CRYPTO_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    
-    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::CRYPTO_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::CRYPTO_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+                        XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+                        XBinary::PDSTRUCT *pPdStruct = nullptr);
+
+    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+                        XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+                        XBinary::PDSTRUCT *pPdStruct = nullptr);
 
 private:
     static void pbkdf2(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nIterations, qint32 nKeyLength, QByteArray &baResult);
-    static bool deriveKeys(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nKeySize, QByteArray &baAESKey, QByteArray &baPasswordVerify, QByteArray &baHMACKey, XBinary::PDSTRUCT *pPdStruct);
+    static bool deriveKeys(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nKeySize, QByteArray &baAESKey, QByteArray &baPasswordVerify,
+                           QByteArray &baHMACKey, XBinary::PDSTRUCT *pPdStruct);
     static bool decryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct);
     static bool encryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct);
-    
+
     // Custom AES implementation
     static qint32 custom_aes_set_encrypt_key(const quint8 *pUserKey, qint32 nBits, CUSTOM_AES_KEY *pKey);
     static void custom_aes_encrypt(const quint8 *pInput, quint8 *pOutput, const CUSTOM_AES_KEY *pKey);

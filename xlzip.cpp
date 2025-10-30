@@ -20,13 +20,11 @@
  */
 #include "xlzip.h"
 
-XBinary::XCONVERT _TABLE_XLZIP_STRUCTID[] = {
-    {XLzip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-    {XLzip::STRUCTID_LZIP_HEADER, "LZIP_HEADER", QString("LZIP header")},
-    {XLzip::STRUCTID_MEMBER_HEADER, "MEMBER_HEADER", QString("Member header")},
-    {XLzip::STRUCTID_COMPRESSED_DATA, "COMPRESSED_DATA", QString("Compressed data")},
-    {XLzip::STRUCTID_FOOTER, "FOOTER", QString("Footer")}
-};
+XBinary::XCONVERT _TABLE_XLZIP_STRUCTID[] = {{XLzip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                             {XLzip::STRUCTID_LZIP_HEADER, "LZIP_HEADER", QString("LZIP header")},
+                                             {XLzip::STRUCTID_MEMBER_HEADER, "MEMBER_HEADER", QString("Member header")},
+                                             {XLzip::STRUCTID_COMPRESSED_DATA, "COMPRESSED_DATA", QString("Compressed data")},
+                                             {XLzip::STRUCTID_FOOTER, "FOOTER", QString("Footer")}};
 
 XLzip::XLzip(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -326,7 +324,7 @@ bool XLzip::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         LZIP_UNPACK_CONTEXT *pContext = new LZIP_UNPACK_CONTEXT;
         pContext->nHeaderSize = 6;
         pContext->nCompressedSize = getSize() - 13;  // Approximate
-        pContext->nUncompressedSize = 0;  // Would need to decompress
+        pContext->nUncompressedSize = 0;             // Would need to decompress
         pContext->nCRC32 = 0;
 
         // Read uncompressed size from footer
@@ -360,7 +358,7 @@ XBinary::ARCHIVERECORD XLzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         result.nStreamSize = pContext->nCompressedSize;
         result.nDecompressedOffset = 0;
         result.nDecompressedSize = pContext->nUncompressedSize;
-        
+
         result.mapProperties[XBinary::FPART_PROP_ORIGINALNAME] = XBinary::getDeviceFileBaseName(getDevice());
         result.mapProperties[XBinary::FPART_PROP_COMPRESSEDSIZE] = pContext->nCompressedSize;
         result.mapProperties[XBinary::FPART_PROP_UNCOMPRESSEDSIZE] = pContext->nUncompressedSize;

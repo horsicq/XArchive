@@ -122,13 +122,13 @@ public:
 private:
     // Format-specific unpacking context
     struct CFBF_UNPACK_CONTEXT {
-        qint64 nSectorSize;                  // Sector size (512 or 4096)
-        qint64 nMiniSectorSize;              // Mini-sector size (typically 64)
-        quint64 nMiniCutoff;                 // Mini-stream cutoff size (typically 4096)
-        qint64 nDirBaseOffset;               // Base offset of directory entries
-        qint64 nRootStreamStart;             // Root storage stream start (for mini-streams)
-        qint64 nRootStreamSize;              // Root storage stream size
-        QList<qint64> listRecordOffsets;     // Offsets to stream directory entries
+        qint64 nSectorSize;               // Sector size (512 or 4096)
+        qint64 nMiniSectorSize;           // Mini-sector size (typically 64)
+        quint64 nMiniCutoff;              // Mini-stream cutoff size (typically 4096)
+        qint64 nDirBaseOffset;            // Base offset of directory entries
+        qint64 nRootStreamStart;          // Root storage stream start (for mini-streams)
+        qint64 nRootStreamSize;           // Root storage stream size
+        QList<qint64> listRecordOffsets;  // Offsets to stream directory entries
     };
 
     static void _addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset, qint64 size, const QString &name);

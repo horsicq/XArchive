@@ -21,9 +21,9 @@
 #include "xcpio.h"
 
 XBinary::XCONVERT _TABLE_XCPIO_STRUCTID[] = {{XCPIO::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                              {XCPIO::STRUCTID_NEWC_HEADER, "NEWC_HEADER", QString("CPIO newc header")},
-                                              {XCPIO::STRUCTID_CRC_HEADER, "CRC_HEADER", QString("CPIO CRC header")},
-                                              {XCPIO::STRUCTID_ODC_HEADER, "ODC_HEADER", QString("CPIO odc header")}};
+                                             {XCPIO::STRUCTID_NEWC_HEADER, "NEWC_HEADER", QString("CPIO newc header")},
+                                             {XCPIO::STRUCTID_CRC_HEADER, "CRC_HEADER", QString("CPIO CRC header")},
+                                             {XCPIO::STRUCTID_ODC_HEADER, "ODC_HEADER", QString("CPIO odc header")}};
 
 XCPIO::XCPIO(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -423,8 +423,7 @@ bool XCPIO::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     CPIO_UNPACK_CONTEXT *pContext = new CPIO_UNPACK_CONTEXT;
     pContext->format = _detectFormat(0);
-    pContext->nHeaderSize = (pContext->format == CPIO_FORMAT_NEWC || pContext->format == CPIO_FORMAT_CRC) ? sizeof(CPIO_NEWC_HEADER)
-                                                                                                            : sizeof(CPIO_ODC_HEADER);
+    pContext->nHeaderSize = (pContext->format == CPIO_FORMAT_NEWC || pContext->format == CPIO_FORMAT_CRC) ? sizeof(CPIO_NEWC_HEADER) : sizeof(CPIO_ODC_HEADER);
 
     pState->pContext = pContext;
     pState->nCurrentOffset = 0;

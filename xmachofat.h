@@ -73,7 +73,7 @@ public:
 
     static QMap<quint64, QString> getHeaderMagics();
     static QMap<quint64, QString> getHeaderMagicsS();
-    
+
     QString getArchitectureString(qint32 nIndex);
     qint64 getArchitectureOffset(qint32 nIndex);
     qint64 getArchitectureSize(qint32 nIndex);

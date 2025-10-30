@@ -883,7 +883,8 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
     if (inflateInit2(&strm, -MAX_WBITS) == Z_OK)  // -MAX_WBITS for raw data
     {
         do {
-            qint32 nBufferSize = (pDecompressState->nInputLimit == -1) ? N_BUFFER_SIZE : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
+            qint32 nBufferSize =
+                (pDecompressState->nInputLimit == -1) ? N_BUFFER_SIZE : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
             strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
             if (strm.avail_in == 0) {
@@ -895,10 +896,10 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
             do {
                 strm.avail_out = N_BUFFER_SIZE;
-//                    strm.avail_out=1;
+                //                    strm.avail_out=1;
                 strm.next_out = (quint8 *)bufferOut;
                 ret = inflate(&strm, Z_NO_FLUSH);
-//                    ret=inflate(&strm,Z_SYNC_FLUSH);
+                //                    ret=inflate(&strm,Z_SYNC_FLUSH);
 
                 if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT)) {
                     break;
@@ -912,7 +913,8 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
                         break;
                     }
                 }
-        } while (strm.avail_out == 0);            if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
+            } while (strm.avail_out == 0);
+            if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
                 break;
             }
 

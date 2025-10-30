@@ -689,24 +689,24 @@ bool XCab::writeCFHeader(QIODevice *pDevice, const CFHEADER &cfHeader)
     }
 
     // Write signature
-    if (pDevice->write((const char*)&cfHeader.signature, 4) != 4) return false;
+    if (pDevice->write((const char *)&cfHeader.signature, 4) != 4) return false;
 
     // Write reserved fields
     quint32 reserved = 0;
-    if (pDevice->write((const char*)&reserved, 4) != 4) return false; // reserved1
-    if (pDevice->write((const char*)&cfHeader.cbCabinet, 4) != 4) return false;
-    if (pDevice->write((const char*)&reserved, 4) != 4) return false; // reserved2
-    if (pDevice->write((const char*)&cfHeader.coffFiles, 4) != 4) return false;
-    if (pDevice->write((const char*)&reserved, 4) != 4) return false; // reserved3
+    if (pDevice->write((const char *)&reserved, 4) != 4) return false;  // reserved1
+    if (pDevice->write((const char *)&cfHeader.cbCabinet, 4) != 4) return false;
+    if (pDevice->write((const char *)&reserved, 4) != 4) return false;  // reserved2
+    if (pDevice->write((const char *)&cfHeader.coffFiles, 4) != 4) return false;
+    if (pDevice->write((const char *)&reserved, 4) != 4) return false;  // reserved3
 
     // Write version and counts
-    if (pDevice->write((const char*)&cfHeader.versionMinor, 1) != 1) return false;
-    if (pDevice->write((const char*)&cfHeader.versionMajor, 1) != 1) return false;
-    if (pDevice->write((const char*)&cfHeader.cFolders, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfHeader.cFiles, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfHeader.flags, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfHeader.setID, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfHeader.iCabinet, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfHeader.versionMinor, 1) != 1) return false;
+    if (pDevice->write((const char *)&cfHeader.versionMajor, 1) != 1) return false;
+    if (pDevice->write((const char *)&cfHeader.cFolders, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfHeader.cFiles, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfHeader.flags, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfHeader.setID, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfHeader.iCabinet, 2) != 2) return false;
 
     return true;
 }
@@ -717,9 +717,9 @@ bool XCab::writeCFFolder(QIODevice *pDevice, const CFFOLDER &cfFolder)
         return false;
     }
 
-    if (pDevice->write((const char*)&cfFolder.coffCabStart, 4) != 4) return false;
-    if (pDevice->write((const char*)&cfFolder.cCFData, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfFolder.typeCompress, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfFolder.coffCabStart, 4) != 4) return false;
+    if (pDevice->write((const char *)&cfFolder.cCFData, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfFolder.typeCompress, 2) != 2) return false;
 
     return true;
 }
@@ -730,12 +730,12 @@ bool XCab::writeCFFILE(QIODevice *pDevice, const CFFILE &cfFile, const QString &
         return false;
     }
 
-    if (pDevice->write((const char*)&cfFile.cbFile, 4) != 4) return false;
-    if (pDevice->write((const char*)&cfFile.uoffFolderStart, 4) != 4) return false;
-    if (pDevice->write((const char*)&cfFile.iFolder, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfFile.date, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfFile.time, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfFile.attribs, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfFile.cbFile, 4) != 4) return false;
+    if (pDevice->write((const char *)&cfFile.uoffFolderStart, 4) != 4) return false;
+    if (pDevice->write((const char *)&cfFile.iFolder, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfFile.date, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfFile.time, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfFile.attribs, 2) != 2) return false;
 
     // Write filename as ANSI string
     QByteArray baFileName = sFileName.toLocal8Bit();
@@ -750,9 +750,9 @@ bool XCab::writeCFData(QIODevice *pDevice, const CFDATA &cfData, const QByteArra
         return false;
     }
 
-    if (pDevice->write((const char*)&cfData.csum, 4) != 4) return false;
-    if (pDevice->write((const char*)&cfData.cbData, 2) != 2) return false;
-    if (pDevice->write((const char*)&cfData.cbUncomp, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfData.csum, 4) != 4) return false;
+    if (pDevice->write((const char *)&cfData.cbData, 2) != 2) return false;
+    if (pDevice->write((const char *)&cfData.cbUncomp, 2) != 2) return false;
     if (pDevice->write(baData.constData(), baData.size()) != baData.size()) return false;
 
     return true;
@@ -772,9 +772,8 @@ bool XCab::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     // Read CAB header
     CFHEADER cfHeader = readCFHeader(0);
-    if (cfHeader.signature[0] != 'M' || cfHeader.signature[1] != 'S' ||
-        cfHeader.signature[2] != 'C' || cfHeader.signature[3] != 'F') {
-        return false; // Invalid CAB signature
+    if (cfHeader.signature[0] != 'M' || cfHeader.signature[1] != 'S' || cfHeader.signature[2] != 'C' || cfHeader.signature[3] != 'F') {
+        return false;  // Invalid CAB signature
     }
 
     // Create unpack context
@@ -824,7 +823,7 @@ bool XCab::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     // Initialize state
-    pState->nCurrentOffset = cfHeader.coffFiles; // Start at first file
+    pState->nCurrentOffset = cfHeader.coffFiles;  // Start at first file
     pState->nTotalSize = getSize();
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = cfHeader.cFiles;
@@ -910,7 +909,7 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
     // For now, only support STORE method (no compression)
     if (cfFolder.typeCompress != 0x0000) {
-        return false; // Compressed CAB files not yet supported
+        return false;  // Compressed CAB files not yet supported
     }
 
     // Calculate offset within the compressed stream
@@ -963,7 +962,7 @@ bool XCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     if (pState->nCurrentIndex + 1 >= pState->nNumberOfRecords) {
-        return false; // No more records
+        return false;  // No more records
     }
 
     CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
@@ -1016,22 +1015,22 @@ bool XCab::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, 
     // Create pack context
     CAB_PACK_CONTEXT *pContext = new CAB_PACK_CONTEXT;
     pContext->nCurrentOffset = 0;
-    pContext->nCompressionType = 0x0000; // STORE method by default
+    pContext->nCompressionType = 0x0000;  // STORE method by default
 
     // Write CAB signature
     QByteArray baSignature("MSCF");
-    baSignature.append(4, '\0'); // reserved1
-    baSignature.append(4, '\0'); // cbCabinet (will be updated later)
-    baSignature.append(4, '\0'); // reserved2
-    baSignature.append(4, '\0'); // coffFiles (will be updated later)
-    baSignature.append(4, '\0'); // reserved3
-    baSignature.append((char)0x03); // versionMinor
-    baSignature.append((char)0x01); // versionMajor
-    baSignature.append(2, '\0'); // cFolders (will be updated later)
-    baSignature.append(2, '\0'); // cFiles (will be updated later)
-    baSignature.append(2, '\0'); // flags
-    baSignature.append(2, '\0'); // setID
-    baSignature.append(2, '\0'); // iCabinet
+    baSignature.append(4, '\0');     // reserved1
+    baSignature.append(4, '\0');     // cbCabinet (will be updated later)
+    baSignature.append(4, '\0');     // reserved2
+    baSignature.append(4, '\0');     // coffFiles (will be updated later)
+    baSignature.append(4, '\0');     // reserved3
+    baSignature.append((char)0x03);  // versionMinor
+    baSignature.append((char)0x01);  // versionMajor
+    baSignature.append(2, '\0');     // cFolders (will be updated later)
+    baSignature.append(2, '\0');     // cFiles (will be updated later)
+    baSignature.append(2, '\0');     // flags
+    baSignature.append(2, '\0');     // setID
+    baSignature.append(2, '\0');     // iCabinet
 
     if (pDestDevice->write(baSignature) != baSignature.size()) {
         delete pContext;
@@ -1079,9 +1078,9 @@ bool XCab::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     // Create file entry
     CFFILE cfFile = {};
     cfFile.cbFile = nFileSize;
-    cfFile.uoffFolderStart = 0; // Will be updated when folder is finalized
-    cfFile.iFolder = 0; // Single folder for simplicity
-    cfFile.attribs = 0x20; // Archive attribute
+    cfFile.uoffFolderStart = 0;  // Will be updated when folder is finalized
+    cfFile.iFolder = 0;          // Single folder for simplicity
+    cfFile.attribs = 0x20;       // Archive attribute
 
     // Convert file time to DOS format
     QDateTime dateTime = fileInfo.lastModified();
@@ -1091,7 +1090,7 @@ bool XCab::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
 
     // For STORE method, create a single data block
     CFDATA cfData = {};
-    cfData.csum = 0; // TODO: Calculate checksum
+    cfData.csum = 0;  // TODO: Calculate checksum
     cfData.cbData = nFileSize;
     cfData.cbUncomp = nFileSize;
 
@@ -1150,7 +1149,7 @@ bool XCab::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct
 
     CFFILE cfFile = {};
     cfFile.cbFile = nDeviceSize;
-    cfFile.uoffFolderStart = 0; // Will be updated
+    cfFile.uoffFolderStart = 0;  // Will be updated
     cfFile.iFolder = 0;
     cfFile.attribs = 0x20;
 
@@ -1162,7 +1161,7 @@ bool XCab::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct
 
     // Create data block
     CFDATA cfData = {};
-    cfData.csum = 0; // TODO: Calculate checksum
+    cfData.csum = 0;  // TODO: Calculate checksum
     cfData.cbData = nDeviceSize;
     cfData.cbUncomp = nDeviceSize;
 
@@ -1252,7 +1251,7 @@ bool XCab::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
     qint64 nFilesOffset = pState->nCurrentOffset;
     for (qint32 i = 0; i < pContext->listFiles.size(); i++) {
         const CFFILE &cfFile = pContext->listFiles.at(i);
-        QString sFileName = QString("file_%1.dat").arg(i); // TODO: Store actual filenames
+        QString sFileName = QString("file_%1.dat").arg(i);  // TODO: Store actual filenames
 
         if (!writeCFFILE(pState->pDevice, cfFile, sFileName)) {
             delete pContext;
@@ -1266,8 +1265,10 @@ bool XCab::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->pDevice->seek(0);
 
     CFHEADER cfHeader = {};
-    cfHeader.signature[0] = 'M'; cfHeader.signature[1] = 'S';
-    cfHeader.signature[2] = 'C'; cfHeader.signature[3] = 'F';
+    cfHeader.signature[0] = 'M';
+    cfHeader.signature[1] = 'S';
+    cfHeader.signature[2] = 'C';
+    cfHeader.signature[3] = 'F';
     cfHeader.cbCabinet = pState->nCurrentOffset;
     cfHeader.coffFiles = nFilesOffset;
     cfHeader.versionMinor = 0x03;

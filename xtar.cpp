@@ -255,7 +255,7 @@ QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         if (nFileParts & FILEPART_STREAM) {
             qint64 nRawSize = _getSize(header);
             qint64 nAlignedSize = align_up(nRawSize, 0x200);
-            
+
             XBinary::FPART record = {};
             record.filePart = FILEPART_STREAM;
             record.nFileOffset = nOffset + 0x200;
@@ -272,7 +272,7 @@ QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
         nOffset += (0x200);
         nOffset += align_up(_getSize(header), 0x200);
-        
+
         nCount++;
     }
 
@@ -371,7 +371,7 @@ XTAR::posix_header XTAR::createHeader(const QString &sFileName, const QString &s
     // Copy name (max 100 bytes)
     QByteArray baName = sFullName.toUtf8();
     qint32 nNameLen = qMin(baName.size(), 100);
-    
+
     if (nNameLen > 0) {
         memcpy(header.name, baName.constData(), nNameLen);
     }
@@ -453,7 +453,7 @@ bool XTAR::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
         while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
             posix_header header = read_posix_header(nOffset);
-            
+
             // Check for end of archive (empty header)
             if (header.name[0] == 0) {
                 break;
@@ -506,7 +506,7 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         QString sUid = QString(QByteArray(header.uid, 8)).trimmed();
         quint32 nUid = sUid.toUInt(nullptr, 8);
         result.mapProperties.insert(XBinary::FPART_PROP_UID, nUid);
-        
+
         QString sGid = QString(QByteArray(header.gid, 8)).trimmed();
         quint32 nGid = sGid.toUInt(nullptr, 8);
         result.mapProperties.insert(XBinary::FPART_PROP_GID, nGid);
@@ -561,7 +561,7 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         if (!sUname.isEmpty()) {
             result.mapProperties.insert(XBinary::FPART_PROP_USERNAME, sUname);
         }
-        
+
         QString sGname = QString::fromUtf8(header.gname, qMin((qint32)sizeof(header.gname), (qint32)32));
         nNullPos = sGname.indexOf(QChar('\0'));
         if (nNullPos != -1) {
@@ -695,24 +695,20 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     // Determine file path to store in archive based on PATH_MODE
     QString sStoredPath;
     TAR_OPTIONS *pTarOptions = static_cast<TAR_OPTIONS *>(pState->pContext);
-    
+
     if (pTarOptions) {
         switch (pTarOptions->pathMode) {
-        case XBinary::PATH_MODE_ABSOLUTE:
-            sStoredPath = fileInfo.absoluteFilePath();
-            break;
-        case XBinary::PATH_MODE_RELATIVE:
-            if (!pTarOptions->sBasePath.isEmpty()) {
-                QDir baseDir(pTarOptions->sBasePath);
-                sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
-            } else {
-                sStoredPath = fileInfo.fileName();
-            }
-            break;
-        case XBinary::PATH_MODE_BASENAME:
-        default:
-            sStoredPath = fileInfo.fileName();
-            break;
+            case XBinary::PATH_MODE_ABSOLUTE: sStoredPath = fileInfo.absoluteFilePath(); break;
+            case XBinary::PATH_MODE_RELATIVE:
+                if (!pTarOptions->sBasePath.isEmpty()) {
+                    QDir baseDir(pTarOptions->sBasePath);
+                    sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
+                } else {
+                    sStoredPath = fileInfo.fileName();
+                }
+                break;
+            case XBinary::PATH_MODE_BASENAME:
+            default: sStoredPath = fileInfo.fileName(); break;
         }
     } else {
         // Default: basename only
@@ -796,7 +792,7 @@ bool XTAR::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
     TAR_OPTIONS *pTarOptions = static_cast<TAR_OPTIONS *>(pState->pContext);
     QString sOriginalBasePath;
     bool bRestoreBasePath = false;
-    
+
     if (pTarOptions && pTarOptions->pathMode == XBinary::PATH_MODE_RELATIVE && pTarOptions->sBasePath.isEmpty()) {
         sOriginalBasePath = pTarOptions->sBasePath;
         pTarOptions->sBasePath = sDirectoryPath;

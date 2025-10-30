@@ -795,7 +795,7 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
 XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
 {
     FILEBLOCK4 result = {};
-    
+
     // Bounds check - need at least 7 + 25 = 32 bytes for basic header
     if (nOffset < 0 || nOffset + 32 > getSize()) {
         return result;
@@ -859,7 +859,7 @@ XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
 XRar::GENERICBLOCK4 XRar::readGenericBlock4(qint64 nOffset)
 {
     GENERICBLOCK4 result = {};
-    
+
     // Bounds check
     if (nOffset < 0 || nOffset + 7 > getSize()) {
         result.nType = 0;
@@ -932,23 +932,23 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
     quint16 nNameSize = baFileName.size();
 
     // Build header (without CRC16 at the beginning)
-    ds << (quint8)BLOCKTYPE4_FILE;          // Type
-    ds << (quint16)0x8000;                  // Flags (0x8000 = has data)
-    
+    ds << (quint8)BLOCKTYPE4_FILE;  // Type
+    ds << (quint16)0x8000;          // Flags (0x8000 = has data)
+
     // Calculate header size (no high size fields for files < 4GB)
     quint16 nHeaderSize = 7 + 25 + nNameSize;  // 7 (generic) + 25 (file-specific) + name
     ds << nHeaderSize;
 
     // File-specific fields
-    ds << (quint32)nFileSize;               // packSize (low 32 bits)
-    ds << (quint32)nFileSize;               // unpSize (low 32 bits)
-    ds << (quint8)RAR_OS_WIN32;             // hostOS
-    ds << nFileCRC;                         // fileCRC
-    ds << nFileTime;                        // fileTime (MS-DOS format)
-    ds << (quint8)0x14;                     // unpVer (2.0)
-    ds << (quint8)RAR_METHOD_STORE;         // method (0x30 = STORE)
-    ds << nNameSize;                        // nameSize
-    ds << nAttributes;                      // fileAttr
+    ds << (quint32)nFileSize;        // packSize (low 32 bits)
+    ds << (quint32)nFileSize;        // unpSize (low 32 bits)
+    ds << (quint8)RAR_OS_WIN32;      // hostOS
+    ds << nFileCRC;                  // fileCRC
+    ds << nFileTime;                 // fileTime (MS-DOS format)
+    ds << (quint8)0x14;              // unpVer (2.0)
+    ds << (quint8)RAR_METHOD_STORE;  // method (0x30 = STORE)
+    ds << nNameSize;                 // nameSize
+    ds << nAttributes;               // fileAttr
 
     // Note: For files < 4GB, we don't write highPackSize/highUnpSize fields
     // The RAR4_FILE_LARGE flag (0x0100) is not set, so reader won't expect these fields
@@ -1025,7 +1025,7 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
 //     for (qint32 i = 0; (i < nNumberOfFiles) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
 //         QString sFilePath = listFiles.at(i);
 //         QString sRelativePath = sFilePath.mid(sFolderPath.length() + 1);  // Relative to folder
-        
+
 //         // Normalize path separators
 //         sRelativePath = sRelativePath.replace("\\", "/");
 
@@ -1035,10 +1035,10 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
 //         }
 
 //         qint64 nFileSize = file.size();
-        
+
 //         // Calculate CRC32
 //         quint32 nFileCRC = XBinary::_getCRC32(&file);
-        
+
 //         // Read file data for writing
 //         file.seek(0);
 //         QByteArray baFileData = file.readAll();
@@ -1047,25 +1047,25 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
 //         // Get file time in MS-DOS format
 //         QFileInfo fileInfo(sFilePath);
 //         QDateTime dateTime = fileInfo.lastModified();
-        
+
 //         // Convert QDateTime to DOS date/time format
 //         QDate date = dateTime.date();
 //         QTime time = dateTime.time();
-        
+
 //         quint16 nDosDate = 0;
 //         quint16 nDosTime = 0;
-        
+
 //         if (date.isValid()) {
 //             qint32 nYear = date.year();
 //             if (nYear >= 1980 && nYear <= 2107) {
 //                 nDosDate = (date.day() & 0x1F) | ((date.month() & 0x0F) << 5) | (((nYear - 1980) & 0x7F) << 9);
 //             }
 //         }
-        
+
 //         if (time.isValid()) {
 //             nDosTime = ((time.second() / 2) & 0x1F) | ((time.minute() & 0x3F) << 5) | ((time.hour() & 0x1F) << 11);
 //         }
-        
+
 //         // Combine DOS date and time into a single 32-bit value (time in low word, date in high word)
 //         quint32 nFileTime = (static_cast<quint32>(nDosDate) << 16) | nDosTime;
 
@@ -1133,19 +1133,19 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 
     qint64 nFileHeaderSize = (pContext->nVersion == 4) ? 7 : 8;
     qint64 nCurrentOffset = nFileHeaderSize;
-    
+
 #ifdef QT_DEBUG
     qDebug() << "XRar::initUnpack() - Version:" << pContext->nVersion << "FileHeaderSize:" << nFileHeaderSize << "ArchiveSize:" << pUnpackState->nTotalSize;
 #endif
-    
+
     // Skip the ARCHIVE header block for RAR4
     if (pContext->nVersion == 4) {
         GENERICBLOCK4 archiveBlock = readGenericBlock4(nCurrentOffset);
 #ifdef QT_DEBUG
-        qDebug() << "XRar::initUnpack() - ARCHIVE Block - Type: 0x" + QString::number(archiveBlock.nType, 16) 
-                 << "Size:" << archiveBlock.nHeaderSize << "Flags: 0x" + QString::number(archiveBlock.nFlags, 16);
+        qDebug() << "XRar::initUnpack() - ARCHIVE Block - Type: 0x" + QString::number(archiveBlock.nType, 16) << "Size:" << archiveBlock.nHeaderSize
+                 << "Flags: 0x" + QString::number(archiveBlock.nFlags, 16);
 #endif
-        
+
         if (archiveBlock.nType == BLOCKTYPE4_ARCHIVE && archiveBlock.nHeaderSize > 0) {
             nCurrentOffset += archiveBlock.nHeaderSize;
 #ifdef QT_DEBUG
@@ -1171,27 +1171,25 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 #endif
                 break;
             }
-            
+
             GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
-            
+
 #ifdef QT_DEBUG
-            qDebug() << "XRar::initUnpack() - Block #" << nBlockCount << "at offset:" << nCurrentOffset 
-                     << "Type: 0x" + QString::number(genericBlock.nType, 16) 
+            qDebug() << "XRar::initUnpack() - Block #" << nBlockCount << "at offset:" << nCurrentOffset << "Type: 0x" + QString::number(genericBlock.nType, 16)
                      << "Size:" << genericBlock.nHeaderSize << "Flags: 0x" + QString::number(genericBlock.nFlags, 16);
 #endif
-            
+
             // Check for read failure or invalid block
             if (genericBlock.nHeaderSize == 0 || genericBlock.nType < 0x72 || genericBlock.nType > 0x7B) {
 #ifdef QT_DEBUG
-                qDebug() << "XRar::initUnpack() - Invalid block: HeaderSize=" << genericBlock.nHeaderSize 
-                         << "Type=0x" + QString::number(genericBlock.nType, 16);
+                qDebug() << "XRar::initUnpack() - Invalid block: HeaderSize=" << genericBlock.nHeaderSize << "Type=0x" + QString::number(genericBlock.nType, 16);
 #endif
                 break;
             }
 
             if (genericBlock.nType == BLOCKTYPE4_FILE) {
                 FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
-                
+
                 // Verify we read a valid block
                 if (fileBlock.genericBlock4.nHeaderSize == 0) {
 #ifdef QT_DEBUG
@@ -1199,12 +1197,11 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 #endif
                     break;  // Failed to read file block
                 }
-                
+
 #ifdef QT_DEBUG
-                qDebug() << "XRar::initUnpack() - Found FILE: " << fileBlock.sFileName 
-                         << "Size:" << fileBlock.unpSize << "Packed:" << fileBlock.packSize;
+                qDebug() << "XRar::initUnpack() - Found FILE: " << fileBlock.sFileName << "Size:" << fileBlock.unpSize << "Packed:" << fileBlock.packSize;
 #endif
-                
+
                 pContext->listFileOffsets.append(nCurrentOffset);
                 pContext->listFileBlocks4.append(fileBlock);
                 pUnpackState->nNumberOfRecords++;
@@ -1225,7 +1222,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 #endif
                 break;
             }
-            
+
             nBlockCount++;
         }
 #ifdef QT_DEBUG
@@ -1318,7 +1315,6 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
     ARCHIVERECORD record = infoCurrent(pUnpackState, pPdStruct);
     COMPRESS_METHOD compressMethod = (COMPRESS_METHOD)record.mapProperties.value(FPART_PROP_COMPRESSMETHOD).toUInt();
 
-
     RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
 
     bool bResult = false;
@@ -1332,13 +1328,9 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
             qint64 nDataOffset = record.nStreamOffset;
             qint64 nDataSize = record.nStreamSize;
 
-            bResult = XBinary::copyDeviceMemory(getDevice(), nDataOffset, pOutputDevice, 0, nDataSize); // TODO
-        } else if ((compressMethod == COMPRESS_METHOD_RAR_15) ||
-                   (compressMethod == COMPRESS_METHOD_RAR_20) ||
-                   (compressMethod == COMPRESS_METHOD_RAR_29) ||
-                   (compressMethod == COMPRESS_METHOD_RAR_50) ||
-                   (compressMethod == COMPRESS_METHOD_RAR_70)) {
-
+            bResult = XBinary::copyDeviceMemory(getDevice(), nDataOffset, pOutputDevice, 0, nDataSize);  // TODO
+        } else if ((compressMethod == COMPRESS_METHOD_RAR_15) || (compressMethod == COMPRESS_METHOD_RAR_20) || (compressMethod == COMPRESS_METHOD_RAR_29) ||
+                   (compressMethod == COMPRESS_METHOD_RAR_50) || (compressMethod == COMPRESS_METHOD_RAR_70)) {
             qint32 nWindowSize = record.mapProperties.value(FPART_PROP_WINDOWSIZE).toInt();
 
             pContext->rarUnpacker.setDevices(&sd, pOutputDevice);
@@ -1461,7 +1453,6 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
 
     return mapResult;
 }
-
 
 QList<XBinary::MAPMODE> XRar::getMapModesList()
 {

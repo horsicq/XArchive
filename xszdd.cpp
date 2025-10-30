@@ -336,7 +336,6 @@ QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             record.nVirtualAddress = -1;
             record.sName = tr("Compressed Data");
 
-
             listResult.append(record);
         }
     }

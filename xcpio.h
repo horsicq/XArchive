@@ -29,45 +29,45 @@ class XCPIO : public XArchive {
 #pragma pack(push)
 #pragma pack(1)
     struct CPIO_NEWC_HEADER {
-        char magic[6];              // "070701" or "070702"
-        char ino[8];                // Inode number
-        char mode[8];               // File mode
-        char uid[8];                // User ID
-        char gid[8];                // Group ID
-        char nlink[8];              // Number of hard links
-        char mtime[8];              // Modification time
-        char filesize[8];           // File size
-        char devmajor[8];           // Device major number
-        char devminor[8];           // Device minor number
-        char rdevmajor[8];          // Special device major number
-        char rdevminor[8];          // Special device minor number
-        char namesize[8];           // Filename size
-        char check[8];              // Checksum
+        char magic[6];      // "070701" or "070702"
+        char ino[8];        // Inode number
+        char mode[8];       // File mode
+        char uid[8];        // User ID
+        char gid[8];        // Group ID
+        char nlink[8];      // Number of hard links
+        char mtime[8];      // Modification time
+        char filesize[8];   // File size
+        char devmajor[8];   // Device major number
+        char devminor[8];   // Device minor number
+        char rdevmajor[8];  // Special device major number
+        char rdevminor[8];  // Special device minor number
+        char namesize[8];   // Filename size
+        char check[8];      // Checksum
     };
 
     struct CPIO_ODC_HEADER {
-        char magic[6];              // "070707"
-        char ino[6];                // Inode number
-        char mode[6];               // File mode
-        char uid[6];                // User ID
-        char gid[6];                // Group ID
-        char nlink[6];              // Number of hard links
-        char mtime[11];             // Modification time
-        char filesize[11];          // File size
-        char devmajor[6];           // Device major number
-        char devminor[6];           // Device minor number
-        char rdevmajor[6];          // Special device major number
-        char rdevminor[6];          // Special device minor number
-        char namesize[6];           // Filename size
-        char check[11];             // Checksum
+        char magic[6];      // "070707"
+        char ino[6];        // Inode number
+        char mode[6];       // File mode
+        char uid[6];        // User ID
+        char gid[6];        // Group ID
+        char nlink[6];      // Number of hard links
+        char mtime[11];     // Modification time
+        char filesize[11];  // File size
+        char devmajor[6];   // Device major number
+        char devminor[6];   // Device minor number
+        char rdevmajor[6];  // Special device major number
+        char rdevminor[6];  // Special device minor number
+        char namesize[6];   // Filename size
+        char check[11];     // Checksum
     };
 #pragma pack(pop)
 
     enum CPIO_FORMAT {
         CPIO_FORMAT_UNKNOWN = 0,
-        CPIO_FORMAT_NEWC,           // new C format (070701)
-        CPIO_FORMAT_CRC,            // CRC format (070702)
-        CPIO_FORMAT_ODC             // Old C format (070707)
+        CPIO_FORMAT_NEWC,  // new C format (070701)
+        CPIO_FORMAT_CRC,   // CRC format (070702)
+        CPIO_FORMAT_ODC    // Old C format (070707)
     };
 
 public:

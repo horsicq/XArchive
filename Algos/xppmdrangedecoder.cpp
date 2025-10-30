@@ -36,25 +36,25 @@ bool XPPMdRangeDecoder::init(QIODevice *pDevice)
 {
     m_pDevice = pDevice;
     m_bError = false;
-    
+
     if (!m_pDevice) {
         m_bError = true;
         return false;
     }
-    
+
     // Initialize range decoder
     m_nRange = 0xFFFFFFFF;
     m_nCode = 0;
-    
+
     // Read initial 4 bytes for Code value (matching 7-Zip's Ppmd8_Init_RangeDec)
     for (qint32 i = 0; i < 4; i++) {
         m_nCode = (m_nCode << 8) | readByte();
     }
-    
+
     if (m_bError) {
         return false;
     }
-    
+
     return true;
 }
 
@@ -70,14 +70,14 @@ void XPPMdRangeDecoder::decode(quint32 nStart, quint32 nSize, quint32 nTotal)
     // Update range decoder state after decoding a symbol
     // Range = Range / Total
     quint32 nNewRange = m_nRange / nTotal;
-    
+
     // Low = Low + Start * NewRange
     // Code = Code - Start * NewRange
     m_nCode -= nStart * nNewRange;
-    
+
     // Range = Size * NewRange
     m_nRange = nSize * nNewRange;
-    
+
     // Normalize if needed
     normalize();
 }
@@ -104,14 +104,14 @@ quint8 XPPMdRangeDecoder::readByte()
         m_bError = true;
         return 0;
     }
-    
+
     char cByte = 0;
     qint64 nRead = m_pDevice->read(&cByte, 1);
-    
+
     if (nRead != 1) {
         m_bError = true;
         return 0;
     }
-    
+
     return (quint8)cByte;
 }

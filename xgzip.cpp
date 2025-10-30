@@ -392,18 +392,16 @@ QList<XBinary::DATA_HEADER> XGzip::getDataHeaders(const DATA_HEADERS_OPTIONS &da
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XGzip::structIDToString(dataHeadersOptions.nID));
                 dataHeader.nSize = sizeof(GZIP_HEADER);
 
+                dataHeader.listRecords.append(getDataRecord(offsetof(GZIP_HEADER, nMagic), 2, "nMagic", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(GZIP_HEADER, nMagic), 2, "nMagic", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(GZIP_HEADER, nCompressionMethod), 1, "nCompressionMethod", VT_UINT8, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(GZIP_HEADER, nCompressionMethod), 1, "nCompressionMethod", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(GZIP_HEADER, nFileFlags), 1, "nFileFlags", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
                     getDataRecord(offsetof(GZIP_HEADER, nTimeStamp), 4, "nTimeStamp", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(GZIP_HEADER, nCompressionFlags), 1, "nCompressionFlags", VT_UINT8, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
                 dataHeader.listRecords.append(
-                    getDataRecord(offsetof(GZIP_HEADER, nOS), 1, "nOS", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    getDataRecord(offsetof(GZIP_HEADER, nCompressionFlags), 1, "nCompressionFlags", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(GZIP_HEADER, nOS), 1, "nOS", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
             }

@@ -523,7 +523,7 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
         cdFileHeader.nOffsetToLocalFileHeader = (quint32)pListZipFileRecords->at(i).nHeaderOffset;
 
         pDest->write((char *)&cdFileHeader, sizeof(cdFileHeader));
-        
+
         QByteArray baFileName = pListZipFileRecords->at(i).sFileName.toUtf8();
         pDest->write(baFileName.data(), baFileName.size());
     }
@@ -643,7 +643,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
         qint64 nOffset = qMax((qint64)0, nSize - 0x1000);  // TODO const
 
         // qDebug() << "findECDOffset: Starting search from offset" << nOffset;
-        
+
         // Debug: Read and print last 30 bytes of file
         // if (nSize >= 30) {
         //     QByteArray lastBytes = read_array(nSize - 30, 30);
@@ -1370,7 +1370,7 @@ bool XZip::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, 
     // Allocate context to store list of ZIPFILE_RECORD structures and options
     ZIP_PACK_CONTEXT *pContext = new ZIP_PACK_CONTEXT();
     pContext->pListZipFileRecords = new QList<ZIPFILE_RECORD>();
-    
+
     pState->pContext = (void *)pContext;
 
     return true;
@@ -1394,25 +1394,21 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
 
     // Determine file path to store in archive based on PATH_MODE
     QString sStoredPath;
-    
+
     switch (pState->pathMode) {
-    case XBinary::PATH_MODE_ABSOLUTE:
-        sStoredPath = fileInfo.absoluteFilePath();
-        break;
-    case XBinary::PATH_MODE_RELATIVE:
-        if (!pState->sBasePath.isEmpty()) {
-            QDir baseDir(pState->sBasePath);
-            sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
-        } else {
-            sStoredPath = fileInfo.fileName();
-        }
-        break;
-    case XBinary::PATH_MODE_BASENAME:
-    default:
-        sStoredPath = fileInfo.fileName();
-        break;
+        case XBinary::PATH_MODE_ABSOLUTE: sStoredPath = fileInfo.absoluteFilePath(); break;
+        case XBinary::PATH_MODE_RELATIVE:
+            if (!pState->sBasePath.isEmpty()) {
+                QDir baseDir(pState->sBasePath);
+                sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
+            } else {
+                sStoredPath = fileInfo.fileName();
+            }
+            break;
+        case XBinary::PATH_MODE_BASENAME:
+        default: sStoredPath = fileInfo.fileName(); break;
     }
-    
+
     // Normalize path separators to forward slashes (ZIP standard)
     sStoredPath = sStoredPath.replace("\\", "/");
 
@@ -1439,7 +1435,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     if (nCompressionLevel == -1) {
         nCompressionLevel = 8;
     }
-    
+
     // Get file permissions and convert to external attributes
     QFile::Permissions permissions = fileInfo.permissions();
     zipFileRecord.nExternalFileAttributes = filePermissionsToExternalAttributes(permissions);
@@ -1642,14 +1638,13 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     localFileHeader.nMethod = zipFileRecord.method;
 
     // Write updated local file header
-    if (pState->pDevice->seek(zipFileRecord.nHeaderOffset) &&
-        pState->pDevice->write((char *)&localFileHeader, sizeof(localFileHeader)) != sizeof(localFileHeader)) {
+    if (pState->pDevice->seek(zipFileRecord.nHeaderOffset) && pState->pDevice->write((char *)&localFileHeader, sizeof(localFileHeader)) != sizeof(localFileHeader)) {
         return false;
     }
 
     // Update current offset to point to end of written data
     pState->nCurrentOffset += zipFileRecord.nCompressedSize;
-    
+
     // Seek to end of data
     pState->pDevice->seek(pState->nCurrentOffset);
 
@@ -1671,11 +1666,11 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
     }
 
     ZIP_PACK_CONTEXT *pContext = (ZIP_PACK_CONTEXT *)pState->pContext;
-    
+
     // Set base path for relative path calculation if not already set
     QString sOriginalBasePath;
     bool bRestoreBasePath = false;
-    
+
     if (pState->pathMode == XBinary::PATH_MODE_RELATIVE && pState->sBasePath.isEmpty()) {
         sOriginalBasePath = pState->sBasePath;
         pState->sBasePath = sDirectoryPath;
@@ -1826,29 +1821,29 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         if (dateTime.isValid()) {
             result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
         }
-        
+
         // Get external file attributes from central directory
         qint64 nECDOffset = findECDOffset(pPdStruct);
-        
+
         if (nECDOffset != -1) {
             qint64 nCentralDirOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
-            
+
             // Scan central directory to find matching record
             qint32 nNumberOfRecords = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
-            
+
             for (qint32 i = 0; i < nNumberOfRecords; i++) {
                 CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nCentralDirOffset, pPdStruct);
-                
+
                 if (cdh.nSignature != SIGNATURE_CFD) {
                     break;
                 }
-                
+
                 // Check if this central directory entry matches current local file header
                 if (cdh.nOffsetToLocalFileHeader == pState->nCurrentOffset) {
                     result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, cdh.nExternalFileAttributes);
                     break;
                 }
-                
+
                 nCentralDirOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
             }
         }
@@ -1866,10 +1861,8 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
         qint64 nDataOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
 
-        qDebug() << "[XZIP] nDataOffset:" << nDataOffset << "= nCurrentOffset:" << pState->nCurrentOffset 
-                 << "+ sizeof(LOCALFILEHEADER):" << sizeof(LOCALFILEHEADER) 
-                 << "+ nFileNameLength:" << lfh.nFileNameLength 
-                 << "+ nExtraFieldLength:" << lfh.nExtraFieldLength;
+        qDebug() << "[XZIP] nDataOffset:" << nDataOffset << "= nCurrentOffset:" << pState->nCurrentOffset << "+ sizeof(LOCALFILEHEADER):" << sizeof(LOCALFILEHEADER)
+                 << "+ nFileNameLength:" << lfh.nFileNameLength << "+ nExtraFieldLength:" << lfh.nExtraFieldLength;
         qDebug() << "[XZIP] Compressed size:" << lfh.nCompressedSize;
 
         COMPRESS_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
@@ -1897,24 +1890,24 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 // Extra field format: HeaderID(2) + DataSize(2) + VendorVersion(2) + VendorID(2) + AESStrength(1) + CompressionMethod(2)
                 qint64 nExtraFieldOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength;
                 qint16 nExtraFieldLength = lfh.nExtraFieldLength;
-                
+
                 XBinary::CRYPTO_METHOD aesMethod = XBinary::CRYPTO_METHOD_AES256;  // Default to AES-256
-                quint16 nActualCompressionMethod = CMETHOD_STORE;  // Default compression method inside AES
-                
+                quint16 nActualCompressionMethod = CMETHOD_STORE;                  // Default compression method inside AES
+
                 // Parse extra field to find AES info
                 qint64 nExtraOffset = 0;
                 while (nExtraOffset < nExtraFieldLength) {
                     quint16 nHeaderID = read_uint16(nExtraFieldOffset + nExtraOffset);
                     quint16 nDataSize = read_uint16(nExtraFieldOffset + nExtraOffset + 2);
-                    
+
                     if (nHeaderID == 0x9901) {  // AES encryption extra field
                         // Read AES strength byte
                         quint8 nAESStrength = read_uint8(nExtraFieldOffset + nExtraOffset + 8);
                         // Read actual compression method
                         nActualCompressionMethod = read_uint16(nExtraFieldOffset + nExtraOffset + 9);
-                        
+
                         qDebug() << "[XZIP] AES extra field found: strength=" << nAESStrength << "actual compression method=" << nActualCompressionMethod;
-                        
+
                         // Determine AES key size from strength byte
                         if (nAESStrength == 0x01) {
                             aesMethod = XBinary::CRYPTO_METHOD_AES128;
@@ -1923,13 +1916,13 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                         } else if (nAESStrength == 0x03) {
                             aesMethod = XBinary::CRYPTO_METHOD_AES256;
                         }
-                        
+
                         break;
                     }
-                    
+
                     nExtraOffset += 4 + nDataSize;
                 }
-                
+
                 pDecryptedDevice = createFileBuffer(lfh.nCompressedSize, pPdStruct);
 
                 XBinary::DATAPROCESS_STATE decryptState = {};
@@ -1947,8 +1940,8 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 if (bDecrypted) {
                     pInputDevice = pDecryptedDevice;
                     nDecryptedSize = decryptState.nCountOutput;  // Use actual decrypted size
-                    pDecryptedDevice->seek(0);  // Rewind to beginning for reading
-                    
+                    pDecryptedDevice->seek(0);                   // Rewind to beginning for reading
+
                     // Update compression method to the actual method inside AES container
                     compressMethod = zipToCompressMethod(nActualCompressionMethod, 0);
                 }
@@ -1972,7 +1965,7 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 if (bDecrypted) {
                     pInputDevice = pDecryptedDevice;
                     nDecryptedSize = decryptState.nCountOutput;  // Use actual decrypted size
-                    pDecryptedDevice->seek(0);  // Rewind to beginning for reading
+                    pDecryptedDevice->seek(0);                   // Rewind to beginning for reading
                 }
             } else {
                 pInputDevice = &subDevice;
@@ -2150,7 +2143,7 @@ QFile::Permissions XZip::externalAttributesToFilePermissions(quint32 nExternalAt
     } else {
         // Fallback: use DOS attributes from low 16 bits
         bool bReadOnly = (nExternalAttributes & 0x01) != 0;
-        
+
         if (bReadOnly) {
             permissions = QFile::ReadOwner | QFile::ReadUser | QFile::ReadGroup | QFile::ReadOther;
         } else {
@@ -2160,4 +2153,3 @@ QFile::Permissions XZip::externalAttributesToFilePermissions(quint32 nExternalAt
 
     return permissions;
 }
-

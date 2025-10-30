@@ -42,7 +42,7 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
     if (pSourceDevice->read((char *)&nParamByte1, 1) != 1) {
         return false;
     }
-    
+
     if (pSourceDevice->read((char *)&nParamByte2, 1) != 1) {
         return false;
     }
@@ -54,24 +54,24 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
     // val = (Order - 1) + ((MemSizeMB - 1) << 4) + (Restor << 12)
     // Stored as 2 bytes little-endian
     quint16 nVal = nParamByte1 | (nParamByte2 << 8);
-    quint8 nOrder = (nVal & 0x0F) + 1;  // Bits 0-3: Order - 1
+    quint8 nOrder = (nVal & 0x0F) + 1;             // Bits 0-3: Order - 1
     quint8 nMemSizeMB = ((nVal >> 4) & 0xFF) + 1;  // Bits 4-11: MemSizeMB - 1
-    quint8 nRestor = (nVal >> 12);  // Bits 12-15: Restor method
-    
+    quint8 nRestor = (nVal >> 12);                 // Bits 12-15: Restor method
+
     quint32 nMemSize = ((quint32)nMemSizeMB) << 20;  // Memory in bytes
 
     // Validate parameters (matching PpmdZip.cpp from 7-Zip)
     if ((nOrder < XPPMdModel::MIN_ORDER) || (nOrder > XPPMdModel::MAX_ORDER)) {
         return false;
     }
-    
+
     if (nRestor > 2) {
         return false;
     }
 
     // Initialize PPMd8 decoder using wrapper classes
     XPPMdModel model;
-    
+
     if (!model.allocate(nMemSize)) {
         return false;
     }
@@ -85,7 +85,7 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
     char sBufferOut[N_BUFFER_SIZE];
 
     qint64 nUncompressedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, -1).toLongLong();
-    
+
     qint64 nDecompressed = 0;
     bool bSuccess = true;
     bool bEndOfStream = false;
@@ -93,7 +93,7 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
 
     while (XBinary::isPdStructNotCanceled(pPdStruct) && !bEndOfStream) {
         qint32 nToDecompress = N_BUFFER_SIZE;
-        
+
         // Limit to remaining size if known
         if (nUncompressedSize > 0) {
             qint64 nRemaining = nUncompressedSize - nDecompressed;
@@ -107,7 +107,7 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
         qint32 nActual = 0;
         for (qint32 i = 0; i < nToDecompress && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
             int nSymbol = model.decodeSymbol();
-            
+
             if (nSymbol < 0) {
                 // End of stream or error
                 if (nUncompressedSize > 0 && nDecompressed < nUncompressedSize) {
@@ -116,7 +116,7 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
                 bEndOfStream = true;
                 break;
             }
-            
+
             sBufferOut[nActual++] = (char)nSymbol;
         }
 
@@ -125,7 +125,7 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
                 bSuccess = false;
                 break;
             }
-            
+
             nDecompressed += nActual;
         }
 

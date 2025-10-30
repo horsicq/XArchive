@@ -60,7 +60,7 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
             qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - nOffset), N_BUFFER_SIZE);
 
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
-            
+
             if (nOffset == 0 && nRead > 0) {
                 QByteArray baFirst(bufferIn, qMin(nRead, 20));
                 qDebug() << "[STORE] First 20 bytes read (hex):" << baFirst.toHex();

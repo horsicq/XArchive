@@ -29,25 +29,25 @@ class XSquashfs : public XArchive {
 #pragma pack(push)
 #pragma pack(1)
     struct SQUASHFS_HEADER {
-        quint32 nMagic;             // Magic number: 0x73717368 ("sqsh")
-        quint32 nInodesCount;       // Number of inodes
-        quint32 nCreationTime;      // Creation time (seconds since epoch)
-        quint32 nBlockSize;         // Block size (power of 2)
-        quint32 nFragmentsCount;    // Number of fragments
-        quint16 nCompressionType;   // Compression method
-        quint16 nBlockLog;          // Log2 of block size
-        quint16 nFlags;             // Flags
-        quint16 nNoIds;             // Number of unique IDs
-        quint32 nVersionMajor;      // Version major
-        quint32 nVersionMinor;      // Version minor
-        quint64 nRootInodeRef;      // Root inode reference
-        quint64 nBytesUsed;         // Bytes used
-        quint64 nIdTableStart;      // ID table start block
-        quint64 nXattrTableStart;   // Xattr table start block
-        quint64 nInodeTableStart;   // Inode table start block
-        quint64 nDirectoryTableStart; // Directory table start block
-        quint64 nFragmentTableStart;  // Fragment table start block
-        quint64 nExportTableStart;  // Export table start block
+        quint32 nMagic;                // Magic number: 0x73717368 ("sqsh")
+        quint32 nInodesCount;          // Number of inodes
+        quint32 nCreationTime;         // Creation time (seconds since epoch)
+        quint32 nBlockSize;            // Block size (power of 2)
+        quint32 nFragmentsCount;       // Number of fragments
+        quint16 nCompressionType;      // Compression method
+        quint16 nBlockLog;             // Log2 of block size
+        quint16 nFlags;                // Flags
+        quint16 nNoIds;                // Number of unique IDs
+        quint32 nVersionMajor;         // Version major
+        quint32 nVersionMinor;         // Version minor
+        quint64 nRootInodeRef;         // Root inode reference
+        quint64 nBytesUsed;            // Bytes used
+        quint64 nIdTableStart;         // ID table start block
+        quint64 nXattrTableStart;      // Xattr table start block
+        quint64 nInodeTableStart;      // Inode table start block
+        quint64 nDirectoryTableStart;  // Directory table start block
+        quint64 nFragmentTableStart;   // Fragment table start block
+        quint64 nExportTableStart;     // Export table start block
     };
 #pragma pack(pop)
 

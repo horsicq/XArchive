@@ -25,7 +25,7 @@ XTGZ::XTGZ(QIODevice *pDevice)
     m_pDevice = nullptr;
     m_pXtar = new XTAR;
     m_pCompressedDevice = new XCompressedDevice;
-    
+
     if (pDevice) {
         setDevice(pDevice);
     }
@@ -60,18 +60,18 @@ bool XTGZ::isValid(PDSTRUCT *pPdStruct)
     if ((m_pDevice) && (m_pCompressedDevice) && (m_pXtar)) {
         // Check if this is a valid gzip file first
         XGzip gzip(m_pDevice);
-        
+
         if (gzip.isValid(pPdStruct)) {
             // Get the header to determine where the compressed stream starts
             XGzip::GZIP_HEADER gzipHeader = gzip._read_GZIP_HEADER(0);
             qint64 nHeaderOffset = sizeof(XGzip::GZIP_HEADER);
-            
+
             // Account for optional filename if present
             if (gzipHeader.nFileFlags & 8) {
                 QString sFileName = gzip.read_ansiString(nHeaderOffset);
                 nHeaderOffset += sFileName.size() + 1;
             }
-            
+
             // Create FPART for just the compressed stream (not the gzip header/footer)
             qint64 nFileSize = gzip.getSize();
             XBinary::FPART fPart = {};
@@ -79,16 +79,16 @@ bool XTGZ::isValid(PDSTRUCT *pPdStruct)
             fPart.nFileOffset = nHeaderOffset;
             fPart.nFileSize = nFileSize - nHeaderOffset - 8;  // Subtract 8-byte footer (CRC + ISIZE)
             fPart.mapProperties[XBinary::FPART_PROP_COMPRESSMETHOD] = XBinary::COMPRESS_METHOD_DEFLATE;
-            
+
             // Try to set up the compressed device
             if (m_pCompressedDevice->setData(m_pDevice, fPart, pPdStruct)) {
                 if (m_pCompressedDevice->open(QIODevice::ReadOnly)) {
                     // Set TAR device to the decompressed gzip data
                     m_pXtar->setDevice(m_pCompressedDevice);
-                    
+
                     // Check if the decompressed data is a valid TAR archive
                     bResult = m_pXtar->isValid(pPdStruct);
-                    
+
                     // Seek back to beginning for further operations
                     if (bResult) {
                         m_pCompressedDevice->seek(0);
@@ -104,10 +104,10 @@ bool XTGZ::isValid(PDSTRUCT *pPdStruct)
 bool XTGZ::isValid(QIODevice *pDevice)
 {
     bool bResult = false;
-    
+
     if (pDevice) {
         bool bNeedToClose = false;
-        
+
         // Open device if not already open
         if (!pDevice->isOpen()) {
             if (pDevice->open(QIODevice::ReadOnly)) {
@@ -116,16 +116,16 @@ bool XTGZ::isValid(QIODevice *pDevice)
                 return false;
             }
         }
-        
+
         XTGZ xtgz(pDevice);
         bResult = xtgz.isValid();
-        
+
         // Close device if we opened it
         if (bNeedToClose) {
             pDevice->close();
         }
     }
-    
+
     return bResult;
 }
 
@@ -133,22 +133,22 @@ void XTGZ::setDevice(QIODevice *pDevice)
 {
     m_pDevice = pDevice;
     XBinary::setDevice(m_pDevice);
-    
+
     if ((m_pDevice) && (m_pCompressedDevice) && (m_pXtar)) {
         // Check if this is a valid gzip file
         XGzip gzip(m_pDevice);
-        
+
         if (gzip.isValid()) {
             // Get the header to determine where the compressed stream starts
             XGzip::GZIP_HEADER gzipHeader = gzip._read_GZIP_HEADER(0);
             qint64 nHeaderOffset = sizeof(XGzip::GZIP_HEADER);
-            
+
             // Account for optional filename if present
             if (gzipHeader.nFileFlags & 8) {
                 QString sFileName = gzip.read_ansiString(nHeaderOffset);
                 nHeaderOffset += sFileName.size() + 1;
             }
-            
+
             // Create FPART for just the compressed stream (not the gzip header/footer)
             qint64 nFileSize = gzip.getSize();
             XBinary::FPART fPart = {};
@@ -156,7 +156,7 @@ void XTGZ::setDevice(QIODevice *pDevice)
             fPart.nFileOffset = nHeaderOffset;
             fPart.nFileSize = nFileSize - nHeaderOffset - 8;  // Subtract 8-byte footer (CRC + ISIZE)
             fPart.mapProperties[XBinary::FPART_PROP_COMPRESSMETHOD] = XBinary::COMPRESS_METHOD_DEFLATE;
-            
+
             // Set up the compressed device for decompression
             if (m_pCompressedDevice->setData(m_pDevice, fPart, nullptr)) {
                 if (m_pCompressedDevice->open(QIODevice::ReadOnly)) {
@@ -242,11 +242,11 @@ QString XTGZ::getFileFormatExt()
 QList<XBinary::MAPMODE> XTGZ::getMapModesList()
 {
     QList<XBinary::MAPMODE> listResult;
-    
+
     if (m_pXtar) {
         listResult = m_pXtar->getMapModesList();
     }
-    
+
     return listResult;
 }
 

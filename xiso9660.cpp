@@ -21,8 +21,8 @@
 #include "xiso9660.h"
 
 XBinary::XCONVERT _TABLE_XISO9660_STRUCTID[] = {{XISO9660::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                 {XISO9660::STRUCTID_PVDESC, "PVDESC", QString("Primary Volume Descriptor")},
-                                                 {XISO9660::STRUCTID_DIR_RECORD, "DIR_RECORD", QString("Directory Record")}};
+                                                {XISO9660::STRUCTID_PVDESC, "PVDESC", QString("Primary Volume Descriptor")},
+                                                {XISO9660::STRUCTID_DIR_RECORD, "DIR_RECORD", QString("Directory Record")}};
 
 XISO9660::XISO9660(QIODevice *pDevice) : XArchive(pDevice)
 {

@@ -51,8 +51,8 @@ class XTAR : public XArchive {
 
     enum TAR_FORMAT {
         TAR_FORMAT_DEFAULT = 0,
-        TAR_FORMAT_POSIX,   // POSIX ustar format (default)
-        TAR_FORMAT_GNU      // GNU tar format (supports longer filenames)
+        TAR_FORMAT_POSIX,  // POSIX ustar format (default)
+        TAR_FORMAT_GNU     // GNU tar format (supports longer filenames)
     };
 
     struct TAR_OPTIONS {

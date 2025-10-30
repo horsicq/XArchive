@@ -32,10 +32,8 @@
 #include <QIODevice>
 #include "xbinary.h"
 
-extern "C" {
 #include "../3rdparty/ppmd/src/Ppmd.h"
 #include "../3rdparty/ppmd/src/Ppmd8.h"
-}
 
 // Forward declaration for internal implementation
 struct XPPMdModelPrivate;
@@ -45,35 +43,35 @@ class XPPMdModel {
 public:
     static const quint8 MIN_ORDER = PPMD8_MIN_ORDER;
     static const quint8 MAX_ORDER = PPMD8_MAX_ORDER;
-    
+
     enum RESTORE_METHOD {
         RESTORE_METHOD_RESTART = PPMD8_RESTORE_METHOD_RESTART,
         RESTORE_METHOD_CUT_OFF = PPMD8_RESTORE_METHOD_CUT_OFF,
         RESTORE_METHOD_UNSUPPORTED = PPMD8_RESTORE_METHOD_UNSUPPPORTED
     };
-    
+
     XPPMdModel();
     ~XPPMdModel();
-    
+
     // Allocate memory for the model
     bool allocate(quint32 nMemorySize);
-    
+
     // Initialize the model with parameters
     void init(quint8 nOrder, quint8 nRestoreMethod);
-    
+
     // Set input device for stream reading
     void setInputStream(QIODevice *pDevice);
-    
+
     // Decode a single symbol
     // Returns: >= 0 for decoded byte, -1 for end of stream, -2 for error
     qint32 decodeSymbol();
-    
+
     // Free allocated resources
     void free();
-    
+
     // Check if memory was allocated
     bool wasAllocated() const;
-    
+
 private:
     XPPMdModelPrivate *m_pPrivate;
 };

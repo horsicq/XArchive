@@ -21,8 +21,8 @@
 #include "xsquashfs.h"
 
 XBinary::XCONVERT _TABLE_XSQUASHFS_STRUCTID[] = {{XSquashfs::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                   {XSquashfs::STRUCTID_HEADER, "HEADER", QString("Header")},
-                                                   {XSquashfs::STRUCTID_SUPERBLOCK, "SUPERBLOCK", QString("Superblock")}};
+                                                 {XSquashfs::STRUCTID_HEADER, "HEADER", QString("Header")},
+                                                 {XSquashfs::STRUCTID_SUPERBLOCK, "SUPERBLOCK", QString("Superblock")}};
 
 XSquashfs::XSquashfs(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -65,24 +65,12 @@ XSquashfs::SQUASHFS_COMPRESSION XSquashfs::_getCompressionMethod(quint16 nType)
     SQUASHFS_COMPRESSION result = COMP_UNKNOWN;
 
     switch (nType) {
-    case 1:
-        result = COMP_GZIP;
-        break;
-    case 2:
-        result = COMP_LZMA;
-        break;
-    case 3:
-        result = COMP_LZO;
-        break;
-    case 4:
-        result = COMP_XZ;
-        break;
-    case 5:
-        result = COMP_LZ4;
-        break;
-    case 6:
-        result = COMP_ZSTD;
-        break;
+        case 1: result = COMP_GZIP; break;
+        case 2: result = COMP_LZMA; break;
+        case 3: result = COMP_LZO; break;
+        case 4: result = COMP_XZ; break;
+        case 5: result = COMP_LZ4; break;
+        case 6: result = COMP_ZSTD; break;
     }
 
     return result;
@@ -91,20 +79,13 @@ XSquashfs::SQUASHFS_COMPRESSION XSquashfs::_getCompressionMethod(quint16 nType)
 QString XSquashfs::_getCompressionMethodString(SQUASHFS_COMPRESSION comp)
 {
     switch (comp) {
-    case COMP_GZIP:
-        return "GZIP";
-    case COMP_LZMA:
-        return "LZMA";
-    case COMP_LZO:
-        return "LZO";
-    case COMP_XZ:
-        return "XZ";
-    case COMP_LZ4:
-        return "LZ4";
-    case COMP_ZSTD:
-        return "ZSTD";
-    default:
-        return "Unknown";
+        case COMP_GZIP: return "GZIP";
+        case COMP_LZMA: return "LZMA";
+        case COMP_LZO: return "LZO";
+        case COMP_XZ: return "XZ";
+        case COMP_LZ4: return "LZ4";
+        case COMP_ZSTD: return "ZSTD";
+        default: return "Unknown";
     }
 }
 

@@ -78,10 +78,10 @@ public:
 private:
     // Format-specific unpacking context
     struct BZIP2_UNPACK_CONTEXT {
-        qint64 nHeaderSize;         // Size of BZIP2 header (4 bytes)
-        qint64 nCompressedSize;     // Size of compressed data
-        qint64 nUncompressedSize;   // Size of uncompressed data
-        QString sFileName;          // Original file name (if available)
+        qint64 nHeaderSize;        // Size of BZIP2 header (4 bytes)
+        qint64 nCompressedSize;    // Size of compressed data
+        qint64 nUncompressedSize;  // Size of uncompressed data
+        QString sFileName;         // Original file name (if available)
     };
 };
 

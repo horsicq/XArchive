@@ -122,13 +122,13 @@ quint64 XCFBF::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
     // Read directory sector start
     quint32 nDirSectorStart = read_uint32(0x30, false);
-    
+
     // Read number of directory sectors (for version 4, required; for version 3, may be 0)
     quint32 nCsectDir = read_uint32(0x28, false);
-    
+
     // Directory entries are 128 bytes each
     const qint32 nDirEntrySize = 128;
-    
+
     // Calculate how many entries can fit
     if (nCsectDir > 0) {
         // Version 4: use csectDir field
@@ -138,19 +138,19 @@ quint64 XCFBF::getNumberOfRecords(PDSTRUCT *pPdStruct)
         // Version 3: count entries by reading until we hit unused entries
         qint64 nDirOffset = nHeaderSize + (qint64)nDirSectorStart * nSectorSize;
         const qint32 nMaxEntries = 4096;  // safety limit
-        
+
         for (qint32 i = 0; i < nMaxEntries; i++) {
             qint64 nEntryOffset = nDirOffset + (qint64)i * nDirEntrySize;
             if (!isOffsetValid(nEntryOffset + nDirEntrySize - 1)) {
                 break;
             }
-            
+
             quint8 nObjectType = read_uint8(nEntryOffset + 66);
             if (nObjectType == 0) {
                 // Reached unused entry
                 break;
             }
-            
+
             nResult++;
         }
     }
@@ -945,4 +945,3 @@ bool XCFBF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return bResult;
 }
-

@@ -86,9 +86,9 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             result = decompressState.bReadError ? COMPRESS_RESULT_READERROR : COMPRESS_RESULT_DATAERROR;
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_PPMD) {
-        qDebug() << "[XArchive] PPMd decompression requested - UncompressedSize:" << pDecompressStruct->spInfo.nUncompressedSize 
+        qDebug() << "[XArchive] PPMd decompression requested - UncompressedSize:" << pDecompressStruct->spInfo.nUncompressedSize
                  << "InSize:" << pDecompressStruct->nInSize << "SourceSize:" << pDecompressStruct->pSourceDevice->size();
-        
+
         XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_PPMD);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
@@ -107,8 +107,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
             result = COMPRESS_RESULT_OK;
         } else {
-            qDebug() << "[XArchive] PPMd decompression failed - ReadError:" << decompressState.bReadError 
-                     << "WriteError:" << decompressState.bWriteError;
+            qDebug() << "[XArchive] PPMd decompression failed - ReadError:" << decompressState.bReadError << "WriteError:" << decompressState.bWriteError;
             if (decompressState.bReadError) {
                 result = COMPRESS_RESULT_READERROR;
             } else if (decompressState.bWriteError) {

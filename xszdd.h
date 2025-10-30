@@ -82,10 +82,10 @@ public:
 private:
     // Format-specific unpacking context
     struct SZDD_UNPACK_CONTEXT {
-        qint64 nHeaderSize;         // Size of SZDD header
-        qint64 nCompressedSize;     // Size of compressed data
-        qint64 nUncompressedSize;   // Size of uncompressed data
-        QString sFileName;          // Original file name
+        qint64 nHeaderSize;        // Size of SZDD header
+        qint64 nCompressedSize;    // Size of compressed data
+        qint64 nUncompressedSize;  // Size of uncompressed data
+        QString sFileName;         // Original file name
     };
 };
 

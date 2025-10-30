@@ -46,8 +46,8 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
         qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
-        // qDebug("_decompressLZMACommon() loop %d: read %d bytes, nCountInput=%lld, nInputLimit=%lld", 
-               // nLoopCount++, nSize, pDecompressState->nCountInput, pDecompressState->nInputLimit);
+        // qDebug("_decompressLZMACommon() loop %d: read %d bytes, nCountInput=%lld, nInputLimit=%lld",
+        // nLoopCount++, nSize, pDecompressState->nCountInput, pDecompressState->nInputLimit);
         nLoopCount++;
 
         // Process available input
@@ -66,8 +66,8 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
                 // Dump first bytes of input for debugging
                 // qDebug("  Input chunk size: %d bytes at nPos=%lld", nSize, nPos);
                 // if (nSize >= 8) {
-                //     qDebug("  First 8 bytes (hex): %02x %02x %02x %02x %02x %02x %02x %02x", 
-                //            (unsigned char)bufferIn[0], (unsigned char)bufferIn[1], 
+                //     qDebug("  First 8 bytes (hex): %02x %02x %02x %02x %02x %02x %02x %02x",
+                //            (unsigned char)bufferIn[0], (unsigned char)bufferIn[1],
                 //            (unsigned char)bufferIn[2], (unsigned char)bufferIn[3],
                 //            (unsigned char)bufferIn[4], (unsigned char)bufferIn[5],
                 //            (unsigned char)bufferIn[6], (unsigned char)bufferIn[7]);
@@ -86,7 +86,7 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
 
             lastStatus = status;
 
-            // qDebug("_decompressLZMACommon() inner loop: inProcessed=%zu, outProcessed=%zu, status=%d", 
+            // qDebug("_decompressLZMACommon() inner loop: inProcessed=%zu, outProcessed=%zu, status=%d",
             //        inProcessed, outProcessed, status);
 
             if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
@@ -245,9 +245,9 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, cons
         return false;
     }
 
-    // qDebug("XLZMADecoder::decompress() called with baProperty.size()=%d, nInputLimit=%lld", 
+    // qDebug("XLZMADecoder::decompress() called with baProperty.size()=%d, nInputLimit=%lld",
     //        baProperty.size(), pDecompressState->nInputLimit);
-    
+
     // Dump LZMA properties
     // if (baProperty.size() >= 5) {
     //     qDebug("  LZMA Properties (hex): %02x %02x %02x %02x %02x",
@@ -279,7 +279,7 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, cons
     bool bResult = _decompressLZMACommon(&state, pDecompressState, pPdStruct);
     LzmaDec_Free(&state, &g_Alloc);
 
-    // qDebug("XLZMADecoder::decompress() result: %s, decompressed size: %lld", 
+    // qDebug("XLZMADecoder::decompress() result: %s, decompressed size: %lld",
     //        bResult ? "TRUE" : "FALSE", pDecompressState->nCountOutput);
 
     return bResult;

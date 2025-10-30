@@ -32,29 +32,35 @@ public:
 
     // Initialize range decoder with input stream
     bool init(QIODevice *pDevice);
-    
+
     // Get current bit from range
     quint32 getThreshold(quint32 nTotal);
-    
+
     // Decode using range
     void decode(quint32 nStart, quint32 nSize, quint32 nTotal);
-    
+
     // Normalize range
     void normalize();
-    
+
     // Check if stream is finished correctly
     bool isFinishedOK() const;
-    
+
     // Get range and code values (for debugging)
-    quint32 getRange() const { return m_nRange; }
-    quint32 getCode() const { return m_nCode; }
-    
+    quint32 getRange() const
+    {
+        return m_nRange;
+    }
+    quint32 getCode() const
+    {
+        return m_nCode;
+    }
+
 private:
     QIODevice *m_pDevice;
     quint32 m_nRange;
     quint32 m_nCode;
     bool m_bError;
-    
+
     quint8 readByte();
 };
 

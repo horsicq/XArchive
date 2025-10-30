@@ -43,9 +43,9 @@ public:
 #pragma pack(push)
 #pragma pack(1)
     struct LZIP_HEADER {
-        char magic[4];          // "LZIP" (0x4C, 0x5A, 0x49, 0x50)
-        quint8 nVersion;        // Format version
-        quint8 nDictSizeCode;   // Dictionary size code
+        char magic[4];         // "LZIP" (0x4C, 0x5A, 0x49, 0x50)
+        quint8 nVersion;       // Format version
+        quint8 nDictSizeCode;  // Dictionary size code
     };
 #pragma pack(pop)
 
@@ -94,10 +94,10 @@ public:
 private:
     // Format-specific unpacking context
     struct LZIP_UNPACK_CONTEXT {
-        qint64 nHeaderSize;         // Size of LZIP header (6 bytes min)
-        qint64 nCompressedSize;     // Size of compressed data
-        qint64 nUncompressedSize;   // Size of uncompressed data
-        quint32 nCRC32;             // CRC32 of uncompressed data
+        qint64 nHeaderSize;        // Size of LZIP header (6 bytes min)
+        qint64 nCompressedSize;    // Size of compressed data
+        qint64 nUncompressedSize;  // Size of uncompressed data
+        quint32 nCRC32;            // CRC32 of uncompressed data
     };
 };
 

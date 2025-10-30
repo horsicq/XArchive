@@ -89,17 +89,17 @@ public:
 
     // Format-specific context structures
     struct CAB_UNPACK_CONTEXT {
-        QList<qint64> listFileOffsets;    // Offsets of CFFILE entries
-        QList<CFFOLDER> listFolders;      // Folder information
-        qint32 nCurrentFileIndex;         // Current file being processed
+        QList<qint64> listFileOffsets;  // Offsets of CFFILE entries
+        QList<CFFOLDER> listFolders;    // Folder information
+        qint32 nCurrentFileIndex;       // Current file being processed
     };
 
     struct CAB_PACK_CONTEXT {
-        QList<CFFOLDER> listFolders;      // Folders being created
-        QList<CFFILE> listFiles;          // Files being added
-        QList<QByteArray> listDataBlocks; // Compressed data blocks
-        qint64 nCurrentOffset;            // Current write offset
-        quint16 nCompressionType;         // Compression type (0=STORE, 1=MSZIP, 3=LZX)
+        QList<CFFOLDER> listFolders;       // Folders being created
+        QList<CFFILE> listFiles;           // Files being added
+        QList<QByteArray> listDataBlocks;  // Compressed data blocks
+        qint64 nCurrentOffset;             // Current write offset
+        quint16 nCompressionType;          // Compression type (0=STORE, 1=MSZIP, 3=LZX)
     };
 
     explicit XCab(QIODevice *pDevice = nullptr);

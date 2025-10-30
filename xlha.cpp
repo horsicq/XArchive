@@ -324,7 +324,6 @@ bool XLHA::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
         // Create a RECORD structure for decompression
 
-
         // Get compression method
         QString sMethod = read_ansiString(pState->nCurrentOffset + 2, 5);
 
@@ -417,8 +416,7 @@ QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
         qint64 nOffset = 0;
 
         while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            if (compareSignature(dataHeadersOptions.pMemoryMap, "....'-lh'..2d", nOffset) ||
-                compareSignature(dataHeadersOptions.pMemoryMap, "....'-lz'..2d", nOffset) ||
+            if (compareSignature(dataHeadersOptions.pMemoryMap, "....'-lh'..2d", nOffset) || compareSignature(dataHeadersOptions.pMemoryMap, "....'-lz'..2d", nOffset) ||
                 compareSignature(dataHeadersOptions.pMemoryMap, "....'-pm'..2d", nOffset)) {
                 qint64 nHeaderSize = read_uint8(nOffset) + 2;
                 qint64 nDataSize = read_uint32(nOffset + 7);
@@ -479,7 +477,7 @@ QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
 
                         if (nHeaderSize > 22 + read_uint8(nCurrentOffset + 21)) {
                             dataHeader.listRecords.append(getDataRecord(22 + read_uint8(nCurrentOffset + 21), nHeaderSize - (22 + read_uint8(nCurrentOffset + 21)),
-                                                                         "Extended Header", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                                                                        "Extended Header", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                         }
 
                         if (nDataSize > 0) {
@@ -603,4 +601,3 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
     return listResult;
 }
-

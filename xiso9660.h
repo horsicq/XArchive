@@ -38,25 +38,25 @@ class XISO9660 : public XArchive {
         quint8 nUnused2[8];         // Unused
         quint32 nLogicalBlockSize;  // Logical block size (little/big endian)
         quint32 nBigEndianBlockSize;
-        quint32 nPathTableSize;     // Path table size (little/big endian)
+        quint32 nPathTableSize;  // Path table size (little/big endian)
         quint32 nBigEndianPathTableSize;
-        quint32 nRootDirExtent;     // Logical block number of root directory
+        quint32 nRootDirExtent;  // Logical block number of root directory
         quint32 nBigEndianRootDirExtent;
-        char szVolSetId[128];       // Volume set identifier
-        char szPublisherId[128];    // Publisher identifier
-        char szDataPreparerId[128]; // Data preparer identifier
-        char szApplicationId[128];  // Application identifier
-        char szCopyrightFile[37];   // Copyright file identifier
-        char szAbstractFile[36];    // Abstract file identifier
-        char szBiblioFile[37];      // Bibliographic file identifier
-        char szCreationTime[17];    // Creation time
-        char szModificationTime[17]; // Modification time
-        char szExpirationTime[17];  // Expiration time
-        char szEffectiveTime[17];   // Effective time
-        quint8 nFileStructVersion;  // File structure version
-        quint8 nUnused3;            // Unused
-        quint8 nAppData[512];       // Application-specific data
-        quint8 nUnused4[653];       // Unused
+        char szVolSetId[128];         // Volume set identifier
+        char szPublisherId[128];      // Publisher identifier
+        char szDataPreparerId[128];   // Data preparer identifier
+        char szApplicationId[128];    // Application identifier
+        char szCopyrightFile[37];     // Copyright file identifier
+        char szAbstractFile[36];      // Abstract file identifier
+        char szBiblioFile[37];        // Bibliographic file identifier
+        char szCreationTime[17];      // Creation time
+        char szModificationTime[17];  // Modification time
+        char szExpirationTime[17];    // Expiration time
+        char szEffectiveTime[17];     // Effective time
+        quint8 nFileStructVersion;    // File structure version
+        quint8 nUnused3;              // Unused
+        quint8 nAppData[512];         // Application-specific data
+        quint8 nUnused4[653];         // Unused
     };
 
     struct ISO9660_DIR_RECORD {

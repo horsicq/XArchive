@@ -926,4 +926,3 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
 
     return bResult;
 }
-
