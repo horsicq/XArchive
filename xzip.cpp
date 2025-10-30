@@ -29,6 +29,7 @@
 #include "Algos/xstoredecoder.h"
 #include "Algos/xzipcryptodecoder.h"
 #include "Algos/xzipaesdecoder.h"
+#include "Algos/xppmddecoder.h"
 
 XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
     {XZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -1341,7 +1342,7 @@ XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 
         case CMETHOD_DEFLATE64: result = COMPRESS_METHOD_DEFLATE64; break;  // TODO
         case CMETHOD_BZIP2: result = COMPRESS_METHOD_BZIP2; break;
         case CMETHOD_LZMA: result = COMPRESS_METHOD_LZMA; break;
-        case CMETHOD_PPMD: result = COMPRESS_METHOD_PPMD; break;  // TODO
+        case CMETHOD_PPMD: result = COMPRESS_METHOD_PPMD; break;
         case CMETHOD_AES: result = COMPRESS_METHOD_AES; break;
     }
     // TODO more methods
@@ -1998,6 +1999,8 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                     bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
                     bResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
+                } else if (compressMethod == XBinary::COMPRESS_METHOD_PPMD) {
+                    bResult = XPPMdDecoder::decompress(&decompressState, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
                     bResult = XShrinkDecoder::decompress(&decompressState, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {

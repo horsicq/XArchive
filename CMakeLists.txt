@@ -4,4 +4,5 @@ project(XArchive)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/bzip2)
 add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/lzma)
+add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/ppmd)
 add_subdirectory(${PROJECT_SOURCE_DIR}/3rdparty/zlib)

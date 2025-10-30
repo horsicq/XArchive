@@ -25,9 +25,6 @@
 #include "bzlib.h"
 #include "xbinary.h"
 #include "zlib.h"
-#ifdef PPMD_SUPPORT
-#include "Ppmd7.h"
-#endif
 #include "xcompress.h"
 #include "Algos/xlzhdecoder.h"
 #include "Algos/xrardecoder.h"

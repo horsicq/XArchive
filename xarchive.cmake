@@ -103,4 +103,10 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipcryptodecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipaesdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipaesdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmddecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmddecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmdrangedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmdrangedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmdmodel.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmdmodel.h
 )

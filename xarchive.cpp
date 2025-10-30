@@ -20,6 +20,7 @@
  */
 #include "xarchive.h"
 #include "xdecompress.h"
+#include "Algos/xppmddecoder.h"
 
 #if defined(_MSC_VER)
 #if _MSC_VER > 1800                                   // TODO Check !!!
@@ -85,31 +86,37 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             result = decompressState.bReadError ? COMPRESS_RESULT_READERROR : COMPRESS_RESULT_DATAERROR;
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_PPMD) {
-        // TODO Check
-#ifdef PPMD_SUPPORT
-        quint8 nOrder = 0;
-        quint32 nMemSize = 0;
+        qDebug() << "[XArchive] PPMd decompression requested - UncompressedSize:" << pDecompressStruct->spInfo.nUncompressedSize 
+                 << "InSize:" << pDecompressStruct->nInSize << "SourceSize:" << pDecompressStruct->pSourceDevice->size();
+        
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_PPMD);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
-        pSourceDevice->read((char *)(&nOrder), 1);
-        pSourceDevice->read((char *)(&nMemSize), 4);
-
-        bool bSuccess = true;
-
-        if ((nOrder < PPMD7_MIN_ORDER) || (nOrder > PPMD7_MAX_ORDER) || (nMemSize < PPMD7_MIN_MEM_SIZE) || (nMemSize > PPMD7_MAX_MEM_SIZE)) {
-            bSuccess = false;
-        }
-
-        bSuccess = true;
-
-        if (bSuccess) {
-            CPpmd7 ppmd;
-            Ppmd7_Construct(&ppmd);
-
-            if (Ppmd7_Alloc(&ppmd, nMemSize, &g_Alloc)) {
-                Ppmd7_Init(&ppmd, nOrder);
+        qDebug() << "[XArchive] Calling XPPMdDecoder::decompress";
+        if (XPPMdDecoder::decompress(&decompressState, pPdStruct)) {
+            qDebug() << "[XArchive] PPMd decompression succeeded - In:" << decompressState.nCountInput << "Out:" << decompressState.nCountOutput;
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
+            result = COMPRESS_RESULT_OK;
+        } else {
+            qDebug() << "[XArchive] PPMd decompression failed - ReadError:" << decompressState.bReadError 
+                     << "WriteError:" << decompressState.bWriteError;
+            if (decompressState.bReadError) {
+                result = COMPRESS_RESULT_READERROR;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
+            } else {
+                result = COMPRESS_RESULT_DATAERROR;
             }
         }
-#endif
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_DEFLATE) {
         XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);

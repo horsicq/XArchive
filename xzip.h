@@ -75,6 +75,7 @@ public:
         CMETHOD_IMPLODED = 6,
         CMETHOD_DEFLATE = 8,
         CMETHOD_DEFLATE64 = 9,
+        CMETHOD_PKWARE_DCL_IMPLODING = 10,  // Also used for older PPMd variant
         CMETHOD_BZIP2 = 12,
         CMETHOD_LZMA = 14,
         CMETHOD_PPMD = 98,

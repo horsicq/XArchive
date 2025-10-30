@@ -2,6 +2,8 @@ INCLUDEPATH += $$PWD
 DEPENDPATH += $$PWD
 INCLUDEPATH += $$PWD/Algos
 DEPENDPATH += $$PWD/Algos
+INCLUDEPATH += $$PWD/3rdparty/ppmd/src
+DEPENDPATH += $$PWD/3rdparty/ppmd/src
 
 HEADERS += \
     $$PWD/Algos/xlzhdecoder.h \
@@ -19,6 +21,9 @@ HEADERS += \
     $$PWD/Algos/xreducedecoder.h \
     $$PWD/Algos/xzipcryptodecoder.h \
     $$PWD/Algos/xzipaesdecoder.h \
+    $$PWD/Algos/xppmddecoder.h \
+    $$PWD/Algos/xppmdrangedecoder.h \
+    $$PWD/Algos/xppmdmodel.h \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
@@ -66,6 +71,9 @@ SOURCES += \
     $$PWD/Algos/xreducedecoder.cpp \
     $$PWD/Algos/xzipcryptodecoder.cpp \
     $$PWD/Algos/xzipaesdecoder.cpp \
+    $$PWD/Algos/xppmddecoder.cpp \
+    $$PWD/Algos/xppmdrangedecoder.cpp \
+    $$PWD/Algos/xppmdmodel.cpp \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \
@@ -130,6 +138,11 @@ SOURCES += \
 !contains(XCONFIG, lzma) {
     XCONFIG += lzma
     include($$PWD/3rdparty/lzma/lzma.pri)
+}
+
+!contains(XCONFIG, ppmd) {
+    XCONFIG += ppmd
+    include($$PWD/3rdparty/ppmd/ppmd.pri)
 }
 
 DISTFILES += \
