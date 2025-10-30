@@ -88,15 +88,15 @@ QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     SubDevice sd(getDevice(), nOffset, -1);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = nullptr;
         state.nInputOffset = 0;
         state.nInputLimit = -1;
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
+        state.nProcessedOffset = 0;
+        state.nProcessedLimit = -1;
 
         bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
@@ -303,7 +303,7 @@ bool XZlib::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         SubDevice sd(getDevice(), nOffset, nCompressedDataSize);
 
         if (sd.open(QIODevice::ReadOnly)) {
-            XBinary::DECOMPRESS_STATE state = {};
+            XBinary::DATAPROCESS_STATE state = {};
             // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
             state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
             state.pDeviceInput = &sd;
@@ -312,8 +312,8 @@ bool XZlib::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
             state.pDeviceOutput = &tempBuffer;
             state.nInputOffset = 0;
             state.nInputLimit = nCompressedDataSize;
-            state.nDecompressedOffset = 0;
-            state.nDecompressedLimit = -1;
+            state.nProcessedOffset = 0;
+            state.nProcessedLimit = -1;
 
             bool bDecompress = XDeflateDecoder::decompress(&state, pPdStruct);
 
@@ -402,15 +402,15 @@ bool XZlib::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     SubDevice sd(getDevice(), pContext->nHeaderSize, pContext->nCompressedSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;
         state.nInputOffset = 0;
         state.nInputLimit = sd.size();
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
+        state.nProcessedOffset = 0;
+        state.nProcessedLimit = -1;
 
         bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
@@ -566,7 +566,7 @@ bool XZlib::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruc
     }
 
     // Compress using DEFLATE (raw, not zlib wrapper since we add our own header)
-    XBinary::DECOMPRESS_STATE compressState = {};
+    XBinary::DATAPROCESS_STATE compressState = {};
     compressState.pDeviceInput = &inputBuffer;
     compressState.pDeviceOutput = pState->pDevice;
     compressState.nInputOffset = 0;

@@ -440,13 +440,13 @@ done:
 
 static size_t example_ozus_read(ozus_ctx *ozus, OZUS_UINT8 *buf, size_t size)
 {
-    XBinary::DECOMPRESS_STATE *pDecompressState = (XBinary::DECOMPRESS_STATE *)ozus->userdata;
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ozus->userdata;
     return XBinary::_readDevice((char *)buf, size, pDecompressState);
 }
 
 static size_t example_ozus_write(ozus_ctx *ozus, const OZUS_UINT8 *buf, size_t size)
 {
-    XBinary::DECOMPRESS_STATE *pDecompressState = (XBinary::DECOMPRESS_STATE *)ozus->userdata;
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ozus->userdata;
     return XBinary::_writeDevice((char *)buf, size, pDecompressState);
 }
 
@@ -454,7 +454,7 @@ XShrinkDecoder::XShrinkDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XShrinkDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XShrinkDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);

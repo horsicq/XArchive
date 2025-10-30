@@ -98,14 +98,14 @@ QList<XArchive::RECORD> XGzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     SubDevice sd(getDevice(), nOffset, getSize() - nOffset);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, record.spInfo.compressMethod);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = nullptr;
         state.nInputOffset = 0;
         state.nInputLimit = getSize() - nOffset;
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
+        state.nProcessedOffset = 0;
+        state.nProcessedLimit = -1;
 
         bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
@@ -191,14 +191,14 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     SubDevice sd(getDevice(), nOffset, getSize() - nOffset);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, cm);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = nullptr;
         state.nInputOffset = 0;
         state.nInputLimit = getSize() - nOffset;
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
+        state.nProcessedOffset = 0;
+        state.nProcessedLimit = -1;
 
         bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
@@ -460,14 +460,14 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         SubDevice sd(getDevice(), nOffset, nFileSize - nOffset);
 
         if (sd.open(QIODevice::ReadOnly)) {
-            XBinary::DECOMPRESS_STATE state = {};
+            XBinary::DATAPROCESS_STATE state = {};
             state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
             state.pDeviceInput = &sd;
             state.pDeviceOutput = nullptr;
             state.nInputOffset = 0;
             state.nInputLimit = -1;
-            state.nDecompressedOffset = 0;
-            state.nDecompressedLimit = -1;
+            state.nProcessedOffset = 0;
+            state.nProcessedLimit = -1;
 
             bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 
@@ -545,14 +545,14 @@ bool XGzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;
         state.nInputOffset = 0;
         state.nInputLimit = getSize();
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
+        state.nProcessedOffset = 0;
+        state.nProcessedLimit = -1;
 
         bResult = XDeflateDecoder::decompress(&state, pPdStruct);
 

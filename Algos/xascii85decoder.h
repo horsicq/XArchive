@@ -27,7 +27,7 @@ class XASCII85Decoder : public QObject {
     Q_OBJECT
 public:
     explicit XASCII85Decoder(QObject *parent = nullptr);
-    static bool decompress_pdf(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XASCII85DECODER_H

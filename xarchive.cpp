@@ -66,15 +66,15 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 
     if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_STORE) {
-        XBinary::DECOMPRESS_STATE decompressState = {};
+        XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
         decompressState.nInputOffset = 0;
         decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
-        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
-        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
         if (XStoreDecoder::decompress(&decompressState, pPdStruct)) {
             pDecompressStruct->nInSize = decompressState.nCountInput;
@@ -111,15 +111,15 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         }
 #endif
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_DEFLATE) {
-        XBinary::DECOMPRESS_STATE decompressState = {};
+        XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
         decompressState.nInputOffset = 0;
         decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
-        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
-        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
         if (XDeflateDecoder::decompress(&decompressState, pPdStruct)) {
             pDecompressStruct->nInSize = decompressState.nCountInput;
@@ -136,15 +136,15 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             }
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_BZIP2) {
-        XBinary::DECOMPRESS_STATE decompressState = {};
+        XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
         decompressState.nInputOffset = 0;
         decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
-        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
-        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
         if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
             pDecompressStruct->nInSize = decompressState.nCountInput;
@@ -161,15 +161,15 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             }
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZMA) {
-        XBinary::DECOMPRESS_STATE decompressState = {};
+        XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
         decompressState.nInputOffset = 0;
         decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
-        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
-        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
         if (XLZMADecoder::decompress(&decompressState, pPdStruct)) {
             pDecompressStruct->nInSize = decompressState.nCountInput;
@@ -197,15 +197,15 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             nMethod = 7;
         }
 
-        XBinary::DECOMPRESS_STATE decompressState = {};
+        XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, pDecompressStruct->spInfo.compressMethod);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
         decompressState.nInputOffset = 0;
         decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
-        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
-        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
         if (XLZHDecoder::decompress(&decompressState, nMethod, pPdStruct)) {
             pDecompressStruct->nInSize = decompressState.nCountInput;
@@ -243,15 +243,15 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             }
         }
     } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZSS_SZDD) {
-        XBinary::DECOMPRESS_STATE decompressState = {};
+        XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZSS_SZDD);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
         decompressState.nInputOffset = 0;
         decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
-        decompressState.nDecompressedOffset = pDecompressStruct->nDecompressedOffset;
-        decompressState.nDecompressedLimit = pDecompressStruct->nDecompressedLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
         if (XLZSSDecoder::decompress(&decompressState, pPdStruct)) {
             pDecompressStruct->nInSize = decompressState.nCountInput;
@@ -280,7 +280,7 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
     SubDevice sd(pSourceDevice, pRecord->nDataOffset, pRecord->nDataSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, pRecord->spInfo.compressMethod);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pRecord->spInfo.nUncompressedSize);
         state.mapProperties.insert(XBinary::FPART_PROP_WINDOWSIZE, pRecord->spInfo.nWindowSize);
@@ -288,8 +288,8 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         state.pDeviceOutput = pDestDevice;
         state.nInputOffset = 0;
         state.nInputLimit = pRecord->nDataSize;
-        state.nDecompressedOffset = nDecompressedOffset;
-        state.nDecompressedLimit = nDecompressedLimit;
+        state.nProcessedOffset = nDecompressedOffset;
+        state.nProcessedLimit = nDecompressedLimit;
 
         XDecompress decompressor;
         bResult = decompressor.decompress(&state, pPdStruct);

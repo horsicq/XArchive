@@ -24,7 +24,7 @@ XBZIP2Decoder::XBZIP2Decoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XBZIP2Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 

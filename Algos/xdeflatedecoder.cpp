@@ -835,7 +835,7 @@ int inflateBack9End(z_stream *strm)
 
 unsigned readFunc(void *in_desc, unsigned char **buf)
 {
-    XBinary::DECOMPRESS_STATE *pDecompressState = (XBinary::DECOMPRESS_STATE *)in_desc;
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)in_desc;
 
     *buf = (unsigned char *)(pDecompressState->pInputBuffer);
 
@@ -844,7 +844,7 @@ unsigned readFunc(void *in_desc, unsigned char **buf)
 
 int writeFunc(void *out_desc, unsigned char *buf, unsigned len)
 {
-    XBinary::DECOMPRESS_STATE *pDecompressState = (XBinary::DECOMPRESS_STATE *)out_desc;
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)out_desc;
 
     qint32 nResult = XBinary::_writeDevice((char *)buf, len, pDecompressState);
 
@@ -855,7 +855,7 @@ XDeflateDecoder::XDeflateDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
@@ -929,7 +929,7 @@ bool XDeflateDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XB
     return bResult;
 }
 
-bool XDeflateDecoder::decompress64(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XDeflateDecoder::decompress64(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
@@ -968,7 +968,7 @@ bool XDeflateDecoder::decompress64(XBinary::DECOMPRESS_STATE *pDecompressState, 
     return bResult;
 }
 
-bool XDeflateDecoder::decompress_zlib(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
@@ -978,7 +978,7 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DECOMPRESS_STATE *pDecompressStat
         pDecompressState->pDeviceOutput->seek(0);
     }
 
-    XBinary::DECOMPRESS_STATE decompressState = *pDecompressState;
+    XBinary::DATAPROCESS_STATE decompressState = *pDecompressState;
     decompressState.nInputLimit = pDecompressState->nInputLimit - 6;    // Skip zlib header and footer
     decompressState.nInputOffset = pDecompressState->nInputOffset + 2;  // Skip zlib header
 
@@ -994,7 +994,7 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DECOMPRESS_STATE *pDecompressStat
     return bResult;
 }
 
-bool XDeflateDecoder::compress(XBinary::DECOMPRESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel)
+bool XDeflateDecoder::compress(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel)
 {
     bool bResult = false;
 
@@ -1090,7 +1090,7 @@ bool XDeflateDecoder::compress(XBinary::DECOMPRESS_STATE *pCompressState, XBinar
     return bResult;
 }
 
-bool XDeflateDecoder::compress_zlib(XBinary::DECOMPRESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel)
+bool XDeflateDecoder::compress_zlib(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel)
 {
     bool bResult = false;
 

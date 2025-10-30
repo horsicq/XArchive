@@ -32,7 +32,7 @@ static void SzFree(ISzAllocPtr, void *address)
 
 static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 
-static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     const qint32 N_BUFFER_SIZE = 0x4000;
 
@@ -118,7 +118,7 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DECOMPRESS_STATE *p
     return true;
 }
 
-static bool _decompressLZMA2Common(CLzma2Dec *pState, XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+static bool _decompressLZMA2Common(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     const qint32 N_BUFFER_SIZE = 0x4000;
 
@@ -186,7 +186,7 @@ XLZMADecoder::XLZMADecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XLZMADecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
@@ -233,7 +233,7 @@ bool XLZMADecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBina
     return bResult;
 }
 
-bool XLZMADecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
+bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         // qDebug("XLZMADecoder::decompress() FAILED: null pointer check");
@@ -285,7 +285,7 @@ bool XLZMADecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, const
     return bResult;
 }
 
-bool XLZMADecoder::decompressLZMA2(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
@@ -321,7 +321,7 @@ bool XLZMADecoder::decompressLZMA2(XBinary::DECOMPRESS_STATE *pDecompressState, 
     return bResult;
 }
 
-bool XLZMADecoder::decompressLZMA2(XBinary::DECOMPRESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
+bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;

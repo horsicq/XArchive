@@ -28,6 +28,7 @@
 #include "Algos/xreducedecoder.h"
 #include "Algos/xstoredecoder.h"
 #include "Algos/xzipcryptodecoder.h"
+#include "Algos/xzipaesdecoder.h"
 
 XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
     {XZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -1369,11 +1370,6 @@ bool XZip::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, 
     ZIP_PACK_CONTEXT *pContext = new ZIP_PACK_CONTEXT();
     pContext->pListZipFileRecords = new QList<ZIPFILE_RECORD>();
     
-    // Copy options if provided
-    if (pOptions) {
-        pContext->options = *(static_cast<ZIP_OPTIONS *>(pOptions));
-    }
-    
     pState->pContext = (void *)pContext;
 
     return true;
@@ -1398,13 +1394,13 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     // Determine file path to store in archive based on PATH_MODE
     QString sStoredPath;
     
-    switch (pContext->options.pathMode) {
+    switch (pState->pathMode) {
     case XBinary::PATH_MODE_ABSOLUTE:
         sStoredPath = fileInfo.absoluteFilePath();
         break;
     case XBinary::PATH_MODE_RELATIVE:
-        if (!pContext->options.sBasePath.isEmpty()) {
-            QDir baseDir(pContext->options.sBasePath);
+        if (!pState->sBasePath.isEmpty()) {
+            QDir baseDir(pState->sBasePath);
             sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
         } else {
             sStoredPath = fileInfo.fileName();
@@ -1419,6 +1415,14 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     // Normalize path separators to forward slashes (ZIP standard)
     sStoredPath = sStoredPath.replace("\\", "/");
 
+    CMETHOD cmethod = CMETHOD_STORE;
+
+    if (pState->compressMethod == XArchive::COMPRESS_METHOD_DEFLATE) {
+        cmethod = CMETHOD_DEFLATE;
+    } else if (pState->compressMethod == XArchive::COMPRESS_METHOD_STORE) {
+        cmethod = CMETHOD_STORE;
+    }
+
     ZIPFILE_RECORD zipFileRecord = {};
     zipFileRecord.sFileName = sStoredPath;
     zipFileRecord.nVersion = 0x14;
@@ -1426,9 +1430,14 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     zipFileRecord.nMinVersion = 0x14;
     zipFileRecord.nMinOS = 0;
     zipFileRecord.nFlags = 0;
-    zipFileRecord.method = pContext->options.compressMethod;  // Use compression method from options
+    zipFileRecord.method = cmethod;  // Use compression method from options
     zipFileRecord.dtTime = fileInfo.lastModified();
     zipFileRecord.nUncompressedSize = fileInfo.size();
+
+    qint32 nCompressionLevel = pState->nCompressionLevel;
+    if (nCompressionLevel == -1) {
+        nCompressionLevel = 8;
+    }
     
     // Get file permissions and convert to external attributes
     QFile::Permissions permissions = fileInfo.permissions();
@@ -1446,6 +1455,12 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     QPair<quint16, quint16> dosDateTime = XBinary::qDateTimeToDosDateTime(zipFileRecord.dtTime);
     quint16 nDosDate = dosDateTime.first;
     quint16 nDosTime = dosDateTime.second;
+
+    // Check if encryption is needed
+    bool bEncrypt = !pState->sPassword.isEmpty() && (pState->cryptoMethod == XBinary::CRYPTO_METHOD_ZIPCRYPTO);
+    if (bEncrypt) {
+        zipFileRecord.nFlags |= 0x01;  // Set encryption flag
+    }
 
     // Write local file header
     zipFileRecord.nHeaderOffset = pState->nCurrentOffset;
@@ -1485,39 +1500,76 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     qint64 nFileSize = fileInfo.size();
 
     if (zipFileRecord.method == CMETHOD_STORE) {
-        // No compression - direct copy
-        while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
+        // No compression - direct copy (with optional encryption)
+        if (bEncrypt) {
+            // Encrypt the file data
+            QBuffer dataBuffer;
+            dataBuffer.open(QIODevice::WriteOnly);
 
-            if (baBuffer.isEmpty() && nBytesWritten < nFileSize) {
-                file.close();
+            // First, read all data to a buffer for encryption
+            QByteArray baFileData = file.readAll();
+            file.close();
+
+            if (baFileData.size() != nFileSize) {
                 return false;
             }
 
-            if (pState->pDevice->write(baBuffer) != baBuffer.size()) {
-                file.close();
+            // Prepare encryption
+            QBuffer inputBuffer(&baFileData);
+            inputBuffer.open(QIODevice::ReadOnly);
+
+            XBinary::DATAPROCESS_STATE encryptState = {};
+            encryptState.pDeviceInput = &inputBuffer;
+            encryptState.pDeviceOutput = &dataBuffer;
+            encryptState.nInputOffset = 0;
+            encryptState.nInputLimit = nFileSize;
+
+            bool bEncryptResult = XZipCryptoDecoder::encrypt(&encryptState, pState->sPassword, zipFileRecord.nCRC32, pPdStruct);
+
+            if (bEncryptResult) {
+                dataBuffer.close();
+                QByteArray baEncrypted = dataBuffer.data();
+
+                if (pState->pDevice->write(baEncrypted) != baEncrypted.size()) {
+                    return false;
+                }
+
+                nBytesWritten = baEncrypted.size();
+                zipFileRecord.nCompressedSize = nBytesWritten;  // Encrypted size (original + 12 byte header)
+            } else {
                 return false;
             }
+        } else {
+            // No encryption - direct copy
+            while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+                QByteArray baBuffer = file.read(qMin((qint64)0x10000, nFileSize - nBytesWritten));
 
-            nBytesWritten += baBuffer.size();
+                if (baBuffer.isEmpty() && nBytesWritten < nFileSize) {
+                    file.close();
+                    return false;
+                }
+
+                if (pState->pDevice->write(baBuffer) != baBuffer.size()) {
+                    file.close();
+                    return false;
+                }
+
+                nBytesWritten += baBuffer.size();
+            }
+
+            file.close();
+            zipFileRecord.nCompressedSize = nFileSize;  // STORE: compressed = uncompressed
         }
-
-        zipFileRecord.nCompressedSize = nFileSize;  // STORE: compressed = uncompressed
     } else if (zipFileRecord.method == CMETHOD_DEFLATE) {
-        // Compress data using DEFLATE
+        // Compress data using DEFLATE (with optional encryption)
         QBuffer compressedBuffer;
         compressedBuffer.open(QIODevice::WriteOnly);
 
-        XBinary::DECOMPRESS_STATE compressState = {};
+        XBinary::DATAPROCESS_STATE compressState = {};
         compressState.pDeviceInput = &file;
         compressState.pDeviceOutput = &compressedBuffer;
         compressState.nInputOffset = 0;
         compressState.nInputLimit = nFileSize;
-
-        qint32 nCompressionLevel = pContext->options.nCompressionLevel;
-        if (nCompressionLevel == -1) {
-            nCompressionLevel = Z_DEFAULT_COMPRESSION;
-        }
 
         bool bCompress = XDeflateDecoder::compress(&compressState, pPdStruct, nCompressionLevel);
 
@@ -1525,17 +1577,53 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
             compressedBuffer.close();
             QByteArray baCompressed = compressedBuffer.data();
 
-            if (pState->pDevice->write(baCompressed) != baCompressed.size()) {
-                file.close();
-                return false;
-            }
+            if (bEncrypt) {
+                // Encrypt the compressed data
+                QBuffer encryptedBuffer;
+                encryptedBuffer.open(QIODevice::WriteOnly);
 
-            nBytesWritten = compressState.nCountOutput;
-            zipFileRecord.nCompressedSize = nBytesWritten;
+                QBuffer inputBuffer(&baCompressed);
+                inputBuffer.open(QIODevice::ReadOnly);
+
+                XBinary::DATAPROCESS_STATE encryptState = {};
+                encryptState.pDeviceInput = &inputBuffer;
+                encryptState.pDeviceOutput = &encryptedBuffer;
+                encryptState.nInputOffset = 0;
+                encryptState.nInputLimit = baCompressed.size();
+
+                bool bEncryptResult = XZipCryptoDecoder::encrypt(&encryptState, pState->sPassword, zipFileRecord.nCRC32, pPdStruct);
+
+                if (bEncryptResult) {
+                    encryptedBuffer.close();
+                    QByteArray baEncrypted = encryptedBuffer.data();
+
+                    if (pState->pDevice->write(baEncrypted) != baEncrypted.size()) {
+                        file.close();
+                        return false;
+                    }
+
+                    nBytesWritten = baEncrypted.size();
+                    zipFileRecord.nCompressedSize = nBytesWritten;
+                } else {
+                    file.close();
+                    return false;
+                }
+            } else {
+                // No encryption
+                if (pState->pDevice->write(baCompressed) != baCompressed.size()) {
+                    file.close();
+                    return false;
+                }
+
+                nBytesWritten = compressState.nCountOutput;
+                zipFileRecord.nCompressedSize = nBytesWritten;
+            }
         } else {
             file.close();
             return false;
         }
+
+        file.close();
     } else {
         // Unsupported compression method
         file.close();
@@ -1587,9 +1675,9 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
     QString sOriginalBasePath;
     bool bRestoreBasePath = false;
     
-    if (pContext->options.pathMode == XBinary::PATH_MODE_RELATIVE && pContext->options.sBasePath.isEmpty()) {
-        sOriginalBasePath = pContext->options.sBasePath;
-        pContext->options.sBasePath = sDirectoryPath;
+    if (pState->pathMode == XBinary::PATH_MODE_RELATIVE && pState->sBasePath.isEmpty()) {
+        sOriginalBasePath = pState->sBasePath;
+        pState->sBasePath = sDirectoryPath;
         bRestoreBasePath = true;
     }
 
@@ -1612,7 +1700,7 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
         // Add file to archive
         if (!addFile(pState, sFilePath, pPdStruct)) {
             if (bRestoreBasePath) {
-                pContext->options.sBasePath = sOriginalBasePath;
+                pState->sBasePath = sOriginalBasePath;
             }
             return false;
         }
@@ -1620,7 +1708,7 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
 
     // Restore original base path if we changed it
     if (bRestoreBasePath) {
-        pContext->options.sBasePath = sOriginalBasePath;
+        pState->sBasePath = sOriginalBasePath;
     }
 
     return true;
@@ -1777,146 +1865,165 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
         qint64 nDataOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
 
+        qDebug() << "[XZIP] nDataOffset:" << nDataOffset << "= nCurrentOffset:" << pState->nCurrentOffset 
+                 << "+ sizeof(LOCALFILEHEADER):" << sizeof(LOCALFILEHEADER) 
+                 << "+ nFileNameLength:" << lfh.nFileNameLength 
+                 << "+ nExtraFieldLength:" << lfh.nExtraFieldLength;
+        qDebug() << "[XZIP] Compressed size:" << lfh.nCompressedSize;
+
         COMPRESS_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
 
         // Check if file is encrypted
         bool bIsEncrypted = (lfh.nFlags & 0x01) != 0;
+        bool bIsAESEncrypted = (lfh.nMethod == CMETHOD_AES);
+        QString sPassword = pState->sPassword;
 
-        if (bIsEncrypted) {
-            // Handle encrypted data with ZipCrypto
-            // Get password from unpack state context
-            QString sPassword;
-            if (pState->pContext) {
-                QVariantMap *pMapContext = (QVariantMap *)pState->pContext;
-                if (pMapContext->contains("password")) {
-                    sPassword = pMapContext->value("password").toString();
+        if ((bIsEncrypted || bIsAESEncrypted) && sPassword.isEmpty()) {
+            // No password provided - cannot decrypt
+            return false;
+        }
+
+        // Create a temporary SubDevice for the encrypted compressed data
+        SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
+
+        if (subDevice.open(QIODevice::ReadOnly)) {
+            QIODevice *pInputDevice = nullptr;
+            QIODevice *pDecryptedDevice = nullptr;
+            qint64 nDecryptedSize = 0;
+
+            if (bIsAESEncrypted) {
+                // AES encryption - need to read extra field to determine AES strength
+                // Extra field format: HeaderID(2) + DataSize(2) + VendorVersion(2) + VendorID(2) + AESStrength(1) + CompressionMethod(2)
+                qint64 nExtraFieldOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength;
+                qint16 nExtraFieldLength = lfh.nExtraFieldLength;
+                
+                XBinary::CRYPTO_METHOD aesMethod = XBinary::CRYPTO_METHOD_AES256;  // Default to AES-256
+                quint16 nActualCompressionMethod = CMETHOD_STORE;  // Default compression method inside AES
+                
+                // Parse extra field to find AES info
+                qint64 nExtraOffset = 0;
+                while (nExtraOffset < nExtraFieldLength) {
+                    quint16 nHeaderID = read_uint16(nExtraFieldOffset + nExtraOffset);
+                    quint16 nDataSize = read_uint16(nExtraFieldOffset + nExtraOffset + 2);
+                    
+                    if (nHeaderID == 0x9901) {  // AES encryption extra field
+                        // Read AES strength byte
+                        quint8 nAESStrength = read_uint8(nExtraFieldOffset + nExtraOffset + 8);
+                        // Read actual compression method
+                        nActualCompressionMethod = read_uint16(nExtraFieldOffset + nExtraOffset + 9);
+                        
+                        qDebug() << "[XZIP] AES extra field found: strength=" << nAESStrength << "actual compression method=" << nActualCompressionMethod;
+                        
+                        // Determine AES key size from strength byte
+                        if (nAESStrength == 0x01) {
+                            aesMethod = XBinary::CRYPTO_METHOD_AES128;
+                        } else if (nAESStrength == 0x02) {
+                            aesMethod = XBinary::CRYPTO_METHOD_AES192;
+                        } else if (nAESStrength == 0x03) {
+                            aesMethod = XBinary::CRYPTO_METHOD_AES256;
+                        }
+                        
+                        break;
+                    }
+                    
+                    nExtraOffset += 4 + nDataSize;
                 }
-            }
+                
+                pDecryptedDevice = createFileBuffer(lfh.nCompressedSize, pPdStruct);
 
-            if (sPassword.isEmpty()) {
-                // No password provided - cannot decrypt
-                return false;
-            }
-
-            // Create a temporary SubDevice for the encrypted compressed data
-            SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
-
-            if (subDevice.open(QIODevice::ReadOnly)) {
-                // First decrypt to a temporary buffer
-                QBuffer decryptedBuffer; // TODO buffer size
-                decryptedBuffer.open(QIODevice::WriteOnly);
-
-                XBinary::DECOMPRESS_STATE decryptState = {};
-                decryptState.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, lfh.nCRC32);
+                XBinary::DATAPROCESS_STATE decryptState = {};
                 decryptState.pDeviceInput = &subDevice;
-                decryptState.pDeviceOutput = &decryptedBuffer;
+                decryptState.pDeviceOutput = pDecryptedDevice;
                 decryptState.nInputOffset = 0;
                 decryptState.nInputLimit = lfh.nCompressedSize;
-                decryptState.nDecompressedOffset = 0;
-                decryptState.nDecompressedLimit = -1;
+                decryptState.nProcessedOffset = 0;
+                decryptState.nProcessedLimit = -1;
 
-                bool bDecrypted = XZipCryptoDecoder::decompress(&decryptState, sPassword, pPdStruct);
+                bool bDecrypted = XZipAESDecoder::decrypt(&decryptState, sPassword, aesMethod, pPdStruct);
 
                 subDevice.close();
 
                 if (bDecrypted) {
-                    // Now decompress the decrypted data
-                    decryptedBuffer.close();
-                    QByteArray baDecrypted = decryptedBuffer.data();
-                    QBuffer decryptedSource;
-                    decryptedSource.setData(baDecrypted);
-                    decryptedSource.open(QIODevice::ReadOnly);
-
-                    XBinary::DECOMPRESS_STATE decompressState = {};
-                    decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
-                    decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
-                    decompressState.pDeviceInput = &decryptedSource;
-                    decompressState.pDeviceOutput = pDevice;
-                    decompressState.nInputOffset = 0;
-                    decompressState.nInputLimit = baDecrypted.size();
-                    decompressState.nDecompressedOffset = 0;
-                    decompressState.nDecompressedLimit = -1;
-
-                    if (compressMethod == COMPRESS_METHOD_STORE) {
-                        bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
-                    } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
-                        bResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
-                    } else if (compressMethod == COMPRESS_METHOD_DEFLATE64) {
-                        bResult = XDeflateDecoder::decompress64(&decompressState, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
-                        bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
-                        bResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
-                        bResult = XShrinkDecoder::decompress(&decompressState, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
-                        bResult = XReduceDecoder::decompress(&decompressState, 1, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
-                        bResult = XReduceDecoder::decompress(&decompressState, 2, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
-                        bResult = XReduceDecoder::decompress(&decompressState, 3, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
-                        bResult = XReduceDecoder::decompress(&decompressState, 4, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
-                        bResult = XImplodeDecoder::decompress(&decompressState, false, false, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
-                        bResult = XImplodeDecoder::decompress(&decompressState, false, true, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
-                        bResult = XImplodeDecoder::decompress(&decompressState, true, false, pPdStruct);
-                    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
-                        bResult = XImplodeDecoder::decompress(&decompressState, true, true, pPdStruct);
-                    }
-
-                    decryptedSource.close();
+                    pInputDevice = pDecryptedDevice;
+                    nDecryptedSize = decryptState.nCountOutput;  // Use actual decrypted size
+                    pDecryptedDevice->seek(0);  // Rewind to beginning for reading
+                    
+                    // Update compression method to the actual method inside AES container
+                    compressMethod = zipToCompressMethod(nActualCompressionMethod, 0);
                 }
-            }
-        } else {
-            // Unencrypted data - original flow
-            // For compressed data, we need to decompress via temporary buffer
-            // Create a temporary SubDevice for the compressed data
-            SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
+            } else if (bIsEncrypted) {
+                // Traditional ZIP crypto
+                pDecryptedDevice = createFileBuffer(lfh.nCompressedSize, pPdStruct);
 
-            if (subDevice.open(QIODevice::ReadOnly)) {
-                XBinary::DECOMPRESS_STATE state = {};
-                state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
-                state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
-                state.pDeviceInput = &subDevice;
-                state.pDeviceOutput = pDevice;
-                state.nInputOffset = 0;
-                state.nInputLimit = lfh.nCompressedSize;
-                state.nDecompressedOffset = 0;
-                state.nDecompressedLimit = -1;
+                XBinary::DATAPROCESS_STATE decryptState = {};
+                decryptState.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, lfh.nCRC32);
+                decryptState.pDeviceInput = &subDevice;
+                decryptState.pDeviceOutput = pDecryptedDevice;
+                decryptState.nInputOffset = 0;
+                decryptState.nInputLimit = lfh.nCompressedSize;
+                decryptState.nProcessedOffset = 0;
+                decryptState.nProcessedLimit = -1;
+
+                bool bDecrypted = XZipCryptoDecoder::decrypt(&decryptState, sPassword, pPdStruct);
+
+                subDevice.close();
+
+                if (bDecrypted) {
+                    pInputDevice = pDecryptedDevice;
+                    nDecryptedSize = decryptState.nCountOutput;  // Use actual decrypted size
+                    pDecryptedDevice->seek(0);  // Rewind to beginning for reading
+                }
+            } else {
+                pInputDevice = &subDevice;
+            }
+
+            if (pInputDevice) {
+                XBinary::DATAPROCESS_STATE decompressState = {};
+                decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+                decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
+                decompressState.pDeviceInput = pInputDevice;
+                decompressState.pDeviceOutput = pDevice;
+                decompressState.nInputOffset = 0;
+                decompressState.nInputLimit = (bIsEncrypted || bIsAESEncrypted) ? nDecryptedSize : pInputDevice->size();
+                decompressState.nProcessedOffset = 0;
+                decompressState.nProcessedLimit = -1;
 
                 if (compressMethod == COMPRESS_METHOD_STORE) {
-                    bResult = XStoreDecoder::decompress(&state, pPdStruct);
+                    bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
                 } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
-                    bResult = XDeflateDecoder::decompress(&state, pPdStruct);
+                    bResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
                 } else if (compressMethod == COMPRESS_METHOD_DEFLATE64) {
-                    bResult = XDeflateDecoder::decompress64(&state, pPdStruct);
+                    bResult = XDeflateDecoder::decompress64(&decompressState, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
-                    bResult = XBZIP2Decoder::decompress(&state, pPdStruct);
+                    bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
-                    bResult = XLZMADecoder::decompress(&state, pPdStruct);
+                    bResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
-                    bResult = XShrinkDecoder::decompress(&state, pPdStruct);
+                    bResult = XShrinkDecoder::decompress(&decompressState, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
-                    bResult = XReduceDecoder::decompress(&state, 1, pPdStruct);
+                    bResult = XReduceDecoder::decompress(&decompressState, 1, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
-                    bResult = XReduceDecoder::decompress(&state, 2, pPdStruct);
+                    bResult = XReduceDecoder::decompress(&decompressState, 2, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
-                    bResult = XReduceDecoder::decompress(&state, 3, pPdStruct);
+                    bResult = XReduceDecoder::decompress(&decompressState, 3, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
-                    bResult = XReduceDecoder::decompress(&state, 4, pPdStruct);
+                    bResult = XReduceDecoder::decompress(&decompressState, 4, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
-                    bResult = XImplodeDecoder::decompress(&state, false, false, pPdStruct);
+                    bResult = XImplodeDecoder::decompress(&decompressState, false, false, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
-                    bResult = XImplodeDecoder::decompress(&state, false, true, pPdStruct);
+                    bResult = XImplodeDecoder::decompress(&decompressState, false, true, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
-                    bResult = XImplodeDecoder::decompress(&state, true, false, pPdStruct);
+                    bResult = XImplodeDecoder::decompress(&decompressState, true, false, pPdStruct);
                 } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
-                    bResult = XImplodeDecoder::decompress(&state, true, true, pPdStruct);
+                    bResult = XImplodeDecoder::decompress(&decompressState, true, true, pPdStruct);
                 }
+            }
 
+            if (pDecryptedDevice) {
+                freeFileBuffer(&pDecryptedDevice, pPdStruct);
+            }
+
+            if (!bIsEncrypted) {
                 subDevice.close();
             }
         }
@@ -1961,12 +2068,15 @@ bool XZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 void XZip::setUnpackPassword(UNPACK_STATE *pState, const QString &sPassword)
 {
     if (pState) {
-        if (!pState->pContext) {
-            pState->pContext = new QVariantMap();
-        }
-        
-        QVariantMap *pMapContext = (QVariantMap *)pState->pContext;
-        pMapContext->insert("password", sPassword);
+        pState->sPassword = sPassword;
+    }
+}
+
+void XZip::setPackPassword(PACK_STATE *pState, const QString &sPassword)
+{
+    if (pState) {
+        pState->sPassword = sPassword;
+        pState->cryptoMethod = XBinary::CRYPTO_METHOD_ZIPCRYPTO;
     }
 }
 

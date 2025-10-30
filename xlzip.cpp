@@ -389,15 +389,15 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     SubDevice sd(getDevice(), pContext->nHeaderSize, pContext->nCompressedSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;
         state.nInputOffset = 0;
         state.nInputLimit = -1;
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
+        state.nProcessedOffset = 0;
+        state.nProcessedLimit = -1;
 
         bResult = XLZMADecoder::decompress(&state, pPdStruct);
 

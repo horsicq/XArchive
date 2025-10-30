@@ -24,7 +24,7 @@ XIT214Decoder::XIT214Decoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XIT214Decoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct)
+bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
@@ -219,7 +219,7 @@ quint32 XIT214Decoder::readbits(STATE *pState, quint8 n)
     return retval;
 }
 
-bool XIT214Decoder::readBlock(STATE *pState, XBinary::DECOMPRESS_STATE *pDecompressState)
+bool XIT214Decoder::readBlock(STATE *pState, XBinary::DATAPROCESS_STATE *pDecompressState)
 {
     bool bResult = false;
 

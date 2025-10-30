@@ -827,7 +827,7 @@ void XLZHDecoder::lzh_huffman_free(lzh_huffman *hf)
     free(hf->tree);
 }
 
-bool XLZHDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32 nMethod, XBinary::PDSTRUCT *pPdStruct)
+bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nMethod, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -885,8 +885,8 @@ bool XLZHDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32
             if (strm.avail_out > 0) {
                 qint64 nWriteSize = qMin((qint64)strm.avail_out, (qint64)(N_BUFFER_SIZE));
 
-                if (nOutputWritten + nWriteSize > pDecompressState->nDecompressedLimit && pDecompressState->nDecompressedLimit != -1) {
-                    nWriteSize = pDecompressState->nDecompressedLimit - nOutputWritten;
+                if (nOutputWritten + nWriteSize > pDecompressState->nProcessedLimit && pDecompressState->nProcessedLimit != -1) {
+                    nWriteSize = pDecompressState->nProcessedLimit - nOutputWritten;
                 }
 
                 if (nWriteSize > 0) {
@@ -901,7 +901,7 @@ bool XLZHDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32
                     strm.avail_out = 0;
                 }
 
-                if (nOutputWritten >= pDecompressState->nDecompressedLimit && pDecompressState->nDecompressedLimit != -1) {
+                if (nOutputWritten >= pDecompressState->nProcessedLimit && pDecompressState->nProcessedLimit != -1) {
                     break;
                 }
             }

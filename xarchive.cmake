@@ -101,4 +101,6 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xreducedecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipcryptodecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipcryptodecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipaesdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipaesdecoder.h
 )

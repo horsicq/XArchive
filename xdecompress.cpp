@@ -26,28 +26,28 @@ XDecompress::XDecompress(QObject *parent) : XThreadObject(parent)
 
 bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct)
 {
-    XBinary::DECOMPRESS_STATE state = {};
+    XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = fPart.mapProperties;
     state.pDeviceInput = pDeviceInput;
     state.pDeviceOutput = pDeviceOutput;
     state.nInputOffset = fPart.nFileOffset;
     state.nInputLimit = fPart.nFileSize;
-    state.nDecompressedOffset = 0;
-    state.nDecompressedLimit = -1;
+    state.nProcessedOffset = 0;
+    state.nProcessedLimit = -1;
 
     return decompress(&state, pPdStruct);
 }
 
 bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct)
 {
-    XBinary::DECOMPRESS_STATE state = {};
+    XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = archiveRecord.mapProperties;
     state.pDeviceInput = pDeviceInput;
     state.pDeviceOutput = pDeviceOutput;
     state.nInputOffset = archiveRecord.nStreamOffset;
     state.nInputLimit = archiveRecord.nStreamSize;
-    state.nDecompressedOffset = archiveRecord.nDecompressedOffset;
-    state.nDecompressedLimit = archiveRecord.nDecompressedSize;
+    state.nProcessedOffset = archiveRecord.nDecompressedOffset;
+    state.nProcessedLimit = archiveRecord.nDecompressedSize;
 
     return decompress(&state, pPdStruct);
 }
@@ -85,7 +85,7 @@ bool XDecompress::checkCRC(const QMap<XBinary::FPART_PROP, QVariant> &mapPropert
     return bResult;
 }
 
-bool XDecompress::decompress(XBinary::DECOMPRESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = true;
 
@@ -216,13 +216,13 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
         QBuffer buffer(&baResult);
 
         if (buffer.open(QIODevice::ReadWrite)) {
-            XBinary::DECOMPRESS_STATE state = {};
+            XBinary::DATAPROCESS_STATE state = {};
             state.pDeviceInput = pDevice;
             state.pDeviceOutput = &buffer;
             state.nInputOffset = nOffset;
             state.nInputLimit = nSize;
-            state.nDecompressedOffset = 0;
-            state.nDecompressedLimit = -1;
+            state.nProcessedOffset = 0;
+            state.nProcessedLimit = -1;
             state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
 
             decompress(&state, pPdStruct);
@@ -243,13 +243,13 @@ qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qi
     qint64 nResult = 0;
 
     if (pDevice) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         state.pDeviceInput = pDevice;
         state.pDeviceOutput = nullptr;
         state.nInputOffset = nOffset;
         state.nInputLimit = nSize;
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
+        state.nProcessedOffset = 0;
+        state.nProcessedLimit = -1;
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
 
         decompress(&state, pPdStruct);

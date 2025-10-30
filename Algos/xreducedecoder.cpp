@@ -362,13 +362,13 @@ done:
 
 static size_t example_ozur_read(ozur_ctx *ozur, OZUR_UINT8 *buf, size_t size)
 {
-    XBinary::DECOMPRESS_STATE *pDecompressState = (XBinary::DECOMPRESS_STATE *)ozur->userdata;
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ozur->userdata;
     return XBinary::_readDevice((char *)buf, size, pDecompressState);
 }
 
 static size_t example_ozur_write(ozur_ctx *ozur, const OZUR_UINT8 *buf, size_t size)
 {
-    XBinary::DECOMPRESS_STATE *pDecompressState = (XBinary::DECOMPRESS_STATE *)ozur->userdata;
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ozur->userdata;
     return XBinary::_writeDevice((char *)buf, size, pDecompressState);
 }
 
@@ -376,7 +376,7 @@ XReduceDecoder::XReduceDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XReduceDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32 nFactor, XBinary::PDSTRUCT *pPdStruct)
+bool XReduceDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nFactor, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);

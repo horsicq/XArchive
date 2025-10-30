@@ -31,7 +31,7 @@ class XLZSSDecoder : public QObject {
 public:
     explicit XLZSSDecoder(QObject *parent = nullptr);
 
-    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XLZSSDECODER_H

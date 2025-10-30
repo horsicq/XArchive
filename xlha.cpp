@@ -339,7 +339,7 @@ bool XLHA::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         }
 
         // Decompress the record
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
 

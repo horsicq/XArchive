@@ -202,7 +202,7 @@ QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         if (sd.open(QIODevice::ReadOnly)) {
             QBuffer buffer;
             if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DECOMPRESS_STATE decompressState = {};
+                XBinary::DATAPROCESS_STATE decompressState = {};
                 decompressState.pDeviceInput = &sd;
                 decompressState.pDeviceOutput = &buffer;
                 decompressState.nInputOffset = 0;
@@ -260,7 +260,7 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
         if (sd.open(QIODevice::ReadOnly)) {
             QBuffer buffer;
             if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DECOMPRESS_STATE decompressState = {};
+                XBinary::DATAPROCESS_STATE decompressState = {};
                 decompressState.pDeviceInput = &sd;
                 decompressState.pDeviceOutput = &buffer;
                 decompressState.nInputOffset = 0;
@@ -359,7 +359,7 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         if (sd.open(QIODevice::ReadOnly)) {
             QBuffer buffer;
             if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DECOMPRESS_STATE decompressState = {};
+                XBinary::DATAPROCESS_STATE decompressState = {};
                 decompressState.pDeviceInput = &sd;
                 decompressState.pDeviceOutput = &buffer;
                 decompressState.nInputOffset = 0;
@@ -442,7 +442,7 @@ bool XBZIP2::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *p
     SubDevice sd(getDevice(), 0, nFileSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE decompressState = {};
+        XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.pDeviceInput = &sd;
         decompressState.pDeviceOutput = pDevice;
         decompressState.nInputOffset = 0;

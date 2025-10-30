@@ -1197,14 +1197,14 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(char *pData, qint64 nSize, PDS
                 bufferOut.setBuffer(&baDecompressedData);
 
                 if (bufferIn.open(QIODevice::ReadOnly) && bufferOut.open(QIODevice::WriteOnly)) {
-                    DECOMPRESS_STATE decompressState = {};
+                    DATAPROCESS_STATE decompressState = {};
                     decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
                     decompressState.pDeviceInput = &bufferIn;
                     decompressState.pDeviceOutput = &bufferOut;
                     decompressState.nInputOffset = 0;
                     decompressState.nInputLimit = nStreamPackedSize;
-                    decompressState.nDecompressedOffset = 0;
-                    decompressState.nDecompressedLimit = -1;
+                    decompressState.nProcessedOffset = 0;
+                    decompressState.nProcessedLimit = -1;
                     decompressState.nCountInput = 0;
                     decompressState.nCountOutput = 0;
 

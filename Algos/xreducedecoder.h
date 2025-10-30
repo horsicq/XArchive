@@ -31,7 +31,7 @@ class XReduceDecoder : public QObject {
 public:
     explicit XReduceDecoder(QObject *parent = nullptr);
 
-    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, qint32 nFactor, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nFactor, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XREDUCEDECODER_H

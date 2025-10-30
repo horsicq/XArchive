@@ -156,24 +156,8 @@ public:
         // TODO Comment!!!
     };
 
-    struct ZIP_OPTIONS {
-        XBinary::PATH_MODE pathMode;
-        QString sBasePath;        // Base path for relative path calculation
-        CMETHOD compressMethod;   // Compression method (STORE, DEFLATE, etc.)
-        qint32 nCompressionLevel; // Compression level (0-9, -1 for default)
-
-        ZIP_OPTIONS()
-        {
-            pathMode = XBinary::PATH_MODE_RELATIVE;
-            sBasePath = "";
-            compressMethod = CMETHOD_STORE;
-            nCompressionLevel = -1; // Default compression level
-        }
-    };
-
     struct ZIP_PACK_CONTEXT {
         QList<ZIPFILE_RECORD> *pListZipFileRecords;
-        ZIP_OPTIONS options;
     };
 
     explicit XZip(QIODevice *pDevice = nullptr);
@@ -220,6 +204,8 @@ public:
     virtual bool addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+    static void setPackPassword(PACK_STATE *pState, const QString &sPassword);
 
     virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;

@@ -28,7 +28,7 @@ class XLZWDecoder : public QObject {
 
 public:
     explicit XLZWDecoder(QObject *parent = nullptr);
-    static bool decompress_pdf(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XLZWDECODER_H

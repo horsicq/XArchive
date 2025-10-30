@@ -28,7 +28,7 @@ class XStoreDecoder : public QObject {
 
 public:
     explicit XStoreDecoder(QObject *parent = nullptr);
-    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XSTOREDECODER_H

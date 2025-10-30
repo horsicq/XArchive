@@ -30,7 +30,7 @@ class XBZIP2Decoder : public QObject {
 public:
     explicit XBZIP2Decoder(QObject *parent = nullptr);
 
-    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XBZIP2DECODER_H

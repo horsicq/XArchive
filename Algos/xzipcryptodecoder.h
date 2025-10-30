@@ -29,8 +29,11 @@ class XZipCryptoDecoder : public QObject {
 public:
     explicit XZipCryptoDecoder(QObject *pParent = nullptr);
 
-    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::PDSTRUCT *pPdStruct = nullptr);
+
+    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, quint32 nCRC32, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, quint32 nCRC32, XBinary::PDSTRUCT *pPdStruct = nullptr);
 
 private:
     static void initKeys(quint32 *pnKeys, const QByteArray &baPassword);

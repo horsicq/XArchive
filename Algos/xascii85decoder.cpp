@@ -22,7 +22,7 @@
 
 // Internal helpers for ASCII85 decoding
 namespace {
-static int _ascii85_readByte(XBinary::DECOMPRESS_STATE *st)
+static int _ascii85_readByte(XBinary::DATAPROCESS_STATE *st)
 {
     char c;
     qint64 r = st->pDeviceInput->read(&c, 1);
@@ -34,7 +34,7 @@ static int _ascii85_readByte(XBinary::DECOMPRESS_STATE *st)
     return (unsigned char)c;
 }
 
-static void _ascii85_writeBytes(XBinary::DECOMPRESS_STATE *st, const unsigned char *buf, int n)
+static void _ascii85_writeBytes(XBinary::DATAPROCESS_STATE *st, const unsigned char *buf, int n)
 {
     if (n > 0) XBinary::_writeDevice((char *)buf, n, st);
 }
@@ -48,7 +48,7 @@ XASCII85Decoder::XASCII85Decoder(QObject *parent) : QObject(parent)
 // Supports optional PostScript style start marker "<~" (ignored if present) and terminates on standard '~>'.
 // Implements zero tuple shortcut 'z', whitespace skipping, and partial tuple handling per Adobe spec.
 // Robustness: ignores malformed characters outside valid range, guards against accumulator overflow, and honors cancellation.
-bool XASCII85Decoder::decompress_pdf(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) return false;
 

@@ -314,7 +314,7 @@ XLZWDecoder::XLZWDecoder(QObject *parent) : QObject(parent)
 }
 
 // Streaming PDF LZWDecode implementation.
-bool XLZWDecoder::decompress_pdf(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XLZWDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) return false;

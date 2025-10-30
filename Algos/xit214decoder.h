@@ -36,11 +36,11 @@ class XIT214Decoder : public QObject {
 
 public:
     explicit XIT214Decoder(QObject *parent = nullptr);
-    static bool decompress(XBinary::DECOMPRESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct = nullptr);
 
 private:
     static quint32 readbits(STATE *pState, quint8 n);
-    static bool readBlock(STATE *pState, XBinary::DECOMPRESS_STATE *pDecompressState);
+    static bool readBlock(STATE *pState, XBinary::DATAPROCESS_STATE *pDecompressState);
 };
 
 #endif  // XIT214DECODER_H

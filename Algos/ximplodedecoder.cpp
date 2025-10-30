@@ -869,13 +869,13 @@ UI6A_API(void) ui6a_destroy(ui6a_ctx *ui6a)
 
 static size_t my_read(ui6a_ctx *ui6a, UI6A_UINT8 *buf, size_t size)
 {
-    XBinary::DECOMPRESS_STATE *pDecompressState = (XBinary::DECOMPRESS_STATE *)ui6a->userdata;
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ui6a->userdata;
     return XBinary::_readDevice((char *)buf, size, pDecompressState);
 }
 
 static size_t my_write(ui6a_ctx *ui6a, const UI6A_UINT8 *buf, size_t size)
 {
-    XBinary::DECOMPRESS_STATE *pDecompressState = (XBinary::DECOMPRESS_STATE *)ui6a->userdata;
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ui6a->userdata;
     return XBinary::_writeDevice((char *)buf, size, pDecompressState);
 }
 
@@ -883,7 +883,7 @@ XImplodeDecoder::XImplodeDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XImplodeDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, bool b8kdict, bool b3trees, XBinary::PDSTRUCT *pPdStruct)
+bool XImplodeDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, bool b8kdict, bool b3trees, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);

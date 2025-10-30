@@ -24,7 +24,7 @@ XLZSSDecoder::XLZSSDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XLZSSDecoder::decompress(XBinary::DECOMPRESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 

@@ -465,14 +465,14 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
     SubDevice sd(getDevice(), pContext->nHeaderSize, pContext->nCompressedSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DECOMPRESS_STATE state = {};
+        XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA2);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;
         state.nInputOffset = 0;
         state.nInputLimit = sd.size();
-        state.nDecompressedOffset = 0;
-        state.nDecompressedLimit = -1;
+        state.nProcessedOffset = 0;
+        state.nProcessedLimit = -1;
 
         // Use XLZMADecoder to decompress LZMA2 data (used by XZ format)
         bResult = XLZMADecoder::decompressLZMA2(&state, pPdStruct);
