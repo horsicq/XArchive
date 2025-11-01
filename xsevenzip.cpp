@@ -113,92 +113,92 @@ QList<XArchive::RECORD> XSevenZip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
     return listResult;
 }
 
-QList<XBinary::ARCHIVERECORD> XSevenZip::getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    QList<XBinary::ARCHIVERECORD> listResult;
+// QList<XBinary::ARCHIVERECORD> XSevenZip::getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+// {
+//     QList<XBinary::ARCHIVERECORD> listResult;
 
-    SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
-    qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
-    qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
+//     SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
+//     qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
+//     qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
 
-    if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
-        char *pData = new char[nNextHeaderSize];
-        qint64 nBytesRead = read_array(nNextHeaderOffset, pData, nNextHeaderSize, pPdStruct);
+//     if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
+//         char *pData = new char[nNextHeaderSize];
+//         qint64 nBytesRead = read_array(nNextHeaderOffset, pData, nNextHeaderSize, pPdStruct);
 
-        if (nBytesRead == nNextHeaderSize) {
-            QList<XSevenZip::SZRECORD> listRecords = _handleData(pData, nNextHeaderSize, pPdStruct, true);
+//         if (nBytesRead == nNextHeaderSize) {
+//             QList<XSevenZip::SZRECORD> listRecords = _handleData(pData, nNextHeaderSize, pPdStruct, true);
 
-            qint32 nNumberOfRecords = listRecords.count();
+//             qint32 nNumberOfRecords = listRecords.count();
 
-            if (nNumberOfRecords > 0) {
-                SZRECORD firstRecord = listRecords.at(0);
+//             if (nNumberOfRecords > 0) {
+//                 SZRECORD firstRecord = listRecords.at(0);
 
-                // Check if the first id is Header
-                if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdHeader)) {
-                    // Standard header - parse file information
-                    QList<QString> listFileNames;
-                    QList<qint64> listFilePackedSizes;
-                    QList<qint64> listFileUnpackedSizes;
-                    QList<quint32> listFileAttributes;
-                    QList<QDateTime> listFileTimes;
+//                 // Check if the first id is Header
+//                 if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdHeader)) {
+//                     // Standard header - parse file information
+//                     QList<QString> listFileNames;
+//                     QList<qint64> listFilePackedSizes;
+//                     QList<qint64> listFileUnpackedSizes;
+//                     QList<quint32> listFileAttributes;
+//                     QList<QDateTime> listFileTimes;
 
-                    // Parse all records to extract file information
-                    for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
-                        SZRECORD szRecord = listRecords.at(i);
+//                     // Parse all records to extract file information
+//                     for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
+//                         SZRECORD szRecord = listRecords.at(i);
 
-                        if (szRecord.impType == IMPTYPE_FILENAME) {
-                            QString sFileName = szRecord.varValue.toString();
-                            listFileNames.append(sFileName);
-                        } else if (szRecord.impType == IMPTYPE_FILEPACKEDSIZE) {
-                            listFilePackedSizes.append(szRecord.varValue.toLongLong());
-                        } else if (szRecord.impType == IMPTYPE_FILEUNPACKEDSIZE) {
-                            listFileUnpackedSizes.append(szRecord.varValue.toLongLong());
-                        } else if (szRecord.impType == IMPTYPE_FILEATTRIBUTES) {
-                            listFileAttributes.append(szRecord.varValue.toUInt());
-                        } else if (szRecord.impType == IMPTYPE_FILETIME) {
-                            // TODO: Convert file time to QDateTime
-                            // listFileTimes.append(convertFileTime(szRecord.varValue));
-                        }
-                    }
+//                         if (szRecord.impType == IMPTYPE_FILENAME) {
+//                             QString sFileName = szRecord.varValue.toString();
+//                             listFileNames.append(sFileName);
+//                         } else if (szRecord.impType == IMPTYPE_FILEPACKEDSIZE) {
+//                             listFilePackedSizes.append(szRecord.varValue.toLongLong());
+//                         } else if (szRecord.impType == IMPTYPE_FILEUNPACKEDSIZE) {
+//                             listFileUnpackedSizes.append(szRecord.varValue.toLongLong());
+//                         } else if (szRecord.impType == IMPTYPE_FILEATTRIBUTES) {
+//                             listFileAttributes.append(szRecord.varValue.toUInt());
+//                         } else if (szRecord.impType == IMPTYPE_FILETIME) {
+//                             // TODO: Convert file time to QDateTime
+//                             // listFileTimes.append(convertFileTime(szRecord.varValue));
+//                         }
+//                     }
 
-                    qint32 nNumberOfFiles = listFileNames.count();
+//                     qint32 nNumberOfFiles = listFileNames.count();
 
-                    // Create archive records for each file
-                    for (qint32 i = 0; (i < nNumberOfFiles) && isPdStructNotCanceled(pPdStruct); i++) {
-                        XBinary::ARCHIVERECORD record = {};
+//                     // Create archive records for each file
+//                     for (qint32 i = 0; (i < nNumberOfFiles) && isPdStructNotCanceled(pPdStruct); i++) {
+//                         XBinary::ARCHIVERECORD record = {};
 
-                        // Set file name
-                        record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, listFileNames.at(i));
+//                         // Set file name
+//                         record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, listFileNames.at(i));
 
-                        // Set file sizes if available
-                        if (i < listFileUnpackedSizes.count()) {
-                            record.nDecompressedSize = listFileUnpackedSizes.at(i);
-                        }
+//                         // Set file sizes if available
+//                         if (i < listFileUnpackedSizes.count()) {
+//                             record.nDecompressedSize = listFileUnpackedSizes.at(i);
+//                         }
 
-                        // For now, set basic properties
-                        // TODO: Set proper stream offsets and sizes based on pack info
-                        record.nStreamOffset = 0;                       // TODO: Calculate from pack info
-                        record.nStreamSize = record.nDecompressedSize;  // Assume uncompressed for now
+//                         // For now, set basic properties
+//                         // TODO: Set proper stream offsets and sizes based on pack info
+//                         record.nStreamOffset = 0;                       // TODO: Calculate from pack info
+//                         record.nStreamSize = record.nDecompressedSize;  // Assume uncompressed for now
 
-                        // Set compression method (assume STORE for now)
-                        record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
+//                         // Set compression method (assume STORE for now)
+//                         record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
 
-                        listResult.append(record);
-                    }
-                } else if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdEncodedHeader)) {
-                    // Encoded header - need to decompress first
-                    // This is a complex case that requires LZMA decompression
-                    // For now, return empty list as this needs more implementation
-                    // TODO: Implement encoded header decompression
-                }
-            }
-        }
+//                         listResult.append(record);
+//                     }
+//                 } else if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdEncodedHeader)) {
+//                     // Encoded header - need to decompress first
+//                     // This is a complex case that requires LZMA decompression
+//                     // For now, return empty list as this needs more implementation
+//                     // TODO: Implement encoded header decompression
+//                 }
+//             }
+//         }
 
-        delete[] pData;
-    }
+//         delete[] pData;
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 qint64 XSevenZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
@@ -953,40 +953,40 @@ void XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qin
 //     return false;
 // }
 
-qint64 XSevenZip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    // Try to quickly get number of records from parsed header data
-    qint64 nResult = 0;
+// qint64 XSevenZip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+// {
+//     // Try to quickly get number of records from parsed header data
+//     qint64 nResult = 0;
 
-    SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
-    qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
-    qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
+//     SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
+//     qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
+//     qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
 
-    if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
-        char *pData = new char[nNextHeaderSize];
-        qint64 nBytesRead = read_array(nNextHeaderOffset, pData, nNextHeaderSize, pPdStruct);
+//     if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
+//         char *pData = new char[nNextHeaderSize];
+//         qint64 nBytesRead = read_array(nNextHeaderOffset, pData, nNextHeaderSize, pPdStruct);
 
-        if (nBytesRead == nNextHeaderSize) {
-            QList<XSevenZip::SZRECORD> listRecords = _handleData(pData, nNextHeaderSize, pPdStruct, true);
+//         if (nBytesRead == nNextHeaderSize) {
+//             QList<XSevenZip::SZRECORD> listRecords = _handleData(pData, nNextHeaderSize, pPdStruct, true);
 
-            qint32 nNumberOfRecords = listRecords.count();
+//             qint32 nNumberOfRecords = listRecords.count();
 
-            // Look for NumberOfFiles in the parsed records
-            for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
-                SZRECORD szRecord = listRecords.at(i);
+//             // Look for NumberOfFiles in the parsed records
+//             for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
+//                 SZRECORD szRecord = listRecords.at(i);
 
-                if (szRecord.impType == IMPTYPE_NUMBEROFFILES) {
-                    nResult = szRecord.varValue.toLongLong();
-                    break;
-                }
-            }
-        }
+//                 if (szRecord.impType == IMPTYPE_NUMBEROFFILES) {
+//                     nResult = szRecord.varValue.toLongLong();
+//                     break;
+//                 }
+//             }
+//         }
 
-        delete[] pData;
-    }
+//         delete[] pData;
+//     }
 
-    return nResult;
-}
+//     return nResult;
+// }
 
 bool XSevenZip::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {

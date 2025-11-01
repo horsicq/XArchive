@@ -251,12 +251,6 @@ quint64 XSZDD::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return 1;  // Only one file per archive
 }
 
-qint64 XSZDD::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-    return 1;  // Only one file per archive
-}
-
 QList<XArchive::RECORD> XSZDD::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)  // Always 1

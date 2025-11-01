@@ -1,34 +1,23 @@
-cmake_minimum_required(VERSION 3.10)
-project(ppmd C)
+cmake_minimum_required(VERSION 3.14)
 
-# PPMd8 library from 7-Zip
-# Original code by Igor Pavlov (public domain)
-# Based on PPMd var.I (2002) by Dmitry Shkarin
+project(ppmd LANGUAGES C)
 
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Source files
-set(PPMD_SOURCES
-    src/Ppmd8.c
-    src/Ppmd8Dec.c
+include_directories(${PROJECT_SOURCE_DIR}/src/)
+
+add_library(ppmd STATIC
+${PROJECT_SOURCE_DIR}/src/Ppmd8.c
+${PROJECT_SOURCE_DIR}/src/Ppmd8Dec.c
 )
 
-# Header files
-set(PPMD_HEADERS
-    src/Ppmd8.h
-)
+set_target_properties(ppmd PROPERTIES LINKER_LANGUAGE C)
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-# Create static library
-add_library(ppmd STATIC ${PPMD_SOURCES} ${PPMD_HEADERS})
-
-# Include directories
-target_include_directories(ppmd PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-# Disable warnings for 3rd party code
 if(MSVC)
-    target_compile_options(ppmd PRIVATE /W0)
-else()
-    target_compile_options(ppmd PRIVATE -w)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()

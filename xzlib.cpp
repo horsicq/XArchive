@@ -464,33 +464,24 @@ bool XZlib::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     return true;
 }
 
-bool XZlib::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct)
+bool XZlib::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    if (!pState || !pDestDevice || !pDestDevice->isWritable()) {
+    if (!pState) {
         return false;
     }
 
-    // Set the output device in the state
-    pState->pDevice = pDestDevice;
+    pState->pDevice = pDevice;
+    pState->mapProperties = mapProperties;
 
     // Create and initialize pack context
     ZLIB_PACK_CONTEXT *pContext = new ZLIB_PACK_CONTEXT;
-    pContext->pOutputDevice = pDestDevice;
     pContext->bDataAdded = false;
 
     // Determine compression level from options
     // Default to level 6 (default compression)
-    pContext->nCompressionLevel = 6;
-
-    if (pOptions) {
-        // Options could be a pointer to compression level (qint32)
-        qint32 *pLevel = (qint32 *)pOptions;
-        if (*pLevel >= 0 && *pLevel <= 9) {
-            pContext->nCompressionLevel = *pLevel;
-        }
-    }
+    qint32 nCompressionLevel = mapProperties.value(PACK_PROP_COMPRESSIONLEVEL, 6).toInt();
 
     // Write zlib header (2 bytes)
     // Format: CMF (Compression Method and Flags) + FLG (Flags)
@@ -498,9 +489,9 @@ bool XZlib::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions,
 
     quint8 nFLG = 0;
     // Set compression level bits (bits 6-7)
-    if (pContext->nCompressionLevel <= 2) {
+    if (nCompressionLevel <= 2) {
         nFLG = 0x01;  // Fast compression
-    } else if (pContext->nCompressionLevel >= 7) {
+    } else if (nCompressionLevel >= 7) {
         nFLG = 0xDA;  // Best compression
     } else {
         nFLG = 0x9C;  // Default compression
@@ -515,14 +506,14 @@ bool XZlib::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions,
     baHeader.append((char)nCMF);
     baHeader.append((char)nFLG);
 
-    if (pDestDevice->write(baHeader) != baHeader.size()) {
+    if (pState->pDevice->write(baHeader) != baHeader.size()) {
         delete pContext;
         return false;
     }
 
     // Initialize state
     pState->nCurrentOffset = 2;  // After header
-    pState->nNumberOfRecords = 0;
+    pState->nNumberOfRecords = 1;
     pState->pContext = pContext;
 
     return true;
@@ -572,7 +563,9 @@ bool XZlib::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruc
     compressState.nInputOffset = 0;
     compressState.nInputLimit = baUncompressed.size();
 
-    bool bCompress = XDeflateDecoder::compress(&compressState, pPdStruct, pContext->nCompressionLevel);
+    qint32 nCompressionLevel = pState->mapProperties.value(PACK_PROP_COMPRESSIONLEVEL, 6).toInt();
+
+    bool bCompress = XDeflateDecoder::compress(&compressState, pPdStruct, nCompressionLevel);
 
     inputBuffer.close();
 

@@ -55,19 +55,6 @@ class XTAR : public XArchive {
         TAR_FORMAT_GNU     // GNU tar format (supports longer filenames)
     };
 
-    struct TAR_OPTIONS {
-        TAR_FORMAT tarFormat;
-        XBinary::PATH_MODE pathMode;
-        QString sBasePath;  // Base path for relative mode
-
-        TAR_OPTIONS()
-        {
-            tarFormat = TAR_FORMAT_POSIX;
-            pathMode = XBinary::PATH_MODE_RELATIVE;
-            sBasePath = "";
-        }
-    };
-
 public:
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
@@ -100,7 +87,7 @@ public:
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Streaming packing API
-    virtual bool initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;

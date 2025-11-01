@@ -73,9 +73,7 @@ public:
     virtual void readTableFinalize(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void *pUserData, PDSTRUCT *pPdStruct);
     quint64 _getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct);
 
-    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
-
-    virtual bool initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;

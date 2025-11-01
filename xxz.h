@@ -98,7 +98,6 @@ public:
     // XArchive interface
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
-    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 
     // Streaming unpacking API
     virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;

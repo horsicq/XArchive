@@ -65,7 +65,6 @@ public:
     virtual QString getMIMEString();
     virtual bool isArchive();
     virtual QString structIDToString(quint32 nID);
-    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 
     XMACH_DEF::fat_header read_fat_header();
     XMACH_DEF::fat_arch read_fat_arch(qint32 nIndex);

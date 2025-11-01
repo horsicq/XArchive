@@ -52,7 +52,7 @@ public:
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Streaming packing API
-    virtual bool initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
@@ -68,8 +68,6 @@ private:
     };
 
     struct ZLIB_PACK_CONTEXT {
-        QIODevice *pOutputDevice;
-        qint32 nCompressionLevel;  // 0-9, where 0=no compression, 9=best compression
         bool bDataAdded;           // Track if data has been added (only one stream allowed)
     };
 };

@@ -184,14 +184,6 @@ quint64 XBZIP2::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return 1;
 }
 
-qint64 XBZIP2::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    // BZip2 typically contains a single compressed stream
-    return 1;
-}
-
 QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> listResult;

@@ -86,7 +86,6 @@ public:
     virtual QString getVersion();
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
-    virtual QList<ARCHIVERECORD> getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
     virtual QString getFileFormatExtsString();
@@ -117,9 +116,6 @@ public:
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-    // Quick record count (if available from header)
-    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 
 private:
     struct SEVENZ_UNPACK_CONTEXT {

@@ -198,12 +198,6 @@ quint64 XLzip::getNumberOfRecords(PDSTRUCT *pPdStruct)
     return 1;
 }
 
-qint64 XLzip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-    return 1;
-}
-
 QList<XArchive::RECORD> XLzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> listResult;

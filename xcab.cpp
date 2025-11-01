@@ -596,90 +596,79 @@ XBinary::ENDIAN XCab::getEndian()
     return ENDIAN_LITTLE;
 }
 
-qint64 XCab::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
+// QList<XBinary::ARCHIVERECORD> XCab::getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+// {
+//     Q_UNUSED(nLimit)
 
-    qint64 nResult = 0;
+//     QList<XBinary::ARCHIVERECORD> listResult;
 
-    nResult = read_uint16(offsetof(CFHEADER, cFiles));
+//     CFHEADER cfHeader = readCFHeader(0);
+//     qint64 nFileSize = getSize();
 
-    return nResult;
-}
+//     // Parse folders
+//     qint64 nFolderOffset = sizeof(CFHEADER);
+//     QList<CFFOLDER> listFolders;
 
-QList<XBinary::ARCHIVERECORD> XCab::getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(nLimit)
+//     for (quint16 i = 0; i < cfHeader.cFolders; i++) {
+//         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+//             break;
+//         }
 
-    QList<XBinary::ARCHIVERECORD> listResult;
+//         if ((nFolderOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
+//             break;
+//         }
 
-    CFHEADER cfHeader = readCFHeader(0);
-    qint64 nFileSize = getSize();
+//         CFFOLDER cfFolder = readCFFolder(nFolderOffset);
+//         listFolders.append(cfFolder);
 
-    // Parse folders
-    qint64 nFolderOffset = sizeof(CFHEADER);
-    QList<CFFOLDER> listFolders;
+//         nFolderOffset += sizeof(CFFOLDER);
+//     }
 
-    for (quint16 i = 0; i < cfHeader.cFolders; i++) {
-        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-            break;
-        }
+//     // Parse files
+//     qint64 nFileOffset = cfHeader.coffFiles;
 
-        if ((nFolderOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
-            break;
-        }
+//     for (quint16 i = 0; i < cfHeader.cFiles; i++) {
+//         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+//             break;
+//         }
 
-        CFFOLDER cfFolder = readCFFolder(nFolderOffset);
-        listFolders.append(cfFolder);
+//         if ((nFileOffset + (qint64)sizeof(CFFILE)) > nFileSize) {
+//             break;
+//         }
 
-        nFolderOffset += sizeof(CFFOLDER);
-    }
+//         CFFILE cfFile = readCFFILE(nFileOffset);
+//         QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
 
-    // Parse files
-    qint64 nFileOffset = cfHeader.coffFiles;
+//         if (cfFile.iFolder < (quint16)listFolders.size()) {
+//             CFFOLDER cfFolder = listFolders.at(cfFile.iFolder);
 
-    for (quint16 i = 0; i < cfHeader.cFiles; i++) {
-        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-            break;
-        }
+//             XBinary::ARCHIVERECORD record = {};
 
-        if ((nFileOffset + (qint64)sizeof(CFFILE)) > nFileSize) {
-            break;
-        }
+//             record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
+//             record.nStreamOffset = cfFolder.coffCabStart;
+//             record.nStreamSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
+//             record.nDecompressedSize = cfFile.cbFile;
+//             record.nDecompressedOffset = cfFile.uoffFolderStart;
 
-        CFFILE cfFile = readCFFILE(nFileOffset);
-        QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
+//             // Set compression method
+//             if (cfFolder.typeCompress == 0x0000) {
+//                 record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE_CAB);
+//             } else if (cfFolder.typeCompress == 0x0001) {
+//                 record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_MSZIP_CAB);
+//             } else if (cfFolder.typeCompress == 0x0003) {
+//                 record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_LZX_CAB);
+//             } else {
+//                 record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN);
+//             }
 
-        if (cfFile.iFolder < (quint16)listFolders.size()) {
-            CFFOLDER cfFolder = listFolders.at(cfFile.iFolder);
+//             listResult.append(record);
+//         }
 
-            XBinary::ARCHIVERECORD record = {};
+//         nFileOffset += sizeof(CFFILE) + sFileName.length() + 1;
+//     }
 
-            record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
-            record.nStreamOffset = cfFolder.coffCabStart;
-            record.nStreamSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
-            record.nDecompressedSize = cfFile.cbFile;
-            record.nDecompressedOffset = cfFile.uoffFolderStart;
-
-            // Set compression method
-            if (cfFolder.typeCompress == 0x0000) {
-                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE_CAB);
-            } else if (cfFolder.typeCompress == 0x0001) {
-                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_MSZIP_CAB);
-            } else if (cfFolder.typeCompress == 0x0003) {
-                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_LZX_CAB);
-            } else {
-                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN);
-            }
-
-            listResult.append(record);
-        }
-
-        nFileOffset += sizeof(CFFILE) + sFileName.length() + 1;
-    }
-
-    return listResult;
-}
+//     return listResult;
+// }
 
 // Helper methods for writing CAB structures
 bool XCab::writeCFHeader(QIODevice *pDevice, const CFHEADER &cfHeader)
@@ -999,18 +988,19 @@ bool XCab::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 }
 
 // Streaming packing API implementation
-bool XCab::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct)
+bool XCab::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pOptions)
-
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
     }
 
-    if (!pState || !pDestDevice || !pDestDevice->isWritable()) {
+    if (!pState) {
         return false;
     }
+
+    pState->pDevice = pDevice;
+    pState->mapProperties = mapProperties;
 
     // Create pack context
     CAB_PACK_CONTEXT *pContext = new CAB_PACK_CONTEXT;
@@ -1032,7 +1022,7 @@ bool XCab::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, 
     baSignature.append(2, '\0');     // setID
     baSignature.append(2, '\0');     // iCabinet
 
-    if (pDestDevice->write(baSignature) != baSignature.size()) {
+    if (pState->pDevice->write(baSignature) != baSignature.size()) {
         delete pContext;
         return false;
     }
@@ -1040,7 +1030,6 @@ bool XCab::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, 
     pContext->nCurrentOffset = baSignature.size();
 
     // Initialize state
-    pState->pDevice = pDestDevice;
     pState->nCurrentOffset = pContext->nCurrentOffset;
     pState->nNumberOfRecords = 0;
     pState->pContext = pContext;

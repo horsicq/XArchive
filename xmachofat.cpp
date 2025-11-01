@@ -318,10 +318,10 @@ QString XMACHOFat::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XMACHOFAT_STRUCTID, sizeof(_TABLE_XMACHOFAT_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-qint64 XMACHOFat::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    return (qint64)getNumberOfRecords(pPdStruct);
-}
+// qint64 XMACHOFat::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
+// {
+//     return (qint64)getNumberOfRecords(pPdStruct);
+// }
 
 XMACH_DEF::fat_header XMACHOFat::read_fat_header()
 {

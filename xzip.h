@@ -199,22 +199,17 @@ public:
 
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct) override;
 
-    virtual bool initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-    static void setPackPassword(PACK_STATE *pState, const QString &sPassword);
 
     virtual bool initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-    static void setUnpackPassword(UNPACK_STATE *pState, const QString &sPassword);
 
     static QMap<quint64, QString> getHeaderSignatures();
     static QMap<quint64, QString> getHeaderSignaturesS();

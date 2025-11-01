@@ -1299,19 +1299,6 @@ qint32 XZip::_getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *
     return nResult;
 }
 
-qint64 XZip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    qint64 nResult = 0;
-
-    qint64 nECDOffset = findECDOffset(pPdStruct);
-
-    if (nECDOffset != -1) {
-        nResult = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
-    }
-
-    return nResult;
-}
-
 XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nFlags)
 {
     COMPRESS_METHOD result = COMPRESS_METHOD_UNKNOWN;
@@ -1350,16 +1337,16 @@ XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 
     return result;
 }
 
-bool XZip::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct)
+bool XZip::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    if (!pState || !pDestDevice || !pDestDevice->isWritable()) {
+    if (!pState) {
         return false;
     }
 
-    // Set the output device in the state
-    pState->pDevice = pDestDevice;
+    pState->pDevice = pDevice;
+    pState->mapProperties = mapProperties;
 
     // ZIP archives don't have a signature at the beginning
     // They start with local file headers
@@ -1394,12 +1381,18 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
 
     // Determine file path to store in archive based on PATH_MODE
     QString sStoredPath;
+    PATH_MODE pathMode = (PATH_MODE)pState->mapProperties.value(PACK_PROP_PATHMODE, PATH_MODE_BASENAME).toInt();
+    QString sBasePath = pState->mapProperties.value(PACK_PROP_BASEPATH).toString();
+    COMPRESS_METHOD compressMethod = (COMPRESS_METHOD)pState->mapProperties.value(PACK_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE).toInt();
+    CRYPTO_METHOD cryptoMethod = (CRYPTO_METHOD)pState->mapProperties.value(PACK_PROP_ENCRYPTIONMETHOD, CRYPTO_METHOD_NONE).toInt();
+    QString sPassword = pState->mapProperties.value(PACK_PROP_PASSWORD).toString();
+    qint32 nCompressionLevel = pState->mapProperties.value(PACK_PROP_COMPRESSIONLEVEL, -1).toInt();
 
-    switch (pState->pathMode) {
+    switch (pathMode) {
         case XBinary::PATH_MODE_ABSOLUTE: sStoredPath = fileInfo.absoluteFilePath(); break;
         case XBinary::PATH_MODE_RELATIVE:
-            if (!pState->sBasePath.isEmpty()) {
-                QDir baseDir(pState->sBasePath);
+            if (!sBasePath.isEmpty()) {
+                QDir baseDir(sBasePath);
                 sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
             } else {
                 sStoredPath = fileInfo.fileName();
@@ -1414,9 +1407,9 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
 
     CMETHOD cmethod = CMETHOD_STORE;
 
-    if (pState->compressMethod == XArchive::COMPRESS_METHOD_DEFLATE) {
+    if (compressMethod == XArchive::COMPRESS_METHOD_DEFLATE) {
         cmethod = CMETHOD_DEFLATE;
-    } else if (pState->compressMethod == XArchive::COMPRESS_METHOD_STORE) {
+    } else if (compressMethod == XArchive::COMPRESS_METHOD_STORE) {
         cmethod = CMETHOD_STORE;
     }
 
@@ -1431,7 +1424,6 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     zipFileRecord.dtTime = fileInfo.lastModified();
     zipFileRecord.nUncompressedSize = fileInfo.size();
 
-    qint32 nCompressionLevel = pState->nCompressionLevel;
     if (nCompressionLevel == -1) {
         nCompressionLevel = 8;
     }
@@ -1454,7 +1446,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     quint16 nDosTime = dosDateTime.second;
 
     // Check if encryption is needed
-    bool bEncrypt = !pState->sPassword.isEmpty() && (pState->cryptoMethod == XBinary::CRYPTO_METHOD_ZIPCRYPTO);
+    bool bEncrypt = !sPassword.isEmpty() && (cryptoMethod == XBinary::CRYPTO_METHOD_ZIPCRYPTO);
     if (bEncrypt) {
         zipFileRecord.nFlags |= 0x01;  // Set encryption flag
     }
@@ -1521,7 +1513,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
             encryptState.nInputOffset = 0;
             encryptState.nInputLimit = nFileSize;
 
-            bool bEncryptResult = XZipCryptoDecoder::encrypt(&encryptState, pState->sPassword, zipFileRecord.nCRC32, pPdStruct);
+            bool bEncryptResult = XZipCryptoDecoder::encrypt(&encryptState, sPassword, zipFileRecord.nCRC32, pPdStruct);
 
             if (bEncryptResult) {
                 dataBuffer.close();
@@ -1588,7 +1580,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
                 encryptState.nInputOffset = 0;
                 encryptState.nInputLimit = baCompressed.size();
 
-                bool bEncryptResult = XZipCryptoDecoder::encrypt(&encryptState, pState->sPassword, zipFileRecord.nCRC32, pPdStruct);
+                bool bEncryptResult = XZipCryptoDecoder::encrypt(&encryptState, sPassword, zipFileRecord.nCRC32, pPdStruct);
 
                 if (bEncryptResult) {
                     encryptedBuffer.close();
@@ -1670,10 +1662,13 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
     // Set base path for relative path calculation if not already set
     QString sOriginalBasePath;
     bool bRestoreBasePath = false;
+    PATH_MODE pathMode = (PATH_MODE)pState->mapProperties.value(PACK_PROP_PATHMODE, PATH_MODE_BASENAME).toInt();
+    QString sBasePath = pState->mapProperties.value(PACK_PROP_BASEPATH).toString();
 
-    if (pState->pathMode == XBinary::PATH_MODE_RELATIVE && pState->sBasePath.isEmpty()) {
-        sOriginalBasePath = pState->sBasePath;
-        pState->sBasePath = sDirectoryPath;
+    if (pathMode == XBinary::PATH_MODE_RELATIVE && sBasePath.isEmpty()) {
+        sOriginalBasePath = sBasePath;
+        sBasePath = sDirectoryPath;
+        pState->mapProperties[PACK_PROP_BASEPATH] = sBasePath;  // Update the map so addFile() can use it
         bRestoreBasePath = true;
     }
 
@@ -1696,7 +1691,7 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
         // Add file to archive
         if (!addFile(pState, sFilePath, pPdStruct)) {
             if (bRestoreBasePath) {
-                pState->sBasePath = sOriginalBasePath;
+                pState->mapProperties[PACK_PROP_BASEPATH] = sOriginalBasePath;
             }
             return false;
         }
@@ -1704,7 +1699,7 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
 
     // Restore original base path if we changed it
     if (bRestoreBasePath) {
-        pState->sBasePath = sOriginalBasePath;
+        pState->mapProperties[PACK_PROP_BASEPATH] = sOriginalBasePath;
     }
 
     return true;
@@ -1870,7 +1865,7 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         // Check if file is encrypted
         bool bIsEncrypted = (lfh.nFlags & 0x01) != 0;
         bool bIsAESEncrypted = (lfh.nMethod == CMETHOD_AES);
-        QString sPassword = pState->sPassword;
+        QString sPassword = pState->mapProperties.value(UNPACK_PROP_PASSWORD).toString();
 
         if ((bIsEncrypted || bIsAESEncrypted) && sPassword.isEmpty()) {
             // No password provided - cannot decrypt
@@ -2059,21 +2054,6 @@ bool XZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return true;
-}
-
-void XZip::setUnpackPassword(UNPACK_STATE *pState, const QString &sPassword)
-{
-    if (pState) {
-        pState->sPassword = sPassword;
-    }
-}
-
-void XZip::setPackPassword(PACK_STATE *pState, const QString &sPassword)
-{
-    if (pState) {
-        pState->sPassword = sPassword;
-        pState->cryptoMethod = XBinary::CRYPTO_METHOD_ZIPCRYPTO;
-    }
 }
 
 quint32 XZip::filePermissionsToExternalAttributes(QFile::Permissions permissions)

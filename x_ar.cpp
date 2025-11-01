@@ -400,11 +400,6 @@ quint64 X_Ar::_getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct)
     return nResult;
 }
 
-qint64 X_Ar::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    return _getNumberOfStreams(8, pPdStruct);
-}
-
 XBinary::_MEMORY_MAP X_Ar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     XBinary::_MEMORY_MAP result = {};
@@ -565,17 +560,16 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     return listResult;
 }
 
-bool X_Ar::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct)
+bool X_Ar::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pOptions)
     Q_UNUSED(pPdStruct)
 
-    if (!pState || !pDestDevice || !pDestDevice->isWritable()) {
+    if (!pState) {
         return false;
     }
 
-    // Set the output device in the state
-    pState->pDevice = pDestDevice;
+    pState->pDevice = pDevice;
+    pState->mapProperties = mapProperties;
 
     // Write AR signature: "!<arch>\n"
     QByteArray baSignature = "!<arch>\n";

@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xlzwdecoder.h"
+#include <assert.h>
 #include <string.h>
 
 typedef int (*WRITEFUNC)(void *user, unsigned char *buf, int len);

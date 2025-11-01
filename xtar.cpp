@@ -633,27 +633,20 @@ bool XTAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XTAR::initPack(PACK_STATE *pState, QIODevice *pDestDevice, void *pOptions, PDSTRUCT *pPdStruct)
+bool XTAR::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    if (!pState || !pDestDevice || !pDestDevice->isWritable()) {
+    if (!pState) {
         return false;
     }
 
-    // Set the output device in the state
-    pState->pDevice = pDestDevice;
+    pState->pDevice = pDevice;
+    pState->mapProperties = mapProperties;
 
     // Initialize state
     pState->nCurrentOffset = 0;
     pState->nNumberOfRecords = 0;
-
-    // Store TAR options in context
-    TAR_OPTIONS *pTarOptions = new TAR_OPTIONS();
-    if (pOptions) {
-        *pTarOptions = *(static_cast<TAR_OPTIONS *>(pOptions));
-    }
-    pState->pContext = pTarOptions;
 
     // TAR format has no signature or header - starts directly with first file header
     return true;
@@ -694,25 +687,21 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
 
     // Determine file path to store in archive based on PATH_MODE
     QString sStoredPath;
-    TAR_OPTIONS *pTarOptions = static_cast<TAR_OPTIONS *>(pState->pContext);
+    PATH_MODE pathMode = (PATH_MODE)pState->mapProperties.value(PACK_PROP_PATHMODE, PATH_MODE_BASENAME).toInt();
+    QString sBasePath = pState->mapProperties.value(PACK_PROP_BASEPATH).toString();
 
-    if (pTarOptions) {
-        switch (pTarOptions->pathMode) {
-            case XBinary::PATH_MODE_ABSOLUTE: sStoredPath = fileInfo.absoluteFilePath(); break;
-            case XBinary::PATH_MODE_RELATIVE:
-                if (!pTarOptions->sBasePath.isEmpty()) {
-                    QDir baseDir(pTarOptions->sBasePath);
-                    sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
-                } else {
-                    sStoredPath = fileInfo.fileName();
-                }
-                break;
-            case XBinary::PATH_MODE_BASENAME:
-            default: sStoredPath = fileInfo.fileName(); break;
+    switch (pathMode) {
+    case XBinary::PATH_MODE_ABSOLUTE: sStoredPath = fileInfo.absoluteFilePath(); break;
+    case XBinary::PATH_MODE_RELATIVE:
+        if (!sBasePath.isEmpty()) {
+            QDir baseDir(sBasePath);
+            sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
+        } else {
+            sStoredPath = fileInfo.fileName();
         }
-    } else {
-        // Default: basename only
-        sStoredPath = fileInfo.fileName();
+        break;
+    case XBinary::PATH_MODE_BASENAME:
+    default: sStoredPath = fileInfo.fileName(); break;
     }
 
     // Create TAR header
@@ -789,13 +778,15 @@ bool XTAR::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
     }
 
     // Set base path for relative path calculation if not already set
-    TAR_OPTIONS *pTarOptions = static_cast<TAR_OPTIONS *>(pState->pContext);
     QString sOriginalBasePath;
     bool bRestoreBasePath = false;
 
-    if (pTarOptions && pTarOptions->pathMode == XBinary::PATH_MODE_RELATIVE && pTarOptions->sBasePath.isEmpty()) {
-        sOriginalBasePath = pTarOptions->sBasePath;
-        pTarOptions->sBasePath = sDirectoryPath;
+    PATH_MODE pathMode = (PATH_MODE)pState->mapProperties.value(PACK_PROP_PATHMODE, PATH_MODE_BASENAME).toInt();
+    QString sBasePath = pState->mapProperties.value(PACK_PROP_BASEPATH).toString();
+
+    if (pathMode == XBinary::PATH_MODE_RELATIVE && sBasePath.isEmpty()) {
+        sOriginalBasePath = sBasePath;
+        sBasePath = sDirectoryPath;
         bRestoreBasePath = true;
     }
 
@@ -817,16 +808,16 @@ bool XTAR::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
 
         // Add file to archive
         if (!addFile(pState, sFilePath, pPdStruct)) {
-            if (bRestoreBasePath && pTarOptions) {
-                pTarOptions->sBasePath = sOriginalBasePath;
+            if (bRestoreBasePath) {
+                sBasePath = sOriginalBasePath;
             }
             return false;
         }
     }
 
     // Restore original base path if we changed it
-    if (bRestoreBasePath && pTarOptions) {
-        pTarOptions->sBasePath = sOriginalBasePath;
+    if (bRestoreBasePath) {
+        sBasePath = sOriginalBasePath;
     }
 
     return true;
@@ -843,13 +834,6 @@ bool XTAR::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     if (pState->pDevice->write(baZeros) != baZeros.size()) {
         return false;
-    }
-
-    // Clean up allocated options
-    if (pState->pContext) {
-        TAR_OPTIONS *pTarOptions = static_cast<TAR_OPTIONS *>(pState->pContext);
-        delete pTarOptions;
-        pState->pContext = nullptr;
     }
 
     return XBinary::isPdStructNotCanceled(pPdStruct);
