@@ -117,12 +117,35 @@ public:
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
+    // Streaming packing API
+    virtual bool initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
 private:
     struct SEVENZ_UNPACK_CONTEXT {
         qint64 nSignatureSize;
         QList<qint64> listRecordOffsets;
         QList<ARCHIVERECORD> listArchiveRecords;  // Pre-parsed archive records
     };
+
+    struct SEVENZ_PACK_CONTEXT {
+        qint64 nHeaderOffset;
+        QList<ARCHIVERECORD> listArchiveRecords;    // Records to pack
+        QList<QByteArray> listCompressedData;       // Compressed data streams
+        QList<quint32> listCRCs;                    // CRC values for streams
+        COMPRESS_METHOD compressMethod;             // Compression method to use
+        qint32 nCompressionLevel;                   // Compression level
+    };
+
+    // Helper functions for writing 7z format
+    static QByteArray _writePackedNumber(quint64 nValue);
+    static void _writeId(QIODevice *pDevice, quint8 nId);
+    static void _writeNumber(QIODevice *pDevice, quint64 nValue);
+    static void _writeByte(QIODevice *pDevice, quint8 nByte);
+
     enum SRTYPE {
         SRTYPE_UNKNOWN = 0,
         SRTYPE_ID,
