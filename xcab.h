@@ -98,7 +98,9 @@ public:
         QList<CFFOLDER> listFolders;       // Folders being created
         QList<CFFILE> listFiles;           // Files being added
         QList<QByteArray> listDataBlocks;  // Compressed data blocks
+        QList<QString> listFileNames;      // Original filenames
         qint64 nCurrentOffset;             // Current write offset
+        qint64 nFolderUncompressedOffset;  // Cumulative uncompressed size in current folder
         quint16 nCompressionType;          // Compression type (0=STORE, 1=MSZIP, 3=LZX)
     };
 

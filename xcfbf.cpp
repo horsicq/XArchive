@@ -717,8 +717,10 @@ void XCFBF::_addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset
     pListResult->append(part);
 }
 
-bool XCFBF::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
+
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();

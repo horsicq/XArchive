@@ -337,8 +337,10 @@ QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     return listResult;
 }
 
-bool XSZDD::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
+    
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
