@@ -815,8 +815,10 @@ X_Ar::FRECORD X_Ar::createHeader(const QString &sFileName, qint64 nFileSize, qui
     return header;
 }
 
-bool X_Ar::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
+    
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();

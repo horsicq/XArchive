@@ -430,8 +430,10 @@ void XTAR::writeOctal(char *pDest, qint32 nSize, qint64 nValue)
     }
 }
 
-bool XTAR::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool XTAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
+    
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();

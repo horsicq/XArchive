@@ -413,8 +413,10 @@ XGzip::GZIP_HEADER XGzip::_read_GZIP_HEADER(qint64 nOffset)
     return result;
 }
 
-bool XGzip::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
+    
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();

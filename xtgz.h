@@ -44,7 +44,7 @@ public:
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct = nullptr) override;
     virtual QString getMIMEString() override;
 
-    virtual bool initUnpack(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool initUnpack(UNPACK_STATE *pUnpackState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pUnpackState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;

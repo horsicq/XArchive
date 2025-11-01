@@ -168,12 +168,12 @@ void XTGZ::setDevice(QIODevice *pDevice)
     }
 }
 
-bool XTGZ::initUnpack(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+bool XTGZ::initUnpack(UNPACK_STATE *pUnpackState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
     if ((m_pXtar) && (pUnpackState)) {
-        bResult = m_pXtar->initUnpack(pUnpackState, pPdStruct);
+        bResult = m_pXtar->initUnpack(pUnpackState, mapProperties, pPdStruct);
     }
 
     return bResult;

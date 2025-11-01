@@ -221,8 +221,10 @@ XBinary::MODE XLHA::getMode()
     return MODE_DATA;
 }
 
-bool XLHA::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
+    
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();

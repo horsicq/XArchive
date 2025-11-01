@@ -413,8 +413,9 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     return listResult;
 }
 
-bool XCPIO::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool XCPIO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
     Q_UNUSED(pPdStruct)
 
     if (!pState) {

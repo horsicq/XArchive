@@ -748,8 +748,10 @@ bool XCab::writeCFData(QIODevice *pDevice, const CFDATA &cfData, const QByteArra
 }
 
 // Streaming unpacking API implementation
-bool XCab::initUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
+    
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;

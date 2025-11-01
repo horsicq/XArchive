@@ -1110,8 +1110,10 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
 //     return true;
 // }
 
-bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
+    
     if (!pUnpackState) {
         return false;
     }
