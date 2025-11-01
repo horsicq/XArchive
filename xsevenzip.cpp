@@ -1038,6 +1038,8 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
         qDebug() << "XSevenZip::initUnpack: NextHeaderOffset=" << nNextHeaderOffset 
                  << "NextHeaderSize=" << nNextHeaderSize;
+        qDebug() << "  SignatureHeader.NextHeaderOffset=" << signatureHeader.NextHeaderOffset;
+        qDebug() << "  File size=" << getSize();
 
         if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
             char *pData = new char[nNextHeaderSize];
@@ -1136,6 +1138,14 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
                     qDebug() << "  PackOffset:" << nPackOffset << "PackedSize:" << nPackedSize 
                              << "UnpackedSize:" << nUnpackedSize << "Codec size:" << baCodec.size() << "Property size:" << baCoderProperty.size();
+                    
+                    // CRITICAL FIX: For encoded headers, the compressed header data is stored
+                    // just BEFORE the NextHeader, not at PackOffset!
+                    // PackOffset refers to the file data streams, not the compressed header.
+                    // The compressed header is at: (end of signature) + NextHeaderOffset - PackedSize
+                    qint64 nCompressedHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset - nPackedSize;
+                    qDebug() << "  Compressed header should be at offset" << nCompressedHeaderOffset 
+                             << "(32 + NextHeaderOffset" << signatureHeader.NextHeaderOffset << "- PackedSize" << nPackedSize << ")";
 
                     // Debug: Print codec bytes
                     if (!baCodec.isEmpty()) {
@@ -1157,10 +1167,18 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     }
 
                     if ((nPackOffset > 0) && (nPackedSize > 0) && (nUnpackedSize > 0) && !baCodec.isEmpty() && !baCoderProperty.isEmpty()) {
-                        qDebug() << "  Decompressing header from offset" << nPackOffset << "size" << nPackedSize;
+                        qDebug() << "  Decompressing header from offset" << nCompressedHeaderOffset << "size" << nPackedSize;
 
-                        // Use SubDevice to create a view of the compressed data at the pack offset
-                        SubDevice subDevice(getDevice(), nPackOffset, nPackedSize);
+                        // Debug: Read and print first 32 bytes at compressed header offset to verify it's LZMA data
+                        QByteArray baTestRead = read_array(nCompressedHeaderOffset, qMin((qint64)32, nPackedSize));
+                        QString sTestHex;
+                        for (qint32 j = 0; j < baTestRead.size(); j++) {
+                            sTestHex += QString("%1 ").arg((unsigned char)baTestRead.at(j), 2, 16, QChar('0'));
+                        }
+                        qDebug() << "  First bytes at CompressedHeaderOffset:" << sTestHex;
+
+                        // Use SubDevice to create a view of the compressed data at the compressed header offset
+                        SubDevice subDevice(getDevice(), nCompressedHeaderOffset, nPackedSize);
                         if (subDevice.open(QIODevice::ReadOnly)) {
                             qDebug() << "  SubDevice opened successfully";
 
@@ -1311,6 +1329,9 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             } else {
                                 qWarning() << "  Failed to decompress header!";
                             }
+                        } else {
+                            qWarning() << "  Failed to open SubDevice!";
+                        }
                     } else {
                         qWarning() << "  Invalid pack info!";
                     }
