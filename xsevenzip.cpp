@@ -1157,13 +1157,24 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                         qDebug() << "  Codec method:" << codecToCompressMethod(baCodec);
                     }
 
-                    // Debug: Print coder property bytes
+                    // Debug: Print coder property bytes in detail
                     if (!baCoderProperty.isEmpty()) {
                         QString sPropHex;
                         for (qint32 j = 0; j < baCoderProperty.size(); j++) {
                             sPropHex += QString("%1 ").arg((unsigned char)baCoderProperty.at(j), 2, 16, QChar('0'));
                         }
                         qDebug() << "  Coder property bytes:" << sPropHex;
+                        
+                        // Parse LZMA properties
+                        if (baCoderProperty.size() == 5) {
+                            quint8 propByte = (quint8)baCoderProperty[0];
+                            quint32 dictSize = ((quint8)baCoderProperty[1]) |
+                                             ((quint8)baCoderProperty[2] << 8) |
+                                             ((quint8)baCoderProperty[3] << 16) |
+                                             ((quint8)baCoderProperty[4] << 24);
+                            qDebug() << "    Properties byte:" << QString::number(propByte, 16) 
+                                     << "Dictionary size:" << dictSize << "bytes (" << (dictSize/1024) << "KB)";
+                        }
                     }
 
                     if ((nPackOffset > 0) && (nPackedSize > 0) && (nUnpackedSize > 0) && !baCodec.isEmpty() && !baCoderProperty.isEmpty()) {
@@ -1176,6 +1187,20 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             sTestHex += QString("%1 ").arg((unsigned char)baTestRead.at(j), 2, 16, QChar('0'));
                         }
                         qDebug() << "  First bytes at CompressedHeaderOffset:" << sTestHex;
+                        
+                        // Check if first 8 bytes are uncompressed size (little-endian uint64)
+                        if (baTestRead.size() >= 8) {
+                            quint64 nPossibleSize = ((quint8)baTestRead[0]) |
+                                                   ((quint64)(quint8)baTestRead[1] << 8) |
+                                                   ((quint64)(quint8)baTestRead[2] << 16) |
+                                                   ((quint64)(quint8)baTestRead[3] << 24) |
+                                                   ((quint64)(quint8)baTestRead[4] << 32) |
+                                                   ((quint64)(quint8)baTestRead[5] << 40) |
+                                                   ((quint64)(quint8)baTestRead[6] << 48) |
+                                                   ((quint64)(quint8)baTestRead[7] << 56);
+                            qDebug() << "  First 8 bytes as uint64:" << nPossibleSize;
+                            qDebug() << "  If this matches UnpackedSize, stream has size header";
+                        }
 
                         // Use SubDevice to create a view of the compressed data at the compressed header offset
                         SubDevice subDevice(getDevice(), nCompressedHeaderOffset, nPackedSize);
@@ -1186,7 +1211,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             QBuffer bufferDecompressed(&baDecompressed);
                             bufferDecompressed.open(QIODevice::WriteOnly);
 
-                            // Use XLZMADecoder directly with properties
+                            // ATTEMPT 1: Try XLZMADecoder directly with properties
                             XLZMADecoder lzmaDecoder;
                             
                             DATAPROCESS_STATE state = {};
@@ -1199,6 +1224,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
                             qDebug() << "  Calling LZMA decoder with properties size" << baCoderProperty.size() << "(nProcessedLimit=-1)";
                             qDebug() << "  Expected unpacked size:" << nUnpackedSize << "Packed size:" << nPackedSize;
+                            
                             bool bDecompressed = lzmaDecoder.decompress(&state, baCoderProperty, pPdStruct);
                             
                             subDevice.close();
