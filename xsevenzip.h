@@ -189,6 +189,7 @@ private:
         qint64 nSize;
         bool bIsError;
         QString sErrorString;
+        quint64 nNumberOfFolders;  // Track folder count for SubStreamsInfo
     };
 
     QList<SZRECORD> _handleData(char *pData, qint64 nSize, PDSTRUCT *pPdStruct, bool bUnpack);
