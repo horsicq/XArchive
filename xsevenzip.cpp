@@ -749,14 +749,25 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             #ifdef QT_DEBUG
             qDebug() << "_handleId: After PackInfo, offset=" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16) << "bIsError=" << pState->bIsError;
             #endif
-            _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
+            
+            // UnpackInfo is optional - clear error state if it fails
+            bool bErrorBeforeUnpackInfo = pState->bIsError;
+            _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
             #ifdef QT_DEBUG
             qDebug() << "_handleId: After UnpackInfo, offset=" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16) << "bIsError=" << pState->bIsError;
             #endif
             
+            // If UnpackInfo failed and it was optional, restore state
+            if (pState->bIsError && !bErrorBeforeUnpackInfo) {
+                #ifdef QT_DEBUG
+                qDebug() << "_handleId: UnpackInfo failed but is optional, clearing error";
+                #endif
+                pState->bIsError = false;
+                pState->sErrorString.clear();
+            }
+            
             // SubStreamsInfo is optional - clear error state if it fails
             bool bErrorBeforeSubStreams = pState->bIsError;
-            qint64 nOffsetBeforeSubStreams = pState->nCurrentOffset;
             _handleId(pListRecords, XSevenZip::k7zIdSubStreamsInfo, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
             #ifdef QT_DEBUG
             qDebug() << "_handleId: After SubStreamsInfo, offset=" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16) << "bIsError=" << pState->bIsError;
@@ -769,7 +780,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                 #endif
                 pState->bIsError = false;
                 pState->sErrorString.clear();
-                // Don't restore offset - SubStreamsInfo may have consumed some data
             }
             
             // MainStreamsInfo doesn't have its own End marker - it's terminated by the next ID
@@ -967,8 +977,41 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                     #ifdef QT_DEBUG
                     qDebug() << "k7zIdFilesInfo: Unknown property ID" << QString("0x%1").arg(nNextByte, 0, 16) << "at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
                     #endif
-                    // Skip unknown property ID - advance by 1 byte
-                    pState->nCurrentOffset++;
+                    // Unknown property - skip the ID byte, then read and skip the size field and data
+                    pState->nCurrentOffset++;  // Skip the ID byte
+                    
+                    // Try to read the size field (most properties have this)
+                    if (pState->nCurrentOffset < pState->nSize) {
+                        XBinary::PACKED_UINT puSize = XBinary::_read_packedNumber(pState->pData + pState->nCurrentOffset, pState->nSize - pState->nCurrentOffset);
+                        if (puSize.bIsValid) {
+                            pState->nCurrentOffset += puSize.nByteSize;
+                            quint64 nDataSize = puSize.nValue;
+                            #ifdef QT_DEBUG
+                            qDebug() << "k7zIdFilesInfo: Unknown property has size" << nDataSize << "- skipping";
+                            #endif
+                            // Skip the data
+                            if (pState->nCurrentOffset + nDataSize <= pState->nSize) {
+                                pState->nCurrentOffset += nDataSize;
+                                bHandled = true;  // Successfully skipped
+                            } else {
+                                #ifdef QT_DEBUG
+                                qDebug() << "k7zIdFilesInfo: Data size exceeds available bytes - treating as end";
+                                #endif
+                                bFoundEnd = true;
+                                break;
+                            }
+                        } else {
+                            // If we can't read a valid size, treat this as the end
+                            #ifdef QT_DEBUG
+                            qDebug() << "k7zIdFilesInfo: Cannot read size for unknown property - treating as end marker";
+                            #endif
+                            bFoundEnd = true;
+                            break;
+                        }
+                    } else {
+                        bFoundEnd = true;
+                        break;
+                    }
                 }
             }
             
