@@ -60,7 +60,7 @@ public:
         // FT fileType;
     };
 
-    struct RECORD {
+    struct RECORD { // Obsolete, use ARCHIVERECORD
         SPINFO spInfo;
         qint64 nDataOffset;
         qint64 nDataSize;

@@ -791,15 +791,13 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                     
                     #ifdef QT_DEBUG
                     qDebug() << "_handleId: k7zIdHeader found CodersUnpackSize, reading" << pState->nNumberOfFolders << "values";
-                    qDebug() << "  Let me try reading MORE values to see what's there...";
                     #endif
                     
-                    // EXPERIMENTAL: Try reading up to 5 values to see what we get
-                    qint32 nValuesToRead = qMin((quint64)5, pState->nNumberOfFolders + 3);
-                    for (qint32 i = 0; i < nValuesToRead && !pState->bIsError; i++) {
+                    // Read one CodersUnpackSize value per folder
+                    for (quint64 i = 0; i < pState->nNumberOfFolders && !pState->bIsError; i++) {
                         quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("CodersUnpackSize%1").arg(i), DRF_SIZE, IMPTYPE_STREAMUNPACKEDSIZE);
                         #ifdef QT_DEBUG
-                        qDebug() << "  Folder/Coder" << i << "unpacked size:" << nSize;
+                        qDebug() << "  Folder" << i << "unpacked size:" << nSize << "bytes";
                         #endif
                     }
                     
@@ -1052,11 +1050,15 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             
             #ifdef QT_DEBUG
             qDebug() << "  Total files across all folders:" << nTotalSubStreams;
+            qDebug() << "  SubStreamsInfo Size section should contain" << (nTotalSubStreams - pState->nNumberOfFolders) << "values";
             qDebug() << "  -> Calling k7zIdSize with impType=IMPTYPE_STREAMUNPACKEDSIZE (6)";
             #endif
             
-            // Now read Size values for all files
-            _handleId(pListRecords, XSevenZip::k7zIdSize, pState, nTotalSubStreams, false, pPdStruct, IMPTYPE_STREAMUNPACKEDSIZE);
+            // SubStreamsInfo Size section contains (N-1) sizes for each folder with N>1 files
+            // For folders with only 1 file, no size is listed (use folder size)
+            // Total Size values = TotalFiles - NumberOfFolders
+            quint64 nSizeCount = (nTotalSubStreams > pState->nNumberOfFolders) ? (nTotalSubStreams - pState->nNumberOfFolders) : 0;
+            _handleId(pListRecords, XSevenZip::k7zIdSize, pState, nSizeCount, false, pPdStruct, IMPTYPE_STREAMUNPACKEDSIZE);
             bResult = true;
             break;
         }
@@ -2191,18 +2193,37 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 QList<qint64> listFileUnpackedSizes;
                                 qint32 nSubStreamIndex = 0;
                                 
+                                #ifdef QT_DEBUG
+                                qDebug() << "Starting file size calculation:";
+                                qDebug() << "  nNumberOfFolders:" << nNumberOfFolders;
+                                qDebug() << "  listFilesPerFolder:" << listFilesPerFolder;
+                                qDebug() << "  listFolderUnpackedSizes:" << listFolderUnpackedSizes;
+                                qDebug() << "  listSubStreamSizes count:" << listSubStreamSizes.count();
+                                #endif
+                                
                                 for (qint32 iFolderIdx = 0; iFolderIdx < nNumberOfFolders; iFolderIdx++) {
                                     qint32 nFilesInFolder = (iFolderIdx < listFilesPerFolder.count()) ? listFilesPerFolder.at(iFolderIdx) : 1;
                                     qint64 nFolderSize = (iFolderIdx < listFolderUnpackedSizes.count()) ? listFolderUnpackedSizes.at(iFolderIdx) : 0;
                                     
+                                    #ifdef QT_DEBUG
+                                    qDebug() << "  Folder" << iFolderIdx << ": nFilesInFolder=" << nFilesInFolder << ", nFolderSize=" << nFolderSize;
+                                    #endif
+                                    
                                     if (nFilesInFolder == 1) {
                                         // Simple case: folder has only one file, use folder size
                                         listFileUnpackedSizes.append(nFolderSize);
+                                        #ifdef QT_DEBUG
+                                        qDebug() << "    Single file folder, size:" << nFolderSize;
+                                        #endif
                                     } else if (nFilesInFolder > 1) {
                                         // Solid block: multiple files in folder
                                         // SubStreamsInfo Size values are the unpacked sizes of the FIRST (N-1) files
                                         // The LAST file size = folder size - sum(first N-1 files)
                                         qint64 nFirstFilesTotal = 0;
+                                        
+                                        #ifdef QT_DEBUG
+                                        qDebug() << "    Multi-file folder, reading" << (nFilesInFolder - 1) << "sizes from SubStreamsInfo";
+                                        #endif
                                         
                                         // Add sizes for first (N-1) files from SubStreamsInfo
                                         for (qint32 j = 0; j < nFilesInFolder - 1; j++) {
@@ -2210,15 +2231,23 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                 qint64 nFileSize = listSubStreamSizes.at(nSubStreamIndex);
                                                 listFileUnpackedSizes.append(nFileSize);
                                                 nFirstFilesTotal += nFileSize;
+                                                #ifdef QT_DEBUG
+                                                qDebug() << "      File" << j << "size:" << nFileSize << "(from SubStreamSizes[" << nSubStreamIndex << "])";
+                                                #endif
                                                 nSubStreamIndex++;
+                                            } else {
+                                                #ifdef QT_DEBUG
+                                                qDebug() << "      WARNING: Not enough SubStreamSizes! Expected index" << nSubStreamIndex << "but count is" << listSubStreamSizes.count();
+                                                #endif
                                             }
                                         }
                                         
                                         // Calculate last file size as remainder
                                         qint64 nLastFileSize = nFolderSize - nFirstFilesTotal;
                                         listFileUnpackedSizes.append(nLastFileSize);
-                                    }
-                                }
+                                        #ifdef QT_DEBUG
+                                        qDebug() << "      File" << (nFilesInFolder - 1) << "size:" << nLastFileSize << "(calculated as" << nFolderSize << "-" << nFirstFilesTotal << ")";
+                                        #endif
                                     }
                                 }
 
@@ -2231,6 +2260,12 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 qDebug() << "  Calculated listFileUnpackedSizes:" << listFileUnpackedSizes;
                                 qDebug() << "  listFilePackedSizes:" << listFilePackedSizes;
                                 qDebug() << "  listStreamOffsets:" << listStreamOffsets;
+                                
+                                // Validation: Check if file count matches calculated size count
+                                if (listFileUnpackedSizes.count() != listFileNames.count()) {
+                                    qDebug() << "  WARNING: Size count mismatch! Files:" << listFileNames.count() 
+                                             << "Calculated sizes:" << listFileUnpackedSizes.count();
+                                }
                                 #endif
 
                                 // Analyze codec chain to separate filters from compressors
