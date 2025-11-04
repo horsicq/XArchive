@@ -1858,10 +1858,6 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
         qint64 nDataOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
 
-        qDebug() << "[XZIP] nDataOffset:" << nDataOffset << "= nCurrentOffset:" << pState->nCurrentOffset << "+ sizeof(LOCALFILEHEADER):" << sizeof(LOCALFILEHEADER)
-                 << "+ nFileNameLength:" << lfh.nFileNameLength << "+ nExtraFieldLength:" << lfh.nExtraFieldLength;
-        qDebug() << "[XZIP] Compressed size:" << lfh.nCompressedSize;
-
         COMPRESS_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
 
         // Check if file is encrypted
@@ -1902,8 +1898,6 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                         quint8 nAESStrength = read_uint8(nExtraFieldOffset + nExtraOffset + 8);
                         // Read actual compression method
                         nActualCompressionMethod = read_uint16(nExtraFieldOffset + nExtraOffset + 9);
-
-                        qDebug() << "[XZIP] AES extra field found: strength=" << nAESStrength << "actual compression method=" << nActualCompressionMethod;
 
                         // Determine AES key size from strength byte
                         if (nAESStrength == 0x01) {
