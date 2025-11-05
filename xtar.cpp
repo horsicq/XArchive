@@ -56,69 +56,6 @@ bool XTAR::isValid(QIODevice *pDevice)
     return xtar.isValid();
 }
 
-quint64 XTAR::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    quint64 nResult = 0;
-
-    _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
-
-    qint64 nOffset = 0;
-
-    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        XTAR::posix_header header = read_posix_header(nOffset);
-
-        if (!compareMemory(header.magic, "ustar", 5)) {
-            break;
-        }
-
-        nResult++;
-
-        nOffset += (0x200);
-        nOffset += align_up(_getSize(header), 0x200);
-    }
-
-    return nResult;
-}
-
-QList<XArchive::RECORD> XTAR::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    QList<XArchive::RECORD> listResult;
-
-    qint64 nOffset = 0;
-
-    qint32 nIndex = 0;
-
-    while (isPdStructNotCanceled(pPdStruct)) {
-        XTAR::posix_header header = read_posix_header(nOffset);
-
-        if (!compareMemory(header.magic, "ustar", 5)) {
-            break;
-        }
-
-        RECORD record = {};
-        record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
-        record.nDataOffset = nOffset + 0x200;
-        record.nHeaderOffset = nOffset;
-        record.nHeaderSize = 0x200;
-        record.spInfo.nUncompressedSize = _getSize(header);
-        record.spInfo.sRecordName = header.name;
-        record.nDataSize = record.spInfo.nUncompressedSize;
-
-        listResult.append(record);
-
-        nIndex++;
-
-        if ((nLimit != -1) && (nIndex > nLimit)) {
-            break;
-        }
-
-        nOffset += (0x200);
-        nOffset += align_up(record.nDataSize, 0x200);
-    }
-
-    return listResult;
-}
-
 QString XTAR::getFileFormatExt()
 {
     return "tar";

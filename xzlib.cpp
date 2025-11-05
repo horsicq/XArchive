@@ -57,68 +57,6 @@ bool XZlib::isValid(QIODevice *pDevice)
     return xzlib.isValid();
 }
 
-quint64 XZlib::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    return 1;  // Always 1
-}
-
-qint64 XZlib::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    return 1;  // Always 1
-}
-
-QList<XArchive::RECORD> XZlib::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(nLimit)  // Always 1
-
-    QList<RECORD> listResult;
-
-    RECORD record = {};
-
-    qint64 nOffset = 0;
-
-    record.spInfo.compressMethod = COMPRESS_METHOD_ZLIB;
-
-    nOffset += 2;
-
-    SubDevice sd(getDevice(), nOffset, -1);
-
-    if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DATAPROCESS_STATE state = {};
-        // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
-        state.pDeviceInput = &sd;
-        state.pDeviceOutput = nullptr;
-        state.nInputOffset = 0;
-        state.nInputLimit = -1;
-        state.nProcessedOffset = 0;
-        state.nProcessedLimit = -1;
-
-        bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
-
-        Q_UNUSED(bResult)
-
-        record.nHeaderOffset = 0;
-        record.nHeaderSize = nOffset;
-        record.nDataOffset = nOffset;
-        record.nDataSize = state.nCountInput;
-        record.spInfo.nUncompressedSize = state.nCountOutput;
-        record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
-
-        sd.close();
-    }
-
-    // TODO
-
-    listResult.append(record);
-
-    return listResult;
-}
-
 qint64 XZlib::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     return _calculateRawSize(pPdStruct);

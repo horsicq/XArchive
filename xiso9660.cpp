@@ -137,38 +137,6 @@ QList<XBinary::DATA_HEADER> XISO9660::getDataHeaders(const DATA_HEADERS_OPTIONS 
     return listResult;
 }
 
-quint64 XISO9660::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    // For ISO 9660, we return 1 as the base record count
-    // In reality, we would need to parse the directory tree
-    return 1;
-}
-
-QList<XArchive::RECORD> XISO9660::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(nLimit)
-    Q_UNUSED(pPdStruct)
-
-    QList<RECORD> listResult;
-
-    ISO9660_PVDESC pvd = _readPrimaryVolumeDescriptor(_getPrimaryVolumeDescriptorOffset());
-
-    RECORD record = {};
-    record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
-    record.nHeaderOffset = _getPrimaryVolumeDescriptorOffset();
-    record.nHeaderSize = sizeof(ISO9660_PVDESC);
-    record.spInfo.nUncompressedSize = getSize();
-    record.spInfo.sRecordName = QString::fromLatin1(pvd.szVolumeId, 32).trimmed();
-    record.nDataOffset = record.nHeaderSize;
-    record.nDataSize = getSize() - record.nHeaderSize;
-
-    listResult.append(record);
-
-    return listResult;
-}
-
 QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

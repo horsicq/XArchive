@@ -142,37 +142,6 @@ QList<XBinary::DATA_HEADER> XSquashfs::getDataHeaders(const DATA_HEADERS_OPTIONS
     return listResult;
 }
 
-quint64 XSquashfs::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    SQUASHFS_HEADER header = _readHeader(0);
-    return header.nInodesCount;
-}
-
-QList<XArchive::RECORD> XSquashfs::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(nLimit)
-    Q_UNUSED(pPdStruct)
-
-    QList<RECORD> listResult;
-
-    SQUASHFS_HEADER header = _readHeader(0);
-
-    RECORD record = {};
-    record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
-    record.nHeaderOffset = 0;
-    record.nHeaderSize = sizeof(SQUASHFS_HEADER);
-    record.spInfo.nUncompressedSize = header.nBytesUsed;
-    record.spInfo.sRecordName = tr("Squashfs archive");
-    record.nDataOffset = record.nHeaderSize;
-    record.nDataSize = getSize() - record.nHeaderSize;
-
-    listResult.append(record);
-
-    return listResult;
-}
-
 QList<XBinary::FPART> XSquashfs::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

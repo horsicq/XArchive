@@ -68,9 +68,6 @@ public:
 
     SZDD_HEADER _read_SZDD_HEADER(qint64 nOffset);
 
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
-
     // Streaming unpacking API
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;

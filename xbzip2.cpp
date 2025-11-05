@@ -176,55 +176,6 @@ QList<XBinary::DATA_HEADER> XBZIP2::getDataHeaders(const DATA_HEADERS_OPTIONS &d
     return listResult;
 }
 
-quint64 XBZIP2::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    // BZip2 typically contains a single compressed stream
-    return 1;
-}
-
-QList<XArchive::RECORD> XBZIP2::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    QList<RECORD> listResult;
-
-    if (isPdStructNotCanceled(pPdStruct)) {
-        SubDevice sd(getDevice(), 0, -1);
-
-        if (sd.open(QIODevice::ReadOnly)) {
-            QBuffer buffer;
-            if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.pDeviceInput = &sd;
-                decompressState.pDeviceOutput = &buffer;
-                decompressState.nInputOffset = 0;
-                decompressState.nInputLimit = getSize();
-
-                if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
-                    RECORD record = {};
-                    record.nHeaderOffset = 0;
-                    record.nHeaderSize = sizeof(BZIP2_HEADER);
-                    record.nDataOffset = 0;
-                    record.nDataSize = decompressState.nCountInput;
-                    record.spInfo.nUncompressedSize = decompressState.nCountOutput;
-                    record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
-                    record.spInfo.compressMethod = COMPRESS_METHOD_BZIP2;
-                    record.sUUID = generateUUID();
-                    listResult.append(record);
-                }
-
-                buffer.close();
-            }
-
-            sd.close();
-        }
-    }
-
-    Q_UNUSED(nLimit)  // We always return just one record for BZip2
-
-    return listResult;
-}
-
 QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

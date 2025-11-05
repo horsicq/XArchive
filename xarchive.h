@@ -92,8 +92,8 @@ public:
 
     explicit XArchive(QIODevice *pDevice = nullptr);
 
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) = 0;
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) = 0;
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
 
     struct DECOMPRESSSTRUCT {
         SPINFO spInfo;

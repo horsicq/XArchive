@@ -66,8 +66,6 @@ public:
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     bool _isValid(_MEMORY_MAP *pMemoryMap, qint64 nOffset, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
     virtual QList<MAPMODE> getMapModesList() override;

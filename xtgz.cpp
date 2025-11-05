@@ -135,6 +135,11 @@ void XTGZ::setDevice(QIODevice *pDevice)
     XBinary::setDevice(m_pDevice);
 
     if ((m_pDevice) && (m_pCompressedDevice) && (m_pXtar)) {
+        // Close compressed device if already open
+        if (m_pCompressedDevice->isOpen()) {
+            m_pCompressedDevice->close();
+        }
+
         // Check if this is a valid gzip file
         XGzip gzip(m_pDevice);
 

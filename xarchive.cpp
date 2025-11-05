@@ -51,6 +51,112 @@ XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice)
 {
 }
 
+quint64 XArchive::getNumberOfRecords(PDSTRUCT *pPdStruct)
+{
+    return getNumberOfArchiveRecords(pPdStruct);
+}
+
+QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    QList<RECORD> listResult;
+
+    XBinary::PDSTRUCT pdStructEmpty = {};
+
+    if (!pPdStruct) {
+        pdStructEmpty = XBinary::createPdStruct();
+        pPdStruct = &pdStructEmpty;
+    }
+
+    QMap<UNPACK_PROP, QVariant> mapProperties;
+
+    // Initialize unpacking state
+    UNPACK_STATE state = {};
+
+    if (!initUnpack(&state, mapProperties, pPdStruct)) {
+        return listResult;
+    }
+
+    // Iterate through records using streaming API
+    qint32 nIndex = 0;
+
+    while ((state.nCurrentIndex < state.nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        // Get current record info
+        ARCHIVERECORD archiveRecord = infoCurrent(&state, pPdStruct);
+
+        if (archiveRecord.nStreamSize == 0 && archiveRecord.nDecompressedSize == 0) {
+            // Invalid record, stop iteration
+            break;
+        }
+
+        // Convert ARCHIVERECORD to legacy RECORD structure
+        RECORD record = {};
+
+        record.nDataOffset = archiveRecord.nStreamOffset;
+        record.nDataSize = archiveRecord.nStreamSize;
+        record.spInfo.nUncompressedSize = archiveRecord.nDecompressedSize;
+
+        // Extract common properties from mapProperties
+        if (archiveRecord.mapProperties.contains(FPART_PROP_ORIGINALNAME)) {
+            record.spInfo.sRecordName = archiveRecord.mapProperties.value(FPART_PROP_ORIGINALNAME).toString();
+        }
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_COMPRESSMETHOD)) {
+            record.spInfo.compressMethod = (COMPRESS_METHOD)archiveRecord.mapProperties.value(FPART_PROP_COMPRESSMETHOD).toInt();
+        } else {
+            record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
+        }
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_CRC_VALUE)) {
+            record.spInfo.nCRC32 = archiveRecord.mapProperties.value(FPART_PROP_CRC_VALUE).toUInt();
+        }
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_WINDOWSIZE)) {
+            record.spInfo.nWindowSize = archiveRecord.mapProperties.value(FPART_PROP_WINDOWSIZE).toULongLong();
+        }
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_SOLID)) {
+            record.spInfo.bIsSolid = archiveRecord.mapProperties.value(FPART_PROP_SOLID).toBool();
+        }
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_HEADER_OFFSET)) {
+            record.nHeaderOffset = archiveRecord.mapProperties.value(FPART_PROP_HEADER_OFFSET).toLongLong();
+        }
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_HEADER_SIZE)) {
+            record.nHeaderSize = archiveRecord.mapProperties.value(FPART_PROP_HEADER_SIZE).toLongLong();
+        }
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_OPTHEADER_OFFSET)) {
+            record.nOptHeaderOffset = archiveRecord.mapProperties.value(FPART_PROP_OPTHEADER_OFFSET).toLongLong();
+        }
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_OPTHEADER_SIZE)) {
+            record.nOptHeaderSize = archiveRecord.mapProperties.value(FPART_PROP_OPTHEADER_SIZE).toLongLong();
+        }
+
+        record.sUUID = generateUUID();
+
+        listResult.append(record);
+
+        nIndex++;
+
+        // Check limit
+        if ((nLimit != -1) && (nIndex >= nLimit)) {
+            break;
+        }
+
+        // Move to next record
+        if (!moveToNext(&state, pPdStruct)) {
+            break;
+        }
+    }
+
+    // Clean up unpacking state
+    finishUnpack(&state, pPdStruct);
+
+    return listResult;
+}
+
 XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStruct, PDSTRUCT *pPdStruct)
 {
     if (pDecompressStruct->nDecompressedLimit == 0) {

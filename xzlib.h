@@ -25,13 +25,13 @@
 
 class XZlib : public XArchive {
     Q_OBJECT
+
 public:
     explicit XZlib(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice);
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
+
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
 
     virtual QList<MAPMODE> getMapModesList();
@@ -41,7 +41,6 @@ public:
     virtual QString getFileFormatExt();
     virtual QString getFileFormatExtsString();
     virtual QString getMIMEString();
-    virtual qint64 getNumberOfArchiveRecords(PDSTRUCT *pPdStruct);
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Streaming unpacking API

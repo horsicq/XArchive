@@ -167,8 +167,6 @@ public:
     virtual QString getVersion() override;
     virtual bool isEncrypted() override;
     virtual QString getCompressMethodString() override;
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
 
     virtual FT getFileType() override;
 

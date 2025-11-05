@@ -58,17 +58,6 @@ QString XCab::getVersion()
     return QString("%1.%2").arg(read_uint8(25)).arg(read_uint8(24), 2, 10, QChar('0'));
 }
 
-quint64 XCab::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    quint64 nResult = 0;
-
-    nResult = read_uint16(offsetof(CFHEADER, cFiles));
-
-    return nResult;
-}
-
 XCab::CFFILE XCab::readCFFILE(qint64 nOffset)
 {
     CFFILE result = {};
@@ -81,75 +70,6 @@ XCab::CFFILE XCab::readCFFILE(qint64 nOffset)
     result.attribs = read_uint16(nOffset + offsetof(CFFILE, attribs));
 
     return result;
-}
-
-QList<XArchive::RECORD> XCab::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    QList<XArchive::RECORD> listResult;
-
-    CFHEADER cfHeader = readCFHeader(0);
-    qint64 nFileSize = getSize();
-
-    // Parse folders
-    QList<CFFOLDER> listFolders;
-    qint64 nCurrentOffset = sizeof(CFHEADER);
-
-    for (quint16 i = 0; i < cfHeader.cFolders; i++) {
-        if (nCurrentOffset + (qint64)sizeof(CFFOLDER) > nFileSize) {
-            break;
-        }
-
-        CFFOLDER cfFolder = readCFFolder(nCurrentOffset);
-        listFolders.append(cfFolder);
-
-        nCurrentOffset += sizeof(CFFOLDER);
-    }
-
-    // Parse files
-    qint64 nFileOffset = cfHeader.coffFiles;
-
-    for (quint16 i = 0; i < cfHeader.cFiles; i++) {
-        if (nFileOffset + (qint64)sizeof(CFFILE) > nFileSize) {
-            break;
-        }
-
-        CFFILE cfFile = readCFFILE(nFileOffset);
-        QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
-
-        if (cfFile.iFolder < (quint16)listFolders.size()) {
-            CFFOLDER cfFolder = listFolders.at(cfFile.iFolder);
-
-            XArchive::RECORD record = {};
-
-            record.spInfo.sRecordName = sFileName;
-            record.spInfo.nUncompressedSize = cfFile.cbFile;
-            record.nDataOffset = cfFolder.coffCabStart;
-            record.nDataSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
-
-            // // Set compression method
-            // if (cfFolder.typeCompress == 0x0000) {
-            //     record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
-            // } else if (cfFolder.typeCompress == 0x0001) {
-            //     record.spInfo.compressMethod = COMPRESS_METHOD_MSZIP;
-            // } else if (cfFolder.typeCompress == 0x0003) {
-            //     record.spInfo.compressMethod = COMPRESS_METHOD_LZX;
-            // } else {
-            //     record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
-            // }
-
-            listResult.append(record);
-        }
-
-        nFileOffset += sizeof(CFFILE) + sFileName.length() + 1;
-
-        if (nLimit != -1 && listResult.size() >= nLimit) {
-            break;
-        }
-    }
-
-    return listResult;
 }
 
 XCab::CFHEADER XCab::readCFHeader(qint64 nOffset)

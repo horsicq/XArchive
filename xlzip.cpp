@@ -192,33 +192,6 @@ QList<XBinary::DATA_HEADER> XLzip::getDataHeaders(const DATA_HEADERS_OPTIONS &da
     return listResult;
 }
 
-quint64 XLzip::getNumberOfRecords(PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-    return 1;
-}
-
-QList<XArchive::RECORD> XLzip::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-{
-    QList<RECORD> listResult;
-    Q_UNUSED(nLimit)
-    Q_UNUSED(pPdStruct)
-
-    // Placeholder: Lzip decompression would go here if a decoder is available
-    RECORD record = {};
-    record.nHeaderOffset = 0;
-    record.nHeaderSize = 6;
-    record.nDataOffset = 6;
-    record.nDataSize = getSize() - 13;  // Approximate
-    record.spInfo.sRecordName = XBinary::getDeviceFileBaseName(getDevice());
-    record.spInfo.compressMethod = COMPRESS_METHOD_LZMA;  // Lzip uses LZMA
-    record.sUUID = generateUUID();
-
-    listResult.append(record);
-
-    return listResult;
-}
-
 QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
