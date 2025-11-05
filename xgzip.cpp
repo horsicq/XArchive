@@ -37,8 +37,10 @@ bool XGzip::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (getSize() > (qint64)sizeof(GZIP_HEADER)) {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+    qint64 nTotalSize = getSize();
+
+    if (nTotalSize > (qint64)sizeof(GZIP_HEADER)) {
+        _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
         if (compareSignature(&memoryMap, "1F8B08", 0, pPdStruct)) {
             bResult = true;
         }
@@ -85,25 +87,17 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     _MEMORY_RECORD memoryRecord = {};
     _MEMORY_RECORD memoryRecordFooter = {};
 
-    qint64 nOffset = 0;
+    qint64 nOffset = getHeaderSize();
 
     GZIP_HEADER gzipHeader = {};
 
-    read_array(nOffset, (char *)&gzipHeader, sizeof(GZIP_HEADER));
+    read_array(0, (char *)&gzipHeader, sizeof(GZIP_HEADER));
 
     COMPRESS_METHOD cm = COMPRESS_METHOD_DEFLATE;
 
     if (gzipHeader.nCompressionMethod == 8)  // TODO consts
     {
         cm = COMPRESS_METHOD_DEFLATE;  // TODO more
-    }
-
-    nOffset += sizeof(GZIP_HEADER);
-
-    if (gzipHeader.nFileFlags & 8)  // File name
-    {
-        QString sFileName = read_ansiString(nOffset);
-        nOffset += sFileName.size() + 1;
     }
 
     memoryRecordHeader.nOffset = 0;
@@ -192,14 +186,7 @@ QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 
     // Header
     if (nFileParts & FILEPART_HEADER) {
-        // Account for optional filename if present
-        qint64 headerSize = (qint64)sizeof(GZIP_HEADER);
-        qint64 optOffset = headerSize;
-        if (gzipHeader.nFileFlags & 8) {
-            QString sFileName = read_ansiString(optOffset);
-            optOffset += sFileName.size() + 1;
-            headerSize = optOffset;
-        }
+        qint64 headerSize = getHeaderSize();
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
@@ -211,11 +198,7 @@ QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 
     // Region: compressed stream payload (best-effort)
     if (nFileParts & FILEPART_REGION) {
-        qint64 payloadOffset = (qint64)sizeof(GZIP_HEADER);
-        if (gzipHeader.nFileFlags & 8) {
-            QString sFileName = read_ansiString(payloadOffset);
-            payloadOffset += sFileName.size() + 1;
-        }
+        qint64 payloadOffset = getHeaderSize();
         qint64 payloadSize = qMax<qint64>(0, fileSize - payloadOffset);
         // Exclude the standard 8-byte footer (CRC32 + ISIZE) if present
         if (payloadSize >= 8) payloadSize -= 8;
@@ -346,6 +329,21 @@ XGzip::GZIP_HEADER XGzip::_read_GZIP_HEADER(qint64 nOffset)
     return result;
 }
 
+qint64 XGzip::getHeaderSize()
+{
+    qint64 nOffset = 0;
+    GZIP_HEADER gzipHeader = _read_GZIP_HEADER(nOffset);
+    nOffset += sizeof(GZIP_HEADER);
+
+    // Check for optional filename
+    if (gzipHeader.nFileFlags & 8) {
+        QString sFileName = read_ansiString(nOffset);
+        nOffset += sFileName.size() + 1;
+    }
+
+    return nOffset;
+}
+
 bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
@@ -366,24 +364,22 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         // Create and initialize context
         GZIP_UNPACK_CONTEXT *pContext = new GZIP_UNPACK_CONTEXT;
 
+        // Get header size
+        pContext->nHeaderSize = getHeaderSize();
+
         // Read header to get metadata
-        qint64 nOffset = 0;
-        GZIP_HEADER gzipHeader = _read_GZIP_HEADER(nOffset);
-        nOffset += sizeof(GZIP_HEADER);
+        GZIP_HEADER gzipHeader = _read_GZIP_HEADER(0);
 
         // Check for optional filename
         if (gzipHeader.nFileFlags & 8) {
-            pContext->sFileName = read_ansiString(nOffset);
-            nOffset += pContext->sFileName.size() + 1;
+            pContext->sFileName = read_ansiString(sizeof(GZIP_HEADER));
         } else {
             pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
         }
 
-        pContext->nHeaderSize = nOffset;
-
         // Decompress to get sizes
         qint64 nFileSize = getSize();
-        SubDevice sd(getDevice(), nOffset, nFileSize - nOffset);
+        SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
 
         if (sd.open(QIODevice::ReadOnly)) {
             XBinary::DATAPROCESS_STATE state = {};
@@ -401,7 +397,7 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
                 pContext->nCompressedSize = state.nCountInput;
                 pContext->nUncompressedSize = state.nCountOutput;
             } else {
-                pContext->nCompressedSize = nFileSize - nOffset;
+                pContext->nCompressedSize = nFileSize - (pContext->nHeaderSize);
                 pContext->nUncompressedSize = 0;
             }
 

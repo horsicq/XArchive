@@ -78,6 +78,7 @@ public:
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
     GZIP_HEADER _read_GZIP_HEADER(qint64 nOffset);
+    qint64 getHeaderSize();
 
 private:
     // Format-specific unpacking context

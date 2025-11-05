@@ -960,34 +960,11 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         // - k7zIdSize (optional): unpacked sizes for files
         // - k7zIdCRC (optional): CRCs for files
 
-        // Check if next byte is k7zIdNumUnpackStream
-        if (pState->nCurrentOffset < pState->nSize && pState->pData[pState->nCurrentOffset] == XSevenZip::k7zIdNumUnpackStream) {
-            // NumUnpackStream internally calls Size, so we don't call Size separately
-            _handleId(pListRecords, XSevenZip::k7zIdNumUnpackStream, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
-#ifdef QT_DEBUG
-            qDebug() << QString("  After NumUnpackStream: offset=0x%1").arg(pState->nCurrentOffset, 0, 16);
-#endif
-        } else {
-#ifdef QT_DEBUG
-            qDebug() << "  No k7zIdNumUnpackStream found (solid blocks with 1 file each or no sub-streams)";
-#endif
-        }
+        _handleId(pListRecords, XSevenZip::k7zIdNumUnpackStream, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
+        // _handleId(pListRecords, XSevenZip::k7zIdSize, pState, pState->nNumberOfFolders - 1, false, pPdStruct, IMPTYPE_UNKNOWN);
+        // _handleId(pListRecords, XSevenZip::k7zIdCRC, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
+        bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
 
-        // Check if next byte is k7zIdCRC
-        if (pState->nCurrentOffset < pState->nSize && pState->pData[pState->nCurrentOffset] == XSevenZip::k7zIdCRC) {
-            // Use nNumberOfFolders as count for CRCs (assuming one unpacked stream per folder)
-            _handleId(pListRecords, XSevenZip::k7zIdCRC, pState, pState->nNumberOfFolders, false, pPdStruct, IMPTYPE_UNKNOWN);
-#ifdef QT_DEBUG
-            qDebug() << QString("  After CRC: offset=0x%1 nNumberOfFolders=%2").arg(pState->nCurrentOffset, 0, 16).arg(pState->nNumberOfFolders);
-#endif
-        } else {
-#ifdef QT_DEBUG
-            qDebug() << "  No k7zIdCRC found in SubStreamsInfo";
-#endif
-        }
-
-        // Don't require End marker - MainStreamsInfo will handle it
-        bResult = true;
         break;
 
     case XSevenZip::k7zIdNumUnpackStream: {
@@ -995,30 +972,17 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         // Then Size section contains unpacked sizes for all files
         quint64 nTotalSubStreams = 0;
 
-#ifdef QT_DEBUG
-        qDebug() << "k7zIdNumUnpackStream: Reading for" << pState->nNumberOfFolders << "folders";
-#endif
-
         for (quint64 i = 0; i < pState->nNumberOfFolders && isPdStructNotCanceled(pPdStruct); i++) {
             quint64 nNumStreamsInFolder = _handleNumber(pListRecords, pState, pPdStruct, QString("NumUnpackStream%1").arg(i), DRF_COUNT, IMPTYPE_UNKNOWN);
             nTotalSubStreams += nNumStreamsInFolder;
-
-#ifdef QT_DEBUG
-            qDebug() << "  Folder" << i << "has" << nNumStreamsInFolder << "files";
-#endif
         }
-
-#ifdef QT_DEBUG
-        qDebug() << "  Total files across all folders:" << nTotalSubStreams;
-        qDebug() << "  SubStreamsInfo Size section should contain" << (nTotalSubStreams - pState->nNumberOfFolders) << "values";
-        qDebug() << "  -> Calling k7zIdSize with impType=IMPTYPE_STREAMUNPACKEDSIZE (6)";
-#endif
 
         // SubStreamsInfo Size section contains (N-1) sizes for each folder with N>1 files
         // For folders with only 1 file, no size is listed (use folder size)
         // Total Size values = TotalFiles - NumberOfFolders
         quint64 nSizeCount = (nTotalSubStreams > pState->nNumberOfFolders) ? (nTotalSubStreams - pState->nNumberOfFolders) : 0;
-        _handleId(pListRecords, XSevenZip::k7zIdSize, pState, nSizeCount, false, pPdStruct, IMPTYPE_STREAMUNPACKEDSIZE);
+        _handleId(pListRecords, XSevenZip::k7zIdSize, pState, nSizeCount, false, pPdStruct, IMPTYPE_FILEUNPACKEDSIZE);
+        _handleId(pListRecords, XSevenZip::k7zIdCRC, pState, nTotalSubStreams, false, pPdStruct, IMPTYPE_FILECRC);
         bResult = true;
         break;
     }
