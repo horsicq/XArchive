@@ -25,7 +25,9 @@ XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unknown", 
                                             {XRar::STRUCTID_RAR14_SIGNATURE, "RAR14_SIGNATURE", QString("RAR 1.4 signature")},
                                             {XRar::STRUCTID_RAR40_SIGNATURE, "RAR40_SIGNATURE", QString("RAR 4.0 signature")},
                                             {XRar::STRUCTID_RAR50_SIGNATURE, "RAR50_SIGNATURE", QString("RAR 5.0 signature)")},
-                                            {XRar::STRUCTID_RAR40_HEADER, "RAR40_HEADER", QString("RAR 4.0 header")}};
+                                            {XRar::STRUCTID_RAR14_HEADER, "RAR14_HEADER", QString("RAR 1.4 header")},
+                                            {XRar::STRUCTID_RAR40_HEADER, "RAR40_HEADER", QString("RAR 4.0 header")},
+                                            {XRar::STRUCTID_RAR50_HEADER, "RAR50_HEADER", QString("RAR 5.0 header")}};
 
 XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -121,6 +123,38 @@ QString XRar::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XRAR_STRUCTID, sizeof(_TABLE_XRAR_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+qint32 XRar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords, void *pUserData, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(locType)
+    Q_UNUSED(nLocation)
+    Q_UNUSED(dataRecordsOptions)
+    Q_UNUSED(pUserData)
+
+    qint32 nResult = 0;
+
+    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_RAR40_HEADER) {
+        XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+
+        qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, locType, nLocation);
+
+        quint8 nType = read_uint8(nStartOffset + 2);
+        nResult = read_uint16(nStartOffset + 5);
+
+        if (nType == BLOCKTYPE4_FILE) {
+            FILEBLOCK4 fileBlock4 = readFileBlock4(nStartOffset);
+
+            qint64 nFileSize = fileBlock4.packSize;
+            nFileSize |= ((qint64)fileBlock4.highPackSize) << 32;
+
+            nResult += nFileSize;
+        }
+    } else {
+        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+    }
+
+    return nResult;
+}
+
 QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::FPART> listResult;
@@ -159,7 +193,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
         if (nInternVersion == 4) {
             while (isPdStructNotCanceled(pPdStruct) && (nLimit == -1 || listResult.size() < nLimit)) {
-                if (nCurrentOffset >= nTotalSize - sizeof(GENERICBLOCK4)) {
+                if (nCurrentOffset > nTotalSize - 7) {
                     break;
                 }
 
@@ -202,9 +236,10 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                         }
 
                         nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + nFileSize;
-                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset);
+                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset); 
                     } else {
                         nCurrentOffset += genericBlock.nHeaderSize;
+                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset);
                     }
                 } else {
                     break;
@@ -337,10 +372,136 @@ QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
 
                 listResult.append(dataHeader);
 
+                if (dataHeadersOptions.bChildren) {
+                    // Count RAR 4.0 blocks for table
+                    qint64 nCurrentOffset = 7;
+                    qint64 nTotalSize = getSize();
+                    qint32 nNumberOfBlocks = 0;
+
+                    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                        if (nCurrentOffset >= nTotalSize - sizeof(GENERICBLOCK4)) {
+                            break;
+                        }
+
+                        GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+
+                        if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
+                            nNumberOfBlocks++;
+
+                            if (genericBlock.nType == BLOCKTYPE4_FILE) {
+                                FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
+                                qint64 nPackSize = fileBlock4.packSize;
+                                if (fileBlock4.genericBlock4.nFlags & RAR4_FILE_LARGE) {
+                                    nPackSize |= ((qint64)fileBlock4.highPackSize << 32);
+                                }
+                                nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + nPackSize;
+                            } else {
+                                nCurrentOffset += genericBlock.nHeaderSize;
+                            }
+
+                            if (genericBlock.nType == BLOCKTYPE4_END) {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Create table of RAR 4.0 blocks
+                    DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+                    _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+                    _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+                    _dataHeadersOptions.nID = STRUCTID_RAR40_HEADER;
+                    _dataHeadersOptions.nLocation += 7;
+                    _dataHeadersOptions.nCount = nNumberOfBlocks;
+                    _dataHeadersOptions.nSize = nCurrentOffset - 7;
+
+                    listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+                }
             } else if (dataHeadersOptions.nID == STRUCTID_RAR50_SIGNATURE) {
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
 
                 dataHeader.listRecords.append(getDataRecord(0, 8, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+
+                listResult.append(dataHeader);
+
+                if (dataHeadersOptions.bChildren) {
+                    // Count RAR 5.0 headers for table
+                    qint64 nCurrentOffset = 8;
+                    qint32 nNumberOfHeaders = 0;
+
+                    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                        GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+
+                        if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
+                            nNumberOfHeaders++;
+                            nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
+
+                            if (genericHeader.nType == HEADERTYPE5_ENDARC) {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Create table of RAR 5.0 headers
+                    DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+                    _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+                    _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+                    _dataHeadersOptions.nID = STRUCTID_RAR50_HEADER;
+                    _dataHeadersOptions.nLocation += 8;
+                    _dataHeadersOptions.nCount = nNumberOfHeaders;
+                    _dataHeadersOptions.nSize = nCurrentOffset - 8;
+
+                    listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+                }
+            } else if (dataHeadersOptions.nID == STRUCTID_RAR40_HEADER) {
+                GENERICBLOCK4 genericBlock = readGenericBlock4(nStartOffset);
+
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+                dataHeader.nSize = genericBlock.nHeaderSize;
+
+                dataHeader.listRecords.append(getDataRecord(0, 2, "CRC16", XBinary::VT_UINT16, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(2, 1, "Type", XBinary::VT_UINT8, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(3, 2, "Flags", XBinary::VT_UINT16, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(5, 2, "Header Size", XBinary::VT_UINT16, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+
+                listResult.append(dataHeader);
+            } else if (dataHeadersOptions.nID == STRUCTID_RAR50_HEADER) {
+                GENERICHEADER5 genericHeader = readGenericHeader5(nStartOffset);
+
+                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+                dataHeader.nSize = genericHeader.nHeaderSize;
+
+                qint64 nOffset = 0;
+                dataHeader.listRecords.append(getDataRecord(nOffset, 4, "CRC32", XBinary::VT_UINT32, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+                nOffset += 4;
+
+                // Variable-length fields (ULEB128)
+                PACKED_UINT packeInt = read_uleb128(nStartOffset + nOffset, 4);
+                dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Header Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+                nOffset += packeInt.nByteSize;
+
+                packeInt = read_uleb128(nStartOffset + nOffset, 4);
+                dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Type", XBinary::VT_ULEB128, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+                nOffset += packeInt.nByteSize;
+
+                packeInt = read_uleb128(nStartOffset + nOffset, 4);
+                dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Flags", XBinary::VT_ULEB128, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+                nOffset += packeInt.nByteSize;
+
+                if (genericHeader.nFlags & 0x0001) {
+                    packeInt = read_uleb128(nStartOffset + nOffset, 4);
+                    dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Extra Area Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+                    nOffset += packeInt.nByteSize;
+                }
+
+                if (genericHeader.nFlags & 0x0002) {
+                    packeInt = read_uleb128(nStartOffset + nOffset, 8);
+                    dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Data Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+                    nOffset += packeInt.nByteSize;
+                }
 
                 listResult.append(dataHeader);
             }
@@ -784,148 +945,6 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
     return baResult;
 }
 
-// bool XRar::packFolderToDevice(const QString &sFolderPath, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
-// {
-//     Q_UNUSED(pOptions)
-
-//     if (!XBinary::isDirectoryExists(sFolderPath)) {
-//         return false;
-//     }
-
-//     if (!pDevice || !pDevice->isWritable()) {
-//         return false;
-//     }
-
-//     // Write RAR 4.x signature (7 bytes)
-//     QByteArray baSignature;
-//     baSignature.append((char)0x52);  // 'R'
-//     baSignature.append((char)0x61);  // 'a'
-//     baSignature.append((char)0x72);  // 'r'
-//     baSignature.append((char)0x21);  // '!'
-//     baSignature.append((char)0x1A);  // EOF
-//     baSignature.append((char)0x07);  // Version marker
-//     baSignature.append((char)0x00);  // Reserved
-
-//     if (pDevice->write(baSignature) != baSignature.size()) {
-//         return false;
-//     }
-
-//     // Write Archive Header block
-//     QByteArray baArchiveHeader;
-//     QDataStream dsArchive(&baArchiveHeader, QIODevice::WriteOnly);
-//     dsArchive.setByteOrder(QDataStream::LittleEndian);
-
-//     dsArchive << (quint8)BLOCKTYPE4_ARCHIVE;  // Type
-//     dsArchive << (quint16)0x0000;             // Flags
-//     dsArchive << (quint16)7;                  // Header size
-
-//     quint16 nArchiveCRC = calculateCRC16(baArchiveHeader);
-//     QByteArray baArchiveCRC;
-//     QDataStream dsArchiveCRC(&baArchiveCRC, QIODevice::WriteOnly);
-//     dsArchiveCRC.setByteOrder(QDataStream::LittleEndian);
-//     dsArchiveCRC << nArchiveCRC;
-
-//     if (pDevice->write(baArchiveCRC) != baArchiveCRC.size()) {
-//         return false;
-//     }
-//     if (pDevice->write(baArchiveHeader) != baArchiveHeader.size()) {
-//         return false;
-//     }
-
-//     // Get list of files recursively
-//     QList<QString> listFiles;
-//     XBinary::findFiles(sFolderPath, &listFiles, true, 0, pPdStruct);
-
-//     qint32 nNumberOfFiles = listFiles.size();
-
-//     for (qint32 i = 0; (i < nNumberOfFiles) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-//         QString sFilePath = listFiles.at(i);
-//         QString sRelativePath = sFilePath.mid(sFolderPath.length() + 1);  // Relative to folder
-
-//         // Normalize path separators
-//         sRelativePath = sRelativePath.replace("\\", "/");
-
-//         QFile file(sFilePath);
-//         if (!file.open(QIODevice::ReadOnly)) {
-//             continue;
-//         }
-
-//         qint64 nFileSize = file.size();
-
-//         // Calculate CRC32
-//         quint32 nFileCRC = XBinary::_getCRC32(&file);
-
-//         // Read file data for writing
-//         file.seek(0);
-//         QByteArray baFileData = file.readAll();
-//         file.close();
-
-//         // Get file time in MS-DOS format
-//         QFileInfo fileInfo(sFilePath);
-//         QDateTime dateTime = fileInfo.lastModified();
-
-//         // Convert QDateTime to DOS date/time format
-//         QDate date = dateTime.date();
-//         QTime time = dateTime.time();
-
-//         quint16 nDosDate = 0;
-//         quint16 nDosTime = 0;
-
-//         if (date.isValid()) {
-//             qint32 nYear = date.year();
-//             if (nYear >= 1980 && nYear <= 2107) {
-//                 nDosDate = (date.day() & 0x1F) | ((date.month() & 0x0F) << 5) | (((nYear - 1980) & 0x7F) << 9);
-//             }
-//         }
-
-//         if (time.isValid()) {
-//             nDosTime = ((time.second() / 2) & 0x1F) | ((time.minute() & 0x3F) << 5) | ((time.hour() & 0x1F) << 11);
-//         }
-
-//         // Combine DOS date and time into a single 32-bit value (time in low word, date in high word)
-//         quint32 nFileTime = (static_cast<quint32>(nDosDate) << 16) | nDosTime;
-
-//         // Get file attributes
-//         quint32 nAttributes = 0x20;  // Archive attribute
-
-//         // Create file block header
-//         QByteArray baFileBlock = createFileBlock4(sRelativePath, nFileSize, nFileCRC, nFileTime, nAttributes);
-
-//         if (pDevice->write(baFileBlock) != baFileBlock.size()) {
-//             return false;
-//         }
-
-//         // Write file data (uncompressed - STORE method)
-//         if (pDevice->write(baFileData) != baFileData.size()) {
-//             return false;
-//         }
-//     }
-
-//     // Write END block
-//     QByteArray baEndBlock;
-//     QDataStream dsEnd(&baEndBlock, QIODevice::WriteOnly);
-//     dsEnd.setByteOrder(QDataStream::LittleEndian);
-
-//     dsEnd << (quint8)BLOCKTYPE4_END;   // Type
-//     dsEnd << (quint16)0x4000;          // Flags (0x4000 = last block)
-//     dsEnd << (quint16)7;               // Header size
-
-//     quint16 nEndCRC = calculateCRC16(baEndBlock);
-//     QByteArray baEndCRC;
-//     QDataStream dsEndCRC(&baEndCRC, QIODevice::WriteOnly);
-//     dsEndCRC.setByteOrder(QDataStream::LittleEndian);
-//     dsEndCRC << nEndCRC;
-
-//     if (pDevice->write(baEndCRC) != baEndCRC.size()) {
-//         return false;
-//     }
-//     if (pDevice->write(baEndBlock) != baEndBlock.size()) {
-//         return false;
-//     }
-
-//     return true;
-// }
-
 bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
@@ -1277,6 +1296,8 @@ QList<XBinary::MAPMODE> XRar::getMapModesList()
     QList<MAPMODE> listResult;
 
     listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_STREAMS);
+    listResult.append(MAPMODE_DATA);
 
     return listResult;
 }
