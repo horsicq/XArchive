@@ -24,12 +24,9 @@ XCompressedDevice::XCompressedDevice(QObject *pParent) : XIODevice(pParent)
 {
     g_pOrigDevice = nullptr;
     g_pSubDevice = nullptr;
+    g_bIsValid = false;
     g_pCurrentDevice = nullptr;
     g_pBufferDevice = nullptr;
-    g_pTempFile = nullptr;
-    g_bIsValid = false;
-    g_nBufferSize = 2 * 1024 * 1024;  // 2 MB buffer size
-    g_pBuffer = nullptr;
 }
 
 XCompressedDevice::~XCompressedDevice()
@@ -39,20 +36,7 @@ XCompressedDevice::~XCompressedDevice()
         delete g_pSubDevice;
     }
 
-    if (g_pBufferDevice) {
-        g_pBufferDevice->close();
-        delete g_pBufferDevice;
-    }
-
-    if (g_pTempFile) {
-        g_pTempFile->close();
-        delete g_pTempFile;
-    }
-
-    if (g_pBuffer) {
-        delete g_pBuffer;
-        g_pBuffer = nullptr;
-    }
+    XBinary::freeFileBuffer(&g_pBufferDevice);
 }
 
 bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart, XBinary::PDSTRUCT *pPdStruct)
@@ -64,27 +48,10 @@ bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart,
     if (fPart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE) != XBinary::COMPRESS_METHOD_STORE) {
         qint64 nUncompressedSize = fPart.mapProperties.value(XBinary::FPART_PROP_COMPRESSEDSIZE, 0).toLongLong();
 
-        if (nUncompressedSize <= g_nBufferSize) {
-            g_pBufferDevice = new QBuffer;
-            g_pBuffer = new char[nUncompressedSize];
+        g_pBufferDevice = XBinary::createFileBuffer(nUncompressedSize, pPdStruct);
 
-            if (g_pBuffer) {
-                g_pBufferDevice->setData(g_pBuffer, nUncompressedSize);
-
-                if (g_pBufferDevice->open(QIODevice::ReadWrite)) {
-                    g_pBufferDevice->setProperty("Memory", true);
-                    g_pCurrentDevice = g_pBufferDevice;
-                    bResult = XDecompress().decompressFPART(fPart, pDevice, g_pBufferDevice, pPdStruct);  // TODO connect signals
-                }
-            }
-        } else {
-            g_pTempFile = new QTemporaryFile;
-
-            if (g_pTempFile->open()) {
-                g_pCurrentDevice = g_pTempFile;
-                bResult = XDecompress().decompressFPART(fPart, pDevice, g_pTempFile, pPdStruct);
-            }
-        }
+        bResult = XDecompress().decompressFPART(fPart, pDevice, g_pBufferDevice, pPdStruct);
+        g_pCurrentDevice = g_pBufferDevice;
     } else {
         if ((fPart.nFileOffset == 0) && (pDevice->size() == fPart.nFileSize)) {
             g_pCurrentDevice = g_pOrigDevice;

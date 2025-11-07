@@ -55,7 +55,7 @@ bool XTGZ::initUnpack(UNPACK_STATE *pUnpackState, const QMap<UNPACK_PROP, QVaria
     pContext->pDevice = XBinary::createFileBuffer(getSize(), pPdStruct);
 
     // Unpack to device
-    bResult = XGzip(getDevice()).unpackSingleStream(pContext->pDevice, pPdStruct);
+    bResult = XGzip(getDevice()).unpackSingleStream(pContext->pDevice, mapProperties, pPdStruct);
 
     // Init TAR unpacking
     if (bResult) {
@@ -113,7 +113,7 @@ bool XTGZ::finishUnpack(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
         if (_pState->pTar) {
             delete _pState->pTar;
         }
-        XBinary::freeFileBuffer(&(_pState->pDevice), pPdStruct);
+        XBinary::freeFileBuffer(&(_pState->pDevice));
         delete _pState;
         pUnpackState->pContext = nullptr;
         bResult = true;

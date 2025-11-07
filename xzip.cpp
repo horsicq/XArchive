@@ -1874,7 +1874,7 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
             }
 
             if (pDecryptedDevice) {
-                freeFileBuffer(&pDecryptedDevice, pPdStruct);
+                freeFileBuffer(&pDecryptedDevice);
             }
 
             if (!bIsEncrypted) {

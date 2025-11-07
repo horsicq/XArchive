@@ -49,12 +49,9 @@ protected:
 private:
     QIODevice *g_pOrigDevice;
     SubDevice *g_pSubDevice;
-    QBuffer *g_pBufferDevice;
-    QTemporaryFile *g_pTempFile;
-    QIODevice *g_pCurrentDevice;
     bool g_bIsValid;
-    qint32 g_nBufferSize;
-    char *g_pBuffer;
+    QIODevice *g_pCurrentDevice;
+    QIODevice *g_pBufferDevice;
 };
 
 #endif  // XCOMPRESSEDDEVICE_H
