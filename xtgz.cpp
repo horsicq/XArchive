@@ -26,7 +26,6 @@ XTGZ::XTGZ(QIODevice *pDevice)
 
 XTGZ::~XTGZ()
 {
-
 }
 
 bool XTGZ::isValid(PDSTRUCT *pPdStruct)

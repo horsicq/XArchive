@@ -123,7 +123,8 @@ QString XRar::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XRAR_STRUCTID, sizeof(_TABLE_XRAR_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-qint32 XRar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords, void *pUserData, PDSTRUCT *pPdStruct)
+qint32 XRar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+                          void *pUserData, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(locType)
     Q_UNUSED(nLocation)
@@ -236,7 +237,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                         }
 
                         nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + nFileSize;
-                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset); 
+                        nMaxOffset = qMax(nMaxOffset, nCurrentOffset);
                     } else {
                         nCurrentOffset += genericBlock.nHeaderSize;
                         nMaxOffset = qMax(nMaxOffset, nCurrentOffset);
@@ -948,7 +949,7 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
 bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
-    
+
     if (!pUnpackState) {
         return false;
     }

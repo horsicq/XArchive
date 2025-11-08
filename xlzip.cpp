@@ -277,7 +277,7 @@ quint32 XLzip::_getDictionarySize(quint8 nDictSizeCode)
 bool XLzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
-    
+
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();

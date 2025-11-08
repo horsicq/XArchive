@@ -125,31 +125,31 @@ public:
 
 private:
     struct SEVENZ_FOLDER_INFO {
-        qint64 nStreamOffset;          // Offset to compressed stream
-        qint64 nStreamSize;            // Size of compressed stream
-        COMPRESS_METHOD compressMethod; // Compression method
-        COMPRESS_METHOD filterMethod;   // Filter method (BCJ, etc.)
-        QByteArray baProperties;        // Compression properties
-        qint64 nUnpackSize;            // Total uncompressed size of folder
-        QList<qint32> listFileIndices;  // Indices of files in this folder
+        qint64 nStreamOffset;            // Offset to compressed stream
+        qint64 nStreamSize;              // Size of compressed stream
+        COMPRESS_METHOD compressMethod;  // Compression method
+        COMPRESS_METHOD filterMethod;    // Filter method (BCJ, etc.)
+        QByteArray baProperties;         // Compression properties
+        qint64 nUnpackSize;              // Total uncompressed size of folder
+        QList<qint32> listFileIndices;   // Indices of files in this folder
     };
 
     struct SEVENZ_UNPACK_CONTEXT {
         qint64 nSignatureSize;
         QList<qint64> listRecordOffsets;
         QList<ARCHIVERECORD> listArchiveRecords;  // Pre-parsed archive records
-        QList<SEVENZ_FOLDER_INFO> listFolders;     // Folder (solid block) information
-        QMap<qint32, qint32> mapFileToFolder;      // Maps file index to folder index
-        QMap<qint32, QByteArray> mapFolderCache;   // Cache of decompressed folder data
+        QList<SEVENZ_FOLDER_INFO> listFolders;    // Folder (solid block) information
+        QMap<qint32, qint32> mapFileToFolder;     // Maps file index to folder index
+        QMap<qint32, QByteArray> mapFolderCache;  // Cache of decompressed folder data
     };
 
     struct SEVENZ_PACK_CONTEXT {
         qint64 nHeaderOffset;
-        QList<ARCHIVERECORD> listArchiveRecords;    // Records to pack
-        QList<QByteArray> listCompressedData;       // Compressed data streams
-        QList<quint32> listCRCs;                    // CRC values for streams
-        COMPRESS_METHOD compressMethod;             // Compression method to use
-        qint32 nCompressionLevel;                   // Compression level
+        QList<ARCHIVERECORD> listArchiveRecords;  // Records to pack
+        QList<QByteArray> listCompressedData;     // Compressed data streams
+        QList<quint32> listCRCs;                  // CRC values for streams
+        COMPRESS_METHOD compressMethod;           // Compression method to use
+        qint32 nCompressionLevel;                 // Compression level
     };
 
     // Helper functions for writing 7z format

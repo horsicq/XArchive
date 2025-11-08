@@ -673,7 +673,7 @@ bool XCab::writeCFData(QIODevice *pDevice, const CFDATA &cfData, const QByteArra
 bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
-    
+
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
@@ -977,7 +977,7 @@ bool XCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     if (pState && pState->pContext && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
-        
+
         pState->nCurrentIndex++;
 
         if (pState->nCurrentIndex < pState->nNumberOfRecords) {
@@ -1030,7 +1030,7 @@ bool XCab::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP
     CAB_PACK_CONTEXT *pContext = new CAB_PACK_CONTEXT;
     pContext->nCurrentOffset = 0;
     pContext->nFolderUncompressedOffset = 0;  // Initialize folder offset
-    pContext->nCompressionType = 0x0000;  // STORE method by default
+    pContext->nCompressionType = 0x0000;      // STORE method by default
 
     // Write CAB signature
     QByteArray baSignature("MSCF");
@@ -1103,8 +1103,8 @@ bool XCab::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     CFFILE cfFile = {};
     cfFile.cbFile = nFileSize;
     cfFile.uoffFolderStart = pContext->nFolderUncompressedOffset;  // Offset in uncompressed folder data
-    cfFile.iFolder = 0;          // Single folder for simplicity
-    cfFile.attribs = 0x20;       // Archive attribute
+    cfFile.iFolder = 0;                                            // Single folder for simplicity
+    cfFile.attribs = 0x20;                                         // Archive attribute
 
     // Convert file time to DOS format
     QDateTime dateTime = fileInfo.lastModified();
@@ -1263,17 +1263,17 @@ bool XCab::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
     // Create and write single folder entry
     // Note: coffCabStart will point to where CFDATA starts (after all CFFILE entries)
     qint64 nDataBlocksOffset = nFoldersOffset + sizeof(CFFOLDER);
-    
+
     // Calculate where CFFILE entries will be
     qint64 nFilesOffset = nDataBlocksOffset;
-    
+
     // Calculate total size of all CFFILE entries to determine where CFDATA will actually start
     qint64 nTotalFileEntriesSize = 0;
     for (qint32 i = 0; i < pContext->listFiles.size(); i++) {
         QString sFileName = (i < pContext->listFileNames.size()) ? pContext->listFileNames.at(i) : QString("file_%1.dat").arg(i);
         nTotalFileEntriesSize += sizeof(CFFILE) + sFileName.length() + 1;
     }
-    
+
     // Actual CFDATA offset
     nDataBlocksOffset = nFilesOffset + nTotalFileEntriesSize;
 

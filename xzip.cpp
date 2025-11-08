@@ -1597,7 +1597,7 @@ bool XZip::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     pState->mapProperties = mapProperties;
-    
+
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();

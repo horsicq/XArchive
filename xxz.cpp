@@ -347,7 +347,7 @@ QList<XArchive::RECORD> XXZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 bool XXZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
-    
+
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();

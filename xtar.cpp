@@ -370,7 +370,7 @@ void XTAR::writeOctal(char *pDest, qint32 nSize, qint64 nValue)
 bool XTAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
-    
+
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -630,17 +630,17 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     QString sBasePath = pState->mapProperties.value(PACK_PROP_BASEPATH).toString();
 
     switch (pathMode) {
-    case XBinary::PATH_MODE_ABSOLUTE: sStoredPath = fileInfo.absoluteFilePath(); break;
-    case XBinary::PATH_MODE_RELATIVE:
-        if (!sBasePath.isEmpty()) {
-            QDir baseDir(sBasePath);
-            sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
-        } else {
-            sStoredPath = fileInfo.fileName();
-        }
-        break;
-    case XBinary::PATH_MODE_BASENAME:
-    default: sStoredPath = fileInfo.fileName(); break;
+        case XBinary::PATH_MODE_ABSOLUTE: sStoredPath = fileInfo.absoluteFilePath(); break;
+        case XBinary::PATH_MODE_RELATIVE:
+            if (!sBasePath.isEmpty()) {
+                QDir baseDir(sBasePath);
+                sStoredPath = baseDir.relativeFilePath(fileInfo.absoluteFilePath());
+            } else {
+                sStoredPath = fileInfo.fileName();
+            }
+            break;
+        case XBinary::PATH_MODE_BASENAME:
+        default: sStoredPath = fileInfo.fileName(); break;
     }
 
     // Create TAR header

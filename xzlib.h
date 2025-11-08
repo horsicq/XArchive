@@ -67,7 +67,7 @@ private:
     };
 
     struct ZLIB_PACK_CONTEXT {
-        bool bDataAdded;           // Track if data has been added (only one stream allowed)
+        bool bDataAdded;  // Track if data has been added (only one stream allowed)
     };
 };
 
