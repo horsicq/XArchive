@@ -24,6 +24,10 @@ XDOS16::XDOS16(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
+XDOS16::~XDOS16()
+{
+}
+
 bool XDOS16::isValid(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

@@ -29,14 +29,16 @@ class XDOS16 : public XArchive {
 
 public:
     explicit XDOS16(QIODevice *pDevice = nullptr);
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual ~XDOS16();
+
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual FT getFileType();
-    virtual _MEMORY_MAP getMemoryMap(XBinary::MAPMODE mapMode = XBinary::MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
-    virtual OSNAME getOsName();
+    virtual FT getFileType() override;
+    virtual _MEMORY_MAP getMemoryMap(XBinary::MAPMODE mapMode = XBinary::MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual OSNAME getOsName() override;
     virtual QString getOsVersion() override;
     virtual MODE getMode() override;
     virtual QString getArch() override;
