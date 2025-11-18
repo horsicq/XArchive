@@ -78,6 +78,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xlzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xxz.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xxz.h
+    ${CMAKE_CURRENT_LIST_DIR}/xminidump.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xminidump.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.cpp

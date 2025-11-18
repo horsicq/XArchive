@@ -86,6 +86,8 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XISO9660(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_AR)) {
         pResult = new X_Ar(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_MINIDUMP)) {
+        pResult = new XMiniDump(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         pResult = new XDOS16(pDevice);
     } else {
