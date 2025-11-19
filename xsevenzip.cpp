@@ -365,15 +365,24 @@ XBinary::COMPRESS_METHOD XSevenZip::codecToCompressMethod(const QByteArray &baCo
 {
     COMPRESS_METHOD result = COMPRESS_METHOD_UNKNOWN;
 
-    if (baCodec.size() >= 3) {
+    if (baCodec.isEmpty()) {
+        return result;
+    }
+
+    // Check 1-byte codecs first
+    if (baCodec.size() == 1) {
+        if (baCodec[0] == '\x00') {
+            result = COMPRESS_METHOD_STORE;  // Copy (uncompressed)
+        } else if (baCodec[0] == '\x21') {
+            result = COMPRESS_METHOD_LZMA2;  // LZMA2
+        }
+    } else if (baCodec.size() >= 3) {
         // 7-Zip codec IDs are typically 3+ bytes
         // Common codecs (from 7-Zip specification)
         if (baCodec.startsWith(QByteArray("\x00", 1))) {
             result = COMPRESS_METHOD_STORE;  // Copy (uncompressed)
         } else if (baCodec.startsWith(QByteArray("\x03\x01\x01", 3))) {
             result = COMPRESS_METHOD_LZMA;  // LZMA
-        } else if (baCodec.startsWith(QByteArray("\x21", 1))) {
-            result = COMPRESS_METHOD_LZMA2;  // LZMA2
         } else if (baCodec.startsWith(QByteArray("\x04\x01\x08", 3))) {
             result = COMPRESS_METHOD_DEFLATE;  // Deflate
         } else if (baCodec.startsWith(QByteArray("\x04\x01\x09", 3))) {
@@ -1682,6 +1691,282 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     }
                     qDebug() << "=== END listRecords DEBUG OUTPUT ===";
 #endif
+
+                    // Process the parsed records to extract file information
+                    if (pHeaderData) {
+                        QList<QString> listFileNames;
+                        QList<qint64> listFilePackedSizes;
+                        QList<qint64> listFileUnpackedSizes;
+                        QList<qint64> listStreamOffsets;
+                        QList<QByteArray> listCodecs;
+                        QList<QByteArray> listCoderProperties;
+                        
+                        QList<XSevenZip::SZRECORD> listRecords;
+                        SZSTATE state = {};
+                        state.pData = pHeaderData;
+                        state.nSize = nHeaderSize;
+                        state.nCurrentOffset = 0;
+                        state.bIsError = false;
+                        state.sErrorString = QString();
+                        
+                        _handleId(&listRecords, XSevenZip::k7zIdHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
+                        qint32 nNumberOfRecords = listRecords.count();
+                        
+                        // Extract file information from parsed records
+                        for (qint32 i = 0; i < nNumberOfRecords; i++) {
+                            SZRECORD rec = listRecords.at(i);
+                            if (rec.impType == IMPTYPE_FILENAME) {
+                                listFileNames.append(rec.varValue.toString());
+                            } else if (rec.impType == IMPTYPE_STREAMPACKEDSIZE) {
+                                listFilePackedSizes.append(rec.varValue.toLongLong());
+                            } else if (rec.impType == IMPTYPE_STREAMUNPACKEDSIZE) {
+                                listFileUnpackedSizes.append(rec.varValue.toLongLong());
+                            } else if (rec.impType == IMPTYPE_STREAMOFFSET) {
+                                listStreamOffsets.append(rec.varValue.toLongLong());
+                            } else if (rec.impType == IMPTYPE_CODER) {
+                                listCodecs.append(rec.varValue.toByteArray());
+                            } else if (rec.impType == IMPTYPE_CODERPROPERTY) {
+                                listCoderProperties.append(rec.varValue.toByteArray());
+                            }
+                        }
+                        
+#ifdef QT_DEBUG
+                        qDebug() << "XSevenZip::initUnpack: Extracted metadata:";
+                        qDebug() << "  File names:" << listFileNames.count();
+                        qDebug() << "  Packed sizes:" << listFilePackedSizes.count();
+                        qDebug() << "  Unpacked sizes:" << listFileUnpackedSizes.count();
+                        qDebug() << "  Stream offsets:" << listStreamOffsets.count();
+                        qDebug() << "  Codecs:" << listCodecs.count();
+                        for (qint32 i = 0; i < listCodecs.count(); i++) {
+                            QString sCodecHex;
+                            for (qint32 j = 0; j < listCodecs.at(i).size(); j++) {
+                                sCodecHex += QString("%1 ").arg((quint8)listCodecs.at(i)[j], 2, 16, QChar('0'));
+                            }
+                            qDebug() << "    Codec" << i << ":" << sCodecHex << "->" << codecToCompressMethod(listCodecs.at(i));
+                        }
+                        qDebug() << "  Codec properties:" << listCoderProperties.count();
+                        for (qint32 i = 0; i < listCoderProperties.count(); i++) {
+                            QString sPropHex;
+                            for (qint32 j = 0; j < listCoderProperties.at(i).size(); j++) {
+                                sPropHex += QString("%1 ").arg((quint8)listCoderProperties.at(i)[j], 2, 16, QChar('0'));
+                            }
+                            qDebug() << "    Property" << i << "size:" << listCoderProperties.at(i).size() << "bytes -" << sPropHex;
+                        }
+#endif
+                        
+                        // File logging for all builds (unconditional)
+                        {
+                            QFile logFile(QDir::tempPath() + "/xsevenzip_debug.log");
+                            if (logFile.open(QIODevice::Append | QIODevice::Text)) {
+                                QTextStream log(&logFile);
+                                log << "=== XSevenZip::initUnpack ===" << "\n";
+                                log << "Codecs: " << listCodecs.count() << "\n";
+                                for (qint32 i = 0; i < listCodecs.count(); i++) {
+                                    QString sCodecHex;
+                                    for (qint32 j = 0; j < listCodecs.at(i).size(); j++) {
+                                        sCodecHex += QString("%1 ").arg((quint8)listCodecs.at(i)[j], 2, 16, QChar('0'));
+                                    }
+                                    COMPRESS_METHOD method = codecToCompressMethod(listCodecs.at(i));
+                                    log << "  Codec " << i << ": " << sCodecHex << " -> " << method << "\n";
+                                }
+                                log << "Codec properties: " << listCoderProperties.count() << "\n";
+                                for (qint32 i = 0; i < listCoderProperties.count(); i++) {
+                                    QString sPropHex;
+                                    for (qint32 j = 0; j < listCoderProperties.at(i).size(); j++) {
+                                        sPropHex += QString("%1 ").arg((quint8)listCoderProperties.at(i)[j], 2, 16, QChar('0'));
+                                    }
+                                    log << "  Property " << i << " size: " << listCoderProperties.at(i).size() << " bytes - " << sPropHex << "\n";
+                                }
+                                logFile.close();
+                            }
+                        }
+                        
+                        // Determine compression method
+                        COMPRESS_METHOD filterMethod = COMPRESS_METHOD_UNKNOWN;
+                        COMPRESS_METHOD compressMethod = COMPRESS_METHOD_STORE;
+                        
+                        for (qint32 i = 0; i < listCodecs.count(); i++) {
+                            COMPRESS_METHOD method = codecToCompressMethod(listCodecs.at(i));
+                            if (method == COMPRESS_METHOD_BCJ || method == COMPRESS_METHOD_BCJ2) {
+                                filterMethod = method;
+                            } else if (method != COMPRESS_METHOD_UNKNOWN) {
+                                compressMethod = method;
+                            }
+                        }
+                        
+                        // Detect if this is a solid archive
+                        // Solid archive: multiple files, but only ONE compressed stream
+                        bool bIsSolid = false;
+                        qint64 nSolidStreamOffset = 0;
+                        qint64 nSolidStreamSize = 0;
+                        qint64 nSolidUnpackSize = 0;
+                        
+                        qint64 nDataOffset = sizeof(SIGNATUREHEADER);
+                        
+                        if (listFileNames.count() > 1 && listCodecs.count() == 1 && 
+                            (compressMethod == COMPRESS_METHOD_LZMA || compressMethod == COMPRESS_METHOD_LZMA2)) {
+                            // Check if all files share the same compressed stream (solid archive)
+                            // In solid archives: listStreamOffsets contains offsets in DECOMPRESSED data
+                            bIsSolid = true;
+                            nSolidStreamOffset = nDataOffset;
+                            
+                            // Sum all unpacked sizes to get total decompressed size
+                            for (qint32 i = 0; i < listFileUnpackedSizes.count(); i++) {
+                                nSolidUnpackSize += listFileUnpackedSizes.at(i);
+                            }
+                            
+                            // Use the first (and only) packed size
+                            if (listFilePackedSizes.count() > 0) {
+                                nSolidStreamSize = listFilePackedSizes.at(0);
+                            }
+                            
+#ifdef QT_DEBUG
+                            qDebug() << "SOLID ARCHIVE DETECTED:";
+                            qDebug() << "  Files:" << listFileNames.count();
+                            qDebug() << "  Compressed stream offset:" << nSolidStreamOffset;
+                            qDebug() << "  Compressed stream size:" << nSolidStreamSize;
+                            qDebug() << "  Total uncompressed size:" << nSolidUnpackSize;
+#endif
+                        }
+                        
+                        // Create ARCHIVERECORD entries
+                        for (qint32 i = 0; i < listFileNames.count(); i++) {
+                            ARCHIVERECORD record = {};
+                            record.mapProperties.insert(FPART_PROP_ORIGINALNAME, listFileNames.at(i));
+                            
+                            if (i < listFileUnpackedSizes.count()) {
+                                record.nDecompressedSize = listFileUnpackedSizes.at(i);
+                            }
+                            if (i < listFilePackedSizes.count()) {
+                                record.nStreamSize = listFilePackedSizes.at(i);
+                            } else {
+                                record.nStreamSize = record.nDecompressedSize;
+                            }
+                            if (i < listStreamOffsets.count()) {
+                                if (bIsSolid) {
+                                    // In solid archives, stream offsets are in DECOMPRESSED data
+                                    record.nStreamOffset = listStreamOffsets.at(i);
+                                } else {
+                                    record.nStreamOffset = nDataOffset + listStreamOffsets.at(i);
+                                }
+                            } else {
+                                record.nStreamOffset = bIsSolid ? 0 : nDataOffset;
+                            }
+                            
+                            record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, compressMethod);
+                            if (filterMethod != COMPRESS_METHOD_UNKNOWN) {
+                                record.mapProperties.insert(FPART_PROP_FILTERMETHOD, filterMethod);
+                            }
+                            
+                            // Store compression properties if available
+                            if (listCoderProperties.count() > 0) {
+                                record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, listCoderProperties.at(0));
+                            }
+                            
+                            // Mark solid archive files
+                            if (bIsSolid) {
+                                record.mapProperties.insert(FPART_PROP_SOLID, true);
+                            }
+                            
+                            pContext->listArchiveRecords.append(record);
+                            pContext->listRecordOffsets.append(record.nStreamOffset);
+                        }
+                        
+                        // Decompress solid block if detected
+                        if (bIsSolid && nSolidStreamSize > 0 && nSolidUnpackSize > 0) {
+#ifdef QT_DEBUG
+                            qDebug() << "Decompressing solid block...";
+#endif
+                            // Create buffer device for decompressed data
+                            QIODevice *pBufferDevice = createFileBuffer(nSolidUnpackSize, pPdStruct);
+                            
+                            if (pBufferDevice) {
+                                // Create SubDevice for compressed stream
+                                SubDevice sd(getDevice(), nSolidStreamOffset, nSolidStreamSize);
+                                
+                                if (sd.open(QIODevice::ReadOnly)) {
+                                    if (pBufferDevice->open(QIODevice::WriteOnly)) {
+                                        bool bDecompressed = false;
+                                        
+                                        // Decompress based on method
+                                        XLZMADecoder lzmaDecoder;
+                                        QByteArray baProperties;
+                                        
+                                        if (listCoderProperties.count() > 0) {
+                                            baProperties = listCoderProperties.at(0);
+                                        }
+                                        
+                                        DATAPROCESS_STATE state = {};
+                                        state.pDeviceInput = &sd;
+                                        state.pDeviceOutput = pBufferDevice;
+                                        state.nInputOffset = 0;
+                                        state.nInputLimit = nSolidStreamSize;
+                                        state.nProcessedOffset = 0;
+                                        state.nProcessedLimit = -1;
+                                        
+                                        if (compressMethod == COMPRESS_METHOD_LZMA) {
+                                            bDecompressed = lzmaDecoder.decompress(&state, baProperties, pPdStruct);
+                                        } else {
+                                            // LZMA2: Convert properties
+                                            QByteArray baLzma2Prop;
+                                            if (baProperties.size() == 5) {
+                                                quint32 nDictSize = ((quint8)baProperties[1]) |
+                                                                   (((quint32)(quint8)baProperties[2]) << 8) |
+                                                                   (((quint32)(quint8)baProperties[3]) << 16) |
+                                                                   (((quint32)(quint8)baProperties[4]) << 24);
+                                                
+                                                quint8 nProp = 40;
+                                                for (quint8 p = 0; p <= 40; p++) {
+                                                    quint64 nTestDictSize = ((quint64)(2 | (p & 1))) << ((p / 2) + 11);
+                                                    if (nTestDictSize >= nDictSize) {
+                                                        nProp = p;
+                                                        break;
+                                                    }
+                                                }
+                                                baLzma2Prop.append((char)nProp);
+                                            } else if (baProperties.size() == 1) {
+                                                baLzma2Prop = baProperties;
+                                            }
+                                            
+                                            bDecompressed = lzmaDecoder.decompressLZMA2(&state, baLzma2Prop, pPdStruct);
+                                        }
+                                        
+                                        pBufferDevice->close();
+                                        
+                                        if (bDecompressed) {
+                                            // Read all data from buffer device and store in cache
+                                            pBufferDevice->open(QIODevice::ReadOnly);
+                                            QByteArray baDecompressed = pBufferDevice->readAll();
+                                            pBufferDevice->close();
+                                            
+                                            pContext->mapFolderCache.insert(0, baDecompressed);
+                                            
+#ifdef QT_DEBUG
+                                            qDebug() << "Solid block decompressed successfully:" << baDecompressed.size() << "bytes";
+#endif
+                                        } else {
+#ifdef QT_DEBUG
+                                            qWarning() << "Failed to decompress solid block";
+#endif
+                                        }
+                                    }
+                                    
+                                    sd.close();
+                                }
+                                
+                                // Free the buffer device
+                                freeFileBuffer(&pBufferDevice);
+                            } else {
+#ifdef QT_DEBUG
+                                qWarning() << "Failed to allocate buffer for solid block:" << nSolidUnpackSize << "bytes";
+#endif
+                            }
+                        }
+                        
+#ifdef QT_DEBUG
+                        qDebug() << "XSevenZip::initUnpack: Created" << pContext->listArchiveRecords.count() << "archive records";
+#endif
+                    }
                 }
 
                 //                 if (bIsEncodedHeader) {
@@ -2563,9 +2848,44 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
 #ifdef QT_DEBUG
         qDebug() << "_unpack: Unpacking" << ar.mapProperties.value(FPART_PROP_ORIGINALNAME).toString() << "StreamOffset:" << ar.nStreamOffset
                  << "StreamSize:" << ar.nStreamSize << "DecompressedSize:" << ar.nDecompressedSize;
+        if (ar.mapProperties.contains(FPART_PROP_COMPRESSMETHOD)) {
+            qDebug() << "  CompressMethod:" << ar.mapProperties.value(FPART_PROP_COMPRESSMETHOD).toUInt();
+        }
 #endif
 
-        if (ar.nStreamSize > 0) {
+        // Check if this is a solid archive file
+        bool bIsSolid = ar.mapProperties.value(FPART_PROP_SOLID, false).toBool();
+        
+        if (bIsSolid && pContext->mapFolderCache.contains(0)) {
+            // Extract from cached solid block
+            QByteArray baDecompressed = pContext->mapFolderCache.value(0);
+            qint64 nOffsetInDecompressed = ar.nStreamOffset;  // Offset in decompressed buffer
+            qint64 nSize = ar.nDecompressedSize;
+            
+#ifdef QT_DEBUG
+            qDebug() << "  Extracting from solid block cache: offset=" << nOffsetInDecompressed << "size=" << nSize;
+#endif
+            
+            if (nOffsetInDecompressed >= 0 && nSize > 0 && 
+                nOffsetInDecompressed + nSize <= baDecompressed.size()) {
+                // Write data from cached buffer
+                qint64 nWritten = pDevice->write(baDecompressed.constData() + nOffsetInDecompressed, nSize);
+                bResult = (nWritten == nSize);
+                
+#ifdef QT_DEBUG
+                if (bResult) {
+                    qDebug() << "  Successfully extracted" << nWritten << "bytes from solid block";
+                } else {
+                    qWarning() << "  Failed to write data: expected" << nSize << "wrote" << nWritten;
+                }
+#endif
+            } else {
+#ifdef QT_DEBUG
+                qWarning() << "  Invalid offset/size in solid block: offset=" << nOffsetInDecompressed 
+                          << "size=" << nSize << "buffer size=" << baDecompressed.size();
+#endif
+            }
+        } else if (ar.nStreamSize > 0) {
             SubDevice sd(getDevice(), ar.nStreamOffset, ar.nStreamSize);
 
             if (sd.open(QIODevice::ReadOnly)) {
@@ -2580,14 +2900,94 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
                     state.nInputLimit = ar.nStreamSize;
                     state.nProcessedOffset = 0;
                     state.nProcessedLimit = -1;
+                    
+#ifdef QT_DEBUG
+                    qDebug() << "Decompression setup: InputLimit=" << state.nInputLimit << "DecompressedSize=" << ar.nDecompressedSize;
+#endif
 
                     switch (compressMethod) {
                         case COMPRESS_METHOD_LZMA:
                         case COMPRESS_METHOD_LZMA2: {
                             XLZMADecoder lzmaDecoder;
-                            // TODO get properties
+                            // Get compression properties from archive record
                             QByteArray baProperties;
-                            bResult = lzmaDecoder.decompress(&state, baProperties, pPdStruct);
+                            if (ar.mapProperties.contains(FPART_PROP_COMPRESSPROPERTIES)) {
+                                baProperties = ar.mapProperties.value(FPART_PROP_COMPRESSPROPERTIES).toByteArray();
+                            }
+                            
+#ifdef QT_DEBUG
+                            qDebug() << "Decompressing with" << (compressMethod == COMPRESS_METHOD_LZMA ? "LZMA" : "LZMA2");
+                            qDebug() << "  Properties size:" << baProperties.size() << "bytes";
+                            if (baProperties.size() > 0) {
+                                QString sHex;
+                                for (qint32 i = 0; i < baProperties.size(); i++) {
+                                    sHex += QString("%1 ").arg((quint8)baProperties[i], 2, 16, QChar('0'));
+                                }
+                                qDebug() << "  Properties hex:" << sHex;
+                            }
+#endif
+                            
+                            if (compressMethod == COMPRESS_METHOD_LZMA) {
+                                bResult = lzmaDecoder.decompress(&state, baProperties, pPdStruct);
+                            } else {
+                                // LZMA2: Convert 5-byte LZMA properties to 1-byte LZMA2 property
+                                // 7z format stores full LZMA properties even for LZMA2
+                                QByteArray baLzma2Prop;
+                                if (baProperties.size() == 5) {
+                                    // Extract dictionary size from bytes 1-4 (little-endian)
+                                    quint32 nDictSize = ((quint8)baProperties[1]) |
+                                                       (((quint32)(quint8)baProperties[2]) << 8) |
+                                                       (((quint32)(quint8)baProperties[3]) << 16) |
+                                                       (((quint32)(quint8)baProperties[4]) << 24);
+                                    
+                                    // Convert dictionary size to LZMA2 1-byte property
+                                    // Formula: dicSize = ((2 | (prop & 1)) << (prop / 2 + 11))
+                                    // Inverse: Find prop such that result >= nDictSize (round up to next valid size)
+                                    quint8 nProp = 40; // Maximum prop value
+                                    for (quint8 p = 0; p <= 40; p++) {
+                                        quint64 nTestDictSize = ((quint64)(2 | (p & 1))) << ((p / 2) + 11);
+                                        if (nTestDictSize >= nDictSize) {
+                                            nProp = p;
+                                            break;
+                                        }
+                                    }
+                                    
+                                    baLzma2Prop.append((char)nProp);
+                                    
+                                    // Log conversion
+                                    QFile logFile(QDir::tempPath() + "/xsevenzip_debug.log");
+                                    if (logFile.open(QIODevice::Append | QIODevice::Text)) {
+                                        QTextStream log(&logFile);
+                                        log << "=== LZMA2 Property Conversion ===" << "\n";
+                                        log << "  Input (5 bytes LZMA): " << QString("%1 %2 %3 %4 %5").arg((quint8)baProperties[0], 2, 16, QChar('0'))
+                                            .arg((quint8)baProperties[1], 2, 16, QChar('0')).arg((quint8)baProperties[2], 2, 16, QChar('0'))
+                                            .arg((quint8)baProperties[3], 2, 16, QChar('0')).arg((quint8)baProperties[4], 2, 16, QChar('0')) << "\n";
+                                        log << "  Extracted dict size: " << nDictSize << " bytes (" << (nDictSize / 1024) << " KB)" << "\n";
+                                        log << "  Output (1 byte LZMA2): " << QString("%1").arg((quint8)baLzma2Prop[0], 2, 16, QChar('0')) << "\n";
+                                        quint64 nResultDictSize = ((quint64)(2 | (nProp & 1))) << ((nProp / 2) + 11);
+                                        log << "  Resulting dict size: " << nResultDictSize << " bytes (" << (nResultDictSize / 1024) << " KB)" << "\n";
+                                        logFile.close();
+                                    }
+                                } else if (baProperties.size() == 1) {
+                                    // Already LZMA2 format
+                                    baLzma2Prop = baProperties;
+                                }
+                                
+                                bResult = lzmaDecoder.decompressLZMA2(&state, baLzma2Prop, pPdStruct);
+                            }
+                            
+                            // Log LZMA/LZMA2 decompression result
+                            {
+                                QFile logFile(QDir::tempPath() + "/xsevenzip_debug.log");
+                                if (logFile.open(QIODevice::Append | QIODevice::Text)) {
+                                    QTextStream log(&logFile);
+                                    log << "=== " << (compressMethod == COMPRESS_METHOD_LZMA ? "LZMA" : "LZMA2") << " Decompression Result ===" << "\n";
+                                    log << "  Success: " << (bResult ? "true" : "false") << "\n";
+                                    log << "  Expected size: " << ar.nDecompressedSize << " bytes" << "\n";
+                                    log << "  Actual size: " << pDevice->size() << " bytes" << "\n";
+                                    logFile.close();
+                                }
+                            }
                             break;
                         }
                         case COMPRESS_METHOD_STORE: {
@@ -2604,15 +3004,52 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
 
                 sd.close();
             }
+#ifdef QT_DEBUG
+            else {
+                qDebug() << "_unpack: No compressed stream data (nStreamSize=" << ar.nStreamSize << ")";
+            }
+#endif
+        } else if (bIsSolid) {
+#ifdef QT_DEBUG
+            qWarning() << "_unpack: Solid archive but no cached data available";
+#endif
         }
 
 #ifdef QT_DEBUG
         if (!bResult) {
             qDebug() << "_unpack: Failed to unpack record at index" << pState->nCurrentIndex;
+        } else {
+            qint64 nActualSize = pDevice->size();
+            qDebug() << "_unpack: Successfully unpacked. Expected:" << ar.nDecompressedSize << "bytes, Actual:" << nActualSize << "bytes";
         }
 #endif
     }
 
+    return bResult;
+}
+
+bool XSevenZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+    
+    bool bResult = true;
+    
+    if (pState && pState->pContext) {
+        SEVENZ_UNPACK_CONTEXT *pContext = (SEVENZ_UNPACK_CONTEXT *)pState->pContext;
+        
+        // Free cached solid block data if any
+        if (!pContext->mapFolderCache.isEmpty()) {
+#ifdef QT_DEBUG
+            qDebug() << "XSevenZip::finishUnpack: Freeing" << pContext->mapFolderCache.size() << "cached solid blocks";
+#endif
+            pContext->mapFolderCache.clear();
+        }
+        
+        // Delete context
+        delete pContext;
+        pState->pContext = nullptr;
+    }
+    
     return bResult;
 }
 
