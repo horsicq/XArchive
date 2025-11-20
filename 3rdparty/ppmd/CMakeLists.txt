@@ -11,6 +11,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 include_directories(${PROJECT_SOURCE_DIR}/src/)
 
 add_library(ppmd STATIC
+${PROJECT_SOURCE_DIR}/src/Ppmd7.c
+${PROJECT_SOURCE_DIR}/src/Ppmd7Dec.c
 ${PROJECT_SOURCE_DIR}/src/Ppmd8.c
 ${PROJECT_SOURCE_DIR}/src/Ppmd8Dec.c
 )

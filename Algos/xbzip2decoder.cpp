@@ -69,8 +69,8 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
                     }
                 }
 
-                // If we have input or previous buffered data, decompress
-                if (strm.avail_in > 0 || bReadMore == false) {
+                // Only decompress if we have input data available
+                if (strm.avail_in > 0) {
                     strm.total_in_hi32 = 0;
                     strm.total_in_lo32 = 0;
                     strm.total_out_hi32 = 0;
@@ -91,9 +91,9 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
                             break;
                         }
                     }
-                } else {
-                    // No input and nothing to read
-                    ret = BZ_MEM_ERROR;
+                } else if (!bReadMore) {
+                    // No more data to read and buffer is empty - exit loop
+                    // The stream should have ended by now if data was valid
                     break;
                 }
 

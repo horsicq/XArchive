@@ -142,6 +142,7 @@ private:
         QList<SEVENZ_FOLDER_INFO> listFolders;    // Folder (solid block) information
         QMap<qint32, qint32> mapFileToFolder;     // Maps file index to folder index
         QMap<qint32, QByteArray> mapFolderCache;  // Cache of decompressed folder data
+        QString sPassword;                        // Archive password (if encrypted)
     };
 
     struct SEVENZ_PACK_CONTEXT {
@@ -183,7 +184,8 @@ private:
         IMPTYPE_FILEATTRIBUTES,
         IMPTYPE_FILETIME,
         IMPTYPE_FILEPACKEDSIZE,
-        IMPTYPE_FILEUNPACKEDSIZE
+        IMPTYPE_FILEUNPACKEDSIZE,
+        IMPTYPE_NUMUNPACKSTREAM  // Number of files in each folder (NumUnpackStream)
     };
 
     struct SZRECORD {
