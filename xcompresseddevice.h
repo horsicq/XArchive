@@ -47,11 +47,11 @@ protected:
     virtual qint64 writeData(const char *pData, qint64 nMaxSize);
 
 private:
-    QIODevice *g_pOrigDevice;
-    SubDevice *g_pSubDevice;
-    bool g_bIsValid;
-    QIODevice *g_pCurrentDevice;
-    QIODevice *g_pBufferDevice;
+    QIODevice *m_pOrigDevice;
+    SubDevice *m_pSubDevice;
+    bool m_bIsValid;
+    QIODevice *m_pCurrentDevice;
+    QIODevice *m_pBufferDevice;
 };
 
 #endif  // XCOMPRESSEDDEVICE_H
