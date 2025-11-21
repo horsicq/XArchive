@@ -20,6 +20,8 @@ unix:macx {
 }
 
 SOURCES += \
+    $$PWD/src/Ppmd7.c \
+    $$PWD/src/Ppmd7Dec.c \
     $$PWD/src/Ppmd8.c \
     $$PWD/src/Ppmd8Dec.c
 
@@ -29,4 +31,3 @@ HEADERS += \
 TARGETLIB_PATH = $$PWD
 
 DESTDIR=$${TARGETLIB_PATH}/libs
-
