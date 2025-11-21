@@ -31,8 +31,8 @@
 #include <QIODevice>
 #include "xbinary.h"
 
-#include "../inbox/C/Ppmd.h"
-#include "../inbox/C/Ppmd7.h"
+#include "Ppmd.h"
+#include "Ppmd7.h"
 
 // Forward declaration for internal implementation
 struct XPPMd7ModelPrivate;

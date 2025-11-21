@@ -24,22 +24,8 @@
 #include "xbinary.h"
 #include "xsha256decoder.h"
 
-// Copy selected AES definitions from 7z Aes.h to avoid using inbox includes.
-
-// Basic types used by AES implementation
-typedef unsigned char Byte;
-typedef unsigned int UInt32;
-
 // AES constants
 #define AES_BLOCK_SIZE 16
-#define AES_NUM_IVMRK_WORDS ((1 + 1 + 15) * 4)
-
-extern "C" {
-    void AesGenTables(void);
-    void Aes_SetKey_Dec(UInt32 *aes, const Byte *key, unsigned keySize);
-    void AesCbc_Init(UInt32 *ivAes, const Byte *iv);
-    void AesCbc_Decode(UInt32 *ivAes, Byte *data, size_t numBlocks);
-}
 
 class XAESDecoder : public QObject {
     Q_OBJECT

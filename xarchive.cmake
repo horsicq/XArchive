@@ -3,6 +3,7 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/bzip2/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/lzma/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/zlib/src/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/ppmd/src/)
 
 if (NOT DEFINED XBINARY_SOURCES)
     include(${CMAKE_CURRENT_LIST_DIR}/../Formats/xbinary.cmake)
