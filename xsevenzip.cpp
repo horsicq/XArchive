@@ -19,62 +19,6 @@
  * SOFTWARE.
  */
 
-/*
- * === RECENT IMPROVEMENTS (2025-11-02) ===
- *
- * 1. k7zIdFolder: Fixed loop to process ALL folders (lines ~637-670)
- *    - Previous: Only processed first folder, then expected k7zIdEnd
- *    - Fixed: Added for-loop to iterate through all nNumberOfFolders
- *    - Impact: Multi-folder archives (100+ files) now parse correctly
- *
- * 2. k7zIdSubStreamsInfo: Fixed CRC and optional field handling (lines ~674-685)
- *    - Previous: Expected k7zIdEnd immediately after k7zIdNumUnpackStream
- *    - Fixed: Added optional k7zIdSize and k7zIdCRC parsing before k7zIdEnd
- *    - Impact: Archives with CRC data in SubStreamsInfo now work
- *
- * 3. k7zIdCRC: Implemented AllAreDefined format (lines ~715-735)
- *    - Previous: Read NumberOfCRCs then CRC array (wrong format)
- *    - Fixed: Read AllAreDefined byte, then conditional CRC reading
- *    - Format: AllAreDefined(1 byte) + [CRC32 × nCount if AllAreDefined==1]
- *    - Impact: CRC validation now works correctly
- *
- * 4. k7zIdName: Individual filename extraction from UTF-16LE blob (lines ~773-827)
- *    - Previous: Stored entire blob as single IMPTYPE_FILENAME record
- *    - Fixed: Parse null-terminated UTF-16LE strings individually
- *    - Creates separate IMPTYPE_FILENAME record for each file
- *    - Impact: Filenames properly extracted as individual strings
- *
- * 5. k7zIdName: Removed incorrect k7zIdDummy expectation (line ~829)
- *    - Previous: Expected k7zIdDummy with bCheck=true after filename data
- *    - Fixed: Return success without expecting k7zIdDummy
- *    - Impact: FilesInfo section parsing no longer fails incorrectly
- *
- * 6. SZSTATE: Added nNumberOfFolders tracking (xsevenzip.h line ~192)
- *    - Added: quint64 nNumberOfFolders field to SZSTATE struct
- *    - Purpose: Track folder count for SubStreamsInfo CRC parsing
- *    - Usage: Stored in k7zIdFolder case, used in k7zIdSubStreamsInfo
- *    - Impact: Correct CRC count passed to k7zIdCRC parser
- *
- * 7. EncodedHeader: Manual metadata extraction (lines ~1117-1273)
- *    - Manual PackPos extraction from EncodedHeader byte-by-byte
- *    - Manual StreamSize extraction from k7zIdSize section
- *    - Manual CodersUnpackSize extraction from k7zIdCodersUnpackSize
- *    - Reason: Parsed records pull values from wrong section (decompressed header's PackInfo)
- *    - Impact: Correct offsets and sizes for LZMA decompression
- *
- * 8. EncodedHeader: LZMA decompression working (lines ~1280-1450)
- *    - Successfully decompresses compressed headers
- *    - Verified: 2054 bytes compressed → 6130 bytes decompressed
- *    - Contains proper k7zIdHeader → k7zIdMainStreamsInfo → k7zIdFilesInfo structure
- *    - Impact: Can now read metadata from archives with compressed headers
- *
- * === KNOWN LIMITATIONS ===
- * - 7z format has many variations based on creation options
- * - Filename encoding may vary (UTF-16LE, UTF-8, etc.)
- * - Some archive structures not yet fully supported
- * - See test_system_create_unpack.cpp for detailed investigation notes
- */
-
 #include "xsevenzip.h"
 #include "xdecompress.h"
 #include "xcompress.h"
@@ -185,93 +129,6 @@ QString XSevenZip::getVersion()
 {
     return QString("%1.%2").arg(read_uint8(6)).arg(read_uint8(7), 1, 10, QChar('0'));
 }
-
-// QList<XBinary::ARCHIVERECORD> XSevenZip::getArchiveRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
-// {
-//     QList<XBinary::ARCHIVERECORD> listResult;
-
-//     SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
-//     qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
-//     qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
-
-//     if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
-//         char *pData = new char[nNextHeaderSize];
-//         qint64 nBytesRead = read_array(nNextHeaderOffset, pData, nNextHeaderSize, pPdStruct);
-
-//         if (nBytesRead == nNextHeaderSize) {
-//             QList<XSevenZip::SZRECORD> listRecords = _handleData(pData, nNextHeaderSize, pPdStruct, true);
-
-//             qint32 nNumberOfRecords = listRecords.count();
-
-//             if (nNumberOfRecords > 0) {
-//                 SZRECORD firstRecord = listRecords.at(0);
-
-//                 // Check if the first id is Header
-//                 if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdHeader)) {
-//                     // Standard header - parse file information
-//                     QList<QString> listFileNames;
-//                     QList<qint64> listFilePackedSizes;
-//                     QList<qint64> listFileUnpackedSizes;
-//                     QList<quint32> listFileAttributes;
-//                     QList<QDateTime> listFileTimes;
-
-//                     // Parse all records to extract file information
-//                     for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
-//                         SZRECORD szRecord = listRecords.at(i);
-
-//                         if (szRecord.impType == IMPTYPE_FILENAME) {
-//                             QString sFileName = szRecord.varValue.toString();
-//                             listFileNames.append(sFileName);
-//                         } else if (szRecord.impType == IMPTYPE_FILEPACKEDSIZE) {
-//                             listFilePackedSizes.append(szRecord.varValue.toLongLong());
-//                         } else if (szRecord.impType == IMPTYPE_FILEUNPACKEDSIZE) {
-//                             listFileUnpackedSizes.append(szRecord.varValue.toLongLong());
-//                         } else if (szRecord.impType == IMPTYPE_FILEATTRIBUTES) {
-//                             listFileAttributes.append(szRecord.varValue.toUInt());
-//                         } else if (szRecord.impType == IMPTYPE_FILETIME) {
-//                             // TODO: Convert file time to QDateTime
-//                             // listFileTimes.append(convertFileTime(szRecord.varValue));
-//                         }
-//                     }
-
-//                     qint32 nNumberOfFiles = listFileNames.count();
-
-//                     // Create archive records for each file
-//                     for (qint32 i = 0; (i < nNumberOfFiles) && isPdStructNotCanceled(pPdStruct); i++) {
-//                         XBinary::ARCHIVERECORD record = {};
-
-//                         // Set file name
-//                         record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, listFileNames.at(i));
-
-//                         // Set file sizes if available
-//                         if (i < listFileUnpackedSizes.count()) {
-//                             record.nDecompressedSize = listFileUnpackedSizes.at(i);
-//                         }
-
-//                         // For now, set basic properties
-//                         // TODO: Set proper stream offsets and sizes based on pack info
-//                         record.nStreamOffset = 0;                       // TODO: Calculate from pack info
-//                         record.nStreamSize = record.nDecompressedSize;  // Assume uncompressed for now
-
-//                         // Set compression method (assume STORE for now)
-//                         record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
-
-//                         listResult.append(record);
-//                     }
-//                 } else if ((firstRecord.srType == SRTYPE_ID) && (firstRecord.varValue.toULongLong() == k7zIdEncodedHeader)) {
-//                     // Encoded header - need to decompress first
-//                     // This is a complex case that requires LZMA decompression
-//                     // For now, return empty list as this needs more implementation
-//                     // TODO: Implement encoded header decompression
-//                 }
-//             }
-//         }
-
-//         delete[] pData;
-//     }
-
-//     return listResult;
-// }
 
 qint64 XSevenZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
@@ -1069,6 +926,9 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         case XSevenZip::k7zIdFilesInfo: {
             quint64 nNumberOfFiles = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFiles", DRF_COUNT, IMPTYPE_NUMBEROFFILES);
             qDebug() << "[k7zIdFilesInfo] Processing" << nNumberOfFiles << "files";
+            
+            // Store file count in state for later use
+            pState->nNumberOfFiles = nNumberOfFiles;
             Q_UNUSED(nNumberOfFiles)
 
             // Loop through property IDs until we hit End marker
@@ -1123,6 +983,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                              << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
 #endif
                     // Unknown property - skip the ID byte, then read and skip the size field and data
+                    qint64 nPropertyStartOffset = pState->nCurrentOffset;
                     pState->nCurrentOffset++;  // Skip the ID byte
 
                     // Try to read the size field (most properties have this)
@@ -1133,6 +994,25 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                             quint64 nDataSize = puSize.nValue;
 #ifdef QT_DEBUG
                             qDebug() << "k7zIdFilesInfo: Unknown property has size" << nDataSize << "- skipping";
+                            
+                            // Print hex dump of the data for debugging
+                            if (nDataSize > 0 && nDataSize <= 64 && pState->nCurrentOffset + nDataSize <= pState->nSize) {
+                                QString sHexData;
+                                for (quint64 i = 0; i < nDataSize && i < 64; i++) {
+                                    sHexData += QString("%1 ").arg((quint8)pState->pData[pState->nCurrentOffset + i], 2, 16, QChar('0'));
+                                }
+                                qDebug() << "k7zIdFilesInfo: Unknown property data:" << sHexData.trimmed();
+                                
+                                // If this is property 0x04 and size is 1, the byte might be the file count!
+                                if (nNextByte == 0x04 && nDataSize == 1 && pState->nNumberOfFiles == 0) {
+                                    quint8 nPossibleFileCount = (quint8)pState->pData[pState->nCurrentOffset];
+                                    qDebug() << "k7zIdFilesInfo: Property 0x04 might indicate file count:" << nPossibleFileCount;
+                                    if (nPossibleFileCount > 0 && nPossibleFileCount <= 100) {
+                                        pState->nNumberOfFiles = nPossibleFileCount;
+                                        qDebug() << "k7zIdFilesInfo: Updated file count to" << nPossibleFileCount;
+                                    }
+                                }
+                            }
 #endif
                             // Skip the data
                             if (pState->nCurrentOffset + nDataSize <= pState->nSize) {
@@ -1446,61 +1326,6 @@ void XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qin
     pState->nCurrentOffset += nSize;
 }
 
-// bool XSevenZip::packFolderToDevice(const QString &sFolderName, QIODevice *pDevice, void *pOptions, PDSTRUCT *pPdStruct)
-// {
-//     Q_UNUSED(sFolderName)
-//     Q_UNUSED(pDevice)
-//     Q_UNUSED(pOptions)
-//     Q_UNUSED(pPdStruct)
-
-//     // TODO: Implement 7z packing
-//     // 7z format is very complex with multiple compression methods, solid blocks, etc.
-//     // For now, return false. A proper implementation would require:
-//     // 1. Write signature header
-//     // 2. Write empty/placeholder next header
-//     // 3. Enumerate files and write them with STORE method
-//     // 4. Build archive properties structure
-//     // 5. Write next header with file metadata
-//     // 6. Update signature header with next header offset/size/CRC
-
-//     return false;
-// }
-
-// qint64 XSevenZip::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
-// {
-//     // Try to quickly get number of records from parsed header data
-//     qint64 nResult = 0;
-
-//     SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
-//     qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
-//     qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
-
-//     if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
-//         char *pData = new char[nNextHeaderSize];
-//         qint64 nBytesRead = read_array(nNextHeaderOffset, pData, nNextHeaderSize, pPdStruct);
-
-//         if (nBytesRead == nNextHeaderSize) {
-//             QList<XSevenZip::SZRECORD> listRecords = _handleData(pData, nNextHeaderSize, pPdStruct, true);
-
-//             qint32 nNumberOfRecords = listRecords.count();
-
-//             // Look for NumberOfFiles in the parsed records
-//             for (qint32 i = 0; (i < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct); i++) {
-//                 SZRECORD szRecord = listRecords.at(i);
-
-//                 if (szRecord.impType == IMPTYPE_NUMBEROFFILES) {
-//                     nResult = szRecord.varValue.toLongLong();
-//                     break;
-//                 }
-//             }
-//         }
-
-//         delete[] pData;
-//     }
-
-//     return nResult;
-// }
-
 bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
@@ -1787,6 +1612,65 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                         qDebug() << "[Extract Loop] Extracted" << nExtractedFilenames << "filenames from" << nNumberOfRecords << "records";
                         qDebug() << "[Size Lists] Folder sizes:" << listFolderUnpackedSizes.count() << "Individual file sizes:" << listIndividualFileSizes.count();
                         
+                        // CRITICAL FIX: Handle archives with NumberOfFiles=0 but valid folder/stream data
+                        // Some 7z archives (created by certain tools/versions) set NumberOfFiles=0 in FilesInfo
+                        // but still contain valid compressed streams. Generate placeholder filenames based on streams.
+                        if (listFileNames.isEmpty() && !listFilePackedSizes.isEmpty()) {
+                            qWarning() << "[NumberOfFiles=0 Fix] Archive has no filenames but" << listFilePackedSizes.count() << "streams";
+                            qWarning() << "[NumberOfFiles=0 Fix] Generating placeholder filenames from stream/folder data";
+                            
+                            // Determine number of files from NumUnpackStream or codec analysis
+                            qint32 nTotalFiles = 0;
+                            if (!listNumUnpackStream.isEmpty()) {
+                                // Sum all NumUnpackStream values to get total file count
+                                for (qint32 i = 0; i < listNumUnpackStream.count(); i++) {
+                                    nTotalFiles += listNumUnpackStream.at(i);
+                                }
+                                qWarning() << "[NumberOfFiles=0 Fix] NumUnpackStream indicates" << nTotalFiles << "files across" << listNumUnpackStream.count() << "folders";
+                            } else {
+                                // Check if this is a BCJ2 archive (4 codecs with last being BCJ2)
+                                // BCJ2 takes 4 input streams and produces 1 output (solid compression)
+                                bool bIsBCJ2Archive = false;
+                                if (listCodecs.count() == 4) {
+                                    // Check if last codec is BCJ2 (0x03 0x03 0x01 0x1b)
+                                    QByteArray baLastCodec = listCodecs.at(3);
+                                    if (baLastCodec.size() == 4 && 
+                                        (quint8)baLastCodec.at(0) == 0x03 &&
+                                        (quint8)baLastCodec.at(1) == 0x03 &&
+                                        (quint8)baLastCodec.at(2) == 0x01 &&
+                                        (quint8)baLastCodec.at(3) == 0x1b) {
+                                        bIsBCJ2Archive = true;
+                                        qWarning() << "[NumberOfFiles=0 Fix] Detected BCJ2 solid archive (4 streams → 1 output)";
+                                    }
+                                }
+                                
+                                if (bIsBCJ2Archive) {
+                                    // BCJ2: 4 input streams produce 1 output, assume 1 file
+                                    // (without SubStreamsInfo, we cannot determine the actual file count)
+                                    nTotalFiles = 1;
+                                    qWarning() << "[NumberOfFiles=0 Fix] BCJ2 archive: assuming 1 file (cannot determine actual count without SubStreamsInfo)";
+                                } else {
+                                    // Fallback: 1 file per stream for non-BCJ2 archives
+                                    nTotalFiles = listFilePackedSizes.count();
+                                    qWarning() << "[NumberOfFiles=0 Fix] Assuming" << nTotalFiles << "files (1 per stream)";
+                                }
+                            }
+                            
+                            // Generate placeholder filenames
+                            for (qint32 i = 0; i < nTotalFiles; i++) {
+                                QString sPlaceholderName = QString("file_%1.bin").arg(i, 5, 10, QChar('0'));
+                                listFileNames.append(sPlaceholderName);
+                            }
+                            
+                            qWarning() << "[NumberOfFiles=0 Fix] Generated" << listFileNames.count() << "placeholder filenames";
+                            
+                            // If we have individual file sizes from SubStreamsInfo, use them
+                            // Otherwise, file sizes will be determined from folder sizes later
+                            if (!listIndividualFileSizes.isEmpty()) {
+                                qWarning() << "[NumberOfFiles=0 Fix] Using" << listIndividualFileSizes.count() << "individual file sizes from SubStreamsInfo";
+                            }
+                        }
+                        
                         // Parse EmptyStream bitmap to identify which files are empty (0 bytes)
                         // Bitmap format: each bit represents one file, bit=1 means empty file
                         if (!baEmptyStreamData.isEmpty()) {
@@ -2052,47 +1936,75 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 #endif
                         }
                         
-                        // Detect if this is a solid archive
-                        // Solid archive: multiple files, but only ONE compressed stream
+                        // Detect solid compression per-folder (not archive-wide)
+                        // 7z format supports folder-level solid compression:
+                        // - A folder with multiple files can be solid (all files compressed into one stream)
+                        // - A folder with one file is always non-solid
+                        // - Different folders can have different solid settings
+                        
+                        qint64 nDataOffset = sizeof(SIGNATUREHEADER);
+                        qint32 nNumberOfFolders = listFilePackedSizes.count();
+                        
+                        // Determine which folders are solid
+                        QList<bool> listFolderIsSolid;
+                        QList<qint32> listFolderFileCount;
+                        
+                        if (listNumUnpackStream.isEmpty()) {
+                            // Simple case: 1 file per folder (all folders are non-solid)
+                            for (qint32 i = 0; i < nNumberOfFolders; i++) {
+                                listFolderIsSolid.append(false);
+                                listFolderFileCount.append(1);
+                            }
+                        } else {
+                            // Complex case: use NumUnpackStream to determine files per folder
+                            for (qint32 i = 0; i < listNumUnpackStream.count(); i++) {
+                                qint32 nFilesInFolder = listNumUnpackStream.at(i);
+                                bool bFolderIsSolid = (nFilesInFolder > 1);  // Solid if multiple files share one stream
+                                listFolderIsSolid.append(bFolderIsSolid);
+                                listFolderFileCount.append(nFilesInFolder);
+                                
+#ifdef QT_DEBUG
+                                qDebug() << "[Folder" << i << "]" 
+                                         << "Files:" << nFilesInFolder 
+                                         << "Solid:" << bFolderIsSolid
+                                         << "Packed size:" << (i < listFilePackedSizes.count() ? listFilePackedSizes.at(i) : 0)
+                                         << "Unpacked size:" << (i < listFolderUnpackedSizes.count() ? listFolderUnpackedSizes.at(i) : 0);
+#endif
+                            }
+                        }
+                        
+                        // DEPRECATED: Archive-wide solid detection (kept for backward compatibility with single-folder archives)
                         bool bIsSolid = false;
                         qint64 nSolidStreamOffset = 0;
                         qint64 nSolidStreamSize = 0;
                         qint64 nSolidUnpackSize = 0;
                         
-                        qint64 nDataOffset = sizeof(SIGNATUREHEADER);
-                        
-                        // Check for solid archive: multiple files sharing one compressed stream
-                        // Note: listCodecs.count() can be 1 (compression only) or 2+ (AES + compression)
-                        // We only care that there's exactly ONE packed size (= one compressed stream)
                         if (listFileNames.count() > 1 && listFilePackedSizes.count() == 1) {
-                            // Check if all files share the same compressed stream (solid archive)
-                            // In solid archives: listStreamOffsets contains offsets in DECOMPRESSED data
+                            // Legacy: Archive-wide solid (all files in one folder)
                             bIsSolid = true;
                             nSolidStreamOffset = nDataOffset;
-                            
-                            // Use the first (and only) packed size
                             if (listFilePackedSizes.count() > 0) {
                                 nSolidStreamSize = listFilePackedSizes.at(0);
                             }
-                            
-                            // Sum all unpacked sizes to get total decompressed size
-                            // Note: N-1 size correction already applied earlier for all archive types
-                            for (qint32 i = 0; i < listFileUnpackedSizes.count(); i++) {
-                                nSolidUnpackSize += listFileUnpackedSizes.at(i);
+                            for (qint32 i = 0; i < listFolderUnpackedSizes.count(); i++) {
+                                nSolidUnpackSize += listFolderUnpackedSizes.at(i);
                             }
-                            
 #ifdef QT_DEBUG
-                            qDebug() << "SOLID ARCHIVE DETECTED:";
+                            qDebug() << "[LEGACY] Archive-wide SOLID detected:";
                             qDebug() << "  Files:" << listFileNames.count();
-                            qDebug() << "  Compressed stream offset:" << nSolidStreamOffset;
                             qDebug() << "  Compressed stream size:" << nSolidStreamSize;
                             qDebug() << "  Total uncompressed size:" << nSolidUnpackSize;
 #endif
                         }
                         
                         // Create ARCHIVERECORD entries
-                        // For solid archives, calculate offsets by accumulating file sizes
-                        qint64 nAccumulatedOffsetSolid = 0;
+                        // Track decompressed offset per-folder (for solid folders)
+                        QList<qint64> listFolderDecompressedOffset;
+                        for (qint32 i = 0; i < nNumberOfFolders; i++) {
+                            listFolderDecompressedOffset.append(0);
+                        }
+                        
+                        qint64 nAccumulatedOffsetSolid = 0;  // For legacy archive-wide solid
                         qint64 nAccumulatedOffsetNonSolid = 0;
                         
                         // CRITICAL: Counter for non-empty files in folders for solid archives
@@ -2113,12 +2025,22 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             // Assign decompressed size
                             // For solid archives: use individual file sizes from SubStreamsInfo
                             // For non-solid archives: use folder size (1 file per folder)
+                            
+                            // Check if this file's folder is solid
+                            bool bFolderIsSolid = false;
+                            if (nFolderIndex >= 0 && nFolderIndex < listFolderIsSolid.count()) {
+                                bFolderIsSolid = listFolderIsSolid.at(nFolderIndex);
+                            } else if (bIsSolid) {
+                                // Fallback to legacy archive-wide solid detection
+                                bFolderIsSolid = true;
+                            }
+                            
                             if (bIsEmptyFile) {
                                 // Empty file: always 0 bytes
                                 record.nDecompressedSize = 0;
                             } else if (nFolderIndex >= 0) {
-                                if (bIsSolid && !listIndividualFileSizes.isEmpty()) {
-                                    // Solid archive: use individual file size
+                                if (bFolderIsSolid && !listIndividualFileSizes.isEmpty()) {
+                                    // Solid folder: use individual file size from SubStreamsInfo
                                     // CRITICAL FIX: Use nNonEmptyFileIndexInFolder to index listIndividualFileSizes
                                     // listIndividualFileSizes[j] corresponds to the j-th NON-EMPTY file in folders
                                     // listIndividualFileSizes contains N-1 sizes (all except the last non-empty file)
@@ -2157,37 +2079,78 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 record.nDecompressedSize = 0;  // Empty file
                             }
                             
-                            if (nFolderIndex >= 0 && nFolderIndex < listFilePackedSizes.count()) {
-                                record.nStreamSize = listFilePackedSizes.at(nFolderIndex);
-                            } else {
-                                record.nStreamSize = record.nDecompressedSize;
-                            }
+                            // Calculate stream offset and decompressed offset based on folder's solid status
+                            // (bFolderIsSolid already determined above)
                             
-                            // Calculate stream offset and decompressed offset
-                            if (bIsSolid) {
-                                // For solid archives:
-                                // nStreamOffset = compressed solid block location in archive
-                                // nDecompressedOffset = offset within decompressed solid block data
+                            if (bFolderIsSolid) {
+                                // SOLID FOLDER: Multiple files compressed into one stream
+                                // All files in this folder share the same compressed stream
                                 
-                                // CRITICAL FIX: Empty files have no stream data, even in solid archives
+                                // Calculate folder's stream offset in archive
+                                qint64 nFolderStreamOffset = nDataOffset;
+                                for (qint32 j = 0; j < nFolderIndex; j++) {
+                                    if (j < listFilePackedSizes.count()) {
+                                        nFolderStreamOffset += listFilePackedSizes.at(j);
+                                    }
+                                }
+                                
+                                // CRITICAL FIX: Empty files have no stream data, even in solid folders
                                 if (bIsEmptyFile) {
                                     record.nStreamOffset = 0;  // Empty file has no stream
                                     record.nStreamSize = 0;     // Empty file has no compressed data
+                                    record.nDecompressedOffset = 0;
                                 } else {
-                                    record.nStreamOffset = nSolidStreamOffset;  // Non-empty files share compressed block offset
-                                    record.nStreamSize = nSolidStreamSize;       // Non-empty files share compressed block size
+                                    // Non-empty file in solid folder
+                                    record.nStreamOffset = nFolderStreamOffset;
+                                    record.nStreamSize = (nFolderIndex < listFilePackedSizes.count()) ? listFilePackedSizes.at(nFolderIndex) : 0;
+                                    record.nDecompressedOffset = listFolderDecompressedOffset[nFolderIndex];
+                                    
+                                    // Accumulate offset for next file in this folder
+                                    listFolderDecompressedOffset[nFolderIndex] += record.nDecompressedSize;
                                 }
                                 
-                                record.nDecompressedOffset = nAccumulatedOffsetSolid;  // Offset within decompressed data
+                                // Mark file as solid
+                                record.mapProperties.insert(FPART_PROP_SOLID, true);
+                                
+#ifdef QT_DEBUG
+                                if (i < 3 || (i >= 62 && i < 65)) {  // Debug first few files and first few of second folder
+                                    qDebug() << "[Solid File]" << listFileNames.at(i)
+                                             << "Folder:" << nFolderIndex
+                                             << "StreamOffset:" << record.nStreamOffset
+                                             << "StreamSize:" << record.nStreamSize
+                                             << "DecompOffset:" << record.nDecompressedOffset
+                                             << "DecompSize:" << record.nDecompressedSize;
+                                }
+#endif
+                            } else if (bIsSolid && nFolderIndex < 0) {
+                                // LEGACY: Archive-wide solid (single folder with all files)
+                                if (bIsEmptyFile) {
+                                    record.nStreamOffset = 0;
+                                    record.nStreamSize = 0;
+                                } else {
+                                    record.nStreamOffset = nSolidStreamOffset;
+                                    record.nStreamSize = nSolidStreamSize;
+                                }
+                                record.nDecompressedOffset = nAccumulatedOffsetSolid;
                                 nAccumulatedOffsetSolid += record.nDecompressedSize;
+                                record.mapProperties.insert(FPART_PROP_SOLID, true);
                             } else {
-                                // For non-solid archives (Copy method):
+                                // NON-SOLID: Each file has its own compressed stream
                                 // If we have explicit stream offsets for all files, use them
                                 // Otherwise, calculate offsets by accumulating packed sizes
+                                
+                                // Use folder size as stream size
+                                if (nFolderIndex >= 0 && nFolderIndex < listFilePackedSizes.count()) {
+                                    record.nStreamSize = listFilePackedSizes.at(nFolderIndex);
+                                } else {
+                                    record.nStreamSize = record.nDecompressedSize;
+                                }
+                                
                                 if (i < listStreamOffsets.count()) {
                                     record.nStreamOffset = nDataOffset + listStreamOffsets.at(i);
+                                    
                                     if (i < 3 && listCodecs.count() > 5) {
-                                        qDebug() << "[Copy Offset EXPLICIT]" << listFileNames.at(i) 
+                                        qDebug() << "[Non-Solid Offset EXPLICIT]" << listFileNames.at(i) 
                                                  << "offset:" << record.nStreamOffset
                                                  << "nDataOffset:" << nDataOffset
                                                  << "streamOffset:" << listStreamOffsets.at(i)
@@ -2201,7 +2164,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                     // calculate offset by accumulating previous file packed sizes
                                     record.nStreamOffset = nDataOffset + nAccumulatedOffsetNonSolid;
                                     if (i < 3 && listCodecs.count() > 5) {
-                                        qDebug() << "[Copy Offset CALCULATED]" << listFileNames.at(i) 
+                                        qDebug() << "[Non-Solid Offset CALCULATED]" << listFileNames.at(i) 
                                                  << "offset:" << record.nStreamOffset
                                                  << "nDataOffset:" << nDataOffset
                                                  << "accumulated:" << nAccumulatedOffsetNonSolid
@@ -2209,6 +2172,9 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                     }
                                     nAccumulatedOffsetNonSolid += record.nStreamSize;
                                 }
+                                
+                                record.nDecompressedOffset = 0;  // Non-solid files don't use decompressed offset
+                                record.mapProperties.insert(FPART_PROP_SOLID, false);
                             }
                             
                             record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, compressMethod);
@@ -2243,11 +2209,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, listCoderProperties.at(0));
                             }
                             
-                            // Mark solid archive files (but not empty files)
-                            // Empty files in solid archives should be extracted as empty, not from solid block
-                            if (bIsSolid && record.nDecompressedSize > 0) {
-                                record.mapProperties.insert(FPART_PROP_SOLID, true);
-                            }
+                            // Note: FPART_PROP_SOLID is already set above based on per-folder solid detection
                             
                             pContext->listArchiveRecords.append(record);
                             pContext->listRecordOffsets.append(record.nStreamOffset);
@@ -3437,21 +3399,45 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
             bool bIsSolid = ar.mapProperties.value(FPART_PROP_SOLID, false).toBool();
             bool bIsEncrypted = ar.mapProperties.value(FPART_PROP_ENCRYPTED, false).toBool();
             
-            if (bIsSolid && !pContext->mapFolderCache.contains(0) && bIsEncrypted) {
-                // Solid encrypted archive - need to decrypt+decompress the entire block on first access
-                qDebug() << "[Solid Encrypted] First file access - decrypting and decompressing entire solid block";
+            // Determine folder index for this file by finding other files with same stream offset
+            // Files in the same folder share the same nStreamOffset (solid folder) or have sequential offsets (non-solid)
+            qint32 nFolderIndex = 0;
+            if (bIsSolid && ar.nStreamOffset > 0) {
+                // For solid files, folder index is determined by stream offset
+                // Count how many unique stream offsets exist before this one
+                QSet<qint64> uniqueOffsets;
+                for (qint32 i = 0; i < pContext->listArchiveRecords.count(); i++) {
+                    ARCHIVERECORD &rec = pContext->listArchiveRecords[i];
+                    bool bRecIsSolid = rec.mapProperties.value(FPART_PROP_SOLID, false).toBool();
+                    if (bRecIsSolid && rec.nStreamOffset > 0 && rec.nStreamOffset < ar.nStreamOffset) {
+                        uniqueOffsets.insert(rec.nStreamOffset);
+                    }
+                }
+                nFolderIndex = uniqueOffsets.count();
+            }
+            
+#ifdef QT_DEBUG
+            if (bIsSolid) {
+                qDebug() << "[Folder Index] File:" << sFilename << "Folder:" << nFolderIndex 
+                         << "StreamOffset:" << ar.nStreamOffset;
+            }
+#endif
+            
+            if (bIsSolid && !pContext->mapFolderCache.contains(nFolderIndex) && bIsEncrypted) {
+                // Solid encrypted folder - need to decrypt+decompress the entire block on first access
+                qDebug() << "[Solid Encrypted] Folder" << nFolderIndex << "first access - decrypting and decompressing entire solid block";
                 
-                // Get the solid block information from the first record
-                // All solid files share the same nStreamOffset and nStreamSize (pointing to the solid block)
+                // Get the solid block information
+                // All solid files in this folder share the same nStreamOffset and nStreamSize
                 qint64 nSolidStreamOffset = ar.nStreamOffset;
                 qint64 nSolidStreamSize = ar.nStreamSize;
                 
-                // Calculate total uncompressed size by finding the last file's offset + size
+                // Calculate total uncompressed size for this folder by finding max(offset + size)
                 qint64 nTotalUncompressedSize = 0;
                 for (qint32 i = 0; i < pContext->listArchiveRecords.count(); i++) {
                     ARCHIVERECORD &rec = pContext->listArchiveRecords[i];
                     bool bRecIsSolid = rec.mapProperties.value(FPART_PROP_SOLID, false).toBool();
-                    if (bRecIsSolid && rec.nDecompressedSize > 0) {
+                    if (bRecIsSolid && rec.nStreamOffset == nSolidStreamOffset && rec.nDecompressedSize > 0) {
                         qint64 nEndOffset = rec.nDecompressedOffset + rec.nDecompressedSize;
                         if (nEndOffset > nTotalUncompressedSize) {
                             nTotalUncompressedSize = nEndOffset;
@@ -3459,6 +3445,7 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
                     }
                 }
                 
+                qDebug() << "[Solid Encrypted]   Folder index:" << nFolderIndex;
                 qDebug() << "[Solid Encrypted]   Stream offset:" << nSolidStreamOffset;
                 qDebug() << "[Solid Encrypted]   Stream size:" << nSolidStreamSize;
                 qDebug() << "[Solid Encrypted]   Total uncompressed size:" << nTotalUncompressedSize;
@@ -3606,9 +3593,9 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
                                             qDebug() << "[Solid Encrypted] Decompressed" << baSolidData.size() << "bytes (expected" << nTotalUncompressedSize << ")";
                                             
                                             if (baSolidData.size() == nTotalUncompressedSize) {
-                                                // Cache the decompressed solid block
-                                                pContext->mapFolderCache.insert(0, baSolidData);
-                                                qDebug() << "[Solid Encrypted] Solid block cached successfully";
+                                                // Cache the decompressed solid block for this folder
+                                                pContext->mapFolderCache.insert(nFolderIndex, baSolidData);
+                                                qDebug() << "[Solid Encrypted] Solid block for folder" << nFolderIndex << "cached successfully";
                                                 
                                                 // Now extract this file from the cached block
                                                 qint64 nOffsetInDecompressed = ar.nDecompressedOffset;
@@ -3638,13 +3625,14 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
                         }
                     }
                 }
-            } else if (bIsSolid && pContext->mapFolderCache.contains(0)) {
-                // Extract from cached solid block
-                QByteArray baDecompressed = pContext->mapFolderCache.value(0);
+            } else if (bIsSolid && pContext->mapFolderCache.contains(nFolderIndex)) {
+                // Extract from cached solid block for this folder
+                QByteArray baDecompressed = pContext->mapFolderCache.value(nFolderIndex);
                 qint64 nOffsetInDecompressed = ar.nDecompressedOffset;  // Offset in decompressed buffer
                 qint64 nSize = ar.nDecompressedSize;
                 
                 qDebug() << "[Solid] Extracting:" << ar.mapProperties.value(FPART_PROP_ORIGINALNAME).toString()
+                         << "Folder:" << nFolderIndex
                          << "BufferSize:" << baDecompressed.size() 
                          << "Offset:" << nOffsetInDecompressed 
                          << "Size:" << nSize;
@@ -3662,6 +3650,99 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
                     qWarning() << "[Solid] Invalid bounds: offset=" << nOffsetInDecompressed 
                               << "size=" << nSize << "bufferSize=" << baDecompressed.size() 
                               << "check=" << (nOffsetInDecompressed + nSize) << "<=" << baDecompressed.size();
+                }
+            } else if (bIsSolid && !bIsEncrypted && !pContext->mapFolderCache.contains(nFolderIndex)) {
+                // Solid non-encrypted folder - decompress entire folder and cache it
+                qDebug() << "[Solid Non-Encrypted] Folder" << nFolderIndex << "first access - decompressing entire solid block";
+                
+                // Calculate total uncompressed size for this folder
+                qint64 nTotalUncompressedSize = 0;
+                for (qint32 i = 0; i < pContext->listArchiveRecords.count(); i++) {
+                    ARCHIVERECORD &rec = pContext->listArchiveRecords[i];
+                    bool bRecIsSolid = rec.mapProperties.value(FPART_PROP_SOLID, false).toBool();
+                    if (bRecIsSolid && rec.nStreamOffset == ar.nStreamOffset && rec.nDecompressedSize > 0) {
+                        qint64 nEndOffset = rec.nDecompressedOffset + rec.nDecompressedSize;
+                        if (nEndOffset > nTotalUncompressedSize) {
+                            nTotalUncompressedSize = nEndOffset;
+                        }
+                    }
+                }
+                
+                qDebug() << "[Solid Non-Encrypted]   Stream offset:" << ar.nStreamOffset;
+                qDebug() << "[Solid Non-Encrypted]   Stream size:" << ar.nStreamSize;
+                qDebug() << "[Solid Non-Encrypted]   Expected decompressed size:" << nTotalUncompressedSize;
+                
+                // Decompress entire solid block
+                SubDevice sd(getDevice(), ar.nStreamOffset, ar.nStreamSize);
+                if (sd.open(QIODevice::ReadOnly)) {
+                    QBuffer *pDecompressBuffer = new QBuffer();
+                    if (pDecompressBuffer->open(QIODevice::WriteOnly)) {
+                        COMPRESS_METHOD compressMethod = (COMPRESS_METHOD)ar.mapProperties.value(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_UNKNOWN).toUInt();
+                        QByteArray baCompressProperties = ar.mapProperties.value(FPART_PROP_COMPRESSPROPERTIES, QByteArray()).toByteArray();
+                        
+                        DATAPROCESS_STATE decompressState = {};
+                        decompressState.pDeviceInput = &sd;
+                        decompressState.pDeviceOutput = pDecompressBuffer;
+                        decompressState.nInputOffset = 0;
+                        decompressState.nInputLimit = ar.nStreamSize;
+                        
+                        bool bDecompressed = false;
+                        if (compressMethod == COMPRESS_METHOD_LZMA2) {
+                            XLZMADecoder lzmaDecoder;
+                            bDecompressed = lzmaDecoder.decompressLZMA2(&decompressState, baCompressProperties, pPdStruct);
+                        } else if (compressMethod == COMPRESS_METHOD_LZMA) {
+                            XLZMADecoder lzmaDecoder;
+                            bDecompressed = lzmaDecoder.decompress(&decompressState, baCompressProperties, pPdStruct);
+                        } else if (compressMethod == COMPRESS_METHOD_BZIP2) {
+                            bDecompressed = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
+                        } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
+                            bDecompressed = XDeflateDecoder::decompress(&decompressState, pPdStruct);
+                        } else {
+                            qWarning() << "[Solid Non-Encrypted] Unsupported compression method:" << compressMethod;
+                        }
+                        
+                        pDecompressBuffer->close();
+                        
+                        if (bDecompressed) {
+                            pDecompressBuffer->open(QIODevice::ReadOnly);
+                            QByteArray baSolidData = pDecompressBuffer->readAll();
+                            pDecompressBuffer->close();
+                            
+                            qDebug() << "[Solid Non-Encrypted] Decompressed" << baSolidData.size() << "bytes (expected" << nTotalUncompressedSize << ")";
+                            
+                            if (baSolidData.size() > 0) {
+                                // Cache the decompressed solid block
+                                pContext->mapFolderCache.insert(nFolderIndex, baSolidData);
+                                qDebug() << "[Solid Non-Encrypted] Solid block for folder" << nFolderIndex << "cached successfully";
+                                
+                                // Now extract this file from the cached block
+                                qint64 nOffsetInDecompressed = ar.nDecompressedOffset;
+                                qint64 nSize = ar.nDecompressedSize;
+                                
+                                if (nOffsetInDecompressed >= 0 && nSize > 0 && 
+                                    nOffsetInDecompressed + nSize <= baSolidData.size()) {
+                                    qint64 nWritten = pDevice->write(baSolidData.constData() + nOffsetInDecompressed, nSize);
+                                    bResult = (nWritten == nSize);
+                                } else {
+                                    qWarning() << "[Solid Non-Encrypted] Invalid bounds: offset=" << nOffsetInDecompressed 
+                                              << "size=" << nSize << "bufferSize=" << baSolidData.size();
+                                    bResult = false;
+                                }
+                            } else {
+                                qWarning() << "[Solid Non-Encrypted] Decompression produced 0 bytes";
+                                bResult = false;
+                            }
+                        } else {
+                            qWarning() << "[Solid Non-Encrypted] Decompression failed";
+                            bResult = false;
+                        }
+                        
+                        delete pDecompressBuffer;
+                    }
+                    sd.close();
+                } else {
+                    qWarning() << "[Solid Non-Encrypted] Failed to open SubDevice";
+                    bResult = false;
                 }
             } else if (ar.nStreamSize > 0) {
             SubDevice sd(getDevice(), ar.nStreamOffset, ar.nStreamSize);

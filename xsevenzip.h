@@ -206,6 +206,7 @@ private:
         bool bIsError;
         QString sErrorString;
         quint64 nNumberOfFolders;  // Track folder count for SubStreamsInfo
+        quint64 nNumberOfFiles;  // Track file count from FilesInfo (including extended count)
     };
 
     QList<SZRECORD> _handleData(char *pData, qint64 nSize, PDSTRUCT *pPdStruct);
