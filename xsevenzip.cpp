@@ -3483,8 +3483,6 @@ bool XSevenZip::initUnpack2(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
 
                     _handleId(&listRecords, XSevenZip::k7zIdHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
 
-                    qint32 nNumberOfRecords = listRecords.count();
-
                     // Process the parsed records to extract file information
                     if (pHeaderData) {
                         QList<QString> listFileNames;
@@ -3511,6 +3509,7 @@ bool XSevenZip::initUnpack2(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
                         QList<qint64> listFolderUnpackedSizes;  // Folder sizes (STREAMUNPACKEDSIZE)
                         QList<qint64> listIndividualFileSizes;  // Individual file sizes (FILEUNPACKEDSIZE)
                         QByteArray baEmptyStreamData;  // Bitmap indicating which files are empty (0 bytes)
+
                         for (qint32 i = 0; i < nNumberOfRecords; i++) {
                             SZRECORD rec = listRecords.at(i);
                             if (rec.impType == IMPTYPE_FILENAME) {
@@ -3537,100 +3536,12 @@ bool XSevenZip::initUnpack2(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
                                 baEmptyStreamData = rec.varValue.toByteArray();
                             }
                         }
-
-                        if (listFileNames.isEmpty() && !listFilePackedSizes.isEmpty()) {
-                            // Determine number of files from NumUnpackStream or codec analysis
-                            qint32 nTotalFiles = 0;
-                            if (!listNumUnpackStream.isEmpty()) {
-                                // Sum all NumUnpackStream values to get total file count
-                                for (qint32 i = 0; i < listNumUnpackStream.count(); i++) {
-                                    nTotalFiles += listNumUnpackStream.at(i);
-                                }
-                                qWarning() << "[NumberOfFiles=0 Fix] NumUnpackStream indicates" << nTotalFiles << "files across" << listNumUnpackStream.count() << "folders";
-                            } else {
-                                // Check if this is a BCJ2 archive (4 codecs with last being BCJ2)
-                                // BCJ2 takes 4 input streams and produces 1 output (solid compression)
-                                bool bIsBCJ2Archive = false;
-                                if (listCodecs.count() == 4) {
-                                    // Check if last codec is BCJ2 (0x03 0x03 0x01 0x1b)
-                                    QByteArray baLastCodec = listCodecs.at(3);
-                                    if (baLastCodec.size() == 4 &&
-                                        (quint8)baLastCodec.at(0) == 0x03 &&
-                                        (quint8)baLastCodec.at(1) == 0x03 &&
-                                        (quint8)baLastCodec.at(2) == 0x01 &&
-                                        (quint8)baLastCodec.at(3) == 0x1b) {
-                                        bIsBCJ2Archive = true;
-                                        qWarning() << "[NumberOfFiles=0 Fix] Detected BCJ2 solid archive (4 streams → 1 output)";
-                                    }
-                                }
-
-                                if (bIsBCJ2Archive) {
-                                    // BCJ2: 4 input streams produce 1 output, assume 1 file
-                                    // (without SubStreamsInfo, we cannot determine the actual file count)
-                                    nTotalFiles = 1;
-                                    qWarning() << "[NumberOfFiles=0 Fix] BCJ2 archive: assuming 1 file (cannot determine actual count without SubStreamsInfo)";
-                                } else {
-                                    // Fallback: 1 file per stream for non-BCJ2 archives
-                                    nTotalFiles = listFilePackedSizes.count();
-                                    qWarning() << "[NumberOfFiles=0 Fix] Assuming" << nTotalFiles << "files (1 per stream)";
-                                }
-                            }
-
-                            // Generate placeholder filenames
-                            for (qint32 i = 0; i < nTotalFiles; i++) {
-                                QString sPlaceholderName = QString("file_%1.bin").arg(i, 5, 10, QChar('0'));
-                                listFileNames.append(sPlaceholderName);
-                            }
-
-                            qWarning() << "[NumberOfFiles=0 Fix] Generated" << listFileNames.count() << "placeholder filenames";
-
-                            // If we have individual file sizes from SubStreamsInfo, use them
-                            // Otherwise, file sizes will be determined from folder sizes later
-                            if (!listIndividualFileSizes.isEmpty()) {
-                                qWarning() << "[NumberOfFiles=0 Fix] Using" << listIndividualFileSizes.count() << "individual file sizes from SubStreamsInfo";
-                            }
-                        }
-
-                        // Parse EmptyStream bitmap to identify which files are empty (0 bytes)
-                        // Bitmap format: each bit represents one file, bit=1 means empty file
-                        if (!baEmptyStreamData.isEmpty()) {
-                            qDebug() << "[EmptyStream Bitmap] Size:" << baEmptyStreamData.size() << "bytes";
-                            QString sBitmapHex;
-                            for (qint32 i = 0; i < baEmptyStreamData.size() && i < 8; i++) {
-                                sBitmapHex += QString("%1 ").arg((quint8)baEmptyStreamData.at(i), 2, 16, QChar('0'));
-                            }
-                            qDebug() << "[EmptyStream Bitmap] Data:" << sBitmapHex;
-                        }
-
-                        QList<bool> listIsEmptyFile;  // listIsEmptyFile[fileIndex] = true if file is empty
-                        for (qint32 i = 0; i < listFileNames.count(); i++) {
-                            bool bIsEmpty = false;
-                            if (!baEmptyStreamData.isEmpty()) {
-                                qint32 nByteIndex = i / 8;
-                                qint32 nBitIndex = i % 8;
-                                if (nByteIndex < baEmptyStreamData.size()) {
-                                    quint8 nByte = (quint8)baEmptyStreamData.at(nByteIndex);
-                                    // CRITICAL: 7z format EmptyStream bitmap uses MSB-first bit order!
-                                    // Within each byte, bit 7 (MSB) represents the first file, bit 0 (LSB) represents the 8th file
-                                    // Bit SET (1) = file has NO stream (empty, 0 bytes)
-                                    // Bit CLEAR (0) = file HAS stream (non-empty, has data)
-                                    // Reverse bit index: bit 7-0 → file 0-7 within byte
-                                    qint32 nReversedBitIndex = 7 - nBitIndex;
-                                    bIsEmpty = (nByte & (1 << nReversedBitIndex)) != 0;
-                                }
-                            }
-                            listIsEmptyFile.append(bIsEmpty);
-                        }
-
-
-
-                        }
-
-#ifdef QT_DEBUG
-                        qDebug() << "XSevenZip::initUnpack: Created" << pContext->listArchiveRecords.count() << "archive records";
-#endif
                     }
+#ifdef QT_DEBUG
+                    qDebug() << "XSevenZip::initUnpack: Created" << pContext->listArchiveRecords.count() << "archive records";
+#endif
                 }
+            }
 
             pState->nNumberOfRecords = pContext->listArchiveRecords.count();
             bResult = (pState->nNumberOfRecords > 0);
