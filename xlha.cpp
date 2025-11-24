@@ -213,8 +213,8 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         result.nStreamOffset = pState->nCurrentOffset + nHeaderSize;
         result.nStreamSize = nCompressedSize;
-        result.nDecompressedOffset = 0;
-        result.nDecompressedSize = nUncompressedSize;
+        // result.nDecompressedOffset = 0;
+        // result.nDecompressedSize = nUncompressedSize;
 
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
 

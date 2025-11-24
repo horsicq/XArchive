@@ -126,6 +126,16 @@ public:
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
+    struct SEVENZ_STREAM {
+        qint64 nOffset;
+        qint64 nSize;
+        COMPRESS_METHOD compressMethod;
+        QByteArray baProperties;
+        qint64 nUnpackSize;
+        QList<qint64> listSizes;
+        QList<quint32> listCRC;
+    };
+
     struct SEVENZ_FOLDER_INFO {
         qint64 nStreamOffset;            // Offset to compressed stream
         qint64 nStreamSize;              // Size of compressed stream
@@ -186,7 +196,13 @@ private:
         IMPTYPE_FILETIME,
         IMPTYPE_FILEPACKEDSIZE,
         IMPTYPE_FILEUNPACKEDSIZE,
-        IMPTYPE_NUMUNPACKSTREAM  // Number of files in each folder (NumUnpackStream)
+        IMPTYPE_NUMUNPACKSTREAM,  // Number of files in each folder (NumUnpackStream)
+        IMPTYPE_EMPTYSTREAMDATA,
+        IMPTYPE_EMPTYFILEDATA,
+        IMPTYPE_CTIMEDATA,
+        IMPTYPE_ATIMEDATA,
+        IMPTYPE_MTIMEDATA,
+        IMPTYPE_WINATTRIBDATA
     };
 
     struct SZRECORD {

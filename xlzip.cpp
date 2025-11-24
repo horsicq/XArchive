@@ -325,8 +325,8 @@ XBinary::ARCHIVERECORD XLzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
         result.nStreamOffset = pContext->nHeaderSize;
         result.nStreamSize = pContext->nCompressedSize;
-        result.nDecompressedOffset = 0;
-        result.nDecompressedSize = pContext->nUncompressedSize;
+        // result.nDecompressedOffset = 0;
+        // result.nDecompressedSize = pContext->nUncompressedSize;
 
         result.mapProperties[XBinary::FPART_PROP_ORIGINALNAME] = XBinary::getDeviceFileBaseName(getDevice());
         result.mapProperties[XBinary::FPART_PROP_COMPRESSEDSIZE] = pContext->nCompressedSize;

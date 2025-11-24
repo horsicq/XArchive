@@ -46,8 +46,8 @@ bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveR
     state.pDeviceOutput = pDeviceOutput;
     state.nInputOffset = archiveRecord.nStreamOffset;
     state.nInputLimit = archiveRecord.nStreamSize;
-    state.nProcessedOffset = archiveRecord.nDecompressedOffset;
-    state.nProcessedLimit = archiveRecord.nDecompressedSize;
+    state.nProcessedOffset = 0;
+    state.nProcessedLimit = -1;
 
     return decompress(&state, pPdStruct);
 }

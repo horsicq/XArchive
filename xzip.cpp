@@ -1660,8 +1660,6 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         result.nStreamOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
         result.nStreamSize = lfh.nCompressedSize;
-        result.nDecompressedOffset = 0;
-        result.nDecompressedSize = lfh.nUncompressedSize;
 
         // Extract file name
         QString sFileName = read_ansiString(pState->nCurrentOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);

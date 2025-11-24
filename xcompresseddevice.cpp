@@ -46,7 +46,7 @@ bool XCompressedDevice::setData(QIODevice *pDevice, const XBinary::FPART &fPart,
     m_pOrigDevice = pDevice;
 
     if (fPart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE) != XBinary::COMPRESS_METHOD_STORE) {
-        qint64 nUncompressedSize = fPart.mapProperties.value(XBinary::FPART_PROP_COMPRESSEDSIZE, 0).toLongLong();
+        qint64 nUncompressedSize = fPart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
 
         m_pBufferDevice = XBinary::createFileBuffer(nUncompressedSize, pPdStruct);
 

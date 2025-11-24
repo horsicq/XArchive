@@ -423,8 +423,8 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         result.nStreamOffset = pState->nCurrentOffset + 512;
         result.nStreamSize = nFileSize;
-        result.nDecompressedOffset = 0;
-        result.nDecompressedSize = nFileSize;
+        // result.nDecompressedOffset = 0;
+        // result.nDecompressedSize = nFileSize;
 
         // Extract file name
         QString sFileName = QString::fromUtf8(header.name, qMin((qint32)sizeof(header.name), (qint32)100));

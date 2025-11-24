@@ -1119,8 +1119,6 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
 
         record.nStreamOffset = pContext->listFileOffsets.at(nIndex) + fileBlock.genericBlock4.nHeaderSize;
         record.nStreamSize = nPackSize;
-        record.nDecompressedOffset = 0;
-        record.nDecompressedSize = nUnpSize;
 
         record.mapProperties = _readProperties(fileBlock);
 
@@ -1129,8 +1127,6 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
 
         record.nStreamOffset = pContext->listFileOffsets.at(nIndex) + fileHeader.nHeaderSize;
         record.nStreamSize = fileHeader.nDataSize;
-        record.nDecompressedOffset = 0;
-        record.nDecompressedSize = fileHeader.nUnpackedSize;
 
         record.mapProperties = _readProperties(fileHeader);
     }

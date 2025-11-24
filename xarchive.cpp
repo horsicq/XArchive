@@ -83,7 +83,7 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         // Get current record info
         ARCHIVERECORD archiveRecord = infoCurrent(&state, pPdStruct);
 
-        if (archiveRecord.nStreamSize == 0 && archiveRecord.nDecompressedSize == 0) {
+        if (archiveRecord.nStreamSize == 0) {
             // Invalid record, stop iteration
             break;
         }
@@ -93,7 +93,7 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
         record.nDataOffset = archiveRecord.nStreamOffset;
         record.nDataSize = archiveRecord.nStreamSize;
-        record.spInfo.nUncompressedSize = archiveRecord.nDecompressedSize;
+        record.spInfo.nUncompressedSize = archiveRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
 
         // Extract common properties from mapProperties
         if (archiveRecord.mapProperties.contains(FPART_PROP_ORIGINALNAME)) {

@@ -734,8 +734,6 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     // Fill ARCHIVERECORD
     result.nStreamOffset = nStreamOffset;
     result.nStreamSize = (qint64)nStreamSize;
-    result.nDecompressedOffset = 0;
-    result.nDecompressedSize = (qint64)nStreamSize;
 
     // Set properties
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sName);

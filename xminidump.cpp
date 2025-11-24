@@ -967,8 +967,6 @@ XBinary::ARCHIVERECORD XMiniDump::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
     // Fill ARCHIVERECORD
     result.nStreamOffset = nStreamOffset;
     result.nStreamSize = (qint64)directory.DataSize;
-    result.nDecompressedOffset = 0;
-    result.nDecompressedSize = (qint64)directory.DataSize;
 
     // Set properties
     QString sStreamName = streamTypeToString(directory.StreamType);

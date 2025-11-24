@@ -356,8 +356,8 @@ XBinary::ARCHIVERECORD XBZIP2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
     // Fill ARCHIVERECORD
     result.nStreamOffset = pContext->nHeaderSize;
     result.nStreamSize = pContext->nCompressedSize - pContext->nHeaderSize;
-    result.nDecompressedOffset = 0;
-    result.nDecompressedSize = pContext->nUncompressedSize;
+    // result.nDecompressedOffset = 0;
+    // result.nDecompressedSize = pContext->nUncompressedSize;
 
     // Set properties
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);

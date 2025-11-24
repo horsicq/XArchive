@@ -770,8 +770,8 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         result.nStreamOffset = cfFolder.coffCabStart;
         result.nStreamSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
-        result.nDecompressedOffset = cfFile.uoffFolderStart;
-        result.nDecompressedSize = cfFile.cbFile;
+        // result.nDecompressedOffset = cfFile.uoffFolderStart;
+        // result.nDecompressedSize = cfFile.cbFile;
 
         result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sFileName);
         result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)cfFile.cbFile);

@@ -314,7 +314,6 @@ XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
         if (record.nHeaderOffset == pState->nCurrentOffset) {
             result.nStreamOffset = record.nDataOffset;
             result.nStreamSize = record.nDataSize;
-            result.nDecompressedSize = record.spInfo.nUncompressedSize;
             result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, record.spInfo.sRecordName);
             result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
             break;

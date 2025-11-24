@@ -797,8 +797,8 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             result.nStreamSize = nFileSize;
         }
 
-        result.nDecompressedOffset = 0;
-        result.nDecompressedSize = result.nStreamSize;
+        // result.nDecompressedOffset = 0;
+        // result.nDecompressedSize = result.nStreamSize;
 
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
@@ -825,7 +825,7 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_GID, nGid);
 
         // Size
-        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, result.nDecompressedSize);
+        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, result.nStreamSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, result.nStreamSize);
 
         // Parse mtime (decimal)
