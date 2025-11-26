@@ -22,6 +22,16 @@
 #define XSEVENZIP_H
 
 #include "xarchive.h"
+#include "xdecompress.h"
+#include "xcompress.h"
+#include "Algos/xlzmadecoder.h"
+#include "Algos/xaesdecoder.h"
+#include "Algos/xppmddecoder.h"
+#include "Algos/xbzip2decoder.h"
+#include "Algos/xdeflatedecoder.h"
+#include <QBuffer>
+#include <QFileInfo>
+#include <QDir>
 
 // TODO https://py7zr.readthedocs.io/en/latest/archive_format.html
 class XSevenZip : public XArchive {
@@ -111,7 +121,6 @@ public:
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
 
     // Streaming unpacking API
-    virtual bool initUnpack_temp(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr);
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
@@ -126,26 +135,6 @@ public:
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
-    struct SEVENZ_STREAM {
-        qint64 nOffset;
-        qint64 nSize;
-        COMPRESS_METHOD compressMethod;
-        QByteArray baProperties;
-        qint64 nUnpackSize;
-        QList<qint64> listSizes;
-        QList<quint32> listCRC;
-    };
-
-    struct SEVENZ_FOLDER_INFO {
-        qint64 nStreamOffset;            // Offset to compressed stream
-        qint64 nStreamSize;              // Size of compressed stream
-        COMPRESS_METHOD compressMethod;  // Compression method
-        COMPRESS_METHOD filterMethod;    // Filter method (BCJ, etc.)
-        QByteArray baProperties;         // Compression properties
-        qint64 nUnpackSize;              // Total uncompressed size of folder
-        QList<qint32> listFileIndices;   // Indices of files in this folder
-    };
-
     struct SEVENZ_UNPACK_CONTEXT {
         QList<ARCHIVERECORD> listArchiveRecords;  // Pre-parsed archive records
         QMap<QString, QIODevice *> mapDevices;
@@ -165,6 +154,7 @@ private:
     static void _writeId(QIODevice *pDevice, quint8 nId);
     static void _writeNumber(QIODevice *pDevice, quint64 nValue);
     static void _writeByte(QIODevice *pDevice, quint8 nByte);
+    bool _decompress(QIODevice *pDevice, COMPRESS_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize, PDSTRUCT *pPdStruct);
 
     enum SRTYPE {
         SRTYPE_UNKNOWN = 0,
@@ -183,7 +173,7 @@ private:
         IMPTYPE_STREAMPACKEDSIZE,
         IMPTYPE_STREAMUNPACKEDSIZE,
         IMPTYPE_STREAMUNPACKEDCRC,
-        IMPTYPE_NUMBEROFSTREAMS,
+        IMPTYPE_NUMBEROFPACKSTREAMS,
         IMPTYPE_CODER,
         IMPTYPE_CODERPROPERTY,
         IMPTYPE_FILENAME,

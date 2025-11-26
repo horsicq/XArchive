@@ -34,6 +34,7 @@
 #include "xreducedecoder.h"
 #include "xthreadobject.h"
 #include "xstoredecoder.h"
+#include "Algos/xppmddecoder.h"
 
 class XDecompress : public XThreadObject {
     Q_OBJECT

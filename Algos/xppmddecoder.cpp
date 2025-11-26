@@ -21,6 +21,7 @@
 #include "xppmddecoder.h"
 #include "xppmdrangedecoder.h"
 #include "xppmdmodel.h"
+#include "xppmd7model.h"
 
 XPPMdDecoder::XPPMdDecoder(QObject *pParent) : QObject(pParent)
 {
@@ -152,4 +153,102 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
 
     // If size is unknown, check if we successfully decoded something and there was no write error
     return bSuccess && (nDecompressed > 0) && !pDecompressState->bWriteError;
+}
+
+bool XPPMdDecoder::decompressPPMdH(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
+        return false;
+    }
+
+    // 7z PPMd format: 5 bytes (order, mem0-3 little-endian)
+    if (baProperty.size() != 5) {
+        return false;
+    }
+
+    // Extract PPMd parameters from 5-byte property
+    quint8 nOrder = (quint8)baProperty[0];
+    quint32 nMemSize = ((quint8)baProperty[1]) |
+                       (((quint32)(quint8)baProperty[2]) << 8) |
+                       (((quint32)(quint8)baProperty[3]) << 16) |
+                       (((quint32)(quint8)baProperty[4]) << 24);
+
+    // Validate parameters
+    if ((nOrder < XPPMd7Model::MIN_ORDER) || (nOrder > XPPMd7Model::MAX_ORDER)) {
+        return false;
+    }
+
+    if (nMemSize == 0) {
+        return false;
+    }
+
+    // Initialize Ppmd7 model (PPMdH variant used by 7z)
+    XPPMd7Model model;
+
+    if (!model.allocate(nMemSize)) {
+        return false;
+    }
+
+    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+    pDecompressState->pDeviceOutput->seek(0);
+
+    // Set input stream to compressed data
+    model.setInputStream(pDecompressState->pDeviceInput);
+    model.init(nOrder);  // PPMdH (Ppmd7) only takes order parameter
+
+    // Decompress symbol by symbol
+    const qint32 N_BUFFER_SIZE = 0x4000;
+    char sBufferOut[N_BUFFER_SIZE];
+
+    qint64 nUncompressedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, -1).toLongLong();
+    qint64 nDecompressed = 0;
+    bool bResult = true;
+
+    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qint32 nActual = 0;
+
+        // Decode buffer
+        for (qint32 i = 0; i < N_BUFFER_SIZE && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+            if (nUncompressedSize > 0 && nDecompressed >= nUncompressedSize) {
+                break;  // Reached expected size
+            }
+
+            qint32 nSymbol = model.decodeSymbol();
+
+            if (nSymbol < 0) {
+                // End of stream or error
+                if (nUncompressedSize > 0 && nDecompressed < nUncompressedSize) {
+                    bResult = false;  // Unexpected end
+                }
+                break;
+            }
+
+            sBufferOut[nActual++] = (char)nSymbol;
+            nDecompressed++;
+        }
+
+        // Write decoded data
+        if (nActual > 0) {
+            if (!XBinary::_writeDevice(sBufferOut, nActual, pDecompressState)) {
+                bResult = false;
+                break;
+            }
+        } else {
+            // No more data
+            break;
+        }
+    }
+
+    model.free();
+
+    // Verify size if known
+    if (nUncompressedSize > 0) {
+        if (nDecompressed != nUncompressedSize) {
+            return false;
+        }
+        return true;
+    }
+
+    // If size is unknown, check if we successfully decoded something and there was no write error
+    return bResult && (nDecompressed > 0) && !pDecompressState->bWriteError;
 }

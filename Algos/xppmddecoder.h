@@ -29,6 +29,7 @@ class XPPMdDecoder : public QObject {
 public:
     explicit XPPMdDecoder(QObject *pParent = nullptr);
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompressPPMdH(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XPPMDDECODER_H

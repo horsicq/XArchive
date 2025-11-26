@@ -132,6 +132,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XBZIP2Decoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
         bResult = XLZMADecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::COMPRESS_METHOD_PPMD) {
+        QByteArray baProperty = pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSPROPERTIES).toByteArray();
+        bResult = XPPMdDecoder::decompressPPMdH(pState, baProperty, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE) {
         bResult = XDeflateDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE64) {
