@@ -1575,6 +1575,10 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     qint32 nRecordIndex = nNumberOfEmptyStreams;
 
                     for (qint32 i = 0; i < nNumberOfPackStreams; i++) {
+                        if (nRecordIndex >= pContext->listArchiveRecords.count()) {
+                            break;
+                        }
+
                         qint64 nPackedStreamSize = 0;
                         qint64 nUnpackedStreamSize = 0;
                         qint32 nNumberOfUnpackedStreams = 0;
