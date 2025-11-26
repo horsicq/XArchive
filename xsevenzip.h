@@ -111,8 +111,8 @@ public:
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
 
     // Streaming unpacking API
+    virtual bool initUnpack_temp(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr);
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual bool initUnpack2(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr);
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -147,13 +147,8 @@ private:
     };
 
     struct SEVENZ_UNPACK_CONTEXT {
-        qint64 nSignatureSize;
-        QList<qint64> listRecordOffsets;
         QList<ARCHIVERECORD> listArchiveRecords;  // Pre-parsed archive records
-        QList<SEVENZ_FOLDER_INFO> listFolders;    // Folder (solid block) information
-        QMap<qint32, qint32> mapFileToFolder;     // Maps file index to folder index
-        QMap<qint32, QByteArray> mapFolderCache;  // Cache of decompressed folder data
-        QString sPassword;                        // Archive password (if encrypted)
+        QMap<QString, QIODevice *> mapDevices;
     };
 
     struct SEVENZ_PACK_CONTEXT {
@@ -187,6 +182,7 @@ private:
         IMPTYPE_STREAMOFFSET,
         IMPTYPE_STREAMPACKEDSIZE,
         IMPTYPE_STREAMUNPACKEDSIZE,
+        IMPTYPE_STREAMUNPACKEDCRC,
         IMPTYPE_NUMBEROFSTREAMS,
         IMPTYPE_CODER,
         IMPTYPE_CODERPROPERTY,
@@ -196,7 +192,7 @@ private:
         IMPTYPE_FILETIME,
         IMPTYPE_FILEPACKEDSIZE,
         IMPTYPE_FILEUNPACKEDSIZE,
-        IMPTYPE_NUMUNPACKSTREAM,  // Number of files in each folder (NumUnpackStream)
+        IMPTYPE_NUMBEROFUNPACKSTREAM,  // Number of files in each folder (NumUnpackStream)
         IMPTYPE_EMPTYSTREAMDATA,
         IMPTYPE_EMPTYFILEDATA,
         IMPTYPE_CTIMEDATA,

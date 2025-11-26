@@ -40,11 +40,7 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 
         // Set input device position
         if (pDecompressState->pDeviceInput) {
-            qDebug() << "[STORE] Input device size:" << pDecompressState->pDeviceInput->size();
-            qDebug() << "[STORE] Input device position before seek:" << pDecompressState->pDeviceInput->pos();
             pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-            qDebug() << "[STORE] Input device position after seek:" << pDecompressState->pDeviceInput->pos();
-            qDebug() << "[STORE] Input offset:" << pDecompressState->nInputOffset << "Input limit:" << pDecompressState->nInputLimit;
         }
 
         // Set output device position
@@ -61,18 +57,8 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
-            if (nOffset == 0 && nRead > 0) {
-                QByteArray baFirst(bufferIn, qMin(nRead, 20));
-                qDebug() << "[STORE] First 20 bytes read (hex):" << baFirst.toHex();
-                qDebug() << "[STORE] First 20 bytes read (text):" << QString::fromLatin1(baFirst);
-            }
-
             if (nRead > 0) {
                 XBinary::_writeDevice(bufferIn, nRead, pDecompressState);
-                if (nOffset == 0) {
-                    QByteArray baFirst(bufferIn, qMin(nRead, 20));
-                    qDebug() << "[STORE] First 20 bytes WRITTEN (hex):" << baFirst.toHex();
-                }
             } else {
                 break;
             }
