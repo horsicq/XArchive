@@ -708,7 +708,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         }
 
         case XSevenZip::k7zIdPackInfo: {
-            _handleNumber(pListRecords, pState, pPdStruct, "PackPosition", DRF_OFFSET, IMPTYPE_STREAMOFFSET);
+            pState->nStreamsBegin = _handleNumber(pListRecords, pState, pPdStruct, "PackPosition", DRF_OFFSET, IMPTYPE_STREAMOFFSET);
             quint64 nNumberOfPackStreams = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfPackStreams", DRF_COUNT, IMPTYPE_NUMBEROFPACKSTREAMS);
             _handleId(pListRecords, XSevenZip::k7zIdSize, pState, nNumberOfPackStreams, false, pPdStruct, IMPTYPE_STREAMPACKEDSIZE);
             _handleId(pListRecords, XSevenZip::k7zIdCRC, pState, 1, false, pPdStruct, IMPTYPE_STREAMCRC);
@@ -732,7 +732,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             break;
 
         case XSevenZip::k7zIdFolder: {
-            quint64 nNumberOfFolders = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFolders", DRF_COUNT, IMPTYPE_UNKNOWN);
+            quint64 nNumberOfFolders = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFolders", DRF_COUNT, IMPTYPE_NUMBEROFFOLDERS);
             pState->nNumberOfFolders = nNumberOfFolders;  // Store for SubStreamsInfo
 
 #ifdef QT_DEBUG
@@ -744,7 +744,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             if (nExt == 0) {
                 // Loop through all folders
                 for (quint64 iFolderIndex = 0; iFolderIndex < nNumberOfFolders && !pState->bIsError; iFolderIndex++) {
-                    quint64 nNumberOfCoders = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfCoders", DRF_COUNT, IMPTYPE_UNKNOWN);
+                    quint64 nNumberOfCoders = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfCoders", DRF_COUNT, IMPTYPE_NUMBEROFCODERS);
 
 #ifdef QT_DEBUG
                     qDebug() << "  Folder" << iFolderIndex << "has" << nNumberOfCoders << "coders";
@@ -1489,7 +1489,9 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     // qint32 nIndex = 0;
                     qint64 nCurrentStreamPosition = 0;
                     qint64 nNumberOfPackStreams = 0;
+                    qint64 nNumberOfFolders = 0;
                     QList<qint32> listNumberOfUnpackedStreams;
+                    QList<qint32> listNumberOfCoders;
                     QList<qint64> listPackedStreamSizes;
                     QList<qint64> listUnpackedStreamSizes;
                     QList<qint32> listUnpackedStreamCRC;
@@ -1505,6 +1507,8 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             ARCHIVERECORD record = {};
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, rec.varValue.toString());
                             pContext->listArchiveRecords.append(record);
+                        } else if (rec.impType == IMPTYPE_NUMBEROFFOLDERS) {
+                            nNumberOfFolders = rec.varValue.toLongLong();
                         } else if (rec.impType == IMPTYPE_NUMBEROFFILES) {
                             nNumberOfFiles = rec.varValue.toLongLong();
                         } else if (rec.impType == IMPTYPE_EMPTYSTREAMDATA) {
@@ -1512,9 +1516,11 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                         } else if (rec.impType == IMPTYPE_EMPTYFILEDATA) {
                             baEmptyFiles = rec.varValue.toByteArray();
                         } else if (rec.impType == IMPTYPE_STREAMOFFSET) {
-                            nCurrentStreamPosition += rec.varValue.toLongLong();
+                            nCurrentStreamPosition = rec.varValue.toLongLong();
                         } else if (rec.impType == IMPTYPE_NUMBEROFPACKSTREAMS) {
                             nNumberOfPackStreams = rec.varValue.toLongLong();
+                        } else if (rec.impType == IMPTYPE_NUMBEROFCODERS) {
+                            listNumberOfCoders.append(rec.varValue.toLongLong());
                         } else if (rec.impType == IMPTYPE_NUMBEROFUNPACKSTREAM) {
                             listNumberOfUnpackedStreams.append(rec.varValue.toLongLong());
                         } else if (rec.impType == IMPTYPE_STREAMPACKEDSIZE) {

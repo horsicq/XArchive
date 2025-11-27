@@ -167,7 +167,9 @@ private:
 
     enum IMPTYPE {
         IMPTYPE_UNKNOWN = 0,
+        IMPTYPE_NUMBEROFFOLDERS,
         IMPTYPE_NUMBEROFFILES,  // Number of files in archive
+        IMPTYPE_NUMBEROFCODERS,
         IMPTYPE_STREAMCRC,
         IMPTYPE_STREAMOFFSET,
         IMPTYPE_STREAMPACKEDSIZE,
@@ -202,14 +204,31 @@ private:
         IMPTYPE impType;
     };
 
+    struct SZCODER {
+        QByteArray baCoder;
+        QByteArray baProperty;
+    };
+
+    struct SZSTREAM {
+        qint64 nStreamOffset;
+        qint64 nStreamSize;
+        QList<SZCODER> listCoders;
+        qint64 nStreamUnpackSize;
+        quint32 nStreamUnpackCRC;
+    };
+
     struct SZSTATE {
         char *pData;
         qint64 nCurrentOffset;
         qint64 nSize;
         bool bIsError;
         QString sErrorString;
+        qint64 nStreamsBegin;
         quint64 nNumberOfFolders;  // Track folder count for SubStreamsInfo
         quint64 nNumberOfFiles;  // Track file count from FilesInfo (including extended count)
+        QList<SZSTREAM> listStreams;
+        qint32 nCurrentStream;
+        qint32 nCurrentSubstream;
     };
 
     QList<SZRECORD> _handleData(char *pData, qint64 nSize, PDSTRUCT *pPdStruct);
