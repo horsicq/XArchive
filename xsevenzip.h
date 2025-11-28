@@ -109,7 +109,7 @@ public:
 
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);
-    static COMPRESS_METHOD codecToCompressMethod(const QByteArray &baCodec);
+    static COMPRESS_METHOD coderToCompressMethod(const QByteArray &baCodec);
     static void _applyBCJFilter(QByteArray &baData, qint32 nOffset);
 
     static const QString PREFIX_k7zId;
@@ -172,7 +172,7 @@ private:
         IMPTYPE_NUMBEROFCODERS,
         IMPTYPE_STREAMCRC,
         IMPTYPE_STREAMOFFSET,
-        IMPTYPE_STREAMPACKEDSIZE,
+        IMPTYPE_STREAMSIZE,
         IMPTYPE_STREAMUNPACKEDSIZE,
         IMPTYPE_STREAMUNPACKEDCRC,
         IMPTYPE_NUMBEROFPACKSTREAMS,
@@ -212,9 +212,12 @@ private:
     struct SZSTREAM {
         qint64 nStreamOffset;
         qint64 nStreamSize;
+        quint32 nStreamCRC;
         QList<SZCODER> listCoders;
-        qint64 nStreamUnpackSize;
-        quint32 nStreamUnpackCRC;
+        qint64 nStreamUnpackedSize;
+        quint32 nStreamUnpackedCRC;
+        QList<qint64> listSubSreamSizes;
+        QList<quint32> listSubSreamCRC;
     };
 
     struct SZSTATE {
@@ -227,6 +230,9 @@ private:
         quint64 nNumberOfFolders;  // Track folder count for SubStreamsInfo
         quint64 nNumberOfFiles;  // Track file count from FilesInfo (including extended count)
         QList<SZSTREAM> listStreams;
+        QByteArray baEmptyStreams;
+        QByteArray baEmtyFiles;
+        QList<QString> listFileNames;
         qint32 nCurrentStream;
         qint32 nCurrentSubstream;
     };
@@ -236,7 +242,7 @@ private:
     quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, quint32 nFlags, IMPTYPE impType);
     quint8 _handleByte(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
     quint32 _handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
-    void _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
+    QByteArray _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
 };
 
 #endif  // XSEVENZIP_H
