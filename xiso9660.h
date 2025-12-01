@@ -105,6 +105,12 @@ public:
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
+    virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
     ISO9660_PVDESC _readPrimaryVolumeDescriptor(qint64 nOffset);
 
 private:
@@ -114,9 +120,19 @@ private:
         qint64 nRootDirSize;
     };
 
+    struct ISO9660_UNPACK_CONTEXT {
+        qint32 nLogicalBlockSize;
+        QList<QPair<qint64, qint64>> listDirStack;  // Stack of (offset, size) for directories to process
+        QList<ARCHIVERECORD> listCurrentDirRecords;  // Records in current directory
+        qint32 nCurrentRecordIndex;  // Index in current directory
+        QSet<qint64> setProcessedBlocks;  // Track processed directory blocks to avoid loops
+    };
+
     qint32 _getLogicalBlockSize();
     qint64 _getPrimaryVolumeDescriptorOffset();
     bool _isValidDescriptor(qint64 nOffset, PDSTRUCT *pPdStruct);
+    QList<ARCHIVERECORD> _parseDirectory(qint64 nOffset, qint64 nSize, qint32 nBlockSize, PDSTRUCT *pPdStruct);
+    QString _cleanFileName(const QString &sFileName);
 };
 
 #endif  // XISO9660_H
