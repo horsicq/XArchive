@@ -354,8 +354,8 @@ XBinary::ARCHIVERECORD XBZIP2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
     BZIP2_UNPACK_CONTEXT *pContext = (BZIP2_UNPACK_CONTEXT *)pState->pContext;
 
     // Fill ARCHIVERECORD
-    result.nStreamOffset = pContext->nHeaderSize;
-    result.nStreamSize = pContext->nCompressedSize - pContext->nHeaderSize;
+    result.nStreamOffset = 0;
+    result.nStreamSize = pContext->nCompressedSize;
     // result.nDecompressedOffset = 0;
     // result.nDecompressedSize = pContext->nUncompressedSize;
 

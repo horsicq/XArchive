@@ -49,6 +49,7 @@
 #include "xbzip2.h"
 #include "xxz.h"
 #include "xminidump.h"
+#include "xdmg.h"
 
 class XArchives : public QObject {
     Q_OBJECT

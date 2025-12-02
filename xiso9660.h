@@ -123,6 +123,8 @@ private:
     struct ISO9660_UNPACK_CONTEXT {
         qint32 nLogicalBlockSize;
         QList<QPair<qint64, qint64>> listDirStack;  // Stack of (offset, size) for directories to process
+        QList<QString> listPathStack;  // Stack of folder paths corresponding to directories
+        QString sCurrentPath;  // Current folder path (e.g., "FolderName1/FolderName2")
         QList<ARCHIVERECORD> listCurrentDirRecords;  // Records in current directory
         qint32 nCurrentRecordIndex;  // Index in current directory
         QSet<qint64> setProcessedBlocks;  // Track processed directory blocks to avoid loops
@@ -131,7 +133,8 @@ private:
     qint32 _getLogicalBlockSize();
     qint64 _getPrimaryVolumeDescriptorOffset();
     bool _isValidDescriptor(qint64 nOffset, PDSTRUCT *pPdStruct);
-    QList<ARCHIVERECORD> _parseDirectory(qint64 nOffset, qint64 nSize, qint32 nBlockSize, PDSTRUCT *pPdStruct);
+    QList<ARCHIVERECORD> _parseDirectory(qint64 nOffset, qint64 nSize, qint32 nBlockSize, const QString &sParentPath, PDSTRUCT *pPdStruct);
+    qint64 _countAllRecords(qint64 nRootOffset, qint64 nRootSize, qint32 nBlockSize, PDSTRUCT *pPdStruct);
     QString _cleanFileName(const QString &sFileName);
 };
 

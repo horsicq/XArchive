@@ -184,7 +184,80 @@ QString XISO9660::_cleanFileName(const QString &sFileName)
     return sResult;
 }
 
-QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectory(qint64 nOffset, qint64 nSize, qint32 nBlockSize, PDSTRUCT *pPdStruct)
+qint64 XISO9660::_countAllRecords(qint64 nRootOffset, qint64 nRootSize, qint32 nBlockSize, PDSTRUCT *pPdStruct)
+{
+    qint64 nTotalCount = 0;
+    QList<QPair<qint64, qint64>> listDirStack;
+    QSet<qint64> setProcessedBlocks;
+    
+    // Add root directory to stack
+    listDirStack.append(QPair<qint64, qint64>(nRootOffset, nRootSize));
+    setProcessedBlocks.insert(nRootOffset / nBlockSize);
+    
+    while (!listDirStack.isEmpty() && isPdStructNotCanceled(pPdStruct)) {
+        QPair<qint64, qint64> dirInfo = listDirStack.takeFirst();
+        qint64 nCurrentOffset = dirInfo.first;
+        qint64 nEndOffset = dirInfo.first + dirInfo.second;
+        
+        while ((nCurrentOffset < nEndOffset) && isPdStructNotCanceled(pPdStruct)) {
+            qint64 nBlockStart = nCurrentOffset;
+            qint64 nBlockEnd = qMin(nBlockStart + nBlockSize, nEndOffset);
+            
+            while (nCurrentOffset < nBlockEnd) {
+                quint8 nRecordLength = read_uint8(nCurrentOffset);
+                
+                if (nRecordLength == 0) {
+                    nCurrentOffset = nBlockEnd;
+                    break;
+                }
+                
+                if (nRecordLength < 34 || nCurrentOffset + nRecordLength > nBlockEnd) {
+                    nCurrentOffset = nBlockEnd;
+                    break;
+                }
+                
+                quint8 nFileNameLength = read_uint8(nCurrentOffset + 32);
+                
+                // Read file name to check for . and ..
+                QString sFileName;
+                if (nFileNameLength > 0 && nCurrentOffset + 33 + nFileNameLength <= nBlockEnd) {
+                    QByteArray baFileName = read_array(nCurrentOffset + 33, nFileNameLength);
+                    sFileName = QString::fromLatin1(baFileName);
+                }
+                
+                // Skip "." and ".." entries
+                if (nFileNameLength == 1 && (sFileName == "\x00" || sFileName == "\x01")) {
+                    nCurrentOffset += nRecordLength;
+                    continue;
+                }
+                
+                // Count this record
+                nTotalCount++;
+                
+                // Check if it's a directory
+                quint8 nFileFlags = read_uint8(nCurrentOffset + 25);
+                if (nFileFlags & 0x02) {
+                    quint32 nExtentLocation = read_uint32(nCurrentOffset + 2);
+                    quint32 nDataLength = read_uint32(nCurrentOffset + 10);
+                    qint64 nDirBlock = nExtentLocation;
+                    
+                    // Add subdirectory to stack if not already processed
+                    if (!setProcessedBlocks.contains(nDirBlock)) {
+                        qint64 nDirOffset = (qint64)nExtentLocation * nBlockSize;
+                        listDirStack.append(QPair<qint64, qint64>(nDirOffset, (qint64)nDataLength));
+                        setProcessedBlocks.insert(nDirBlock);
+                    }
+                }
+                
+                nCurrentOffset += nRecordLength;
+            }
+        }
+    }
+    
+    return nTotalCount;
+}
+
+QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectory(qint64 nOffset, qint64 nSize, qint32 nBlockSize, const QString &sParentPath, PDSTRUCT *pPdStruct)
 {
     QList<ARCHIVERECORD> listResult;
     
@@ -235,8 +308,17 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectory(qint64 nOffset, qint64 n
             record.nStreamOffset = (qint64)nExtentLocation * nBlockSize + nExtAttrLength * nBlockSize;
             record.nStreamSize = nDataLength;
             
+            // Clean file name and build full path
+            QString sCleanName = _cleanFileName(sFileName);
+            QString sFullPath;
+            if (sParentPath.isEmpty()) {
+                sFullPath = sCleanName;
+            } else {
+                sFullPath = sParentPath + "/" + sCleanName;
+            }
+            
             // Set properties
-            record.mapProperties[FPART_PROP_ORIGINALNAME] = _cleanFileName(sFileName);
+            record.mapProperties[FPART_PROP_ORIGINALNAME] = sFullPath;
             record.mapProperties[FPART_PROP_UNCOMPRESSEDSIZE] = (qint64)nDataLength;
             record.mapProperties[FPART_PROP_COMPRESSEDSIZE] = (qint64)nDataLength;
             record.mapProperties[FPART_PROP_COMPRESSMETHOD] = COMPRESS_METHOD_STORE;
@@ -304,13 +386,16 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     qint64 nRootOffset = (qint64)nRootExtentLocation * pContext->nLogicalBlockSize;
     qint64 nRootSize = (qint64)nRootDataLength;
     
+    // Count total records by walking through all directories upfront
+    pState->nNumberOfRecords = _countAllRecords(nRootOffset, nRootSize, pContext->nLogicalBlockSize, pPdStruct);
+    
+    // Initialize current path as empty for root directory
+    pContext->sCurrentPath = "";
+    
     // Parse root directory
-    pContext->listCurrentDirRecords = _parseDirectory(nRootOffset, nRootSize, pContext->nLogicalBlockSize, pPdStruct);
+    pContext->listCurrentDirRecords = _parseDirectory(nRootOffset, nRootSize, pContext->nLogicalBlockSize, pContext->sCurrentPath, pPdStruct);
     pContext->nCurrentRecordIndex = 0;
     pContext->setProcessedBlocks.insert(nRootExtentLocation);
-    
-    // Count total records (will be updated as we discover subdirectories)
-    pState->nNumberOfRecords = pContext->listCurrentDirRecords.count();
     
     pState->pContext = pContext;
     
@@ -395,6 +480,11 @@ bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
             // Only add if not already processed (avoid loops)
             if (!pContext->setProcessedBlocks.contains(nDirBlock)) {
                 pContext->listDirStack.append(QPair<qint64, qint64>(nDirOffset, nDirSize));
+                
+                // Build path for this subdirectory
+                QString sFolderName = record.mapProperties.value(FPART_PROP_ORIGINALNAME).toString();
+                pContext->listPathStack.append(sFolderName);
+                
                 pContext->setProcessedBlocks.insert(nDirBlock);
             }
         }
@@ -403,15 +493,25 @@ bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pContext->nCurrentRecordIndex++;
     pState->nCurrentIndex++;
     
+    // Check if we've exceeded the total record count
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+    
     // If we've processed all records in current directory, load next directory from stack
     if (pContext->nCurrentRecordIndex >= pContext->listCurrentDirRecords.count()) {
         if (!pContext->listDirStack.isEmpty()) {
             QPair<qint64, qint64> dirInfo = pContext->listDirStack.takeFirst();
-            pContext->listCurrentDirRecords = _parseDirectory(dirInfo.first, dirInfo.second, pContext->nLogicalBlockSize, pPdStruct);
-            pContext->nCurrentRecordIndex = 0;
+            QString sNextPath = pContext->listPathStack.takeFirst();
             
-            // Update total count
-            pState->nNumberOfRecords += pContext->listCurrentDirRecords.count();
+            // Update current path
+            pContext->sCurrentPath = sNextPath;
+            
+            pContext->listCurrentDirRecords = _parseDirectory(dirInfo.first, dirInfo.second, pContext->nLogicalBlockSize, pContext->sCurrentPath, pPdStruct);
+            pContext->nCurrentRecordIndex = 0;
+        } else {
+            // No more directories to process
+            return false;
         }
     }
     

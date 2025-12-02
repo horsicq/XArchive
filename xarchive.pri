@@ -57,7 +57,8 @@ HEADERS += \
     $$PWD/xlzip.h \
     $$PWD/xxz.h \
     $$PWD/xzlib.h \
-    $$PWD/xminidump.h
+    $$PWD/xminidump.h \
+    $$PWD/xdmg.h
 
 SOURCES += \
     $$PWD/Algos/xlzhdecoder.cpp \
@@ -111,7 +112,8 @@ SOURCES += \
     $$PWD/xlzip.cpp \
     $$PWD/xxz.cpp \
     $$PWD/xzlib.cpp \
-    $$PWD/xminidump.cpp
+    $$PWD/xminidump.cpp \
+    $$PWD/xdmg.cpp
 
 !contains(XCONFIG, xbinary) {
     XCONFIG += xbinary
