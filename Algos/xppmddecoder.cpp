@@ -168,10 +168,8 @@ bool XPPMdDecoder::decompressPPMdH(XBinary::DATAPROCESS_STATE *pDecompressState,
 
     // Extract PPMd parameters from 5-byte property
     quint8 nOrder = (quint8)baProperty[0];
-    quint32 nMemSize = ((quint8)baProperty[1]) |
-                       (((quint32)(quint8)baProperty[2]) << 8) |
-                       (((quint32)(quint8)baProperty[3]) << 16) |
-                       (((quint32)(quint8)baProperty[4]) << 24);
+    quint32 nMemSize =
+        ((quint8)baProperty[1]) | (((quint32)(quint8)baProperty[2]) << 8) | (((quint32)(quint8)baProperty[3]) << 16) | (((quint32)(quint8)baProperty[4]) << 24);
 
     // Validate parameters
     if ((nOrder < XPPMd7Model::MIN_ORDER) || (nOrder > XPPMd7Model::MAX_ORDER)) {

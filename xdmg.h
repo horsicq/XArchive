@@ -49,7 +49,7 @@ public:
 
     // 512-byte koly block (trailer)
     struct KOLY_BLOCK {
-        quint32 nMagic;           // 0x6b6f6c79 ("koly")
+        quint32 nMagic;  // 0x6b6f6c79 ("koly")
         quint32 nVersion;
         quint32 nHeaderLength;
         quint32 nFlags;
@@ -73,7 +73,7 @@ public:
 
     // 204-byte mish block
     struct MISH_BLOCK {
-        quint32 nMagic;        // 0x6d697368 ("mish")
+        quint32 nMagic;  // 0x6d697368 ("mish")
         quint32 nVersion;
         quint64 nStartSector;
         quint64 nSectorCount;

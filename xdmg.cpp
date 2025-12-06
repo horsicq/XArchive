@@ -150,24 +150,24 @@ quint64 XDMG::getNumberOfRecords(PDSTRUCT *pPdStruct)
     qint64 nSize = getSize();
     if (nSize > 512) {
         KOLY_BLOCK kolyBlock = readKolyBlock(getDevice(), nSize - 512);
-        
+
         if (kolyBlock.nMagic == 0x6b6f6c79 && kolyBlock.nXmlLength > 0) {
             QByteArray baXml = read_array(kolyBlock.nXmlOffset, kolyBlock.nXmlLength);
-            
+
             // Count mish blocks in XML
             qint32 nMishCount = 0;
             QString sXml = QString::fromUtf8(baXml);
             qint32 nPos = 0;
-            
+
             while ((nPos = sXml.indexOf("<key>blkx</key>", nPos)) != -1) {
                 nMishCount++;
                 nPos += 15;
-                
+
                 if (isPdStructNotCanceled(pPdStruct)) {
                     break;
                 }
             }
-            
+
             nResult = nMishCount;
         }
     }
@@ -182,29 +182,27 @@ QList<XArchive::RECORD> XDMG::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     qint64 nSize = getSize();
     if (nSize > 512) {
         KOLY_BLOCK kolyBlock = readKolyBlock(getDevice(), nSize - 512);
-        
+
         if (kolyBlock.nMagic == 0x6b6f6c79 && kolyBlock.nXmlLength > 0) {
             QByteArray baXml = read_array(kolyBlock.nXmlOffset, kolyBlock.nXmlLength);
-            
+
             // Parse XML for mish blocks
             QString sXml = QString::fromUtf8(baXml);
             qint32 nPos = 0;
             qint32 nRecordIndex = 0;
-            
-            while ((nPos = sXml.indexOf("<key>blkx</key>", nPos)) != -1 && 
-                   isPdStructNotCanceled(pPdStruct)) {
-                
+
+            while ((nPos = sXml.indexOf("<key>blkx</key>", nPos)) != -1 && isPdStructNotCanceled(pPdStruct)) {
                 if (nLimit != -1 && nRecordIndex >= nLimit) {
                     break;
                 }
-                
+
                 RECORD record = {};
                 record.spInfo.sRecordName = QString("partition%1").arg(nRecordIndex);
                 record.spInfo.nUncompressedSize = 0;
                 record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
                 record.nDataOffset = 0;
                 record.nDataSize = 0;
-                
+
                 listResult.append(record);
                 nRecordIndex++;
                 nPos += 15;
@@ -218,7 +216,7 @@ QList<XArchive::RECORD> XDMG::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapOptions, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapOptions)
-    
+
     bool bResult = false;
 
     if (pState) {
@@ -231,21 +229,20 @@ bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         qint64 nSize = getSize();
         if (nSize > 512) {
             KOLY_BLOCK kolyBlock = readKolyBlock(getDevice(), nSize - 512);
-            
+
             if (kolyBlock.nMagic == 0x6b6f6c79 && kolyBlock.nXmlLength > 0) {
                 pContext->baXmlData = read_array(kolyBlock.nXmlOffset, kolyBlock.nXmlLength);
-                
+
                 // Parse XML for mish blocks
                 QString sXml = QString::fromUtf8(pContext->baXmlData);
                 qint32 nPos = 0;
                 qint32 nRecordCount = 0;
-                
-                while ((nPos = sXml.indexOf("<key>blkx</key>", nPos)) != -1 && 
-                       isPdStructNotCanceled(pPdStruct)) {
+
+                while ((nPos = sXml.indexOf("<key>blkx</key>", nPos)) != -1 && isPdStructNotCanceled(pPdStruct)) {
                     nRecordCount++;
                     nPos += 15;
                 }
-                
+
                 pState->nNumberOfRecords = nRecordCount;
                 pState->nCurrentIndex = 0;
                 pState->pContext = pContext;
@@ -264,12 +261,12 @@ bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 XArchive::ARCHIVERECORD XDMG::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    
+
     ARCHIVERECORD result = {};
 
     if (pState && pState->pContext) {
         DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
-        
+
         result.mapProperties.insert(FPART_PROP_ORIGINALNAME, QString("partition%1").arg(pContext->nCurrentFileIndex));
         result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, 0);
         result.nStreamOffset = 0;
@@ -282,7 +279,7 @@ XArchive::ARCHIVERECORD XDMG::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    
+
     bool bResult = false;
 
     if (pState && pState->pContext && pDevice) {
@@ -297,15 +294,15 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 bool XDMG::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    
+
     bool bResult = false;
 
     if (pState && pState->pContext) {
         DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
-        
+
         pContext->nCurrentFileIndex++;
         pState->nCurrentIndex++;
-        
+
         if (pState->nCurrentIndex < pState->nNumberOfRecords) {
             bResult = true;
         }
@@ -317,7 +314,7 @@ bool XDMG::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 bool XDMG::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    
+
     bool bResult = false;
 
     if (pState && pState->pContext) {
@@ -336,7 +333,7 @@ XDMG::KOLY_BLOCK XDMG::readKolyBlock(QIODevice *pDevice, qint64 nOffset)
 
     if (pDevice) {
         XBinary binary(pDevice);
-        
+
         result.nMagic = binary.read_uint32(nOffset, true);
         result.nVersion = binary.read_uint32(nOffset + 4, true);
         result.nHeaderLength = binary.read_uint32(nOffset + 8, true);
@@ -348,11 +345,11 @@ XDMG::KOLY_BLOCK XDMG::readKolyBlock(QIODevice *pDevice, qint64 nOffset)
         result.nResourceForkLength = binary.read_uint64(nOffset + 48, true);
         result.nSegment = binary.read_uint32(nOffset + 56, true);
         result.nSegmentCount = binary.read_uint32(nOffset + 60, true);
-        
+
         // Skip segmentID (16 bytes) and dataChecksum (136 bytes)
         result.nXmlOffset = binary.read_uint64(nOffset + 216, true);
         result.nXmlLength = binary.read_uint64(nOffset + 224, true);
-        
+
         // Skip padding and masterChecksum
         result.nImageVariant = binary.read_uint32(nOffset + 488, true);
         result.nSectorCount = binary.read_uint64(nOffset + 492, true);
@@ -367,7 +364,7 @@ XDMG::MISH_BLOCK XDMG::readMishBlock(QIODevice *pDevice, qint64 nOffset)
 
     if (pDevice) {
         XBinary binary(pDevice);
-        
+
         result.nMagic = binary.read_uint32(nOffset, true);
         result.nVersion = binary.read_uint32(nOffset + 4, true);
         result.nStartSector = binary.read_uint64(nOffset + 8, true);
@@ -388,7 +385,7 @@ XDMG::BLOCK_DATA XDMG::readBlockData(QIODevice *pDevice, qint64 nOffset)
 
     if (pDevice) {
         XBinary binary(pDevice);
-        
+
         result.nType = binary.read_uint32(nOffset, true);
         result.nReserved = binary.read_uint32(nOffset + 4, true);
         result.nStartSector = binary.read_uint64(nOffset + 8, true);
@@ -403,7 +400,7 @@ XDMG::BLOCK_DATA XDMG::readBlockData(QIODevice *pDevice, qint64 nOffset)
 QByteArray XDMG::_parseXmlForMish(const QByteArray &baXml, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    
+
     // Placeholder for XML parsing
     return QByteArray();
 }
@@ -411,7 +408,7 @@ QByteArray XDMG::_parseXmlForMish(const QByteArray &baXml, PDSTRUCT *pPdStruct)
 bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    
+
     bool bResult = true;
     qint64 nSectorSize = 512;  // DMG sector size
     qint64 nExpectedSize = stripe.nSectorCount * nSectorSize;
@@ -518,18 +515,18 @@ bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, QIODevice *pDevice, PDSTR
 bool XDMG::_writeZeroes(QIODevice *pDevice, qint64 nSize)
 {
     bool bResult = true;
-    
+
     QByteArray baZeroes(4096, 0);
     while (nSize > 0 && bResult) {
         qint64 nToWrite = qMin(nSize, (qint64)baZeroes.size());
         qint64 nWritten = pDevice->write(baZeroes.constData(), nToWrite);
-        
+
         if (nWritten != nToWrite) {
             bResult = false;
         }
-        
+
         nSize -= nWritten;
     }
-    
+
     return bResult;
 }

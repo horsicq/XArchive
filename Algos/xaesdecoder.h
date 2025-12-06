@@ -32,11 +32,11 @@ class XAESDecoder : public QObject {
 
 public:
     explicit XAESDecoder(QObject *parent = nullptr);
-    
+
     // Decrypt AES-encrypted data from 7z archives
     // Properties format: NumCyclesPower (1 byte) + SaltSize (1 byte) + Salt (0-16 bytes) + IV (16 bytes)
     static bool decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByteArray &baProperties, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    
+
 private:
     // Derive key from password using SHA-256 with salt and cycle power
     static void deriveKey(const QString &sPassword, const QByteArray &baSalt, quint8 nNumCyclesPower, quint8 *pKey);

@@ -22,12 +22,9 @@
 #include "Algos/xstoredecoder.h"
 
 XBinary::XCONVERT _TABLE_XMINIDUMP_STRUCTID[] = {
-    {XMiniDump::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-    {XMiniDump::STRUCTID_HEADER, "HEADER", QString("Header")},
-    {XMiniDump::STRUCTID_DIRECTORY, "DIRECTORY", QString("Directory")},
-    {XMiniDump::STRUCTID_STREAM, "STREAM", QString("Stream")},
-    {XMiniDump::STRUCTID_MODULE_LIST, "MODULE_LIST", QString("Module List")},
-    {XMiniDump::STRUCTID_MODULE, "MODULE", QString("Module")},
+    {XMiniDump::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},         {XMiniDump::STRUCTID_HEADER, "HEADER", QString("Header")},
+    {XMiniDump::STRUCTID_DIRECTORY, "DIRECTORY", QString("Directory")},       {XMiniDump::STRUCTID_STREAM, "STREAM", QString("Stream")},
+    {XMiniDump::STRUCTID_MODULE_LIST, "MODULE_LIST", QString("Module List")}, {XMiniDump::STRUCTID_MODULE, "MODULE", QString("Module")},
 };
 
 XMiniDump::XMiniDump(QIODevice *pDevice) : XArchive(pDevice)
@@ -58,11 +55,8 @@ bool XMiniDump::isValid(PDSTRUCT *pPdStruct)
                     // Validate stream directory RVA is within file bounds
                     qint64 nDirectoryOffset = (qint64)header.StreamDirectoryRva;
                     qint64 nDirectorySize = (qint64)header.NumberOfStreams * (qint64)sizeof(MINIDUMP_DIRECTORY);
-                    
-                    if ((nDirectoryOffset > 0) && 
-                        (nDirectoryOffset < nFileSize) && 
-                        (nDirectorySize > 0) && 
-                        (nDirectoryOffset + nDirectorySize <= nFileSize)) {
+
+                    if ((nDirectoryOffset > 0) && (nDirectoryOffset < nFileSize) && (nDirectorySize > 0) && (nDirectoryOffset + nDirectorySize <= nFileSize)) {
                         bResult = true;
                     }
                 }
@@ -96,15 +90,15 @@ QString XMiniDump::getArch()
 
     XBinary::PDSTRUCT pdStructEmpty = {};
     PDSTRUCT *pPdStruct = &pdStructEmpty;
-    
+
     // Find SystemInfoStream (stream type 7)
     MINIDUMP_DIRECTORY systemInfoDir = findStream(SystemInfoStream, pPdStruct);
-    
+
     if ((systemInfoDir.StreamType == SystemInfoStream) && (systemInfoDir.DataSize >= sizeof(MINIDUMP_SYSTEM_INFO))) {
         MINIDUMP_SYSTEM_INFO systemInfo = read_MINIDUMP_SYSTEM_INFO(systemInfoDir.LocationRva);
         sResult = processorArchitectureToString(systemInfo.ProcessorArchitecture);
     }
-    
+
     return sResult;
 }
 
@@ -114,26 +108,23 @@ XBinary::MODE XMiniDump::getMode()
 
     XBinary::PDSTRUCT pdStructEmpty = {};
     PDSTRUCT *pPdStruct = &pdStructEmpty;
-    
+
     // Find SystemInfoStream (stream type 7)
     MINIDUMP_DIRECTORY systemInfoDir = findStream(SystemInfoStream, pPdStruct);
-    
+
     if ((systemInfoDir.StreamType == SystemInfoStream) && (systemInfoDir.DataSize >= sizeof(MINIDUMP_SYSTEM_INFO))) {
         MINIDUMP_SYSTEM_INFO systemInfo = read_MINIDUMP_SYSTEM_INFO(systemInfoDir.LocationRva);
-        
+
         // Determine mode based on architecture
-        if ((systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_AMD64) ||
-            (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_IA64) ||
+        if ((systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_AMD64) || (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_IA64) ||
             (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_ARM64)) {
             result = MODE_64;
-        } else if ((systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_INTEL) ||
-                   (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_ARM) ||
-                   (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_PPC) ||
-                   (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_MIPS)) {
+        } else if ((systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_INTEL) || (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_ARM) ||
+                   (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_PPC) || (systemInfo.ProcessorArchitecture == X_PROCESSOR_ARCHITECTURE_MIPS)) {
             result = MODE_32;
         }
     }
-    
+
     return result;
 }
 
@@ -225,13 +216,20 @@ QList<XBinary::DATA_HEADER> XMiniDump::getDataHeaders(const DATA_HEADERS_OPTIONS
                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XMiniDump::structIDToString(dataHeadersOptions.nID));
                 dataHeader.nSize = sizeof(MINIDUMP_HEADER);
 
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, Signature), sizeof(quint32), "Signature", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, Version), sizeof(quint32), "Version", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, NumberOfStreams), sizeof(quint32), "NumberOfStreams", VT_UINT32, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, StreamDirectoryRva), sizeof(quint32), "StreamDirectoryRva", VT_UINT32, DRF_OFFSET, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, CheckSum), sizeof(quint32), "CheckSum", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, TimeDateStamp), sizeof(quint32), "TimeDateStamp", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian)); // TODO TimeDateStamp
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, Flags), sizeof(quint64), "Flags", VT_UINT64, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(MINIDUMP_HEADER, Signature), sizeof(quint32), "Signature", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(MINIDUMP_HEADER, Version), sizeof(quint32), "Version", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, NumberOfStreams), sizeof(quint32), "NumberOfStreams", VT_UINT32, DRF_COUNT,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, StreamDirectoryRva), sizeof(quint32), "StreamDirectoryRva", VT_UINT32, DRF_OFFSET,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(MINIDUMP_HEADER, CheckSum), sizeof(quint32), "CheckSum", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_HEADER, TimeDateStamp), sizeof(quint32), "TimeDateStamp", VT_UINT32, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));  // TODO TimeDateStamp
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(MINIDUMP_HEADER, Flags), sizeof(quint64), "Flags", VT_UINT64, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
 
@@ -252,9 +250,12 @@ QList<XBinary::DATA_HEADER> XMiniDump::getDataHeaders(const DATA_HEADERS_OPTIONS
                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XMiniDump::structIDToString(dataHeadersOptions.nID));
                 dataHeader.nSize = sizeof(MINIDUMP_DIRECTORY);
 
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_DIRECTORY, StreamType), sizeof(quint32), "StreamType", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_DIRECTORY, DataSize), sizeof(quint32), "DataSize", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_DIRECTORY, LocationRva), sizeof(quint32), "LocationRva", VT_UINT32, DRF_OFFSET, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_DIRECTORY, StreamType), sizeof(quint32), "StreamType", VT_UINT32, DRF_UNKNOWN,
+                                                            dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(MINIDUMP_DIRECTORY, DataSize), sizeof(quint32), "DataSize", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(MINIDUMP_DIRECTORY, LocationRva), sizeof(quint32), "LocationRva", VT_UINT32, DRF_OFFSET,
+                                                            dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
 
@@ -262,16 +263,16 @@ QList<XBinary::DATA_HEADER> XMiniDump::getDataHeaders(const DATA_HEADERS_OPTIONS
                     // Compute directory index from location
                     MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
                     qint32 nDirectoryIndex = -1;
-                    
-                    if ((nStartOffset >= (qint64)header.StreamDirectoryRva) && 
+
+                    if ((nStartOffset >= (qint64)header.StreamDirectoryRva) &&
                         ((nStartOffset - (qint64)header.StreamDirectoryRva) % (qint64)sizeof(MINIDUMP_DIRECTORY) == 0)) {
                         nDirectoryIndex = (nStartOffset - (qint64)header.StreamDirectoryRva) / (qint64)sizeof(MINIDUMP_DIRECTORY);
                     }
-                    
+
                     if (nDirectoryIndex >= 0) {
                         // Read the directory entry to check if it's a ModuleListStream
                         MINIDUMP_DIRECTORY directory = read_MINIDUMP_DIRECTORY(nDirectoryIndex);
-                        
+
                         if (directory.StreamType == ModuleListStream) {
                             // Add ModuleListStream child
                             DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
@@ -286,7 +287,7 @@ QList<XBinary::DATA_HEADER> XMiniDump::getDataHeaders(const DATA_HEADERS_OPTIONS
                 }
             } else if (dataHeadersOptions.nID == STRUCTID_MODULE_LIST) {
                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XMiniDump::structIDToString(dataHeadersOptions.nID));
-                
+
                 // Read module list header
                 MINIDUMP_MODULE_LIST moduleList = read_MINIDUMP_MODULE_LIST(nStartOffset);
                 dataHeader.nSize = sizeof(quint32);
@@ -311,12 +312,12 @@ QList<XBinary::DATA_HEADER> XMiniDump::getDataHeaders(const DATA_HEADERS_OPTIONS
                 // Read module to get name for display
                 MINIDUMP_MODULE module = read_MINIDUMP_MODULE(nStartOffset);
                 QString sModuleName = read_MINIDUMP_STRING(module.ModuleNameRva);
-                
+
                 QString sStructName = XMiniDump::structIDToString(dataHeadersOptions.nID);
                 if (!sModuleName.isEmpty()) {
                     sStructName = sStructName + QString(" (%1)").arg(sModuleName);
                 }
-                
+
                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, sStructName);
                 qint64 nModuleSize = 8 + 4 + 4 + 4 + 4 + sizeof(VS_FIXEDFILEINFO) + sizeof(MINIDUMP_LOCATION_DESCRIPTOR) * 2 + 8 + 8;
                 dataHeader.nSize = nModuleSize;
@@ -339,31 +340,44 @@ QList<XBinary::DATA_HEADER> XMiniDump::getDataHeaders(const DATA_HEADERS_OPTIONS
                 nOffset += 4;
 
                 // VS_FIXEDFILEINFO
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwSignature", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwSignature", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwStrucVersion", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwStrucVersion", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileVersionMS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileVersionMS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileVersionLS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileVersionLS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwProductVersionMS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwProductVersionMS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwProductVersionLS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwProductVersionLS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileFlagsMask", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileFlagsMask", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileFlags", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileFlags", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileOS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileOS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileType", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileType", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileSubtype", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileSubtype", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileDateMS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileDateMS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
-                dataHeader.listRecords.append(getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileDateLS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(nOffset, sizeof(quint32), "VersionInfo.dwFileDateLS", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                 nOffset += 4;
 
                 // CvRecord
@@ -460,7 +474,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
         // Find the maximum offset + size from all streams and directory
         qint64 nMaxOffset = sizeof(MINIDUMP_HEADER);
         qint64 nDirectoryEnd = header.StreamDirectoryRva + header.NumberOfStreams * sizeof(MINIDUMP_DIRECTORY);
-        
+
         if (nDirectoryEnd > nMaxOffset) {
             nMaxOffset = nDirectoryEnd;
         }
@@ -468,7 +482,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
         for (qint32 i = 0; i < listDirectories.count(); i++) {
             MINIDUMP_DIRECTORY directory = listDirectories.at(i);
             qint64 nStreamEnd = (qint64)directory.LocationRva + (qint64)directory.DataSize;
-            
+
             if (nStreamEnd > nMaxOffset) {
                 nMaxOffset = nStreamEnd;
             }
@@ -631,9 +645,7 @@ XMiniDump::MINIDUMP_SYSTEM_INFO XMiniDump::read_MINIDUMP_SYSTEM_INFO(qint64 nOff
 
     qint64 nFileSize = getSize();
 
-    if ((nOffset >= 0) && 
-        (nOffset < nFileSize) && 
-        (nOffset + (qint64)sizeof(MINIDUMP_SYSTEM_INFO) <= nFileSize)) {
+    if ((nOffset >= 0) && (nOffset < nFileSize) && (nOffset + (qint64)sizeof(MINIDUMP_SYSTEM_INFO) <= nFileSize)) {
         result.ProcessorArchitecture = read_uint16(nOffset + offsetof(MINIDUMP_SYSTEM_INFO, ProcessorArchitecture));
         result.ProcessorLevel = read_uint16(nOffset + offsetof(MINIDUMP_SYSTEM_INFO, ProcessorLevel));
         result.ProcessorRevision = read_uint16(nOffset + offsetof(MINIDUMP_SYSTEM_INFO, ProcessorRevision));
@@ -711,9 +723,7 @@ XMiniDump::MINIDUMP_MODULE_LIST XMiniDump::read_MINIDUMP_MODULE_LIST(qint64 nOff
 
     qint64 nFileSize = getSize();
 
-    if ((nOffset >= 0) && 
-        (nOffset < nFileSize) && 
-        (nOffset + (qint64)sizeof(quint32) <= nFileSize)) {
+    if ((nOffset >= 0) && (nOffset < nFileSize) && (nOffset + (qint64)sizeof(quint32) <= nFileSize)) {
         result.NumberOfModules = read_uint32(nOffset);
     }
 
@@ -727,9 +737,7 @@ XMiniDump::MINIDUMP_MODULE XMiniDump::read_MINIDUMP_MODULE(qint64 nOffset)
     qint64 nFileSize = getSize();
     qint64 nStructSize = 8 + 4 + 4 + 4 + 4 + sizeof(VS_FIXEDFILEINFO) + sizeof(MINIDUMP_LOCATION_DESCRIPTOR) * 2 + 8 + 8;  // 108 bytes
 
-    if ((nOffset >= 0) && 
-        (nOffset < nFileSize) && 
-        (nOffset + nStructSize <= nFileSize)) {
+    if ((nOffset >= 0) && (nOffset < nFileSize) && (nOffset + nStructSize <= nFileSize)) {
         qint64 nCurrentOffset = nOffset;
 
         result.BaseOfImage = read_uint64(nCurrentOffset);
@@ -802,9 +810,7 @@ QString XMiniDump::read_MINIDUMP_STRING(qint64 nOffset)
 
     qint64 nFileSize = getSize();
 
-    if ((nOffset >= 0) && 
-        (nOffset < nFileSize) && 
-        (nOffset + 4 <= nFileSize)) {
+    if ((nOffset >= 0) && (nOffset < nFileSize) && (nOffset + 4 <= nFileSize)) {
         quint32 nLength = read_uint32(nOffset);
 
         // Validate length (reasonable limit: max 32KB for module name)
@@ -815,7 +821,7 @@ QString XMiniDump::read_MINIDUMP_STRING(qint64 nOffset)
             if (nStringOffset + nBytesNeeded <= nFileSize) {
                 // Read Unicode string (UTF-16LE)
                 QByteArray baData = read_array(nStringOffset, nBytesNeeded);
-                
+
                 // Convert UTF-16LE to QString
                 sResult = QString::fromUtf16(reinterpret_cast<const ushort *>(baData.constData()), nLength / 2);
             }
@@ -837,7 +843,7 @@ QList<XMiniDump::MINIDUMP_MODULE> XMiniDump::read_MINIDUMP_MODULE_list(qint64 nO
         return listResult;
     }
 
-    qint64 nCurrentOffset = nOffset + sizeof(quint32);  // Skip NumberOfModules field
+    qint64 nCurrentOffset = nOffset + sizeof(quint32);                                                                     // Skip NumberOfModules field
     qint64 nModuleSize = 8 + 4 + 4 + 4 + 4 + sizeof(VS_FIXEDFILEINFO) + sizeof(MINIDUMP_LOCATION_DESCRIPTOR) * 2 + 8 + 8;  // 108 bytes
 
     for (qint32 i = 0; (i < nNumberOfModules) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
@@ -900,10 +906,7 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         qint64 nStreamOffset = (qint64)directory.LocationRva;
         qint64 nStreamSize = (qint64)directory.DataSize;
 
-        if ((nStreamOffset >= 0) && 
-            (nStreamSize >= 0) && 
-            (nStreamOffset < nFileSize) && 
-            (nStreamOffset + nStreamSize <= nFileSize)) {
+        if ((nStreamOffset >= 0) && (nStreamSize >= 0) && (nStreamOffset < nFileSize) && (nStreamOffset + nStreamSize <= nFileSize)) {
             pContext->listStreamOffsets.append(nStreamOffset);
             pState->nNumberOfRecords++;
         } else {
@@ -951,8 +954,7 @@ XBinary::ARCHIVERECORD XMiniDump::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
 
     MINIDUMP_UNPACK_CONTEXT *pContext = (MINIDUMP_UNPACK_CONTEXT *)pState->pContext;
 
-    if ((pState->nCurrentIndex >= pContext->listDirectories.count()) || 
-        (pState->nCurrentIndex >= pContext->listStreamOffsets.count())) {
+    if ((pState->nCurrentIndex >= pContext->listDirectories.count()) || (pState->nCurrentIndex >= pContext->listStreamOffsets.count())) {
         return result;
     }
 
@@ -992,8 +994,7 @@ bool XMiniDump::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
 
     MINIDUMP_UNPACK_CONTEXT *pContext = (MINIDUMP_UNPACK_CONTEXT *)pState->pContext;
 
-    if ((pState->nCurrentIndex >= pContext->listDirectories.count()) || 
-        (pState->nCurrentIndex >= pContext->listStreamOffsets.count())) {
+    if ((pState->nCurrentIndex >= pContext->listDirectories.count()) || (pState->nCurrentIndex >= pContext->listStreamOffsets.count())) {
         return false;
     }
 

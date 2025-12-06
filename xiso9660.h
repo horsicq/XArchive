@@ -122,12 +122,12 @@ private:
 
     struct ISO9660_UNPACK_CONTEXT {
         qint32 nLogicalBlockSize;
-        QList<QPair<qint64, qint64>> listDirStack;  // Stack of (offset, size) for directories to process
-        QList<QString> listPathStack;  // Stack of folder paths corresponding to directories
-        QString sCurrentPath;  // Current folder path (e.g., "FolderName1/FolderName2")
+        QList<QPair<qint64, qint64>> listDirStack;   // Stack of (offset, size) for directories to process
+        QList<QString> listPathStack;                // Stack of folder paths corresponding to directories
+        QString sCurrentPath;                        // Current folder path (e.g., "FolderName1/FolderName2")
         QList<ARCHIVERECORD> listCurrentDirRecords;  // Records in current directory
-        qint32 nCurrentRecordIndex;  // Index in current directory
-        QSet<qint64> setProcessedBlocks;  // Track processed directory blocks to avoid loops
+        qint32 nCurrentRecordIndex;                  // Index in current directory
+        QSet<qint64> setProcessedBlocks;             // Track processed directory blocks to avoid loops
     };
 
     qint32 _getLogicalBlockSize();

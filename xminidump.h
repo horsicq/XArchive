@@ -54,9 +54,9 @@ public:
     };
 
     struct MINIDUMP_DIRECTORY {
-        quint32 StreamType;      // Type of stream
-        quint32 DataSize;        // Size of data
-        quint32 LocationRva;     // RVA to stream data
+        quint32 StreamType;   // Type of stream
+        quint32 DataSize;     // Size of data
+        quint32 LocationRva;  // RVA to stream data
     };
 
     struct MINIDUMP_LOCATION_DESCRIPTOR {
@@ -86,7 +86,7 @@ public:
     };
 
     struct VS_FIXEDFILEINFO {
-        quint32 dwSignature;            // 0xFEEF04BD
+        quint32 dwSignature;  // 0xFEEF04BD
         quint32 dwStrucVersion;
         quint32 dwFileVersionMS;
         quint32 dwFileVersionLS;
@@ -102,25 +102,25 @@ public:
     };
 
     struct MINIDUMP_STRING {
-        quint32 Length;                 // Length in bytes (not including null terminator)
-        quint16 Buffer[1];              // Unicode string data
+        quint32 Length;     // Length in bytes (not including null terminator)
+        quint16 Buffer[1];  // Unicode string data
     };
 
     struct MINIDUMP_MODULE {
-        quint64 BaseOfImage;            // Base address of module
-        quint32 SizeOfImage;            // Size of module in bytes
-        quint32 CheckSum;               // Module checksum
-        quint32 TimeDateStamp;          // Module timestamp
-        quint32 ModuleNameRva;          // RVA to module name (MINIDUMP_STRING)
-        VS_FIXEDFILEINFO VersionInfo;   // Module version information
-        MINIDUMP_LOCATION_DESCRIPTOR CvRecord;      // CodeView record
-        MINIDUMP_LOCATION_DESCRIPTOR MiscRecord;    // Misc debug record
+        quint64 BaseOfImage;                      // Base address of module
+        quint32 SizeOfImage;                      // Size of module in bytes
+        quint32 CheckSum;                         // Module checksum
+        quint32 TimeDateStamp;                    // Module timestamp
+        quint32 ModuleNameRva;                    // RVA to module name (MINIDUMP_STRING)
+        VS_FIXEDFILEINFO VersionInfo;             // Module version information
+        MINIDUMP_LOCATION_DESCRIPTOR CvRecord;    // CodeView record
+        MINIDUMP_LOCATION_DESCRIPTOR MiscRecord;  // Misc debug record
         quint64 Reserved0;
         quint64 Reserved1;
     };
 
     struct MINIDUMP_MODULE_LIST {
-        quint32 NumberOfModules;        // Number of modules in the list
+        quint32 NumberOfModules;  // Number of modules in the list
         // Followed by NumberOfModules MINIDUMP_MODULE entries
     };
 #pragma pack(pop)
@@ -276,7 +276,7 @@ public:
     MINIDUMP_MODULE read_MINIDUMP_MODULE(qint64 nOffset);
     QString read_MINIDUMP_STRING(qint64 nOffset);
     QList<MINIDUMP_MODULE> read_MINIDUMP_MODULE_list(qint64 nOffset, PDSTRUCT *pPdStruct);
-    
+
     MINIDUMP_DIRECTORY findStream(quint32 nStreamType, PDSTRUCT *pPdStruct);
     QString streamTypeToString(quint32 nStreamType);
     QString processorArchitectureToString(quint16 nArchitecture);
@@ -287,7 +287,7 @@ public:
 private:
     // Format-specific unpack context for streaming API
     struct MINIDUMP_UNPACK_CONTEXT {
-        QList<qint64> listStreamOffsets;    // Pre-computed offsets for each stream
+        QList<qint64> listStreamOffsets;            // Pre-computed offsets for each stream
         QList<MINIDUMP_DIRECTORY> listDirectories;  // Cached directory entries
     };
 };

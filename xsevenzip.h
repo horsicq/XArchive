@@ -154,7 +154,8 @@ private:
     static void _writeId(QIODevice *pDevice, quint8 nId);
     static void _writeNumber(QIODevice *pDevice, quint64 nValue);
     static void _writeByte(QIODevice *pDevice, quint8 nByte);
-    bool _decompress(QIODevice *pDevice, COMPRESS_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize, PDSTRUCT *pPdStruct);
+    bool _decompress(QIODevice *pDevice, COMPRESS_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize,
+                     PDSTRUCT *pPdStruct);
 
     enum SRTYPE {
         SRTYPE_UNKNOWN = 0,
@@ -228,7 +229,7 @@ private:
         QString sErrorString;
         qint64 nStreamsBegin;
         quint64 nNumberOfFolders;  // Track folder count for SubStreamsInfo
-        quint64 nNumberOfFiles;  // Track file count from FilesInfo (including extended count)
+        quint64 nNumberOfFiles;    // Track file count from FilesInfo (including extended count)
         QList<SZSTREAM> listStreams;
         QByteArray baEmptyStreams;
         QByteArray baEmtyFiles;
