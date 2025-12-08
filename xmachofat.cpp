@@ -452,3 +452,120 @@ bool XMACHOFat::isArchitectureValid(qint32 nIndex)
 
     return bResult;
 }
+
+bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    pState->nCurrentOffset = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = (qint32)getNumberOfRecords(nullptr);
+    pState->nTotalSize = getSize();
+    pState->mapProperties = mapProperties;
+    pState->pContext = nullptr;
+
+    return (pState->nNumberOfRecords > 0);
+}
+
+XBinary::ARCHIVERECORD XMACHOFat::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    ARCHIVERECORD result = {};
+
+    if (!pState || pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return result;
+    }
+
+    bool bIsBigEndian = isBigEndian();
+    qint64 nOffset = sizeof(XMACH_DEF::fat_header) + (qint64)pState->nCurrentIndex * sizeof(XMACH_DEF::fat_arch);
+
+    quint32 _cputype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cputype), bIsBigEndian);
+    quint32 _cpusubtype = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, cpusubtype), bIsBigEndian);
+    quint32 _offset = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, offset), bIsBigEndian);
+    quint32 _size = read_uint32(nOffset + offsetof(XMACH_DEF::fat_arch, size), bIsBigEndian);
+
+    QString sArchName = XMACH::_getArch(_cputype, _cpusubtype);
+
+    result.nStreamOffset = _offset;
+    result.nStreamSize = _size;
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sArchName);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)_size);
+    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, (quint32)COMPRESS_METHOD_STORE);
+
+    return result;
+}
+
+bool XMACHOFat::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pDevice || pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    ARCHIVERECORD ar = infoCurrent(pState, pPdStruct);
+
+    if (ar.nStreamSize == 0) {
+        return false;
+    }
+
+    // Since Mach-O Fat uses STORE compression, just copy the data
+    qint64 nBytesWritten = 0;
+    qint64 nBytesToWrite = ar.nStreamSize;
+    qint64 nCurrentOffset = ar.nStreamOffset;
+    const qint64 nBufferSize = 0x10000;  // 64KB buffer
+
+    QByteArray baBuffer;
+    baBuffer.resize(nBufferSize);
+
+    while ((nBytesWritten < nBytesToWrite) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qint64 nChunkSize = qMin(nBufferSize, nBytesToWrite - nBytesWritten);
+        nChunkSize = read_array(nCurrentOffset, baBuffer.data(), nChunkSize);
+
+        if (nChunkSize <= 0) {
+            return false;
+        }
+
+        qint64 nWritten = pDevice->write(baBuffer.data(), nChunkSize);
+        if (nWritten != nChunkSize) {
+            return false;
+        }
+
+        nBytesWritten += nChunkSize;
+        nCurrentOffset += nChunkSize;
+    }
+
+    return (nBytesWritten == nBytesToWrite);
+}
+
+bool XMACHOFat::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    pState->nCurrentIndex++;
+
+    return (pState->nCurrentIndex <= pState->nNumberOfRecords);
+}
+
+bool XMACHOFat::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    pState->nCurrentOffset = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = nullptr;
+
+    return true;
+}

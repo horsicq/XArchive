@@ -66,6 +66,12 @@ public:
     virtual bool isArchive();
     virtual QString structIDToString(quint32 nID);
 
+    virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
     XMACH_DEF::fat_header read_fat_header();
     XMACH_DEF::fat_arch read_fat_arch(qint32 nIndex);
     QList<XMACH_DEF::fat_arch> read_fat_arch_list(PDSTRUCT *pPdStruct);
