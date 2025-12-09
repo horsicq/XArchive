@@ -20,6 +20,13 @@
  */
 #include "xdos16.h"
 
+XBinary::XCONVERT _TABLE_XDOS16_STRUCTID[] = {
+    {XDOS16::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+    {XDOS16::STRUCTID_LOADER, "LOADER", QString("Loader")},
+    {XDOS16::STRUCTID_SEGMENT, "SEGMENT", QString("Segment")},
+    {XDOS16::STRUCTID_PAYLOAD, "PAYLOAD", QString("Payload")},
+};
+
 XDOS16::XDOS16(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -418,4 +425,36 @@ qint32 XDOS16::getType()
 QString XDOS16::getFileFormatExt()
 {
     return "exe";
+}
+
+QString XDOS16::getFileFormatExtsString()
+{
+    return "DOS Extender (*.exe)";
+}
+
+QString XDOS16::getMIMEString()
+{
+    return "application/x-dosexec";
+}
+
+qint64 XDOS16::getFileFormatSize(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+    
+    return getSize();
+}
+
+QList<XBinary::MAPMODE> XDOS16::getMapModesList()
+{
+    QList<MAPMODE> listResult;
+
+    listResult.append(MAPMODE_REGIONS);
+    listResult.append(MAPMODE_DATA);
+
+    return listResult;
+}
+
+QString XDOS16::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XDOS16_STRUCTID, sizeof(_TABLE_XDOS16_STRUCTID) / sizeof(XBinary::XCONVERT));
 }

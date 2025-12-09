@@ -28,6 +28,13 @@ class XDOS16 : public XArchive {
     Q_OBJECT
 
 public:
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_LOADER,
+        STRUCTID_SEGMENT,
+        STRUCTID_PAYLOAD
+    };
+
     explicit XDOS16(QIODevice *pDevice = nullptr);
     virtual ~XDOS16();
 
@@ -37,6 +44,11 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
     virtual FT getFileType() override;
+    virtual QString getMIMEString() override;
+    virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString() override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(XBinary::MAPMODE mapMode = XBinary::MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
     virtual OSNAME getOsName() override;
     virtual QString getOsVersion() override;
@@ -44,7 +56,7 @@ public:
     virtual QString getArch() override;
     virtual ENDIAN getEndian() override;
     virtual qint32 getType() override;
-    virtual QString getFileFormatExt() override;
+    virtual QString structIDToString(quint32 nID) override;
 };
 
 #endif  // XDOS16_H
