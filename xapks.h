@@ -28,6 +28,11 @@ class XAPKS : public XAPK {
 
 public:
     explicit XAPKS(QIODevice *pDevice = nullptr);
+    ~XAPKS();
+
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
+    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     virtual FT getFileType() override;
     virtual QString getFileFormatExt() override;

@@ -24,6 +24,59 @@ XAPKS::XAPKS(QIODevice *pDevice) : XAPK(pDevice)
 {
 }
 
+XAPKS::~XAPKS()
+{
+}
+
+bool XAPKS::isValid(PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    XAPKS xapks(getDevice());
+
+    if (xapks.XAPK::isValid(pPdStruct)) {
+        QList<XArchive::RECORD> listArchiveRecords = xapks.getRecords(10, pPdStruct);
+        bResult = isValid(&listArchiveRecords, pPdStruct);
+    }
+
+    return bResult;
+}
+
+bool XAPKS::isValid(QIODevice *pDevice)
+{
+    XAPKS xapks(pDevice);
+
+    return xapks.isValid();
+}
+
+bool XAPKS::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    // // APKS is an APK with additional metadata, check for BundleConfig.pb file
+    // bool bHasBundleConfig = false;
+    // bool bHasSignatures = false;
+
+    // if (pListRecords) {
+    //     for (qint32 i = 0; i < pListRecords->count(); i++) {
+    //         QString sFileName = pListRecords->at(i).spInfo.sRecordName;
+
+    //         if (sFileName == "BundleConfig.pb") {
+    //             bHasBundleConfig = true;
+    //         }
+
+    //         if (sFileName == "META-INF/MANIFEST.MF" || sFileName.startsWith("META-INF/") && sFileName.endsWith(".SF")) {
+    //             bHasSignatures = true;
+    //         }
+    //     }
+    // }
+
+    // // APKS format requires bundle configuration and signatures
+    // return (bHasBundleConfig && bHasSignatures);
+
+    return false; // TODO
+}
+
 QString XAPKS::getFileFormatExt()
 {
     return "apks";
