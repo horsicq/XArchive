@@ -115,12 +115,6 @@ public:
     CFDATA readCFData(qint64 nOffset);
     CFFILE readCFFILE(qint64 nOffset);
 
-    // Helper methods for writing CAB structures
-    bool writeCFHeader(QIODevice *pDevice, const CFHEADER &cfHeader);
-    bool writeCFFolder(QIODevice *pDevice, const CFFOLDER &cfFolder);
-    bool writeCFFILE(QIODevice *pDevice, const CFFILE &cfFile, const QString &sFileName);
-    bool writeCFData(QIODevice *pDevice, const CFDATA &cfData, const QByteArray &baData);
-
     virtual FT getFileType() override;
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
@@ -147,13 +141,6 @@ public:
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-
-    // Streaming packing API
-    virtual bool initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual bool addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual bool addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     CFFOLDER _read_CFFOLDER(qint64 nOffset);
