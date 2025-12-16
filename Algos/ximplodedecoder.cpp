@@ -26,10 +26,10 @@
 #define UI6A_UINT8 unsigned char
 #endif
 #ifndef UI6A_UINT16
-#define UI6A_UINT16 uint16_t
+#define UI6A_UINT16 quint16
 #endif
 #ifndef UI6A_UINT32
-#define UI6A_UINT32 uint32_t
+#define UI6A_UINT32 quint32
 #endif
 #ifndef UI6A_OFF_T
 #define UI6A_OFF_T long

@@ -26,7 +26,7 @@
 #define OZUS_UINT8 unsigned char
 #endif
 #ifndef OZUS_UINT16
-#define OZUS_UINT16 uint16_t
+#define OZUS_UINT16 quint16
 #endif
 #ifndef OZUS_OFF_T
 #define OZUS_OFF_T off_t

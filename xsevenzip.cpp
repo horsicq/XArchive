@@ -627,14 +627,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                         qDebug() << "  Folder" << i << "unpacked size:" << nSize << "bytes";
 #endif
                     }
-
-#ifdef QT_DEBUG
-                    qDebug() << "  After reading CodersUnpackSize, offset:" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-                    if (pState->nCurrentOffset < pState->nSize) {
-                        qDebug() << "  Next bytes:"
-                                 << QByteArray((char *)(pState->pData + pState->nCurrentOffset), qMin(10, (int)(pState->nSize - pState->nCurrentOffset))).toHex(' ');
-                    }
-#endif
                 } else if (nextId == k7zIdSubStreamsInfo) {
 // SubStreamsInfo can appear at header level
 #ifdef QT_DEBUG
