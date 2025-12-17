@@ -748,7 +748,11 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         const quint64 nEpochDiff = 116444736000000000ULL;  // Difference between 1601 and 1970 in 100-ns intervals
         if (nModifiedTime > nEpochDiff) {
             qint64 nUnixTime = (nModifiedTime - nEpochDiff) / 10000000;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
             QDateTime dateTime = QDateTime::fromSecsSinceEpoch(nUnixTime, Qt::UTC);
+#else
+            QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(nUnixTime * 1000, Qt::UTC);
+#endif
             result.mapProperties.insert(FPART_PROP_DATETIME, dateTime);
         }
     }

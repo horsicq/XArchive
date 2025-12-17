@@ -1281,7 +1281,11 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
     mapResult.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
 
     if (fileHeader5.nFileFlags & 0x0002) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
         QDateTime dateTime = QDateTime::fromSecsSinceEpoch(fileHeader5.nMTime);
+#else
+        QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(fileHeader5.nMTime * 1000);
+#endif
         mapResult.insert(XBinary::FPART_PROP_DATETIME, dateTime);
     }
 

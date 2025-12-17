@@ -414,7 +414,11 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             bool bOk = false;
             quint64 nModSecs = sMod.toULongLong(&bOk, 10);
             if (bOk) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
                 QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nModSecs, Qt::UTC);
+#else
+                QDateTime dt = QDateTime::fromMSecsSinceEpoch((qint64)nModSecs * 1000, Qt::UTC);
+#endif
                 part.mapProperties.insert(FPART_PROP_DATETIME, dt);
             }
             listResult.append(part);
@@ -495,7 +499,11 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     QString sBaseName = fileInfo.fileName();
     qint64 nFileSize = fileInfo.size();
     quint32 nMode = 0;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
     qint64 nMTime = fileInfo.lastModified().toSecsSinceEpoch();
+#else
+    qint64 nMTime = fileInfo.lastModified().toMSecsSinceEpoch() / 1000;
+#endif
 
 #ifdef Q_OS_WIN
     nMode = 0644;  // owner read/write, group/others read
@@ -833,7 +841,11 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         sMTime.resize(sizeof(header.fileMod));
         sMTime = sMTime.trimmed();
         qint64 nMTime = sMTime.toLongLong();
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
         QDateTime dateTime = QDateTime::fromSecsSinceEpoch(nMTime);
+#else
+        QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(nMTime * 1000);
+#endif
         result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
     }
 

@@ -456,7 +456,11 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         // Parse mtime (octal)
         QString sMTime = QString(QByteArray(header.mtime, 12)).trimmed();
         qint64 nMTime = sMTime.toLongLong(nullptr, 8);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
         QDateTime dateTime = QDateTime::fromSecsSinceEpoch(nMTime);
+#else
+        QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(nMTime * 1000);
+#endif
         result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
 
         // Parse checksum (octal)
@@ -606,7 +610,11 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     // Get file metadata
     qint64 nFileSize = fileInfo.size();
     quint32 nMode = 0;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
     qint64 nMTime = fileInfo.lastModified().toSecsSinceEpoch();
+#else
+    qint64 nMTime = fileInfo.lastModified().toMSecsSinceEpoch() / 1000;
+#endif
 
 #ifdef Q_OS_WIN
     nMode = 00644;  // Octal: owner read/write, group/others read

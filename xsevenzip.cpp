@@ -1430,12 +1430,12 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             if (rec.sName == "k7zId") {
                                 sValue = idToSring((XSevenZip::EIdEnum)rec.varValue.toUInt());
                             } else if (rec.varValue.type() == QVariant::ByteArray) {
-                                QByteArray ba = rec.varValue.toByteArray();
-                                if (ba.size() <= 16) {
-                                    sValue = ba.toHex(' ');
-                                } else {
-                                    sValue = QString("ByteArray[%1 bytes]: %2...").arg(ba.size()).arg(ba.left(16).toHex(' ').data());
-                                }
+                                // QByteArray ba = rec.varValue.toByteArray();
+                                // if (ba.size() <= 16) {
+                                //     sValue = ba.toHex(' ');
+                                // } else {
+                                //     sValue = QString("ByteArray[%1 bytes]: %2...").arg(ba.size()).arg(ba.left(16).toHex(' ').data());
+                                // }
                             } else {
                                 sValue = rec.varValue.toString();
                             }
