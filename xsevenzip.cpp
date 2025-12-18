@@ -165,7 +165,7 @@ XSevenZip::SIGNATUREHEADER XSevenZip::_read_SIGNATUREHEADER(qint64 nOffset)
 {
     SIGNATUREHEADER result = {};
 
-    read_array(nOffset, (char *)result.kSignature, 6);
+    read_array_simple(nOffset, (char *)result.kSignature, 6);
     result.Major = read_uint8(nOffset + 6);
     result.Minor = read_uint8(nOffset + 7);
     result.StartHeaderCRC = read_uint32(nOffset + 8);
