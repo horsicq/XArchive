@@ -74,7 +74,7 @@ bool XAPKS::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
     // // APKS format requires bundle configuration and signatures
     // return (bHasBundleConfig && bHasSignatures);
 
-    return false; // TODO
+    return false;  // TODO
 }
 
 QString XAPKS::getFileFormatExt()

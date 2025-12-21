@@ -440,7 +440,7 @@ QString XDOS16::getMIMEString()
 qint64 XDOS16::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-    
+
     return getSize();
 }
 
