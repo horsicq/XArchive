@@ -282,7 +282,7 @@ XCFBF::StructuredStorageHeader XCFBF::read_StructuredStorageHeader(qint64 nOffse
 {
     StructuredStorageHeader header = {};
 
-    read_array(nOffset, (char *)&header, sizeof(header), pPdStruct);
+    read_array_process(nOffset, (char *)&header, sizeof(header), pPdStruct);
 
     return header;
 }

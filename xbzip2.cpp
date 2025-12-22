@@ -267,7 +267,7 @@ XBZIP2::BZIP2_HEADER XBZIP2::_read_BZIP2_HEADER(qint64 nOffset)
     BZIP2_HEADER result = {};
 
     // Read the magic "BZh" signature
-    read_array_simple(nOffset, (char *)&result.magic, 3);
+    read_array(nOffset, (char *)&result.magic, 3);
 
     // Read the block size
     result.blockSize = read_uint8(nOffset + 3);

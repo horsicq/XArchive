@@ -41,7 +41,7 @@ bool XXZ::isValid(PDSTRUCT *pPdStruct)
     qint64 nSize = getSize();
     if (nSize < 6) return false;
 
-    QByteArray baMagic = read_array(0, 6, pPdStruct);
+    QByteArray baMagic = read_array_process(0, 6, pPdStruct);
     static const quint8 XZ_MAGIC[6] = {0xFD, '7', 'z', 'X', 'Z', 0x00};
     if (memcmp(baMagic.constData(), XZ_MAGIC, 6) != 0) return false;
 

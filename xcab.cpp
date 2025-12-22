@@ -741,7 +741,7 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
             }
 
             // Read compressed data into memory
-            QByteArray baCompressedData = read_array_simple(nCompressedDataOffset, nCompressedDataSize);
+            QByteArray baCompressedData = read_array(nCompressedDataOffset, nCompressedDataSize);
             if (baCompressedData.size() != nCompressedDataSize) {
                 return false;
             }
