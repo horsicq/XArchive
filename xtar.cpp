@@ -785,3 +785,102 @@ bool XTAR::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
+
+bool XTAR::sub_initUnpack(FT fileType, QIODevice *pDevice, UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    T_UNPACK_CONTEXT *pContext = new T_UNPACK_CONTEXT;
+    pContext->pDevice = XBinary::createFileBuffer(pDevice->size(), pPdStruct);
+
+    // Unpack to device
+    if (fileType == FT_TARGZ) {
+        bResult = XGzip(pDevice).unpackSingleStream(pContext->pDevice, mapProperties, pPdStruct);
+    }
+
+    if (bResult && pContext->pDevice) {
+        pContext->pDevice->seek(0);
+    }
+
+    // Init TAR unpacking
+    if (bResult) {
+        pContext->pTar = new XTAR(pContext->pDevice);
+        bResult = pContext->pTar->initUnpack(&(pContext->usTar), mapProperties, pPdStruct);
+        pState->nNumberOfRecords = pContext->usTar.nNumberOfRecords;
+    }
+
+    pState->pContext = pContext;
+
+    return bResult;
+}
+
+bool XTAR::sub_unpackCurrent(FT fileType, UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(fileType)
+
+    bool bResult = false;
+
+    T_UNPACK_CONTEXT *pContext = (T_UNPACK_CONTEXT *)pState->pContext;
+
+    if ((pContext->pTar) && (pState) && (pDevice)) {
+        bResult = pContext->pTar->unpackCurrent(&(pContext->usTar), pDevice, pPdStruct);
+    }
+
+    return bResult;
+}
+
+bool XTAR::sub_moveToNext(FT fileType, UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(fileType)
+
+    bool bResult = false;
+
+    T_UNPACK_CONTEXT *pContext = (T_UNPACK_CONTEXT *)pUnpackState->pContext;
+
+    if ((pContext->pTar) && (pUnpackState)) {
+        bResult = pContext->pTar->moveToNext(&(pContext->usTar), pPdStruct);
+    }
+
+    if (bResult) {
+        pUnpackState->nCurrentIndex++;
+    }
+
+    return bResult;
+}
+
+bool XTAR::sub_finishUnpack(FT fileType, UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(fileType)
+
+    bool bResult = false;
+
+    if (pState && pState->pContext) {
+        T_UNPACK_CONTEXT *pContext = (T_UNPACK_CONTEXT *)pState->pContext;
+        pContext->pTar->finishUnpack(&pContext->usTar, pPdStruct);
+
+        if (pContext->pTar) {
+            delete pContext->pTar;
+        }
+        XBinary::freeFileBuffer(&(pContext->pDevice));
+        delete pContext;
+        pState->pContext = nullptr;
+        bResult = true;
+    }
+
+    return bResult;
+}
+
+XBinary::ARCHIVERECORD XTAR::sub_infoCurrent(FT fileType, UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(fileType)
+
+    ARCHIVERECORD result = {};
+
+    T_UNPACK_CONTEXT *pContext = (T_UNPACK_CONTEXT *)pUnpackState->pContext;
+
+    if ((pContext->pTar) && (pUnpackState)) {
+        result = pContext->pTar->infoCurrent(&(pContext->usTar), pPdStruct);
+    }
+
+    return result;
+}

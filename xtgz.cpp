@@ -20,7 +20,7 @@
  */
 #include "xtgz.h"
 
-XTGZ::XTGZ(QIODevice *pDevice)
+XTGZ::XTGZ(QIODevice *pDevice) : XGzip(pDevice)
 {
 }
 
@@ -48,77 +48,27 @@ bool XTGZ::isValid(QIODevice *pDevice)
 
 bool XTGZ::initUnpack(UNPACK_STATE *pUnpackState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    T_UNPACK_CONTEXT *pContext = new T_UNPACK_CONTEXT;
-    pContext->pDevice = XBinary::createFileBuffer(getSize(), pPdStruct);
-
-    // Unpack to device
-    bResult = XGzip(getDevice()).unpackSingleStream(pContext->pDevice, mapProperties, pPdStruct);
-
-    // Init TAR unpacking
-    if (bResult) {
-        pContext->pTar = new XTAR(pContext->pDevice);
-        bResult = pContext->pTar->initUnpack(&(pContext->usTar), mapProperties, pPdStruct);
-    }
-
-    pUnpackState->pContext = pContext;
-
-    return bResult;
+    return XTAR::sub_initUnpack(FT_TARGZ, getDevice(), pUnpackState, mapProperties, pPdStruct);
 }
 
-XBinary::ARCHIVERECORD XTGZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+XBinary::ARCHIVERECORD XTGZ::infoCurrent(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 {
-    XBinary::ARCHIVERECORD record;
-
-    T_UNPACK_CONTEXT *pContext = (T_UNPACK_CONTEXT *)pState->pContext;
-    XBinary::ARCHIVERECORD _record = pContext->pTar->infoCurrent(&(pContext->usTar), pPdStruct);
-
-    return record;
+    return XTAR::sub_infoCurrent(FT_TARGZ, pUnpackState, pPdStruct);
 }
 
 bool XTGZ::unpackCurrent(UNPACK_STATE *pUnpackState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    // if ((m_pXtar) && (pUnpackState) && (pDevice)) {
-    //     bResult = m_pXtar->unpackCurrent(pUnpackState, pDevice, pPdStruct);
-    // }
-
-    return bResult;
+    return XTAR::sub_unpackCurrent(FT_TARGZ, pUnpackState, pDevice, pPdStruct);
 }
 
 bool XTGZ::moveToNext(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    // if ((m_pXtar) && (pUnpackState)) {
-    //     bResult = m_pXtar->moveToNext(pUnpackState, pPdStruct);
-    // }
-
-    return bResult;
+    return XTAR::sub_moveToNext(FT_TARGZ, pUnpackState, pPdStruct);
 }
 
 bool XTGZ::finishUnpack(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    bool bResult = false;
-
-    if (pUnpackState && pUnpackState->pContext) {
-        T_UNPACK_CONTEXT *_pState = (T_UNPACK_CONTEXT *)pUnpackState->pContext;
-        _pState->pTar->finishUnpack(&_pState->usTar, pPdStruct);
-
-        if (_pState->pTar) {
-            delete _pState->pTar;
-        }
-        XBinary::freeFileBuffer(&(_pState->pDevice));
-        delete _pState;
-        pUnpackState->pContext = nullptr;
-        bResult = true;
-    }
-
-    return bResult;
+    return XTAR::sub_finishUnpack(FT_TARGZ, pUnpackState, pPdStruct);
 }
 
 QString XTGZ::getFileFormatExt()

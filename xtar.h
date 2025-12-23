@@ -22,6 +22,7 @@
 #define XTAR_H
 
 #include "xarchive.h"
+#include "xgzip.h"
 
 class XTAR : public XArchive {
     Q_OBJECT
@@ -61,6 +62,12 @@ public:
         STRUCTID_POSIX_HEADER
     };
 
+    struct T_UNPACK_CONTEXT {
+        QIODevice *pDevice;
+        XTAR *pTar;
+        UNPACK_STATE usTar;
+    };
+
     explicit XTAR(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
@@ -89,6 +96,12 @@ public:
     virtual bool addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+    static bool sub_initUnpack(FT fileType, QIODevice *pDevice, UNPACK_STATE *pUnpackState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr);
+    static ARCHIVERECORD sub_infoCurrent(FT fileType, UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr);
+    static bool sub_unpackCurrent(FT fileType, UNPACK_STATE *pUnpackState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
+    static bool sub_moveToNext(FT fileType, UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr);
+    static bool sub_finishUnpack(FT fileType, UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr);
 
 private:
     posix_header read_posix_header(qint64 nOffset);

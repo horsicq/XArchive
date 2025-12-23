@@ -242,13 +242,10 @@ XBinary::COMPRESS_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCo
             result = COMPRESS_METHOD_BZIP2;  // BZip2
         } else if (baCodec.startsWith(QByteArray("\x03\x04\x01", 3))) {
             result = COMPRESS_METHOD_PPMD;  // PPMd (actual codec from 7z)
-        } else if (baCodec.startsWith(QByteArray("\x03\x03\x01", 3))) {
-            // Check if it's BCJ (03 03 01 03) or PPMd (03 03 01 01)
-            if (baCodec.size() >= 4 && baCodec.at(3) == '\x03') {
-                result = COMPRESS_METHOD_BCJ;  // BCJ (x86 filter)
-            } else {
-                result = COMPRESS_METHOD_PPMD;  // PPMd (alternative codec)
-            }
+        } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x03", 4))) {
+            result = COMPRESS_METHOD_BCJ;  // BCJ (x86 filter)
+        } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x01", 4))) {
+            result = COMPRESS_METHOD_PPMD;  // PPMd (alternative codec)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x02\x05", 4))) {
             result = COMPRESS_METHOD_BCJ2;  // BCJ2 (x86 advanced filter)
         } else if (baCodec.startsWith(QByteArray("\x06\xF1\x07\x01", 4))) {
@@ -848,14 +845,20 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             // Then Size section contains unpacked sizes for all files
             quint64 nTotalSubStreams = 0;
 
+#ifdef QT_DEBUG
             qDebug() << "[NumUnpackStream] Parsing" << pState->nNumberOfFolders << "folder entries";
+#endif
             for (quint64 i = 0; i < pState->nNumberOfFolders && isPdStructNotCanceled(pPdStruct); i++) {
                 quint64 nNumStreamsInFolder =
                     _handleNumber(pListRecords, pState, pPdStruct, QString("NumUnpackStream%1").arg(i), DRF_COUNT, IMPTYPE_NUMBEROFUNPACKSTREAM);
+#ifdef QT_DEBUG
                 qDebug() << "[NumUnpackStream] Folder" << i << "has" << nNumStreamsInFolder << "file(s)";
+#endif
                 nTotalSubStreams += nNumStreamsInFolder;
             }
+#ifdef QT_DEBUG
             qDebug() << "[NumUnpackStream] Total files in all folders:" << nTotalSubStreams;
+#endif
 
             // SubStreamsInfo Size section contains (N-1) sizes for each folder with N>1 files
             // For folders with only 1 file, no size is listed (use folder size)
@@ -942,7 +945,9 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
 
         case XSevenZip::k7zIdFilesInfo: {
             quint64 nNumberOfFiles = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFiles", DRF_COUNT, IMPTYPE_NUMBEROFFILES);
+#ifdef QT_DEBUG
             qDebug() << "[k7zIdFilesInfo] Processing" << nNumberOfFiles << "files";
+#endif
 
             // Store file count in state for later use
             pState->nNumberOfFiles = nNumberOfFiles;
@@ -1069,10 +1074,14 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         }
 
         case XSevenZip::k7zIdName: {
+#ifdef QT_DEBUG
             qDebug() << "[k7zIdName] Processing file names...";
+#endif
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("NameSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
             quint8 nExt = _handleByte(pListRecords, pState, pPdStruct, "ExternalByte", IMPTYPE_UNKNOWN);
+#ifdef QT_DEBUG
             qDebug() << "[k7zIdName] NameSize:" << nSize << "Ext:" << nExt;
+#endif
 
             if (nExt == 0) {
                 // The data is a single block of null-terminated UTF-16LE strings.
@@ -1113,7 +1122,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
 
                             SZRECORD record = {};
                             record.nRelOffset = nNameStartOffset;
-                            record.nSize = nNameLenBytes;
+                            record.nSize = nNameLenBytes + 2; // NUll
                             record.varValue = sFilename;
                             record.srType = SRTYPE_ARRAY;
                             record.valType = VT_STRING;
@@ -1121,7 +1130,9 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                             record.sName = QString("FileName[%1]").arg(nFileIndex);
                             pListRecords->append(record);
 
+#ifdef QT_DEBUG
                             qDebug() << "[k7zIdName] Added filename" << nFileIndex << ":" << sFilename;
+#endif
                             nFileIndex++;
 
                             nRelativeOffset += (nNameLenBytes + 2);  // Move to the start of the next name (+2 for the null terminator)
@@ -1467,12 +1478,12 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             if (rec.sName == "k7zId") {
                                 sValue = idToSring((XSevenZip::EIdEnum)rec.varValue.toUInt());
                             } else if (rec.varValue.type() == QVariant::ByteArray) {
-                                // QByteArray ba = rec.varValue.toByteArray();
-                                // if (ba.size() <= 16) {
-                                //     sValue = ba.toHex(' ');
-                                // } else {
-                                //     sValue = QString("ByteArray[%1 bytes]: %2...").arg(ba.size()).arg(ba.left(16).toHex(' ').data());
-                                // }
+                                QByteArray ba = rec.varValue.toByteArray();
+                                if (ba.size() <= 16) {
+                                    sValue = ba.toHex(' ');
+                                } else {
+                                    sValue = QString("ByteArray[%1 bytes]: %2...").arg(ba.size()).arg(ba.left(16).toHex(' ').data());
+                                }
                             } else {
                                 sValue = rec.varValue.toString();
                             }
@@ -1909,7 +1920,7 @@ bool XSevenZip::_decompress(QIODevice *pDevice, COMPRESS_METHOD compressMethod, 
             bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
         } else {
 #ifdef QT_DEBUG
-            qDebug("Unsupported compression method: %d", compressMethod);
+            qDebug("Unsupported compression method: %s(%d)", compressMethodToString(compressMethod).toLatin1().data(), compressMethod);
 #endif
         }
 

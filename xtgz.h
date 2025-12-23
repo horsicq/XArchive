@@ -21,8 +21,8 @@
 #ifndef XTGZ_H
 #define XTGZ_H
 
+#include "xgzip.h"
 #include "xtar.h"
-#include "xcompresseddevice.h"
 
 class XTGZ : public XGzip {
     Q_OBJECT
@@ -38,18 +38,9 @@ public:
     virtual FT getFileType() override;
 
     virtual bool initUnpack(UNPACK_STATE *pUnpackState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pUnpackState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
-
-private:
-    struct T_UNPACK_CONTEXT {
-        QIODevice *pDevice;
-        XTAR *pTar;
-        UNPACK_STATE usTar;
-    };
-
-    void _closeResources();
 };
 #endif  // XTGZ_H
