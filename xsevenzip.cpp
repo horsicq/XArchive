@@ -570,85 +570,86 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             qDebug() << "_handleId: Parsing k7zIdHeader at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
             qDebug() << QString("  pData ptr: %1, nSize: %2").arg((quint64)pState->pData, 0, 16).arg(pState->nSize);
 #endif
-//             // Parse sections sequentially - look specifically for FilesInfo
-//             bool bFoundFilesInfo = false;
-//             while (pState->nCurrentOffset < pState->nSize && !pState->bIsError && !bFoundFilesInfo) {
-//                 // Peek at next ID
-//                 qint64 nPeekOffset = pState->nCurrentOffset;
-//                 quint8 nPeekByte = pState->pData[nPeekOffset];
+            //             // Parse sections sequentially - look specifically for FilesInfo
+            //             bool bFoundFilesInfo = false;
+            //             while (pState->nCurrentOffset < pState->nSize && !pState->bIsError && !bFoundFilesInfo) {
+            //                 // Peek at next ID
+            //                 qint64 nPeekOffset = pState->nCurrentOffset;
+            //                 quint8 nPeekByte = pState->pData[nPeekOffset];
 
-//                 XBinary::PACKED_UINT puNextTag = XBinary::_read_packedNumber(pState->pData + pState->nCurrentOffset, pState->nSize - pState->nCurrentOffset);
-//                 if (!puNextTag.bIsValid) break;
+            //                 XBinary::PACKED_UINT puNextTag = XBinary::_read_packedNumber(pState->pData + pState->nCurrentOffset, pState->nSize -
+            //                 pState->nCurrentOffset); if (!puNextTag.bIsValid) break;
 
-//                 EIdEnum nextId = (EIdEnum)puNextTag.nValue;
+            //                 EIdEnum nextId = (EIdEnum)puNextTag.nValue;
 
-// #ifdef QT_DEBUG
-//                 if (nextId <= 26) {  // Only log reasonable ID values
-//                     qDebug() << QString("_handleId: k7zIdHeader loop - offset=0x%1 peekByte=0x%2 nextId=0x%3")
-//                                     .arg(pState->nCurrentOffset, 0, 16)
-//                                     .arg(nPeekByte, 2, 16, QChar('0'))
-//                                     .arg((quint64)nextId, 0, 16);
-//                 }
-// #endif
+            // #ifdef QT_DEBUG
+            //                 if (nextId <= 26) {  // Only log reasonable ID values
+            //                     qDebug() << QString("_handleId: k7zIdHeader loop - offset=0x%1 peekByte=0x%2 nextId=0x%3")
+            //                                     .arg(pState->nCurrentOffset, 0, 16)
+            //                                     .arg(nPeekByte, 2, 16, QChar('0'))
+            //                                     .arg((quint64)nextId, 0, 16);
+            //                 }
+            // #endif
 
-//                 if (nextId == k7zIdFilesInfo) {
-//                     // FilesInfo is what we really need for file listings
-//                     _handleId(pListRecords, k7zIdFilesInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-//                     bFoundFilesInfo = true;
-//                     break;  // After FilesInfo, we're done
-//                 } else if (nextId == k7zIdEnd && bFoundFilesInfo) {
-//                     // Only process End if we've already found FilesInfo
-//                     _handleId(pListRecords, k7zIdEnd, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-//                     break;
-//                 } else if (nextId == k7zIdMainStreamsInfo || nextId == k7zIdArchiveProperties || nextId == k7zIdAdditionalStreamsInfo) {
-//                     // These are major sections - try to parse them
-//                     bool bHandled = _handleId(pListRecords, nextId, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-//                     if (!bHandled || pState->bIsError) {
-//                         pState->bIsError = false;
-//                         pState->sErrorString.clear();
-//                         pState->nCurrentOffset++;
-//                     }
-//                 } else if (nextId == k7zIdCodersUnpackSize) {
-//                     // CodersUnpackSize can appear at header level in some archives
-//                     // Read nNumberOfFolders size values (one per folder)
-//                     pState->nCurrentOffset += puNextTag.nByteSize;  // Skip ID
+            //                 if (nextId == k7zIdFilesInfo) {
+            //                     // FilesInfo is what we really need for file listings
+            //                     _handleId(pListRecords, k7zIdFilesInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
+            //                     bFoundFilesInfo = true;
+            //                     break;  // After FilesInfo, we're done
+            //                 } else if (nextId == k7zIdEnd && bFoundFilesInfo) {
+            //                     // Only process End if we've already found FilesInfo
+            //                     _handleId(pListRecords, k7zIdEnd, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
+            //                     break;
+            //                 } else if (nextId == k7zIdMainStreamsInfo || nextId == k7zIdArchiveProperties || nextId == k7zIdAdditionalStreamsInfo) {
+            //                     // These are major sections - try to parse them
+            //                     bool bHandled = _handleId(pListRecords, nextId, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
+            //                     if (!bHandled || pState->bIsError) {
+            //                         pState->bIsError = false;
+            //                         pState->sErrorString.clear();
+            //                         pState->nCurrentOffset++;
+            //                     }
+            //                 } else if (nextId == k7zIdCodersUnpackSize) {
+            //                     // CodersUnpackSize can appear at header level in some archives
+            //                     // Read nNumberOfFolders size values (one per folder)
+            //                     pState->nCurrentOffset += puNextTag.nByteSize;  // Skip ID
 
-// #ifdef QT_DEBUG
-//                     qDebug() << "_handleId: k7zIdHeader found CodersUnpackSize, reading" << pState->nNumberOfFolders << "values";
-// #endif
+            // #ifdef QT_DEBUG
+            //                     qDebug() << "_handleId: k7zIdHeader found CodersUnpackSize, reading" << pState->nNumberOfFolders << "values";
+            // #endif
 
-//                     // Read one CodersUnpackSize value per folder
-//                     for (quint64 i = 0; i < pState->nNumberOfFolders && !pState->bIsError; i++) {
-//                         quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("CodersUnpackSize%1").arg(i), DRF_SIZE, IMPTYPE_STREAMUNPACKEDSIZE);
-// #ifdef QT_DEBUG
-//                         qDebug() << "  Folder" << i << "unpacked size:" << nSize << "bytes";
-// #endif
-//                     }
-//                 } else if (nextId == k7zIdSubStreamsInfo) {
-// // SubStreamsInfo can appear at header level
-// #ifdef QT_DEBUG
-//                     qDebug() << "_handleId: k7zIdHeader found SubStreamsInfo at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-// #endif
-//                     bool bHandled = _handleId(pListRecords, k7zIdSubStreamsInfo, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
-//                     if (!bHandled || pState->bIsError) {
-// #ifdef QT_DEBUG
-//                         qDebug() << "_handleId: k7zIdHeader SubStreamsInfo parsing failed or skipped";
-// #endif
-//                         pState->bIsError = false;
-//                         pState->sErrorString.clear();
-//                         pState->nCurrentOffset++;
-//                     }
-//                 } else {
-//                     // Logging unknown IDs at this level
-// #ifdef QT_DEBUG
-//                     qDebug() << "_handleId: k7zIdHeader found unknown ID"
-//                     << QString("0x%1").arg((quint64)nextId, 0, 16)
-//                              << "at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-// #endif
-//                     // Skip unknown/invalid bytes
-//                     pState->nCurrentOffset++;
-//                 }
-//             }
+            //                     // Read one CodersUnpackSize value per folder
+            //                     for (quint64 i = 0; i < pState->nNumberOfFolders && !pState->bIsError; i++) {
+            //                         quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("CodersUnpackSize%1").arg(i), DRF_SIZE,
+            //                         IMPTYPE_STREAMUNPACKEDSIZE);
+            // #ifdef QT_DEBUG
+            //                         qDebug() << "  Folder" << i << "unpacked size:" << nSize << "bytes";
+            // #endif
+            //                     }
+            //                 } else if (nextId == k7zIdSubStreamsInfo) {
+            // // SubStreamsInfo can appear at header level
+            // #ifdef QT_DEBUG
+            //                     qDebug() << "_handleId: k7zIdHeader found SubStreamsInfo at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
+            // #endif
+            //                     bool bHandled = _handleId(pListRecords, k7zIdSubStreamsInfo, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
+            //                     if (!bHandled || pState->bIsError) {
+            // #ifdef QT_DEBUG
+            //                         qDebug() << "_handleId: k7zIdHeader SubStreamsInfo parsing failed or skipped";
+            // #endif
+            //                         pState->bIsError = false;
+            //                         pState->sErrorString.clear();
+            //                         pState->nCurrentOffset++;
+            //                     }
+            //                 } else {
+            //                     // Logging unknown IDs at this level
+            // #ifdef QT_DEBUG
+            //                     qDebug() << "_handleId: k7zIdHeader found unknown ID"
+            //                     << QString("0x%1").arg((quint64)nextId, 0, 16)
+            //                              << "at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
+            // #endif
+            //                     // Skip unknown/invalid bytes
+            //                     pState->nCurrentOffset++;
+            //                 }
+            //             }
             _handleId(pListRecords, XSevenZip::k7zIdMainStreamsInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
             _handleId(pListRecords, XSevenZip::k7zIdFilesInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
             bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
@@ -1122,7 +1123,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
 
                             SZRECORD record = {};
                             record.nRelOffset = nNameStartOffset;
-                            record.nSize = nNameLenBytes + 2; // NUll
+                            record.nSize = nNameLenBytes + 2;  // NUll
                             record.varValue = sFilename;
                             record.srType = SRTYPE_ARRAY;
                             record.valType = VT_STRING;

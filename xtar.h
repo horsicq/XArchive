@@ -97,7 +97,8 @@ public:
     virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
-    static bool sub_initUnpack(FT fileType, QIODevice *pDevice, UNPACK_STATE *pUnpackState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr);
+    static bool sub_initUnpack(FT fileType, QIODevice *pDevice, UNPACK_STATE *pUnpackState, const QMap<UNPACK_PROP, QVariant> &mapProperties,
+                               PDSTRUCT *pPdStruct = nullptr);
     static ARCHIVERECORD sub_infoCurrent(FT fileType, UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr);
     static bool sub_unpackCurrent(FT fileType, UNPACK_STATE *pUnpackState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool sub_moveToNext(FT fileType, UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr);
