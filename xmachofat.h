@@ -46,25 +46,25 @@ public:
 
     explicit XMACHOFat(QIODevice *pDevice = nullptr);
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
-    virtual ENDIAN getEndian();
-    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);
-    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);
+    virtual ENDIAN getEndian() override;
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
 
-    virtual OSNAME getOsName();
-    virtual QString getFileFormatExt();
-    virtual QString getFileFormatExtsString();
-    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
-    virtual QList<MAPMODE> getMapModesList();
-    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr);
-    virtual QString getArch();
-    virtual qint32 getType();
-    virtual QString typeIdToString(qint32 nType);
-    virtual FT getFileType();
-    virtual QString getMIMEString();
-    virtual bool isArchive();
-    virtual QString structIDToString(quint32 nID);
+    virtual OSNAME getOsName() override;
+    virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString() override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
+    virtual QList<MAPMODE> getMapModesList() override;
+    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QString getArch() override;
+    virtual qint32 getType() override;
+    virtual QString typeIdToString(qint32 nType) override;
+    virtual FT getFileType() override;
+    virtual QString getMIMEString() override;
+    virtual bool isArchive() override;
+    virtual QString structIDToString(quint32 nID) override;
 
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;

@@ -37,7 +37,7 @@ bool XISO9660::isValid(PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (getSize() >= 0x8000) {  // At least PVD offset + size
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
 
         // ISO 9660 Primary Volume Descriptor is typically at offset 0x8000 (32KB)
         // Check for "CD001" signature

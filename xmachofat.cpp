@@ -463,7 +463,7 @@ bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
     pState->nCurrentOffset = 0;
     pState->nCurrentIndex = 0;
-    pState->nNumberOfRecords = (qint32)getNumberOfRecords(nullptr);
+    pState->nNumberOfRecords = (qint32)getNumberOfRecords(pPdStruct);
     pState->nTotalSize = getSize();
     pState->mapProperties = mapProperties;
     pState->pContext = nullptr;
