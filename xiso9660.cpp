@@ -130,11 +130,115 @@ QString XISO9660::structIDToString(quint32 nID)
 
 QList<XBinary::DATA_HEADER> XISO9660::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(dataHeadersOptions)
-    Q_UNUSED(pPdStruct)
-
     QList<DATA_HEADER> listResult;
-    // TODO: Implement data header extraction
+
+    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+        _dataHeadersOptions.bChildren = true;
+        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+
+        _dataHeadersOptions.nID = STRUCTID_PVDESC;
+        _dataHeadersOptions.nLocation = _getPrimaryVolumeDescriptorOffset();
+        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+
+        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+    } else {
+        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+
+        if (nStartOffset != -1) {
+            if (dataHeadersOptions.nID == STRUCTID_PVDESC) {
+                DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XISO9660::structIDToString(dataHeadersOptions.nID));
+                dataHeader.nSize = sizeof(ISO9660_PVDESC);
+
+                dataHeader.listRecords.append(getDataRecord(0, 1, "Descriptor Type", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(1, 5, "Standard Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(6, 1, "Version", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(7, 1, "Unused", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(8, 32, "System Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(40, 32, "Volume Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(72, 8, "Unused", VT_BYTE_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(80, 4, "Volume Space Size (LE)", VT_UINT32, DRF_SIZE, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(84, 4, "Volume Space Size (BE)", VT_UINT32, DRF_SIZE, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(88, 32, "Unused", VT_BYTE_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(120, 2, "Volume Set Size (LE)", VT_UINT16, DRF_COUNT, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(122, 2, "Volume Set Size (BE)", VT_UINT16, DRF_COUNT, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(124, 2, "Volume Sequence Number (LE)", VT_UINT16, DRF_COUNT, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(126, 2, "Volume Sequence Number (BE)", VT_UINT16, DRF_COUNT, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(128, 2, "Logical Block Size (LE)", VT_UINT16, DRF_SIZE, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(130, 2, "Logical Block Size (BE)", VT_UINT16, DRF_SIZE, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(132, 4, "Path Table Size (LE)", VT_UINT32, DRF_SIZE, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(136, 4, "Path Table Size (BE)", VT_UINT32, DRF_SIZE, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(140, 4, "L Path Table Location", VT_UINT32, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(144, 4, "Optional L Path Table Location", VT_UINT32, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(148, 4, "M Path Table Location", VT_UINT32, DRF_UNKNOWN, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(152, 4, "Optional M Path Table Location", VT_UINT32, DRF_UNKNOWN, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(156, 34, "Root Directory Record", VT_BYTE_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(190, 128, "Volume Set Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(318, 128, "Publisher Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(446, 128, "Data Preparer Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(574, 128, "Application Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(702, 37, "Copyright File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(739, 37, "Abstract File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(776, 37, "Bibliographic File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(813, 17, "Creation Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(830, 17, "Modification Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(847, 17, "Expiration Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(864, 17, "Effective Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(881, 1, "File Structure Version", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+
+                listResult.append(dataHeader);
+
+                if (dataHeadersOptions.bChildren) {
+                    // Add root directory record as a child structure
+                    DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+                    _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+                    _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+                    _dataHeadersOptions.nID = STRUCTID_DIR_RECORD;
+                    _dataHeadersOptions.locType = LT_OFFSET;
+                    _dataHeadersOptions.nLocation = nStartOffset + 156;  // Root directory record offset within PVD
+                    _dataHeadersOptions.nSize = 34;
+
+                    listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+                }
+            } else if (dataHeadersOptions.nID == STRUCTID_DIR_RECORD) {
+                DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XISO9660::structIDToString(dataHeadersOptions.nID));
+
+                quint8 nRecordLength = read_uint8(nStartOffset);
+                dataHeader.nSize = nRecordLength;
+
+                dataHeader.listRecords.append(getDataRecord(0, 1, "Length of Directory Record", VT_UINT8, DRF_SIZE, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(1, 1, "Extended Attribute Record Length", VT_UINT8, DRF_SIZE, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(2, 4, "Location of Extent (LE)", VT_UINT32, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(6, 4, "Location of Extent (BE)", VT_UINT32, DRF_UNKNOWN, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(10, 4, "Data Length (LE)", VT_UINT32, DRF_SIZE, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(14, 4, "Data Length (BE)", VT_UINT32, DRF_SIZE, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(18, 1, "Years since 1900", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(19, 1, "Month", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(20, 1, "Day", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(21, 1, "Hour", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(22, 1, "Minute", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(23, 1, "Second", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(24, 1, "GMT Offset", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(25, 1, "File Flags", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(26, 1, "File Unit Size", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(27, 1, "Interleave Gap Size", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(28, 2, "Volume Sequence Number (LE)", VT_UINT16, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(30, 2, "Volume Sequence Number (BE)", VT_UINT16, DRF_UNKNOWN, ENDIAN_BIG));
+                dataHeader.listRecords.append(getDataRecord(32, 1, "Length of File Identifier", VT_UINT8, DRF_SIZE, ENDIAN_LITTLE));
+
+                // File identifier follows at offset 33
+                quint8 nFileIdLength = read_uint8(nStartOffset + 32);
+                if (nFileIdLength > 0 && nRecordLength >= 33 + nFileIdLength) {
+                    dataHeader.listRecords.append(getDataRecord(33, nFileIdLength, "File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                }
+
+                listResult.append(dataHeader);
+            }
+        }
+    }
+
     return listResult;
 }
 
