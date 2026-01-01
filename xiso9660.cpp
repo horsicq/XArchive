@@ -250,6 +250,17 @@ QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, 
     QList<FPART> listResult;
     qint64 nTotalSize = getSize();
 
+    if (nFileParts & FILEPART_REGION) {
+        FPART record = {};
+        record.filePart = FILEPART_REGION;
+        record.nFileOffset = 0;
+        record.nFileSize =  _getPrimaryVolumeDescriptorOffset();
+        record.nVirtualAddress = -1;
+        record.sName = tr("Reserved");
+
+        listResult.append(record);
+    }
+
     if (nFileParts & FILEPART_HEADER) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
