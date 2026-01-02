@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xiso9660.h"
+#include "Algos/xstoredecoder.h"
 
 XBinary::XCONVERT _TABLE_XISO9660_STRUCTID[] = {{XISO9660::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                 {XISO9660::STRUCTID_PVDESC, "PVDESC", QString("Primary Volume Descriptor")},
@@ -93,6 +94,27 @@ QString XISO9660::getFileFormatExt()
 QString XISO9660::getFileFormatExtsString()
 {
     return "ISO 9660 (*.iso)";
+}
+
+qint64 XISO9660::getFileFormatSize(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    qint64 nResult = 0;
+
+    if (isValid()) {
+        // Volume Space Size is at offset 80 in the Primary Volume Descriptor (little-endian)
+        // It specifies the total number of logical blocks
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        quint32 nVolumeSpaceSize = read_uint32(nPVDOffset + 80);
+        qint32 nLogicalBlockSize = _getLogicalBlockSize();
+
+        if (nLogicalBlockSize > 0 && nVolumeSpaceSize > 0) {
+            nResult = (qint64)nVolumeSpaceSize * (qint64)nLogicalBlockSize;
+        }
+    }
+
+    return nResult;
 }
 
 QString XISO9660::getMIMEString()
@@ -536,8 +558,6 @@ XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
 
 bool XISO9660::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     if (!pState || !pState->pContext || !pDevice) return false;
 
     ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
@@ -553,28 +573,18 @@ bool XISO9660::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
         return true;
     }
 
-    // Read and write data
-    qint64 nOffset = record.nStreamOffset;
-    qint64 nSize = record.nStreamSize;
-    qint64 nBufferSize = 65536;
+    // Use XStoreDecoder for data extraction
+    XBinary::DATAPROCESS_STATE decompressState = {};
+    decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XArchive::COMPRESS_METHOD_STORE);
+    decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, record.nStreamSize);
+    decompressState.pDeviceInput = getDevice();
+    decompressState.pDeviceOutput = pDevice;
+    decompressState.nInputOffset = record.nStreamOffset;
+    decompressState.nInputLimit = record.nStreamSize;
+    decompressState.nProcessedOffset = 0;
+    decompressState.nProcessedLimit = -1;
 
-    while (nSize > 0 && isPdStructNotCanceled(pPdStruct)) {
-        qint64 nCurrentSize = qMin(nSize, nBufferSize);
-        QByteArray baData = read_array(nOffset, nCurrentSize);
-
-        if (baData.size() != nCurrentSize) {
-            return false;
-        }
-
-        if (pDevice->write(baData) != nCurrentSize) {
-            return false;
-        }
-
-        nOffset += nCurrentSize;
-        nSize -= nCurrentSize;
-    }
-
-    return true;
+    return XStoreDecoder::decompress(&decompressState, pPdStruct);
 }
 
 bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

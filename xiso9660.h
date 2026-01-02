@@ -97,6 +97,7 @@ public:
     static bool isValid(QIODevice *pDevice);
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct = nullptr) override;
     virtual QString getMIMEString() override;
     virtual FT getFileType() override;
     virtual QList<MAPMODE> getMapModesList() override;
