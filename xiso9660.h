@@ -114,6 +114,20 @@ public:
 
     ISO9660_PVDESC _readPrimaryVolumeDescriptor(qint64 nOffset);
 
+    QString getSystemIdentifier();
+    QString getVolumeIdentifier();
+    QString getVolumeSetIdentifier();
+    QString getPublisherIdentifier();
+    QString getDataPreparerIdentifier();
+    QString getApplicationIdentifier();
+    QString getCopyrightFileIdentifier();
+    QString getAbstractFileIdentifier();
+    QString getBibliographicFileIdentifier();
+    QString getCreationDateTime();
+    QString getModificationDateTime();
+    QString getExpirationDateTime();
+    QString getEffectiveDateTime();
+
 private:
     struct ISO9660_SCAN_CONTEXT {
         qint32 nLogicalBlockSize;
@@ -137,6 +151,20 @@ private:
     QList<ARCHIVERECORD> _parseDirectory(qint64 nOffset, qint64 nSize, qint32 nBlockSize, const QString &sParentPath, PDSTRUCT *pPdStruct);
     qint64 _countAllRecords(qint64 nRootOffset, qint64 nRootSize, qint32 nBlockSize, PDSTRUCT *pPdStruct);
     QString _cleanFileName(const QString &sFileName);
+
+    QString m_sSystemIdentifier;
+    QString m_sVolumeIdentifier;
+    QString m_sVolumeSetIdentifier;
+    QString m_sPublisherIdentifier;
+    QString m_sDataPreparerIdentifier;
+    QString m_sApplicationIdentifier;
+    QString m_sCopyrightFileIdentifier;
+    QString m_sAbstractFileIdentifier;
+    QString m_sBibliographicFileIdentifier;
+    QString m_sCreationDateTime;
+    QString m_sModificationDateTime;
+    QString m_sExpirationDateTime;
+    QString m_sEffectiveDateTime;
 };
 
 #endif  // XISO9660_H

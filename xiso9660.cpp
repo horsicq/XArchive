@@ -27,6 +27,19 @@ XBinary::XCONVERT _TABLE_XISO9660_STRUCTID[] = {{XISO9660::STRUCTID_UNKNOWN, "Un
 
 XISO9660::XISO9660(QIODevice *pDevice) : XArchive(pDevice)
 {
+    m_sSystemIdentifier = getSystemIdentifier();
+    m_sVolumeIdentifier = getVolumeIdentifier();
+    m_sVolumeSetIdentifier = getVolumeSetIdentifier();
+    m_sPublisherIdentifier = getPublisherIdentifier();
+    m_sDataPreparerIdentifier = getDataPreparerIdentifier();
+    m_sApplicationIdentifier = getApplicationIdentifier();
+    m_sCopyrightFileIdentifier = getCopyrightFileIdentifier();
+    m_sAbstractFileIdentifier = getAbstractFileIdentifier();
+    m_sBibliographicFileIdentifier = getBibliographicFileIdentifier();
+    m_sCreationDateTime = getCreationDateTime();
+    m_sModificationDateTime = getModificationDateTime();
+    m_sExpirationDateTime = getExpirationDateTime();
+    m_sEffectiveDateTime = getEffectiveDateTime();
 }
 
 XISO9660::~XISO9660()
@@ -267,10 +280,10 @@ QList<XBinary::DATA_HEADER> XISO9660::getDataHeaders(const DATA_HEADERS_OPTIONS 
 QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
-    Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
     qint64 nTotalSize = getSize();
+    qint64 nFormatSize = getFileFormatSize(pPdStruct);
 
     if (nFileParts & FILEPART_REGION) {
         FPART record = {};
@@ -295,14 +308,32 @@ QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, 
     }
 
     if (nFileParts & FILEPART_REGION) {
-        FPART record = {};
-        record.filePart = FILEPART_REGION;
-        record.nFileOffset = _getPrimaryVolumeDescriptorOffset() + sizeof(ISO9660_PVDESC);
-        record.nFileSize = nTotalSize - (_getPrimaryVolumeDescriptorOffset() + sizeof(ISO9660_PVDESC));
-        record.nVirtualAddress = -1;
-        record.sName = tr("Data");
+        qint64 nDataOffset = _getPrimaryVolumeDescriptorOffset() + sizeof(ISO9660_PVDESC);
+        qint64 nDataSize = (nFormatSize > 0) ? (nFormatSize - nDataOffset) : (nTotalSize - nDataOffset);
 
-        listResult.append(record);
+        if (nDataSize > 0) {
+            FPART record = {};
+            record.filePart = FILEPART_REGION;
+            record.nFileOffset = nDataOffset;
+            record.nFileSize = nDataSize;
+            record.nVirtualAddress = -1;
+            record.sName = tr("Data");
+
+            listResult.append(record);
+        }
+    }
+
+    if (nFileParts & FILEPART_OVERLAY) {
+        if (nFormatSize > 0 && nTotalSize > nFormatSize) {
+            FPART record = {};
+            record.filePart = FILEPART_OVERLAY;
+            record.nFileOffset = nFormatSize;
+            record.nFileSize = nTotalSize - nFormatSize;
+            record.nVirtualAddress = -1;
+            record.sName = tr("Overlay");
+
+            listResult.append(record);
+        }
     }
 
     return listResult;
@@ -656,4 +687,173 @@ bool XISO9660::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return true;
+}
+
+QString XISO9660::getSystemIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baSystemId = read_array(nPVDOffset + 8, 32);
+        sResult = QString::fromLatin1(baSystemId).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getVolumeIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baVolumeId = read_array(nPVDOffset + 40, 32);
+        sResult = QString::fromLatin1(baVolumeId).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getVolumeSetIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baVolSetId = read_array(nPVDOffset + 190, 128);
+        sResult = QString::fromLatin1(baVolSetId).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getPublisherIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baPublisherId = read_array(nPVDOffset + 318, 128);
+        sResult = QString::fromLatin1(baPublisherId).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getDataPreparerIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baDataPreparerId = read_array(nPVDOffset + 446, 128);
+        sResult = QString::fromLatin1(baDataPreparerId).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getApplicationIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baApplicationId = read_array(nPVDOffset + 574, 128);
+        sResult = QString::fromLatin1(baApplicationId).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getCopyrightFileIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baCopyrightFile = read_array(nPVDOffset + 702, 37);
+        sResult = QString::fromLatin1(baCopyrightFile).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getAbstractFileIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baAbstractFile = read_array(nPVDOffset + 739, 37);
+        sResult = QString::fromLatin1(baAbstractFile).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getBibliographicFileIdentifier()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baBiblioFile = read_array(nPVDOffset + 776, 37);
+        sResult = QString::fromLatin1(baBiblioFile).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getCreationDateTime()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baCreationTime = read_array(nPVDOffset + 813, 17);
+        sResult = QString::fromLatin1(baCreationTime).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getModificationDateTime()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baModificationTime = read_array(nPVDOffset + 830, 17);
+        sResult = QString::fromLatin1(baModificationTime).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getExpirationDateTime()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baExpirationTime = read_array(nPVDOffset + 847, 17);
+        sResult = QString::fromLatin1(baExpirationTime).trimmed();
+    }
+
+    return sResult;
+}
+
+QString XISO9660::getEffectiveDateTime()
+{
+    QString sResult;
+
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        QByteArray baEffectiveTime = read_array(nPVDOffset + 864, 17);
+        sResult = QString::fromLatin1(baEffectiveTime).trimmed();
+    }
+
+    return sResult;
 }
