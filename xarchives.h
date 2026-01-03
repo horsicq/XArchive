@@ -27,6 +27,7 @@
 #include "xcpio.h"
 #include "xgzip.h"
 #include "xiso9660.h"
+#include "xudf.h"
 #include "xmachofat.h"
 #include "xrar.h"
 #include "xsevenzip.h"

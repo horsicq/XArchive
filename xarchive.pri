@@ -41,8 +41,7 @@ HEADERS += \
     $$PWD/xdos16.h \
     $$PWD/xgzip.h \
     $$PWD/xipa.h \
-    $$PWD/xiso9660.h \
-    $$PWD/xjar.h \
+    $$PWD/xiso9660.h \    $$PWD/xudf.h \    $$PWD/xjar.h \
     $$PWD/xlha.h \
     $$PWD/xmachofat.h \
     $$PWD/xrar.h \
@@ -96,8 +95,7 @@ SOURCES += \
     $$PWD/xdos16.cpp \
     $$PWD/xgzip.cpp \
     $$PWD/xipa.cpp \
-    $$PWD/xiso9660.cpp \
-    $$PWD/xjar.cpp \
+    $$PWD/xiso9660.cpp \    $$PWD/xudf.cpp \    $$PWD/xjar.cpp \
     $$PWD/xlha.cpp \
     $$PWD/xmachofat.cpp \
     $$PWD/xrar.cpp \
