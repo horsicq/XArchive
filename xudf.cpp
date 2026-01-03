@@ -162,9 +162,9 @@ QList<XBinary::DATA_HEADER> XUDF::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
             DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XUDF::structIDToString(dataHeadersOptions.nID));
             dataHeader.nSize = 512;
 
-            dataHeader.listRecords.append(getDataRecord(0, 16, "Tag", VT_STRUCT, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-            dataHeader.listRecords.append(getDataRecord(16, 8, "Main Volume Descriptor Sequence Extent", VT_STRUCT, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-            dataHeader.listRecords.append(getDataRecord(24, 8, "Reserve Volume Descriptor Sequence Extent", VT_STRUCT, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+            dataHeader.listRecords.append(getDataRecord(0, 16, "Tag", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+            dataHeader.listRecords.append(getDataRecord(16, 8, "Main Volume Descriptor Sequence Extent", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+            dataHeader.listRecords.append(getDataRecord(24, 8, "Reserve Volume Descriptor Sequence Extent", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
             listResult.append(dataHeader);
         }
@@ -260,15 +260,18 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         if (pContext->nCurrentRecordIndex < pContext->listRecords.count()) {
             ARCHIVERECORD ar = pContext->listRecords.at(pContext->nCurrentRecordIndex);
 
-            if (!ar.mapProperties.value(FPART_PROP_ISDIRECTORY).toBool()) {
-                XStoreDecoder decoder(getDevice(), ar.nStreamOffset, ar.nStreamSize);
+            if (!ar.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) {
+                XBinary::DATAPROCESS_STATE decompressState = {};
+                decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XArchive::COMPRESS_METHOD_STORE);
+                decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, ar.nStreamSize);
+                decompressState.pDeviceInput = getDevice();
+                decompressState.pDeviceOutput = pDevice;
+                decompressState.nInputOffset = ar.nStreamOffset;
+                decompressState.nInputLimit = ar.nStreamSize;
+                decompressState.nProcessedOffset = 0;
+                decompressState.nProcessedLimit = -1;
 
-                if (decoder.open(QIODevice::ReadOnly)) {
-                    XBinary::copyDeviceData(&decoder, pDevice, ar.nStreamSize, pPdStruct);
-                    decoder.close();
-
-                    bResult = true;
-                }
+                bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
             } else {
                 bResult = true;
             }
