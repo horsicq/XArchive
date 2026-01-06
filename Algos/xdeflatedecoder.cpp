@@ -857,75 +857,82 @@ XDeflateDecoder::XDeflateDecoder(QObject *parent) : QObject(parent)
 
 bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->pDeviceInput) {
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    }
-
-    if (pDecompressState->pDeviceOutput) {
-        pDecompressState->pDeviceOutput->seek(0);
-    }
-
     bool bResult = false;
 
-    char bufferIn[N_BUFFER_SIZE];
-    char bufferOut[N_BUFFER_SIZE];
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
+        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
 
-    z_stream strm;
+        char *bufferIn = new char[_nBufferSize];
+        char *bufferOut = new char[_nBufferSize];
 
-    strm.zalloc = nullptr;
-    strm.zfree = nullptr;
-    strm.opaque = nullptr;
-    strm.avail_in = 0;
-    strm.next_in = nullptr;
+        if (pDecompressState->pDeviceInput) {
+            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+        }
 
-    qint32 ret = Z_OK;
+        if (pDecompressState->pDeviceOutput) {
+            pDecompressState->pDeviceOutput->seek(0);
+        }
 
-    if (inflateInit2(&strm, -MAX_WBITS) == Z_OK)  // -MAX_WBITS for raw data
-    {
-        do {
-            qint32 nBufferSize =
-                (pDecompressState->nInputLimit == -1) ? N_BUFFER_SIZE : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
-            strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
+        z_stream strm;
 
-            if (strm.avail_in == 0) {
-                ret = Z_ERRNO;
-                break;
-            }
+        strm.zalloc = nullptr;
+        strm.zfree = nullptr;
+        strm.opaque = nullptr;
+        strm.avail_in = 0;
+        strm.next_in = nullptr;
 
-            strm.next_in = (quint8 *)bufferIn;
+        qint32 ret = Z_OK;
 
+        if (inflateInit2(&strm, -MAX_WBITS) == Z_OK)  // -MAX_WBITS for raw data
+        {
             do {
-                strm.avail_out = N_BUFFER_SIZE;
-                //                    strm.avail_out=1;
-                strm.next_out = (quint8 *)bufferOut;
-                ret = inflate(&strm, Z_NO_FLUSH);
-                //                    ret=inflate(&strm,Z_SYNC_FLUSH);
+                qint32 nBufferSize = (pDecompressState->nInputLimit == -1) ? _nBufferSize
+                                                                            : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+                strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
-                if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT)) {
+                if (strm.avail_in == 0) {
+                    ret = Z_ERRNO;
                     break;
                 }
 
-                qint32 nTemp = N_BUFFER_SIZE - strm.avail_out;
+                strm.next_in = (quint8 *)bufferIn;
 
-                if (nTemp > 0) {
-                    if (!XBinary::_writeDevice(bufferOut, nTemp, pDecompressState)) {
-                        ret = Z_ERRNO;
+                do {
+                    strm.avail_out = _nBufferSize;
+                    //                    strm.avail_out=1;
+                    strm.next_out = (quint8 *)bufferOut;
+                    ret = inflate(&strm, Z_NO_FLUSH);
+                    //                    ret=inflate(&strm,Z_SYNC_FLUSH);
+
+                    if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT)) {
                         break;
                     }
+
+                    qint32 nTemp = _nBufferSize - strm.avail_out;
+
+                    if (nTemp > 0) {
+                        if (!XBinary::_writeDevice(bufferOut, nTemp, pDecompressState)) {
+                            ret = Z_ERRNO;
+                            break;
+                        }
+                    }
+                } while (strm.avail_out == 0);
+                if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
+                    break;
                 }
-            } while (strm.avail_out == 0);
-            if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
-                break;
-            }
 
-            if (XBinary::isPdStructStopped(pPdStruct)) {
-                break;
-            }
-        } while (ret != Z_STREAM_END);
+                if (XBinary::isPdStructStopped(pPdStruct)) {
+                    break;
+                }
+            } while (ret != Z_STREAM_END);
 
-        inflateEnd(&strm);
+            inflateEnd(&strm);
 
-        bResult = (ret == Z_STREAM_END);
+            bResult = (ret == Z_STREAM_END);
+        }
+
+        delete[] bufferIn;
+        delete[] bufferOut;
     }
 
     return bResult;

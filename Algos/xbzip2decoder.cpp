@@ -28,12 +28,12 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 {
     bool bResult = false;
 
-    const qint32 N_BUFFER_SIZE = 0x4000;
-
-    char bufferIn[N_BUFFER_SIZE];
-    char bufferOut[N_BUFFER_SIZE];
-
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
+        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+
+        char *bufferIn = new char[_nBufferSize];
+        char *bufferOut = new char[_nBufferSize];
+
         if (pDecompressState->pDeviceInput) {
             pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
         }
@@ -52,7 +52,7 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
             do {
                 // Read more data only if we consumed all input
                 if (bReadMore && strm.avail_in == 0) {
-                    qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
+                    qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
 
                     if (nBufferSize > 0) {
                         strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
@@ -75,7 +75,7 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
                     strm.total_in_lo32 = 0;
                     strm.total_out_hi32 = 0;
                     strm.total_out_lo32 = 0;
-                    strm.avail_out = N_BUFFER_SIZE;
+                    strm.avail_out = _nBufferSize;
                     strm.next_out = bufferOut;
                     ret = BZ2_bzDecompress(&strm);
 
@@ -83,7 +83,7 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
                         break;
                     }
 
-                    qint32 nTemp = N_BUFFER_SIZE - strm.avail_out;
+                    qint32 nTemp = _nBufferSize - strm.avail_out;
 
                     if (nTemp > 0) {
                         if (!XBinary::_writeDevice((char *)bufferOut, nTemp, pDecompressState)) {
@@ -108,6 +108,9 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
                 bResult = true;
             }
         }
+
+        delete[] bufferIn;
+        delete[] bufferOut;
     }
 
     return bResult;

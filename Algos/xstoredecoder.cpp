@@ -32,6 +32,10 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
     bool bResult = false;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
+        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+
+        char *bufferIn = new char[_nBufferSize];
+
         // Initialize error states
         pDecompressState->bReadError = false;
         pDecompressState->bWriteError = false;
@@ -48,12 +52,9 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
             pDecompressState->pDeviceOutput->seek(0);
         }
 
-        // Allocate buffer for copying data
-        char bufferIn[N_BUFFER_SIZE];
-
         // Copy data from input to output
         for (qint64 nOffset = 0; (nOffset < pDecompressState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
-            qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - nOffset), N_BUFFER_SIZE);
+            qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - nOffset), _nBufferSize);
 
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
@@ -72,6 +73,8 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 
         // Success if no errors occurred
         bResult = !pDecompressState->bReadError && !pDecompressState->bWriteError;
+
+        delete[] bufferIn;
     }
 
     return bResult;

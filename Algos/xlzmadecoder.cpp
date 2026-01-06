@@ -34,16 +34,16 @@ static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 
 static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    const qint32 N_BUFFER_SIZE = 0x4000;
+    qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
 
-    char bufferIn[N_BUFFER_SIZE];
-    char bufferOut[N_BUFFER_SIZE];
+    char *bufferIn = new char[_nBufferSize];
+    char *bufferOut = new char[_nBufferSize];
 
     ELzmaStatus lastStatus = LZMA_STATUS_NOT_FINISHED;
     qint32 nLoopCount = 0;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
+        qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
         // qDebug("_decompressLZMACommon() loop %d: read %d bytes, nCountInput=%lld, nInputLimit=%lld",
@@ -57,7 +57,7 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
         while (bContinueReading && nPos < nSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
             ELzmaStatus status;
             SizeT inProcessed = nSize - nPos;
-            SizeT outProcessed = N_BUFFER_SIZE;
+            SizeT outProcessed = _nBufferSize;
 
             SRes ret = LzmaDec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
 
@@ -72,6 +72,8 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
                 //            (unsigned char)bufferIn[4], (unsigned char)bufferIn[5],
                 //            (unsigned char)bufferIn[6], (unsigned char)bufferIn[7]);
                 // }
+                delete[] bufferIn;
+                delete[] bufferOut;
                 return false;
             }
 
@@ -80,6 +82,8 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
             if (outProcessed > 0) {
                 if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pDecompressState)) {
                     // qDebug("_decompressLZMACommon() FAILED: _writeDevice returned false");
+                    delete[] bufferIn;
+                    delete[] bufferOut;
                     return false;
                 }
             }
@@ -115,20 +119,23 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
         }
     }
 
+    delete[] bufferIn;
+    delete[] bufferOut;
+
     return true;
 }
 
 static bool _decompressLZMA2Common(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    const qint32 N_BUFFER_SIZE = 0x4000;
+    qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
 
-    char bufferIn[N_BUFFER_SIZE];
-    char bufferOut[N_BUFFER_SIZE];
+    char *bufferIn = new char[_nBufferSize];
+    char *bufferOut = new char[_nBufferSize];
 
     ELzmaStatus lastStatus = LZMA_STATUS_NOT_FINISHED;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), N_BUFFER_SIZE);
+        qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
         // Process available input
@@ -138,11 +145,13 @@ static bool _decompressLZMA2Common(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE
         while (bContinueReading && nPos < nSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
             ELzmaStatus status;
             SizeT inProcessed = nSize - nPos;
-            SizeT outProcessed = N_BUFFER_SIZE;
+            SizeT outProcessed = _nBufferSize;
 
             SRes ret = Lzma2Dec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
 
             if (ret != 0) {  // Check for decompression error
+                delete[] bufferIn;
+                delete[] bufferOut;
                 return false;
             }
 
@@ -150,6 +159,8 @@ static bool _decompressLZMA2Common(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE
 
             if (outProcessed > 0) {
                 if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pDecompressState)) {
+                    delete[] bufferIn;
+                    delete[] bufferOut;
                     return false;
                 }
             }
@@ -178,6 +189,9 @@ static bool _decompressLZMA2Common(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE
             break;
         }
     }
+
+    delete[] bufferIn;
+    delete[] bufferOut;
 
     return true;
 }
