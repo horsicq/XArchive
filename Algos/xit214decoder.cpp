@@ -38,18 +38,18 @@ bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qui
     quint16 blkpos; /* position in block */
     quint8 width;   /* actual "bit width" */
 
-    const qint32 N_BUFFER_SIZE = 0x8000;
+    qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
 
-    char bufferOut[N_BUFFER_SIZE];
+    char *bufferOut = new char[_nBufferSize];
 
     bool bProcess = true;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct) && bProcess) {
         STATE state = {};
-        memset(bufferOut, 0, N_BUFFER_SIZE);
+        memset(bufferOut, 0, _nBufferSize);
         char *pDestpos = bufferOut; /* position in output buffer */
 
-        qint32 nBufferSize = N_BUFFER_SIZE;
+        qint32 nBufferSize = _nBufferSize;
 
         /* now unpack data till the dest buffer is full */
         /* read a new block of compressed data and reset variables */
@@ -190,6 +190,8 @@ bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qui
             bProcess = false;
         }
     }
+
+    delete[] bufferOut;
 
     return true;
 }
