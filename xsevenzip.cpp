@@ -212,9 +212,9 @@ QString XSevenZip::idToSring(XSevenZip::EIdEnum id)
     return XBinary::XIDSTRING_idToString((quint32)id, _TABLE_XSevenZip_EIdEnum, sizeof(_TABLE_XSevenZip_EIdEnum) / sizeof(XBinary::XIDSTRING));
 }
 
-XBinary::COMPRESS_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCodec)
+XBinary::HANDLE_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCodec)
 {
-    COMPRESS_METHOD result = COMPRESS_METHOD_UNKNOWN;
+    HANDLE_METHOD result = HANDLE_METHOD_UNKNOWN;
 
     if (baCodec.isEmpty()) {
         return result;
@@ -223,33 +223,33 @@ XBinary::COMPRESS_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCo
     // Check 1-byte codecs first
     if (baCodec.size() == 1) {
         if (baCodec[0] == '\x00') {
-            result = COMPRESS_METHOD_STORE;  // Copy (uncompressed)
+            result = HANDLE_METHOD_STORE;  // Copy (uncompressed)
         } else if (baCodec[0] == '\x21') {
-            result = COMPRESS_METHOD_LZMA2;  // LZMA2
+            result = HANDLE_METHOD_LZMA2;  // LZMA2
         }
     } else if (baCodec.size() >= 3) {
         // 7-Zip codec IDs are typically 3+ bytes
         // Common codecs (from 7-Zip specification)
         if (baCodec.startsWith(QByteArray("\x00", 1))) {
-            result = COMPRESS_METHOD_STORE;  // Copy (uncompressed)
+            result = HANDLE_METHOD_STORE;  // Copy (uncompressed)
         } else if (baCodec.startsWith(QByteArray("\x03\x01\x01", 3))) {
-            result = COMPRESS_METHOD_LZMA;  // LZMA
+            result = HANDLE_METHOD_LZMA;  // LZMA
         } else if (baCodec.startsWith(QByteArray("\x04\x01\x08", 3))) {
-            result = COMPRESS_METHOD_DEFLATE;  // Deflate
+            result = HANDLE_METHOD_DEFLATE;  // Deflate
         } else if (baCodec.startsWith(QByteArray("\x04\x01\x09", 3))) {
-            result = COMPRESS_METHOD_DEFLATE64;  // Deflate64
+            result = HANDLE_METHOD_DEFLATE64;  // Deflate64
         } else if (baCodec.startsWith(QByteArray("\x04\x02\x02", 3))) {
-            result = COMPRESS_METHOD_BZIP2;  // BZip2
+            result = HANDLE_METHOD_BZIP2;  // BZip2
         } else if (baCodec.startsWith(QByteArray("\x03\x04\x01", 3))) {
-            result = COMPRESS_METHOD_PPMD;  // PPMd (actual codec from 7z)
+            result = HANDLE_METHOD_PPMD;  // PPMd (actual codec from 7z)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x03", 4))) {
-            result = COMPRESS_METHOD_BCJ;  // BCJ (x86 filter)
+            result = HANDLE_METHOD_BCJ;  // BCJ (x86 filter)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x01", 4))) {
-            result = COMPRESS_METHOD_PPMD;  // PPMd (alternative codec)
+            result = HANDLE_METHOD_PPMD;  // PPMd (alternative codec)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x02\x05", 4))) {
-            result = COMPRESS_METHOD_BCJ2;  // BCJ2 (x86 advanced filter)
+            result = HANDLE_METHOD_BCJ2;  // BCJ2 (x86 advanced filter)
         } else if (baCodec.startsWith(QByteArray("\x06\xF1\x07\x01", 4))) {
-            result = COMPRESS_METHOD_AES;  // AES encryption
+            result = HANDLE_METHOD_AES;  // AES encryption
         }
     }
 
@@ -1407,7 +1407,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     _handleId(&listRecords, XSevenZip::k7zIdEncodedHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
 
                     if (state.listStreams.count() == 1) {
-                        COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+                        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
                         QByteArray baProperty;
                         qint64 nStreamOffset = qint64(sizeof(SIGNATUREHEADER) + state.nStreamsBegin + state.listStreams.at(0).nStreamOffset);
                         qint64 nStreamPackedSize = state.listStreams.at(0).nStreamSize;
@@ -1419,7 +1419,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             baProperty = state.listStreams.at(0).listCoders.at(0).baProperty;
                         }
 
-                        if (compressMethod != COMPRESS_METHOD_UNKNOWN) {
+                        if (compressMethod != HANDLE_METHOD_UNKNOWN) {
                             QByteArray baUncompressedData;
                             bool bProcessed = false;
 
@@ -1594,7 +1594,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                     }
                                 }
 
-                                pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
+                                pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE);
                                 pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, 0);
                                 pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_ISFOLDER, !bIsFile);
                                 pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_ISSOLID, false);
@@ -1643,7 +1643,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             nUnpackedStreamCRC = listUnpackedStreamCRC.at(i);
                         }
 
-                        COMPRESS_METHOD cm = coderToCompressMethod(baCoder);
+                        HANDLE_METHOD cm = coderToCompressMethod(baCoder);
 
                         if (nNumberOfUnpackedStreams > 0) {
                             qint64 nCurrentRelOffset = 0;
@@ -1670,7 +1670,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 pContext->listArchiveRecords[nRecordIndex].nStreamOffset = nStreamOffset;
                                 pContext->listArchiveRecords[nRecordIndex].nStreamSize = nPackedStreamSize;
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUnpackedStreamSize);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSMETHOD, cm);
+                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_HANDLEMETHOD1, cm);
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, nCurrentRelOffset);
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nFileSize);
@@ -1686,7 +1686,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             pContext->listArchiveRecords[nRecordIndex].nStreamOffset = nStreamOffset;
                             pContext->listArchiveRecords[nRecordIndex].nStreamSize = nPackedStreamSize;
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUnpackedStreamSize);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSMETHOD, cm);
+                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_HANDLEMETHOD1, cm);
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, 0);
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUnpackedStreamSize);
@@ -1753,8 +1753,8 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
         if (archiveRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() == 0) return true;  // Empty file
 
         bool bIsSolid = archiveRecord.mapProperties.value(FPART_PROP_ISSOLID).toBool();
-        COMPRESS_METHOD compressMethod = (COMPRESS_METHOD)(archiveRecord.mapProperties.value(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_UNKNOWN).toInt());
-        QByteArray baProperty = archiveRecord.mapProperties.value(FPART_PROP_COMPRESSPROPERTIES, COMPRESS_METHOD_UNKNOWN).toByteArray();
+        HANDLE_METHOD compressMethod = (HANDLE_METHOD)(archiveRecord.mapProperties.value(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_UNKNOWN).toInt());
+        QByteArray baProperty = archiveRecord.mapProperties.value(FPART_PROP_COMPRESSPROPERTIES, HANDLE_METHOD_UNKNOWN).toByteArray();
         qint64 nStreamOffset = archiveRecord.nStreamOffset;
         qint64 nStreamSize = archiveRecord.nStreamSize;
 
@@ -1785,7 +1785,7 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
                 qint64 nUncompressedSize = archiveRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
 
                 XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
+                decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE);
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
                 decompressState.pDeviceInput = pSolidDevice;
                 decompressState.pDeviceOutput = pDevice;
@@ -1883,7 +1883,7 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(char *pData, qint64 nSize, PDS
     return listResult;
 }
 
-bool XSevenZip::_decompress(QIODevice *pDevice, COMPRESS_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize,
+bool XSevenZip::_decompress(QIODevice *pDevice, HANDLE_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize,
                             PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
@@ -1892,7 +1892,7 @@ bool XSevenZip::_decompress(QIODevice *pDevice, COMPRESS_METHOD compressMethod, 
 
     if (sdCompressed.open(QIODevice::ReadOnly)) {
         DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSPROPERTIES, baProperty);
         if (nUncompressedSize > 0) {
             decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
@@ -1904,24 +1904,24 @@ bool XSevenZip::_decompress(QIODevice *pDevice, COMPRESS_METHOD compressMethod, 
         decompressState.nProcessedOffset = 0;
         decompressState.nProcessedLimit = -1;
 
-        if (compressMethod == COMPRESS_METHOD_LZMA) {
+        if (compressMethod == HANDLE_METHOD_LZMA) {
             bResult = XLZMADecoder::decompress(&decompressState, baProperty, pPdStruct);
             // bDecompressResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
-        } else if (compressMethod == COMPRESS_METHOD_LZMA2) {
+        } else if (compressMethod == HANDLE_METHOD_LZMA2) {
             bResult = XLZMADecoder::decompressLZMA2(&decompressState, baProperty, pPdStruct);
-        } else if (compressMethod == COMPRESS_METHOD_PPMD) {
+        } else if (compressMethod == HANDLE_METHOD_PPMD) {
             bResult = XPPMdDecoder::decompressPPMdH(&decompressState, baProperty, pPdStruct);
-        } else if (compressMethod == COMPRESS_METHOD_BZIP2) {
+        } else if (compressMethod == HANDLE_METHOD_BZIP2) {
             bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
-        } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
+        } else if (compressMethod == HANDLE_METHOD_DEFLATE) {
             bResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
-        } else if (compressMethod == COMPRESS_METHOD_DEFLATE64) {
+        } else if (compressMethod == HANDLE_METHOD_DEFLATE64) {
             bResult = XDeflateDecoder::decompress64(&decompressState, pPdStruct);
-        } else if (compressMethod == COMPRESS_METHOD_STORE) {
+        } else if (compressMethod == HANDLE_METHOD_STORE) {
             bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
         } else {
 #ifdef QT_DEBUG
-            qDebug("Unsupported compression method: %s(%d)", compressMethodToString(compressMethod).toLatin1().data(), compressMethod);
+            qDebug("Unsupported compression method: %s(%d)", handleMethodToString(compressMethod).toLatin1().data(), compressMethod);
 #endif
         }
 

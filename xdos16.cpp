@@ -122,7 +122,7 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             record.nDataOffset = 0;
             record.nDataSize = nSignatureOffset;
             record.spInfo.nUncompressedSize = nSignatureOffset;
-            record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
+            record.spInfo.compressMethod = HANDLE_METHOD_STORE;
 
             listResult.append(record);
         }
@@ -143,7 +143,7 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                     record.nDataOffset = nSignatureOffset;
                     record.nDataSize = nNewSignatureOffset - nSignatureOffset;
                     record.spInfo.nUncompressedSize = nNewSignatureOffset - nSignatureOffset;
-                    record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
+                    record.spInfo.compressMethod = HANDLE_METHOD_STORE;
 
                     listResult.append(record);
 
@@ -157,7 +157,7 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                     record.nDataOffset = nSignatureOffset;
                     record.nDataSize = nSize - nSignatureOffset;
                     record.spInfo.nUncompressedSize = nSize - nSignatureOffset;
-                    record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
+                    record.spInfo.compressMethod = HANDLE_METHOD_STORE;
 
                     listResult.append(record);
 

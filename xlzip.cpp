@@ -222,7 +222,7 @@ QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         region.nFileSize = nDataSize;
         region.nVirtualAddress = -1;
         region.sName = tr("Stream");
-        region.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA);
+        region.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_LZMA);
         listResult.append(region);
     }
 
@@ -357,7 +357,7 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
 
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_LZMA);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;

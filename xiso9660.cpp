@@ -489,7 +489,7 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectory(qint64 nOffset, qint64 n
             record.mapProperties[FPART_PROP_ORIGINALNAME] = sFullPath;
             record.mapProperties[FPART_PROP_UNCOMPRESSEDSIZE] = (qint64)nDataLength;
             record.mapProperties[FPART_PROP_COMPRESSEDSIZE] = (qint64)nDataLength;
-            record.mapProperties[FPART_PROP_COMPRESSMETHOD] = COMPRESS_METHOD_STORE;
+            record.mapProperties[FPART_PROP_HANDLEMETHOD1] = HANDLE_METHOD_STORE;
             record.mapProperties[FPART_PROP_ISFOLDER] = (bool)(nFileFlags & 0x02);
 
             // Store directory info for later processing
@@ -606,7 +606,7 @@ bool XISO9660::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
 
     // Use XStoreDecoder for data extraction
     XBinary::DATAPROCESS_STATE decompressState = {};
-    decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XArchive::COMPRESS_METHOD_STORE);
+    decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, XArchive::HANDLE_METHOD_STORE);
     decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, record.nStreamSize);
     decompressState.pDeviceInput = getDevice();
     decompressState.pDeviceOutput = pDevice;

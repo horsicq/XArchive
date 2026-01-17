@@ -93,11 +93,11 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     read_array(0, (char *)&gzipHeader, sizeof(GZIP_HEADER));
 
-    COMPRESS_METHOD cm = COMPRESS_METHOD_DEFLATE;
+    HANDLE_METHOD cm = HANDLE_METHOD_DEFLATE;
 
     if (gzipHeader.nCompressionMethod == 8)  // TODO consts
     {
-        cm = COMPRESS_METHOD_DEFLATE;  // TODO more
+        cm = HANDLE_METHOD_DEFLATE;  // TODO more
     }
 
     memoryRecordHeader.nOffset = 0;
@@ -112,7 +112,7 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, cm);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, cm);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = nullptr;
         state.nInputOffset = 0;
@@ -383,7 +383,7 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
         if (sd.open(QIODevice::ReadOnly)) {
             XBinary::DATAPROCESS_STATE state = {};
-            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+            state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_DEFLATE);
             state.pDeviceInput = &sd;
             state.pDeviceOutput = nullptr;
             state.nInputOffset = 0;
@@ -443,7 +443,7 @@ XBinary::ARCHIVERECORD XGzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
-    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_DEFLATE);
 
     return result;
 }
@@ -468,7 +468,7 @@ bool XGzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
 
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_DEFLATE);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;
         state.nInputOffset = 0;

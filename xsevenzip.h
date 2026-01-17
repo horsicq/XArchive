@@ -109,7 +109,7 @@ public:
 
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);
-    static COMPRESS_METHOD coderToCompressMethod(const QByteArray &baCodec);
+    static HANDLE_METHOD coderToCompressMethod(const QByteArray &baCodec);
     static void _applyBCJFilter(QByteArray &baData, qint32 nOffset);
 
     static const QString PREFIX_k7zId;
@@ -133,7 +133,7 @@ private:
         QMap<QString, QIODevice *> mapDevices;
     };
 
-    bool _decompress(QIODevice *pDevice, COMPRESS_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize,
+    bool _decompress(QIODevice *pDevice, HANDLE_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize,
                      PDSTRUCT *pPdStruct);
 
     enum SRTYPE {

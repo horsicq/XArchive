@@ -46,7 +46,7 @@ public:
     };
 
     struct COMPRESS_INFO {
-        COMPRESS_METHOD compressMethod;
+        HANDLE_METHOD compressMethod;
         QString sOptions;
     };
 
@@ -56,7 +56,7 @@ public:
         qint64 nUncompressedSize;
         quint64 nWindowSize;
         bool bIsSolid;  // For RAR
-        COMPRESS_METHOD compressMethod;
+        HANDLE_METHOD compressMethod;
         // FT fileType;
     };
 
@@ -72,7 +72,7 @@ public:
         // for targz
         // qint64 nLayerOffset;
         // qint64 nLayerSize;
-        // COMPRESS_METHOD layerCompressMethod;
+        // HANDLE_METHOD layerCompressMethod;
     };
 
     enum COMPRESS_RESULT {
@@ -110,7 +110,7 @@ public:
     static COMPRESS_RESULT _decompress(DECOMPRESSSTRUCT *pDecompressStruct, PDSTRUCT *pPdStruct = nullptr);
     static bool _decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset,
                                   qint64 nDecompressedLimit);
-    static COMPRESS_RESULT _compress(COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr);
+    static COMPRESS_RESULT _compress(HANDLE_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr);
     static COMPRESS_RESULT _compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
                                              qint32 nStrategy, PDSTRUCT *pPdStruct = nullptr);
     QByteArray decompress(const RECORD *pRecord, PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0, qint64 nDecompressedLimit = -1);

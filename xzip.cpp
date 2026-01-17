@@ -131,7 +131,7 @@ QString XZip::getCompressMethodString()
 {
     QString sResult;
 
-    QSet<COMPRESS_METHOD> stMethods;
+    QSet<HANDLE_METHOD> stMethods;
 
     qint64 nECDOffset = findECDOffset(nullptr);
 
@@ -182,10 +182,10 @@ QString XZip::getCompressMethodString()
 
     // Iterate QSet
 
-    QSetIterator<COMPRESS_METHOD> i(stMethods);
+    QSetIterator<HANDLE_METHOD> i(stMethods);
     while (i.hasNext()) {
-        COMPRESS_METHOD cm = (COMPRESS_METHOD)i.next();
-        QString sMethod = compressMethodToString(cm);
+        HANDLE_METHOD cm = (HANDLE_METHOD)i.next();
+        QString sMethod = handleMethodToString(cm);
 
         sResult = XBinary::appendText(sResult, sMethod, ", ");
     }
@@ -253,7 +253,7 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
                 if (!isPdStructNotCanceled(pPdStruct)) break;
                 const RECORD &rec = pListRecords->at(idx);
 
-                if (rec.spInfo.compressMethod == XArchive::COMPRESS_METHOD_STORE) {
+                if (rec.spInfo.compressMethod == XArchive::HANDLE_METHOD_STORE) {
                     // Skip directories
                     if (rec.spInfo.nUncompressedSize < 4) {
                         bAPKS = false;
@@ -345,7 +345,7 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
 
     pZipFileRecord->nDataOffset = pDest->pos();
 
-    XArchive::_compress(XArchive::COMPRESS_METHOD_DEFLATE, pSource, pDest, pPdStruct);
+    XArchive::_compress(XArchive::HANDLE_METHOD_DEFLATE, pSource, pDest, pPdStruct);
 
     qint64 nEndPosition = pDest->pos();
 
@@ -924,7 +924,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.nVirtualAddress = -1;
                                                 record.sName = sName;
                                                 record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
-                                                record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
+                                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
@@ -980,7 +980,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.nFileSize = lfh.nCompressedSize;
                             record.nVirtualAddress = -1;
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
-                            record.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
+                            record.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
                             record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
@@ -1166,38 +1166,38 @@ qint32 XZip::_getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *
     return nResult;
 }
 
-XArchive::COMPRESS_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nFlags)
+XArchive::HANDLE_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nFlags)
 {
-    COMPRESS_METHOD result = COMPRESS_METHOD_UNKNOWN;
+    HANDLE_METHOD result = HANDLE_METHOD_UNKNOWN;
 
     switch (nZipMethod) {
-        case CMETHOD_STORE: result = COMPRESS_METHOD_STORE; break;
-        case CMETHOD_SHRINK: result = COMPRESS_METHOD_SHRINK; break;
-        case CMETHOD_REDUCED_1: result = COMPRESS_METHOD_REDUCE_1; break;
-        case CMETHOD_REDUCED_2: result = COMPRESS_METHOD_REDUCE_2; break;
-        case CMETHOD_REDUCED_3: result = COMPRESS_METHOD_REDUCE_3; break;
-        case CMETHOD_REDUCED_4: result = COMPRESS_METHOD_REDUCE_4; break;
+        case CMETHOD_STORE: result = HANDLE_METHOD_STORE; break;
+        case CMETHOD_SHRINK: result = HANDLE_METHOD_SHRINK; break;
+        case CMETHOD_REDUCED_1: result = HANDLE_METHOD_REDUCE_1; break;
+        case CMETHOD_REDUCED_2: result = HANDLE_METHOD_REDUCE_2; break;
+        case CMETHOD_REDUCED_3: result = HANDLE_METHOD_REDUCE_3; break;
+        case CMETHOD_REDUCED_4: result = HANDLE_METHOD_REDUCE_4; break;
 
         case CMETHOD_IMPLODED: {
             bool b8kdict = (nFlags & 0x02) ? true : false;
             bool b3tree = (nFlags & 0x04) ? true : false;
 
             if (!b8kdict && !b3tree) {
-                result = COMPRESS_METHOD_IMPLODED_4KDICT_2TREES;
+                result = HANDLE_METHOD_IMPLODED_4KDICT_2TREES;
             } else if (!b8kdict && b3tree) {
-                result = COMPRESS_METHOD_IMPLODED_4KDICT_3TREES;
+                result = HANDLE_METHOD_IMPLODED_4KDICT_3TREES;
             } else if (b8kdict && !b3tree) {
-                result = COMPRESS_METHOD_IMPLODED_8KDICT_2TREES;
+                result = HANDLE_METHOD_IMPLODED_8KDICT_2TREES;
             } else if (b8kdict && b3tree) {
-                result = COMPRESS_METHOD_IMPLODED_8KDICT_3TREES;
+                result = HANDLE_METHOD_IMPLODED_8KDICT_3TREES;
             }
         } break;
-        case CMETHOD_DEFLATE: result = COMPRESS_METHOD_DEFLATE; break;
-        case CMETHOD_DEFLATE64: result = COMPRESS_METHOD_DEFLATE64; break;  // TODO
-        case CMETHOD_BZIP2: result = COMPRESS_METHOD_BZIP2; break;
-        case CMETHOD_LZMA: result = COMPRESS_METHOD_LZMA; break;
-        case CMETHOD_PPMD: result = COMPRESS_METHOD_PPMD; break;
-        case CMETHOD_AES: result = COMPRESS_METHOD_AES; break;
+        case CMETHOD_DEFLATE: result = HANDLE_METHOD_DEFLATE; break;
+        case CMETHOD_DEFLATE64: result = HANDLE_METHOD_DEFLATE64; break;  // TODO
+        case CMETHOD_BZIP2: result = HANDLE_METHOD_BZIP2; break;
+        case CMETHOD_LZMA: result = HANDLE_METHOD_LZMA; break;
+        case CMETHOD_PPMD: result = HANDLE_METHOD_PPMD; break;
+        case CMETHOD_AES: result = HANDLE_METHOD_AES; break;
     }
     // TODO more methods
 
@@ -1250,7 +1250,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     QString sStoredPath;
     PATH_MODE pathMode = (PATH_MODE)pState->mapProperties.value(PACK_PROP_PATHMODE, PATH_MODE_BASENAME).toInt();
     QString sBasePath = pState->mapProperties.value(PACK_PROP_BASEPATH).toString();
-    COMPRESS_METHOD compressMethod = (COMPRESS_METHOD)pState->mapProperties.value(PACK_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE).toInt();
+    HANDLE_METHOD compressMethod = (HANDLE_METHOD)pState->mapProperties.value(PACK_PROP_COMPRESSMETHOD, HANDLE_METHOD_DEFLATE).toInt();
     CRYPTO_METHOD cryptoMethod = (CRYPTO_METHOD)pState->mapProperties.value(PACK_PROP_ENCRYPTIONMETHOD, CRYPTO_METHOD_NONE).toInt();
     QString sPassword = pState->mapProperties.value(PACK_PROP_PASSWORD).toString();
     qint32 nCompressionLevel = pState->mapProperties.value(PACK_PROP_COMPRESSIONLEVEL, -1).toInt();
@@ -1274,9 +1274,9 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
 
     CMETHOD cmethod = CMETHOD_STORE;
 
-    if (compressMethod == XArchive::COMPRESS_METHOD_DEFLATE) {
+    if (compressMethod == XArchive::HANDLE_METHOD_DEFLATE) {
         cmethod = CMETHOD_DEFLATE;
-    } else if (compressMethod == XArchive::COMPRESS_METHOD_STORE) {
+    } else if (compressMethod == XArchive::HANDLE_METHOD_STORE) {
         cmethod = CMETHOD_STORE;
     }
 
@@ -1667,8 +1667,8 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
 
         // Compression method
-        COMPRESS_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
-        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+        HANDLE_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
 
         // CRC32
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, lfh.nCRC32);
@@ -1723,7 +1723,7 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
         qint64 nDataOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
 
-        COMPRESS_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
+        HANDLE_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
 
         // Check if file is encrypted
         bool bIsEncrypted = (lfh.nFlags & 0x01) != 0;
@@ -1829,7 +1829,7 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
             if (pInputDevice) {
                 XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+                decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
                 decompressState.pDeviceInput = pInputDevice;
                 decompressState.pDeviceOutput = pDevice;
@@ -1838,35 +1838,35 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 decompressState.nProcessedOffset = 0;
                 decompressState.nProcessedLimit = -1;
 
-                if (compressMethod == COMPRESS_METHOD_STORE) {
+                if (compressMethod == HANDLE_METHOD_STORE) {
                     bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
-                } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
+                } else if (compressMethod == HANDLE_METHOD_DEFLATE) {
                     bResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
-                } else if (compressMethod == COMPRESS_METHOD_DEFLATE64) {
+                } else if (compressMethod == HANDLE_METHOD_DEFLATE64) {
                     bResult = XDeflateDecoder::decompress64(&decompressState, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP2) {
                     bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_LZMA) {
                     bResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_PPMD) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_PPMD) {
                     bResult = XPPMdDecoder::decompress(&decompressState, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_SHRINK) {
                     bResult = XShrinkDecoder::decompress(&decompressState, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_1) {
                     bResult = XReduceDecoder::decompress(&decompressState, 1, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_2) {
                     bResult = XReduceDecoder::decompress(&decompressState, 2, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_3) {
                     bResult = XReduceDecoder::decompress(&decompressState, 3, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_4) {
                     bResult = XReduceDecoder::decompress(&decompressState, 4, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_4KDICT_2TREES) {
                     bResult = XImplodeDecoder::decompress(&decompressState, false, false, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_4KDICT_3TREES) {
                     bResult = XImplodeDecoder::decompress(&decompressState, false, true, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_8KDICT_2TREES) {
                     bResult = XImplodeDecoder::decompress(&decompressState, true, false, pPdStruct);
-                } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
+                } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_8KDICT_3TREES) {
                     bResult = XImplodeDecoder::decompress(&decompressState, true, true, pPdStruct);
                 }
             }

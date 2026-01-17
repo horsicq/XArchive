@@ -199,7 +199,7 @@ QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             record.nFileSize = nAlignedSize;  // Padded size in archive
             record.nVirtualAddress = -1;
             record.sName = header.name;
-            record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
+            record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, XBinary::HANDLE_METHOD_STORE);
             record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nAlignedSize);
             record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nRawSize);  // Actual file size
             record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, QString(header.name));
@@ -434,7 +434,7 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         }
 
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
-        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, XBinary::HANDLE_METHOD_STORE);
 
         // Parse mode (octal)
         QString sMode = QString(QByteArray(header.mode, 8)).trimmed();

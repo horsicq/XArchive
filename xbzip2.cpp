@@ -220,7 +220,7 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
                         region.nVirtualAddress = -1;
                         region.nFileSize = mMaxOffset;
                         region.sName = tr("Stream");
-                        region.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
+                        region.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_BZIP2);
                         region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, decompressState.nCountOutput);
                         region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, decompressState.nCountInput);
 
@@ -363,7 +363,7 @@ XBinary::ARCHIVERECORD XBZIP2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
-    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_BZIP2);
 
     return result;
 }

@@ -154,7 +154,7 @@ QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct
 
         record.spInfo.sRecordName = XMACH::_getArch(_cputype, _cpusubtype);
         record.spInfo.nUncompressedSize = _size;
-        record.spInfo.compressMethod = COMPRESS_METHOD_STORE;
+        record.spInfo.compressMethod = HANDLE_METHOD_STORE;
         record.nHeaderOffset = nOffset;
         record.nHeaderSize = sizeof(XMACH_DEF::fat_arch);
         record.nDataOffset = _offset;
@@ -495,7 +495,7 @@ XBinary::ARCHIVERECORD XMACHOFat::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
     result.nStreamSize = _size;
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sArchName);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)_size);
-    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, (quint32)COMPRESS_METHOD_STORE);
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, (quint32)HANDLE_METHOD_STORE);
 
     return result;
 }

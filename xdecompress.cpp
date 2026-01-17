@@ -102,15 +102,15 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         pState->pDeviceOutput->seek(0);
     }
 
-    XBinary::COMPRESS_METHOD compressMethod =
-        (XBinary::COMPRESS_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_STORE).toUInt();
+    XBinary::HANDLE_METHOD compressMethod =
+        (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD1, XBinary::HANDLE_METHOD_STORE).toUInt();
     qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
     qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
 
-    // state.compressMethod = (XBinary::COMPRESS_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_COMPRESSMETHOD, XBinary::COMPRESS_METHOD_UNKNOWN).toUInt();
+    // state.compressMethod = (XBinary::HANDLE_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD1, XBinary::HANDLE_METHOD_UNKNOWN).toUInt();
     // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
 
-    if (compressMethod == XBinary::COMPRESS_METHOD_STORE) {
+    if (compressMethod == XBinary::HANDLE_METHOD_STORE) {
         for (qint64 nOffset = 0; (nOffset < pState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
             qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - nOffset), N_BUFFER_SIZE);
 
@@ -128,59 +128,59 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             nOffset += nRead;
         }
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_BZIP2) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP2) {
         bResult = XBZIP2Decoder::decompress(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZMA) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZMA) {
         bResult = XLZMADecoder::decompress(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_PPMD) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_PPMD) {
         QByteArray baProperty = pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSPROPERTIES).toByteArray();
         bResult = XPPMdDecoder::decompressPPMdH(pState, baProperty, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_DEFLATE) {
         bResult = XDeflateDecoder::decompress(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_DEFLATE64) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_DEFLATE64) {
         bResult = XDeflateDecoder::decompress64(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IT214_8) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IT214_8) {
         bResult = XIT214Decoder::decompress(pState, 8, false, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IT214_16) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IT214_16) {
         bResult = XIT214Decoder::decompress(pState, 16, false, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IT215_8) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IT215_8) {
         bResult = XIT214Decoder::decompress(pState, 8, true, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IT215_16) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IT215_16) {
         bResult = XIT214Decoder::decompress(pState, 16, true, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_2TREES) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_4KDICT_2TREES) {
         bResult = XImplodeDecoder::decompress(pState, false, false, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_4KDICT_3TREES) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_4KDICT_3TREES) {
         bResult = XImplodeDecoder::decompress(pState, false, true, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_2TREES) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_8KDICT_2TREES) {
         bResult = XImplodeDecoder::decompress(pState, true, false, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_IMPLODED_8KDICT_3TREES) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_8KDICT_3TREES) {
         bResult = XImplodeDecoder::decompress(pState, true, true, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_SHRINK) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_SHRINK) {
         bResult = XShrinkDecoder::decompress(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_1) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_1) {
         bResult = XReduceDecoder::decompress(pState, 1, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_2) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_2) {
         bResult = XReduceDecoder::decompress(pState, 2, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_3) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_3) {
         bResult = XReduceDecoder::decompress(pState, 3, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_REDUCE_4) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_4) {
         bResult = XReduceDecoder::decompress(pState, 4, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_ZLIB) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ZLIB) {
         bResult = XDeflateDecoder::decompress_zlib(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZW_PDF) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZW_PDF) {
         bResult = XLZWDecoder::decompress_pdf(pState, pPdStruct);
         // bResult = XStoreDecoder::decompress(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_ASCII85) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ASCII85) {
         bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZH5) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZH5) {
         bResult = XLZHDecoder::decompress(pState, 5, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZH6) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZH6) {
         bResult = XLZHDecoder::decompress(pState, 6, pPdStruct);
-    } else if (compressMethod == XBinary::COMPRESS_METHOD_LZH7) {
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZH7) {
         bResult = XLZHDecoder::decompress(pState, 7, pPdStruct);
-    } else if ((compressMethod == XBinary::COMPRESS_METHOD_RAR_15) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_20) ||
-               (compressMethod == XBinary::COMPRESS_METHOD_RAR_29) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_50) ||
-               (compressMethod == XBinary::COMPRESS_METHOD_RAR_70)) {
+    } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_15) || (compressMethod == XBinary::HANDLE_METHOD_RAR_20) ||
+               (compressMethod == XBinary::HANDLE_METHOD_RAR_29) || (compressMethod == XBinary::HANDLE_METHOD_RAR_50) ||
+               (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
         bool bIsSolid = false;
         rar_Unpack rarUnpack;
         rarUnpack.setDevices(pState->pDeviceInput, pState->pDeviceOutput);
@@ -189,13 +189,13 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         if (nInit > 0) {
             rarUnpack.SetDestSize(nUncompressedSize);
 
-            if (compressMethod == XBinary::COMPRESS_METHOD_RAR_15) {
+            if (compressMethod == XBinary::HANDLE_METHOD_RAR_15) {
                 rarUnpack.Unpack15(bIsSolid, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_RAR_20) {
+            } else if (compressMethod == XBinary::HANDLE_METHOD_RAR_20) {
                 rarUnpack.Unpack20(bIsSolid, pPdStruct);
-            } else if (compressMethod == XBinary::COMPRESS_METHOD_RAR_29) {
+            } else if (compressMethod == XBinary::HANDLE_METHOD_RAR_29) {
                 rarUnpack.Unpack29(bIsSolid, pPdStruct);
-            } else if ((compressMethod == XBinary::COMPRESS_METHOD_RAR_50) || (compressMethod == XBinary::COMPRESS_METHOD_RAR_70)) {
+            } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_50) || (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
                 rarUnpack.Unpack5(bIsSolid, pPdStruct);
             }
 
@@ -203,15 +203,15 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         }
     } else {
 #ifdef QT_DEBUG
-        qDebug() << "Unknown compression method" << XBinary::compressMethodToString(compressMethod);
+        qDebug() << "Unknown compression method" << XBinary::handleMethodToString(compressMethod);
 #endif
-        emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method"), XBinary::compressMethodToString(compressMethod)));
+        emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method"), XBinary::handleMethodToString(compressMethod)));
     }
 
     return bResult;
 }
 
-QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct)
 {
     QByteArray baResult;
 
@@ -226,7 +226,7 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
             state.nInputLimit = nSize;
             state.nProcessedOffset = 0;
             state.nProcessedLimit = -1;
-            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+            state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
 
             decompress(&state, pPdStruct);
 
@@ -237,7 +237,7 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
     return baResult;
 }
 
-qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::COMPRESS_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct)
+qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct)
 {
     if (nSize == -1) {
         nSize = pDevice->size() - nOffset;
@@ -253,7 +253,7 @@ qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qi
         state.nInputLimit = nSize;
         state.nProcessedOffset = 0;
         state.nProcessedLimit = -1;
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
 
         decompress(&state, pPdStruct);
 

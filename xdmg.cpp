@@ -199,7 +199,7 @@ QList<XArchive::RECORD> XDMG::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                 RECORD record = {};
                 record.spInfo.sRecordName = QString("partition%1").arg(nRecordIndex);
                 record.spInfo.nUncompressedSize = 0;
-                record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
+                record.spInfo.compressMethod = HANDLE_METHOD_UNKNOWN;
                 record.nDataOffset = 0;
                 record.nDataSize = 0;
 

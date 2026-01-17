@@ -216,7 +216,7 @@ public:
     static QFile::Permissions externalAttributesToFilePermissions(quint32 nExternalAttributes);
 
 protected:
-    COMPRESS_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
+    HANDLE_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
     bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct);
     qint32 _getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *pnRealSize, PDSTRUCT *pPdStruct);
 };

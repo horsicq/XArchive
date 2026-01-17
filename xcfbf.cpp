@@ -739,7 +739,7 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, (qint64)nStreamSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nStreamSize);
-    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE);
 
     // Convert FILETIME to QDateTime (if non-zero)
     if (nModifiedTime != 0) {

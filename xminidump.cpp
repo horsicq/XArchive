@@ -975,7 +975,7 @@ XBinary::ARCHIVERECORD XMiniDump::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sStreamName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, (qint64)directory.DataSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)directory.DataSize);
-    result.mapProperties.insert(FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE);
 
     return result;
 }

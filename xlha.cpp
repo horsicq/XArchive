@@ -220,19 +220,19 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // Get compression method
         QString sMethod = read_ansiString(pState->nCurrentOffset + 2, 5);
-        XBinary::COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+        XBinary::HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
 
         if ((sMethod == "-lh0-") || (sMethod == "-lz4-") || (sMethod == "-lhd-")) {
-            compressMethod = COMPRESS_METHOD_STORE;
+            compressMethod = HANDLE_METHOD_STORE;
         } else if (sMethod == "-lh5-") {
-            compressMethod = COMPRESS_METHOD_LZH5;
+            compressMethod = HANDLE_METHOD_LZH5;
         } else if (sMethod == "-lh6-") {
-            compressMethod = COMPRESS_METHOD_LZH6;
+            compressMethod = HANDLE_METHOD_LZH6;
         } else if (sMethod == "-lh7-") {
-            compressMethod = COMPRESS_METHOD_LZH7;
+            compressMethod = HANDLE_METHOD_LZH7;
         }
 
-        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nCompressedSize);
     }
@@ -249,7 +249,7 @@ bool XLHA::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         qint64 nCompressedSize = read_uint32(pState->nCurrentOffset + 7);
         qint64 nUncompressedSize = read_uint32(pState->nCurrentOffset + 11);
         qint64 nDataOffset = pState->nCurrentOffset + nHeaderSize;
-        COMPRESS_METHOD compressMethod = COMPRESS_METHOD_UNKNOWN;
+        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
 
         // Create a RECORD structure for decompression
 
@@ -257,18 +257,18 @@ bool XLHA::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         QString sMethod = read_ansiString(pState->nCurrentOffset + 2, 5);
 
         if ((sMethod == "-lh0-") || (sMethod == "-lz4-") || (sMethod == "-lhd-")) {
-            compressMethod = COMPRESS_METHOD_STORE;
+            compressMethod = HANDLE_METHOD_STORE;
         } else if (sMethod == "-lh5-") {
-            compressMethod = COMPRESS_METHOD_LZH5;
+            compressMethod = HANDLE_METHOD_LZH5;
         } else if (sMethod == "-lh6-") {
-            compressMethod = COMPRESS_METHOD_LZH6;
+            compressMethod = HANDLE_METHOD_LZH6;
         } else if (sMethod == "-lh7-") {
-            compressMethod = COMPRESS_METHOD_LZH7;
+            compressMethod = HANDLE_METHOD_LZH7;
         }
 
         // Decompress the record
         XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, compressMethod);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
 
         SubDevice sd(getDevice(), nDataOffset, nCompressedSize);
@@ -278,13 +278,13 @@ bool XLHA::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
             state.nInputOffset = 0;
             state.nInputLimit = nCompressedSize;
 
-            if (compressMethod == COMPRESS_METHOD_STORE) {
+            if (compressMethod == HANDLE_METHOD_STORE) {
                 bResult = XStoreDecoder::decompress(&state, pPdStruct);
-            } else if (compressMethod == COMPRESS_METHOD_LZH5) {
+            } else if (compressMethod == HANDLE_METHOD_LZH5) {
                 bResult = XLZHDecoder::decompress(&state, 5, pPdStruct);
-            } else if (compressMethod == COMPRESS_METHOD_LZH6) {
+            } else if (compressMethod == HANDLE_METHOD_LZH6) {
                 bResult = XLZHDecoder::decompress(&state, 6, pPdStruct);
-            } else if (compressMethod == COMPRESS_METHOD_LZH7) {
+            } else if (compressMethod == HANDLE_METHOD_LZH7) {
                 bResult = XLZHDecoder::decompress(&state, 7, pPdStruct);
             }
             sd.close();

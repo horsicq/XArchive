@@ -100,10 +100,10 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             record.spInfo.sRecordName = archiveRecord.mapProperties.value(FPART_PROP_ORIGINALNAME).toString();
         }
 
-        if (archiveRecord.mapProperties.contains(FPART_PROP_COMPRESSMETHOD)) {
-            record.spInfo.compressMethod = (COMPRESS_METHOD)archiveRecord.mapProperties.value(FPART_PROP_COMPRESSMETHOD).toInt();
+        if (archiveRecord.mapProperties.contains(FPART_PROP_HANDLEMETHOD1)) {
+            record.spInfo.compressMethod = (HANDLE_METHOD)archiveRecord.mapProperties.value(FPART_PROP_HANDLEMETHOD1).toInt();
         } else {
-            record.spInfo.compressMethod = COMPRESS_METHOD_UNKNOWN;
+            record.spInfo.compressMethod = HANDLE_METHOD_UNKNOWN;
         }
 
         if (archiveRecord.mapProperties.contains(FPART_PROP_CRC_VALUE)) {
@@ -172,9 +172,9 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 
-    if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_STORE) {
+    if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_STORE) {
         XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_STORE);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
@@ -191,12 +191,12 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         } else {
             result = decompressState.bReadError ? COMPRESS_RESULT_READERROR : COMPRESS_RESULT_DATAERROR;
         }
-    } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_PPMD) {
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_PPMD) {
         qDebug() << "[XArchive] PPMd decompression requested - UncompressedSize:" << pDecompressStruct->spInfo.nUncompressedSize
                  << "InSize:" << pDecompressStruct->nInSize << "SourceSize:" << pDecompressStruct->pSourceDevice->size();
 
         XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_PPMD);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_PPMD);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
@@ -222,9 +222,9 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
-    } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_DEFLATE) {
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_DEFLATE) {
         XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_DEFLATE);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_DEFLATE);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
@@ -247,9 +247,9 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
-    } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_BZIP2) {
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_BZIP2) {
         XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_BZIP2);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_BZIP2);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
@@ -272,9 +272,9 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
-    } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZMA) {
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZMA) {
         XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZMA);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_LZMA);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
@@ -297,20 +297,20 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
-    } else if ((pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH5) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH6) ||
-               (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH7)) {
+    } else if ((pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH5) || (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH6) ||
+               (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH7)) {
         qint32 nMethod = 5;
 
-        if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH5) {
+        if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH5) {
             nMethod = 5;
-        } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH6) {
+        } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH6) {
             nMethod = 6;
-        } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZH7) {
+        } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH7) {
             nMethod = 7;
         }
 
         XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, pDecompressStruct->spInfo.compressMethod);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, pDecompressStruct->spInfo.compressMethod);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
@@ -333,9 +333,9 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
-    } else if ((pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_15) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_20) ||
-               (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_29) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_50) ||
-               (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_70)) {
+    } else if ((pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_15) || (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_20) ||
+               (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_29) || (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_50) ||
+               (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_70)) {
         bool bIsSolid = false;
         rar_Unpack rarUnpack;
         rarUnpack.setDevices(pDecompressStruct->pSourceDevice, pDecompressStruct->pDestDevice);
@@ -344,19 +344,19 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         if (nInit > 0) {
             rarUnpack.SetDestSize(pDecompressStruct->spInfo.nUncompressedSize);
 
-            if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_15) {
+            if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_15) {
                 rarUnpack.Unpack15(bIsSolid, pPdStruct);
-            } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_20) {
+            } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_20) {
                 rarUnpack.Unpack20(bIsSolid, pPdStruct);
-            } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_29) {
+            } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_29) {
                 rarUnpack.Unpack29(bIsSolid, pPdStruct);
-            } else if ((pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_50) || (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_RAR_70)) {
+            } else if ((pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_50) || (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_RAR_70)) {
                 rarUnpack.Unpack5(bIsSolid, pPdStruct);
             }
         }
-    } else if (pDecompressStruct->spInfo.compressMethod == COMPRESS_METHOD_LZSS_SZDD) {
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZSS_SZDD) {
         XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, COMPRESS_METHOD_LZSS_SZDD);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_LZSS_SZDD);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
@@ -393,7 +393,7 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
 
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSMETHOD, pRecord->spInfo.compressMethod);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, pRecord->spInfo.compressMethod);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pRecord->spInfo.nUncompressedSize);
         state.mapProperties.insert(XBinary::FPART_PROP_WINDOWSIZE, pRecord->spInfo.nWindowSize);
         state.pDeviceInput = &sd;
@@ -412,7 +412,7 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
     return bResult;
 }
 
-XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
+XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::HANDLE_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
 {
     XBinary::PDSTRUCT pdStructEmpty = {};
 
@@ -423,7 +423,7 @@ XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compress
 
     COMPRESS_RESULT result = COMPRESS_RESULT_UNKNOWN;
 
-    if (compressMethod == COMPRESS_METHOD_STORE) {
+    if (compressMethod == HANDLE_METHOD_STORE) {
         const qint32 CHUNK = COMPRESS_BUFFERSIZE;
         char buffer[CHUNK];
         qint64 nSize = pSourceDevice->size();
@@ -445,7 +445,7 @@ XArchive::COMPRESS_RESULT XArchive::_compress(XArchive::COMPRESS_METHOD compress
 
             nSize -= nTemp;
         }
-    } else if (compressMethod == COMPRESS_METHOD_DEFLATE) {
+    } else if (compressMethod == HANDLE_METHOD_DEFLATE) {
         result = _compress_deflate(pSourceDevice, pDestDevice, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY);  // -MAX_WBITS for raw data
     }
 

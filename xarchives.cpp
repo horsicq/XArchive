@@ -410,7 +410,7 @@ void XArchives::_findFiles(const QString &sDirectoryName, QList<XArchive::RECORD
             if (fi.isFile()) {
                 XArchive::RECORD record = {};
 
-                record.spInfo.compressMethod = XArchive::COMPRESS_METHOD_FILE;
+                record.spInfo.compressMethod = XArchive::HANDLE_METHOD_FILE;
                 record.spInfo.sRecordName = fi.absoluteFilePath();
                 record.nDataSize = fi.size();
                 record.spInfo.nUncompressedSize = fi.size();
