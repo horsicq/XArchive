@@ -160,7 +160,7 @@ enum FilterType {
 #define UNPACK_MAX_WRITE 0x400000
 
 // Get lowest 16 bits.
-#define GET_SHORT16(x) (sizeof(ushort) == 2 ? (ushort)(x) : ((x)&0xffff))
+#define GET_SHORT16(x) (sizeof(ushort) == 2 ? (ushort)(x) : ((x) & 0xffff))
 #define ASIZE(x) (sizeof(x) / sizeof(x[0]))
 
 // Maximum dictionary allowed by compression. Can be less than

@@ -163,8 +163,10 @@ QList<XBinary::DATA_HEADER> XUDF::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
             dataHeader.nSize = 512;
 
             dataHeader.listRecords.append(getDataRecord(0, 16, "Tag", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-            dataHeader.listRecords.append(getDataRecord(16, 8, "Main Volume Descriptor Sequence Extent", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-            dataHeader.listRecords.append(getDataRecord(24, 8, "Reserve Volume Descriptor Sequence Extent", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+            dataHeader.listRecords.append(
+                getDataRecord(16, 8, "Main Volume Descriptor Sequence Extent", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+            dataHeader.listRecords.append(
+                getDataRecord(24, 8, "Reserve Volume Descriptor Sequence Extent", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
             listResult.append(dataHeader);
         }
@@ -181,7 +183,7 @@ QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
     if (nFileParts & FILEPART_HEADER) {
         qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
-        
+
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = nAnchorOffset;
@@ -195,7 +197,7 @@ QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     if (nFileParts & FILEPART_OVERLAY) {
         qint64 nDataEnd = getSize();
         qint64 nFormatSize = getFileFormatSize(pPdStruct);
-        
+
         if (nFormatSize < nDataEnd) {
             FPART record = {};
             record.filePart = FILEPART_OVERLAY;

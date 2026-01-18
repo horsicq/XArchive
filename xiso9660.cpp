@@ -289,7 +289,7 @@ QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, 
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = 0;
-        record.nFileSize =  _getPrimaryVolumeDescriptorOffset();
+        record.nFileSize = _getPrimaryVolumeDescriptorOffset();
         record.nVirtualAddress = -1;
         record.sName = tr("Reserved");
 

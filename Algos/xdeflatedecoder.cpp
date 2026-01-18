@@ -886,8 +886,8 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
         if (inflateInit2(&strm, -MAX_WBITS) == Z_OK)  // -MAX_WBITS for raw data
         {
             do {
-                qint32 nBufferSize = (pDecompressState->nInputLimit == -1) ? _nBufferSize
-                                                                            : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+                qint32 nBufferSize =
+                    (pDecompressState->nInputLimit == -1) ? _nBufferSize : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
                 strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
                 if (strm.avail_in == 0) {

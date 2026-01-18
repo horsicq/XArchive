@@ -51,7 +51,7 @@ typedef struct LZWSTATE {
 #define LZW_HASHSIZE 9001  // at least 1<<MAXBITS, should be prime
 
 // accessors to table[]-values
-#define NEXTBYTE(a) ((a)&0xff)
+#define NEXTBYTE(a) ((a) & 0xff)
 #define PREFIXCODE(a) ((a >> 8) & 0xfff)
 #define CODE(a) ((a >> 20) & 0xfff)                                                            // encode only
 #define MAKETABLE(code, prefixcode, nextbyte) ((code << 20) | (prefixcode << 8) | (nextbyte))  // for decode: code=0

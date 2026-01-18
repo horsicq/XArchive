@@ -1711,7 +1711,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                 pState->pContext = nullptr;
             }
         }  // End if (pState)
-    }      // End outer scope
+    }  // End outer scope
 
     return bResult;
 }
