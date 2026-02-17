@@ -80,6 +80,11 @@ public:
         CMETHOD_LZMA = 14,
         CMETHOD_PPMD = 98,
         CMETHOD_AES = 99,  // Apple or AES?
+        // TODO
+        // 93 - Zstd
+        // 95 - XZ
+        // 96 - JPEG (recompression)
+        // 97 - WavPack
     };
 
 #pragma pack(push)
