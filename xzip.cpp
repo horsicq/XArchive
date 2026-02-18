@@ -1644,6 +1644,11 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
             bResult = (pState->nNumberOfRecords > 0);
         }
+
+        if (bResult) {
+            pState->pContext = new ZIP_UNPACK_CONTEXT;
+            ((ZIP_UNPACK_CONTEXT *)pState->pContext)->bIsECD = (nECDOffset != -1);
+        }
     }
 
     return bResult;
@@ -1656,58 +1661,80 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     XBinary::ARCHIVERECORD result = {};
 
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        LOCALFILEHEADER lfh = read_LOCALFILEHEADER(pState->nCurrentOffset, pPdStruct);
+        bool bIsECD = ((ZIP_UNPACK_CONTEXT *)pState->pContext)->bIsECD;
+        qint64 nLocalHeaderOffset = 0;
+        QString sFileName;
 
-        result.nStreamOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
-        result.nStreamSize = lfh.nCompressedSize;
+        quint8 nVersion = 0;
+        quint8 nOS = 0;
+        quint8 nMinVersion = 0;
+        quint8 nMinOS = 0;
+        quint16 nFlags = 0;
+        quint16 nMethod = 0;
+        quint16 nLastModTime = 0;
+        quint16 nLastModDate = 0;
+        quint32 nCRC32 = 0;
+        quint32 nCompressedSize = 0;
+        quint32 nUncompressedSize = 0;
 
-        // Extract file name
-        QString sFileName = read_ansiString(pState->nCurrentOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
+        if (bIsECD) {
+            CENTRALDIRECTORYFILEHEADER cdfh = read_CENTRALDIRECTORYFILEHEADER(pState->nCurrentOffset, pPdStruct);
+            nVersion = cdfh.nVersion;
+            nOS = cdfh.nOS;
+            nMinVersion = cdfh.nMinVersion;
+            nMinOS = cdfh.nMinOS;
+            nFlags = cdfh.nFlags;
+            nMethod = cdfh.nMethod;
+            nLastModTime = cdfh.nLastModTime;
+            nLastModDate = cdfh.nLastModDate;
+            nCRC32 = cdfh.nCRC32;
+            nCompressedSize = cdfh.nCompressedSize;
+            nUncompressedSize = cdfh.nUncompressedSize;
+            sFileName = read_ansiString(pState->nCurrentOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdfh.nFileNameLength);
+
+            nLocalHeaderOffset = cdfh.nOffsetToLocalFileHeader;
+        } else {
+            nLocalHeaderOffset = pState->nCurrentOffset;
+        }
+
+        LOCALFILEHEADER lfh = read_LOCALFILEHEADER(nLocalHeaderOffset, pPdStruct);
+
+        if (!bIsECD) {
+            nMinVersion = lfh.nMinVersion;
+            nMinOS = lfh.nMinOS;
+            nCRC32 = lfh.nCRC32;
+            nFlags = lfh.nFlags;
+            nMethod = lfh.nMethod;
+            nLastModTime = lfh.nLastModTime;
+            nLastModDate = lfh.nLastModDate;
+            nCompressedSize = lfh.nCompressedSize;
+            nUncompressedSize = lfh.nUncompressedSize;
+            sFileName = read_ansiString(nLocalHeaderOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
+        }
+
+        result.nStreamSize = nCompressedSize;
+        result.nStreamOffset = nLocalHeaderOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
 
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
+        result.mapProperties.insert(XBinary::FPART_PROP_STREAMOFFSET, result.nStreamOffset);
+        result.mapProperties.insert(XBinary::FPART_PROP_STREAMSIZE, result.nStreamSize);
 
         // Compression method
-        HANDLE_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
+        HANDLE_METHOD compressMethod = zipToCompressMethod(nMethod, nFlags);
         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
 
         // CRC32
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, lfh.nCRC32);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, nCRC32);
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
 
         // Sizes
-        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
-        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
+        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nCompressedSize);
+        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
 
         // Date/Time
-        QDateTime dateTime = dosDateTimeToQDateTime(lfh.nLastModDate, lfh.nLastModTime);
+        QDateTime dateTime = dosDateTimeToQDateTime(nLastModDate, nLastModTime);
         if (dateTime.isValid()) {
             result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
-        }
-
-        // Get external file attributes from central directory
-        qint64 nECDOffset = findECDOffset(pPdStruct);
-
-        if (nECDOffset != -1) {
-            qint64 nCentralDirOffset = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
-
-            // Scan central directory to find matching record
-            qint32 nNumberOfRecords = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
-
-            for (qint32 i = 0; i < nNumberOfRecords; i++) {
-                CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nCentralDirOffset, pPdStruct);
-
-                if (cdh.nSignature != SIGNATURE_CFD) {
-                    break;
-                }
-
-                // Check if this central directory entry matches current local file header
-                if (cdh.nOffsetToLocalFileHeader == pState->nCurrentOffset) {
-                    result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, cdh.nExternalFileAttributes);
-                    break;
-                }
-
-                nCentralDirOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
-            }
         }
     }
 
@@ -1891,11 +1918,16 @@ bool XZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        LOCALFILEHEADER lfh = read_LOCALFILEHEADER(pState->nCurrentOffset, pPdStruct);
+        bool bIsECD = ((ZIP_UNPACK_CONTEXT *)pState->pContext)->bIsECD;
 
-        qint64 nRecordSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength + lfh.nCompressedSize;
+        if (bIsECD) {
+            CENTRALDIRECTORYFILEHEADER cdfh = read_CENTRALDIRECTORYFILEHEADER(pState->nCurrentOffset, pPdStruct);
+            pState->nCurrentOffset += sizeof(CENTRALDIRECTORYFILEHEADER) + cdfh.nFileNameLength + cdfh.nExtraFieldLength + cdfh.nFileCommentLength;
+        } else {
+            LOCALFILEHEADER lfh = read_LOCALFILEHEADER(pState->nCurrentOffset, pPdStruct);
+            pState->nCurrentOffset += sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength + lfh.nCompressedSize;
+        }
 
-        pState->nCurrentOffset += nRecordSize;
         pState->nCurrentIndex++;
 
         bResult = (pState->nCurrentIndex < pState->nNumberOfRecords);
@@ -1909,12 +1941,27 @@ bool XZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     Q_UNUSED(pPdStruct)
 
     if (pState && pState->pContext) {
-        QVariantMap *pMapContext = (QVariantMap *)pState->pContext;
-        delete pMapContext;
+        ZIP_UNPACK_CONTEXT *pZipUnpackContext = (ZIP_UNPACK_CONTEXT *)pState->pContext;
+        delete pZipUnpackContext;
         pState->pContext = nullptr;
     }
 
     return true;
+}
+
+QVariant XZip::calculateHash(QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    if (!pDevice) {
+        return 0;
+    }
+
+    XBinary binary(pDevice);
+
+    quint32 nCRC = binary._getCRC32(0, binary.getSize(), 0xFFFFFFFF, _getCRC32Table_EDB88320(), pPdStruct);
+
+    pDevice->reset();
+    
+    return nCRC;
 }
 
 quint32 XZip::filePermissionsToExternalAttributes(QFile::Permissions permissions)

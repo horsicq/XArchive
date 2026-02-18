@@ -166,6 +166,11 @@ public:
         QList<ZIPFILE_RECORD> *pListZipFileRecords;
     };
 
+    // Format-specific context structures
+    struct ZIP_UNPACK_CONTEXT {
+        bool bIsECD;
+    };
+
     explicit XZip(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
@@ -213,6 +218,8 @@ public:
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+
+    virtual QVariant calculateHash(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
 
     static QMap<quint64, QString> getHeaderSignatures();
     static QMap<quint64, QString> getHeaderSignaturesS();
