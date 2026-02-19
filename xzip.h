@@ -87,6 +87,18 @@ public:
         // 97 - WavPack
     };
 
+    // AES encryption mode constants
+    enum AES_ENCRYPTION_MODE {
+        AES_ENCRYPTION_MODE_128 = 0x01,  // 128-bit AES encryption
+        AES_ENCRYPTION_MODE_192 = 0x02,  // 192-bit AES encryption
+        AES_ENCRYPTION_MODE_256 = 0x03   // 256-bit AES encryption
+    };
+
+    // ZIP AES extra field header ID
+    static const quint16 ZIP_AES_EXTRA_FIELD_HEADER_ID = 0x9901;
+    static const quint16 ZIP_AES_EXTRA_FIELD_DATA_SIZE = 0x0007;
+    static const quint16 ZIP_AES_VENDOR_ID_AE = 0x4541;  // 'AE' in little-endian
+
 #pragma pack(push)
 #pragma pack(1)
     struct LOCALFILEHEADER {
@@ -142,6 +154,23 @@ public:
         // Extra field
         // File Comment
     };
+
+    /**
+     * ZIP AES Extra Field Structure (Header ID: 0x9901)
+     * Used in ZIP archives to indicate AES encryption
+     * Total size: 11 bytes (4 byte header + 7 byte data)
+     */
+    struct AES_EXTRA_FIELD {
+        quint16 nHeaderID;           // Extra field header ID (0x9901)
+        quint16 nDataSize;           // Data size (typically 7 bytes)
+        quint16 nAESVersion;         // AES version number (vendor-specific)
+        quint16 nVendorID;           // 2-character vendor ID (e.g., 'AE' = 0x4145)
+        quint8 nEncryptionMode;      // AES encryption strength:
+                                     // 0x01 = 128-bit
+                                     // 0x02 = 192-bit
+                                     // 0x03 = 256-bit
+        quint16 nCompressionMethod;  // Actual compression method used
+    };
 #pragma pack(pop)
 
     struct ZIPFILE_RECORD {
@@ -192,6 +221,7 @@ public:
 
     CENTRALDIRECTORYFILEHEADER read_CENTRALDIRECTORYFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct);
     LOCALFILEHEADER read_LOCALFILEHEADER(qint64 nOffset, PDSTRUCT *pPdStruct);
+    AES_EXTRA_FIELD read_AES_EXTRA_FIELD(qint64 nOffset, PDSTRUCT *pPdStruct);
     qint64 findECDOffset(PDSTRUCT *pPdStruct);
 
     bool isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct);

@@ -26,6 +26,7 @@
 #include "xbinary.h"
 #include "zlib.h"
 #include "xcompress.h"
+#include "xdecompress.h"
 #include "Algos/xlzhdecoder.h"
 #include "Algos/xrardecoder.h"
 #include "Algos/xstoredecoder.h"

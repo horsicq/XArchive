@@ -20,7 +20,7 @@
  */
 #include "xdecompress.h"
 
-XDecompress::XDecompress(QObject *parent) : XThreadObject(parent)
+XDecompress::XDecompress(QObject *parent) : QObject(parent)
 {
 }
 
@@ -40,6 +40,7 @@ bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDevic
 
 bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct)
 {
+    // TODO Encrypt
     XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = archiveRecord.mapProperties;
     state.pDeviceInput = pDeviceInput;
@@ -89,11 +90,6 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 {
     bool bResult = true;
 
-    const qint32 N_BUFFER_SIZE = 0x4000;
-
-    char bufferIn[N_BUFFER_SIZE];
-    char bufferOut[N_BUFFER_SIZE];
-
     if (pState->pDeviceInput) {
         pState->pDeviceInput->seek(pState->nInputOffset);
     }
@@ -110,23 +106,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
 
     if (compressMethod == XBinary::HANDLE_METHOD_STORE) {
-        for (qint64 nOffset = 0; (nOffset < pState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
-            qint32 nBufferSize = qMin((qint32)(pState->nInputLimit - nOffset), N_BUFFER_SIZE);
-
-            qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pState);
-
-            if (nRead > 0) {
-                XBinary::_writeDevice(bufferIn, nRead, pState);
-            } else {
-                break;
-            }
-
-            if (pState->bReadError || pState->bWriteError) {
-                break;
-            }
-
-            nOffset += nRead;
-        }
+        bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP2) {
         bResult = XBZIP2Decoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZMA) {
@@ -260,8 +240,4 @@ qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qi
     }
 
     return nResult;
-}
-
-void XDecompress::process()
-{
 }

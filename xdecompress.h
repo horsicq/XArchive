@@ -34,9 +34,9 @@
 #include "xreducedecoder.h"
 #include "xthreadobject.h"
 #include "xstoredecoder.h"
-#include "Algos/xppmddecoder.h"
+#include "xppmddecoder.h"
 
-class XDecompress : public XThreadObject {
+class XDecompress : public QObject {
     Q_OBJECT
 
 public:
@@ -48,7 +48,11 @@ public:
     QByteArray decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
     qint64 getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
 
-    virtual void process();
+signals:
+    void completed(qint64 nElapsedTime);
+    void errorMessage(const QString &sErrorMessage);
+    void warningMessage(const QString &sWarningMessage);
+    void infoMessage(const QString &sInfoMessage);
 };
 
 #endif  // XDECOMPRESS_H
