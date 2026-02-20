@@ -241,11 +241,11 @@ XBinary::HANDLE_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCode
         } else if (baCodec.startsWith(QByteArray("\x04\x02\x02", 3))) {
             result = HANDLE_METHOD_BZIP2;  // BZip2
         } else if (baCodec.startsWith(QByteArray("\x03\x04\x01", 3))) {
-            result = HANDLE_METHOD_PPMD;  // PPMd (actual codec from 7z)
+            result = HANDLE_METHOD_PPMD7;  // PPMd (actual codec from 7z)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x03", 4))) {
             result = HANDLE_METHOD_BCJ;  // BCJ (x86 filter)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x01", 4))) {
-            result = HANDLE_METHOD_PPMD;  // PPMd (alternative codec)
+            result = HANDLE_METHOD_PPMD7;  // PPMd (alternative codec)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x02\x05", 4))) {
             result = HANDLE_METHOD_BCJ2;  // BCJ2 (x86 advanced filter)
         } else if (baCodec.startsWith(QByteArray("\x06\xF1\x07\x01", 4))) {
@@ -1909,8 +1909,8 @@ bool XSevenZip::_decompress(QIODevice *pDevice, HANDLE_METHOD compressMethod, co
             // bDecompressResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
         } else if (compressMethod == HANDLE_METHOD_LZMA2) {
             bResult = XLZMADecoder::decompressLZMA2(&decompressState, baProperty, pPdStruct);
-        } else if (compressMethod == HANDLE_METHOD_PPMD) {
-            bResult = XPPMdDecoder::decompressPPMdH(&decompressState, baProperty, pPdStruct);
+        } else if (compressMethod == HANDLE_METHOD_PPMD7) {
+            bResult = XPPMdDecoder::decompressPPMD7(&decompressState, baProperty, pPdStruct);
         } else if (compressMethod == HANDLE_METHOD_BZIP2) {
             bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
         } else if (compressMethod == HANDLE_METHOD_DEFLATE) {

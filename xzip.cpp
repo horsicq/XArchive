@@ -1212,7 +1212,8 @@ XArchive::HANDLE_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nF
         case CMETHOD_DEFLATE64: result = HANDLE_METHOD_DEFLATE64; break;  // TODO
         case CMETHOD_BZIP2: result = HANDLE_METHOD_BZIP2; break;
         case CMETHOD_LZMA: result = HANDLE_METHOD_LZMA; break;
-        case CMETHOD_PPMD: result = HANDLE_METHOD_PPMD; break;
+        case CMETHOD_XZ: result = HANDLE_METHOD_XZ; break;
+        case CMETHOD_PPMD: result = HANDLE_METHOD_PPMD8; break;
         case CMETHOD_AES: result = HANDLE_METHOD_AES; break;
     }
     // TODO more methods
@@ -1753,6 +1754,10 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             nFileCommentLength = 0;
         }
 
+        bool bIsFolder = sFileName.endsWith(QLatin1Char('/'));
+
+        result.mapProperties.insert(XBinary::FPART_PROP_ISFOLDER, bIsFolder);
+
         result.nStreamSize = nCompressedSize;
         result.nStreamOffset = nLocalHeaderOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
 
@@ -1763,6 +1768,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         // Compression method
         HANDLE_METHOD compressMethod = zipToCompressMethod(nMethod, nFlags);
         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nMethod);  // Raw ZIP method number
 
         // CRC32
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, nCRC32);

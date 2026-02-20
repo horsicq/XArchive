@@ -78,12 +78,12 @@ public:
         CMETHOD_PKWARE_DCL_IMPLODING = 10,  // Also used for older PPMd variant
         CMETHOD_BZIP2 = 12,
         CMETHOD_LZMA = 14,
+        CMETHOD_XZ = 95,
         CMETHOD_PPMD = 98,
         CMETHOD_AES = 99,  // Apple or AES?
         // TODO
         // 93 - Zstd
-        // 95 - XZ
-        // 96 - JPEG (recompression)
+        // 96 - JPEG (recompression) - WinZip proprietary
         // 97 - WavPack
     };
 

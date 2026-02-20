@@ -27,7 +27,7 @@ XPPMdDecoder::XPPMdDecoder(QObject *pParent) : QObject(pParent)
 {
 }
 
-bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
@@ -155,7 +155,7 @@ bool XPPMdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
     return bSuccess && (nDecompressed > 0) && !pDecompressState->bWriteError;
 }
 
-bool XPPMdDecoder::decompressPPMdH(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
+bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;

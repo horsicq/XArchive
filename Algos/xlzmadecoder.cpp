@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xlzmadecoder.h"
+#include <QBuffer>
 
 static void *SzAlloc(ISzAllocPtr, size_t size)
 {
@@ -361,4 +362,231 @@ bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState,
     Lzma2Dec_Free(&state, &g_Alloc);
 
     return bResult;
+}
+
+// XZ variable-length integer decoder
+static bool _xzReadVarInt(const QByteArray &ba, qint32 &nPos, quint64 &nValue)
+{
+    nValue = 0;
+    qint32 nShift = 0;
+    while (nPos < ba.size()) {
+        quint8 nByte = (quint8)ba.at(nPos++);
+        nValue |= ((quint64)(nByte & 0x7F)) << nShift;
+        if (!(nByte & 0x80)) {
+            return true;
+        }
+        nShift += 7;
+        if (nShift > 63) {
+            return false;
+        }
+    }
+    return false;
+}
+
+// BCJ x86 reverse filter (decompression side)
+// Algorithm from xz-utils liblzma/simple/x86.c:
+//   forward (encoding): stored = rel_addr + (now_pos + i + 1)
+//   reverse (decoding): rel_addr = stored - (now_pos + i + 1), now_pos = 0
+static void _applyBCJX86Decode(QByteArray &ba)
+{
+    qint32 nSize = ba.size();
+    if (nSize < 5) {
+        return;
+    }
+    for (qint32 i = 0; i <= nSize - 5; ) {
+        quint8 nOpcode = (quint8)ba.at(i);
+        if (nOpcode != 0xE8 && nOpcode != 0xE9) {
+            i++;
+            continue;
+        }
+        // Validity check: MSB of the stored 4-byte value must be 0x00 or 0xFF
+        quint8 nMSB = (quint8)ba.at(i + 4);
+        if (nMSB != 0x00 && nMSB != 0xFF) {
+            i++;
+            continue;
+        }
+        // Read stored 4-byte LE value
+        quint32 nStored = (quint32)(quint8)ba[i + 1] |
+                          ((quint32)(quint8)ba[i + 2] << 8) |
+                          ((quint32)(quint8)ba[i + 3] << 16) |
+                          ((quint32)(quint8)ba[i + 4] << 24);
+        // Reverse: rel_addr = stored - (now_pos + i + 5)  with now_pos = 0
+        quint32 nRelAddr = nStored - (quint32)(i + 5);
+        ba[i + 1] = (char)(nRelAddr & 0xFF);
+        ba[i + 2] = (char)((nRelAddr >> 8) & 0xFF);
+        ba[i + 3] = (char)((nRelAddr >> 16) & 0xFF);
+        ba[i + 4] = (char)((nRelAddr >> 24) & 0xFF);
+        i += 5;
+    }
+}
+
+bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
+        return false;
+    }
+
+    QIODevice *pDevice = pDecompressState->pDeviceInput;
+    qint64 nOffset = pDecompressState->nInputOffset;
+    qint64 nTotalSize = pDecompressState->nInputLimit;
+
+    if (nTotalSize < 28) {  // stream header(12) + minimal block header(4) + stream footer(12)
+        return false;
+    }
+
+    // --- 1. Validate XZ stream header (12 bytes) ---
+    pDevice->seek(nOffset);
+    QByteArray baStreamHeader = pDevice->read(12);
+    if (baStreamHeader.size() != 12) {
+        return false;
+    }
+    static const quint8 XZ_MAGIC[6] = {0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00};
+    if (memcmp(baStreamHeader.constData(), XZ_MAGIC, 6) != 0) {
+        return false;
+    }
+
+    // --- 2. Parse block header (starts at offset 12) ---
+    qint64 nBlockHeaderOffset = nOffset + 12;
+    pDevice->seek(nBlockHeaderOffset);
+
+    // header_size byte: actual block header size = (header_size + 1) * 4
+    char nHdrSizeBuf = 0;
+    if (pDevice->read(&nHdrSizeBuf, 1) != 1) {
+        return false;
+    }
+    quint8 nHeaderSizeByte = (quint8)nHdrSizeBuf;
+    qint32 nActualHeaderSize = (nHeaderSizeByte + 1) * 4;
+    if (nActualHeaderSize < 4 || nActualHeaderSize > 1024) {
+        return false;
+    }
+
+    pDevice->seek(nBlockHeaderOffset);
+    QByteArray baBH = pDevice->read(nActualHeaderSize);
+    if (baBH.size() != nActualHeaderSize) {
+        return false;
+    }
+
+    quint8 nBlockFlags = (quint8)baBH.at(1);
+    qint32 nNumFilters = (nBlockFlags & 0x03) + 1;
+    bool bHasCompressedSize = (nBlockFlags & 0x40) != 0;
+    bool bHasUncompressedSize = (nBlockFlags & 0x80) != 0;
+
+    qint32 nBHPos = 2;
+    quint64 nCompressedSize64 = 0;
+    quint64 nUncompressedSize64 = 0;
+
+    if (bHasCompressedSize) {
+        if (!_xzReadVarInt(baBH, nBHPos, nCompressedSize64)) {
+            return false;
+        }
+    }
+    if (bHasUncompressedSize) {
+        if (!_xzReadVarInt(baBH, nBHPos, nUncompressedSize64)) {
+            return false;
+        }
+    }
+
+    // Parse filter chain: find LZMA2 props byte and optional BCJ x86 filter
+    bool bHasBCJX86 = false;
+    quint8 nLZMA2PropsByte = 0;
+
+    for (qint32 nFilter = 0; nFilter < nNumFilters && nFilter < 4; nFilter++) {
+        quint64 nFilterID = 0;
+        quint64 nPropSize = 0;
+        if (!_xzReadVarInt(baBH, nBHPos, nFilterID)) {
+            return false;
+        }
+        if (!_xzReadVarInt(baBH, nBHPos, nPropSize)) {
+            return false;
+        }
+        if (nFilterID == 0x21) {  // LZMA2
+            if (nPropSize == 1 && nBHPos < baBH.size()) {
+                nLZMA2PropsByte = (quint8)baBH.at(nBHPos);
+            }
+        } else if (nFilterID == 0x04) {  // BCJ x86
+            bHasBCJX86 = true;
+        }
+        nBHPos += (qint32)nPropSize;
+    }
+
+    // --- 3. Locate compressed block data ---
+    qint64 nDataOffset = nBlockHeaderOffset + nActualHeaderSize;
+    qint64 nDataSize = 0;
+    if (bHasCompressedSize) {
+        nDataSize = (qint64)nCompressedSize64;
+    } else {
+        // Generous estimate; LZMA2 end-of-stream marker stops decompression naturally
+        nDataSize = nTotalSize - 12 - nActualHeaderSize - 12;
+        if (nDataSize <= 0) {
+            return false;
+        }
+    }
+
+    pDevice->seek(nDataOffset);
+    QByteArray baCompressed = pDevice->read(nDataSize);
+    if (baCompressed.isEmpty()) {
+        return false;
+    }
+
+    QBuffer compressedBuffer(&baCompressed);
+    compressedBuffer.open(QIODevice::ReadOnly);
+
+    QByteArray baPropByte;
+    baPropByte.append((char)nLZMA2PropsByte);
+
+    bool bDecompressResult = false;
+
+    if (bHasBCJX86) {
+        // Decompress LZMA2 to intermediate buffer, then apply BCJ x86 reverse
+        QByteArray baIntermediate;
+        QBuffer intermediateBuffer(&baIntermediate);
+        intermediateBuffer.open(QIODevice::WriteOnly);
+
+        XBinary::DATAPROCESS_STATE lzma2State = {};
+        lzma2State.pDeviceInput = &compressedBuffer;
+        lzma2State.pDeviceOutput = &intermediateBuffer;
+        lzma2State.nInputOffset = 0;
+        lzma2State.nInputLimit = baCompressed.size();
+        lzma2State.nProcessedOffset = 0;
+        lzma2State.nProcessedLimit = -1;
+
+        bDecompressResult = XLZMADecoder::decompressLZMA2(&lzma2State, baPropByte, pPdStruct);
+        intermediateBuffer.close();
+
+        if (bDecompressResult) {
+            _applyBCJX86Decode(baIntermediate);
+
+            qint64 nWriteFrom = pDecompressState->nProcessedOffset;
+            qint64 nWriteLimit = pDecompressState->nProcessedLimit;
+            if (nWriteLimit == -1) {
+                nWriteLimit = baIntermediate.size();
+            }
+            qint64 nToWrite = qMin(nWriteLimit, (qint64)(baIntermediate.size() - nWriteFrom));
+            if (nToWrite > 0 && nWriteFrom >= 0) {
+                pDecompressState->pDeviceOutput->seek(0);
+                pDecompressState->pDeviceOutput->write(baIntermediate.constData() + nWriteFrom, nToWrite);
+                pDecompressState->nCountOutput = nToWrite;
+            }
+        }
+    } else {
+        // Pure LZMA2 — stream directly to output device
+        XBinary::DATAPROCESS_STATE lzma2State = {};
+        lzma2State.pDeviceInput = &compressedBuffer;
+        lzma2State.pDeviceOutput = pDecompressState->pDeviceOutput;
+        lzma2State.nInputOffset = 0;
+        lzma2State.nInputLimit = baCompressed.size();
+        lzma2State.nProcessedOffset = pDecompressState->nProcessedOffset;
+        lzma2State.nProcessedLimit = pDecompressState->nProcessedLimit;
+
+        bDecompressResult = XLZMADecoder::decompressLZMA2(&lzma2State, baPropByte, pPdStruct);
+
+        if (bDecompressResult) {
+            pDecompressState->nCountInput = lzma2State.nCountInput;
+            pDecompressState->nCountOutput = lzma2State.nCountOutput;
+        }
+    }
+
+    compressedBuffer.close();
+
+    return bDecompressResult;
 }

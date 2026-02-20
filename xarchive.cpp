@@ -191,12 +191,12 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         } else {
             result = decompressState.bReadError ? COMPRESS_RESULT_READERROR : COMPRESS_RESULT_DATAERROR;
         }
-    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_PPMD) {
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_PPMD8) {
         qDebug() << "[XArchive] PPMd decompression requested - UncompressedSize:" << pDecompressStruct->spInfo.nUncompressedSize
                  << "InSize:" << pDecompressStruct->nInSize << "SourceSize:" << pDecompressStruct->pSourceDevice->size();
 
         XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_PPMD);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_PPMD8);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
         decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
         decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
@@ -206,7 +206,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
         qDebug() << "[XArchive] Calling XPPMdDecoder::decompress";
-        if (XPPMdDecoder::decompress(&decompressState, pPdStruct)) {
+        if (XPPMdDecoder::decompressPPMD8(&decompressState, pPdStruct)) {
             qDebug() << "[XArchive] PPMd decompression succeeded - In:" << decompressState.nCountInput << "Out:" << decompressState.nCountOutput;
             pDecompressStruct->nInSize = decompressState.nCountInput;
             pDecompressStruct->nOutSize = decompressState.nCountOutput;
@@ -379,7 +379,55 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
-    }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_XZ) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_XZ);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XLZMADecoder::decompressXZ(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
+            result = COMPRESS_RESULT_OK;
+        } else {
+            if (decompressState.bReadError) {
+                result = COMPRESS_RESULT_READERROR;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
+            } else {
+                result = COMPRESS_RESULT_DATAERROR;
+            }
+        }    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_XZ) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_XZ);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = pDecompressStruct->nInSize != 0 ? pDecompressStruct->nInSize : pDecompressStruct->pSourceDevice->size();
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XLZMADecoder::decompressXZ(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit > 0) && (decompressState.nCountOutput >= pDecompressStruct->nDecompressedLimit);
+            result = COMPRESS_RESULT_OK;
+        } else {
+            if (decompressState.bReadError) {
+                result = COMPRESS_RESULT_READERROR;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
+            } else {
+                result = COMPRESS_RESULT_DATAERROR;
+            }
+        }    }
 
     return result;
 }
