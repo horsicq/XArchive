@@ -393,7 +393,7 @@ static void _applyBCJX86Decode(QByteArray &ba)
     if (nSize < 5) {
         return;
     }
-    for (qint32 i = 0; i <= nSize - 5; ) {
+    for (qint32 i = 0; i <= nSize - 5;) {
         quint8 nOpcode = (quint8)ba.at(i);
         if (nOpcode != 0xE8 && nOpcode != 0xE9) {
             i++;
@@ -406,10 +406,7 @@ static void _applyBCJX86Decode(QByteArray &ba)
             continue;
         }
         // Read stored 4-byte LE value
-        quint32 nStored = (quint32)(quint8)ba[i + 1] |
-                          ((quint32)(quint8)ba[i + 2] << 8) |
-                          ((quint32)(quint8)ba[i + 3] << 16) |
-                          ((quint32)(quint8)ba[i + 4] << 24);
+        quint32 nStored = (quint32)(quint8)ba[i + 1] | ((quint32)(quint8)ba[i + 2] << 8) | ((quint32)(quint8)ba[i + 3] << 16) | ((quint32)(quint8)ba[i + 4] << 24);
         // Reverse: rel_addr = stored - (now_pos + i + 5)  with now_pos = 0
         quint32 nRelAddr = nStored - (quint32)(i + 5);
         ba[i + 1] = (char)(nRelAddr & 0xFF);

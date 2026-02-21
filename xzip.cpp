@@ -2052,7 +2052,7 @@ QVariant XZip::calculateHash(QIODevice *pDevice, PDSTRUCT *pPdStruct)
     quint32 nCRC = binary._getCRC32(0, binary.getSize(), 0xFFFFFFFF, _getCRC32Table_EDB88320(), pPdStruct);
 
     pDevice->reset();
-    
+
     return nCRC;
 }
 

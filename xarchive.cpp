@@ -403,7 +403,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             } else {
                 result = COMPRESS_RESULT_DATAERROR;
             }
-        }    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_XZ) {
+        }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_XZ) {
         XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_XZ);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
@@ -427,7 +428,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             } else {
                 result = COMPRESS_RESULT_DATAERROR;
             }
-        }    }
+        }
+    }
 
     return result;
 }
