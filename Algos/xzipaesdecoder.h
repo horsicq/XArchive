@@ -37,14 +37,14 @@ class XZipAESDecoder : public QObject {
 public:
     explicit XZipAESDecoder(QObject *pParent = nullptr);
 
-    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod,
                         XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod,
                         XBinary::PDSTRUCT *pPdStruct = nullptr);
 
-    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod,
                         XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod,
                         XBinary::PDSTRUCT *pPdStruct = nullptr);
 
 private:

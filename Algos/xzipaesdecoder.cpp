@@ -86,12 +86,12 @@ XZipAESDecoder::XZipAESDecoder(QObject *pParent) : QObject(pParent)
     // Constructor - no initialization needed with OpenSSL
 }
 
-bool XZipAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::CRYPTO_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
+bool XZipAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
 {
     return decrypt(pDecompressState, sPassword.toLatin1(), cryptoMethod, pPdStruct);
 }
 
-bool XZipAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::CRYPTO_METHOD cryptoMethod,
+bool XZipAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod,
                              XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
@@ -107,7 +107,7 @@ bool XZipAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const
         qint32 nKeySize = 0;
         qint32 nSaltSize = 0;
 
-        if (cryptoMethod == XBinary::CRYPTO_METHOD_AES256) {
+        if (cryptoMethod == XBinary::HANDLE_METHOD_AES256) {
             nKeySize = 32;   // 256 bits
             nSaltSize = 16;  // Salt size for AES-256
         } else {
@@ -589,12 +589,12 @@ bool XZipAESDecoder::encryptAESCTR(const QByteArray &baKey, const QByteArray &ba
     return true;
 }
 
-bool XZipAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::CRYPTO_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
+bool XZipAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
 {
     return encrypt(pCompressState, sPassword.toLatin1(), cryptoMethod, pPdStruct);
 }
 
-bool XZipAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::CRYPTO_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
+bool XZipAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -609,7 +609,7 @@ bool XZipAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const Q
         qint32 nKeySize = 0;
         qint32 nSaltSize = 0;
 
-        if (cryptoMethod == XBinary::CRYPTO_METHOD_AES256) {
+        if (cryptoMethod == XBinary::HANDLE_METHOD_AES256) {
             nKeySize = 32;   // 256 bits
             nSaltSize = 16;  // Salt size for AES-256
         } else {

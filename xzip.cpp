@@ -1815,6 +1815,14 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
                     // Original compression method
                     HANDLE_METHOD compressMethod = zipToCompressMethod(aesExtraField.nCompressionMethod, nFlags);
                     result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+
+                    if (aesExtraField.nEncryptionMode == 1) {
+                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES128);
+                    } else if (aesExtraField.nEncryptionMode == 2) {
+                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES192);
+                    } else if (aesExtraField.nEncryptionMode == 3) {
+                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES256);
+                    }
                 }
             }
 
@@ -1836,168 +1844,7 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
         connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
 
-        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pPdStruct);
-
-        // LOCALFILEHEADER lfh = read_LOCALFILEHEADER(pState->nCurrentOffset, pPdStruct);
-
-        // qint64 nDataOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
-
-        // HANDLE_METHOD compressMethod = zipToCompressMethod(lfh.nMethod, lfh.nFlags);
-
-        // // Check if file is encrypted
-        // bool bIsEncrypted = (lfh.nFlags & 0x01) != 0;
-        // bool bIsAESEncrypted = (lfh.nMethod == CMETHOD_AES);
-        // QString sPassword = pState->mapProperties.value(UNPACK_PROP_PASSWORD).toString();
-
-        // if ((bIsEncrypted || bIsAESEncrypted) && sPassword.isEmpty()) {
-        //     // No password provided - cannot decrypt
-        //     return false;
-        // }
-
-        // // Create a temporary SubDevice for the encrypted compressed data
-        // SubDevice subDevice(getDevice(), nDataOffset, lfh.nCompressedSize);
-
-        // if (subDevice.open(QIODevice::ReadOnly)) {
-        //     QIODevice *pInputDevice = nullptr;
-        //     QIODevice *pDecryptedDevice = nullptr;
-        //     qint64 nDecryptedSize = 0;
-
-        //     if (bIsAESEncrypted) {
-        //         // AES encryption - need to read extra field to determine AES strength
-        //         // Extra field format: HeaderID(2) + DataSize(2) + VendorVersion(2) + VendorID(2) + AESStrength(1) + CompressionMethod(2)
-        //         qint64 nExtraFieldOffset = pState->nCurrentOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength;
-        //         qint16 nExtraFieldLength = lfh.nExtraFieldLength;
-
-        //         XBinary::CRYPTO_METHOD aesMethod = XBinary::CRYPTO_METHOD_AES256;  // Default to AES-256
-        //         quint16 nActualCompressionMethod = CMETHOD_STORE;                  // Default compression method inside AES
-
-        //         // Parse extra field to find AES info
-        //         qint64 nExtraOffset = 0;
-        //         while (nExtraOffset < nExtraFieldLength) {
-        //             quint16 nHeaderID = read_uint16(nExtraFieldOffset + nExtraOffset);
-        //             quint16 nDataSize = read_uint16(nExtraFieldOffset + nExtraOffset + 2);
-
-        //             if (nHeaderID == 0x9901) {  // AES encryption extra field
-        //                 // Read AES strength byte
-        //                 quint8 nAESStrength = read_uint8(nExtraFieldOffset + nExtraOffset + 8);
-        //                 // Read actual compression method
-        //                 nActualCompressionMethod = read_uint16(nExtraFieldOffset + nExtraOffset + 9);
-
-        //                 // Determine AES key size from strength byte
-        //                 if (nAESStrength == 0x01) {
-        //                     aesMethod = XBinary::CRYPTO_METHOD_AES128;
-        //                 } else if (nAESStrength == 0x02) {
-        //                     aesMethod = XBinary::CRYPTO_METHOD_AES192;
-        //                 } else if (nAESStrength == 0x03) {
-        //                     aesMethod = XBinary::CRYPTO_METHOD_AES256;
-        //                 }
-
-        //                 break;
-        //             }
-
-        //             nExtraOffset += 4 + nDataSize;
-        //         }
-
-        //         pDecryptedDevice = createFileBuffer(lfh.nCompressedSize, pPdStruct);
-
-        //         XBinary::DATAPROCESS_STATE decryptState = {};
-        //         decryptState.pDeviceInput = &subDevice;
-        //         decryptState.pDeviceOutput = pDecryptedDevice;
-        //         decryptState.nInputOffset = 0;
-        //         decryptState.nInputLimit = lfh.nCompressedSize;
-        //         decryptState.nProcessedOffset = 0;
-        //         decryptState.nProcessedLimit = -1;
-
-        //         bool bDecrypted = XZipAESDecoder::decrypt(&decryptState, sPassword, aesMethod, pPdStruct);
-
-        //         subDevice.close();
-
-        //         if (bDecrypted) {
-        //             pInputDevice = pDecryptedDevice;
-        //             nDecryptedSize = decryptState.nCountOutput;  // Use actual decrypted size
-        //             pDecryptedDevice->seek(0);                   // Rewind to beginning for reading
-
-        //             // Update compression method to the actual method inside AES container
-        //             compressMethod = zipToCompressMethod(nActualCompressionMethod, 0);
-        //         }
-        //     } else if (bIsEncrypted) {
-        //         // Traditional ZIP crypto
-        //         pDecryptedDevice = createFileBuffer(lfh.nCompressedSize, pPdStruct);
-
-        //         XBinary::DATAPROCESS_STATE decryptState = {};
-        //         decryptState.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, lfh.nCRC32);
-        //         decryptState.pDeviceInput = &subDevice;
-        //         decryptState.pDeviceOutput = pDecryptedDevice;
-        //         decryptState.nInputOffset = 0;
-        //         decryptState.nInputLimit = lfh.nCompressedSize;
-        //         decryptState.nProcessedOffset = 0;
-        //         decryptState.nProcessedLimit = -1;
-
-        //         bool bDecrypted = XZipCryptoDecoder::decrypt(&decryptState, sPassword, pPdStruct);
-
-        //         subDevice.close();
-
-        //         if (bDecrypted) {
-        //             pInputDevice = pDecryptedDevice;
-        //             nDecryptedSize = decryptState.nCountOutput;  // Use actual decrypted size
-        //             pDecryptedDevice->seek(0);                   // Rewind to beginning for reading
-        //         }
-        //     } else {
-        //         pInputDevice = &subDevice;
-        //     }
-
-        //     if (pInputDevice) {
-        //         XBinary::DATAPROCESS_STATE decompressState = {};
-        //         decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
-        //         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
-        //         decompressState.pDeviceInput = pInputDevice;
-        //         decompressState.pDeviceOutput = pDevice;
-        //         decompressState.nInputOffset = 0;
-        //         decompressState.nInputLimit = (bIsEncrypted || bIsAESEncrypted) ? nDecryptedSize : pInputDevice->size();
-        //         decompressState.nProcessedOffset = 0;
-        //         decompressState.nProcessedLimit = -1;
-
-        //         if (compressMethod == HANDLE_METHOD_STORE) {
-        //             bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
-        //         } else if (compressMethod == HANDLE_METHOD_DEFLATE) {
-        //             bResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
-        //         } else if (compressMethod == HANDLE_METHOD_DEFLATE64) {
-        //             bResult = XDeflateDecoder::decompress64(&decompressState, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP2) {
-        //             bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_LZMA) {
-        //             bResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_PPMD) {
-        //             bResult = XPPMdDecoder::decompress(&decompressState, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_SHRINK) {
-        //             bResult = XShrinkDecoder::decompress(&decompressState, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_1) {
-        //             bResult = XReduceDecoder::decompress(&decompressState, 1, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_2) {
-        //             bResult = XReduceDecoder::decompress(&decompressState, 2, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_3) {
-        //             bResult = XReduceDecoder::decompress(&decompressState, 3, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_REDUCE_4) {
-        //             bResult = XReduceDecoder::decompress(&decompressState, 4, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_4KDICT_2TREES) {
-        //             bResult = XImplodeDecoder::decompress(&decompressState, false, false, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_4KDICT_3TREES) {
-        //             bResult = XImplodeDecoder::decompress(&decompressState, false, true, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_8KDICT_2TREES) {
-        //             bResult = XImplodeDecoder::decompress(&decompressState, true, false, pPdStruct);
-        //         } else if (compressMethod == XBinary::HANDLE_METHOD_IMPLODED_8KDICT_3TREES) {
-        //             bResult = XImplodeDecoder::decompress(&decompressState, true, true, pPdStruct);
-        //         }
-        //     }
-
-        //     if (pDecryptedDevice) {
-        //         freeFileBuffer(&pDecryptedDevice);
-        //     }
-
-        //     if (!bIsEncrypted) {
-        //         subDevice.close();
-        //     }
-        // }
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapProperties, pPdStruct);
     }
 
     return bResult;

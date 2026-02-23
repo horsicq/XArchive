@@ -114,8 +114,8 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             record.spInfo.nWindowSize = archiveRecord.mapProperties.value(FPART_PROP_WINDOWSIZE).toULongLong();
         }
 
-        if (archiveRecord.mapProperties.contains(FPART_PROP_SOLID)) {
-            record.spInfo.bIsSolid = archiveRecord.mapProperties.value(FPART_PROP_SOLID).toBool();
+        if (archiveRecord.mapProperties.contains(FPART_PROP_ISSOLID)) {
+            record.spInfo.bIsSolid = archiveRecord.mapProperties.value(FPART_PROP_ISSOLID).toBool();
         }
 
         if (archiveRecord.mapProperties.contains(FPART_PROP_HEADER_OFFSET)) {
@@ -454,7 +454,7 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         state.nProcessedLimit = nDecompressedLimit;
 
         XDecompress decompressor;
-        bResult = decompressor.decompress(&state, pPdStruct);
+        bResult = decompressor._decompress(&state, pPdStruct);
 
         sd.close();
     }

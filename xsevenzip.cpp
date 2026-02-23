@@ -1671,7 +1671,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 pContext->listArchiveRecords[nRecordIndex].nStreamSize = nPackedStreamSize;
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUnpackedStreamSize);
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_HANDLEMETHOD1, cm);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
+                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES1, baCoderProperty);
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, nCurrentRelOffset);
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nFileSize);
                                 pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
@@ -1687,7 +1687,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             pContext->listArchiveRecords[nRecordIndex].nStreamSize = nPackedStreamSize;
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUnpackedStreamSize);
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_HANDLEMETHOD1, cm);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
+                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES1, baCoderProperty);
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, 0);
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUnpackedStreamSize);
                             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
@@ -1754,7 +1754,7 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
 
         bool bIsSolid = archiveRecord.mapProperties.value(FPART_PROP_ISSOLID).toBool();
         HANDLE_METHOD compressMethod = (HANDLE_METHOD)(archiveRecord.mapProperties.value(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_UNKNOWN).toInt());
-        QByteArray baProperty = archiveRecord.mapProperties.value(FPART_PROP_COMPRESSPROPERTIES, HANDLE_METHOD_UNKNOWN).toByteArray();
+        QByteArray baProperty = archiveRecord.mapProperties.value(FPART_PROP_COMPRESSPROPERTIES1, HANDLE_METHOD_UNKNOWN).toByteArray();
         qint64 nStreamOffset = archiveRecord.nStreamOffset;
         qint64 nStreamSize = archiveRecord.nStreamSize;
 
@@ -1893,7 +1893,7 @@ bool XSevenZip::_decompress(QIODevice *pDevice, HANDLE_METHOD compressMethod, co
     if (sdCompressed.open(QIODevice::ReadOnly)) {
         DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSPROPERTIES, baProperty);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSPROPERTIES1, baProperty);
         if (nUncompressedSize > 0) {
             decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
         }
