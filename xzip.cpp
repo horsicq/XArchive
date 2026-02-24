@@ -943,8 +943,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
-                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
                                                 record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
+                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE, cdh.nCRC32 != 0 ? CRC_TYPE_EDB88320 : CRC_TYPE_UNKNOWN);
 
                                                 if (cdh.nFlags & 0x01) record.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
 
@@ -999,8 +999,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
-                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
                             record.mapProperties.insert(FPART_PROP_CRC_VALUE, lfh.nCRC32);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, lfh.nCRC32 != 0 ? CRC_TYPE_EDB88320 : CRC_TYPE_UNKNOWN);
                             record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::dosDateTimeToQDateTime(lfh.nLastModDate, lfh.nLastModTime));
 
                             listResult.append(record);
@@ -1772,7 +1772,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // CRC32
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, nCRC32);
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_EDB88320 : XBinary::CRC_TYPE_UNKNOWN);
 
         // Sizes
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nCompressedSize);

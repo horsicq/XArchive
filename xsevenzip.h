@@ -187,6 +187,9 @@ private:
     struct SZCODER {
         QByteArray baCoder;
         QByteArray baProperty;
+        bool bIsComplex;
+        qint32 nNumInStreams;
+        qint32 nNumOutStreams;
     };
 
     struct SZSTREAM {

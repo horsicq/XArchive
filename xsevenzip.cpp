@@ -570,86 +570,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             qDebug() << "_handleId: Parsing k7zIdHeader at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
             qDebug() << QString("  pData ptr: %1, nSize: %2").arg((quint64)pState->pData, 0, 16).arg(pState->nSize);
 #endif
-            //             // Parse sections sequentially - look specifically for FilesInfo
-            //             bool bFoundFilesInfo = false;
-            //             while (pState->nCurrentOffset < pState->nSize && !pState->bIsError && !bFoundFilesInfo) {
-            //                 // Peek at next ID
-            //                 qint64 nPeekOffset = pState->nCurrentOffset;
-            //                 quint8 nPeekByte = pState->pData[nPeekOffset];
-
-            //                 XBinary::PACKED_UINT puNextTag = XBinary::_read_packedNumber(pState->pData + pState->nCurrentOffset, pState->nSize -
-            //                 pState->nCurrentOffset); if (!puNextTag.bIsValid) break;
-
-            //                 EIdEnum nextId = (EIdEnum)puNextTag.nValue;
-
-            // #ifdef QT_DEBUG
-            //                 if (nextId <= 26) {  // Only log reasonable ID values
-            //                     qDebug() << QString("_handleId: k7zIdHeader loop - offset=0x%1 peekByte=0x%2 nextId=0x%3")
-            //                                     .arg(pState->nCurrentOffset, 0, 16)
-            //                                     .arg(nPeekByte, 2, 16, QChar('0'))
-            //                                     .arg((quint64)nextId, 0, 16);
-            //                 }
-            // #endif
-
-            //                 if (nextId == k7zIdFilesInfo) {
-            //                     // FilesInfo is what we really need for file listings
-            //                     _handleId(pListRecords, k7zIdFilesInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-            //                     bFoundFilesInfo = true;
-            //                     break;  // After FilesInfo, we're done
-            //                 } else if (nextId == k7zIdEnd && bFoundFilesInfo) {
-            //                     // Only process End if we've already found FilesInfo
-            //                     _handleId(pListRecords, k7zIdEnd, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-            //                     break;
-            //                 } else if (nextId == k7zIdMainStreamsInfo || nextId == k7zIdArchiveProperties || nextId == k7zIdAdditionalStreamsInfo) {
-            //                     // These are major sections - try to parse them
-            //                     bool bHandled = _handleId(pListRecords, nextId, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-            //                     if (!bHandled || pState->bIsError) {
-            //                         pState->bIsError = false;
-            //                         pState->sErrorString.clear();
-            //                         pState->nCurrentOffset++;
-            //                     }
-            //                 } else if (nextId == k7zIdCodersUnpackSize) {
-            //                     // CodersUnpackSize can appear at header level in some archives
-            //                     // Read nNumberOfFolders size values (one per folder)
-            //                     pState->nCurrentOffset += puNextTag.nByteSize;  // Skip ID
-
-            // #ifdef QT_DEBUG
-            //                     qDebug() << "_handleId: k7zIdHeader found CodersUnpackSize, reading" << pState->nNumberOfFolders << "values";
-            // #endif
-
-            //                     // Read one CodersUnpackSize value per folder
-            //                     for (quint64 i = 0; i < pState->nNumberOfFolders && !pState->bIsError; i++) {
-            //                         quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("CodersUnpackSize%1").arg(i), DRF_SIZE,
-            //                         IMPTYPE_STREAMUNPACKEDSIZE);
-            // #ifdef QT_DEBUG
-            //                         qDebug() << "  Folder" << i << "unpacked size:" << nSize << "bytes";
-            // #endif
-            //                     }
-            //                 } else if (nextId == k7zIdSubStreamsInfo) {
-            // // SubStreamsInfo can appear at header level
-            // #ifdef QT_DEBUG
-            //                     qDebug() << "_handleId: k7zIdHeader found SubStreamsInfo at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-            // #endif
-            //                     bool bHandled = _handleId(pListRecords, k7zIdSubStreamsInfo, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
-            //                     if (!bHandled || pState->bIsError) {
-            // #ifdef QT_DEBUG
-            //                         qDebug() << "_handleId: k7zIdHeader SubStreamsInfo parsing failed or skipped";
-            // #endif
-            //                         pState->bIsError = false;
-            //                         pState->sErrorString.clear();
-            //                         pState->nCurrentOffset++;
-            //                     }
-            //                 } else {
-            //                     // Logging unknown IDs at this level
-            // #ifdef QT_DEBUG
-            //                     qDebug() << "_handleId: k7zIdHeader found unknown ID"
-            //                     << QString("0x%1").arg((quint64)nextId, 0, 16)
-            //                              << "at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-            // #endif
-            //                     // Skip unknown/invalid bytes
-            //                     pState->nCurrentOffset++;
-            //                 }
-            //             }
             _handleId(pListRecords, XSevenZip::k7zIdMainStreamsInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
             _handleId(pListRecords, XSevenZip::k7zIdFilesInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
             bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
@@ -740,10 +660,8 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             if (nExt == 0) {
                 // Loop through all folders
                 for (quint64 iFolderIndex = 0; iFolderIndex < nNumberOfFolders && !pState->bIsError; iFolderIndex++) {
-                    qint32 nNumberOfInStreams = 0;
-                    qint32 nNumberOfPackStreams = 0;
-                    qint32 nIndexOfMainStream = 0;
-                    qint32 nNumberOfCoderStreams = 1;
+                    qint32 nNumInStreamsTotal = 0;
+                    qint32 nNumOutStreamsTotal = 0;
                     quint64 nNumberOfCoders = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfCoders", DRF_COUNT, IMPTYPE_NUMBEROFCODERS);
 
                     // Loop through all coders in this folder
@@ -753,21 +671,23 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                         quint8 nFlag = _handleByte(pListRecords, pState, pPdStruct, "Flag", IMPTYPE_UNKNOWN);
 
                         qint32 nCodecSize = nFlag & 0x0F;
-                        bool bIsComplex = (nFlag & 0x10) != 0;
+                        coder.bIsComplex = (nFlag & 0x10) != 0;
                         bool bHasAttr = (nFlag & 0x20) != 0;
 
                         coder.baCoder = _handleArray(pListRecords, pState, nCodecSize, pPdStruct, "Coder", IMPTYPE_CODER);
 
-                        if (bIsComplex) {
+                        if (coder.bIsComplex) {
                             // Complex coders have bind pairs and packed streams
                             // Read the number of input and output streams
-                            nNumberOfCoderStreams = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfCoderStreams", DRF_COUNT, IMPTYPE_UNKNOWN);
-                            // quint64 nNumOutStreams = _handleNumber(pListRecords, pState, pPdStruct, "NumOutStreams", DRF_COUNT, IMPTYPE_UNKNOWN);
-                            // Q_UNUSED(nNumInStreams)
-                            // Q_UNUSED(nNumOutStreams)
+                            coder.nNumInStreams = _handleNumber(pListRecords, pState, pPdStruct, "NumInStreams", DRF_COUNT, IMPTYPE_UNKNOWN);
+                            coder.nNumOutStreams = _handleNumber(pListRecords, pState, pPdStruct, "NumOutStreams", DRF_COUNT, IMPTYPE_UNKNOWN);
+                        } else {
+                            coder.nNumInStreams = 1;
+                            coder.nNumOutStreams = 1;
                         }
 
-                        nNumberOfInStreams += nNumberOfCoderStreams;
+                        nNumInStreamsTotal += coder.nNumInStreams;
+                        nNumOutStreamsTotal += coder.nNumOutStreams;
 
                         if (bHasAttr && !pState->bIsError) {
                             quint64 nPropertySize = _handleNumber(pListRecords, pState, pPdStruct, "PropertiesSize", DRF_SIZE, IMPTYPE_UNKNOWN);
@@ -779,23 +699,18 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                         }
                     }
 
-                    if ((nNumberOfCoders == 1) && (nNumberOfInStreams == 1)) {
-                        nIndexOfMainStream = 0;
-                        nNumberOfPackStreams = 1;
-                    } else {
-                        qint32 nNubmerOfBonds = nNumberOfCoders - 1;
+                    qint32 nNumBindPairs = nNumOutStreamsTotal -1;
 
-                        for (qint32 iBonds = 0; iBonds < nNubmerOfBonds; iBonds++) {
+                    for (qint32 iBonds = 0; iBonds < nNumBindPairs; iBonds++) {
+                        quint32 nStreamIndex = _handleNumber(pListRecords, pState, pPdStruct, "StreamIndex", DRF_UNKNOWN, IMPTYPE_UNKNOWN);
+                        quint32 nCoderIndex = _handleNumber(pListRecords, pState, pPdStruct, "CoderIndex", DRF_UNKNOWN, IMPTYPE_UNKNOWN);
+                    }
+
+                    qint32 nNumPackedStreams = nNumInStreamsTotal - nNumBindPairs;
+
+                    if (nNumPackedStreams > 1) {
+                        for (qint32 iPacks = 0; iPacks < nNumPackedStreams; iPacks++) {
                             quint32 nStreamIndex = _handleNumber(pListRecords, pState, pPdStruct, "StreamIndex", DRF_UNKNOWN, IMPTYPE_UNKNOWN);
-                            quint32 nCoderIndex = _handleNumber(pListRecords, pState, pPdStruct, "CoderIndex", DRF_UNKNOWN, IMPTYPE_UNKNOWN);
-                        }
-
-                        nNumberOfPackStreams = nNumberOfInStreams - nNubmerOfBonds;
-
-                        if (nNumberOfPackStreams != 1) {
-                            for (qint32 iPacks = 0; iPacks < nNumberOfPackStreams; iPacks++) {
-                                quint32 nStreamIndex = _handleNumber(pListRecords, pState, pPdStruct, "StreamIndex", DRF_UNKNOWN, IMPTYPE_UNKNOWN);
-                            }
                         }
                     }
 

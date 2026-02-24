@@ -276,6 +276,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         }
 
         bResult = XZipAESDecoder::decrypt(pState, sPassword, compressMethod, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ZIPCRYPTO) {
+        QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+        bResult = XZipCryptoDecoder::decrypt(pState, sPassword, pPdStruct);
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::handleMethodToString(compressMethod);
