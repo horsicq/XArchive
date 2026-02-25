@@ -153,7 +153,7 @@ private:
         IMPTYPE_STREAMCRC,
         IMPTYPE_STREAMOFFSET,
         IMPTYPE_STREAMSIZE,
-        IMPTYPE_STREAMUNPACKEDSIZE,
+        IMPTYPE_CODERUNPACKEDSIZE,
         IMPTYPE_STREAMUNPACKEDCRC,
         IMPTYPE_NUMBEROFPACKSTREAMS,
         IMPTYPE_CODER,
@@ -184,6 +184,11 @@ private:
         IMPTYPE impType;
     };
 
+    struct SZBOND {
+        qint32 nPackIndex;
+        qint32 nUnpackIndex;
+    };
+
     struct SZCODER {
         QByteArray baCoder;
         QByteArray baProperty;
@@ -192,15 +197,23 @@ private:
         qint32 nNumOutStreams;
     };
 
-    struct SZSTREAM {
-        qint64 nStreamOffset;
-        qint64 nStreamSize;
-        quint32 nStreamCRC;
+    struct SZINSTREAM {
+        qint64 nOffset;
+        qint64 nSize;
+        quint32 nCRC;
+        // QList<qint64> listSubSreamSizes;
+        // QList<quint32> listSubSreamCRC;
+    };
+
+    struct SZOUTSTREAM {
+        qint64 nSize;
+        quint32 nCRC;
+    };
+
+    struct SZFOLDER {
         QList<SZCODER> listCoders;
-        qint64 nStreamUnpackedSize;
-        quint32 nStreamUnpackedCRC;
-        QList<qint64> listSubSreamSizes;
-        QList<quint32> listSubSreamCRC;
+        QList<SZBOND> listBonds;
+        QList<qint32> listStreamIndexes;
     };
 
     struct SZSTATE {
@@ -211,11 +224,13 @@ private:
         QString sErrorString;
         qint64 nStreamsBegin;
         quint64 nNumberOfFolders;  // Track folder count for SubStreamsInfo
-        quint64 nNumberOfOutStreams;
         quint64 nNumberOfFiles;  // Track file count from FilesInfo (including extended count)
-        QList<SZSTREAM> listStreams;
+        quint64 nNumberOfCoders;
+        QList<SZINSTREAM> listInStreams;
+        QList<SZOUTSTREAM> listOutStreams;
+        QList<SZFOLDER> listFolders;
         QByteArray baEmptyStreams;
-        QByteArray baEmtyFiles;
+        QByteArray baEmptyFiles;
         QList<QString> listFileNames;
         qint32 nCurrentStream;
         qint32 nCurrentSubstream;
