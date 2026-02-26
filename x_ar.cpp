@@ -404,7 +404,7 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             part.sName = tr("Record") + QString(" %1").arg(nIndex);
             part.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
             // Properties: ar stores raw bytes, no compression
-            part.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE);
+            part.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE);
             part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, dataSize);
             part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, dataSize);
             // Optional: modification time (ASCII epoch seconds in header)
@@ -809,7 +809,7 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         // result.nDecompressedSize = result.nStreamSize;
 
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, XBinary::HANDLE_METHOD_STORE);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE);
 
         // Parse file mode (octal)
         QString sMode = QString(header.fileMode);

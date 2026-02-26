@@ -1147,7 +1147,7 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
     }
 
     ARCHIVERECORD record = infoCurrent(pUnpackState, pPdStruct);
-    HANDLE_METHOD compressMethod = (HANDLE_METHOD)record.mapProperties.value(FPART_PROP_HANDLEMETHOD1).toUInt();
+    HANDLE_METHOD compressMethod = (HANDLE_METHOD)record.mapProperties.value(FPART_PROP_HANDLEMETHOD).toUInt();
 
     RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
 
@@ -1244,7 +1244,7 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEBLOCK4 &file
         compressMethod = HANDLE_METHOD_RAR_29;
     }
 
-    mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+    mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
     // Extract DOS date and time from 32-bit fileTime field (date in high word, time in low word)
     quint16 nDosTime = fileBlock4.fileTime & 0xFFFF;
@@ -1278,7 +1278,7 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
         compressMethod = HANDLE_METHOD_RAR_70;
     }
 
-    mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+    mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
     if (fileHeader5.nFileFlags & 0x0002) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)

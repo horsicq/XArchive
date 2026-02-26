@@ -272,13 +272,13 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                     rec.sName = tr("Stream") + QString(" (%1)").arg(i);
 
                     if (cfFolder.typeCompress == 0x0000) {
-                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE_CAB);
+                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE_CAB);
                     } else if (cfFolder.typeCompress == 0x0001) {
-                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_MSZIP_CAB);
+                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_MSZIP_CAB);
                     } else if (cfFolder.typeCompress == 0x0003) {
-                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_LZX_CAB);
+                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZX_CAB);
                     } else {
-                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_UNKNOWN);
+                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN);
                     }
 
                     listResult.append(rec);
@@ -627,13 +627,13 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // Set compression method
         if (cfFolder.typeCompress == 0x0000) {
-            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE_CAB);
+            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE_CAB);
         } else if (cfFolder.typeCompress == 0x0001) {
-            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_MSZIP_CAB);
+            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_MSZIP_CAB);
         } else if (cfFolder.typeCompress == 0x0003) {
-            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_LZX_CAB);
+            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZX_CAB);
         } else {
-            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_UNKNOWN);
+            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN);
         }
 
         // Convert DOS date/time to QDateTime

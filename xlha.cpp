@@ -232,7 +232,7 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             compressMethod = HANDLE_METHOD_LZH7;
         }
 
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nCompressedSize);
     }
@@ -268,7 +268,7 @@ bool XLHA::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
         // Decompress the record
         XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
 
         SubDevice sd(getDevice(), nDataOffset, nCompressedSize);

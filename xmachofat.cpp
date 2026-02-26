@@ -495,7 +495,7 @@ XBinary::ARCHIVERECORD XMACHOFat::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
     result.nStreamSize = _size;
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sArchName);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)_size);
-    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, (quint32)HANDLE_METHOD_STORE);
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, (quint32)HANDLE_METHOD_STORE);
 
     return result;
 }

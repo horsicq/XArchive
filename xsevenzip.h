@@ -173,6 +173,14 @@ private:
         IMPTYPE_WINATTRIBDATA
     };
 
+    struct CODER_RECORD {
+        FPART_PROP method;
+        QByteArray baProperty;
+        QString sPassword;
+        qint64 nCompressedSize;
+        qint64 nUncompressedSize;
+    };
+
     struct SZRECORD {
         qint32 nRelOffset;
         qint32 nSize;
@@ -185,8 +193,8 @@ private:
     };
 
     struct SZBOND {
-        qint32 nPackIndex;
-        qint32 nUnpackIndex;
+        qint32 nInput;
+        qint32 nOutputIndex;
     };
 
     struct SZCODER {
@@ -228,12 +236,11 @@ private:
         quint64 nNumberOfCoders;
         QList<SZINSTREAM> listInStreams;
         QList<SZOUTSTREAM> listOutStreams;
+        QList<quint64> listCodersSizes;
         QList<SZFOLDER> listFolders;
         QByteArray baEmptyStreams;
         QByteArray baEmptyFiles;
         QList<QString> listFileNames;
-        qint32 nCurrentStream;
-        qint32 nCurrentSubstream;
     };
 
     QList<SZRECORD> _handleData(char *pData, qint64 nSize, PDSTRUCT *pPdStruct);

@@ -264,7 +264,7 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
             if (!ar.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) {
                 XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, XArchive::HANDLE_METHOD_STORE);
+                decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XArchive::HANDLE_METHOD_STORE);
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, ar.nStreamSize);
                 decompressState.pDeviceInput = getDevice();
                 decompressState.pDeviceOutput = pDevice;

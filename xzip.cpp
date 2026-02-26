@@ -519,29 +519,12 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
     qint64 nResult = -1;
     qint64 nSize = getSize();
 
-    // qDebug() << "findECDOffset: File size =" << nSize << "Device:" << (getDevice() ? "SET" : "NULL");
-
     if (nSize >= 22)  // 22 is minimum size [0x50,0x4B,0x05,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
     {
         qint64 nOffset = qMax((qint64)0, nSize - 0x1000);  // TODO const
 
-        // qDebug() << "findECDOffset: Starting search from offset" << nOffset;
-
-        // Debug: Read and print last 30 bytes of file
-        // if (nSize >= 30) {
-        //     QByteArray lastBytes = read_array(nSize - 30, 30);
-        //     qDebug() << "findECDOffset: Last 30 bytes of file:";
-        //     QString sHex;
-        //     for (int i = 0; i < lastBytes.size(); i++) {
-        //         sHex += QString("%1 ").arg((quint8)lastBytes[i], 2, 16, QChar('0')).toUpper();
-        //     }
-        //     qDebug() << sHex;
-        // }
-
         while (XBinary::isPdStructNotCanceled(pPdStruct)) {
             qint64 nCurrent = find_uint32(nOffset, -1, SIGNATURE_ECD, false, pPdStruct);
-
-            // qDebug() << "findECDOffset: find_uint32 returned" << nCurrent;
 
             if (nCurrent == -1) {
                 break;
@@ -571,20 +554,17 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
 
 bool XZip::isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
-    return _isRecordNamePresent(nECDOffset, "classes.dex", "AndroidManifest.xml", pPdStruct);
+    return _isRecordNamePresent(nECDOffset, "classes.dex", "AndroidManifest.xml", pPdStruct, false);
 }
 
 bool XZip::isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nECDOffset);
-    Q_UNUSED(pPdStruct);
-
-    return false;  // TODO
+    return _isRecordNamePresent(nECDOffset, "Payload/", "", pPdStruct, true);
 }
 
 bool XZip::isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
-    return _isRecordNamePresent(nECDOffset, "META-INF/MANIFEST.MF", "", pPdStruct);
+    return _isRecordNamePresent(nECDOffset, "META-INF/MANIFEST.MF", "", pPdStruct, false);
 }
 
 QString XZip::structIDToString(quint32 nID)
@@ -940,7 +920,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.nVirtualAddress = -1;
                                                 record.sName = sName;
                                                 record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
-                                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
+                                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
@@ -996,7 +976,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.nFileSize = lfh.nCompressedSize;
                             record.nVirtualAddress = -1;
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
-                            record.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
+                            record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
                             record.mapProperties.insert(FPART_PROP_CRC_VALUE, lfh.nCRC32);
@@ -1049,7 +1029,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     return listResult;
 }
 
-bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct)
+bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith)
 {
     qint32 nLimit = 10000;  // TODO
     qint64 nTotalSize = getSize();
@@ -1076,22 +1056,36 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
                 break;
             }
 
-            if ((cdh.nFileNameLength == nRecordNameSize1) && (nRecordNameSize1 == nRecordNameSize2)) {
-                QString sRecordName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
+            if (!bStartWith) {
+                if ((cdh.nFileNameLength == nRecordNameSize1) && (nRecordNameSize1 == nRecordNameSize2)) {
+                    QString sRecordName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
 
-                if ((sRecordName == sRecordName1) || (sRecordName == sRecordName2)) {
-                    return true;
+                    if ((sRecordName == sRecordName1) || (sRecordName == sRecordName2)) {
+                        return true;
+                    }
                 }
-            }
 
-            if (cdh.nFileNameLength == nRecordNameSize1) {
-                if (read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength) == sRecordName1) {
-                    return true;
+                if (cdh.nFileNameLength == nRecordNameSize1) {
+                    if (read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength) == sRecordName1) {
+                        return true;
+                    }
                 }
-            }
-            if ((nRecordNameSize2) && (cdh.nFileNameLength == nRecordNameSize2)) {
-                if (read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength) == sRecordName2) {
-                    return true;
+                if ((nRecordNameSize2) && (cdh.nFileNameLength == nRecordNameSize2)) {
+                    if (read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength) == sRecordName2) {
+                        return true;
+                    }
+                }
+            } else {
+                if (cdh.nFileNameLength >= nRecordNameSize1) {
+                    if (read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), nRecordNameSize1) == sRecordName1) {
+                        return true;
+                    }
+                }
+
+                if ((nRecordNameSize2) && (cdh.nFileNameLength >= nRecordNameSize2)) {
+                    if (read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), nRecordNameSize2) == sRecordName2) {
+                        return true;
+                    }
                 }
             }
 
@@ -1122,22 +1116,36 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
                 break;
             }
 
-            if ((lfh.nFileNameLength == nRecordNameSize1) && (nRecordNameSize1 == nRecordNameSize2)) {
-                QString sRecordName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
+            if (!bStartWith) {
+                if ((lfh.nFileNameLength == nRecordNameSize1) && (nRecordNameSize1 == nRecordNameSize2)) {
+                    QString sRecordName = read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
 
-                if ((sRecordName == sRecordName1) || (sRecordName == sRecordName2)) {
-                    return true;
+                    if ((sRecordName == sRecordName1) || (sRecordName == sRecordName2)) {
+                        return true;
+                    }
                 }
-            }
 
-            if (lfh.nFileNameLength == nRecordNameSize1) {
-                if (read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength) == sRecordName1) {
-                    return true;
+                if (lfh.nFileNameLength == nRecordNameSize1) {
+                    if (read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength) == sRecordName1) {
+                        return true;
+                    }
                 }
-            }
-            if ((nRecordNameSize2) && (lfh.nFileNameLength == nRecordNameSize2)) {
-                if (read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength) == sRecordName2) {
-                    return true;
+                if ((nRecordNameSize2) && (lfh.nFileNameLength == nRecordNameSize2)) {
+                    if (read_ansiString(nOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength) == sRecordName2) {
+                        return true;
+                    }
+                }
+            } else {
+                if (lfh.nFileNameLength >= nRecordNameSize1) {
+                    if (read_ansiString(nOffset + sizeof(LOCALFILEHEADER), nRecordNameSize1) == sRecordName1) {
+                        return true;
+                    }
+                }
+
+                if ((nRecordNameSize2) && (lfh.nFileNameLength >= nRecordNameSize2)) {
+                    if (read_ansiString(nOffset + sizeof(LOCALFILEHEADER), nRecordNameSize2) == sRecordName2) {
+                        return true;
+                    }
                 }
             }
 
@@ -1767,7 +1775,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // Compression method
         HANDLE_METHOD compressMethod = zipToCompressMethod(nMethod, nFlags);
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nMethod);  // Raw ZIP method number
 
         // CRC32
@@ -1793,7 +1801,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         if (nMethod == CMETHOD_AES) {
             result.mapProperties.insert(XBinary::FPART_PROP_ENCRYPTED, true);
-            result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_STORE);
+            result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE);
             result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES);
         }
 
@@ -1814,7 +1822,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
                     // Original compression method
                     HANDLE_METHOD compressMethod = zipToCompressMethod(aesExtraField.nCompressionMethod, nFlags);
-                    result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+                    result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
                     if (aesExtraField.nEncryptionMode == 1) {
                         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES128);

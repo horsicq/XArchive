@@ -245,7 +245,7 @@ bool XZlib::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         if (sd.open(QIODevice::ReadOnly)) {
             XBinary::DATAPROCESS_STATE state = {};
             // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
-            state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_DEFLATE);
+            state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
             state.pDeviceInput = &sd;
             QBuffer tempBuffer;
             tempBuffer.open(QIODevice::WriteOnly);
@@ -313,7 +313,7 @@ XBinary::ARCHIVERECORD XZlib::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
-    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_ZLIB);
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_ZLIB);
 
     if (pContext->nAdler32 != 0) {
         result.mapProperties.insert(FPART_PROP_CRC_VALUE, pContext->nAdler32);
@@ -344,7 +344,7 @@ bool XZlib::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
         // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
-        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, HANDLE_METHOD_DEFLATE);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;
         state.nInputOffset = 0;

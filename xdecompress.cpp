@@ -172,16 +172,16 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         pState->pDeviceOutput->seek(0);
     }
 
-    XBinary::XBinary::FPART_PROP fpHM = XBinary::FPART_PROP_HANDLEMETHOD1;
-    XBinary::XBinary::FPART_PROP fpCP = XBinary::FPART_PROP_COMPRESSPROPERTIES1;
+    XBinary::XBinary::FPART_PROP fpHandleMethod = XBinary::FPART_PROP_HANDLEMETHOD;
+    XBinary::XBinary::FPART_PROP fpCompressProperties = XBinary::FPART_PROP_COMPRESSPROPERTIES;
 
     if (nIndex == 1) {
-        fpHM = XBinary::FPART_PROP_HANDLEMETHOD2;
-        fpCP = XBinary::FPART_PROP_COMPRESSPROPERTIES2;
+        fpHandleMethod = XBinary::FPART_PROP_HANDLEMETHOD2;
+        fpCompressProperties = XBinary::FPART_PROP_COMPRESSPROPERTIES2;
     }
 
-    XBinary::HANDLE_METHOD compressMethod = (XBinary::HANDLE_METHOD)pState->mapProperties.value(fpHM, XBinary::HANDLE_METHOD_STORE).toUInt();
-    QByteArray baProperty = pState->mapProperties.value(fpCP).toByteArray();
+    XBinary::HANDLE_METHOD compressMethod = (XBinary::HANDLE_METHOD)pState->mapProperties.value(fpHandleMethod, XBinary::HANDLE_METHOD_STORE).toUInt();
+    QByteArray baProperty = pState->mapProperties.value(fpCompressProperties).toByteArray();
 
     qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
     qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
@@ -304,7 +304,7 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
             state.nInputLimit = nSize;
             state.nProcessedOffset = 0;
             state.nProcessedLimit = -1;
-            state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+            state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
             _decompress(&state, pPdStruct);
 
@@ -331,7 +331,7 @@ qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qi
         state.nInputLimit = nSize;
         state.nProcessedOffset = 0;
         state.nProcessedLimit = -1;
-        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD1, compressMethod);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
         _decompress(&state, pPdStruct);
 
