@@ -19,6 +19,8 @@
  * SOFTWARE.
  */
 #include "xaesdecoder.h"
+#include "xzipaesdecoder.h"
+#include <QBuffer>
 #include <QDebug>
 #include <cstring>
 
@@ -33,8 +35,14 @@ void XAESDecoder::deriveKey(const QString &sPassword, const QByteArray &baSalt, 
 {
     // Note: tiny-AES-c does not require table initialization
 
-    // Convert password to UTF-8 bytes
-    QByteArray baPassword = sPassword.toUtf8();
+    // Convert password to UTF-16LE bytes (7-Zip uses UTF-16LE, not UTF-8)
+    // Reference: 7zAes.cpp CalcKey() uses CBuffer<Byte> Password which stores UTF-16LE
+    QByteArray baPassword;
+    for (qint32 i = 0; i < sPassword.size(); i++) {
+        ushort ch = sPassword[i].unicode();
+        baPassword.append((char)(ch & 0xFF));
+        baPassword.append((char)((ch >> 8) & 0xFF));
+    }
 
     // Note: Test code removed to reduce debug output
     // AES-256-CBC and SHA256 implementations verified correct with NIST test vectors
@@ -279,11 +287,7 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
     }
     qDebug() << "[XAESDecoder] Derived key (first 16 bytes):" << sKeyHex;
 
-    // Initialize AES context using tiny-AES-c (avoids DD[*][0x63]=0 table singularity)
-    // struct AES_ctx aesCtx;
-    // AES_init_ctx_iv(&aesCtx, aKey, (const uint8_t *)baIV.constData());
-
-    // Debug: Show key and IV being used
+    // Show derived key in debug
     QString sKeyDebug;
     for (qint32 i = 0; i < 32; i++) {
         sKeyDebug += QString("%1 ").arg((quint8)aKey[i], 2, 16, QChar('0'));
@@ -296,136 +300,82 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
     }
     qDebug() << "[XAESDecoder] IV for AES-CBC (16 bytes):" << sIvDebug;
 
-    // Debug: Check stream position and read first block for inspection
-    qint64 nStreamPosBefore = pDecryptState->pDeviceInput->pos();
-    qDebug() << "[XAESDecoder] Stream position before decryption:" << nStreamPosBefore;
-    qDebug() << "[XAESDecoder] Input limit (total encrypted size):" << pDecryptState->nInputLimit;
+    // Read all remaining encrypted data
+    qint64 nTotalEncrypted = pDecryptState->nInputLimit - pDecryptState->nCountInput;
+    qDebug() << "[XAESDecoder] Total encrypted bytes to read:" << nTotalEncrypted;
 
-    // Decrypt data in blocks
-    const qint32 N_BUFFER_SIZE = 0x4000;  // 16KB buffer
-
-    char bufferIn[N_BUFFER_SIZE];
-    char bufferOut[N_BUFFER_SIZE];
-
-    qint64 nTotalDecrypted = 0;
-    bool bFirstBlock = true;  // Flag to log first block details
-
-    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        // Read input data
-        qint32 nBufferSize = qMin((qint32)(pDecryptState->nInputLimit - pDecryptState->nCountInput), N_BUFFER_SIZE);
-
-        qDebug() << "[XAESDecoder] Loop: nInputLimit=" << pDecryptState->nInputLimit << "nCountInput=" << pDecryptState->nCountInput << "nBufferSize=" << nBufferSize;
-
-        if (nBufferSize <= 0) {
-            qDebug() << "[XAESDecoder] Breaking: nBufferSize <= 0";
-            break;  // No more input
-        }
-
-        // Ensure we read complete AES blocks (16 bytes)
-        nBufferSize = (nBufferSize / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
-
-        qDebug() << "[XAESDecoder] After block alignment: nBufferSize=" << nBufferSize;
-
-        if (nBufferSize == 0) {
-            qDebug() << "[XAESDecoder] Breaking: nBufferSize == 0 after alignment";
-            break;  // Not enough data for even one block
-        }
-
-        qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecryptState);
-
-        if (nSize <= 0) {
-            break;  // End of input or error
-        }
-
-        // Debug: Show first block of encrypted data (first iteration only)
-        if (nTotalDecrypted == 0 && nSize >= 16) {
-            qDebug() << "[XAESDecoder] Read" << nSize << "bytes from input stream";
-            qDebug() << "[XAESDecoder] Device position after read:" << pDecryptState->pDeviceInput->pos();
-            QString sEncHex;
-            for (qint32 i = 0; i < qMin(nSize, 80); i++) {  // Show more bytes
-                sEncHex += QString("%1 ").arg((quint8)bufferIn[i], 2, 16, QChar('0'));
-            }
-            qDebug() << "[XAESDecoder] First 80 encrypted bytes:" << sEncHex;
-        }
-
-        // Ensure size is multiple of block size
-        nSize = (nSize / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
-
-        if (nSize > 0) {
-            // Copy to output buffer for in-place decryption
-            memcpy(bufferOut, bufferIn, nSize);
-
-            // Debug: Show first encrypted block (first iteration only)
-            if (nTotalDecrypted == 0 && nSize >= 16) {
-                QString sEncHex;
-                for (qint32 i = 0; i < qMin(nSize, 32); i++) {
-                    sEncHex += QString("%1 ").arg((quint8)bufferOut[i], 2, 16, QChar('0'));
-                }
-                qDebug() << "[XAESDecoder] First encrypted bytes:" << sEncHex;
-            }
-
-            // Decrypt using tiny-AES-c (operates in-place on buffer)
-            // AES_CBC_decrypt_buffer(&aesCtx, (uint8_t *)bufferOut, nSize);
-
-            // Debug: Show first block of decrypted data (first iteration only)
-            if (nTotalDecrypted == 0 && nSize >= 16) {
-                QString sDecHex;
-                for (qint32 i = 0; i < qMin(nSize, 32); i++) {
-                    sDecHex += QString("%1 ").arg((quint8)bufferOut[i], 2, 16, QChar('0'));
-                }
-                qDebug() << "[XAESDecoder] First decrypted bytes:" << sDecHex;
-            }
-
-            // Write decrypted data
-            if (!XBinary::_writeDevice(bufferOut, nSize, pDecryptState)) {
-                qWarning() << "[XAESDecoder] Failed to write decrypted data";
-                return false;
-            }
-
-            nTotalDecrypted += nSize;
-        }
+    if (nTotalEncrypted <= 0 || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
+        qWarning() << "[XAESDecoder] Invalid encrypted data size:" << nTotalEncrypted;
+        memset(aKey, 0, sizeof(aKey));
+        return false;
     }
 
-    qDebug() << "[XAESDecoder] Successfully decrypted" << nTotalDecrypted << "bytes (before padding removal)";
+    QByteArray baEncrypted;
+    baEncrypted.resize((qint32)nTotalEncrypted);
+    qint32 nRead = XBinary::_readDevice(baEncrypted.data(), (qint32)nTotalEncrypted, pDecryptState);
+    if (nRead != (qint32)nTotalEncrypted) {
+        qWarning() << "[XAESDecoder] Failed to read encrypted data: got" << nRead << "expected" << nTotalEncrypted;
+        memset(aKey, 0, sizeof(aKey));
+        return false;
+    }
 
-    // Remove PKCS#7 padding
-    // AES-CBC adds padding to make data multiple of block size (16 bytes)
-    // PKCS#7: if N bytes padding needed, add N bytes each with value N
-    // Last byte tells us how many padding bytes to remove
-    if (nTotalDecrypted > 0 && pDecryptState->pDeviceOutput) {
-        QBuffer *pBuffer = qobject_cast<QBuffer *>(pDecryptState->pDeviceOutput);
-        if (pBuffer) {
-            QByteArray &baBuffer = pBuffer->buffer();
-            if (baBuffer.size() > 0) {
-                // Read last byte (padding length)
-                quint8 nPaddingLength = (quint8)baBuffer.at(baBuffer.size() - 1);
+    // AES-256-CBC decrypt
+    QByteArray baKey32 = QByteArray((const char *)aKey, 32);
+    QByteArray baDecrypted;
+    baDecrypted.resize((qint32)nTotalEncrypted);
 
-                // Validate padding: must be 1-16, and <= total size
-                if (nPaddingLength > 0 && nPaddingLength <= 16 && nPaddingLength <= baBuffer.size()) {
-                    // Verify padding bytes
-                    bool bValidPadding = true;
-                    qint32 nPaddingStart = baBuffer.size() - nPaddingLength;
-                    for (qint32 i = nPaddingStart; i < baBuffer.size() && bValidPadding; i++) {
-                        if ((quint8)baBuffer.at(i) != nPaddingLength) {
-                            bValidPadding = false;
-                        }
+    if (!XZipAESDecoder::decryptAESCBC(baKey32, baIV, (const quint8 *)baEncrypted.constData(), (quint8 *)baDecrypted.data(), nTotalEncrypted)) {
+        qWarning() << "[XAESDecoder] AES-CBC decryption failed";
+        memset(aKey, 0, sizeof(aKey));
+        return false;
+    }
+
+    // Show first 32 decrypted bytes for debugging
+    {
+        QString sDecHex;
+        for (qint32 i = 0; i < qMin((qint32)nTotalEncrypted, 32); i++) {
+            sDecHex += QString("%1 ").arg((quint8)baDecrypted[i], 2, 16, QChar('0'));
+        }
+        qDebug() << "[XAESDecoder] First 32 decrypted bytes:" << sDecHex;
+    }
+
+    // Write decrypted data to output
+    QBuffer *pBuffer = qobject_cast<QBuffer *>(pDecryptState->pDeviceOutput);
+    if (!pBuffer) {
+        qWarning() << "[XAESDecoder] Cannot write to non-QBuffer device";
+        memset(aKey, 0, sizeof(aKey));
+        return false;
+    }
+
+    pBuffer->buffer() = baDecrypted;
+    qint64 nTotalDecrypted = nTotalEncrypted;
+
+    // Remove PKCS#7 padding from decrypted data
+    {
+        QByteArray &baBuffer = pBuffer->buffer();
+        if (baBuffer.size() > 0) {
+            quint8 nPaddingLength = (quint8)baBuffer.at(baBuffer.size() - 1);
+
+            if (nPaddingLength >= 1 && nPaddingLength <= AES_BLOCK_SIZE && nPaddingLength <= baBuffer.size()) {
+                bool bValidPadding = true;
+                qint32 nPaddingStart = baBuffer.size() - nPaddingLength;
+                for (qint32 i = nPaddingStart; i < baBuffer.size() && bValidPadding; i++) {
+                    if ((quint8)baBuffer.at(i) != nPaddingLength) {
+                        bValidPadding = false;
                     }
-
-                    if (bValidPadding) {
-                        // Remove padding
-                        baBuffer.resize(nPaddingStart);
-                        pBuffer->seek(baBuffer.size());
-                        qDebug() << "[XAESDecoder] Removed" << nPaddingLength << "bytes of PKCS#7 padding, final size:" << baBuffer.size();
-                        nTotalDecrypted = baBuffer.size();
-                    } else {
-                        qWarning() << "[XAESDecoder] Invalid PKCS#7 padding (bytes don't match length" << nPaddingLength << "), not removing";
-                    }
-                } else {
-                    qDebug() << "[XAESDecoder] Padding length" << nPaddingLength << "out of range (size:" << baBuffer.size() << "), keeping all data";
                 }
+
+                if (bValidPadding) {
+                    baBuffer.resize(nPaddingStart);
+                    pBuffer->seek(baBuffer.size());
+                    qDebug() << "[XAESDecoder] Removed" << nPaddingLength << "bytes of PKCS#7 padding, final size:" << baBuffer.size();
+                    nTotalDecrypted = baBuffer.size();
+                } else {
+                    qWarning() << "[XAESDecoder] Invalid PKCS#7 padding byte pattern, keeping all data";
+                }
+            } else {
+                qDebug() << "[XAESDecoder] Padding length" << nPaddingLength << "out of range, keeping all data";
             }
-        } else {
-            qWarning() << "[XAESDecoder] Cannot remove padding from non-QBuffer device";
         }
     }
 
@@ -433,7 +383,6 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
 
     // Zero out sensitive data
     memset(aKey, 0, sizeof(aKey));
-    // memset(&aesCtx, 0, sizeof(aesCtx));  // Zero out AES context
 
     return nTotalDecrypted > 0;
 }

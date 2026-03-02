@@ -47,6 +47,11 @@ public:
     static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod,
                         XBinary::PDSTRUCT *pPdStruct = nullptr);
 
+    // AES-256-CBC decryption used by 7z AES decoder
+    // baKey: 32-byte AES-256 key, baIV: 16-byte IV
+    // pInputData/pOutputData: buffers of nSize bytes (must be multiple of 16)
+    static bool decryptAESCBC(const QByteArray &baKey, const QByteArray &baIV, const quint8 *pInputData, quint8 *pOutputData, qint64 nSize);
+
 private:
     static void pbkdf2(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nIterations, qint32 nKeyLength, QByteArray &baResult);
     static bool deriveKeys(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nKeySize, QByteArray &baAESKey, QByteArray &baPasswordVerify,

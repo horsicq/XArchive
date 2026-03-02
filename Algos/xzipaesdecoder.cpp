@@ -107,7 +107,7 @@ bool XZipAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const
         qint32 nKeySize = 0;
         qint32 nSaltSize = 0;
 
-        if (cryptoMethod == XBinary::HANDLE_METHOD_AES256) {
+        if (cryptoMethod == XBinary::HANDLE_METHOD_ZIP_AES256) {
             nKeySize = 32;   // 256 bits
             nSaltSize = 16;  // Salt size for AES-256
         } else {
@@ -493,6 +493,128 @@ void XZipAESDecoder::custom_aes_encrypt(const quint8 *pInput, quint8 *pOutput, c
     }
 }
 
+//------------------------------------------------------------------------------
+// AES Inverse Cipher Implementation (for CBC decryption)
+//------------------------------------------------------------------------------
+
+// InvSubBytes: apply inverse S-box to every byte of state
+static void InvSubBytes(quint8 *pState)
+{
+    for (qint32 i = 0; i < 16; i++) {
+        pState[i] = s_aes_inv_sbox[pState[i]];
+    }
+}
+
+// InvShiftRows: reverse of ShiftRows (shift rows right)
+static void InvShiftRows(quint8 *pState)
+{
+    quint8 temp;
+
+    // Row 1: shift right by 1 (indices 1,5,9,13)
+    temp        = pState[13];
+    pState[13]  = pState[9];
+    pState[9]   = pState[5];
+    pState[5]   = pState[1];
+    pState[1]   = temp;
+
+    // Row 2: shift right by 2 = swap pairs (indices 2,6,10,14)
+    temp        = pState[2];
+    pState[2]   = pState[10];
+    pState[10]  = temp;
+    temp        = pState[6];
+    pState[6]   = pState[14];
+    pState[14]  = temp;
+
+    // Row 3: shift right by 3 = left by 1 (indices 3,7,11,15)
+    temp        = pState[3];
+    pState[3]   = pState[7];
+    pState[7]   = pState[11];
+    pState[11]  = pState[15];
+    pState[15]  = temp;
+}
+
+// InvMixColumns: multiply each column by the inverse MDS matrix in GF(2^8)
+static void InvMixColumns(quint8 *pState)
+{
+    quint8 a0, a1, a2, a3;
+
+    for (qint32 i = 0; i < 4; i++) {
+        a0 = pState[i * 4 + 0];
+        a1 = pState[i * 4 + 1];
+        a2 = pState[i * 4 + 2];
+        a3 = pState[i * 4 + 3];
+
+        pState[i * 4 + 0] = gf_mul(a0, 0x0e) ^ gf_mul(a1, 0x0b) ^ gf_mul(a2, 0x0d) ^ gf_mul(a3, 0x09);
+        pState[i * 4 + 1] = gf_mul(a0, 0x09) ^ gf_mul(a1, 0x0e) ^ gf_mul(a2, 0x0b) ^ gf_mul(a3, 0x0d);
+        pState[i * 4 + 2] = gf_mul(a0, 0x0d) ^ gf_mul(a1, 0x09) ^ gf_mul(a2, 0x0e) ^ gf_mul(a3, 0x0b);
+        pState[i * 4 + 3] = gf_mul(a0, 0x0b) ^ gf_mul(a1, 0x0d) ^ gf_mul(a2, 0x09) ^ gf_mul(a3, 0x0e);
+    }
+}
+
+// AES block decryption: Direct Inverse Cipher using encrypt round keys in reverse order
+// (FIPS 197, Section 5.3 / Algorithm 3)
+static void custom_aes_decrypt_block(const quint8 *pInput, quint8 *pOutput, const CUSTOM_AES_KEY *pKey)
+{
+    quint8 state[16];
+    qint32 nRound;
+
+    for (qint32 i = 0; i < 16; i++) {
+        state[i] = pInput[i];
+    }
+
+    // Initial AddRoundKey with last round key
+    AddRoundKey(state, pKey->rd_key + pKey->rounds * 4);
+
+    // Main inverse rounds (Nr-1 down to 1)
+    for (nRound = pKey->rounds - 1; nRound >= 1; nRound--) {
+        InvShiftRows(state);
+        InvSubBytes(state);
+        AddRoundKey(state, pKey->rd_key + nRound * 4);
+        InvMixColumns(state);
+    }
+
+    // Final round (no InvMixColumns)
+    InvShiftRows(state);
+    InvSubBytes(state);
+    AddRoundKey(state, pKey->rd_key);
+
+    for (qint32 i = 0; i < 16; i++) {
+        pOutput[i] = state[i];
+    }
+}
+
+bool XZipAESDecoder::decryptAESCBC(const QByteArray &baKey, const QByteArray &baIV, const quint8 *pInputData, quint8 *pOutputData, qint64 nSize)
+{
+    if (!pInputData || !pOutputData || nSize <= 0 || (nSize % N_AES_BLOCK_SIZE) != 0) {
+        return false;
+    }
+    if (baKey.isEmpty() || baIV.size() < N_AES_BLOCK_SIZE) {
+        return false;
+    }
+
+    CUSTOM_AES_KEY customKey;
+    if (custom_aes_set_encrypt_key((const quint8 *)baKey.constData(), baKey.size() * 8, &customKey) != 0) {
+        return false;
+    }
+
+    quint8 prevBlock[N_AES_BLOCK_SIZE];
+    memcpy(prevBlock, baIV.constData(), N_AES_BLOCK_SIZE);
+
+    for (qint64 nOffset = 0; nOffset + N_AES_BLOCK_SIZE <= nSize; nOffset += N_AES_BLOCK_SIZE) {
+        quint8 decryptedBlock[N_AES_BLOCK_SIZE];
+        custom_aes_decrypt_block(pInputData + nOffset, decryptedBlock, &customKey);
+
+        // CBC XOR with previous ciphertext block (or IV for first block)
+        for (qint32 i = 0; i < N_AES_BLOCK_SIZE; i++) {
+            pOutputData[nOffset + i] = decryptedBlock[i] ^ prevBlock[i];
+        }
+
+        memcpy(prevBlock, pInputData + nOffset, N_AES_BLOCK_SIZE);
+    }
+
+    return true;
+}
+
 bool XZipAESDecoder::decryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize,
                                    XBinary::PDSTRUCT *pPdStruct)
 {
@@ -609,7 +731,7 @@ bool XZipAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const Q
         qint32 nKeySize = 0;
         qint32 nSaltSize = 0;
 
-        if (cryptoMethod == XBinary::HANDLE_METHOD_AES256) {
+        if (cryptoMethod == XBinary::HANDLE_METHOD_ZIP_AES256) {
             nKeySize = 32;   // 256 bits
             nSaltSize = 16;  // Salt size for AES-256
         } else {

@@ -21,6 +21,7 @@
 #ifndef XDECOMPRESS_H
 #define XDECOMPRESS_H
 
+#include "xaesdecoder.h"
 #include "xzipaesdecoder.h"
 #include "xzipcryptodecoder.h"
 #include "xlzhdecoder.h"

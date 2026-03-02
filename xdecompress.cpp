@@ -267,18 +267,21 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             bResult = true;
         }
-    } else if ((compressMethod == XBinary::HANDLE_METHOD_AES) || (compressMethod == XBinary::HANDLE_METHOD_AES128) ||
-               (compressMethod == XBinary::HANDLE_METHOD_AES192 || (compressMethod == XBinary::HANDLE_METHOD_AES256))) {
+    } else if ((compressMethod == XBinary::HANDLE_METHOD_ZIP_AES) || (compressMethod == XBinary::HANDLE_METHOD_ZIP_AES128) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ZIP_AES192 || (compressMethod == XBinary::HANDLE_METHOD_ZIP_AES256))) {
         QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
 
-        if (compressMethod == XBinary::HANDLE_METHOD_AES) {
-            compressMethod = XBinary::HANDLE_METHOD_AES256;
+        if (compressMethod == XBinary::HANDLE_METHOD_ZIP_AES) {
+            compressMethod = XBinary::HANDLE_METHOD_ZIP_AES256;
         }
 
         bResult = XZipAESDecoder::decrypt(pState, sPassword, compressMethod, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ZIPCRYPTO) {
         QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
         bResult = XZipCryptoDecoder::decrypt(pState, sPassword, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_7Z_AES) {
+        QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+        bResult = XAESDecoder::decrypt(pState, baProperty, sPassword, pPdStruct);
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::handleMethodToString(compressMethod);

@@ -193,7 +193,7 @@ private:
     };
 
     struct SZBOND {
-        qint32 nInput;
+        qint32 nInputIndex;
         qint32 nOutputIndex;
     };
 
@@ -249,6 +249,8 @@ private:
     quint8 _handleByte(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
     quint32 _handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
     QByteArray _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
+
+    bool _decompress(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, QIODevice *pDeviceOut, qint32 nFolderIndex, SZSTATE *pState, PDSTRUCT *pPdStruct);
 };
 
 #endif  // XSEVENZIP_H

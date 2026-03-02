@@ -1222,7 +1222,7 @@ XArchive::HANDLE_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nF
         case CMETHOD_LZMA: result = HANDLE_METHOD_LZMA; break;
         case CMETHOD_XZ: result = HANDLE_METHOD_XZ; break;
         case CMETHOD_PPMD: result = HANDLE_METHOD_PPMD8; break;
-        case CMETHOD_AES: result = HANDLE_METHOD_AES; break;
+        case CMETHOD_AES: result = HANDLE_METHOD_ZIP_AES; break;
     }
     // TODO more methods
 
@@ -1802,7 +1802,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         if (nMethod == CMETHOD_AES) {
             result.mapProperties.insert(XBinary::FPART_PROP_ENCRYPTED, true);
             result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE);
-            result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES);
+            result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_ZIP_AES);
         }
 
         result.mapProperties.insert(XBinary::FPART_PROP_EXTRAFIELDOFFSET, nExtraFieldOffset);
@@ -1825,11 +1825,11 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
                     result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
                     if (aesExtraField.nEncryptionMode == 1) {
-                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES128);
+                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_ZIP_AES128);
                     } else if (aesExtraField.nEncryptionMode == 2) {
-                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES192);
+                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_ZIP_AES192);
                     } else if (aesExtraField.nEncryptionMode == 3) {
-                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_AES256);
+                        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_ZIP_AES256);
                     }
                 }
             }
