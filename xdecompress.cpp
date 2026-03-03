@@ -35,7 +35,7 @@ bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDevic
     state.nProcessedOffset = 0;
     state.nProcessedLimit = -1;
 
-    return _decompress(&state, pPdStruct);
+    return multiDecompress(&state, pPdStruct);
 }
 
 bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct)
@@ -50,7 +50,7 @@ bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveR
     state.nProcessedOffset = 0;
     state.nProcessedLimit = -1;
 
-    return _decompress(&state, pPdStruct);
+    return multiDecompress(&state, pPdStruct);
 }
 
 bool XDecompress::checkCRC(const QMap<XBinary::FPART_PROP, QVariant> &mapProperties, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
@@ -86,7 +86,7 @@ bool XDecompress::checkCRC(const QMap<XBinary::FPART_PROP, QVariant> &mapPropert
     return bResult;
 }
 
-bool XDecompress::_decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -94,12 +94,12 @@ bool XDecompress::_decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTR
 
     qint32 nNumberOfMethods = 1;
 
-    if (pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD2, XBinary::HANDLE_METHOD_UNKNOWN) != XBinary::HANDLE_METHOD_UNKNOWN) {
+    if (pState->mapProperties.contains(XBinary::FPART_PROP_HANDLEMETHOD2)) {
         nNumberOfMethods = 2;
     }
 
     if ((nNumberOfMethods == 1) && (!bIsSolid)) {
-        bResult = decompress(pState, pPdStruct, 0);
+        bResult = decompress(pState, pPdStruct);
     } else {
         QIODevice *pDeviceInput = nullptr;
         QIODevice *pDeviceOutput = nullptr;
@@ -109,6 +109,34 @@ bool XDecompress::_decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTR
 
         for (qint32 i = nNumberOfMethods - 1; i >= 0; i--) {
             XBinary::DATAPROCESS_STATE state = *pState;
+
+            XBinary::XBinary::FPART_PROP fpHandleMethod = XBinary::FPART_PROP_HANDLEMETHOD;
+            XBinary::XBinary::FPART_PROP fpCompressProperties = XBinary::FPART_PROP_COMPRESSPROPERTIES;
+            XBinary::XBinary::FPART_PROP fpCompressedSize = XBinary::FPART_PROP_COMPRESSEDSIZE;
+            XBinary::XBinary::FPART_PROP fpUncompressedSize = XBinary::FPART_PROP_UNCOMPRESSEDSIZE;
+
+            if (i == 1) {
+                if (pState->mapProperties.contains(XBinary::FPART_PROP_HANDLEMETHOD2)) {
+                    fpHandleMethod = XBinary::FPART_PROP_HANDLEMETHOD2;
+                }
+
+                if (pState->mapProperties.contains(XBinary::FPART_PROP_COMPRESSPROPERTIES2)) {
+                    fpCompressProperties = XBinary::FPART_PROP_COMPRESSPROPERTIES2;
+                }
+
+                if (pState->mapProperties.contains(XBinary::FPART_PROP_COMPRESSEDSIZE2)) {
+                    fpCompressedSize = XBinary::FPART_PROP_COMPRESSEDSIZE2;
+                }
+
+                if (pState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE2)) {
+                    fpUncompressedSize = XBinary::FPART_PROP_UNCOMPRESSEDSIZE2;
+                }
+            }
+
+            state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, pState->mapProperties.value(fpHandleMethod));
+            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSPROPERTIES, pState->mapProperties.value(fpCompressProperties));
+            state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, pState->mapProperties.value(fpCompressedSize));
+            state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pState->mapProperties.value(fpUncompressedSize));
 
             state.pDeviceInput = nullptr;
             state.pDeviceOutput = nullptr;
@@ -131,7 +159,7 @@ bool XDecompress::_decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTR
                 state.pDeviceOutput = pDeviceOutput;
             }
 
-            bResult = decompress(&state, pPdStruct, i);
+            bResult = decompress(&state, pPdStruct);
             nIntermediateSize = state.nCountOutput;  // Track how many bytes were written
 
             if (pDeviceInput) {
@@ -160,7 +188,7 @@ bool XDecompress::_decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTR
     return bResult;
 }
 
-bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct, qint32 nIndex)
+bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = true;
 
@@ -172,17 +200,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         pState->pDeviceOutput->seek(0);
     }
 
-    XBinary::XBinary::FPART_PROP fpHandleMethod = XBinary::FPART_PROP_HANDLEMETHOD;
-    XBinary::XBinary::FPART_PROP fpCompressProperties = XBinary::FPART_PROP_COMPRESSPROPERTIES;
-
-    if (nIndex == 1) {
-        fpHandleMethod = XBinary::FPART_PROP_HANDLEMETHOD2;
-        fpCompressProperties = XBinary::FPART_PROP_COMPRESSPROPERTIES2;
-    }
-
-    XBinary::HANDLE_METHOD compressMethod = (XBinary::HANDLE_METHOD)pState->mapProperties.value(fpHandleMethod, XBinary::HANDLE_METHOD_STORE).toUInt();
-    QByteArray baProperty = pState->mapProperties.value(fpCompressProperties).toByteArray();
-
+    XBinary::HANDLE_METHOD compressMethod = (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE).toUInt();
+    QByteArray baProperty = pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSPROPERTIES).toByteArray();
     qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
     qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
 
@@ -194,7 +213,52 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP2) {
         bResult = XBZIP2Decoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZMA) {
-        bResult = XLZMADecoder::decompress(pState, pPdStruct);
+        if (!baProperty.isEmpty()) {
+            bResult = XLZMADecoder::decompress(pState, baProperty, pPdStruct);
+        } else {
+            bResult = XLZMADecoder::decompress(pState, pPdStruct);
+        }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZMA2) {
+        if (!baProperty.isEmpty()) {
+            bResult = XLZMADecoder::decompressLZMA2(pState, baProperty, pPdStruct);
+        } else {
+            bResult = XLZMADecoder::decompressLZMA2(pState, pPdStruct);
+        }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_BCJ) {
+        // x86 BCJ inverse filter (7-Zip compatible)
+        // Only transforms E8/E9 instructions where MSB of 4-byte operand is 0x00 or 0xFF
+        if (pState->pDeviceInput && pState->pDeviceOutput) {
+            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
+            pState->nCountInput = baData.size();
+
+            qint32 nSize = baData.size();
+            unsigned char *pData = reinterpret_cast<unsigned char *>(baData.data());
+            qint32 nPos = 0;
+
+            while (nPos < nSize - 4) {
+                unsigned char b = pData[nPos];
+                if (b == 0xE8 || b == 0xE9) {
+                    unsigned char bMSB = pData[nPos + 4];
+                    if (bMSB == 0x00 || bMSB == 0xFF) {
+                        quint32 nSrc = (quint32)pData[nPos + 1] | ((quint32)pData[nPos + 2] << 8) | ((quint32)pData[nPos + 3] << 16) | ((quint32)bMSB << 24);
+                        quint32 nDest = nSrc - (quint32)(nPos + 5);
+                        pData[nPos + 1] = (unsigned char)(nDest);
+                        pData[nPos + 2] = (unsigned char)(nDest >> 8);
+                        pData[nPos + 3] = (unsigned char)(nDest >> 16);
+                        pData[nPos + 4] = (unsigned char)(nDest >> 24);
+                        nPos += 5;
+                    } else {
+                        nPos++;
+                    }
+                } else {
+                    nPos++;
+                }
+            }
+
+            qint64 nWritten = pState->pDeviceOutput->write(baData);
+            pState->nCountOutput = nWritten;
+            bResult = (nWritten == (qint64)baData.size());
+        }
     } else if (compressMethod == XBinary::HANDLE_METHOD_XZ) {
         bResult = XLZMADecoder::decompressXZ(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_PPMD7) {
@@ -275,7 +339,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             compressMethod = XBinary::HANDLE_METHOD_ZIP_AES256;
         }
 
-        bResult = XZipAESDecoder::decrypt(pState, sPassword, compressMethod, pPdStruct);
+        bResult = XAESDecoder::decrypt(pState, sPassword, compressMethod, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ZIPCRYPTO) {
         QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
         bResult = XZipCryptoDecoder::decrypt(pState, sPassword, pPdStruct);
@@ -309,7 +373,7 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
             state.nProcessedLimit = -1;
             state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
-            _decompress(&state, pPdStruct);
+            multiDecompress(&state, pPdStruct);
 
             buffer.close();
         }
@@ -336,7 +400,7 @@ qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qi
         state.nProcessedLimit = -1;
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
-        _decompress(&state, pPdStruct);
+        multiDecompress(&state, pPdStruct);
 
         nResult = state.nCountInput;
     }

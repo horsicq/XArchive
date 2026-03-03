@@ -260,42 +260,28 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, cons
         return false;
     }
 
-    // qDebug("XLZMADecoder::decompress() called with baProperty.size()=%d, nInputLimit=%lld",
-    //        baProperty.size(), pDecompressState->nInputLimit);
-
-    // Dump LZMA properties
-    // if (baProperty.size() >= 5) {
-    //     qDebug("  LZMA Properties (hex): %02x %02x %02x %02x %02x",
-    //            (unsigned char)baProperty[0], (unsigned char)baProperty[1],
-    //            (unsigned char)baProperty[2], (unsigned char)baProperty[3],
-    //            (unsigned char)baProperty[4]);
-    // }
-
     pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     pDecompressState->pDeviceOutput->seek(0);
 
     CLzmaDec state = {};
     SRes ret = LzmaProps_Decode(&state.prop, (Byte *)baProperty.constData(), baProperty.size());
 
-    if (ret != 0) {  // S_OK
-        // qDebug("XLZMADecoder::decompress() FAILED: LzmaProps_Decode returned %d", ret);
+    if (ret != 0) {
+        qDebug("[LZMA] LzmaProps_Decode FAILED: %d", ret);
         return false;
     }
 
     LzmaDec_Construct(&state);
     ret = LzmaDec_Allocate(&state, (Byte *)baProperty.constData(), baProperty.size(), &g_Alloc);
 
-    if (ret != 0) {  // S_OK
-        // qDebug("XLZMADecoder::decompress() FAILED: LzmaDec_Allocate returned %d", ret);
+    if (ret != 0) {
+        qDebug("[LZMA] LzmaDec_Allocate FAILED: %d", ret);
         return false;
     }
 
     LzmaDec_Init(&state);
     bool bResult = _decompressLZMACommon(&state, pDecompressState, pPdStruct);
     LzmaDec_Free(&state, &g_Alloc);
-
-    // qDebug("XLZMADecoder::decompress() result: %s, decompressed size: %lld",
-    //        bResult ? "TRUE" : "FALSE", pDecompressState->nCountOutput);
 
     return bResult;
 }

@@ -46,8 +46,10 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xipa.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xipa.h
     ${CMAKE_CURRENT_LIST_DIR}/xiso9660.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xiso9660.h    ${CMAKE_CURRENT_LIST_DIR}/xudf.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xudf.h    ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xiso9660.h
+    ${CMAKE_CURRENT_LIST_DIR}/xudf.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xudf.h
+    ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xjar.h
     ${CMAKE_CURRENT_LIST_DIR}/xlha.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlha.h
@@ -111,8 +113,6 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xreducedecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipcryptodecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipcryptodecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipaesdecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzipaesdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmddecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmddecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmdrangedecoder.cpp

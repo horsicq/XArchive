@@ -133,9 +133,6 @@ private:
         QMap<QString, QIODevice *> mapDevices;
     };
 
-    bool _decompress(QIODevice *pDevice, HANDLE_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize,
-                     PDSTRUCT *pPdStruct);
-
     enum SRTYPE {
         SRTYPE_UNKNOWN = 0,
         SRTYPE_ID,
@@ -240,9 +237,20 @@ private:
         QList<SZFOLDER> listFolders;
         QByteArray baEmptyStreams;
         QByteArray baEmptyFiles;
+        QByteArray baAnti;
+        QByteArray baCTime;
+        QByteArray baATime;
+        QByteArray baMTime;
+        QByteArray baWinAttrib;
+        QByteArray baComment;
+        QByteArray baStartPos;
         QList<QString> listFileNames;
+        QList<quint64> listNumUnpackedStreams;  // per-folder file count (from SubStreamsInfo)
+        QList<qint64> listFileSizes;            // per-file unpacked sizes (from SubStreamsInfo)
+        QList<quint32> listFileCRC;             // per-file CRC32 values (from SubStreamsInfo)
     };
 
+    void _printRecords(QList<SZRECORD> *pListRecords);
     QList<SZRECORD> _handleData(char *pData, qint64 nSize, PDSTRUCT *pPdStruct);
     bool _handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, qint32 nCount, bool bCheck, PDSTRUCT *pPdStruct, IMPTYPE impType);
     quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, quint32 nFlags, IMPTYPE impType);

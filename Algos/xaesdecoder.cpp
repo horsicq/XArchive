@@ -19,13 +19,10 @@
  * SOFTWARE.
  */
 #include "xaesdecoder.h"
-#include "xzipaesdecoder.h"
 #include <QBuffer>
+#include <QCryptographicHash>
 #include <QDebug>
 #include <cstring>
-
-// AES constants
-#define AES_BLOCK_SIZE 16
 
 XAESDecoder::XAESDecoder(QObject *parent) : QObject(parent)
 {
@@ -77,36 +74,12 @@ void XAESDecoder::deriveKey(const QString &sPassword, const QByteArray &baSalt, 
         baBuffer[nCounterOffset + 3] = (nRound >> 24) & 0xFF;
         // Bytes 4-7 remain zero
 
-        // Debug: Show first 3 rounds
-        if (nRound < 3) {
-            QString sRoundHex;
-            for (qint32 i = 0; i < baBuffer.size(); i++) {
-                sRoundHex += QString("%1 ").arg((quint8)baBuffer[i], 2, 16, QChar('0'));
-            }
-            qDebug() << QString("[XAESDecoder] Round %1 buffer:").arg(nRound) << sRoundHex;
-        }
-
         // Hash: Salt + Password + Counter
         XSha256Decoder::update(&sha, (const quint8 *)baBuffer.constData(), baBuffer.size());
     }
 
     // Finalize and get the key
     XSha256Decoder::final(&sha, pKey);
-
-    // Debug: Show derived key
-    QString sKeyHex;
-    for (qint32 i = 0; i < 32; i++) {
-        sKeyHex += QString("%1 ").arg((quint8)pKey[i], 2, 16, QChar('0'));
-    }
-    qDebug() << "[XAESDecoder] Derived key:" << sKeyHex;
-
-    // Debug: Show buffer structure
-    QString sBufferHex;
-    for (qint32 i = 0; i < qMin(baBuffer.size(), 64); i++) {
-        sBufferHex += QString("%1 ").arg((quint8)baBuffer[i], 2, 16, QChar('0'));
-    }
-    qDebug() << "[XAESDecoder] Buffer (first 64 bytes):" << sBufferHex;
-    qDebug() << "[XAESDecoder] Buffer size:" << baBuffer.size() << "NumRounds:" << nNumRounds;
 }
 
 bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByteArray &baProperties, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct)
@@ -121,25 +94,11 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
         return false;
     }
 
-    // Debug: Show raw properties
-    QString sPropsHex;
-    for (qint32 i = 0; i < qMin(baProperties.size(), 32); i++) {
-        sPropsHex += QString("%1 ").arg((quint8)baProperties[i], 2, 16, QChar('0'));
-    }
-    qDebug() << "[XAESDecoder] Raw properties:" << sPropsHex;
-    qDebug() << "[XAESDecoder] Properties size:" << baProperties.size();
-
-    // Debug: Show all properties bytes
-    QString sAllPropsHex;
-    for (qint32 i = 0; i < baProperties.size(); i++) {
-        sAllPropsHex += QString("%1 ").arg((quint8)baProperties[i], 2, 16, QChar('0'));
-    }
-    qDebug() << "[XAESDecoder] All properties:" << sAllPropsHex;
-
     // Parse properties: FirstByte + Salt (0-16 bytes) + IV (16 bytes)
     // FirstByte format (from 7-Zip source):
     //   Bits 0-5: NumCyclesPower (0-63, typically 19 for 524288 iterations)
-    //   Bits 6-7: SaltSize code (0-3 → 0,4,8,16 bytes respectively)
+    //   Bit 6: IV flag
+    //   Bit 7: Salt flag
     if (baProperties.size() < 1) {
         qWarning() << "[XAESDecoder] Invalid properties size:" << baProperties.size();
         return false;
@@ -151,37 +110,13 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
     quint8 nSaltSize = 0;
     quint8 nIVSizeInProps = 0;
 
-    qDebug() << "[XAESDecoder] FirstByte: 0x" << QString::number(nFirstByte, 16) << " = 0b" << QString::number(nFirstByte, 2).rightJustified(8, '0');
-    qDebug() << "[XAESDecoder]   Bits 6-7: 0x" << QString::number((nFirstByte & 0xC0), 16) << " (bit 7=" << ((nFirstByte >> 7) & 1)
-             << ", bit 6=" << ((nFirstByte >> 6) & 1) << ")";
-
-    // According to 7-Zip SDK (7zAes.cpp CDecoder::SetDecoderProperties2):
-    // OLD FORMAT: (b0 & 0xC0) == 0 (NEITHER bit 6 nor bit 7 set)
-    //   - Properties: [FirstByte] only (1 byte)
-    //   - Salt size encoded in bits 6-7 of FirstByte (but both are 0, so no salt!)
-    //   - IV must be read from stream
-    // NEW FORMAT: (b0 & 0xC0) != 0 (AT LEAST ONE of bits 6-7 set)
-    //   - Properties: [FirstByte][SecondByte][Salt][IV]
-    //   - Salt/IV sizes calculated from FirstByte and SecondByte
-
     if ((nFirstByte & 0xC0) == 0) {
         // OLD FORMAT: No salt, no IV in properties
-        qDebug() << "[XAESDecoder] Using OLD format (bits 6-7 both zero)";
         nSaltSize = 0;
         nIVSizeInProps = 0;
-
-        if (baProperties.size() != 1) {
-            qWarning() << "[XAESDecoder] OLD format expects 1 byte, got" << baProperties.size();
-            // Continue anyway - maybe it's already appended
-        }
     } else {
         // NEW FORMAT (7-Zip 9.20+): Properties contain Salt and/or IV
         // Format: [FirstByte][SecondByte][Salt][IV]
-        // FirstByte: bits 0-5=NumCyclesPower, bit 6=IV flag, bit 7=Salt flag
-        // SecondByte: bits 4-7=SaltSize part, bits 0-3=IVSize part
-
-        qDebug() << "[XAESDecoder] Using NEW format (at least one of bits 6-7 set)";
-
         if (baProperties.size() < 2) {
             qWarning() << "[XAESDecoder] New format properties too small:" << baProperties.size();
             return false;
@@ -189,46 +124,25 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
 
         quint8 nSecondByte = (quint8)baProperties[1];
 
-        // CRITICAL: 7-Zip SDK decoder formula (from 7zAes.cpp lines 252-253):
+        // CRITICAL: 7-Zip SDK decoder formula (from 7zAes.cpp):
         // const unsigned saltSize = ((b0 >> 7) & 1) + (b1 >> 4);
         // const unsigned ivSize   = ((b0 >> 6) & 1) + (b1 & 0x0F);
-        // The flag bit value (0 or 1) is ADDED to the encoded value from SecondByte
-
         nSaltSize = ((nFirstByte >> 7) & 1) + (nSecondByte >> 4);
         nIVSizeInProps = ((nFirstByte >> 6) & 1) + (nSecondByte & 0x0F);
-
-        qDebug() << "[XAESDecoder]   SecondByte: 0x" << QString::number(nSecondByte, 16);
-        qDebug() << "[XAESDecoder]   Salt: flag bit=" << ((nFirstByte >> 7) & 1) << "+ encoded=" << (nSecondByte >> 4) << "= size" << nSaltSize;
-        qDebug() << "[XAESDecoder]   IV: flag bit=" << ((nFirstByte >> 6) & 1) << "+ encoded=" << (nSecondByte & 0x0F) << "= size" << nIVSizeInProps;
 
         qint32 nExpectedSize = 2 + nSaltSize + nIVSizeInProps;
         if (baProperties.size() < nExpectedSize) {
             qWarning() << "[XAESDecoder] New format size mismatch: got" << baProperties.size() << "expected at least" << nExpectedSize;
             return false;
         }
-
-        qDebug() << "[XAESDecoder] NEW format: SaltSize=" << nSaltSize << "IVSize=" << nIVSizeInProps;
     }
 
     // Extract salt from properties
-    // OLD format: no second byte, no salt (nSaltSize should be 0)
-    // NEW format: starts at offset 2 (after FirstByte and SecondByte)
     qint32 nSaltOffset = ((nFirstByte & 0xC0) == 0) ? 1 : 2;
     QByteArray baSalt;
     if (nSaltSize > 0) {
         baSalt = baProperties.mid(nSaltOffset, nSaltSize);
-        qDebug() << "[XAESDecoder] Extracted" << nSaltSize << "bytes of salt from offset" << nSaltOffset;
-    } else {
-        qDebug() << "[XAESDecoder] No salt (size=0)";
-
-        // DEBUGGING: Check if 7z might be using a default salt
-        // According to 7-Zip SDK encoder (7zAes.cpp CEncoder::WriteCoderProperties):
-        // When there's no explicit salt/IV, older versions might behave differently
-        qDebug() << "[XAESDecoder] NOTE: 7z encoder typically generates random salt/IV";
-        qDebug() << "[XAESDecoder] If SecondByte encoding is wrong, salt might be hidden";
     }
-
-    qDebug() << "[XAESDecoder] Salt offset:" << nSaltOffset << "size:" << nSaltSize;
 
     // Extract IV
     QByteArray baIV;
@@ -236,73 +150,29 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
         // NEW FORMAT: IV is in properties after salt
         qint32 nIVOffset = nSaltOffset + nSaltSize;
         baIV = baProperties.mid(nIVOffset, nIVSizeInProps);
-        qDebug() << "[XAESDecoder] IV extracted from properties:" << nIVSizeInProps << "bytes";
     } else {
-        // OLD FORMAT or SOLID: IV must be read from stream or appended to properties
-        // Check if caller already appended IV to properties (solid archives do this)
+        // OLD FORMAT or SOLID: check if IV was appended to properties
         qint32 nExpectedWithIV = nSaltOffset + nSaltSize + 16;
         if (baProperties.size() >= nExpectedWithIV) {
-            // IV was appended by caller (solid archive case)
             baIV = baProperties.mid(nSaltOffset + nSaltSize, 16);
-            qDebug() << "[XAESDecoder] IV extracted from appended properties";
         } else {
-            // IV in stream (typical non-solid case)
-            qint64 nDevicePos = pDecryptState->pDeviceInput->pos();
-            qDebug() << "[XAESDecoder] Reading IV from stream at position" << nDevicePos;
-
+            // IV in stream
             baIV.resize(16);
             qint64 nIvRead = pDecryptState->pDeviceInput->read(baIV.data(), 16);
             if (nIvRead != 16) {
-                qWarning() << "[XAESDecoder] Failed to read IV from stream: got" << nIvRead << "bytes, expected 16";
+                qWarning() << "[XAESDecoder] Failed to read IV from stream: got" << nIvRead << "bytes";
                 return false;
             }
             pDecryptState->nCountInput += 16;
-            qDebug() << "[XAESDecoder] IV read from stream, now at position" << pDecryptState->pDeviceInput->pos();
         }
     }
-
-    // Debug: Show salt and IV
-    QString sSaltHex, sIvHex;
-    for (qint32 i = 0; i < baSalt.size(); i++) {
-        sSaltHex += QString("%1 ").arg((quint8)baSalt[i], 2, 16, QChar('0'));
-    }
-    for (qint32 i = 0; i < baIV.size(); i++) {
-        sIvHex += QString("%1 ").arg((quint8)baIV[i], 2, 16, QChar('0'));
-    }
-
-    qDebug() << "[XAESDecoder] NumCyclesPower:" << nNumCyclesPower;
-    qDebug() << "[XAESDecoder] SaltSize:" << nSaltSize;
-    qDebug() << "[XAESDecoder] Salt:" << sSaltHex;
-    qDebug() << "[XAESDecoder] IV:" << sIvHex;
-    qDebug() << "[XAESDecoder] Password:" << sPassword;
 
     // Derive key from password
     quint8 aKey[32];  // AES-256 key
     deriveKey(sPassword, baSalt, nNumCyclesPower, aKey);
 
-    // Debug: Show derived key (first 16 bytes)
-    QString sKeyHex;
-    for (qint32 i = 0; i < 16; i++) {
-        sKeyHex += QString("%1 ").arg(aKey[i], 2, 16, QChar('0'));
-    }
-    qDebug() << "[XAESDecoder] Derived key (first 16 bytes):" << sKeyHex;
-
-    // Show derived key in debug
-    QString sKeyDebug;
-    for (qint32 i = 0; i < 32; i++) {
-        sKeyDebug += QString("%1 ").arg((quint8)aKey[i], 2, 16, QChar('0'));
-    }
-    qDebug() << "[XAESDecoder] Key for AES-256-CBC (32 bytes):" << sKeyDebug;
-
-    QString sIvDebug;
-    for (qint32 i = 0; i < 16; i++) {
-        sIvDebug += QString("%1 ").arg((quint8)baIV[i], 2, 16, QChar('0'));
-    }
-    qDebug() << "[XAESDecoder] IV for AES-CBC (16 bytes):" << sIvDebug;
-
     // Read all remaining encrypted data
     qint64 nTotalEncrypted = pDecryptState->nInputLimit - pDecryptState->nCountInput;
-    qDebug() << "[XAESDecoder] Total encrypted bytes to read:" << nTotalEncrypted;
 
     if (nTotalEncrypted <= 0 || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
         qWarning() << "[XAESDecoder] Invalid encrypted data size:" << nTotalEncrypted;
@@ -324,65 +194,655 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
     QByteArray baDecrypted;
     baDecrypted.resize((qint32)nTotalEncrypted);
 
-    if (!XZipAESDecoder::decryptAESCBC(baKey32, baIV, (const quint8 *)baEncrypted.constData(), (quint8 *)baDecrypted.data(), nTotalEncrypted)) {
+    if (!XAESDecoder::decryptAESCBC(baKey32, baIV, (const quint8 *)baEncrypted.constData(), (quint8 *)baDecrypted.data(), nTotalEncrypted)) {
         qWarning() << "[XAESDecoder] AES-CBC decryption failed";
         memset(aKey, 0, sizeof(aKey));
         return false;
     }
 
-    // Show first 32 decrypted bytes for debugging
-    {
-        QString sDecHex;
-        for (qint32 i = 0; i < qMin((qint32)nTotalEncrypted, 32); i++) {
-            sDecHex += QString("%1 ").arg((quint8)baDecrypted[i], 2, 16, QChar('0'));
-        }
-        qDebug() << "[XAESDecoder] First 32 decrypted bytes:" << sDecHex;
-    }
-
     // Write decrypted data to output
-    QBuffer *pBuffer = qobject_cast<QBuffer *>(pDecryptState->pDeviceOutput);
-    if (!pBuffer) {
-        qWarning() << "[XAESDecoder] Cannot write to non-QBuffer device";
+    if (!pDecryptState->pDeviceOutput) {
+        qWarning() << "[XAESDecoder] No output device";
         memset(aKey, 0, sizeof(aKey));
         return false;
     }
 
-    pBuffer->buffer() = baDecrypted;
     qint64 nTotalDecrypted = nTotalEncrypted;
 
-    // Remove PKCS#7 padding from decrypted data
-    {
-        QByteArray &baBuffer = pBuffer->buffer();
-        if (baBuffer.size() > 0) {
-            quint8 nPaddingLength = (quint8)baBuffer.at(baBuffer.size() - 1);
+    // 7z uses zero-padding (not PKCS#7): the expected output size is stored in FPART_PROP_UNCOMPRESSEDSIZE
+    // Truncate the decrypted output to the expected size
+    qint64 nExpectedSize = pDecryptState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    if (nExpectedSize > 0 && nExpectedSize < nTotalDecrypted) {
+        baDecrypted.resize((qint32)nExpectedSize);
+        nTotalDecrypted = nExpectedSize;
+    } else {
+        // Fallback: try PKCS#7 padding removal
+        if (baDecrypted.size() > 0) {
+            quint8 nPaddingLength = (quint8)baDecrypted.at(baDecrypted.size() - 1);
 
-            if (nPaddingLength >= 1 && nPaddingLength <= AES_BLOCK_SIZE && nPaddingLength <= baBuffer.size()) {
+            if (nPaddingLength >= 1 && nPaddingLength <= AES_BLOCK_SIZE && nPaddingLength <= baDecrypted.size()) {
                 bool bValidPadding = true;
-                qint32 nPaddingStart = baBuffer.size() - nPaddingLength;
-                for (qint32 i = nPaddingStart; i < baBuffer.size() && bValidPadding; i++) {
-                    if ((quint8)baBuffer.at(i) != nPaddingLength) {
+                qint32 nPaddingStart = baDecrypted.size() - nPaddingLength;
+                for (qint32 i = nPaddingStart; i < baDecrypted.size() && bValidPadding; i++) {
+                    if ((quint8)baDecrypted.at(i) != nPaddingLength) {
                         bValidPadding = false;
                     }
                 }
 
                 if (bValidPadding) {
-                    baBuffer.resize(nPaddingStart);
-                    pBuffer->seek(baBuffer.size());
-                    qDebug() << "[XAESDecoder] Removed" << nPaddingLength << "bytes of PKCS#7 padding, final size:" << baBuffer.size();
-                    nTotalDecrypted = baBuffer.size();
+                    baDecrypted.resize(nPaddingStart);
+                    nTotalDecrypted = nPaddingStart;
                 } else {
                     qWarning() << "[XAESDecoder] Invalid PKCS#7 padding byte pattern, keeping all data";
                 }
-            } else {
-                qDebug() << "[XAESDecoder] Padding length" << nPaddingLength << "out of range, keeping all data";
             }
         }
     }
 
-    qDebug() << "[XAESDecoder] Final decrypted size:" << nTotalDecrypted << "bytes";
+    // Write to output device (works with any QIODevice: QBuffer, QFile, etc.)
+    if (nTotalDecrypted > 0) {
+        QBuffer *pBuffer = qobject_cast<QBuffer *>(pDecryptState->pDeviceOutput);
+        if (pBuffer) {
+            // For QBuffer: replace the buffer directly for efficiency
+            pBuffer->buffer() = baDecrypted;
+        } else {
+            // For other devices (QFile, etc.): write directly
+            qint64 nWritten = pDecryptState->pDeviceOutput->write(baDecrypted.constData(), nTotalDecrypted);
+            if (nWritten != nTotalDecrypted) {
+                qWarning() << "[XAESDecoder] Write error: wrote" << nWritten << "of" << nTotalDecrypted << "bytes";
+                memset(aKey, 0, sizeof(aKey));
+                return false;
+            }
+        }
+        pDecryptState->nCountOutput += nTotalDecrypted;
+    }
 
     // Zero out sensitive data
     memset(aKey, 0, sizeof(aKey));
 
     return nTotalDecrypted > 0;
+}
+
+//------------------------------------------------------------------------------
+// ZIP AES (WinZip AES-256-CTR with PBKDF2-HMAC-SHA1)
+//------------------------------------------------------------------------------
+
+static const qint32 N_BUFFER_SIZE = 65536;
+static const qint32 N_PBKDF2_ITERATIONS = 1000;
+static const qint32 N_PASSWORD_VERIFY_SIZE = 2;
+static const qint32 N_HMAC_SIZE = 10;
+static const qint32 N_AES_BLOCK_SIZE = 16;
+
+static QByteArray custom_hmac_sha1(const QByteArray &baKey, const QByteArray &baMessage)
+{
+    const qint32 BLOCK_SIZE = 64;
+    const quint8 IPAD = 0x36;
+    const quint8 OPAD = 0x5c;
+
+    QByteArray baKeyPadded;
+    if (baKey.size() > BLOCK_SIZE) {
+        baKeyPadded = QCryptographicHash::hash(baKey, QCryptographicHash::Sha1);
+    } else {
+        baKeyPadded = baKey;
+    }
+    while (baKeyPadded.size() < BLOCK_SIZE) {
+        baKeyPadded.append((char)0);
+    }
+
+    QByteArray baInnerKey(BLOCK_SIZE, 0);
+    QByteArray baOuterKey(BLOCK_SIZE, 0);
+    for (qint32 i = 0; i < BLOCK_SIZE; i++) {
+        baInnerKey[i] = baKeyPadded[i] ^ IPAD;
+        baOuterKey[i] = baKeyPadded[i] ^ OPAD;
+    }
+
+    QCryptographicHash innerHash(QCryptographicHash::Sha1);
+    innerHash.addData(baInnerKey);
+    innerHash.addData(baMessage);
+    QByteArray baInnerResult = innerHash.result();
+
+    QCryptographicHash outerHash(QCryptographicHash::Sha1);
+    outerHash.addData(baOuterKey);
+    outerHash.addData(baInnerResult);
+    return outerHash.result();
+}
+
+bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
+{
+    return decrypt(pDecompressState, sPassword.toLatin1(), cryptoMethod, pPdStruct);
+}
+
+bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && !baPassword.isEmpty()) {
+        pDecompressState->bReadError = false;
+        pDecompressState->bWriteError = false;
+        pDecompressState->nCountInput = 0;
+        pDecompressState->nCountOutput = 0;
+
+        qint32 nKeySize = 0;
+        qint32 nSaltSize = 0;
+
+        if (cryptoMethod == XBinary::HANDLE_METHOD_ZIP_AES256) {
+            nKeySize = 32;
+            nSaltSize = 16;
+        } else {
+            return false;
+        }
+
+        char bufferSalt[16];
+        qint32 nSaltRead = XBinary::_readDevice(bufferSalt, nSaltSize, pDecompressState);
+        if (nSaltRead != nSaltSize) {
+            pDecompressState->bReadError = true;
+            return false;
+        }
+        QByteArray baSalt(bufferSalt, nSaltSize);
+
+        char bufferPasswordVerify[N_PASSWORD_VERIFY_SIZE];
+        qint32 nPasswordVerifyRead = XBinary::_readDevice(bufferPasswordVerify, N_PASSWORD_VERIFY_SIZE, pDecompressState);
+        if (nPasswordVerifyRead != N_PASSWORD_VERIFY_SIZE) {
+            pDecompressState->bReadError = true;
+            return false;
+        }
+        QByteArray baPasswordVerifyExpected(bufferPasswordVerify, N_PASSWORD_VERIFY_SIZE);
+
+        QByteArray baAESKey;
+        QByteArray baHMACKey;
+        QByteArray baPasswordVerifyKey;
+        if (!deriveKeys(baPassword, baSalt, nKeySize, baAESKey, baPasswordVerifyKey, baHMACKey, pPdStruct)) {
+            return false;
+        }
+
+        if (baPasswordVerifyKey != baPasswordVerifyExpected) {
+            return false;
+        }
+
+        qint64 nEncryptedDataSize = pDecompressState->nInputLimit - nSaltSize - N_PASSWORD_VERIFY_SIZE - N_HMAC_SIZE;
+        if (nEncryptedDataSize <= 0) {
+            return false;
+        }
+
+        QByteArray baEncryptedData;
+        baEncryptedData.resize((qint32)nEncryptedDataSize);
+        qint64 nReadTotal = 0;
+        while (nReadTotal < nEncryptedDataSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            qint32 nToRead = qMin((qint32)(nEncryptedDataSize - nReadTotal), N_BUFFER_SIZE);
+            qint32 nRead = XBinary::_readDevice(baEncryptedData.data() + nReadTotal, nToRead, pDecompressState);
+            if (nRead <= 0) {
+                pDecompressState->bReadError = true;
+                return false;
+            }
+            nReadTotal += nRead;
+        }
+
+        char bufferHmac[N_HMAC_SIZE];
+        qint32 nHmacRead = XBinary::_readDevice(bufferHmac, N_HMAC_SIZE, pDecompressState);
+        if (nHmacRead != N_HMAC_SIZE) {
+            pDecompressState->bReadError = true;
+            return false;
+        }
+        QByteArray baExpectedHmac(bufferHmac, N_HMAC_SIZE);
+
+        QByteArray baComputedHmac = custom_hmac_sha1(baHMACKey, baEncryptedData);
+        if (baComputedHmac.left(N_HMAC_SIZE) != baExpectedHmac) {
+            return false;
+        }
+
+        QByteArray baDecryptedData;
+        baDecryptedData.resize((qint32)nEncryptedDataSize);
+        QByteArray baNonce;
+        bResult = decryptAESCTR(baAESKey, baNonce, baEncryptedData.constData(), baDecryptedData.data(), nEncryptedDataSize, pPdStruct);
+
+        if (bResult) {
+            XBinary::_writeDevice(baDecryptedData.data(), (qint32)nEncryptedDataSize, pDecompressState);
+        }
+
+        bResult = !pDecompressState->bReadError && !pDecompressState->bWriteError;
+    }
+
+    return bResult;
+}
+
+void XAESDecoder::pbkdf2(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nIterations, qint32 nKeyLength, QByteArray &baResult)
+{
+    baResult.clear();
+
+    qint32 nHashLength = 20;
+    qint32 nBlocks = (nKeyLength + nHashLength - 1) / nHashLength;
+
+    for (qint32 nBlock = 1; nBlock <= nBlocks; nBlock++) {
+        QByteArray baBlockIndex(4, 0);
+        baBlockIndex[0] = (char)((nBlock >> 24) & 0xFF);
+        baBlockIndex[1] = (char)((nBlock >> 16) & 0xFF);
+        baBlockIndex[2] = (char)((nBlock >> 8) & 0xFF);
+        baBlockIndex[3] = (char)(nBlock & 0xFF);
+
+        QByteArray baU = custom_hmac_sha1(baPassword, baSalt + baBlockIndex);
+        QByteArray baT = baU;
+
+        for (qint32 i = 1; i < nIterations; i++) {
+            baU = custom_hmac_sha1(baPassword, baU);
+            for (qint32 j = 0; j < baT.size(); j++) {
+                baT.data()[j] ^= baU.at(j);
+            }
+        }
+
+        baResult.append(baT);
+    }
+
+    baResult.resize(nKeyLength);
+}
+
+bool XAESDecoder::deriveKeys(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nKeySize, QByteArray &baAESKey, QByteArray &baPasswordVerify,
+                             QByteArray &baHMACKey, XBinary::PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    qint32 nTotalKeySize = nKeySize + N_PASSWORD_VERIFY_SIZE + nKeySize;
+
+    QByteArray baDerivedKeys;
+    pbkdf2(baPassword, baSalt, N_PBKDF2_ITERATIONS, nTotalKeySize, baDerivedKeys);
+
+    if (baDerivedKeys.size() != nTotalKeySize) {
+        return false;
+    }
+
+    baAESKey = baDerivedKeys.left(nKeySize);
+    baHMACKey = baDerivedKeys.mid(nKeySize, nKeySize);
+    baPasswordVerify = baDerivedKeys.right(N_PASSWORD_VERIFY_SIZE);
+
+    return true;
+}
+
+//------------------------------------------------------------------------------
+// Custom AES Key Expansion
+//------------------------------------------------------------------------------
+
+static const quint8 s_aes_sbox[256] = {
+    0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76, 0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4,
+    0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0, 0xb7, 0xfd, 0x93, 0x26, 0x36, 0x3f, 0xf7, 0xcc, 0x34, 0xa5, 0xe5, 0xf1, 0x71, 0xd8, 0x31, 0x15, 0x04, 0xc7, 0x23, 0xc3,
+    0x18, 0x96, 0x05, 0x9a, 0x07, 0x12, 0x80, 0xe2, 0xeb, 0x27, 0xb2, 0x75, 0x09, 0x83, 0x2c, 0x1a, 0x1b, 0x6e, 0x5a, 0xa0, 0x52, 0x3b, 0xd6, 0xb3, 0x29, 0xe3,
+    0x2f, 0x84, 0x53, 0xd1, 0x00, 0xed, 0x20, 0xfc, 0xb1, 0x5b, 0x6a, 0xcb, 0xbe, 0x39, 0x4a, 0x4c, 0x58, 0xcf, 0xd0, 0xef, 0xaa, 0xfb, 0x43, 0x4d, 0x33, 0x85,
+    0x45, 0xf9, 0x02, 0x7f, 0x50, 0x3c, 0x9f, 0xa8, 0x51, 0xa3, 0x40, 0x8f, 0x92, 0x9d, 0x38, 0xf5, 0xbc, 0xb6, 0xda, 0x21, 0x10, 0xff, 0xf3, 0xd2, 0xcd, 0x0c,
+    0x13, 0xec, 0x5f, 0x97, 0x44, 0x17, 0xc4, 0xa7, 0x7e, 0x3d, 0x64, 0x5d, 0x19, 0x73, 0x60, 0x81, 0x4f, 0xdc, 0x22, 0x2a, 0x90, 0x88, 0x46, 0xee, 0xb8, 0x14,
+    0xde, 0x5e, 0x0b, 0xdb, 0xe0, 0x32, 0x3a, 0x0a, 0x49, 0x06, 0x24, 0x5c, 0xc2, 0xd3, 0xac, 0x62, 0x91, 0x95, 0xe4, 0x79, 0xe7, 0xc8, 0x37, 0x6d, 0x8d, 0xd5,
+    0x4e, 0xa9, 0x6c, 0x56, 0xf4, 0xea, 0x65, 0x7a, 0xae, 0x08, 0xba, 0x78, 0x25, 0x2e, 0x1c, 0xa6, 0xb4, 0xc6, 0xe8, 0xdd, 0x74, 0x1f, 0x4b, 0xbd, 0x8b, 0x8a,
+    0x70, 0x3e, 0xb5, 0x66, 0x48, 0x03, 0xf6, 0x0e, 0x61, 0x35, 0x57, 0xb9, 0x86, 0xc1, 0x1d, 0x9e, 0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e,
+    0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf, 0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16};
+
+static const quint32 s_aes_rcon[10] = {0x00000001, 0x00000002, 0x00000004, 0x00000008, 0x00000010, 0x00000020, 0x00000040, 0x00000080, 0x0000001b, 0x00000036};
+
+static quint32 SubWord(quint32 nWord)
+{
+    return ((quint32)s_aes_sbox[(nWord >> 0) & 0xFF] << 0) | ((quint32)s_aes_sbox[(nWord >> 8) & 0xFF] << 8) | ((quint32)s_aes_sbox[(nWord >> 16) & 0xFF] << 16) |
+           ((quint32)s_aes_sbox[(nWord >> 24) & 0xFF] << 24);
+}
+
+static quint32 RotWord(quint32 nWord)
+{
+    return (nWord >> 8) | (nWord << 24);
+}
+
+qint32 XAESDecoder::custom_aes_set_encrypt_key(const quint8 *pUserKey, qint32 nBits, CUSTOM_AES_KEY *pKey)
+{
+    if (!pUserKey || !pKey) {
+        return -1;
+    }
+
+    qint32 nKeyWords = 0;
+    qint32 nRounds = 0;
+
+    switch (nBits) {
+        case 128: nKeyWords = 4; nRounds = 10; break;
+        case 192: nKeyWords = 6; nRounds = 12; break;
+        case 256: nKeyWords = 8; nRounds = 14; break;
+        default:  return -2;
+    }
+
+    pKey->rounds = nRounds;
+
+    for (qint32 i = 0; i < nKeyWords; i++) {
+        pKey->rd_key[i] =
+            ((quint32)pUserKey[4 * i + 0] << 0) | ((quint32)pUserKey[4 * i + 1] << 8) | ((quint32)pUserKey[4 * i + 2] << 16) | ((quint32)pUserKey[4 * i + 3] << 24);
+    }
+
+    qint32 nTotalWords = 4 * (nRounds + 1);
+    for (qint32 i = nKeyWords; i < nTotalWords; i++) {
+        quint32 nTemp = pKey->rd_key[i - 1];
+
+        if (i % nKeyWords == 0) {
+            nTemp = SubWord(RotWord(nTemp)) ^ s_aes_rcon[i / nKeyWords - 1];
+        } else if (nKeyWords > 6 && i % nKeyWords == 4) {
+            nTemp = SubWord(nTemp);
+        }
+
+        pKey->rd_key[i] = pKey->rd_key[i - nKeyWords] ^ nTemp;
+    }
+
+    return 0;
+}
+
+//------------------------------------------------------------------------------
+// Custom AES Encryption (forward cipher)
+//------------------------------------------------------------------------------
+
+static const quint8 s_aes_inv_sbox[256] = {
+    0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb, 0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e,
+    0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb, 0x54, 0x7b, 0x94, 0x32, 0xa6, 0xc2, 0x23, 0x3d, 0xee, 0x4c, 0x95, 0x0b, 0x42, 0xfa, 0xc3, 0x4e, 0x08, 0x2e, 0xa1, 0x66,
+    0x28, 0xd9, 0x24, 0xb2, 0x76, 0x5b, 0xa2, 0x49, 0x6d, 0x8b, 0xd1, 0x25, 0x72, 0xf8, 0xf6, 0x64, 0x86, 0x68, 0x98, 0x16, 0xd4, 0xa4, 0x5c, 0xcc, 0x5d, 0x65,
+    0xb6, 0x92, 0x6c, 0x70, 0x48, 0x50, 0xfd, 0xed, 0xb9, 0xda, 0x5e, 0x15, 0x46, 0x57, 0xa7, 0x8d, 0x9d, 0x84, 0x90, 0xd8, 0xab, 0x00, 0x8c, 0xbc, 0xd3, 0x0a,
+    0xf7, 0xe4, 0x58, 0x05, 0xb8, 0xb3, 0x45, 0x06, 0xd0, 0x2c, 0x1e, 0x8f, 0xca, 0x3f, 0x0f, 0x02, 0xc1, 0xaf, 0xbd, 0x03, 0x01, 0x13, 0x8a, 0x6b, 0x3a, 0x91,
+    0x11, 0x41, 0x4f, 0x67, 0xdc, 0xea, 0x97, 0xf2, 0xcf, 0xce, 0xf0, 0xb4, 0xe6, 0x73, 0x96, 0xac, 0x74, 0x22, 0xe7, 0xad, 0x35, 0x85, 0xe2, 0xf9, 0x37, 0xe8,
+    0x1c, 0x75, 0xdf, 0x6e, 0x47, 0xf1, 0x1a, 0x71, 0x1d, 0x29, 0xc5, 0x89, 0x6f, 0xb7, 0x62, 0x0e, 0xaa, 0x18, 0xbe, 0x1b, 0xfc, 0x56, 0x3e, 0x4b, 0xc6, 0xd2,
+    0x79, 0x20, 0x9a, 0xdb, 0xc0, 0xfe, 0x78, 0xcd, 0x5a, 0xf4, 0x1f, 0xdd, 0xa8, 0x33, 0x88, 0x07, 0xc7, 0x31, 0xb1, 0x12, 0x10, 0x59, 0x27, 0x80, 0xec, 0x5f,
+    0x60, 0x51, 0x7f, 0xa9, 0x19, 0xb5, 0x4a, 0x0d, 0x2d, 0xe5, 0x7a, 0x9f, 0x93, 0xc9, 0x9c, 0xef, 0xa0, 0xe0, 0x3b, 0x4d, 0xae, 0x2a, 0xf5, 0xb0, 0xc8, 0xeb,
+    0xbb, 0x3c, 0x83, 0x53, 0x99, 0x61, 0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d};
+
+static quint8 gf_mul(quint8 a, quint8 b)
+{
+    quint8 p = 0;
+    quint8 hi_bit_set;
+    for (qint32 i = 0; i < 8; i++) {
+        if (b & 1) { p ^= a; }
+        hi_bit_set = (a & 0x80);
+        a <<= 1;
+        if (hi_bit_set) { a ^= 0x1b; }
+        b >>= 1;
+    }
+    return p;
+}
+
+static void SubBytes(quint8 *pState)
+{
+    for (qint32 i = 0; i < 16; i++) { pState[i] = s_aes_sbox[pState[i]]; }
+}
+
+static void ShiftRows(quint8 *pState)
+{
+    quint8 temp;
+    temp = pState[1];  pState[1] = pState[5];  pState[5] = pState[9];  pState[9] = pState[13]; pState[13] = temp;
+    temp = pState[2];  pState[2] = pState[10]; pState[10] = temp;
+    temp = pState[6];  pState[6] = pState[14]; pState[14] = temp;
+    temp = pState[15]; pState[15] = pState[11]; pState[11] = pState[7]; pState[7] = pState[3]; pState[3] = temp;
+}
+
+static void MixColumns(quint8 *pState)
+{
+    quint8 temp[4];
+    for (qint32 i = 0; i < 4; i++) {
+        temp[0] = pState[i * 4 + 0]; temp[1] = pState[i * 4 + 1]; temp[2] = pState[i * 4 + 2]; temp[3] = pState[i * 4 + 3];
+        pState[i * 4 + 0] = gf_mul(temp[0], 2) ^ gf_mul(temp[1], 3) ^ temp[2]           ^ temp[3];
+        pState[i * 4 + 1] = temp[0]           ^ gf_mul(temp[1], 2) ^ gf_mul(temp[2], 3) ^ temp[3];
+        pState[i * 4 + 2] = temp[0]           ^ temp[1]           ^ gf_mul(temp[2], 2) ^ gf_mul(temp[3], 3);
+        pState[i * 4 + 3] = gf_mul(temp[0], 3) ^ temp[1]           ^ temp[2]           ^ gf_mul(temp[3], 2);
+    }
+}
+
+static void AddRoundKey(quint8 *pState, const quint32 *pRoundKey)
+{
+    for (qint32 i = 0; i < 4; i++) {
+        quint32 nKey = pRoundKey[i];
+        pState[i * 4 + 0] ^= (quint8)(nKey >> 0);
+        pState[i * 4 + 1] ^= (quint8)(nKey >> 8);
+        pState[i * 4 + 2] ^= (quint8)(nKey >> 16);
+        pState[i * 4 + 3] ^= (quint8)(nKey >> 24);
+    }
+}
+
+void XAESDecoder::custom_aes_encrypt(const quint8 *pInput, quint8 *pOutput, const CUSTOM_AES_KEY *pKey)
+{
+    if (!pInput || !pOutput || !pKey) { return; }
+
+    quint8 state[16];
+    for (qint32 i = 0; i < 16; i++) { state[i] = pInput[i]; }
+
+    AddRoundKey(state, pKey->rd_key);
+
+    for (qint32 nRound = 1; nRound < pKey->rounds; nRound++) {
+        SubBytes(state);
+        ShiftRows(state);
+        MixColumns(state);
+        AddRoundKey(state, pKey->rd_key + (nRound * 4));
+    }
+
+    SubBytes(state);
+    ShiftRows(state);
+    AddRoundKey(state, pKey->rd_key + (pKey->rounds * 4));
+
+    for (qint32 i = 0; i < 16; i++) { pOutput[i] = state[i]; }
+}
+
+//------------------------------------------------------------------------------
+// AES Inverse Cipher (for CBC decryption)
+//------------------------------------------------------------------------------
+
+static void InvSubBytes(quint8 *pState)
+{
+    for (qint32 i = 0; i < 16; i++) { pState[i] = s_aes_inv_sbox[pState[i]]; }
+}
+
+static void InvShiftRows(quint8 *pState)
+{
+    quint8 temp;
+    temp = pState[13]; pState[13] = pState[9]; pState[9] = pState[5]; pState[5] = pState[1]; pState[1] = temp;
+    temp = pState[2];  pState[2] = pState[10]; pState[10] = temp;
+    temp = pState[6];  pState[6] = pState[14]; pState[14] = temp;
+    temp = pState[3];  pState[3] = pState[7];  pState[7] = pState[11]; pState[11] = pState[15]; pState[15] = temp;
+}
+
+static void InvMixColumns(quint8 *pState)
+{
+    quint8 a0, a1, a2, a3;
+    for (qint32 i = 0; i < 4; i++) {
+        a0 = pState[i * 4 + 0]; a1 = pState[i * 4 + 1]; a2 = pState[i * 4 + 2]; a3 = pState[i * 4 + 3];
+        pState[i * 4 + 0] = gf_mul(a0, 0x0e) ^ gf_mul(a1, 0x0b) ^ gf_mul(a2, 0x0d) ^ gf_mul(a3, 0x09);
+        pState[i * 4 + 1] = gf_mul(a0, 0x09) ^ gf_mul(a1, 0x0e) ^ gf_mul(a2, 0x0b) ^ gf_mul(a3, 0x0d);
+        pState[i * 4 + 2] = gf_mul(a0, 0x0d) ^ gf_mul(a1, 0x09) ^ gf_mul(a2, 0x0e) ^ gf_mul(a3, 0x0b);
+        pState[i * 4 + 3] = gf_mul(a0, 0x0b) ^ gf_mul(a1, 0x0d) ^ gf_mul(a2, 0x09) ^ gf_mul(a3, 0x0e);
+    }
+}
+
+static void custom_aes_decrypt_block(const quint8 *pInput, quint8 *pOutput, const CUSTOM_AES_KEY *pKey)
+{
+    quint8 state[16];
+    qint32 nRound;
+
+    for (qint32 i = 0; i < 16; i++) { state[i] = pInput[i]; }
+
+    AddRoundKey(state, pKey->rd_key + pKey->rounds * 4);
+
+    for (nRound = pKey->rounds - 1; nRound >= 1; nRound--) {
+        InvShiftRows(state);
+        InvSubBytes(state);
+        AddRoundKey(state, pKey->rd_key + nRound * 4);
+        InvMixColumns(state);
+    }
+
+    InvShiftRows(state);
+    InvSubBytes(state);
+    AddRoundKey(state, pKey->rd_key);
+
+    for (qint32 i = 0; i < 16; i++) { pOutput[i] = state[i]; }
+}
+
+bool XAESDecoder::decryptAESCBC(const QByteArray &baKey, const QByteArray &baIV, const quint8 *pInputData, quint8 *pOutputData, qint64 nSize)
+{
+    if (!pInputData || !pOutputData || nSize <= 0 || (nSize % N_AES_BLOCK_SIZE) != 0) {
+        return false;
+    }
+    if (baKey.isEmpty() || baIV.size() < N_AES_BLOCK_SIZE) {
+        return false;
+    }
+
+    CUSTOM_AES_KEY customKey;
+    if (custom_aes_set_encrypt_key((const quint8 *)baKey.constData(), baKey.size() * 8, &customKey) != 0) {
+        return false;
+    }
+
+    quint8 prevBlock[N_AES_BLOCK_SIZE];
+    memcpy(prevBlock, baIV.constData(), N_AES_BLOCK_SIZE);
+
+    for (qint64 nOffset = 0; nOffset + N_AES_BLOCK_SIZE <= nSize; nOffset += N_AES_BLOCK_SIZE) {
+        quint8 decryptedBlock[N_AES_BLOCK_SIZE];
+        custom_aes_decrypt_block(pInputData + nOffset, decryptedBlock, &customKey);
+
+        for (qint32 i = 0; i < N_AES_BLOCK_SIZE; i++) {
+            pOutputData[nOffset + i] = decryptedBlock[i] ^ prevBlock[i];
+        }
+
+        memcpy(prevBlock, pInputData + nOffset, N_AES_BLOCK_SIZE);
+    }
+
+    return true;
+}
+
+bool XAESDecoder::decryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize,
+                                XBinary::PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(baNonce)
+    Q_UNUSED(pPdStruct)
+
+    CUSTOM_AES_KEY customKey;
+    if (custom_aes_set_encrypt_key((const quint8 *)baKey.constData(), baKey.size() * 8, &customKey) != 0) {
+        return false;
+    }
+
+    unsigned char counter[N_AES_BLOCK_SIZE];
+    memset(counter, 0, N_AES_BLOCK_SIZE);
+    counter[0] = 1;
+
+    qint64 nOffset = 0;
+    unsigned char encryptedCounter[N_AES_BLOCK_SIZE];
+
+    while (nOffset < nSize) {
+        custom_aes_encrypt(counter, encryptedCounter, &customKey);
+
+        qint64 nBlockSize = qMin((qint64)N_AES_BLOCK_SIZE, nSize - nOffset);
+        for (qint64 i = 0; i < nBlockSize; i++) {
+            pOutputData[nOffset + i] = pInputData[nOffset + i] ^ encryptedCounter[i];
+        }
+
+        for (qint32 j = 0; j < 8; j++) {
+            if (++counter[j] != 0) { break; }
+        }
+
+        nOffset += nBlockSize;
+    }
+
+    return true;
+}
+
+bool XAESDecoder::encryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize,
+                                XBinary::PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(baNonce)
+    Q_UNUSED(pPdStruct)
+
+    CUSTOM_AES_KEY customKey;
+    if (custom_aes_set_encrypt_key((const quint8 *)baKey.constData(), baKey.size() * 8, &customKey) != 0) {
+        return false;
+    }
+
+    unsigned char counter[N_AES_BLOCK_SIZE];
+    memset(counter, 0, N_AES_BLOCK_SIZE);
+    counter[0] = 1;
+
+    qint64 nOffset = 0;
+    unsigned char encryptedCounter[N_AES_BLOCK_SIZE];
+
+    while (nOffset < nSize) {
+        custom_aes_encrypt(counter, encryptedCounter, &customKey);
+
+        qint64 nBlockSize = qMin((qint64)N_AES_BLOCK_SIZE, nSize - nOffset);
+        for (qint64 i = 0; i < nBlockSize; i++) {
+            pOutputData[nOffset + i] = pInputData[nOffset + i] ^ encryptedCounter[i];
+        }
+
+        for (qint32 j = 0; j < 8; j++) {
+            if (++counter[j] != 0) { break; }
+        }
+
+        nOffset += nBlockSize;
+    }
+
+    return true;
+}
+
+bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
+{
+    return encrypt(pCompressState, sPassword.toLatin1(), cryptoMethod, pPdStruct);
+}
+
+bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput && !baPassword.isEmpty()) {
+        pCompressState->bReadError = false;
+        pCompressState->bWriteError = false;
+        pCompressState->nCountInput = 0;
+        pCompressState->nCountOutput = 0;
+
+        qint32 nKeySize = 0;
+        qint32 nSaltSize = 0;
+
+        if (cryptoMethod == XBinary::HANDLE_METHOD_ZIP_AES256) {
+            nKeySize = 32;
+            nSaltSize = 16;
+        } else {
+            return false;
+        }
+
+        QByteArray baSalt;
+        baSalt.resize(nSaltSize);
+        for (qint32 i = 0; i < nSaltSize; i++) {
+            baSalt.data()[i] = (char)(rand() % 256);
+        }
+
+        QByteArray baAESKey;
+        QByteArray baHMACKey;
+        QByteArray baPasswordVerify;
+        if (!deriveKeys(baPassword, baSalt, nKeySize, baAESKey, baPasswordVerify, baHMACKey, pPdStruct)) {
+            return false;
+        }
+
+        XBinary::_writeDevice((char *)baSalt.constData(), nSaltSize, pCompressState);
+        if (pCompressState->bWriteError) { return false; }
+
+        XBinary::_writeDevice((char *)baPasswordVerify.constData(), N_PASSWORD_VERIFY_SIZE, pCompressState);
+        if (pCompressState->bWriteError) { return false; }
+
+        qint64 nPlainDataSize = pCompressState->nInputLimit;
+        if (nPlainDataSize <= 0) { return false; }
+
+        QByteArray baPlainData;
+        baPlainData.resize((qint32)nPlainDataSize);
+        qint64 nReadTotal = 0;
+        while (nReadTotal < nPlainDataSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            qint32 nToRead = qMin((qint32)(nPlainDataSize - nReadTotal), N_BUFFER_SIZE);
+            qint32 nRead = XBinary::_readDevice(baPlainData.data() + nReadTotal, nToRead, pCompressState);
+            if (nRead <= 0) {
+                pCompressState->bReadError = true;
+                return false;
+            }
+            nReadTotal += nRead;
+        }
+
+        QByteArray baEncryptedData;
+        baEncryptedData.resize((qint32)nPlainDataSize);
+        QByteArray baNonce;
+        bResult = encryptAESCTR(baAESKey, baNonce, baPlainData.constData(), baEncryptedData.data(), nPlainDataSize, pPdStruct);
+
+        if (bResult) {
+            QByteArray baComputedHmac = custom_hmac_sha1(baHMACKey, baEncryptedData);
+            XBinary::_writeDevice((char *)baEncryptedData.constData(), (qint32)nPlainDataSize, pCompressState);
+            XBinary::_writeDevice((char *)baComputedHmac.constData(), N_HMAC_SIZE, pCompressState);
+        }
+
+        bResult = !pCompressState->bReadError && !pCompressState->bWriteError;
+    }
+
+    return bResult;
 }

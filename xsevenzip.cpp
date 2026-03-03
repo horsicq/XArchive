@@ -545,12 +545,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         return false;
     }
 
-#ifdef QT_DEBUG
-    if (id == XSevenZip::k7zIdSubStreamsInfo) {
-        qDebug() << "DEBUG: _handleId called for k7zIdSubStreamsInfo at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-    }
-#endif
-
     // Add ID record
     SZRECORD record = {};
     record.nRelOffset = pState->nCurrentOffset;
@@ -558,7 +552,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
     record.varValue = puTag.nValue;
     record.srType = SRTYPE_ID;
     record.valType = VT_PACKEDNUMBER;
-    record.sName = "k7zId";
+    record.sName = get_k7zId().value(puTag.nValue);
     pListRecords->append(record);
 
     pState->nCurrentOffset += puTag.nByteSize;
@@ -566,10 +560,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
     // Process ID-specific data
     switch (id) {
         case XSevenZip::k7zIdHeader: {
-#ifdef QT_DEBUG
-            qDebug() << "_handleId: Parsing k7zIdHeader at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-            qDebug() << QString("  pData ptr: %1, nSize: %2").arg((quint64)pState->pData, 0, 16).arg(pState->nSize);
-#endif
             _handleId(pListRecords, XSevenZip::k7zIdMainStreamsInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
             _handleId(pListRecords, XSevenZip::k7zIdFilesInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
             bResult = _handleId(pListRecords, XSevenZip::k7zIdEnd, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
@@ -578,26 +568,14 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         }
 
         case XSevenZip::k7zIdMainStreamsInfo: {
-#ifdef QT_DEBUG
-            qDebug() << "_handleId: Parsing k7zIdMainStreamsInfo at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-#endif
             _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
-#ifdef QT_DEBUG
-            qDebug() << "_handleId: After PackInfo, offset=" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16) << "bIsError=" << pState->bIsError;
-#endif
 
             // UnpackInfo is optional - clear error state if it fails
             bool bErrorBeforeUnpackInfo = pState->bIsError;
             _handleId(pListRecords, XSevenZip::k7zIdUnpackInfo, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
-#ifdef QT_DEBUG
-            qDebug() << "_handleId: After UnpackInfo, offset=" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16) << "bIsError=" << pState->bIsError;
-#endif
 
             // If UnpackInfo failed and it was optional, restore state
             if (pState->bIsError && !bErrorBeforeUnpackInfo) {
-#ifdef QT_DEBUG
-                qDebug() << "_handleId: UnpackInfo failed but is optional, clearing error";
-#endif
                 pState->bIsError = false;
                 pState->sErrorString.clear();
             }
@@ -605,15 +583,9 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             // SubStreamsInfo is optional - clear error state if it fails
             bool bErrorBeforeSubStreams = pState->bIsError;
             _handleId(pListRecords, XSevenZip::k7zIdSubStreamsInfo, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
-#ifdef QT_DEBUG
-            qDebug() << "_handleId: After SubStreamsInfo, offset=" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16) << "bIsError=" << pState->bIsError;
-#endif
 
             // If SubStreamsInfo failed and it was optional, restore state
             if (pState->bIsError && !bErrorBeforeSubStreams) {
-#ifdef QT_DEBUG
-                qDebug() << "_handleId: SubStreamsInfo failed but is optional, clearing error";
-#endif
                 pState->bIsError = false;
                 pState->sErrorString.clear();
             }
@@ -622,14 +594,11 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
 
             // MainStreamsInfo doesn't have its own End marker - it's terminated by the next ID
             bResult = true;
-#ifdef QT_DEBUG
-            qDebug() << "_handleId: MainStreamsInfo parsing complete at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-#endif
             break;
         }
 
         case XSevenZip::k7zIdPackInfo: {
-            pState->nStreamsBegin = _handleNumber(pListRecords, pState, pPdStruct, "PackPosition", DRF_OFFSET, IMPTYPE_STREAMOFFSET);
+            pState->nStreamsBegin = sizeof(SIGNATUREHEADER) + _handleNumber(pListRecords, pState, pPdStruct, "PackPosition", DRF_OFFSET, IMPTYPE_STREAMOFFSET);
             quint64 nNumberOfPackStreams = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfPackStreams", DRF_COUNT, IMPTYPE_NUMBEROFPACKSTREAMS);
 
             for (int i = 0; i < nNumberOfPackStreams; i++) {
@@ -745,27 +714,12 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                 pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
             }
 
-            if (!pState->bIsError) {
-#ifdef QT_DEBUG
-                qDebug() << "k7zIdFolder: After folder parsing, offset:" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-                if (pState->nCurrentOffset < pState->nSize) {
-                    qDebug() << "  Next byte:" << QString("0x%1").arg((quint8)pState->pData[pState->nCurrentOffset], 2, 16, QChar('0'));
-                }
-#endif
-            } else {
-#ifdef QT_DEBUG
-                qDebug() << "k7zIdFolder: ERROR - skipping optional fields. Error:" << pState->sErrorString;
-#endif
-            }
+
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdSubStreamsInfo:
-#ifdef QT_DEBUG
-            qDebug() << QString("_handleId: Parsing k7zIdSubStreamsInfo at offset 0x%1").arg(pState->nCurrentOffset, 0, 16);
-#endif
-
             // SubStreamsInfo structure (all fields are optional):
             // - k7zIdNumUnpackStream (optional): present if any folder has >1 file
             // - k7zIdSize (optional): unpacked sizes for files
@@ -783,20 +737,12 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             // Then Size section contains unpacked sizes for all files
             quint64 nTotalSubStreams = 0;
 
-#ifdef QT_DEBUG
-            qDebug() << "[NumUnpackStream] Parsing" << pState->nNumberOfFolders << "folder entries";
-#endif
             for (quint64 i = 0; i < pState->nNumberOfFolders && isPdStructNotCanceled(pPdStruct); i++) {
                 quint64 nNumStreamsInFolder =
                     _handleNumber(pListRecords, pState, pPdStruct, QString("NumUnpackStream%1").arg(i), DRF_COUNT, IMPTYPE_NUMBEROFUNPACKSTREAM);
-#ifdef QT_DEBUG
-                qDebug() << "[NumUnpackStream] Folder" << i << "has" << nNumStreamsInFolder << "file(s)";
-#endif
+                pState->listNumUnpackedStreams.append(nNumStreamsInFolder);
                 nTotalSubStreams += nNumStreamsInFolder;
             }
-#ifdef QT_DEBUG
-            qDebug() << "[NumUnpackStream] Total files in all folders:" << nTotalSubStreams;
-#endif
 
             // SubStreamsInfo Size section contains (N-1) sizes for each folder with N>1 files
             // For folders with only 1 file, no size is listed (use folder size)
@@ -807,6 +753,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             bResult = true;
             break;
         }
+
 
         case XSevenZip::k7zIdEncodedHeader:
             _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
@@ -824,6 +771,8 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                         pState->listInStreams[i].nOffset = nCurrentOffset;
                         pState->listInStreams[i].nSize = nSize;
                     }
+                } else if (impType == IMPTYPE_FILEUNPACKEDSIZE) {
+                    pState->listFileSizes.append((qint64)nSize);
                 }
 
                 nCurrentOffset += nSize;
@@ -866,14 +815,13 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                         if (i < pState->listOutStreams.count()) {
                             pState->listOutStreams[i].nCRC = nCRC;
                         }
+                    } else if (impType == IMPTYPE_FILECRC) {
+                        pState->listFileCRC.append(nCRC);
                     }
                 }
             } else {
 // Bitmask format - read bitmask then CRCs for set bits
 // For now, skip this case as it's more complex
-#ifdef QT_DEBUG
-                qDebug() << "k7zIdCRC: AllAreDefined==0 (bitmask format) not fully implemented";
-#endif
             }
             bResult = true;
             break;
@@ -881,9 +829,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
 
         case XSevenZip::k7zIdFilesInfo: {
             quint64 nNumberOfFiles = _handleNumber(pListRecords, pState, pPdStruct, "NumberOfFiles", DRF_COUNT, IMPTYPE_NUMBEROFFILES);
-#ifdef QT_DEBUG
-            qDebug() << "[k7zIdFilesInfo] Processing" << nNumberOfFiles << "files";
-#endif
 
             // Store file count in state for later use
             pState->nNumberOfFiles = nNumberOfFiles;
@@ -900,11 +845,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                 }
 
                 quint8 nNextByte = pState->pData[pState->nCurrentOffset];
-
-#ifdef QT_DEBUG
-                qDebug() << "k7zIdFilesInfo: Checking property ID at offset" << QString("0x%1").arg(pState->nCurrentOffset, 0, 16)
-                         << "byte=" << QString("0x%1").arg(nNextByte, 0, 16);
-#endif
 
                 // Check for End marker
                 if (nNextByte == XSevenZip::k7zIdEnd) {
@@ -936,10 +876,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                 } else if (nNextByte == XSevenZip::k7zIdComment) {
                     bHandled = _handleId(pListRecords, XSevenZip::k7zIdComment, pState, 1, false, pPdStruct, IMPTYPE_UNKNOWN);
                 } else {
-#ifdef QT_DEBUG
-                    qDebug() << "k7zIdFilesInfo: Unknown property ID" << QString("0x%1").arg(nNextByte, 0, 16) << "at offset"
-                             << QString("0x%1").arg(pState->nCurrentOffset, 0, 16);
-#endif
                     // Unknown property - skip the ID byte, then read and skip the size field and data
                     qint64 nPropertyStartOffset = pState->nCurrentOffset;
                     pState->nCurrentOffset++;  // Skip the ID byte
@@ -950,44 +886,16 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                         if (puSize.bIsValid) {
                             pState->nCurrentOffset += puSize.nByteSize;
                             quint64 nDataSize = puSize.nValue;
-#ifdef QT_DEBUG
-                            qDebug() << "k7zIdFilesInfo: Unknown property has size" << nDataSize << "- skipping";
-
-                            // Print hex dump of the data for debugging
-                            if (nDataSize > 0 && nDataSize <= 64 && pState->nCurrentOffset + nDataSize <= pState->nSize) {
-                                QString sHexData;
-                                for (quint64 i = 0; i < nDataSize && i < 64; i++) {
-                                    sHexData += QString("%1 ").arg((quint8)pState->pData[pState->nCurrentOffset + i], 2, 16, QChar('0'));
-                                }
-                                qDebug() << "k7zIdFilesInfo: Unknown property data:" << sHexData.trimmed();
-
-                                // If this is property 0x04 and size is 1, the byte might be the file count!
-                                if (nNextByte == 0x04 && nDataSize == 1 && pState->nNumberOfFiles == 0) {
-                                    quint8 nPossibleFileCount = (quint8)pState->pData[pState->nCurrentOffset];
-                                    qDebug() << "k7zIdFilesInfo: Property 0x04 might indicate file count:" << nPossibleFileCount;
-                                    if (nPossibleFileCount > 0 && nPossibleFileCount <= 100) {
-                                        pState->nNumberOfFiles = nPossibleFileCount;
-                                        qDebug() << "k7zIdFilesInfo: Updated file count to" << nPossibleFileCount;
-                                    }
-                                }
-                            }
-#endif
                             // Skip the data
-                            if (pState->nCurrentOffset + nDataSize <= pState->nSize) {
+                            if (pState->nCurrentOffset + (qint64)nDataSize <= pState->nSize) {
                                 pState->nCurrentOffset += nDataSize;
                                 bHandled = true;  // Successfully skipped
                             } else {
-#ifdef QT_DEBUG
-                                qDebug() << "k7zIdFilesInfo: Data size exceeds available bytes - treating as end";
-#endif
                                 bFoundEnd = true;
                                 break;
                             }
                         } else {
-// If we can't read a valid size, treat this as the end
-#ifdef QT_DEBUG
-                            qDebug() << "k7zIdFilesInfo: Cannot read size for unknown property - treating as end";
-#endif
+                            // If we can't read a valid size, treat this as the end
                             bFoundEnd = true;
                             break;
                         }
@@ -1010,14 +918,8 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
         }
 
         case XSevenZip::k7zIdName: {
-#ifdef QT_DEBUG
-            qDebug() << "[k7zIdName] Processing file names...";
-#endif
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("NameSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
             quint8 nExt = _handleByte(pListRecords, pState, pPdStruct, "ExternalByte", IMPTYPE_UNKNOWN);
-#ifdef QT_DEBUG
-            qDebug() << "[k7zIdName] NameSize:" << nSize << "Ext:" << nExt;
-#endif
 
             if (nExt == 0) {
                 // The data is a single block of null-terminated UTF-16LE strings.
@@ -1066,9 +968,8 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                             record.sName = QString("FileName[%1]").arg(nFileIndex);
                             pListRecords->append(record);
 
-#ifdef QT_DEBUG
-                            qDebug() << "[k7zIdName] Added filename" << nFileIndex << ":" << sFilename;
-#endif
+                            pState->listFileNames.append(sFilename);  // Store filename in state for later use
+
                             nFileIndex++;
 
                             nRelativeOffset += (nNameLenBytes + 2);  // Move to the start of the next name (+2 for the null terminator)
@@ -1090,63 +991,63 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
 
         case XSevenZip::k7zIdEmptyStream: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("EmptyStreamSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("EmptyStreamData"), IMPTYPE_EMPTYSTREAMDATA);
+            pState->baEmptyStreams = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("EmptyStreamData"), IMPTYPE_EMPTYSTREAMDATA);
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdEmptyFile: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("EmptyFileSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("EmptyFileData"), IMPTYPE_EMPTYFILEDATA);
+            pState->baEmptyFiles = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("EmptyFileData"), IMPTYPE_EMPTYFILEDATA);
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdAnti: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("AntiSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("AntiData"), IMPTYPE_UNKNOWN);
+            pState->baAnti = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("AntiData"), IMPTYPE_UNKNOWN);
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdCTime: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("CTimeSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("CTimeData"), IMPTYPE_CTIMEDATA);
+            pState->baCTime = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("CTimeData"), IMPTYPE_CTIMEDATA);
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdATime: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("ATimeSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("ATimeData"), IMPTYPE_ATIMEDATA);
+            pState->baATime = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("ATimeData"), IMPTYPE_ATIMEDATA);
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdMTime: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("MTimeSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("MTimeData"), IMPTYPE_MTIMEDATA);
+            pState->baMTime = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("MTimeData"), IMPTYPE_MTIMEDATA);
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdWinAttrib: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("WinAttribSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("WinAttribData"), IMPTYPE_WINATTRIBDATA);
+            pState->baWinAttrib = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("WinAttribData"), IMPTYPE_WINATTRIBDATA);
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdComment: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("CommentSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("CommentData"), IMPTYPE_UNKNOWN);
+            pState->baComment = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("CommentData"), IMPTYPE_UNKNOWN);
             bResult = true;
             break;
         }
 
         case XSevenZip::k7zIdStartPos: {
             quint64 nSize = _handleNumber(pListRecords, pState, pPdStruct, QString("StartPosSize"), DRF_SIZE, IMPTYPE_UNKNOWN);
-            _handleArray(pListRecords, pState, nSize, pPdStruct, QString("StartPosData"), IMPTYPE_UNKNOWN);
+            pState->baStartPos = _handleArray(pListRecords, pState, nSize, pPdStruct, QString("StartPosData"), IMPTYPE_UNKNOWN);
             bResult = true;
             break;
         }
@@ -1303,6 +1204,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = 0;
         pState->pContext = pContext;
+        pState->mapUnpackProperties = mapProperties;  // Store unpack properties (including password) for file extraction
 
         // Parse archive structure directly using streaming approach
         SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
@@ -1344,9 +1246,11 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     QBuffer bufferOut;
                     bufferOut.setBuffer(&baData);
 
-                    if (bufferOut.open(QIODevice::WriteOnly)) {
+                    if (bufferOut.open(QIODevice::ReadWrite)) {
                         bHeader = _decompress(mapProperties, &bufferOut, 0, &state, pPdStruct);
                         bufferOut.close();
+                        // Update nHeaderSize to actual decompressed size
+                        nHeaderSize = baData.size();
                     }
                 } else {
                     bHeader = true;
@@ -1363,106 +1267,248 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                     state.sErrorString = QString();
 
                     _handleId(&listRecords, XSevenZip::k7zIdHeader, &state, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
+                    // _printRecords(&listRecords);
 
-                    qint32 nNumberOfRecords = listRecords.count();
+                    // qint32 nNumberOfRecords = listRecords.count();
 
-#ifdef QT_DEBUG
+                    // pContext->listArchiveRecords.clear();
+                    // qint32 nNumberOfFiles = 0;
+                    // QByteArray baEmptyStreams;
+                    // QByteArray baEmptyFiles;
+                    // // QList<SEVENZ_STREAM> listStreams;
+                    // // qint32 nIndex = 0;
+                    // qint64 nCurrentStreamPosition = 0;
+                    // qint64 nNumberOfPackStreams = 0;
+                    // qint64 nNumberOfFolders = 0;
+                    // QList<qint32> listNumberOfUnpackedStreams;
+                    // QList<qint32> listNumberOfCoders;
+                    // QList<qint64> listPackedStreamSizes;
+                    // QList<qint64> listUnpackedCoderSizes;
+                    // QList<qint32> listUnpackedStreamCRC;
+                    // QList<QByteArray> listCoders;
+                    // QList<QByteArray> listCoderProperties;
+                    // // Maps each entry in listCoders to its index in listCoderProperties (-1 if none).
+                    // // Not all coders have properties (e.g. Copy/Store has bHasAttr=false).
+                    // QList<qint32> listCoderPropertyIndex;
+                    // QList<quint32> listFileCRC;
+                    // QList<qint64> listFileSizes;
+
+                    qint32 nNumberOfFiles = state.listFileNames.count();
+                    qint32 nNumberOfFolders = state.listFolders.count();
+                    qint32 nNumberOfEmptyStreams = XBinary::_getBitCount_safe(state.baEmptyStreams.data(), state.baEmptyStreams.size());
+                    bool bEmptyFilesPresent = (state.baEmptyFiles.size() > 0);
+
+                    qint64 nCurrentCompressedOffset = 0;
+                    Q_UNUSED(nCurrentCompressedOffset)
+                    qint64 nCurrentUncompressedOffset = 0;
+                    qint32 nCurrentFolder = 0;
+
+                    // Build per-folder file counts
+                    QList<qint32> listFolderFileCounts;
+                    for (qint32 nFi = 0; nFi < nNumberOfFolders; nFi++) {
+                        qint32 nFolderFileCount = 1;
+                        if (nFi < state.listNumUnpackedStreams.count()) {
+                            nFolderFileCount = (qint32)state.listNumUnpackedStreams.at(nFi);
+                        }
+                        listFolderFileCounts.append(nFolderFileCount);
+                    }
+
+                    // Build per-folder global pack-stream start index.
+                    // listStreamIndexes stores relative indices within each folder's pack-stream
+                    // allocation; folders consume pack streams sequentially.
+                    QList<qint32> listFolderStreamOffset;
                     {
-                        qDebug() << "=== BEGIN listRecords DEBUG OUTPUT ===";
-                        qDebug() << "Total records:" << nNumberOfRecords;
-                        for (qint32 i = 0; i < nNumberOfRecords; i++) {
-                            const SZRECORD &rec = listRecords.at(i);
-                            QString sValue;
-                            if (rec.sName == "k7zId") {
-                                sValue = idToSring((XSevenZip::EIdEnum)rec.varValue.toUInt());
-                            } else if (rec.varValue.type() == QVariant::ByteArray) {
-                                QByteArray ba = rec.varValue.toByteArray();
-                                if (ba.size() <= 16) {
-                                    sValue = ba.toHex(' ');
-                                } else {
-                                    sValue = QString("ByteArray[%1 bytes]: %2...").arg(ba.size()).arg(ba.left(16).toHex(' ').data());
-                                }
+                        qint32 nRunningStreamOffset = 0;
+                        for (qint32 nFi = 0; nFi < nNumberOfFolders; nFi++) {
+                            listFolderStreamOffset.append(nRunningStreamOffset);
+                            if (nFi < (qint32)state.listFolders.count()) {
+                                nRunningStreamOffset += state.listFolders.at(nFi).listStreamIndexes.count();
                             } else {
-                                sValue = rec.varValue.toString();
+                                nRunningStreamOffset++;
                             }
-                            qDebug() << QString("[%1] Offset:%2/%3 Size:%4 srType:%5 valType:%6 impType:%7 Name:%8 Value:%9")
-                                            .arg(i, 4)
-                                            .arg(rec.nRelOffset, 6)
-                                            .arg(nHeaderSize, 6)
-                                            .arg(rec.nSize, 6)
-                                            .arg(rec.srType, 2)
-                                            .arg(rec.valType, 2)
-                                            .arg(rec.impType, 3)
-                                            .arg(rec.sName, -30)
-                                            .arg(sValue);
+                        }
+                    }
 
-                            if (i != (nNumberOfRecords - 1)) {
-                                if ((rec.nRelOffset + rec.nSize) != listRecords.at(i + 1).nRelOffset) {
-                                    qDebug() << QString("CHECK!!!");
+                    qint32 nFileSizeIndex = 0;
+                    qint32 nFileCRCIndex = 0;
+                    qint32 nFileIndexInCurrentFolder = 0;
+
+                    for (qint32 nCurrentFileIndex = 0; nCurrentFileIndex < nNumberOfFiles; nCurrentFileIndex++) {
+                        ARCHIVERECORD record = {};
+
+                        // Determine if this file has no data stream (empty dir or empty file)
+                        bool bCurrentFileIsEmpty = false;
+                        if (state.baEmptyStreams.size() > 0) {
+                            bCurrentFileIsEmpty = XBinary::_read_bool_safe_rev(state.baEmptyStreams.data(), state.baEmptyStreams.size(), nCurrentFileIndex);
+                        }
+
+                        if (bCurrentFileIsEmpty) {
+                            bool bIsFile = false;
+                            if (bEmptyFilesPresent) {
+                                if (XBinary::_read_bool_safe_rev(state.baEmptyFiles.data(), state.baEmptyFiles.size(), nCurrentFileIndex)) {
+                                    bIsFile = true;
                                 }
                             }
-                        }
-                        qDebug() << "=== END listRecords DEBUG OUTPUT ===";
-                    }
-#endif
-                    pContext->listArchiveRecords.clear();
-                    qint32 nNumberOfFiles = 0;
-                    QByteArray baEmptyStreams;
-                    QByteArray baEmptyFiles;
-                    // QList<SEVENZ_STREAM> listStreams;
-                    // qint32 nIndex = 0;
-                    qint64 nCurrentStreamPosition = 0;
-                    qint64 nNumberOfPackStreams = 0;
-                    qint64 nNumberOfFolders = 0;
-                    QList<qint32> listNumberOfUnpackedStreams;
-                    QList<qint32> listNumberOfCoders;
-                    QList<qint64> listPackedStreamSizes;
-                    QList<qint64> listUnpackedCoderSizes;
-                    QList<qint32> listUnpackedStreamCRC;
-                    QList<QByteArray> listCoders;
-                    QList<QByteArray> listCoderProperties;
-                    QList<quint32> listFileCRC;
-                    QList<qint64> listFileSizes;
 
-                    for (qint32 i = 0; i < nNumberOfRecords; i++) {
-                        SZRECORD rec = listRecords.at(i);
+                            record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, (quint32)HANDLE_METHOD_STORE);
+                            record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0);
+                            record.mapProperties.insert(FPART_PROP_ISFOLDER, !bIsFile);
+                            record.mapProperties.insert(FPART_PROP_ISSOLID, false);
+                        } else if (nCurrentFolder < nNumberOfFolders) {
+                            // This file has a data stream; map it to the current folder
+                            qint32 nFilesInFolder = (nCurrentFolder < listFolderFileCounts.count()) ? listFolderFileCounts.at(nCurrentFolder) : 1;
+                            bool bIsSolid = (nFilesInFolder > 1);
 
-                        if (rec.impType == IMPTYPE_FILENAME) {
-                            ARCHIVERECORD record = {};
-                            record.mapProperties.insert(FPART_PROP_ORIGINALNAME, rec.varValue.toString());
-                            pContext->listArchiveRecords.append(record);
-                        } else if (rec.impType == IMPTYPE_NUMBEROFFOLDERS) {
-                            nNumberOfFolders = rec.varValue.toLongLong();
-                        } else if (rec.impType == IMPTYPE_NUMBEROFFILES) {
-                            nNumberOfFiles = rec.varValue.toLongLong();
-                        } else if (rec.impType == IMPTYPE_EMPTYSTREAMDATA) {
-                            baEmptyStreams = rec.varValue.toByteArray();
-                        } else if (rec.impType == IMPTYPE_EMPTYFILEDATA) {
-                            baEmptyFiles = rec.varValue.toByteArray();
-                        } else if (rec.impType == IMPTYPE_STREAMOFFSET) {
-                            nCurrentStreamPosition = rec.varValue.toLongLong();
-                        } else if (rec.impType == IMPTYPE_NUMBEROFPACKSTREAMS) {
-                            nNumberOfPackStreams = rec.varValue.toLongLong();
-                        } else if (rec.impType == IMPTYPE_NUMBEROFCODERS) {
-                            listNumberOfCoders.append(rec.varValue.toLongLong());
-                        } else if (rec.impType == IMPTYPE_NUMBEROFUNPACKSTREAM) {
-                            listNumberOfUnpackedStreams.append(rec.varValue.toLongLong());
-                        } else if (rec.impType == IMPTYPE_STREAMSIZE) {
-                            listPackedStreamSizes.append(rec.varValue.toLongLong());
-                        } else if (rec.impType == IMPTYPE_CODERUNPACKEDSIZE) {
-                            listUnpackedCoderSizes.append(rec.varValue.toLongLong());
-                        } else if (rec.impType == IMPTYPE_STREAMUNPACKEDCRC) {
-                            listUnpackedStreamCRC.append(rec.varValue.toLongLong());
-                        } else if (rec.impType == IMPTYPE_CODER) {
-                            listCoders.append(rec.varValue.toByteArray());
-                        } else if (rec.impType == IMPTYPE_CODERPROPERTY) {
-                            listCoderProperties.append(rec.varValue.toByteArray());
-                        } else if (rec.impType == IMPTYPE_FILECRC) {
-                            listFileCRC.append(rec.varValue.toUInt());
-                        } else if (rec.impType == IMPTYPE_FILEUNPACKEDSIZE) {
-                            listFileSizes.append(rec.varValue.toLongLong());
+                            // Resolve pack stream index for this folder using the global offset
+                            qint32 nFolderStreamBase = (nCurrentFolder < listFolderStreamOffset.count()) ? listFolderStreamOffset.at(nCurrentFolder) : nCurrentFolder;
+                            qint32 nRelativeStreamIndex = 0;
+                            if (nCurrentFolder < (qint32)state.listFolders.count() && !state.listFolders.at(nCurrentFolder).listStreamIndexes.isEmpty()) {
+                                nRelativeStreamIndex = state.listFolders.at(nCurrentFolder).listStreamIndexes.at(0);
+                            }
+                            qint32 nStreamListIndex = nFolderStreamBase + nRelativeStreamIndex;
+
+                            qint64 nStreamOffset = 0;
+                            qint64 nStreamSize = 0;
+                            if (nStreamListIndex < (qint32)state.listInStreams.count()) {
+                                nStreamOffset = state.nStreamsBegin + state.listInStreams.at(nStreamListIndex).nOffset;
+                                nStreamSize = state.listInStreams.at(nStreamListIndex).nSize;
+                            }
+
+                            // Compute this folder's total decompressed size (last coder's output)
+                            qint32 nCoderSizesOffset = 0;
+                            for (qint32 nFi = 0; nFi < nCurrentFolder; nFi++) {
+                                if (nFi < (qint32)state.listFolders.count()) {
+                                    nCoderSizesOffset += state.listFolders.at(nFi).listCoders.count();
+                                } else {
+                                    nCoderSizesOffset++;
+                                }
+                            }
+                            qint32 nFolderCoderCount = 1;
+                            if (nCurrentFolder < (qint32)state.listFolders.count()) {
+                                nFolderCoderCount = state.listFolders.at(nCurrentFolder).listCoders.count();
+                            }
+                            qint64 nFolderDecompressedSize = 0;
+                            if ((nCoderSizesOffset + nFolderCoderCount - 1) < (qint32)state.listCodersSizes.count()) {
+                                nFolderDecompressedSize = (qint64)state.listCodersSizes.at(nCoderSizesOffset + nFolderCoderCount - 1);
+                            }
+
+                            // Resolve compression method and properties from this folder's coders
+                            HANDLE_METHOD cm = HANDLE_METHOD_STORE;
+                            QByteArray baCoderProperty;
+                            HANDLE_METHOD cm2 = HANDLE_METHOD_STORE;
+                            QByteArray baCoderProperty2;
+                            bool bHasSecondCoder = false;
+                            if (nCurrentFolder < (qint32)state.listFolders.count()) {
+                                const SZFOLDER &folder = state.listFolders.at(nCurrentFolder);
+                                qint32 nNumCoders = folder.listCoders.count();
+                                if (nNumCoders >= 1) {
+                                    qint32 nLastCoder = nNumCoders - 1;
+                                    cm = coderToCompressMethod(folder.listCoders.at(nLastCoder).baCoder);
+                                    baCoderProperty = folder.listCoders.at(nLastCoder).baProperty;
+                                }
+                                if (nNumCoders >= 2) {
+                                    cm2 = coderToCompressMethod(folder.listCoders.at(0).baCoder);
+                                    baCoderProperty2 = folder.listCoders.at(0).baProperty;
+                                    bHasSecondCoder = true;
+                                }
+                            }
+
+                            // Determine this file's uncompressed size
+                            qint64 nFileSize = 0;
+                            if (bIsSolid && (nFileIndexInCurrentFolder < (nFilesInFolder - 1))) {
+                                // Not the last file in this solid folder; use explicit size
+                                if (nFileSizeIndex < (qint32)state.listFileSizes.count()) {
+                                    nFileSize = state.listFileSizes.at(nFileSizeIndex);
+                                }
+                                nFileSizeIndex++;
+                            } else {
+                                // Last (or only) file: remainder of decompressed block
+                                nFileSize = nFolderDecompressedSize - nCurrentUncompressedOffset;
+                            }
+
+                            // Get CRC for this file:
+                            // If SubStreamsInfo provided per-file CRCs (solid/multi-file folders), use listFileCRC.
+                            // Otherwise fall back to the per-folder CRC stored in listOutStreams.
+                            quint32 nFileCRC = 0;
+                            if (nFileCRCIndex < (qint32)state.listFileCRC.count()) {
+                                nFileCRC = state.listFileCRC.at(nFileCRCIndex);
+                                nFileCRCIndex++;
+                            } else if (nCurrentFolder < (qint32)state.listOutStreams.count()) {
+                                nFileCRC = state.listOutStreams.at(nCurrentFolder).nCRC;
+                            }
+
+                            record.nStreamOffset = nStreamOffset;
+                            record.nStreamSize = nStreamSize;
+                            record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, (quint32)cm);
+                            record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
+                            if (bHasSecondCoder) {
+                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD2, (quint32)cm2);
+                                record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES2, baCoderProperty2);
+                            }
+                            record.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nFolderDecompressedSize);
+                            record.mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, nCurrentUncompressedOffset);
+                            record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nFileSize);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, (quint32)CRC_TYPE_EDB88320);
+                            record.mapProperties.insert(FPART_PROP_CRC_VALUE, nFileCRC);
+                            record.mapProperties.insert(FPART_PROP_ISFOLDER, false);
+                            record.mapProperties.insert(FPART_PROP_ISSOLID, bIsSolid);
+
+                            nCurrentUncompressedOffset += nFileSize;
+                            nFileIndexInCurrentFolder++;
+
+                            // Advance to next folder when current folder's files are exhausted
+                            if (nFileIndexInCurrentFolder >= nFilesInFolder) {
+                                nCurrentFolder++;
+                                nFileIndexInCurrentFolder = 0;
+                                nCurrentUncompressedOffset = 0;
+                            }
                         }
+
+                        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, state.listFileNames.at(nCurrentFileIndex));
+                        pContext->listArchiveRecords.append(record);
                     }
+
+                    // for (qint32 i = 0; i < nNumberOfRecords; i++) {
+                    //     SZRECORD rec = listRecords.at(i);
+
+                    //     if (rec.impType == IMPTYPE_EMPTYSTREAMDATA) {
+                    //         baEmptyStreams = rec.varValue.toByteArray();
+                    //     } else if (rec.impType == IMPTYPE_EMPTYFILEDATA) {
+                    //         baEmptyFiles = rec.varValue.toByteArray();
+                    //     } else if (rec.impType == IMPTYPE_STREAMOFFSET) {
+                    //         nCurrentStreamPosition = rec.varValue.toLongLong();
+                    //     } else if (rec.impType == IMPTYPE_NUMBEROFPACKSTREAMS) {
+                    //         nNumberOfPackStreams = rec.varValue.toLongLong();
+                    //     } else if (rec.impType == IMPTYPE_NUMBEROFCODERS) {
+                    //         listNumberOfCoders.append(rec.varValue.toLongLong());
+                    //     } else if (rec.impType == IMPTYPE_NUMBEROFUNPACKSTREAM) {
+                    //         listNumberOfUnpackedStreams.append(rec.varValue.toLongLong());
+                    //     } else if (rec.impType == IMPTYPE_STREAMSIZE) {
+                    //         listPackedStreamSizes.append(rec.varValue.toLongLong());
+                    //     } else if (rec.impType == IMPTYPE_CODERUNPACKEDSIZE) {
+                    //         listUnpackedCoderSizes.append(rec.varValue.toLongLong());
+                    //     } else if (rec.impType == IMPTYPE_STREAMUNPACKEDCRC) {
+                    //         listUnpackedStreamCRC.append(rec.varValue.toLongLong());
+                    //     } else if (rec.impType == IMPTYPE_CODER) {
+                    //         listCoders.append(rec.varValue.toByteArray());
+                    //         // Check if the NEXT record is the property for this coder.
+                    //         // We'll fill listCoderPropertyIndex after both lists are populated.
+                    //         // For now, add a placeholder and fix up below.
+                    //         listCoderPropertyIndex.append(-1);  // will be fixed up
+                    //     } else if (rec.impType == IMPTYPE_CODERPROPERTY) {
+                    //         // Associate this property with the most recently added coder.
+                    //         qint32 nPropIdx = listCoderProperties.count();
+                    //         listCoderProperties.append(rec.varValue.toByteArray());
+                    //         // Fix up the last coder's property index
+                    //         if (!listCoderPropertyIndex.isEmpty()) {
+                    //             listCoderPropertyIndex[listCoderPropertyIndex.count() - 1] = nPropIdx;
+                    //         }
+                    //     } else if (rec.impType == IMPTYPE_FILECRC) {
+                    //         listFileCRC.append(rec.varValue.toUInt());
+                    //     } else if (rec.impType == IMPTYPE_FILEUNPACKEDSIZE) {
+                    //         listFileSizes.append(rec.varValue.toLongLong());
+                    //     }
+                    // }
 
                     //                     if (listPackedStreamSizes.count() != nNumberOfPackedStreams) {
                     // #ifdef QT_DEBUG
@@ -1476,127 +1522,156 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 #endif
                     }
 
-                    qint32 nNumberOfEmptyStreams = XBinary::_getBitCount_safe(baEmptyStreams.data(), baEmptyStreams.size());
-                    bool bEmptyFilesPresent = (baEmptyFiles.size() > 0);
+                    // qint32 nSubStreamFileIndex = 0;
+                    // qint32 nSubStreamCRCIndex = 0;
+                    // qint64 nStreamOffset = sizeof(SIGNATUREHEADER) + nCurrentStreamPosition;
+                    // qint32 nRecordIndex = nNumberOfEmptyStreams;
 
-                    if (nNumberOfEmptyStreams <= nNumberOfFiles) {
-                        for (qint32 i = 0; i < nNumberOfEmptyStreams; i++) {
-                            bool bIsEmpty = XBinary::_read_bool_safe_rev(baEmptyStreams.data(), baEmptyStreams.size(), i);
-                            bool bIsFile = false;
+                    // // Build a per-folder coder offset table so we can correctly map
+                    // // pack stream i -> first coder of folder i.
+                    // // listNumberOfCoders[i] tells how many coders are in folder i.
+                    // // listCoders is a flat list of ALL coders across ALL folders.
+                    // // listUnpackedCoderSizes has one entry per coder across all folders.
+                    // QList<qint32> listFolderCoderOffset;   // index into listCoders for first coder of folder i
+                    // QList<qint32> listFolderSizeOffset;    // index into listUnpackedCoderSizes for first coder of folder i
+                    // {
+                    //     qint32 nRunningCoderOffset = 0;
+                    //     for (qint32 fi = 0; fi < listNumberOfCoders.count(); fi++) {
+                    //         listFolderCoderOffset.append(nRunningCoderOffset);
+                    //         listFolderSizeOffset.append(nRunningCoderOffset);
+                    //         nRunningCoderOffset += listNumberOfCoders.at(fi);
+                    //     }
+                    // }
 
-                            if (bIsEmpty) {
-                                if (bEmptyFilesPresent) {
-                                    if (XBinary::_read_bool_safe_rev(baEmptyFiles.data(), baEmptyFiles.size(), i)) {
-                                        bIsFile = true;
-                                    }
-                                }
+                    // for (qint32 i = 0; i < nNumberOfPackStreams; i++) {
+                    //     if (nRecordIndex >= pContext->listArchiveRecords.count()) {
+                    //         break;
+                    //     }
 
-                                pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE);
-                                pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, 0);
-                                pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_ISFOLDER, !bIsFile);
-                                pContext->listArchiveRecords[i].mapProperties.insert(FPART_PROP_ISSOLID, false);
-                            }
-                        }
-                    }
+                    //     qint64 nPackedStreamSize = 0;
+                    //     qint64 nUnpackedCoderSize = 0;
+                    //     qint32 nNumberOfUnpackedStreams = 0;
+                    //     QByteArray baCoder;
+                    //     QByteArray baCoderProperty;
+                    //     quint32 nUnpackedStreamCRC = 0;
 
-                    qint32 nSubStreamFileIndex = 0;
-                    qint32 nSubStreamCRCIndex = 0;
-                    qint64 nStreamOffset = sizeof(SIGNATUREHEADER) + nCurrentStreamPosition;
-                    qint32 nRecordIndex = nNumberOfEmptyStreams;
+                    //     if (i < listPackedStreamSizes.count()) {
+                    //         nPackedStreamSize = listPackedStreamSizes.at(i);
+                    //     }
 
-                    for (qint32 i = 0; i < nNumberOfPackStreams; i++) {
-                        if (nRecordIndex >= pContext->listArchiveRecords.count()) {
-                            break;
-                        }
+                    //     // Determine the coder offset for this folder (pack stream i = folder i).
+                    //     // The number of coders in this folder:
+                    //     qint32 nCodersThisFolder = 1;
+                    //     if (i < listNumberOfCoders.count()) {
+                    //         nCodersThisFolder = listNumberOfCoders.at(i);
+                    //     }
 
-                        qint64 nPackedStreamSize = 0;
-                        qint64 nUnpackedCoderSize = 0;
-                        qint32 nNumberOfUnpackedStreams = 0;
-                        QByteArray baCoder;
-                        QByteArray baCoderProperty;
-                        quint32 nUnpackedStreamCRC = 0;
+                    //     // For a multi-coder folder (e.g. Copy+AES or AES+LZMA), the FIRST coder
+                    //     // in the folder is the one that reads directly from the pack stream
+                    //     // (the encrypted/compressed data). We want the first coder's codec and
+                    //     // properties, plus the LAST coder's output size (= final decompressed size).
+                    //     qint32 nFirstCoderIdx = (i < listFolderCoderOffset.count()) ? listFolderCoderOffset.at(i) : i;
+                    //     qint32 nLastSizeIdx = nFirstCoderIdx + nCodersThisFolder - 1;
 
-                        if (i < listPackedStreamSizes.count()) {
-                            nPackedStreamSize = listPackedStreamSizes.at(i);
-                        }
+                    //     // Select the primary coder: prefer AES if present in this folder's coders,
+                    //     // otherwise use the first coder.
+                    //     qint32 nSelectedCoderIdx = nFirstCoderIdx;
+                    //     for (qint32 c = 0; c < nCodersThisFolder; c++) {
+                    //         qint32 nCIdx = nFirstCoderIdx + c;
+                    //         if (nCIdx < listCoders.count()) {
+                    //             QByteArray baTmpCoder = listCoders.at(nCIdx);
+                    //             if (coderToCompressMethod(baTmpCoder) == HANDLE_METHOD_7Z_AES) {
+                    //                 nSelectedCoderIdx = nCIdx;
+                    //                 break;
+                    //             }
+                    //         }
+                    //     }
 
-                        if (i < listUnpackedCoderSizes.count()) {
-                            nUnpackedCoderSize = listUnpackedCoderSizes.at(i);
-                        }
+                    //     if (nSelectedCoderIdx < listCoders.count()) {
+                    //         baCoder = listCoders.at(nSelectedCoderIdx);
+                    //     }
 
-                        if (i < listCoders.count()) {
-                            baCoder = listCoders.at(i);
-                        }
+                    //     // Use listCoderPropertyIndex to map from the coder's global index
+                    //     // to its index in listCoderProperties (since not all coders have properties).
+                    //     if (nSelectedCoderIdx < listCoderPropertyIndex.count()) {
+                    //         qint32 nPropIdx = listCoderPropertyIndex.at(nSelectedCoderIdx);
+                    //         if (nPropIdx >= 0 && nPropIdx < listCoderProperties.count()) {
+                    //             baCoderProperty = listCoderProperties.at(nPropIdx);
+                    //         }
+                    //     }
 
-                        if (i < listCoderProperties.count()) {
-                            baCoderProperty = listCoderProperties.at(i);
-                        }
+                    //     // The uncompressed (final output) size is the last coder's output size.
+                    //     if (nLastSizeIdx < listUnpackedCoderSizes.count()) {
+                    //         nUnpackedCoderSize = listUnpackedCoderSizes.at(nLastSizeIdx);
+                    //     } else if (nFirstCoderIdx < listUnpackedCoderSizes.count()) {
+                    //         nUnpackedCoderSize = listUnpackedCoderSizes.at(nFirstCoderIdx);
+                    //     }
 
-                        if (i < listNumberOfUnpackedStreams.count()) {
-                            nNumberOfUnpackedStreams = listNumberOfUnpackedStreams.at(i);
-                        }
+                    //     if (i < listNumberOfUnpackedStreams.count()) {
+                    //         nNumberOfUnpackedStreams = listNumberOfUnpackedStreams.at(i);
+                    //     }
 
-                        if (i < listUnpackedStreamCRC.count()) {
-                            nUnpackedStreamCRC = listUnpackedStreamCRC.at(i);
-                        }
+                    //     if (i < listUnpackedStreamCRC.count()) {
+                    //         nUnpackedStreamCRC = listUnpackedStreamCRC.at(i);
+                    //     }
 
-                        HANDLE_METHOD cm = coderToCompressMethod(baCoder);
+                    //     HANDLE_METHOD cm = coderToCompressMethod(baCoder);
 
-                        if (nNumberOfUnpackedStreams > 0) {
-                            qint64 nCurrentRelOffset = 0;
+                    //     if (nNumberOfUnpackedStreams > 0) {
+                    //         qint64 nCurrentRelOffset = 0;
 
-                            for (qint32 j = 0; j < nNumberOfUnpackedStreams; j++) {
-                                qint64 nFileSize = 0;
-                                quint32 nCRC = 0;
+                    //         for (qint32 j = 0; j < nNumberOfUnpackedStreams; j++) {
+                    //             qint64 nFileSize = 0;
+                    //             quint32 nCRC = 0;
 
-                                if (nSubStreamCRCIndex < listFileCRC.count()) {
-                                    nCRC = listFileCRC.at(nSubStreamCRCIndex);
-                                    nSubStreamCRCIndex++;
-                                }
+                    //             if (nSubStreamCRCIndex < listFileCRC.count()) {
+                    //                 nCRC = listFileCRC.at(nSubStreamCRCIndex);
+                    //                 nSubStreamCRCIndex++;
+                    //             }
 
-                                if (j != (nNumberOfUnpackedStreams - 1)) {
-                                    if (nSubStreamFileIndex < listFileSizes.count()) {
-                                        nFileSize = listFileSizes.at(nSubStreamFileIndex);
-                                    }
+                    //             if (j != (nNumberOfUnpackedStreams - 1)) {
+                    //                 if (nSubStreamFileIndex < listFileSizes.count()) {
+                    //                     nFileSize = listFileSizes.at(nSubStreamFileIndex);
+                    //                 }
 
-                                    nSubStreamFileIndex++;
-                                } else {
-                                    nFileSize = nUnpackedCoderSize - nCurrentRelOffset;
-                                }
+                    //                 nSubStreamFileIndex++;
+                    //             } else {
+                    //                 nFileSize = nUnpackedCoderSize - nCurrentRelOffset;
+                    //             }
 
-                                pContext->listArchiveRecords[nRecordIndex].nStreamOffset = nStreamOffset;
-                                pContext->listArchiveRecords[nRecordIndex].nStreamSize = nPackedStreamSize;
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUnpackedCoderSize);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_HANDLEMETHOD, cm);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, nCurrentRelOffset);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nFileSize);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_VALUE, nCRC);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_ISFOLDER, false);
-                                pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_ISSOLID, true);
+                    //             pContext->listArchiveRecords[nRecordIndex].nStreamOffset = nStreamOffset;
+                    //             pContext->listArchiveRecords[nRecordIndex].nStreamSize = nPackedStreamSize;
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUnpackedCoderSize);
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_HANDLEMETHOD, cm);
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, nCurrentRelOffset);
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nFileSize);
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_VALUE, nCRC);
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_ISFOLDER, false);
+                    //             pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_ISSOLID, true);
 
-                                nCurrentRelOffset += nFileSize;
-                                nRecordIndex++;
-                            }
-                        } else {
-                            pContext->listArchiveRecords[nRecordIndex].nStreamOffset = nStreamOffset;
-                            pContext->listArchiveRecords[nRecordIndex].nStreamSize = nPackedStreamSize;
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUnpackedCoderSize);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_HANDLEMETHOD, cm);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, 0);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUnpackedCoderSize);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_VALUE, nUnpackedStreamCRC);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_ISFOLDER, false);
-                            pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_ISSOLID, false);
+                    //             nCurrentRelOffset += nFileSize;
+                    //             nRecordIndex++;
+                    //         }
+                    //     } else {
+                    //         pContext->listArchiveRecords[nRecordIndex].nStreamOffset = nStreamOffset;
+                    //         pContext->listArchiveRecords[nRecordIndex].nStreamSize = nPackedStreamSize;
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUnpackedCoderSize);
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_HANDLEMETHOD, cm);
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, baCoderProperty);
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, 0);
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUnpackedCoderSize);
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_CRC_VALUE, nUnpackedStreamCRC);
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_ISFOLDER, false);
+                    //         pContext->listArchiveRecords[nRecordIndex].mapProperties.insert(FPART_PROP_ISSOLID, false);
 
-                            nRecordIndex++;
-                        }
+                    //         nRecordIndex++;
+                    //     }
 
-                        nStreamOffset += nPackedStreamSize;
-                    }
+                    //     nStreamOffset += nPackedStreamSize;
+                    // }
                 } else {
                     _errorMessage(tr("Cannot unpack data"), pPdStruct);
                 }
@@ -1654,8 +1729,6 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
         if (archiveRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() == 0) return true;  // Empty file
 
         bool bIsSolid = archiveRecord.mapProperties.value(FPART_PROP_ISSOLID).toBool();
-        HANDLE_METHOD compressMethod = (HANDLE_METHOD)(archiveRecord.mapProperties.value(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN).toInt());
-        QByteArray baProperty = archiveRecord.mapProperties.value(FPART_PROP_COMPRESSPROPERTIES, HANDLE_METHOD_UNKNOWN).toByteArray();
         qint64 nStreamOffset = archiveRecord.nStreamOffset;
         qint64 nStreamSize = archiveRecord.nStreamSize;
 
@@ -1670,7 +1743,19 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
                 qint64 nStreamUnpackedSize = archiveRecord.mapProperties.value(FPART_PROP_STREAMUNPACKEDSIZE).toLongLong();
                 pSolidDevice = XBinary::createFileBuffer(nStreamUnpackedSize, pPdStruct);
 
-                bool bProcessed = _decompress(pSolidDevice, compressMethod, baProperty, nStreamOffset, nStreamSize, nStreamUnpackedSize, pPdStruct);
+                XDecompress xDecompressSolid;
+                connect(&xDecompressSolid, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+                connect(&xDecompressSolid, &XDecompress::infoMessage, this, &XBinary::infoMessage);
+
+                // Build a block-level record for decompressing the entire solid block.
+                // We must NOT pass ISSOLID=true here: multiDecompress would route output
+                // to a temporary discarded buffer instead of pSolidDevice.
+                // We also replace UNCOMPRESSEDSIZE with the full block size.
+                ARCHIVERECORD solidBlockRecord = archiveRecord;
+                solidBlockRecord.mapProperties.insert(FPART_PROP_ISSOLID, false);
+                solidBlockRecord.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nStreamUnpackedSize);
+
+                bool bProcessed = xDecompressSolid.decompressArchiveRecord(solidBlockRecord, getDevice(), pSolidDevice, pState->mapUnpackProperties, pPdStruct);
 
                 // Process decompressed data if decompression was successful
                 if (bProcessed) {
@@ -1698,8 +1783,10 @@ bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
                 bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
             }
         } else {
-            qint64 nUncompressedSize = archiveRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
-            bResult = _decompress(pDevice, compressMethod, baProperty, nStreamOffset, nStreamSize, nUncompressedSize, pPdStruct);
+            XDecompress xDecompressDirect;
+            connect(&xDecompressDirect, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+            connect(&xDecompressDirect, &XDecompress::infoMessage, this, &XBinary::infoMessage);
+            bResult = xDecompressDirect.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
         }
     }
 
@@ -1755,6 +1842,93 @@ bool XSevenZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     return bResult;
 }
 
+void XSevenZip::_printRecords(QList<SZRECORD> *pListRecords)
+{
+    if (!pListRecords) {
+        return;
+    }
+
+    qDebug("=== SZRECORD list: %d records ===", pListRecords->count());
+
+    for (qint32 nI = 0; nI < pListRecords->count(); nI++) {
+        const SZRECORD &rec = pListRecords->at(nI);
+
+        QString sSrType;
+        if (rec.srType == SRTYPE_UNKNOWN)            sSrType = "UNKNOWN";
+        else if (rec.srType == SRTYPE_ID)            sSrType = "ID";
+        else if (rec.srType == SRTYPE_NUMBER)        sSrType = "NUMBER";
+        else if (rec.srType == SRTYPE_BYTE)          sSrType = "BYTE";
+        else if (rec.srType == SRTYPE_UINT32)        sSrType = "UINT32";
+        else if (rec.srType == SRTYPE_ARRAY)         sSrType = "ARRAY";
+        else                                         sSrType = QString::number((qint32)rec.srType);
+
+        QString sValType;
+        if (rec.valType == VT_UNKNOWN)               sValType = "UNKNOWN";
+        else if (rec.valType == VT_BYTE)             sValType = "BYTE";
+        else if (rec.valType == VT_UINT16)           sValType = "UINT16";
+        else if (rec.valType == VT_UINT32)           sValType = "UINT32";
+        else if (rec.valType == VT_UINT64)           sValType = "UINT64";
+        else if (rec.valType == VT_INT8)             sValType = "INT8";
+        else if (rec.valType == VT_INT16)            sValType = "INT16";
+        else if (rec.valType == VT_INT32)            sValType = "INT32";
+        else if (rec.valType == VT_INT64)            sValType = "INT64";
+        else if (rec.valType == VT_PACKEDNUMBER)     sValType = "PACKEDNUMBER";
+        else if (rec.valType == VT_STRING)           sValType = "STRING";
+        else if (rec.valType == VT_BYTE_ARRAY)       sValType = "BYTE_ARRAY";
+        else if (rec.valType == VT_CHAR_ARRAY)       sValType = "CHAR_ARRAY";
+        else                                         sValType = QString::number((qint32)rec.valType);
+
+        QString sImpType;
+        if (rec.impType == IMPTYPE_UNKNOWN)                    sImpType = "UNKNOWN";
+        else if (rec.impType == IMPTYPE_NUMBEROFFOLDERS)       sImpType = "NUMBEROFFOLDERS";
+        else if (rec.impType == IMPTYPE_NUMBEROFFILES)         sImpType = "NUMBEROFFILES";
+        else if (rec.impType == IMPTYPE_NUMBEROFCODERS)        sImpType = "NUMBEROFCODERS";
+        else if (rec.impType == IMPTYPE_STREAMCRC)             sImpType = "STREAMCRC";
+        else if (rec.impType == IMPTYPE_STREAMOFFSET)          sImpType = "STREAMOFFSET";
+        else if (rec.impType == IMPTYPE_STREAMSIZE)            sImpType = "STREAMSIZE";
+        else if (rec.impType == IMPTYPE_CODERUNPACKEDSIZE)     sImpType = "CODERUNPACKEDSIZE";
+        else if (rec.impType == IMPTYPE_STREAMUNPACKEDCRC)     sImpType = "STREAMUNPACKEDCRC";
+        else if (rec.impType == IMPTYPE_NUMBEROFPACKSTREAMS)   sImpType = "NUMBEROFPACKSTREAMS";
+        else if (rec.impType == IMPTYPE_CODER)                 sImpType = "CODER";
+        else if (rec.impType == IMPTYPE_CODERPROPERTY)         sImpType = "CODERPROPERTY";
+        else if (rec.impType == IMPTYPE_FILENAME)              sImpType = "FILENAME";
+        else if (rec.impType == IMPTYPE_FILECRC)               sImpType = "FILECRC";
+        else if (rec.impType == IMPTYPE_FILEATTRIBUTES)        sImpType = "FILEATTRIBUTES";
+        else if (rec.impType == IMPTYPE_FILETIME)              sImpType = "FILETIME";
+        else if (rec.impType == IMPTYPE_FILEPACKEDSIZE)        sImpType = "FILEPACKEDSIZE";
+        else if (rec.impType == IMPTYPE_FILEUNPACKEDSIZE)      sImpType = "FILEUNPACKEDSIZE";
+        else if (rec.impType == IMPTYPE_NUMBEROFUNPACKSTREAM)  sImpType = "NUMBEROFUNPACKSTREAM";
+        else if (rec.impType == IMPTYPE_EMPTYSTREAMDATA)       sImpType = "EMPTYSTREAMDATA";
+        else if (rec.impType == IMPTYPE_EMPTYFILEDATA)         sImpType = "EMPTYFILEDATA";
+        else if (rec.impType == IMPTYPE_CTIMEDATA)             sImpType = "CTIMEDATA";
+        else if (rec.impType == IMPTYPE_ATIMEDATA)             sImpType = "ATIMEDATA";
+        else if (rec.impType == IMPTYPE_MTIMEDATA)             sImpType = "MTIMEDATA";
+        else if (rec.impType == IMPTYPE_WINATTRIBDATA)         sImpType = "WINATTRIBDATA";
+        else                                                   sImpType = QString::number((qint32)rec.impType);
+
+        QString sValue;
+        if (rec.srType == SRTYPE_ARRAY) {
+            QByteArray baValue = rec.varValue.toByteArray();
+            sValue = QString("(%1 bytes) %2").arg(baValue.size()).arg(QString(baValue.toHex()));
+        } else {
+            sValue = rec.varValue.toString();
+        }
+
+        qDebug("[%d] offset=0x%X size=0x%X name=\"%s\" srType=%s valType=%s impType=%s flags=0x%X value=%s",
+               nI,
+               (quint32)rec.nRelOffset,
+               (quint32)rec.nSize,
+               rec.sName.toUtf8().constData(),
+               sSrType.toUtf8().constData(),
+               sValType.toUtf8().constData(),
+               sImpType.toUtf8().constData(),
+               rec.nFlags,
+               sValue.toUtf8().constData());
+    }
+
+    qDebug("=== end SZRECORD list ===");
+}
+
 QList<XSevenZip::SZRECORD> XSevenZip::_handleData(char *pData, qint64 nSize, PDSTRUCT *pPdStruct)
 {
     QList<XSevenZip::SZRECORD> listResult;
@@ -1784,54 +1958,6 @@ QList<XSevenZip::SZRECORD> XSevenZip::_handleData(char *pData, qint64 nSize, PDS
     return listResult;
 }
 
-bool XSevenZip::_decompress(QIODevice *pDevice, HANDLE_METHOD compressMethod, const QByteArray &baProperty, qint64 nOffset, qint64 nSize, qint64 nUncompressedSize,
-                            PDSTRUCT *pPdStruct)
-{
-    bool bResult = false;
-
-    SubDevice sdCompressed(getDevice(), nOffset, nSize);
-
-    if (sdCompressed.open(QIODevice::ReadOnly)) {
-        DATAPROCESS_STATE decompressState = {};
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
-        decompressState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSPROPERTIES, baProperty);
-        if (nUncompressedSize > 0) {
-            decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
-        }
-        decompressState.pDeviceInput = &sdCompressed;
-        decompressState.pDeviceOutput = pDevice;
-        decompressState.nInputOffset = 0;
-        decompressState.nInputLimit = nSize;
-        decompressState.nProcessedOffset = 0;
-        decompressState.nProcessedLimit = -1;
-
-        if (compressMethod == HANDLE_METHOD_LZMA) {
-            bResult = XLZMADecoder::decompress(&decompressState, baProperty, pPdStruct);
-            // bDecompressResult = XLZMADecoder::decompress(&decompressState, pPdStruct);
-        } else if (compressMethod == HANDLE_METHOD_LZMA2) {
-            bResult = XLZMADecoder::decompressLZMA2(&decompressState, baProperty, pPdStruct);
-        } else if (compressMethod == HANDLE_METHOD_PPMD7) {
-            bResult = XPPMdDecoder::decompressPPMD7(&decompressState, baProperty, pPdStruct);
-        } else if (compressMethod == HANDLE_METHOD_BZIP2) {
-            bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
-        } else if (compressMethod == HANDLE_METHOD_DEFLATE) {
-            bResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
-        } else if (compressMethod == HANDLE_METHOD_DEFLATE64) {
-            bResult = XDeflateDecoder::decompress64(&decompressState, pPdStruct);
-        } else if (compressMethod == HANDLE_METHOD_STORE) {
-            bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
-        } else {
-#ifdef QT_DEBUG
-            qDebug("Unsupported compression method: %s(%d)", handleMethodToString(compressMethod).toLatin1().data(), compressMethod);
-#endif
-        }
-
-        sdCompressed.close();
-    }
-
-    return bResult;
-}
-
 bool XSevenZip::_decompress(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, QIODevice *pDeviceOut, qint32 nFolderIndex, SZSTATE *pState, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
@@ -1842,78 +1968,69 @@ bool XSevenZip::_decompress(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperti
 
     if (nFolderIndex < pState->listFolders.count()) {
         qint32 nInputStreamIndex = 0;
-        qint32 nInputStreamCount = 1;
 
         for (qint32 i = 0; i < nFolderIndex; i++) {
             // nInputIndex += pState->listFolders.at(i).
         }
 
-        QList<QIODevice *> listDevices;
+        qint64 nStreamOffset = pState->nStreamsBegin + pState->listInStreams.at(nInputStreamIndex).nOffset;
+        qint64 nStreamSize = pState->listInStreams.at(nInputStreamIndex).nSize;
 
-        for (qint32 i = 0; i < nInputStreamCount; i++) {
-            qint64 nStreamOffset = pState->nStreamsBegin + pState->listInStreams.at(nInputStreamIndex + i).nOffset;
-            qint64 nStreamSize = pState->listInStreams.at(nInputStreamIndex + i).nSize;
-            QIODevice *pDevice = createFileBuffer(nStreamSize, pPdStruct);
+        const SZFOLDER &folder = pState->listFolders.at(nFolderIndex);
+        qint32 nNumCoders = folder.listCoders.count();
 
-            copyDeviceMemory(getDevice(), nStreamOffset, pDevice, 0, nStreamSize, pPdStruct);
-
-            listDevices.append(pDevice);
-        }
-
-        QIODevice *pTempDeviceInput = nullptr;
-        QIODevice *pTempDeviceOutput = nullptr;
-
-        for (qint32 i = 0; i < pState->listFolders.at(nFolderIndex).listCoders.count(); i++) {
-            SZCODER szCoder = pState->listFolders.at(nFolderIndex).listCoders.at(i);
-
-            QIODevice *pInput = nullptr;
-            QIODevice *pOutput = nullptr;
-
-            if (i == 0) {
-                pInput = listDevices.at(0);
-            } else {
-                pTempDeviceInput = pTempDeviceOutput;
-                pInput = pTempDeviceOutput;
-                pTempDeviceOutput = nullptr;
-            }
-
-            if (i == pState->listFolders.at(nFolderIndex).listCoders.count() - 1) {
-                pOutput = pDeviceOut;
-            } else {
-                pTempDeviceOutput = createFileBuffer(pState->listCodersSizes.at(i), pPdStruct);
-                pOutput = pTempDeviceOutput;
-            }
-
-            QMap<FPART_PROP, QVariant> mapProperties;
-            mapProperties.insert(FPART_PROP_HANDLEMETHOD, coderToCompressMethod(szCoder.baCoder));
-            mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, szCoder.baProperty);
-            mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pState->listCodersSizes.at(i));
-
-            XBinary::DATAPROCESS_STATE state = {};
-            state.mapProperties = mapProperties;
-            state.mapUnpackProperties = mapUnpackProperties;
-            state.pDeviceInput = pInput;
-            state.pDeviceOutput = pOutput;
-            state.nInputOffset = 0;
-            state.nInputLimit = pInput->size();
-            state.nProcessedOffset = 0;
-            state.nProcessedLimit = -1;
-
-            bResult = xDecompress._decompress(&state, pPdStruct);
-
-            if (pTempDeviceInput) {
-                freeFileBuffer(&pTempDeviceInput);
-                pTempDeviceInput = nullptr;
-            }
-
-            if (!bResult) {
-                break;
-            }
-        }
-
+        // Compute the index into listCodersSizes for the first coder of this folder
+        qint32 nCoderSizesOffset = 0;
         for (qint32 i = 0; i < nFolderIndex; i++) {
-            freeFileBuffer(&listDevices[i]);
+            nCoderSizesOffset += pState->listFolders.at(i).listCoders.count();
         }
+
+        // Build mapProperties BEFORE assigning to state.
+        // multiDecompress processes methods in reverse order:
+        //   i=last uses HANDLEMETHOD2 -> reads raw stream  (= coder[0])
+        //   i=0    uses HANDLEMETHOD  -> writes final output (= coder[last])
+        QMap<FPART_PROP, QVariant> mapProperties;
+        mapProperties.insert(FPART_PROP_STREAMOFFSET, nStreamOffset);
+        mapProperties.insert(FPART_PROP_STREAMSIZE, nStreamSize);
+
+        if (nNumCoders >= 1) {
+            qint32 nLastCoder = nNumCoders - 1;
+            mapProperties.insert(FPART_PROP_HANDLEMETHOD, (quint32)coderToCompressMethod(folder.listCoders.at(nLastCoder).baCoder));
+            mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES, folder.listCoders.at(nLastCoder).baProperty);
+            if ((nCoderSizesOffset + nLastCoder) < pState->listCodersSizes.count()) {
+                mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)pState->listCodersSizes.at(nCoderSizesOffset + nLastCoder));
+            }
+        }
+
+        if (nNumCoders >= 2) {
+            mapProperties.insert(FPART_PROP_HANDLEMETHOD2, (quint32)coderToCompressMethod(folder.listCoders.at(0).baCoder));
+            mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES2, folder.listCoders.at(0).baProperty);
+            if (nCoderSizesOffset < pState->listCodersSizes.count()) {
+                mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE2, (qint64)pState->listCodersSizes.at(nCoderSizesOffset));
+            }
+        }
+
+        XBinary::DATAPROCESS_STATE state = {};
+        state.mapProperties = mapProperties;
+        state.mapUnpackProperties = mapUnpackProperties;
+        state.pDeviceInput = getDevice();
+        state.pDeviceOutput = pDeviceOut;
+        state.nInputOffset = nStreamOffset;
+        state.nInputLimit = nStreamSize;
+        state.nProcessedOffset = 0;
+        // Limit final output to the expected unpack size so each decoder is properly bounded
+        if (nNumCoders >= 1) {
+            qint32 nLastCoder = nNumCoders - 1;
+            if ((nCoderSizesOffset + nLastCoder) < pState->listCodersSizes.count()) {
+                state.nProcessedLimit = (qint64)pState->listCodersSizes.at(nCoderSizesOffset + nLastCoder);
+            } else {
+                state.nProcessedLimit = -1;
+            }
+        } else {
+            state.nProcessedLimit = -1;
+        }
+
+        bResult = xDecompress.multiDecompress(&state, pPdStruct);
 
         // Check CRC of decompressed data if available
         if (bResult && (nFolderIndex < pState->listOutStreams.count())) {
@@ -1922,13 +2039,11 @@ bool XSevenZip::_decompress(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperti
             if (nExpectedCRC != 0) {
                 pDeviceOut->seek(0);
                 quint32 nActualCRC = XBinary::_getCRC32(pDeviceOut, (quint32)0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320(), pPdStruct);
+                // _getCRC32 uses nInit=0xFFFFFFFF but does not apply the final XOR 0xFFFFFFFF
+                // 7z stores standard CRC32 (with final XOR). Flip to match.
+                nActualCRC ^= 0xFFFFFFFF;
 
                 if (nActualCRC != nExpectedCRC) {
-#ifdef QT_DEBUG
-                    qDebug() << "[7z] CRC mismatch for folder" << nFolderIndex
-                             << "expected:" << Qt::hex << nExpectedCRC
-                             << "actual:" << Qt::hex << nActualCRC;
-#endif
                     bResult = false;
                 }
             }
@@ -1937,3 +2052,4 @@ bool XSevenZip::_decompress(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperti
 
     return bResult;
 }
+

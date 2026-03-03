@@ -20,7 +20,6 @@ HEADERS += \
     $$PWD/Algos/xshrinkdecoder.h \
     $$PWD/Algos/xreducedecoder.h \
     $$PWD/Algos/xzipcryptodecoder.h \
-    $$PWD/Algos/xzipaesdecoder.h \
     $$PWD/Algos/xppmddecoder.h \
     $$PWD/Algos/xppmdrangedecoder.h \
     $$PWD/Algos/xppmdmodel.h \
@@ -76,7 +75,6 @@ SOURCES += \
     $$PWD/Algos/xshrinkdecoder.cpp \
     $$PWD/Algos/xreducedecoder.cpp \
     $$PWD/Algos/xzipcryptodecoder.cpp \
-    $$PWD/Algos/xzipaesdecoder.cpp \
     $$PWD/Algos/xppmddecoder.cpp \
     $$PWD/Algos/xppmdrangedecoder.cpp \
     $$PWD/Algos/xppmdmodel.cpp \

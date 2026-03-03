@@ -454,7 +454,7 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         state.nProcessedLimit = nDecompressedLimit;
 
         XDecompress decompressor;
-        bResult = decompressor._decompress(&state, pPdStruct);
+        bResult = decompressor.multiDecompress(&state, pPdStruct);
 
         sd.close();
     }

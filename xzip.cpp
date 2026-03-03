@@ -28,7 +28,7 @@
 #include "Algos/xreducedecoder.h"
 #include "Algos/xstoredecoder.h"
 #include "Algos/xzipcryptodecoder.h"
-#include "Algos/xzipaesdecoder.h"
+#include "Algos/xaesdecoder.h"
 #include "Algos/xppmddecoder.h"
 
 XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
@@ -1621,7 +1621,7 @@ bool XZip::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    pState->mapProperties = mapProperties;
+    pState->mapUnpackProperties = mapProperties;
 
     bool bResult = false;
 
@@ -1852,7 +1852,7 @@ bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
         connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
 
-        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapProperties, pPdStruct);
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
     }
 
     return bResult;
