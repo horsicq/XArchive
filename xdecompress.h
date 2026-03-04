@@ -37,19 +37,26 @@
 #include "xthreadobject.h"
 #include "xstoredecoder.h"
 #include "xppmddecoder.h"
+#include "Algos/xbcj2decoder.h"
 
 class XDecompress : public QObject {
     Q_OBJECT
 
 public:
     explicit XDecompress(QObject *parent = nullptr);
+    virtual ~XDecompress();
     bool decompressFPART(const XBinary::FPART &fPart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct);
     bool decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct);
-    bool checkCRC(const QMap<XBinary::FPART_PROP, QVariant> &mapProperties, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct);
     bool multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
     bool decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
+    bool checkCRC(XBinary::CRC_TYPE crcType, QVariant value, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct = nullptr);
     QByteArray decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
     qint64 getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
+
+private:
+    void clearSolidCache();
+    QMap<QString, QIODevice *> m_mapSolidCache;
+    QString m_sCurrentArchiveMD5;
 
 signals:
     void completed(qint64 nElapsedTime);

@@ -123,6 +123,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xppmd7model.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xaesdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xaesdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xbcj2decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xbcj2decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.h
 )

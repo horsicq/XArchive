@@ -29,6 +29,7 @@
 #include "Algos/xppmddecoder.h"
 #include "Algos/xbzip2decoder.h"
 #include "Algos/xdeflatedecoder.h"
+#include "Algos/xbcj2decoder.h"
 #include <QBuffer>
 #include <QFileInfo>
 #include <QDir>
@@ -130,7 +131,22 @@ public:
 private:
     struct SEVENZ_UNPACK_CONTEXT {
         QList<ARCHIVERECORD> listArchiveRecords;  // Pre-parsed archive records
-        QMap<QString, QIODevice *> mapDevices;
+        XDecompress decompress;
+        // // Stream/folder metadata persisted for BCJ2 (and any future multi-stream) decompression
+        // qint64 nStreamsBegin;                     // Base file offset for all pack streams
+        // QList<qint64> listPackStreamOffsets;      // Offset of each global pack stream (rel to nStreamsBegin)
+        // QList<qint64> listPackStreamSizes;        // Compressed size of each global pack stream
+        // QList<qint32> listFolderPackBase;         // First global pack stream index for each folder
+        // QList<qint32> listFolderStreamRelBase;    // Start index into listFolderStreamRelIdx per folder
+        // QList<qint32> listFolderStreamRelIdx;     // Flat list of relative stream indices for all folders
+        // QList<qint32> listFolderCoderOffset;      // First global coder index for each folder
+        // QList<QByteArray> listAllCoderIds;        // Flat list of coder ID bytes (across all folders)
+        // QList<QByteArray> listAllCoderProperties; // Flat list of coder properties
+        // QList<quint64> listCodersSizes;           // Flat list of per-coder unpack sizes
+        // QList<qint32> listAllCoderNumInStreams;   // Flat list of nNumInStreams per coder
+        // QList<qint32> listFolderBondBase;         // Start index into listAllBondInput for each folder
+        // QList<qint32> listAllBondInput;           // Flat list of Bond.nInputIndex values
+        // QList<qint32> listAllBondOutput;          // Flat list of Bond.nOutputIndex values
     };
 
     enum SRTYPE {
@@ -258,7 +274,7 @@ private:
     quint32 _handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
     QByteArray _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
 
-    bool _decompress(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, QIODevice *pDeviceOut, qint32 nFolderIndex, SZSTATE *pState, PDSTRUCT *pPdStruct);
+    bool decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, QIODevice *pDeviceOut, SZSTATE *pState, PDSTRUCT *pPdStruct);
 };
 
 #endif  // XSEVENZIP_H

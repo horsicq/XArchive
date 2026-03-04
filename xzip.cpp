@@ -923,8 +923,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
-                                                record.mapProperties.insert(FPART_PROP_CRC_VALUE, cdh.nCRC32);
-                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE, cdh.nCRC32 != 0 ? CRC_TYPE_EDB88320 : CRC_TYPE_UNKNOWN);
+                                                record.mapProperties.insert(FPART_PROP_RESULTCRC, cdh.nCRC32);
+                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE, cdh.nCRC32 != 0 ? CRC_TYPE_FFFFFFFF_EDB88320_00000000 : CRC_TYPE_UNKNOWN);
 
                                                 if (cdh.nFlags & 0x01) record.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
 
@@ -979,8 +979,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
-                            record.mapProperties.insert(FPART_PROP_CRC_VALUE, lfh.nCRC32);
-                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, lfh.nCRC32 != 0 ? CRC_TYPE_EDB88320 : CRC_TYPE_UNKNOWN);
+                            record.mapProperties.insert(FPART_PROP_RESULTCRC, lfh.nCRC32);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, lfh.nCRC32 != 0 ? CRC_TYPE_FFFFFFFF_EDB88320_00000000 : CRC_TYPE_UNKNOWN);
                             record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::dosDateTimeToQDateTime(lfh.nLastModDate, lfh.nLastModTime));
 
                             listResult.append(record);
@@ -1685,6 +1685,9 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         if (bResult) {
             pState->pContext = new ZIP_UNPACK_CONTEXT;
             ((ZIP_UNPACK_CONTEXT *)pState->pContext)->bIsECD = bIsECD;
+
+            QString sMD5 = XBinary::getHash(XBinary::HASH_MD5, getDevice(), pPdStruct);
+            pState->mapArchiveProperties.insert(FPART_PROP_FILEMD5, sMD5);
         }
     }
 
@@ -1696,6 +1699,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     XBinary::ARCHIVERECORD result = {};
 
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+        result.mapProperties = pState->mapArchiveProperties;  // Initialize with archive-level properties
         bool bIsECD = ((ZIP_UNPACK_CONTEXT *)pState->pContext)->bIsECD;
         qint64 nLocalHeaderOffset = 0;
         QString sFileName;
@@ -1779,8 +1783,8 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nMethod);  // Raw ZIP method number
 
         // CRC32
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, nCRC32);
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_EDB88320 : XBinary::CRC_TYPE_UNKNOWN);
+        result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nCRC32);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_00000000 : XBinary::CRC_TYPE_UNKNOWN);
 
         // Sizes
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nCompressedSize);

@@ -1229,7 +1229,7 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEBLOCK4 &file
     mapResult.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nPackSize);
     mapResult.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUnpSize);
     mapResult.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
-    mapResult.insert(XBinary::FPART_PROP_CRC_VALUE, fileBlock4.fileCRC);
+    mapResult.insert(XBinary::FPART_PROP_RESULTCRC, fileBlock4.fileCRC);
 
     HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
 
@@ -1263,7 +1263,7 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
     mapResult.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, fileHeader5.nDataSize);
     mapResult.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, fileHeader5.nUnpackedSize);
     mapResult.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
-    mapResult.insert(XBinary::FPART_PROP_CRC_VALUE, fileHeader5.nCRC32);
+    mapResult.insert(XBinary::FPART_PROP_RESULTCRC, fileHeader5.nCRC32);
 
     quint8 nVer = fileHeader5.nCompInfo & 0x003f;
     quint8 nMethod = (fileHeader5.nCompInfo >> 7) & 7;

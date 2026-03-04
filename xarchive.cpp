@@ -106,8 +106,8 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             record.spInfo.compressMethod = HANDLE_METHOD_UNKNOWN;
         }
 
-        if (archiveRecord.mapProperties.contains(FPART_PROP_CRC_VALUE)) {
-            record.spInfo.nCRC32 = archiveRecord.mapProperties.value(FPART_PROP_CRC_VALUE).toUInt();
+        if (archiveRecord.mapProperties.contains(FPART_PROP_RESULTCRC)) {
+            record.spInfo.nCRC32 = archiveRecord.mapProperties.value(FPART_PROP_RESULTCRC).toUInt();
         }
 
         if (archiveRecord.mapProperties.contains(FPART_PROP_WINDOWSIZE)) {

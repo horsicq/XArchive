@@ -466,7 +466,7 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         // Parse checksum (octal)
         QString sChecksum = QString(QByteArray(header.chksum, 8)).trimmed();
         quint32 nChecksum = sChecksum.toUInt(nullptr, 8);
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_VALUE, nChecksum);
+        result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nChecksum);
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
 
         // Type flag

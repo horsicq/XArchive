@@ -25,6 +25,7 @@ HEADERS += \
     $$PWD/Algos/xppmdmodel.h \
     $$PWD/Algos/xppmd7model.h \
     $$PWD/Algos/xaesdecoder.h \
+    $$PWD/Algos/xbcj2decoder.h \
     $$PWD/Algos/xsha256decoder.h \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
@@ -80,6 +81,7 @@ SOURCES += \
     $$PWD/Algos/xppmdmodel.cpp \
     $$PWD/Algos/xppmd7model.cpp \
     $$PWD/Algos/xaesdecoder.cpp \
+    $$PWD/Algos/xbcj2decoder.cpp \
     $$PWD/Algos/xsha256decoder.cpp \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \

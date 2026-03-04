@@ -316,7 +316,7 @@ XBinary::ARCHIVERECORD XZlib::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_ZLIB);
 
     if (pContext->nAdler32 != 0) {
-        result.mapProperties.insert(FPART_PROP_CRC_VALUE, pContext->nAdler32);
+        result.mapProperties.insert(FPART_PROP_RESULTCRC, pContext->nAdler32);
         result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_ADLER32);
     }
 

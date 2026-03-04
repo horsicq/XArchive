@@ -435,7 +435,7 @@ XBinary::ARCHIVERECORD XXZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruc
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZMA2);
 
     if (pContext->nCRC32 != 0) {
-        result.mapProperties.insert(FPART_PROP_CRC_VALUE, pContext->nCRC32);
+        result.mapProperties.insert(FPART_PROP_RESULTCRC, pContext->nCRC32);
         result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
     }
 

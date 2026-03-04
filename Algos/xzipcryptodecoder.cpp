@@ -80,8 +80,8 @@ bool XZipCryptoDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, co
         quint8 nLastHeaderByte = (quint8)bufferHeader[N_ENCRYPTION_HEADER_SIZE - 1];
 
         // Check if we have CRC32 for validation
-        if (pDecompressState->mapProperties.contains(XBinary::FPART_PROP_CRC_VALUE)) {
-            quint32 nCRC32 = pDecompressState->mapProperties.value(XBinary::FPART_PROP_CRC_VALUE).toUInt();
+        if (pDecompressState->mapProperties.contains(XBinary::FPART_PROP_RESULTCRC)) {
+            quint32 nCRC32 = pDecompressState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC).toUInt();
             quint8 nExpectedByte = (nCRC32 >> 24) & 0xFF;
 
             // Also check for DOS time format (high byte of modification time)
