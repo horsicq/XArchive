@@ -132,21 +132,6 @@ private:
     struct SEVENZ_UNPACK_CONTEXT {
         QList<ARCHIVERECORD> listArchiveRecords;  // Pre-parsed archive records
         XDecompress decompress;
-        // // Stream/folder metadata persisted for BCJ2 (and any future multi-stream) decompression
-        // qint64 nStreamsBegin;                     // Base file offset for all pack streams
-        // QList<qint64> listPackStreamOffsets;      // Offset of each global pack stream (rel to nStreamsBegin)
-        // QList<qint64> listPackStreamSizes;        // Compressed size of each global pack stream
-        // QList<qint32> listFolderPackBase;         // First global pack stream index for each folder
-        // QList<qint32> listFolderStreamRelBase;    // Start index into listFolderStreamRelIdx per folder
-        // QList<qint32> listFolderStreamRelIdx;     // Flat list of relative stream indices for all folders
-        // QList<qint32> listFolderCoderOffset;      // First global coder index for each folder
-        // QList<QByteArray> listAllCoderIds;        // Flat list of coder ID bytes (across all folders)
-        // QList<QByteArray> listAllCoderProperties; // Flat list of coder properties
-        // QList<quint64> listCodersSizes;           // Flat list of per-coder unpack sizes
-        // QList<qint32> listAllCoderNumInStreams;   // Flat list of nNumInStreams per coder
-        // QList<qint32> listFolderBondBase;         // Start index into listAllBondInput for each folder
-        // QList<qint32> listAllBondInput;           // Flat list of Bond.nInputIndex values
-        // QList<qint32> listAllBondOutput;          // Flat list of Bond.nOutputIndex values
     };
 
     enum SRTYPE {
@@ -275,6 +260,11 @@ private:
     QByteArray _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
 
     bool decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, QIODevice *pDeviceOut, SZSTATE *pState, PDSTRUCT *pPdStruct);
+
+    // Decode per-file time (8-byte FILETIME) or attrib (4-byte UINT32) from a 7-zip packed array.
+    // Format: AllAreDefined[1] + optional bitmap[ceil(n/8)] + values.
+    static bool _decode7zTimeValue(const QByteArray &baData, qint32 nNumFiles, qint32 nFileIndex, quint64 *pResult);
+    static bool _decode7zAttribValue(const QByteArray &baData, qint32 nNumFiles, qint32 nFileIndex, quint32 *pResult);
 };
 
 #endif  // XSEVENZIP_H

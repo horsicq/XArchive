@@ -19,9 +19,12 @@
  * SOFTWARE.
  */
 #include "xdecompress.h"
+#include "subdevice.h"
 
 XDecompress::XDecompress(QObject *parent) : QObject(parent)
 {
+    m_pRarUnpacker = nullptr;
+    m_nRarSolidIndex = 0;
 }
 
 XDecompress::~XDecompress()
@@ -67,6 +70,146 @@ void XDecompress::clearSolidCache()
         XBinary::freeFileBuffer(&pDevice);
     }
     m_mapSolidCache.clear();
+
+    delete m_pRarUnpacker;
+    m_pRarUnpacker = nullptr;
+    m_nRarSolidIndex = 0;
+}
+
+bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+{
+    bool bResult = false;
+
+    if (!pState || !pState->pDeviceInput || !pState->pDeviceOutput) {
+        return false;
+    }
+
+    QString sFileName = pState->mapProperties.value(XBinary::FPART_PROP_ORIGINALNAME).toString();
+    QString sCacheKey = QString("rar_%1").arg(sFileName);
+
+    // If the requested file is not yet cached, decompress it using a persistent rar_Unpack
+    // instance that maintains decoder dictionary state across sequential solid files.
+    if (!m_mapSolidCache.contains(sCacheKey)) {
+        XBinary::HANDLE_METHOD compressMethod = (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE).toUInt();
+        qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
+        qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
+
+        // For encrypted RAR5: decrypt first, then use the inner compression method
+        QIODevice *pDecryptedDevice = nullptr;
+        QIODevice *pInputDevice = pState->pDeviceInput;
+        qint64 nInputOffset = pState->nInputOffset;
+        qint64 nInputLimit = pState->nInputLimit;
+
+        XBinary::HANDLE_METHOD outerMethod = (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD2, XBinary::HANDLE_METHOD_UNKNOWN).toUInt();
+        if (outerMethod == XBinary::HANDLE_METHOD_RAR5_AES) {
+            // Decrypt the encrypted data into a temporary buffer
+            QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+            qint64 nEncryptedSize = pState->nInputLimit;
+
+            // Align to AES block size
+            if (nEncryptedSize > 0 && (nEncryptedSize % AES_BLOCK_SIZE) == 0) {
+                pDecryptedDevice = XBinary::createFileBuffer(nEncryptedSize, pPdStruct);
+                if (pDecryptedDevice) {
+                    XBinary::DATAPROCESS_STATE decryptState = *pState;
+                    decryptState.pDeviceOutput = pDecryptedDevice;
+                    decryptState.nCountInput = 0;
+                    decryptState.nCountOutput = 0;
+
+                    if (XAESDecoder::decryptRar5(&decryptState, sPassword, pPdStruct)) {
+                        pInputDevice = pDecryptedDevice;
+                        nInputOffset = 0;
+                        nInputLimit = nEncryptedSize;
+                    } else {
+                        XBinary::freeFileBuffer(&pDecryptedDevice);
+                        pDecryptedDevice = nullptr;
+                    }
+                }
+            }
+        }
+
+        // For solid archives: first file is not solid (bIsSolid=false), subsequent files are solid (bIsSolid=true)
+        bool bIsSolid = (m_nRarSolidIndex > 0);
+
+        if (nUncompressedSize > 0) {
+            QIODevice *pBuffer = XBinary::createFileBuffer(nUncompressedSize, pPdStruct);
+
+            if (pBuffer) {
+                bool bDecompressOk = false;
+
+                if (compressMethod == XBinary::HANDLE_METHOD_STORE) {
+                    // STORE: copy data directly, decoder state is unaffected
+                    bDecompressOk = XBinary::copyDeviceMemory(pInputDevice, nInputOffset, pBuffer, 0, nInputLimit);
+                } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_15) || (compressMethod == XBinary::HANDLE_METHOD_RAR_20) ||
+                           (compressMethod == XBinary::HANDLE_METHOD_RAR_29) || (compressMethod == XBinary::HANDLE_METHOD_RAR_50) ||
+                           (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
+                    if (!m_pRarUnpacker) {
+                        m_pRarUnpacker = new rar_Unpack();
+                    }
+
+                    SubDevice sd(pInputDevice, nInputOffset, nInputLimit);
+
+                    if (sd.open(QIODevice::ReadOnly)) {
+                        m_pRarUnpacker->setDevices(&sd, pBuffer);
+                        qint32 nInit = m_pRarUnpacker->Init(nWindowSize, bIsSolid);
+
+                        if (nInit > 0) {
+                            m_pRarUnpacker->SetDestSize(nUncompressedSize);
+
+                            if (compressMethod == XBinary::HANDLE_METHOD_RAR_15) {
+                                m_pRarUnpacker->Unpack15(bIsSolid, pPdStruct);
+                                bDecompressOk = true;
+                            } else if (compressMethod == XBinary::HANDLE_METHOD_RAR_20) {
+                                m_pRarUnpacker->Unpack20(bIsSolid, pPdStruct);
+                                bDecompressOk = true;
+                            } else if (compressMethod == XBinary::HANDLE_METHOD_RAR_29) {
+                                m_pRarUnpacker->Unpack29(bIsSolid, pPdStruct);
+                                bDecompressOk = true;
+                            } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_50) || (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
+                                m_pRarUnpacker->Unpack5(bIsSolid, pPdStruct);
+                                bDecompressOk = true;
+                            }
+                        }
+
+                        sd.close();
+                    }
+                }
+
+                if (bDecompressOk) {
+                    m_mapSolidCache.insert(sCacheKey, pBuffer);
+                } else {
+                    XBinary::freeFileBuffer(&pBuffer);
+                }
+            }
+        }
+
+        // Clean up decrypted device if we created one
+        XBinary::freeFileBuffer(&pDecryptedDevice);
+
+        m_nRarSolidIndex++;
+    }
+
+    // Retrieve the requested file from cache
+    if (m_mapSolidCache.contains(sCacheKey)) {
+        QIODevice *pCachedDevice = m_mapSolidCache.value(sCacheKey);
+        qint64 nDecompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong();
+
+        if (pCachedDevice) {
+            pCachedDevice->seek(0);
+            QByteArray baData = pCachedDevice->read(nDecompressedSize);
+            pState->pDeviceOutput->seek(0);
+            pState->nCountOutput = pState->pDeviceOutput->write(baData);
+            bResult = (pState->nCountOutput == nDecompressedSize);
+
+            if (bResult) {
+                // Verify CRC of the extracted file
+                XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+                QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+            }
+        }
+    }
+
+    return bResult;
 }
 
 bool XDecompress::checkCRC(XBinary::CRC_TYPE crcType, QVariant value, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
@@ -124,56 +267,69 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
             bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
         }
     } else if (bIsSolid) {
-        // Solid block: decompress the entire folder block once, cache it, then extract this
-        // file's sub-stream.  Prefer the explicit solid-folder ID (set by archive parsers such
-        // as XSevenZip via FPART_PROP_SOLIDFOLDERINDEX); fall back to offset_size when absent.
-        QString sCacheKey;
-        qint64 nSolidFolderIndex = pState->mapProperties.value(XBinary::FPART_PROP_SOLIDFOLDERINDEX, (qint64)-1).toLongLong();
-        if (nSolidFolderIndex >= 0) {
-            sCacheKey = QString("f%1").arg(nSolidFolderIndex);
+        // Check if this is a RAR solid archive — RAR solid requires sequential decompression
+        // with persistent decoder state, unlike 7z solid which uses a single compressed block.
+        bool bIsRarSolid = (topMethod == XBinary::HANDLE_METHOD_RAR_15) || (topMethod == XBinary::HANDLE_METHOD_RAR_20) ||
+                           (topMethod == XBinary::HANDLE_METHOD_RAR_29) || (topMethod == XBinary::HANDLE_METHOD_RAR_50) ||
+                           (topMethod == XBinary::HANDLE_METHOD_RAR_70);
+
+        if (bIsRarSolid) {
+            // RAR solid: use XRar streaming API to decompress all files with proper decoder state,
+            // cache each file's output, and return the requested file from cache.
+            bResult = decompressRarSolid(pState, pPdStruct);
         } else {
-            sCacheKey = QString("%1_%2").arg(pState->nInputOffset).arg(pState->nInputLimit);
-        }
-
-        if (!m_mapSolidCache.contains(sCacheKey)) {
-            qint64 nStreamUnpackedSize = pState->mapProperties.value(XBinary::FPART_PROP_STREAMUNPACKEDSIZE, (qint64)0).toLongLong();
-
-            // Build a block-level state: same source, ISSOLID=false, full block uncompressed size.
-            // The recursive call goes to single-method or multi-method non-solid branch.
-            XBinary::DATAPROCESS_STATE blockState = *pState;
-            blockState.mapProperties.insert(XBinary::FPART_PROP_ISSOLID, false);
-            blockState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nStreamUnpackedSize);
-            // Remove per-file CRC from the block state — CRC belongs to individual files, not the solid block
-            blockState.mapProperties.remove(XBinary::FPART_PROP_CRC_TYPE);
-            blockState.mapProperties.remove(XBinary::FPART_PROP_RESULTCRC);
-
-            QIODevice *pSolidDevice = XBinary::createFileBuffer(nStreamUnpackedSize, pPdStruct);
-            blockState.pDeviceOutput = pSolidDevice;
-
-            bool bBlockResult = multiDecompress(&blockState, pPdStruct);
-            if (pSolidDevice && bBlockResult) {
-                m_mapSolidCache.insert(sCacheKey, pSolidDevice);
+            // Non-RAR solid (e.g., 7z): decompress the entire folder block once, cache it,
+            // then extract this file's sub-stream.
+            // Prefer the explicit solid-folder ID (set by archive parsers such as XSevenZip
+            // via FPART_PROP_SOLIDFOLDERINDEX); fall back to offset_size when absent.
+            QString sCacheKey;
+            qint64 nSolidFolderIndex = pState->mapProperties.value(XBinary::FPART_PROP_SOLIDFOLDERINDEX, (qint64)-1).toLongLong();
+            if (nSolidFolderIndex >= 0) {
+                sCacheKey = QString("f%1").arg(nSolidFolderIndex);
             } else {
-                XBinary::freeFileBuffer(&pSolidDevice);
+                sCacheKey = QString("%1_%2").arg(pState->nInputOffset).arg(pState->nInputLimit);
             }
-        }
 
-        if (m_mapSolidCache.contains(sCacheKey)) {
-            qint64 nSubstreamOffset = pState->mapProperties.value(XBinary::FPART_PROP_SUBSTREAMOFFSET, (qint64)0).toLongLong();
-            qint64 nDecompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong();
-            QIODevice *pSolidDevice = m_mapSolidCache.value(sCacheKey);
-            if (pState->pDeviceOutput && pSolidDevice) {
-                pSolidDevice->seek(nSubstreamOffset);
-                QByteArray baSubStream = pSolidDevice->read(nDecompressedSize);
-                pState->pDeviceOutput->seek(0);
-                qint64 nWritten = pState->pDeviceOutput->write(baSubStream);
-                pState->nCountOutput = nWritten;
-                bResult = (nWritten == nDecompressedSize);
-                if (bResult) {
-                    // Verify CRC of the extracted sub-stream
-                    XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
-                    QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
-                    bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+            if (!m_mapSolidCache.contains(sCacheKey)) {
+                qint64 nStreamUnpackedSize = pState->mapProperties.value(XBinary::FPART_PROP_STREAMUNPACKEDSIZE, (qint64)0).toLongLong();
+
+                // Build a block-level state: same source, ISSOLID=false, full block uncompressed size.
+                // The recursive call goes to single-method or multi-method non-solid branch.
+                XBinary::DATAPROCESS_STATE blockState = *pState;
+                blockState.mapProperties.insert(XBinary::FPART_PROP_ISSOLID, false);
+                blockState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nStreamUnpackedSize);
+                // Remove per-file CRC from the block state — CRC belongs to individual files, not the solid block
+                blockState.mapProperties.remove(XBinary::FPART_PROP_CRC_TYPE);
+                blockState.mapProperties.remove(XBinary::FPART_PROP_RESULTCRC);
+
+                QIODevice *pSolidDevice = XBinary::createFileBuffer(nStreamUnpackedSize, pPdStruct);
+                blockState.pDeviceOutput = pSolidDevice;
+
+                bool bBlockResult = multiDecompress(&blockState, pPdStruct);
+                if (pSolidDevice && bBlockResult) {
+                    m_mapSolidCache.insert(sCacheKey, pSolidDevice);
+                } else {
+                    XBinary::freeFileBuffer(&pSolidDevice);
+                }
+            }
+
+            if (m_mapSolidCache.contains(sCacheKey)) {
+                qint64 nSubstreamOffset = pState->mapProperties.value(XBinary::FPART_PROP_SUBSTREAMOFFSET, (qint64)0).toLongLong();
+                qint64 nDecompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong();
+                QIODevice *pSolidDevice = m_mapSolidCache.value(sCacheKey);
+                if (pState->pDeviceOutput && pSolidDevice) {
+                    pSolidDevice->seek(nSubstreamOffset);
+                    QByteArray baSubStream = pSolidDevice->read(nDecompressedSize);
+                    pState->pDeviceOutput->seek(0);
+                    qint64 nWritten = pState->pDeviceOutput->write(baSubStream);
+                    pState->nCountOutput = nWritten;
+                    bResult = (nWritten == nDecompressedSize);
+                    if (bResult) {
+                        // Verify CRC of the extracted sub-stream
+                        XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+                        QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                        bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+                    }
                 }
             }
         }
@@ -298,6 +454,11 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
 
     if (compressMethod == XBinary::HANDLE_METHOD_STORE) {
+        // For STORE after AES decryption, the input may include AES padding bytes.
+        // Cap input to the actual uncompressed size to avoid copying padding.
+        if (nUncompressedSize > 0 && nUncompressedSize < pState->nInputLimit) {
+            pState->nInputLimit = nUncompressedSize;
+        }
         bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP2) {
         bResult = XBZIP2Decoder::decompress(pState, pPdStruct);
@@ -567,6 +728,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     } else if (compressMethod == XBinary::HANDLE_METHOD_7Z_AES) {
         QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
         bResult = XAESDecoder::decrypt(pState, baProperty, sPassword, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_RAR5_AES) {
+        QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+        bResult = XAESDecoder::decryptRar5(pState, sPassword, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_BCJ2) {
         if (pState->pDeviceInput && pState->pDeviceOutput) {
             XBinary::HANDLE_METHOD cmMain = (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD4, (quint32)XBinary::HANDLE_METHOD_LZMA).toUInt();
@@ -590,7 +754,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             qint64 nOutputSize = nUncompressedSize;  // BCJ2 total output set by multiDecompress
 
-            if (nMainUnpack > 0 && nCallUnpack > 0 && nJmpUnpack > 0 && nOutputSize > 0) {
+            // nCallUnpack / nJmpUnpack may be 0 when the data contains no CALL/JMP instructions
+            // (e.g. pure image or text files). Only require nMainUnpack > 0 and nOutputSize > 0.
+            if (nMainUnpack > 0 && nOutputSize > 0) {
                 QByteArray baMain, baCall, baJmp;
                 baMain.resize((qint32)nMainUnpack);
                 baCall.resize((qint32)nCallUnpack);

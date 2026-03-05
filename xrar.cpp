@@ -20,6 +20,8 @@
  */
 #include "xrar.h"
 #include "Algos/xrardecoder.h"
+#include "Algos/xaesdecoder.h"
+#include <QBuffer>
 
 XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                             {XRar::STRUCTID_RAR14_SIGNATURE, "RAR14_SIGNATURE", QString("RAR 1.4 signature")},
@@ -251,8 +253,28 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                 }
             }
         } else if (nInternVersion == 5) {
+            qint64 nFileSize = getSize();
             while (isPdStructNotCanceled(pPdStruct) && (nLimit == -1 || listResult.size() < nLimit)) {
+                if (nCurrentOffset >= nFileSize) break;
+
                 GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+
+                if (genericHeader.nHeaderSize == 0) break;
+
+                // Stop at encryption header — can't parse encrypted data without password
+                if (genericHeader.nType == HEADERTYPE5_ENCRYPTION) {
+                    if (nFileParts & FILEPART_HEADER) {
+                        XBinary::FPART record = {};
+                        record.filePart = FILEPART_HEADER;
+                        record.nFileOffset = nCurrentOffset;
+                        record.nFileSize = genericHeader.nHeaderSize;
+                        record.nVirtualAddress = -1;
+                        record.sName = headerType5ToString((HEADERTYPE5)genericHeader.nType);
+                        listResult.append(record);
+                    }
+                    nMaxOffset = qMax(nMaxOffset, (qint64)(nCurrentOffset + genericHeader.nHeaderSize));
+                    break;
+                }
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
                     if (nFileParts & FILEPART_HEADER) {
@@ -430,9 +452,21 @@ QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                     // Count RAR 5.0 headers for table
                     qint64 nCurrentOffset = 8;
                     qint32 nNumberOfHeaders = 0;
+                    qint64 nFileSize = getSize();
 
                     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+                        if (nCurrentOffset >= nFileSize) break;
+
                         GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+
+                        if (genericHeader.nHeaderSize == 0) break;
+
+                        // Stop at encryption header
+                        if (genericHeader.nType == HEADERTYPE5_ENCRYPTION) {
+                            nNumberOfHeaders++;
+                            nCurrentOffset += genericHeader.nHeaderSize;
+                            break;
+                        }
 
                         if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
                             nNumberOfHeaders++;
@@ -593,9 +627,22 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
         if (nVersion == 5) {
             nCurrentOffset = 8;
             result.sVersion = "5.X-7.X";
+            qint64 nFileSize = getSize();
 
             while (isPdStructNotCanceled(pPdStruct)) {
+                if (nCurrentOffset >= nFileSize) break;
+
                 GENERICHEADER5 genericHeader = XRar::readGenericHeader5(nCurrentOffset);
+
+                if (genericHeader.nHeaderSize == 0) break;
+
+                // Stop at encryption header — can't determine version from encrypted data
+                if (genericHeader.nType == HEADERTYPE5_ENCRYPTION) {
+                    nFormatSize = qMax(nFormatSize, nCurrentOffset + (qint64)genericHeader.nHeaderSize);
+                    // Encrypted headers archive — set format size to entire file
+                    nFormatSize = qMax(nFormatSize, nFileSize);
+                    break;
+                }
 
                 if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
                     if (genericHeader.nType == HEADERTYPE5_FILE) {
@@ -948,11 +995,12 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
 
 bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     if (!pUnpackState) {
         return false;
     }
+
+    // Store unpack properties (including password for encrypted archives)
+    pUnpackState->mapUnpackProperties = mapProperties;
 
     // Initialize state
     pUnpackState->nCurrentOffset = 0;
@@ -963,12 +1011,13 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
     // Create context
     RAR_UNPACK_CONTEXT *pContext = new RAR_UNPACK_CONTEXT;
     pContext->nVersion = getInternVersion(pPdStruct);
+    pContext->bArchiveIsSolid = false;
+    pContext->bHeadersEncrypted = false;
 
     if (pContext->nVersion == 0) {
         delete pContext;
         return false;
     }
-
     qint64 nFileHeaderSize = (pContext->nVersion == 4) ? 7 : 8;
     qint64 nCurrentOffset = nFileHeaderSize;
 
@@ -985,6 +1034,8 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 #endif
 
         if (archiveBlock.nType == BLOCKTYPE4_ARCHIVE && archiveBlock.nHeaderSize > 0) {
+            // RAR4 archive header flag 0x0008 = solid archive
+            pContext->bArchiveIsSolid = (archiveBlock.nFlags & 0x0008) != 0;
             nCurrentOffset += archiveBlock.nHeaderSize;
 #ifdef QT_DEBUG
             qDebug() << "XRar::initUnpack() - ARCHIVE Block processed, next offset:" << nCurrentOffset;
@@ -1066,9 +1117,152 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 #ifdef QT_DEBUG
         qDebug() << "XRar::initUnpack() - Total blocks processed:" << nBlockCount << "Files found:" << pUnpackState->nNumberOfRecords;
 #endif
+
+        // Compute solid folder indices for RAR4: increment when per-file solid flag is false
+        {
+            qint32 nFolderIndex = 0;
+            for (qint32 i = 0; i < pContext->listFileBlocks4.count(); i++) {
+                bool bPerFileSolid = (pContext->listFileBlocks4.at(i).genericBlock4.nFlags & 0x0010) != 0;
+                if (!bPerFileSolid && (i > 0)) {
+                    nFolderIndex++;
+                }
+                pContext->listSolidFolderIndex.append(nFolderIndex);
+            }
+        }
     } else if (pContext->nVersion == 5) {
         while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+            if (nCurrentOffset >= pUnpackState->nTotalSize) {
+                break;
+            }
+
             GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+
+            if (genericHeader.nHeaderSize == 0) {
+#ifdef QT_DEBUG
+                qDebug() << "XRar::initUnpack() - RAR5: Invalid header size 0 at offset:" << nCurrentOffset;
+#endif
+                break;
+            }
+
+            if (genericHeader.nType == HEADERTYPE5_MAIN) {
+                // RAR5 main archive header: archive flags bit 0x0004 = solid
+                // Read archive flags from header body (after CRC + headerSize + type + flags)
+                // The GENERICHEADER5 nFlags field contains common header flags, not archive flags.
+                // Archive flags are in the header body. For simplicity, scan file headers instead.
+            }
+
+            if (genericHeader.nType == HEADERTYPE5_ENCRYPTION) {
+                // Archive has encrypted headers — parse encryption params from header body
+                // Body layout: vint encVer, vint encFlags, byte kdfCount, 16-byte salt, [8+4 pswCheck]
+                qint64 nBodyOffset = nCurrentOffset + 4;  // skip CRC32
+
+                PACKED_UINT puBodySize = read_uleb128(nBodyOffset, 4);
+                nBodyOffset += puBodySize.nByteSize;
+
+                PACKED_UINT puType = read_uleb128(nBodyOffset, 4);  // type vint
+                nBodyOffset += puType.nByteSize;
+
+                PACKED_UINT puFlags = read_uleb128(nBodyOffset, 4);  // common flags vint
+                nBodyOffset += puFlags.nByteSize;
+
+                PACKED_UINT puEncVer = read_uleb128(nBodyOffset, 4);
+                nBodyOffset += puEncVer.nByteSize;
+
+                PACKED_UINT puEncFlags = read_uleb128(nBodyOffset, 4);
+                nBodyOffset += puEncFlags.nByteSize;
+
+                quint8 nKdfCount = read_uint8(nBodyOffset);
+                nBodyOffset += 1;
+
+                QByteArray baSalt = read_array(nBodyOffset, 16);
+                nBodyOffset += 16;
+
+#ifdef QT_DEBUG
+                qDebug() << "XRar::initUnpack() - ENCRYPTION header: encVer=" << puEncVer.nValue
+                         << "encFlags=" << puEncFlags.nValue << "kdfCount=" << nKdfCount
+                         << "saltSize=" << baSalt.size();
+#endif
+
+                // Derive AES key for header decryption
+                QString sPassword = pUnpackState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+
+                if (!sPassword.isEmpty() && puEncVer.nValue == 0) {
+                    QByteArray baHeaderAesKey = XAESDecoder::deriveRar5HeaderKey(sPassword, baSalt, nKdfCount);
+
+                    if (!baHeaderAesKey.isEmpty()) {
+                        pContext->bHeadersEncrypted = true;
+                        nCurrentOffset += genericHeader.nHeaderSize;
+
+#ifdef QT_DEBUG
+                        qDebug() << "XRar::initUnpack() - Decrypting encrypted headers starting at offset:" << nCurrentOffset;
+#endif
+
+                        // Read encrypted headers
+                        while (XBinary::isPdStructNotCanceled(pPdStruct) && nCurrentOffset < pUnpackState->nTotalSize) {
+                            qint64 nConsumed = 0;
+                            QByteArray baDecHeader = decryptRar5HeaderBlock(nCurrentOffset, baHeaderAesKey, &nConsumed);
+
+                            if (baDecHeader.isEmpty() || nConsumed == 0) {
+#ifdef QT_DEBUG
+                                qDebug() << "XRar::initUnpack() - Failed to decrypt header at offset:" << nCurrentOffset;
+#endif
+                                break;
+                            }
+
+                            // Parse decrypted header using QBuffer + temporary XRar
+                            QBuffer bufHeader(&baDecHeader);
+                            bufHeader.open(QIODevice::ReadOnly);
+                            XRar rarTemp(&bufHeader);
+
+                            GENERICHEADER5 decGeneric = rarTemp.readGenericHeader5(0);
+
+#ifdef QT_DEBUG
+                            qDebug() << "XRar::initUnpack() - Decrypted header type:" << decGeneric.nType
+                                     << "headerSize(plain):" << decGeneric.nHeaderSize
+                                     << "dataSize:" << decGeneric.nDataSize
+                                     << "consumed(ondisk):" << nConsumed;
+#endif
+
+                            if (decGeneric.nType == HEADERTYPE5_FILE) {
+                                FILEHEADER5 fileHeader = rarTemp.readFileHeader5(0);
+
+                                // Override nHeaderSize to reflect the actual on-disk size (IV + encrypted)
+                                fileHeader.nHeaderSize = nConsumed;
+
+                                pContext->listFileOffsets.append(nCurrentOffset);
+                                pContext->listFileHeaders5.append(fileHeader);
+                                pUnpackState->nNumberOfRecords++;
+
+#ifdef QT_DEBUG
+                                qDebug() << "XRar::initUnpack() - Encrypted FILE:" << fileHeader.sFileName
+                                         << "unpackedSize:" << fileHeader.nUnpackedSize
+                                         << "dataSize:" << fileHeader.nDataSize;
+#endif
+                            }
+
+                            // Move past encrypted header + data area
+                            nCurrentOffset += nConsumed;
+
+                            if (decGeneric.nDataSize > 0) {
+                                nCurrentOffset += decGeneric.nDataSize;
+                            }
+
+                            if (decGeneric.nType == HEADERTYPE5_ENDARC) {
+                                break;
+                            }
+                        }
+
+                        baHeaderAesKey.fill(0);
+                    }
+                }
+#ifdef QT_DEBUG
+                else {
+                    qDebug() << "XRar::initUnpack() - ENCRYPTION header found but no password provided or unsupported version";
+                }
+#endif
+
+                break;  // After encryption header processing, we're done with block scanning
+            }
 
             if (genericHeader.nType == HEADERTYPE5_FILE) {
                 FILEHEADER5 fileHeader = readFileHeader5(nCurrentOffset);
@@ -1083,6 +1277,27 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
             if (genericHeader.nType == HEADERTYPE5_ENDARC) {
                 break;
+            }
+        }
+
+        // Detect solid archive: if any RAR5 file has solid flag (nCompInfo bit 6),
+        // the archive uses solid compression.
+        for (qint32 i = 0; i < pContext->listFileHeaders5.count(); i++) {
+            if ((pContext->listFileHeaders5.at(i).nCompInfo >> 6) & 1) {
+                pContext->bArchiveIsSolid = true;
+                break;
+            }
+        }
+
+        // Compute solid folder indices for RAR5: increment when per-file solid flag is false
+        {
+            qint32 nFolderIndex = 0;
+            for (qint32 i = 0; i < pContext->listFileHeaders5.count(); i++) {
+                bool bPerFileSolid = (pContext->listFileHeaders5.at(i).nCompInfo >> 6) & 1;
+                if (!bPerFileSolid && (i > 0)) {
+                    nFolderIndex++;
+                }
+                pContext->listSolidFolderIndex.append(nFolderIndex);
             }
         }
     }
@@ -1122,6 +1337,16 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
 
         record.mapProperties = _readProperties(fileBlock);
 
+        // For solid archives, mark ALL files as solid so decompressArchiveRecord
+        // routes them through the persistent decoder path
+        if (pContext->bArchiveIsSolid) {
+            record.mapProperties.insert(XBinary::FPART_PROP_ISSOLID, true);
+        }
+
+        if (nIndex < pContext->listSolidFolderIndex.count()) {
+            record.mapProperties.insert(XBinary::FPART_PROP_SOLIDFOLDERINDEX, (qint64)pContext->listSolidFolderIndex.at(nIndex));
+        }
+
     } else if (pContext->nVersion == 5) {
         const FILEHEADER5 &fileHeader = pContext->listFileHeaders5.at(nIndex);
 
@@ -1129,6 +1354,16 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
         record.nStreamSize = fileHeader.nDataSize;
 
         record.mapProperties = _readProperties(fileHeader);
+
+        // For solid archives, mark ALL files as solid so decompressArchiveRecord
+        // routes them through the persistent decoder path
+        if (pContext->bArchiveIsSolid) {
+            record.mapProperties.insert(XBinary::FPART_PROP_ISSOLID, true);
+        }
+
+        if (nIndex < pContext->listSolidFolderIndex.count()) {
+            record.mapProperties.insert(XBinary::FPART_PROP_SOLIDFOLDERINDEX, (qint64)pContext->listSolidFolderIndex.at(nIndex));
+        }
     }
 
     return record;
@@ -1146,49 +1381,55 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
         return false;
     }
 
-    ARCHIVERECORD record = infoCurrent(pUnpackState, pPdStruct);
-    HANDLE_METHOD compressMethod = (HANDLE_METHOD)record.mapProperties.value(FPART_PROP_HANDLEMETHOD).toUInt();
-
     RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
+    ARCHIVERECORD archiveRecord = infoCurrent(pUnpackState, pPdStruct);
 
-    bool bResult = false;
-    // For solid archives: first file is not solid (bIsSolid=false), subsequent files are solid (bIsSolid=true)
-    bool bIsSolid = (pUnpackState->nCurrentIndex > 0);
+    if (archiveRecord.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) return true;  // Directory
 
-    SubDevice sd(getDevice(), record.nStreamOffset, record.nStreamSize);
+    if (archiveRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() == 0) return true;  // Empty file
 
-    if (sd.open(QIODevice::ReadOnly)) {
-        if (compressMethod == HANDLE_METHOD_STORE) {
-            qint64 nDataOffset = record.nStreamOffset;
-            qint64 nDataSize = record.nStreamSize;
+    bool bResult = pContext->decompress.decompressArchiveRecord(archiveRecord, getDevice(), pOutputDevice, pUnpackState->mapUnpackProperties, pPdStruct);
 
-            bResult = XBinary::copyDeviceMemory(getDevice(), nDataOffset, pOutputDevice, 0, nDataSize);  // TODO
-        } else if ((compressMethod == HANDLE_METHOD_RAR_15) || (compressMethod == HANDLE_METHOD_RAR_20) || (compressMethod == HANDLE_METHOD_RAR_29) ||
-                   (compressMethod == HANDLE_METHOD_RAR_50) || (compressMethod == HANDLE_METHOD_RAR_70)) {
-            qint32 nWindowSize = record.mapProperties.value(FPART_PROP_WINDOWSIZE).toInt();
+    // bool bResult = false;
+    // // For solid archives: first file is not solid (bIsSolid=false), subsequent files are solid (bIsSolid=true)
+    // bool bIsSolid = (pUnpackState->nCurrentIndex > 0);
 
-            pContext->rarUnpacker.setDevices(&sd, pOutputDevice);
-            qint32 nInit = pContext->rarUnpacker.Init(nWindowSize, bIsSolid);
+    // SubDevice sd(getDevice(), record.nStreamOffset, record.nStreamSize);
 
-            if (nInit > 0) {
-                if (compressMethod == HANDLE_METHOD_RAR_15) {
-                    pContext->rarUnpacker.Unpack15(bIsSolid, pPdStruct);
-                    bResult = true;
-                } else if (compressMethod == HANDLE_METHOD_RAR_20) {
-                    pContext->rarUnpacker.Unpack20(bIsSolid, pPdStruct);
-                    bResult = true;
-                } else if (compressMethod == HANDLE_METHOD_RAR_29) {
-                    pContext->rarUnpacker.Unpack29(bIsSolid, pPdStruct);
-                    bResult = true;
-                } else if ((compressMethod == HANDLE_METHOD_RAR_50) || (compressMethod == HANDLE_METHOD_RAR_70)) {
-                    pContext->rarUnpacker.Unpack5(bIsSolid, pPdStruct);
-                    bResult = true;
-                }
-            }
-        }
+    // if (sd.open(QIODevice::ReadOnly)) {
+    //     if (compressMethod == HANDLE_METHOD_STORE) {
+    //         qint64 nDataOffset = record.nStreamOffset;
+    //         qint64 nDataSize = record.nStreamSize;
 
-        sd.close();
-    }
+    //         bResult = XBinary::copyDeviceMemory(getDevice(), nDataOffset, pOutputDevice, 0, nDataSize);  // TODO
+    //     } else if ((compressMethod == HANDLE_METHOD_RAR_15) || (compressMethod == HANDLE_METHOD_RAR_20) || (compressMethod == HANDLE_METHOD_RAR_29) ||
+    //                (compressMethod == HANDLE_METHOD_RAR_50) || (compressMethod == HANDLE_METHOD_RAR_70)) {
+    //         qint32 nWindowSize = record.mapProperties.value(FPART_PROP_WINDOWSIZE).toInt();
+    //         qint64 nUncompressedSize = record.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
+
+    //         pContext->rarUnpacker.setDevices(&sd, pOutputDevice);
+    //         qint32 nInit = pContext->rarUnpacker.Init(nWindowSize, bIsSolid);
+
+    //         if (nInit > 0) {
+    //             pContext->rarUnpacker.SetDestSize(nUncompressedSize);
+    //             if (compressMethod == HANDLE_METHOD_RAR_15) {
+    //                 pContext->rarUnpacker.Unpack15(bIsSolid, pPdStruct);
+    //                 bResult = true;
+    //             } else if (compressMethod == HANDLE_METHOD_RAR_20) {
+    //                 pContext->rarUnpacker.Unpack20(bIsSolid, pPdStruct);
+    //                 bResult = true;
+    //             } else if (compressMethod == HANDLE_METHOD_RAR_29) {
+    //                 pContext->rarUnpacker.Unpack29(bIsSolid, pPdStruct);
+    //                 bResult = true;
+    //             } else if ((compressMethod == HANDLE_METHOD_RAR_50) || (compressMethod == HANDLE_METHOD_RAR_70)) {
+    //                 pContext->rarUnpacker.Unpack5(bIsSolid, pPdStruct);
+    //                 bResult = true;
+    //             }
+    //         }
+    //     }
+
+    //     sd.close();
+    // }
 
     return bResult;
 }
@@ -1246,6 +1487,14 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEBLOCK4 &file
 
     mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
+    // Solid flag: RAR4 file header nFlags bit 0x0010
+    bool bIsSolid = (fileBlock4.genericBlock4.nFlags & 0x0010) != 0;
+    mapResult.insert(XBinary::FPART_PROP_ISSOLID, bIsSolid);
+
+    // Directory flag: RAR4 uses dictionary size field (bits 7-5) == 7 or fileAttr & 0x10
+    bool bIsFolder = ((fileBlock4.genericBlock4.nFlags & 0x00E0) == 0x00E0) || (fileBlock4.fileAttr & 0x10);
+    mapResult.insert(XBinary::FPART_PROP_ISFOLDER, bIsFolder);
+
     // Extract DOS date and time from 32-bit fileTime field (date in high word, time in low word)
     quint16 nDosTime = fileBlock4.fileTime & 0xFFFF;
     quint16 nDosDate = (fileBlock4.fileTime >> 16) & 0xFFFF;
@@ -1263,7 +1512,7 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
     mapResult.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, fileHeader5.nDataSize);
     mapResult.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, fileHeader5.nUnpackedSize);
     mapResult.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_EDB88320);
-    mapResult.insert(XBinary::FPART_PROP_RESULTCRC, fileHeader5.nCRC32);
+    mapResult.insert(XBinary::FPART_PROP_RESULTCRC, fileHeader5.nDataCRC32);
 
     quint8 nVer = fileHeader5.nCompInfo & 0x003f;
     quint8 nMethod = (fileHeader5.nCompInfo >> 7) & 7;
@@ -1280,6 +1529,35 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
 
     mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
+    // Solid flag: bit 6 of nCompInfo
+    bool bIsSolid = (fileHeader5.nCompInfo >> 6) & 1;
+    mapResult.insert(XBinary::FPART_PROP_ISSOLID, bIsSolid);
+
+    // Directory flag: RAR5 nFileFlags bit 0 = directory
+    bool bIsFolder = (fileHeader5.nFileFlags & 0x0001) != 0;
+    mapResult.insert(XBinary::FPART_PROP_ISFOLDER, bIsFolder);
+
+    // Calculate window (dictionary) size from compression info
+    if (nVer == 0) {
+        // RAR 5.0: bits 10-14 encode dictionary size as 128KB << dictBits
+        quint8 nDictBits = (fileHeader5.nCompInfo >> 10) & 0x1F;
+        quint64 nWindowSize = (quint64)0x20000 << nDictBits;
+        mapResult.insert(XBinary::FPART_PROP_WINDOWSIZE, nWindowSize);
+    } else if (nVer == 1) {
+        // RAR 7.0: bits 10-14 = d, bit 15 = fraction flag
+        // If fraction flag is 0: window_size = 128KB << d
+        // If fraction flag is 1: window_size = 3 * (128KB << (d-1))  (1.5x rounding)
+        quint8 nDictBits = (fileHeader5.nCompInfo >> 10) & 0x1F;
+        bool bFraction = (fileHeader5.nCompInfo >> 15) & 1;
+        quint64 nWindowSize;
+        if (!bFraction) {
+            nWindowSize = (quint64)0x20000 << nDictBits;
+        } else {
+            nWindowSize = 3 * ((quint64)0x20000 << (nDictBits > 0 ? nDictBits - 1 : 0));
+        }
+        mapResult.insert(XBinary::FPART_PROP_WINDOWSIZE, nWindowSize);
+    }
+
     if (fileHeader5.nFileFlags & 0x0002) {
 #if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
         QDateTime dateTime = QDateTime::fromSecsSinceEpoch(fileHeader5.nMTime);
@@ -1287,6 +1565,86 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
         QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(fileHeader5.nMTime * 1000);
 #endif
         mapResult.insert(XBinary::FPART_PROP_DATETIME, dateTime);
+    }
+
+    // Parse extra area for encryption record (id=1)
+    if (!fileHeader5.baExtraArea.isEmpty()) {
+        qint64 nExtraOffset = 0;
+        qint64 nExtraSize = fileHeader5.baExtraArea.size();
+        char *pExtraData = const_cast<char *>(fileHeader5.baExtraArea.constData());
+
+        while (nExtraOffset < nExtraSize) {
+            // Read record size (varint)
+            PACKED_UINT puRecSize = _read_uleb128(pExtraData + nExtraOffset, qMin((qint64)10, nExtraSize - nExtraOffset));
+            if (puRecSize.nByteSize == 0) break;
+            nExtraOffset += puRecSize.nByteSize;
+            qint64 nRecSize = puRecSize.nValue;
+
+            if (nRecSize <= 0 || nExtraOffset + nRecSize > nExtraSize) break;
+
+            qint64 nRecStart = nExtraOffset;
+
+            // Read record id (varint)
+            PACKED_UINT puRecId = _read_uleb128(pExtraData + nExtraOffset, qMin((qint64)10, nExtraSize - nExtraOffset));
+            if (puRecId.nByteSize == 0) break;
+            nExtraOffset += puRecId.nByteSize;
+
+            if (puRecId.nValue == 1) {
+                // Encryption record: [varint version=0][varint flags][byte cnt][16 salt][16 IV][opt 12 pswCheck]
+                PACKED_UINT puVersion = _read_uleb128(pExtraData + nExtraOffset, qMin((qint64)10, nExtraSize - nExtraOffset));
+                if (puVersion.nByteSize == 0) break;
+                nExtraOffset += puVersion.nByteSize;
+
+                if (puVersion.nValue == 0) {
+                    PACKED_UINT puFlags = _read_uleb128(pExtraData + nExtraOffset, qMin((qint64)10, nExtraSize - nExtraOffset));
+                    if (puFlags.nByteSize == 0) break;
+                    nExtraOffset += puFlags.nByteSize;
+
+                    quint64 nCryptoFlags = puFlags.nValue;
+                    bool bHasPswCheck = (nCryptoFlags & 0x0001) != 0;  // flag bit 0 = password check present
+
+                    if (nExtraOffset + 1 + 16 + 16 <= nExtraSize) {
+                        quint8 nCnt = (quint8)pExtraData[nExtraOffset];
+                        nExtraOffset += 1;
+
+                        QByteArray baSalt(pExtraData + nExtraOffset, 16);
+                        nExtraOffset += 16;
+
+                        QByteArray baIV(pExtraData + nExtraOffset, 16);
+                        nExtraOffset += 16;
+
+                        QByteArray baPswCheck;
+                        if (bHasPswCheck && nExtraOffset + 12 <= nExtraSize) {
+                            baPswCheck = QByteArray(pExtraData + nExtraOffset, 12);
+                            nExtraOffset += 12;
+                        }
+
+                        // Pack crypto params: [1 byte cnt][16 salt][16 IV][opt 12 pswCheck]
+                        QByteArray baAESKey;
+                        baAESKey.append((char)nCnt);
+                        baAESKey.append(baSalt);
+                        baAESKey.append(baIV);
+                        if (!baPswCheck.isEmpty()) {
+                            baAESKey.append(baPswCheck);
+                        }
+
+                        mapResult.insert(XBinary::FPART_PROP_ENCRYPTED, true);
+                        mapResult.insert(XBinary::FPART_PROP_AESKEY, baAESKey);
+
+                        // RAR5_AES is the outer (decryption) method; original compress method stays as HANDLEMETHOD (inner)
+                        mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD2, (quint32)HANDLE_METHOD_RAR5_AES);
+
+                        // RAR5 encrypted files store HMAC-modified CRC, not plain CRC32.
+                        // Disable CRC verification since we can't compare directly.
+                        mapResult.insert(XBinary::FPART_PROP_CRC_TYPE, (quint32)CRC_TYPE_UNKNOWN);
+                        mapResult.remove(XBinary::FPART_PROP_RESULTCRC);
+                    }
+                }
+            }
+
+            // Skip to next record
+            nExtraOffset = nRecStart + nRecSize;
+        }
     }
 
     return mapResult;
@@ -1325,6 +1683,75 @@ XBinary::_MEMORY_MAP XRar::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 XBinary::FT XRar::getFileType()
 {
     return FT_RAR;
+}
+
+QByteArray XRar::decryptRar5HeaderBlock(qint64 nOffset, const QByteArray &baAesKey, qint64 *pConsumedSize)
+{
+    *pConsumedSize = 0;
+
+    qint64 nTotalSize = getSize();
+
+    if (nOffset + 32 > nTotalSize) {
+        // Need at least IV(16) + one AES block(16)
+        return QByteArray();
+    }
+
+    // Read 16-byte IV
+    QByteArray baIV = read_array(nOffset, 16);
+
+    if (baIV.size() != 16) {
+        return QByteArray();
+    }
+
+    // Read first AES block (16 bytes) of encrypted header
+    QByteArray baFirstCipher = read_array(nOffset + 16, 16);
+
+    if (baFirstCipher.size() != 16) {
+        return QByteArray();
+    }
+
+    // Decrypt first block to get CRC and headerSize
+    QByteArray baFirstPlain(16, 0);
+
+    if (!XAESDecoder::decryptAESCBC(baAesKey, baIV, (const quint8 *)baFirstCipher.constData(), (quint8 *)baFirstPlain.data(), 16)) {
+        return QByteArray();
+    }
+
+    // Parse _headerSize from decrypted data: CRC32(4) + vint(_headerSize)
+    PACKED_UINT puHeaderSize = _read_uleb128(baFirstPlain.data() + 4, 10);
+
+    if (puHeaderSize.nByteSize == 0) {
+        return QByteArray();
+    }
+
+    quint64 nPlainSize = 4 + puHeaderSize.nByteSize + puHeaderSize.nValue;
+    quint64 nEncSize = ((nPlainSize + 15) / 16) * 16;
+
+    if (nOffset + 16 + (qint64)nEncSize > nTotalSize) {
+        return QByteArray();
+    }
+
+    if (nEncSize <= 16) {
+        // First AES block was enough
+        *pConsumedSize = 16 + (qint64)nEncSize;
+        return baFirstPlain.left((qint32)nPlainSize);
+    }
+
+    // Need more data — read full encrypted buffer and re-decrypt from scratch
+    QByteArray baAllCipher = read_array(nOffset + 16, (qint32)nEncSize);
+
+    if ((quint64)baAllCipher.size() != nEncSize) {
+        return QByteArray();
+    }
+
+    QByteArray baAllPlain((qint32)nEncSize, 0);
+
+    if (!XAESDecoder::decryptAESCBC(baAesKey, baIV, (const quint8 *)baAllCipher.constData(), (quint8 *)baAllPlain.data(), nEncSize)) {
+        return QByteArray();
+    }
+
+    *pConsumedSize = 16 + (qint64)nEncSize;
+    return baAllPlain.left((qint32)nPlainSize);
 }
 
 XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)

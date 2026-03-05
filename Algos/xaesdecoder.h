@@ -54,6 +54,12 @@ public:
     // AES-256-CBC decryption (used by 7z)
     static bool decryptAESCBC(const QByteArray &baKey, const QByteArray &baIV, const quint8 *pInputData, quint8 *pOutputData, qint64 nSize);
 
+    // RAR5 AES-256-CBC decrypt (PBKDF2-HMAC-SHA256 key derivation)
+    static bool decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct = nullptr);
+
+    // RAR5 header key derivation (returns 32-byte AES key for encrypted-headers archives)
+    static QByteArray deriveRar5HeaderKey(const QString &sPassword, const QByteArray &baSalt, quint8 nKdfCount);
+
     // Custom AES block cipher
     static qint32 custom_aes_set_encrypt_key(const quint8 *pUserKey, qint32 nBits, CUSTOM_AES_KEY *pKey);
     static void custom_aes_encrypt(const quint8 *pInput, quint8 *pOutput, const CUSTOM_AES_KEY *pKey);
@@ -68,6 +74,13 @@ private:
                            QByteArray &baHMACKey, XBinary::PDSTRUCT *pPdStruct);
     static bool decryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct);
     static bool encryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct);
+
+    // HMAC-SHA256 helpers (used by RAR5 AES)
+    static void hmacSha256SetKey(XSha256Decoder::Context *pInnerCtx, XSha256Decoder::Context *pOuterCtx, const quint8 *pKey, qint32 nKeySize);
+    static void hmacSha256Final(XSha256Decoder::Context *pInnerCtx, XSha256Decoder::Context *pOuterCtx, quint8 *pDigest);
+
+    // RAR5 key derivation (PBKDF2-HMAC-SHA256, 3-key)
+    static void deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSalt, quint8 nCnt, quint8 *pAesKey, quint8 *pHashKey, quint8 *pPswCheck);
 };
 
 #endif  // XAESDECODER_H

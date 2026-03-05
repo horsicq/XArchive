@@ -113,10 +113,13 @@ class XRar : public XArchive {
 
     struct RAR_UNPACK_CONTEXT {
         qint32 nVersion;                      // RAR version (4 or 5)
+        bool bArchiveIsSolid;                 // Archive-level solid flag
+        bool bHeadersEncrypted;               // True if archive has encrypted headers (RAR5)
         QList<qint64> listFileOffsets;        // Offsets of file headers
         QList<FILEBLOCK4> listFileBlocks4;    // Cache of RAR 4.x file blocks
         QList<FILEHEADER5> listFileHeaders5;  // Cache of RAR 5.x file headers
-        rar_Unpack rarUnpacker;
+        QList<qint32> listSolidFolderIndex;   // Solid block index per file (incremented on non-solid boundary)
+        XDecompress decompress;
     };
 
     enum BLOCKTYPE4 {
@@ -192,6 +195,10 @@ private:
     FILEBLOCK4 readFileBlock4(qint64 nOffset);
     FILEHEADER5 readFileHeader5(qint64 nOffset);
     QString decodeRarUnicodeName(const QByteArray &nameData);
+
+    // Decrypt a single RAR5 encrypted header block (IV + AES-CBC data)
+    // Returns decrypted header bytes; sets *pConsumedSize to total bytes consumed from file
+    QByteArray decryptRar5HeaderBlock(qint64 nOffset, const QByteArray &baAesKey, qint64 *pConsumedSize);
 
     // Helper functions for property extraction
     QMap<XBinary::FPART_PROP, QVariant> _readProperties(const FILEBLOCK4 &fileBlock4);

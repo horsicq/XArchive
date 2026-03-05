@@ -1715,6 +1715,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         quint32 nCRC32 = 0;
         quint32 nCompressedSize = 0;
         quint32 nUncompressedSize = 0;
+        quint32 nExternalFileAttributes = 0;
         // Extra field and file comment information
         qint64 nExtraFieldOffset = 0;
         qint64 nExtraFieldLength = 0;
@@ -1737,6 +1738,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             sFileName = read_ansiString(pState->nCurrentOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdfh.nFileNameLength);
 
             nLocalHeaderOffset = cdfh.nOffsetToLocalFileHeader;
+            nExternalFileAttributes = cdfh.nExternalFileAttributes;
 
             nExtraFieldOffset = pState->nCurrentOffset + sizeof(CENTRALDIRECTORYFILEHEADER) + cdfh.nFileNameLength;
             nExtraFieldLength = cdfh.nExtraFieldLength;
@@ -1836,9 +1838,74 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
                         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD2, HANDLE_METHOD_ZIP_AES256);
                     }
                 }
+            } else if (nHeaderID == 0x000A) {
+                // NTFS extra field: 4-byte reserved + TLV attribute entries
+                // Contains high-resolution MTIME, ATIME, CTIME as Windows FILETIMEs
+                if (nDataSize >= (4 + 4 + 24)) {  // reserved(4) + tag(2)+size(2) + 3×FILETIME(24)
+                    qint64 nBase = nExtraFieldOffset + i + 4 + 4;  // skip headerID(2)+dataSize(2)+reserved(4)
+                    qint64 nBlockEnd = nExtraFieldOffset + i + 4 + nDataSize;
+                    while (nBase + 4 <= nBlockEnd) {
+                        quint16 nAttrTag  = read_uint16(nBase);
+                        quint16 nAttrSize = read_uint16(nBase + 2);
+                        if (nAttrTag == 0x0001 && nAttrSize >= 24 && nBase + 4 + 24 <= nBlockEnd) {
+                            quint64 nMTime = read_uint64(nBase + 4);
+                            quint64 nATime = read_uint64(nBase + 12);
+                            quint64 nCTime = read_uint64(nBase + 20);
+                            QDateTime dt;
+                            dt = XBinary::winFileTimeToQDateTime(nMTime);
+                            if (dt.isValid()) result.mapProperties.insert(XBinary::FPART_PROP_MTIME, dt);
+                            dt = XBinary::winFileTimeToQDateTime(nATime);
+                            if (dt.isValid()) result.mapProperties.insert(XBinary::FPART_PROP_ATIME, dt);
+                            dt = XBinary::winFileTimeToQDateTime(nCTime);
+                            if (dt.isValid()) result.mapProperties.insert(XBinary::FPART_PROP_CTIME, dt);
+                        }
+                        nBase += 4 + nAttrSize;
+                    }
+                }
+            } else if (nHeaderID == 0x5455) {
+                // Extended Unix Timestamp extra field
+                // Flags byte: bit0=MTIME, bit1=ATIME, bit2=CTIME
+                if (nDataSize >= 1) {
+                    quint8 nTsFlags = (quint8)read_uint8(nExtraFieldOffset + i + 4);
+                    qint64 nTsOff = nExtraFieldOffset + i + 4 + 1;  // first timestamp byte
+                    qint64 nTsEnd = nExtraFieldOffset + i + 4 + nDataSize;
+                    if ((nTsFlags & 0x01) && (nTsOff + 4 <= nTsEnd)) {
+                        quint32 nUnixMTime = read_uint32(nTsOff);
+                        QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nUnixMTime, Qt::UTC);
+                        if (dt.isValid() && !result.mapProperties.contains(XBinary::FPART_PROP_MTIME)) {
+                            result.mapProperties.insert(XBinary::FPART_PROP_MTIME, dt);
+                        }
+                        nTsOff += 4;
+                    }
+                    if ((nTsFlags & 0x02) && (nTsOff + 4 <= nTsEnd)) {
+                        quint32 nUnixATime = read_uint32(nTsOff);
+                        QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nUnixATime, Qt::UTC);
+                        if (dt.isValid() && !result.mapProperties.contains(XBinary::FPART_PROP_ATIME)) {
+                            result.mapProperties.insert(XBinary::FPART_PROP_ATIME, dt);
+                        }
+                        nTsOff += 4;
+                    }
+                    if ((nTsFlags & 0x04) && (nTsOff + 4 <= nTsEnd)) {
+                        quint32 nUnixCTime = read_uint32(nTsOff);
+                        QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nUnixCTime, Qt::UTC);
+                        if (dt.isValid() && !result.mapProperties.contains(XBinary::FPART_PROP_CTIME)) {
+                            result.mapProperties.insert(XBinary::FPART_PROP_CTIME, dt);
+                        }
+                    }
+                }
             }
 
             i += (4 + nDataSize);
+        }
+
+        // Windows/DOS external file attributes (available only from Central Directory)
+        // nOS == 0: MS-DOS/PKZIP  nOS == 10: Windows NTFS/VFAT
+        if (bIsECD && (nOS == 0 || nOS == 10)) {
+            quint16 nWinAttrib = (quint16)(nExternalFileAttributes & 0xFFFF);
+            result.mapProperties.insert(XBinary::FPART_PROP_ISREADONLY, (nWinAttrib & 0x01) != 0);
+            result.mapProperties.insert(XBinary::FPART_PROP_ISHIDDEN,   (nWinAttrib & 0x02) != 0);
+            result.mapProperties.insert(XBinary::FPART_PROP_ISSYSTEM,   (nWinAttrib & 0x04) != 0);
+            result.mapProperties.insert(XBinary::FPART_PROP_ISARCHIVE,  (nWinAttrib & 0x20) != 0);
         }
     }
 

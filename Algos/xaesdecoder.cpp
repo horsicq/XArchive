@@ -846,3 +846,238 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
 
     return bResult;
 }
+
+// HMAC-SHA256: initialize inner and outer contexts with key (standard ipad/opad construction)
+void XAESDecoder::hmacSha256SetKey(XSha256Decoder::Context *pInnerCtx, XSha256Decoder::Context *pOuterCtx, const quint8 *pKey, qint32 nKeySize)
+{
+    quint8 aKeyBlock[64];
+    memset(aKeyBlock, 0, 64);
+
+    if (nKeySize > 64) {
+        // Hash the key if longer than block size
+        XSha256Decoder::Context hashCtx;
+        XSha256Decoder::init(&hashCtx);
+        XSha256Decoder::update(&hashCtx, pKey, nKeySize);
+        XSha256Decoder::final(&hashCtx, aKeyBlock);
+    } else {
+        memcpy(aKeyBlock, pKey, nKeySize);
+    }
+
+    quint8 aInnerPad[64];
+    quint8 aOuterPad[64];
+
+    for (qint32 i = 0; i < 64; i++) {
+        aInnerPad[i] = aKeyBlock[i] ^ 0x36;
+        aOuterPad[i] = aKeyBlock[i] ^ 0x5C;
+    }
+
+    XSha256Decoder::init(pInnerCtx);
+    XSha256Decoder::update(pInnerCtx, aInnerPad, 64);
+
+    XSha256Decoder::init(pOuterCtx);
+    XSha256Decoder::update(pOuterCtx, aOuterPad, 64);
+
+    memset(aKeyBlock, 0, 64);
+    memset(aInnerPad, 0, 64);
+    memset(aOuterPad, 0, 64);
+}
+
+// HMAC-SHA256: finalize - produces 32-byte digest
+void XAESDecoder::hmacSha256Final(XSha256Decoder::Context *pInnerCtx, XSha256Decoder::Context *pOuterCtx, quint8 *pDigest)
+{
+    quint8 aInnerDigest[32];
+    XSha256Decoder::final(pInnerCtx, aInnerDigest);
+    XSha256Decoder::update(pOuterCtx, aInnerDigest, 32);
+    XSha256Decoder::final(pOuterCtx, pDigest);
+    memset(aInnerDigest, 0, 32);
+}
+
+// RAR5 key derivation: PBKDF2-HMAC-SHA256 producing 3 keys (AES key, hash key, password check)
+// Follows the RAR5 spec: 2^nCnt main iterations, then 16 extra per additional key
+void XAESDecoder::deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSalt, quint8 nCnt, quint8 *pAesKey, quint8 *pHashKey, quint8 *pPswCheck)
+{
+    // Set up base HMAC context with password as key
+    XSha256Decoder::Context baseInner, baseOuter;
+    hmacSha256SetKey(&baseInner, &baseOuter, (const quint8 *)baPassword.constData(), baPassword.size());
+
+    // First HMAC round: HMAC(password, salt || 0x00000001_BE)
+    XSha256Decoder::Context ctxInner = baseInner;
+    XSha256Decoder::Context ctxOuter = baseOuter;
+    XSha256Decoder::update(&ctxInner, pSalt, 16);
+
+    quint8 aCounter[4] = {0x00, 0x00, 0x00, 0x01};  // Big-endian 1
+    XSha256Decoder::update(&ctxInner, aCounter, 4);
+
+    quint8 aU[32];   // Current HMAC result
+    quint8 aKey[32];  // XOR accumulator
+    hmacSha256Final(&ctxInner, &ctxOuter, aU);
+    memcpy(aKey, aU, 32);
+
+    // Main iterations: 2^nCnt - 1 (already did 1 above)
+    quint32 nIterations = ((quint32)1 << nCnt) - 1;
+
+    // 3 keys: i=0 → AES key, i=1 → hashKey, i=2 → pswCheck
+    for (qint32 i = 0; i < 3; i++) {
+        for (; nIterations != 0; nIterations--) {
+            // u = HMAC(password, u)
+            ctxInner = baseInner;
+            ctxOuter = baseOuter;
+            XSha256Decoder::update(&ctxInner, aU, 32);
+            hmacSha256Final(&ctxInner, &ctxOuter, aU);
+
+            // key ^= u
+            for (qint32 s = 0; s < 32; s++) {
+                aKey[s] ^= aU[s];
+            }
+        }
+
+        // Store derived key
+        if (i == 0) {
+            memcpy(pAesKey, aKey, 32);
+        } else if (i == 1) {
+            memcpy(pHashKey, aKey, 32);
+        } else {
+            memcpy(pPswCheck, aKey, 32);
+        }
+
+        // RAR uses 16 additional iterations for subsequent keys
+        nIterations = 16;
+    }
+
+    memset(aU, 0, 32);
+    memset(aKey, 0, 32);
+}
+
+QByteArray XAESDecoder::deriveRar5HeaderKey(const QString &sPassword, const QByteArray &baSalt, quint8 nKdfCount)
+{
+    if (sPassword.isEmpty() || baSalt.size() < 16) {
+        return QByteArray();
+    }
+
+    QByteArray baPassword = sPassword.toUtf8();
+    quint8 aAesKey[32], aHashKey[32], aPswCheck[32];
+    deriveRar5Keys(baPassword, (const quint8 *)baSalt.constData(), nKdfCount, aAesKey, aHashKey, aPswCheck);
+
+    QByteArray baResult((const char *)aAesKey, 32);
+
+    memset(aAesKey, 0, 32);
+    memset(aHashKey, 0, 32);
+    memset(aPswCheck, 0, 32);
+
+    return baResult;
+}
+
+// RAR5 AES-256-CBC decrypt
+bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pDecryptState || !pDecryptState->pDeviceInput || !pDecryptState->pDeviceOutput) {
+        qWarning() << "[XAESDecoder::decryptRar5] Invalid state or devices";
+        return false;
+    }
+
+    if (sPassword.isEmpty()) {
+        qWarning() << "[XAESDecoder::decryptRar5] Password is required for RAR5 AES decryption";
+        return false;
+    }
+
+    // Get crypto parameters from AESKEY property: [1 cnt][16 salt][16 IV][opt 12 pswCheck]
+    QByteArray baAESKeyProp = pDecryptState->mapProperties.value(XBinary::FPART_PROP_AESKEY).toByteArray();
+
+    if (baAESKeyProp.size() < 33) {  // 1 + 16 + 16 = 33 minimum
+        qWarning() << "[XAESDecoder::decryptRar5] Invalid AESKEY property size:" << baAESKeyProp.size();
+        return false;
+    }
+
+    quint8 nCnt = (quint8)baAESKeyProp.at(0);
+    QByteArray baSalt = baAESKeyProp.mid(1, 16);
+    QByteArray baIV = baAESKeyProp.mid(17, 16);
+
+    // Convert password to UTF-8 (RAR5 uses UTF-8 encoding)
+    QByteArray baPassword = sPassword.toUtf8();
+
+    // Derive 3 keys via PBKDF2-HMAC-SHA256
+    quint8 aAesKey[32];
+    quint8 aHashKey[32];
+    quint8 aPswCheck[32];
+    deriveRar5Keys(baPassword, (const quint8 *)baSalt.constData(), nCnt, aAesKey, aHashKey, aPswCheck);
+
+    // Optional password verification (if pswCheck present in AESKEY)
+    if (baAESKeyProp.size() >= 45) {  // 33 + 12 = 45 (8 bytes pswCheck + 4 bytes checksum)
+        // RAR5 password check: XOR-fold 32-byte pswCheck to 8 bytes
+        quint8 aCheckCalced[8];
+        for (qint32 i = 0; i < 4; i++) {
+            quint32 nVal = 0;
+            for (qint32 j = 0; j < 8; j++) {
+                nVal ^= (quint32)aPswCheck[i * 4 + j + (j >= 4 ? 12 : 0)];
+                // XOR pairs: check[0]^check[2]^check[4]^check[6] and check[1]^check[3]^check[5]^check[7]
+            }
+        }
+        // Simplified: XOR 32 bytes down to 8 bytes
+        for (qint32 i = 0; i < 8; i++) {
+            aCheckCalced[i] = aPswCheck[i] ^ aPswCheck[i + 8] ^ aPswCheck[i + 16] ^ aPswCheck[i + 24];
+        }
+
+        const quint8 *pExpectedCheck = (const quint8 *)baAESKeyProp.constData() + 33;
+        if (memcmp(aCheckCalced, pExpectedCheck, 8) != 0) {
+            qWarning() << "[XAESDecoder::decryptRar5] Password check failed - wrong password";
+            memset(aAesKey, 0, 32);
+            memset(aHashKey, 0, 32);
+            memset(aPswCheck, 0, 32);
+            return false;
+        }
+    }
+
+    // Read all encrypted data
+    qint64 nTotalEncrypted = pDecryptState->nInputLimit - pDecryptState->nCountInput;
+
+    if (nTotalEncrypted <= 0 || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
+        qWarning() << "[XAESDecoder::decryptRar5] Invalid encrypted data size:" << nTotalEncrypted;
+        memset(aAesKey, 0, 32);
+        memset(aHashKey, 0, 32);
+        memset(aPswCheck, 0, 32);
+        return false;
+    }
+
+    QByteArray baEncrypted;
+    baEncrypted.resize((qint32)nTotalEncrypted);
+    qint32 nRead = XBinary::_readDevice(baEncrypted.data(), (qint32)nTotalEncrypted, pDecryptState);
+    if (nRead != (qint32)nTotalEncrypted) {
+        qWarning() << "[XAESDecoder::decryptRar5] Failed to read encrypted data: got" << nRead << "expected" << nTotalEncrypted;
+        memset(aAesKey, 0, 32);
+        memset(aHashKey, 0, 32);
+        memset(aPswCheck, 0, 32);
+        return false;
+    }
+
+    // AES-256-CBC decryption
+    QByteArray baKey32 = QByteArray((const char *)aAesKey, 32);
+    QByteArray baDecrypted;
+    baDecrypted.resize((qint32)nTotalEncrypted);
+
+    if (!XAESDecoder::decryptAESCBC(baKey32, baIV, (const quint8 *)baEncrypted.constData(), (quint8 *)baDecrypted.data(), nTotalEncrypted)) {
+        qWarning() << "[XAESDecoder::decryptRar5] AES-CBC decryption failed";
+        memset(aAesKey, 0, 32);
+        memset(aHashKey, 0, 32);
+        memset(aPswCheck, 0, 32);
+        return false;
+    }
+
+    // Write decrypted data - only the uncompressed size portion (RAR5 pads encrypted data to AES block boundary)
+    qint64 nOutputSize = pDecryptState->mapProperties.value(XBinary::FPART_PROP_COMPRESSEDSIZE, nTotalEncrypted).toLongLong();
+    // For encrypted RAR5, the actual compressed data may be smaller than the encrypted block
+    // Use the full decrypted size since the decompressor will handle the actual data length
+    qint64 nToWrite = nTotalEncrypted;
+
+    pDecryptState->pDeviceOutput->seek(0);
+    qint64 nWritten = pDecryptState->pDeviceOutput->write(baDecrypted.constData(), nToWrite);
+    pDecryptState->nCountOutput = nWritten;
+
+    // Clear sensitive data
+    memset(aAesKey, 0, 32);
+    memset(aHashKey, 0, 32);
+    memset(aPswCheck, 0, 32);
+
+    return (nWritten == nToWrite);
+}

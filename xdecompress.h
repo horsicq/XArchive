@@ -55,8 +55,11 @@ public:
 
 private:
     void clearSolidCache();
+    bool decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
     QMap<QString, QIODevice *> m_mapSolidCache;
     QString m_sCurrentArchiveMD5;
+    rar_Unpack *m_pRarUnpacker;
+    qint32 m_nRarSolidIndex;
 
 signals:
     void completed(qint64 nElapsedTime);
