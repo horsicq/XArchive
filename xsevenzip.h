@@ -107,6 +107,8 @@ public:
     virtual MODE getMode();
     virtual QString getArch();
     virtual QString getMIMEString();
+    virtual bool isCommentPresent() override;
+    virtual QString getComment() override;
 
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);

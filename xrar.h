@@ -159,6 +159,8 @@ public:
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion() override;
+    virtual bool isCommentPresent() override;
+    virtual QString getComment() override;
 
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;

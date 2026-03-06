@@ -27,6 +27,7 @@ HEADERS += \
     $$PWD/Algos/xaesdecoder.h \
     $$PWD/Algos/xbcj2decoder.h \
     $$PWD/Algos/xsha256decoder.h \
+    $$PWD/Algos/xblake2sp.h \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
@@ -83,6 +84,7 @@ SOURCES += \
     $$PWD/Algos/xaesdecoder.cpp \
     $$PWD/Algos/xbcj2decoder.cpp \
     $$PWD/Algos/xsha256decoder.cpp \
+    $$PWD/Algos/xblake2sp.cpp \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \

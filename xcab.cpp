@@ -532,6 +532,12 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
 
+    qint64 nFileSize = getSize();
+
+    if (nFileSize < (qint64)sizeof(CFHEADER)) {
+        return false;
+    }
+
     // Read CAB header
     CFHEADER cfHeader = readCFHeader(0);
     if (cfHeader.signature[0] != 'M' || cfHeader.signature[1] != 'S' || cfHeader.signature[2] != 'C' || cfHeader.signature[3] != 'F') {
@@ -541,10 +547,42 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // Create unpack context
     CAB_UNPACK_CONTEXT *pContext = new CAB_UNPACK_CONTEXT;
     pContext->nCurrentFileIndex = 0;
+    pContext->nCbCFHeader = 0;
+    pContext->nCbCFFolder = 0;
+    pContext->nCbCFData = 0;
 
-    // Parse folders
+    // Handle reserved fields (flag 0x0004 = cfhdrRESERVE_PRESENT)
     qint64 nFolderOffset = sizeof(CFHEADER);
-    qint64 nFileSize = getSize();
+
+    if (cfHeader.flags & 0x0004) {
+        if ((nFolderOffset + 4) > nFileSize) {
+            delete pContext;
+            return false;
+        }
+        pContext->nCbCFHeader = read_uint16(nFolderOffset);
+        pContext->nCbCFFolder = read_uint8(nFolderOffset + 2);
+        pContext->nCbCFData = read_uint8(nFolderOffset + 3);
+        nFolderOffset += 4 + pContext->nCbCFHeader;  // Skip cbCFHeader + cbCFFolder + cbCFData + abReserve
+    }
+
+    // Handle optional previous cabinet name (flag 0x0001 = cfhdrPREV_CABINET)
+    if (cfHeader.flags & 0x0001) {
+        QString sPrevCab = read_ansiString(nFolderOffset, 256);
+        nFolderOffset += sPrevCab.length() + 1;
+        QString sPrevDisk = read_ansiString(nFolderOffset, 256);
+        nFolderOffset += sPrevDisk.length() + 1;
+    }
+
+    // Handle optional next cabinet name (flag 0x0002 = cfhdrNEXT_CABINET)
+    if (cfHeader.flags & 0x0002) {
+        QString sNextCab = read_ansiString(nFolderOffset, 256);
+        nFolderOffset += sNextCab.length() + 1;
+        QString sNextDisk = read_ansiString(nFolderOffset, 256);
+        nFolderOffset += sNextDisk.length() + 1;
+    }
+
+    // Parse folders (each CFFOLDER may have per-folder reserved area)
+    qint64 nFolderStructSize = (qint64)sizeof(CFFOLDER) + pContext->nCbCFFolder;
 
     for (quint16 i = 0; i < cfHeader.cFolders; i++) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -552,17 +590,17 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             return false;
         }
 
-        if ((nFolderOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
+        if ((nFolderOffset + nFolderStructSize) > nFileSize) {
             delete pContext;
             return false;
         }
 
         CFFOLDER cfFolder = readCFFolder(nFolderOffset);
         pContext->listFolders.append(cfFolder);
-        nFolderOffset += sizeof(CFFOLDER);
+        nFolderOffset += nFolderStructSize;
     }
 
-    // Parse file offsets
+    // Parse file offsets starting at coffFiles
     qint64 nFileOffset = cfHeader.coffFiles;
 
     for (quint16 i = 0; i < cfHeader.cFiles; i++) {
@@ -578,15 +616,14 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
         pContext->listFileOffsets.append(nFileOffset);
 
-        // Skip to next file entry
-        CFFILE cfFile = readCFFILE(nFileOffset);
+        // Skip to next file entry (variable-length due to null-terminated filename)
         QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
         nFileOffset += sizeof(CFFILE) + sFileName.length() + 1;
     }
 
     // Initialize state
-    pState->nCurrentOffset = cfHeader.coffFiles;  // Start at first file
-    pState->nTotalSize = getSize();
+    pState->nCurrentOffset = cfHeader.coffFiles;
+    pState->nTotalSize = nFileSize;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = cfHeader.cFiles;
     pState->pContext = pContext;
@@ -614,33 +651,51 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     CFFILE cfFile = readCFFILE(nFileOffset);
     QString sFileName = read_ansiString(nFileOffset + sizeof(CFFILE), 256);
 
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sFileName);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)cfFile.cbFile);
+    result.mapProperties.insert(FPART_PROP_FILEMODE, (quint32)cfFile.attribs);
+
+    // Convert DOS date/time to QDateTime
+    quint32 nDosDate = (quint32)cfFile.date;
+    quint32 nDosTime = (quint32)cfFile.time;
+    qint32 nYear = ((nDosDate >> 9) & 0x7F) + 1980;
+    qint32 nMonth = (nDosDate >> 5) & 0x0F;
+    qint32 nDay = nDosDate & 0x1F;
+    qint32 nHour = (nDosTime >> 11) & 0x1F;
+    qint32 nMinute = (nDosTime >> 5) & 0x3F;
+    qint32 nSecond = (nDosTime & 0x1F) * 2;
+
+    QDate date(nYear, nMonth, nDay);
+    QTime time(nHour, nMinute, nSecond);
+
+    if (date.isValid() && time.isValid()) {
+        QDateTime dateTime(date, time, Qt::UTC);
+        result.mapProperties.insert(FPART_PROP_MTIME, dateTime);
+    }
+
     if (cfFile.iFolder < (quint16)pContext->listFolders.size()) {
         CFFOLDER cfFolder = pContext->listFolders.at(cfFile.iFolder);
 
         result.nStreamOffset = cfFolder.coffCabStart;
         result.nStreamSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData);
-        // result.nDecompressedOffset = cfFile.uoffFolderStart;
-        // result.nDecompressedSize = cfFile.cbFile;
 
-        result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sFileName);
-        result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)cfFile.cbFile);
+        result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, result.nStreamSize);
+        result.mapProperties.insert(FPART_PROP_TYPE, (quint32)cfFolder.typeCompress);
+        result.mapProperties.insert(FPART_PROP_SOLIDFOLDERINDEX, (qint64)cfFile.iFolder);
+        result.mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, (qint64)cfFile.uoffFolderStart);
 
         // Set compression method
-        if (cfFolder.typeCompress == 0x0000) {
+        quint16 nCompressType = cfFolder.typeCompress & 0x000F;
+
+        if (nCompressType == 0x0000) {
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE_CAB);
-        } else if (cfFolder.typeCompress == 0x0001) {
+        } else if (nCompressType == 0x0001) {
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_MSZIP_CAB);
-        } else if (cfFolder.typeCompress == 0x0003) {
+        } else if (nCompressType == 0x0003) {
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZX_CAB);
         } else {
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN);
         }
-
-        // Convert DOS date/time to QDateTime
-        // QDateTime dateTime = XBinary::dosDateTimeToQt((quint32)cfFile.date | ((quint32)cfFile.time << 16));
-        // result.mapProperties.insert(FPART_PROP_DATETIME, dateTime);
-
-        result.mapProperties.insert(FPART_PROP_FILEMODE, (quint32)cfFile.attribs);
     }
 
     return result;
@@ -656,6 +711,11 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         return false;
     }
 
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
     CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
     qint64 nFileOffset = pContext->listFileOffsets.at(pState->nCurrentIndex);
 
@@ -667,29 +727,32 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
     CFFOLDER cfFolder = pContext->listFolders.at(cfFile.iFolder);
 
-    // Determine compression type
-    quint16 nCompressionType = cfFolder.typeCompress & 0x000F;  // Lower 4 bits = compression type
+    // Determine compression type (lower 4 bits)
+    quint16 nCompressionType = cfFolder.typeCompress & 0x000F;
+    qint64 nTotalSize = getSize();
+    // Per-datablock reserved area size
+    qint64 nDataReservedSize = (qint64)pContext->nCbCFData;
 
-    // Handle different compression methods
     if (nCompressionType == 0x0000) {
-        // STORE method (no compression) - direct copy
+        // STORE method (no compression) - direct copy from data blocks
         qint64 nDataOffset = cfFolder.coffCabStart;
         qint64 nCurrentUncompressedOffset = 0;
         qint64 nTargetOffset = cfFile.uoffFolderStart;
         qint64 nRemainingSize = cfFile.cbFile;
+        qint64 nWriteOffset = 0;
 
-        // Find the correct data block
-        for (quint16 i = 0; i < cfFolder.cCFData && nRemainingSize > 0; i++) {
-            if ((nDataOffset + (qint64)sizeof(CFDATA)) > getSize()) {
+        for (quint16 i = 0; (i < cfFolder.cCFData) && (nRemainingSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+            if ((nDataOffset + (qint64)sizeof(CFDATA) + nDataReservedSize) > nTotalSize) {
                 break;
             }
 
             CFDATA cfData = readCFData(nDataOffset);
+            qint64 nPayloadOffset = nDataOffset + (qint64)sizeof(CFDATA) + nDataReservedSize;
 
             if (nCurrentUncompressedOffset + cfData.cbUncomp <= nTargetOffset) {
                 // Skip this block entirely
                 nCurrentUncompressedOffset += cfData.cbUncomp;
-                nDataOffset += sizeof(CFDATA) + cfData.cbData;
+                nDataOffset = nPayloadOffset + cfData.cbData;
                 continue;
             }
 
@@ -698,120 +761,126 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
             qint64 nCopySize = qMin(nRemainingSize, (qint64)cfData.cbUncomp - nBlockStart);
 
             if (nCopySize > 0) {
-                qint64 nSourceOffset = nDataOffset + sizeof(CFDATA) + nBlockStart;
-                if (!copyDeviceMemory(getDevice(), nSourceOffset, pDevice, 0, nCopySize)) {
+                qint64 nSourceOffset = nPayloadOffset + nBlockStart;
+
+                if ((nSourceOffset + nCopySize) > nTotalSize) {
                     return false;
                 }
+
+                if (!copyDeviceMemory(getDevice(), nSourceOffset, pDevice, nWriteOffset, nCopySize)) {
+                    return false;
+                }
+
+                nWriteOffset += nCopySize;
             }
 
             nTargetOffset += nCopySize;
             nRemainingSize -= nCopySize;
             nCurrentUncompressedOffset += cfData.cbUncomp;
-            nDataOffset += sizeof(CFDATA) + cfData.cbData;
+            nDataOffset = nPayloadOffset + cfData.cbData;
         }
 
-        return nRemainingSize == 0;
+        return (nRemainingSize == 0);
     } else if (nCompressionType == 0x0001) {
-        // MSZIP method (DEFLATE with 2-byte signature "CK")
-        // Need to decompress all blocks and extract the file data
-        QByteArray baFolderData;
-        baFolderData.reserve(cfFile.cbFile);
+        // MSZIP method (DEFLATE with 2-byte "CK" signature per block)
+        // Use folder cache to avoid re-decompressing the same folder for multiple files
+        quint16 nFolderIndex = cfFile.iFolder;
 
-        qint64 nDataOffset = cfFolder.coffCabStart;
-        qint64 nCurrentUncompressedOffset = 0;
+        if (!pContext->mapFolderCache.contains(nFolderIndex)) {
+            // Decompress entire folder into cache
+            QByteArray baFolderData;
 
-        // Decompress all blocks in this folder up to and including the file data
-        for (quint16 i = 0; i < cfFolder.cCFData; i++) {
-            if ((nDataOffset + (qint64)sizeof(CFDATA)) > getSize()) {
-                break;
-            }
+            qint64 nDataOffset = cfFolder.coffCabStart;
 
-            CFDATA cfData = readCFData(nDataOffset);
+            for (quint16 i = 0; (i < cfFolder.cCFData) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+                if ((nDataOffset + (qint64)sizeof(CFDATA) + nDataReservedSize) > nTotalSize) {
+                    break;
+                }
 
-            if (cfData.cbData < 2) {
-                return false;  // Invalid block
-            }
+                CFDATA cfData = readCFData(nDataOffset);
+                qint64 nPayloadOffset = nDataOffset + (qint64)sizeof(CFDATA) + nDataReservedSize;
 
-            // Read the compressed data (skip 2-byte MSZIP signature "CK")
-            qint64 nCompressedDataOffset = nDataOffset + sizeof(CFDATA) + 2;
-            qint64 nCompressedDataSize = cfData.cbData - 2;
+                if (cfData.cbData < 2) {
+                    return false;  // Invalid block (needs at least 2-byte "CK" signature)
+                }
 
-            if (nCompressedDataSize <= 0) {
-                return false;
-            }
+                // Verify MSZIP signature "CK" (0x43 0x4B)
+                quint8 nSig0 = read_uint8(nPayloadOffset);
+                quint8 nSig1 = read_uint8(nPayloadOffset + 1);
 
-            // Read compressed data into memory
-            QByteArray baCompressedData = read_array(nCompressedDataOffset, nCompressedDataSize);
-            if (baCompressedData.size() != nCompressedDataSize) {
-                return false;
-            }
+                if (nSig0 != 0x43 || nSig1 != 0x4B) {
+                    return false;  // Invalid MSZIP block signature
+                }
 
-            // Decompress this block using DEFLATE (raw, no zlib header)
-            QBuffer bufferCompressed(&baCompressedData);
-            if (!bufferCompressed.open(QIODevice::ReadOnly)) {
-                return false;
-            }
+                qint64 nCompressedDataOffset = nPayloadOffset + 2;
+                qint64 nCompressedDataSize = cfData.cbData - 2;
 
-            QByteArray baUncompressedBlock;
-            QBuffer bufferUncompressed(&baUncompressedBlock);
-            if (!bufferUncompressed.open(QIODevice::WriteOnly)) {
+                if (nCompressedDataSize <= 0) {
+                    return false;
+                }
+
+                if ((nCompressedDataOffset + nCompressedDataSize) > nTotalSize) {
+                    return false;
+                }
+
+                QByteArray baCompressedData = read_array(nCompressedDataOffset, nCompressedDataSize);
+
+                if (baCompressedData.size() != nCompressedDataSize) {
+                    return false;
+                }
+
+                QBuffer bufferCompressed(&baCompressedData);
+                if (!bufferCompressed.open(QIODevice::ReadOnly)) {
+                    return false;
+                }
+
+                QByteArray baUncompressedBlock;
+                QBuffer bufferUncompressed(&baUncompressedBlock);
+                if (!bufferUncompressed.open(QIODevice::WriteOnly)) {
+                    bufferCompressed.close();
+                    return false;
+                }
+
+                DATAPROCESS_STATE decompressState = {};
+                decompressState.pDeviceInput = &bufferCompressed;
+                decompressState.pDeviceOutput = &bufferUncompressed;
+                decompressState.nInputOffset = 0;
+                decompressState.nInputLimit = nCompressedDataSize;
+                decompressState.nProcessedOffset = 0;
+                decompressState.nProcessedLimit = cfData.cbUncomp;
+
+                bool bDecompressResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
+
                 bufferCompressed.close();
-                return false;
+                bufferUncompressed.close();
+
+                if (!bDecompressResult) {
+                    return false;
+                }
+
+                if (baUncompressedBlock.size() != (qint32)cfData.cbUncomp) {
+                    return false;
+                }
+
+                baFolderData.append(baUncompressedBlock);
+                nDataOffset = nPayloadOffset + cfData.cbData;
             }
 
-            DATAPROCESS_STATE decompressState = {};
-            decompressState.pDeviceInput = &bufferCompressed;
-            decompressState.pDeviceOutput = &bufferUncompressed;
-            decompressState.nInputOffset = 0;
-            decompressState.nInputLimit = nCompressedDataSize;
-            decompressState.nProcessedOffset = 0;
-            decompressState.nProcessedLimit = cfData.cbUncomp;
-
-            bool bDecompressResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
-
-            bufferCompressed.close();
-            bufferUncompressed.close();
-
-            if (!bDecompressResult) {
-                return false;
-            }
-
-            // Check if decompressed size matches expected size
-            if (baUncompressedBlock.size() != (qint32)cfData.cbUncomp) {
-                return false;
-            }
-
-            // Append uncompressed data to folder buffer
-            baFolderData.append(baUncompressedBlock);
-            nCurrentUncompressedOffset += cfData.cbUncomp;
-
-            nDataOffset += sizeof(CFDATA) + cfData.cbData;
-
-            // Stop if we have enough data
-            if (nCurrentUncompressedOffset >= cfFile.uoffFolderStart + (qint64)cfFile.cbFile) {
-                break;
-            }
+            pContext->mapFolderCache.insert(nFolderIndex, baFolderData);
         }
 
-        // Extract the file data from the folder buffer
-        if (baFolderData.size() < cfFile.uoffFolderStart + (qint64)cfFile.cbFile) {
+        // Extract file data from the cached folder
+        const QByteArray &baFolderData = pContext->mapFolderCache.value(nFolderIndex);
+
+        if (baFolderData.size() < (qint64)cfFile.uoffFolderStart + (qint64)cfFile.cbFile) {
             return false;
         }
 
         qint64 nBytesWritten = pDevice->write(baFolderData.constData() + cfFile.uoffFolderStart, cfFile.cbFile);
-        return nBytesWritten == (qint64)cfFile.cbFile;
+        return (nBytesWritten == (qint64)cfFile.cbFile);
     } else if (nCompressionType == 0x0003) {
-        // LZX method - requires LZH decoder
+        // LZX method - not yet implemented (requires specialized LZX decoder)
         // LZX window size is encoded in upper bits: (typeCompress >> 8) & 0x1F
-        // Window size = 2^(15 + windowBits) where windowBits is from typeCompress
-        quint8 nWindowBits = (cfFolder.typeCompress >> 8) & 0x1F;
-
-        if (nWindowBits < 15 || nWindowBits > 21) {
-            return false;  // Invalid LZX window size
-        }
-
-        // For now, LZX decompression not fully implemented
-        // Would need specialized LZX decoder
         return false;
     }
 
@@ -848,6 +917,7 @@ bool XCab::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     if (pState->pContext) {
         CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
+        pContext->mapFolderCache.clear();
         delete pContext;
         pState->pContext = nullptr;
     }

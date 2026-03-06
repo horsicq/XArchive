@@ -89,9 +89,13 @@ public:
 
     // Format-specific context structures
     struct CAB_UNPACK_CONTEXT {
-        QList<qint64> listFileOffsets;  // Offsets of CFFILE entries
-        QList<CFFOLDER> listFolders;    // Folder information
-        qint32 nCurrentFileIndex;       // Current file being processed
+        QList<qint64> listFileOffsets;                // Offsets of CFFILE entries
+        QList<CFFOLDER> listFolders;                  // Folder information
+        QMap<quint16, QByteArray> mapFolderCache;     // Decompressed folder data cache (folder index -> data)
+        qint32 nCurrentFileIndex;                     // Current file being processed
+        quint16 nCbCFHeader;                          // Size of per-cabinet reserved area (if flags & 0x0004)
+        quint8 nCbCFFolder;                           // Size of per-folder reserved area
+        quint8 nCbCFData;                             // Size of per-datablock reserved area
     };
 
     struct CAB_PACK_CONTEXT {

@@ -205,6 +205,8 @@ public:
     static bool isValid(QIODevice *pDevice);
     virtual QString getVersion() override;
     virtual bool isEncrypted() override;
+    virtual bool isCommentPresent() override;
+    virtual QString getComment() override;
     virtual QString getCompressMethodString() override;
 
     virtual FT getFileType() override;

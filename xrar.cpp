@@ -63,6 +63,203 @@ QString XRar::getVersion()
     return getFileFormatInfo(nullptr).sVersion;
 }
 
+bool XRar::isCommentPresent()
+{
+    bool bResult = false;
+
+    qint32 nVersion = getInternVersion(nullptr);
+
+    if (nVersion == 4) {
+        // RAR4: scan blocks for BLOCKTYPE4_COMMENT (0x75) or BLOCKTYPE4_SUBBLOCK_NEW (0x7A) with "CMT" name
+        qint64 nCurrentOffset = 7;  // After signature
+        qint64 nTotalSize = getSize();
+
+        while (nCurrentOffset < nTotalSize) {
+            GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+
+            if (genericBlock.nHeaderSize == 0 || genericBlock.nType < 0x72 || genericBlock.nType > 0x7B) {
+                break;
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_COMMENT) {
+                bResult = true;
+                break;
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW) {
+                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                if (fileBlock.sFileName == "CMT") {
+                    bResult = true;
+                    break;
+                }
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_END) {
+                break;
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_FILE || genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW) {
+                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                qint64 nPackSize = fileBlock.packSize;
+                if (fileBlock.genericBlock4.nFlags & RAR4_FILE_LARGE) {
+                    nPackSize |= ((qint64)fileBlock.highPackSize << 32);
+                }
+                nCurrentOffset += genericBlock.nHeaderSize + nPackSize;
+            } else {
+                nCurrentOffset += genericBlock.nHeaderSize;
+            }
+        }
+    } else if (nVersion == 5) {
+        // RAR5: scan for service header (type 3) with name "CMT"
+        qint64 nCurrentOffset = 8;  // After RAR5 signature
+        qint64 nTotalSize = getSize();
+
+        while (nCurrentOffset < nTotalSize) {
+            GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+
+            if (genericHeader.nHeaderSize == 0) {
+                break;
+            }
+
+            if (genericHeader.nType == HEADERTYPE5_SERVICE) {
+                FILEHEADER5 fileHeader = readFileHeader5(nCurrentOffset);
+                if (fileHeader.sFileName == "CMT") {
+                    bResult = true;
+                    break;
+                }
+            }
+
+            if (genericHeader.nType == HEADERTYPE5_ENDARC) {
+                break;
+            }
+
+            nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
+        }
+    }
+
+    return bResult;
+}
+
+QString XRar::getComment()
+{
+    QString sResult;
+
+    qint32 nVersion = getInternVersion(nullptr);
+
+    if (nVersion == 4) {
+        // RAR4: find COMMENT block (0x75) or SUBBLOCK_NEW (0x7A) with "CMT" name
+        qint64 nCurrentOffset = 7;
+        qint64 nTotalSize = getSize();
+
+        while (nCurrentOffset < nTotalSize) {
+            GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+
+            if (genericBlock.nHeaderSize == 0 || genericBlock.nType < 0x72 || genericBlock.nType > 0x7B) {
+                break;
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_COMMENT) {
+                // Old-style RAR4 comment block after generic header (7 bytes):
+                //   2 bytes: unpacked comment size
+                //   1 byte: version needed to extract
+                //   1 byte: packing method
+                //   2 bytes: comment CRC16
+                // Remaining header data = comment (compressed or stored)
+                qint64 nBodyOffset = nCurrentOffset + 7;
+
+                quint16 nUnpSize = read_uint16(nBodyOffset);
+                nBodyOffset += 2;
+                quint8 nUnpVer = read_uint8(nBodyOffset);
+                nBodyOffset += 1;
+                quint8 nMethod = read_uint8(nBodyOffset);
+                nBodyOffset += 1;
+
+                Q_UNUSED(nUnpVer)
+
+                if (nMethod == RAR_METHOD_STORE) {
+                    nBodyOffset += 2;  // Skip CRC16
+                    qint64 nCommentDataSize = genericBlock.nHeaderSize - (nBodyOffset - nCurrentOffset);
+                    if (nCommentDataSize > 0 && nCommentDataSize <= nUnpSize) {
+                        QByteArray baComment = read_array(nBodyOffset, nCommentDataSize);
+                        sResult = QString::fromUtf8(baComment);
+                    }
+                }
+                // Compressed comments (method != STORE) are not supported for reading yet
+                break;
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW) {
+                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                if (fileBlock.sFileName == "CMT") {
+                    // RAR3/4 new-style comment sub-block (same structure as FILE block)
+                    // Data after header is the comment (compressed or stored)
+                    qint64 nDataOffset = nCurrentOffset + genericBlock.nHeaderSize;
+                    qint64 nPackSize = fileBlock.packSize;
+
+                    if (fileBlock.method == RAR_METHOD_STORE && nPackSize > 0) {
+                        QByteArray baComment = read_array(nDataOffset, nPackSize);
+                        sResult = QString::fromUtf8(baComment);
+                    }
+                    // Compressed comments (method != STORE) require RAR decompression engine
+                    break;
+                }
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_END) {
+                break;
+            }
+
+            if (genericBlock.nType == BLOCKTYPE4_FILE || genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW) {
+                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                qint64 nPackSize = fileBlock.packSize;
+                if (fileBlock.genericBlock4.nFlags & RAR4_FILE_LARGE) {
+                    nPackSize |= ((qint64)fileBlock.highPackSize << 32);
+                }
+                nCurrentOffset += genericBlock.nHeaderSize + nPackSize;
+            } else {
+                nCurrentOffset += genericBlock.nHeaderSize;
+            }
+        }
+    } else if (nVersion == 5) {
+        // RAR5: find service header "CMT" and read comment data area
+        qint64 nCurrentOffset = 8;
+        qint64 nTotalSize = getSize();
+
+        while (nCurrentOffset < nTotalSize) {
+            GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+
+            if (genericHeader.nHeaderSize == 0) {
+                break;
+            }
+
+            if (genericHeader.nType == HEADERTYPE5_SERVICE) {
+                FILEHEADER5 fileHeader = readFileHeader5(nCurrentOffset);
+                if (fileHeader.sFileName == "CMT" && fileHeader.nDataSize > 0) {
+                    // RAR5 comment data area follows the header
+                    qint64 nDataOffset = nCurrentOffset + fileHeader.nHeaderSize;
+                    quint64 nMethod = fileHeader.nCompInfo & 0x003f;
+
+                    if (nMethod == 0) {
+                        // Store method (version 0) — read directly
+                        QByteArray baComment = read_array(nDataOffset, (qint64)fileHeader.nDataSize);
+                        sResult = QString::fromUtf8(baComment);
+                    }
+                    // Compressed CMT data is not supported for reading yet
+                    break;
+                }
+            }
+
+            if (genericHeader.nType == HEADERTYPE5_ENDARC) {
+                break;
+            }
+
+            nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
+        }
+    }
+
+    return sResult;
+}
+
 QString XRar::getFileFormatExt()
 {
     return "rar";
@@ -1272,7 +1469,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
                 nCurrentOffset += fileHeader.nHeaderSize + fileHeader.nDataSize;
             } else {
-                nCurrentOffset += genericHeader.nHeaderSize;
+                nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
             }
 
             if (genericHeader.nType == HEADERTYPE5_ENDARC) {

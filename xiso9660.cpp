@@ -352,155 +352,156 @@ QString XISO9660::_cleanFileName(const QString &sFileName)
     return sResult;
 }
 
-qint64 XISO9660::_countAllRecords(qint64 nRootOffset, qint64 nRootSize, qint32 nBlockSize, PDSTRUCT *pPdStruct)
-{
-    qint64 nTotalCount = 0;
-    QList<QPair<qint64, qint64>> listDirStack;
-    QSet<qint64> setProcessedBlocks;
-
-    // Add root directory to stack
-    listDirStack.append(QPair<qint64, qint64>(nRootOffset, nRootSize));
-    setProcessedBlocks.insert(nRootOffset / nBlockSize);
-
-    while (!listDirStack.isEmpty() && isPdStructNotCanceled(pPdStruct)) {
-        QPair<qint64, qint64> dirInfo = listDirStack.takeFirst();
-        qint64 nCurrentOffset = dirInfo.first;
-        qint64 nEndOffset = dirInfo.first + dirInfo.second;
-
-        while ((nCurrentOffset < nEndOffset) && isPdStructNotCanceled(pPdStruct)) {
-            qint64 nBlockStart = nCurrentOffset;
-            qint64 nBlockEnd = qMin(nBlockStart + nBlockSize, nEndOffset);
-
-            while (nCurrentOffset < nBlockEnd) {
-                quint8 nRecordLength = read_uint8(nCurrentOffset);
-
-                if (nRecordLength == 0) {
-                    nCurrentOffset = nBlockEnd;
-                    break;
-                }
-
-                if (nRecordLength < 34 || nCurrentOffset + nRecordLength > nBlockEnd) {
-                    nCurrentOffset = nBlockEnd;
-                    break;
-                }
-
-                quint8 nFileNameLength = read_uint8(nCurrentOffset + 32);
-
-                // Read file name to check for . and ..
-                QString sFileName;
-                if (nFileNameLength > 0 && nCurrentOffset + 33 + nFileNameLength <= nBlockEnd) {
-                    QByteArray baFileName = read_array(nCurrentOffset + 33, nFileNameLength);
-                    sFileName = QString::fromLatin1(baFileName);
-                }
-
-                // Skip "." and ".." entries
-                if (nFileNameLength == 1 && (sFileName == "\x00" || sFileName == "\x01")) {
-                    nCurrentOffset += nRecordLength;
-                    continue;
-                }
-
-                // Count this record
-                nTotalCount++;
-
-                // Check if it's a directory
-                quint8 nFileFlags = read_uint8(nCurrentOffset + 25);
-                if (nFileFlags & 0x02) {
-                    quint32 nExtentLocation = read_uint32(nCurrentOffset + 2);
-                    quint32 nDataLength = read_uint32(nCurrentOffset + 10);
-                    qint64 nDirBlock = nExtentLocation;
-
-                    // Add subdirectory to stack if not already processed
-                    if (!setProcessedBlocks.contains(nDirBlock)) {
-                        qint64 nDirOffset = (qint64)nExtentLocation * nBlockSize;
-                        listDirStack.append(QPair<qint64, qint64>(nDirOffset, (qint64)nDataLength));
-                        setProcessedBlocks.insert(nDirBlock);
-                    }
-                }
-
-                nCurrentOffset += nRecordLength;
-            }
-        }
-    }
-
-    return nTotalCount;
-}
-
-QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectory(qint64 nOffset, qint64 nSize, qint32 nBlockSize, const QString &sParentPath, PDSTRUCT *pPdStruct)
+QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, qint64 nSize, qint32 nBlockSize, const QString &sParentPath, PDSTRUCT *pPdStruct)
 {
     QList<ARCHIVERECORD> listResult;
 
-    qint64 nCurrentOffset = nOffset;
+    qint64 nFileSize = getSize();
     qint64 nEndOffset = nOffset + nSize;
 
-    while ((nCurrentOffset < nEndOffset) && isPdStructNotCanceled(pPdStruct)) {
-        qint64 nBlockStart = nCurrentOffset;
-        qint64 nBlockEnd = qMin(nBlockStart + nBlockSize, nEndOffset);
+    if (nEndOffset > nFileSize) {
+        nEndOffset = nFileSize;
+    }
 
-        while (nCurrentOffset < nBlockEnd) {
+    qint64 nCurrentOffset = nOffset;
+
+    while ((nCurrentOffset < nEndOffset) && isPdStructNotCanceled(pPdStruct)) {
+        // Align to logical block boundaries for padding detection
+        qint64 nBlockStart = nCurrentOffset;
+        qint64 nNextBlockStart = ((nBlockStart / nBlockSize) + 1) * (qint64)nBlockSize;
+        qint64 nBlockEnd = qMin(nNextBlockStart, nEndOffset);
+
+        while (nCurrentOffset < nBlockEnd && isPdStructNotCanceled(pPdStruct)) {
             quint8 nRecordLength = read_uint8(nCurrentOffset);
 
             if (nRecordLength == 0) {
-                // Padding to next block
+                // Zero-padding to next logical block
                 nCurrentOffset = nBlockEnd;
                 break;
             }
 
             if (nRecordLength < 34 || nCurrentOffset + nRecordLength > nBlockEnd) {
-                // Invalid record or extends beyond block
                 nCurrentOffset = nBlockEnd;
                 break;
             }
 
-            // Read directory record
             quint8 nExtAttrLength = read_uint8(nCurrentOffset + 1);
-            quint32 nExtentLocation = read_uint32(nCurrentOffset + 2);  // Little-endian
-            quint32 nDataLength = read_uint32(nCurrentOffset + 10);     // Little-endian
+            quint32 nExtentLocation = read_uint32(nCurrentOffset + 2);
+            quint32 nDataLength = read_uint32(nCurrentOffset + 10);
             quint8 nFileFlags = read_uint8(nCurrentOffset + 25);
             quint8 nFileNameLength = read_uint8(nCurrentOffset + 32);
 
-            // Read file name
             QString sFileName;
+
             if (nFileNameLength > 0 && nCurrentOffset + 33 + nFileNameLength <= nBlockEnd) {
                 QByteArray baFileName = read_array(nCurrentOffset + 33, nFileNameLength);
                 sFileName = QString::fromLatin1(baFileName);
             }
 
-            // Skip "." and ".." entries
+            // Skip "." (0x00) and ".." (0x01) entries
             if (nFileNameLength == 1 && (sFileName == "\x00" || sFileName == "\x01")) {
                 nCurrentOffset += nRecordLength;
                 continue;
             }
 
-            // Create archive record
             ARCHIVERECORD record = {};
-            record.nStreamOffset = (qint64)nExtentLocation * nBlockSize + nExtAttrLength * nBlockSize;
+            record.nStreamOffset = (qint64)nExtentLocation * nBlockSize + (qint64)nExtAttrLength * nBlockSize;
             record.nStreamSize = nDataLength;
 
-            // Clean file name and build full path
             QString sCleanName = _cleanFileName(sFileName);
             QString sFullPath;
+
             if (sParentPath.isEmpty()) {
                 sFullPath = sCleanName;
             } else {
                 sFullPath = sParentPath + "/" + sCleanName;
             }
 
-            // Set properties
+            bool bIsFolder = (nFileFlags & 0x02) != 0;
+
             record.mapProperties[FPART_PROP_ORIGINALNAME] = sFullPath;
             record.mapProperties[FPART_PROP_UNCOMPRESSEDSIZE] = (qint64)nDataLength;
             record.mapProperties[FPART_PROP_COMPRESSEDSIZE] = (qint64)nDataLength;
             record.mapProperties[FPART_PROP_HANDLEMETHOD] = HANDLE_METHOD_STORE;
-            record.mapProperties[FPART_PROP_ISFOLDER] = (bool)(nFileFlags & 0x02);
+            record.mapProperties[FPART_PROP_ISFOLDER] = bIsFolder;
 
-            // Store directory info for later processing
-            if (nFileFlags & 0x02) {
+            if (bIsFolder) {
                 record.mapProperties[FPART_PROP_STREAMOFFSET] = (qint64)nExtentLocation * nBlockSize;
                 record.mapProperties[FPART_PROP_STREAMSIZE] = (qint64)nDataLength;
             }
 
+            // Read recording date/time from directory record
+            quint8 nYear = read_uint8(nCurrentOffset + 18);
+            quint8 nMonth = read_uint8(nCurrentOffset + 19);
+            quint8 nDay = read_uint8(nCurrentOffset + 20);
+            quint8 nHour = read_uint8(nCurrentOffset + 21);
+            quint8 nMinute = read_uint8(nCurrentOffset + 22);
+            quint8 nSecond = read_uint8(nCurrentOffset + 23);
+
+            if (nYear > 0 && nMonth >= 1 && nMonth <= 12 && nDay >= 1 && nDay <= 31) {
+                QDateTime dt(QDate(1900 + nYear, nMonth, nDay), QTime(nHour, nMinute, nSecond));
+
+                if (dt.isValid()) {
+                    record.mapProperties[FPART_PROP_MTIME] = dt;
+                }
+            }
+
+            listResult.append(record);
+            nCurrentOffset += nRecordLength;
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::ARCHIVERECORD> XISO9660::_collectAllRecords(qint64 nRootOffset, qint64 nRootSize, qint32 nBlockSize, PDSTRUCT *pPdStruct)
+{
+    QList<ARCHIVERECORD> listResult;
+
+    // BFS: queue of (dirOffset, dirSize, parentPath)
+    struct DirEntry {
+        qint64 nOffset;
+        qint64 nSize;
+        QString sPath;
+    };
+
+    QList<DirEntry> listDirQueue;
+    QSet<qint64> setProcessedBlocks;
+
+    DirEntry rootEntry;
+    rootEntry.nOffset = nRootOffset;
+    rootEntry.nSize = nRootSize;
+    rootEntry.sPath = QString();
+
+    listDirQueue.append(rootEntry);
+    setProcessedBlocks.insert(nRootOffset / nBlockSize);
+
+    while (!listDirQueue.isEmpty() && isPdStructNotCanceled(pPdStruct)) {
+        DirEntry dirInfo = listDirQueue.takeFirst();
+
+        QList<ARCHIVERECORD> listDirRecords = _parseDirectoryEntries(
+            dirInfo.nOffset, dirInfo.nSize, nBlockSize, dirInfo.sPath, pPdStruct);
+
+        for (qint32 i = 0; i < listDirRecords.count() && isPdStructNotCanceled(pPdStruct); i++) {
+            ARCHIVERECORD record = listDirRecords.at(i);
             listResult.append(record);
 
-            nCurrentOffset += nRecordLength;
+            // If it's a directory, enqueue it for processing
+            if (record.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) {
+                qint64 nSubDirOffset = record.mapProperties.value(FPART_PROP_STREAMOFFSET).toLongLong();
+                qint64 nSubDirSize = record.mapProperties.value(FPART_PROP_STREAMSIZE).toLongLong();
+                qint64 nSubDirBlock = nSubDirOffset / nBlockSize;
+
+                if (!setProcessedBlocks.contains(nSubDirBlock) && nSubDirOffset > 0 && nSubDirSize > 0) {
+                    DirEntry subEntry;
+                    subEntry.nOffset = nSubDirOffset;
+                    subEntry.nSize = nSubDirSize;
+                    subEntry.sPath = record.mapProperties.value(FPART_PROP_ORIGINALNAME).toString();
+
+                    listDirQueue.append(subEntry);
+                    setProcessedBlocks.insert(nSubDirBlock);
+                }
+            }
         }
     }
 
@@ -510,17 +511,16 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectory(qint64 nOffset, qint64 n
 bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
-    Q_UNUSED(pPdStruct)
 
-    if (!pState) return false;
+    if (!pState) {
+        return false;
+    }
 
-    // Initialize state
     pState->nCurrentOffset = 0;
     pState->nTotalSize = getSize();
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
 
-    // Create unpack context
     ISO9660_UNPACK_CONTEXT *pContext = new ISO9660_UNPACK_CONTEXT;
     pContext->nLogicalBlockSize = _getLogicalBlockSize();
 
@@ -529,17 +529,14 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         return false;
     }
 
-    // Read root directory from PVD
-    // The root directory record is embedded in the PVD at offset 156
-    // It's 34 bytes minimum, contains:
-    // +0: record length (1 byte)
-    // +1: extended attr length (1 byte)
-    // +2: extent location LE (4 bytes)
-    // +6: extent location BE (4 bytes)
-    // +10: data length LE (4 bytes)
-    // +14: data length BE (4 bytes)
-
+    // Read root directory record from PVD at offset 156
     qint64 nRootRecordOffset = 0x8000 + 156;
+
+    if (nRootRecordOffset + 34 > pState->nTotalSize) {
+        delete pContext;
+        return false;
+    }
+
     quint8 nRootRecordLength = read_uint8(nRootRecordOffset);
 
     if (nRootRecordLength < 34) {
@@ -547,24 +544,21 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         return false;
     }
 
-    quint8 nExtAttrLength = read_uint8(nRootRecordOffset + 1);
     quint32 nRootExtentLocation = read_uint32(nRootRecordOffset + 2);
     quint32 nRootDataLength = read_uint32(nRootRecordOffset + 10);
 
     qint64 nRootOffset = (qint64)nRootExtentLocation * pContext->nLogicalBlockSize;
     qint64 nRootSize = (qint64)nRootDataLength;
 
-    // Count total records by walking through all directories upfront
-    pState->nNumberOfRecords = _countAllRecords(nRootOffset, nRootSize, pContext->nLogicalBlockSize, pPdStruct);
+    if (nRootOffset <= 0 || nRootSize <= 0 || nRootOffset >= pState->nTotalSize) {
+        delete pContext;
+        return false;
+    }
 
-    // Initialize current path as empty for root directory
-    pContext->sCurrentPath = "";
+    // Build flat list of all records via BFS traversal
+    pContext->listAllRecords = _collectAllRecords(nRootOffset, nRootSize, pContext->nLogicalBlockSize, pPdStruct);
 
-    // Parse root directory
-    pContext->listCurrentDirRecords = _parseDirectory(nRootOffset, nRootSize, pContext->nLogicalBlockSize, pContext->sCurrentPath, pPdStruct);
-    pContext->nCurrentRecordIndex = 0;
-    pContext->setProcessedBlocks.insert(nRootExtentLocation);
-
+    pState->nNumberOfRecords = pContext->listAllRecords.count();
     pState->pContext = pContext;
 
     return true;
@@ -576,12 +570,14 @@ XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
 
     ARCHIVERECORD record = {};
 
-    if (!pState || !pState->pContext) return record;
+    if (!pState || !pState->pContext) {
+        return record;
+    }
 
     ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
 
-    if (pContext->nCurrentRecordIndex >= 0 && pContext->nCurrentRecordIndex < pContext->listCurrentDirRecords.count()) {
-        record = pContext->listCurrentDirRecords[pContext->nCurrentRecordIndex];
+    if (pState->nCurrentIndex >= 0 && pState->nCurrentIndex < pContext->listAllRecords.count()) {
+        record = pContext->listAllRecords.at(pState->nCurrentIndex);
     }
 
     return record;
@@ -589,29 +585,50 @@ XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
 
 bool XISO9660::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pContext || !pDevice) return false;
-
-    ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
-
-    if (pContext->nCurrentRecordIndex < 0 || pContext->nCurrentRecordIndex >= pContext->listCurrentDirRecords.count()) {
+    if (!pState || !pState->pContext || !pDevice) {
         return false;
     }
 
-    ARCHIVERECORD record = pContext->listCurrentDirRecords[pContext->nCurrentRecordIndex];
+    ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
 
-    // Don't extract folders
+    if (pState->nCurrentIndex < 0 || pState->nCurrentIndex >= pContext->listAllRecords.count()) {
+        return false;
+    }
+
+    ARCHIVERECORD record = pContext->listAllRecords.at(pState->nCurrentIndex);
+
+    // Folders have no data to extract
     if (record.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) {
         return true;
     }
 
-    // Use XStoreDecoder for data extraction
+    qint64 nStreamSize = record.nStreamSize;
+
+    // Empty files are valid
+    if (nStreamSize <= 0) {
+        return true;
+    }
+
+    qint64 nStreamOffset = record.nStreamOffset;
+    qint64 nFileSize = getSize();
+
+    if (nStreamOffset < 0 || nStreamOffset >= nFileSize) {
+        return false;
+    }
+
+    // Clamp to file size if necessary
+    if (nStreamOffset + nStreamSize > nFileSize) {
+        nStreamSize = nFileSize - nStreamOffset;
+    }
+
+    // ISO 9660 data is stored uncompressed — copy directly
     XBinary::DATAPROCESS_STATE decompressState = {};
     decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XArchive::HANDLE_METHOD_STORE);
-    decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, record.nStreamSize);
+    decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nStreamSize);
     decompressState.pDeviceInput = getDevice();
     decompressState.pDeviceOutput = pDevice;
-    decompressState.nInputOffset = record.nStreamOffset;
-    decompressState.nInputLimit = record.nStreamSize;
+    decompressState.nInputOffset = nStreamOffset;
+    decompressState.nInputLimit = nStreamSize;
     decompressState.nProcessedOffset = 0;
     decompressState.nProcessedLimit = -1;
 
@@ -620,68 +637,32 @@ bool XISO9660::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
 
 bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pContext) return false;
+    Q_UNUSED(pPdStruct)
 
-    ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
-
-    // Check if current record is a directory - add to processing stack
-    if (pContext->nCurrentRecordIndex >= 0 && pContext->nCurrentRecordIndex < pContext->listCurrentDirRecords.count()) {
-        ARCHIVERECORD record = pContext->listCurrentDirRecords[pContext->nCurrentRecordIndex];
-
-        if (record.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) {
-            qint64 nDirOffset = record.mapProperties.value(FPART_PROP_STREAMOFFSET).toLongLong();
-            qint64 nDirSize = record.mapProperties.value(FPART_PROP_STREAMSIZE).toLongLong();
-            qint64 nDirBlock = nDirOffset / pContext->nLogicalBlockSize;
-
-            // Only add if not already processed (avoid loops)
-            if (!pContext->setProcessedBlocks.contains(nDirBlock)) {
-                pContext->listDirStack.append(QPair<qint64, qint64>(nDirOffset, nDirSize));
-
-                // Build path for this subdirectory
-                QString sFolderName = record.mapProperties.value(FPART_PROP_ORIGINALNAME).toString();
-                pContext->listPathStack.append(sFolderName);
-
-                pContext->setProcessedBlocks.insert(nDirBlock);
-            }
-        }
-    }
-
-    pContext->nCurrentRecordIndex++;
-    pState->nCurrentIndex++;
-
-    // Check if we've exceeded the total record count
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+    if (!pState || !pState->pContext) {
         return false;
     }
 
-    // If we've processed all records in current directory, load next directory from stack
-    if (pContext->nCurrentRecordIndex >= pContext->listCurrentDirRecords.count()) {
-        if (!pContext->listDirStack.isEmpty()) {
-            QPair<qint64, qint64> dirInfo = pContext->listDirStack.takeFirst();
-            QString sNextPath = pContext->listPathStack.takeFirst();
+    pState->nCurrentIndex++;
 
-            // Update current path
-            pContext->sCurrentPath = sNextPath;
+    ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
 
-            pContext->listCurrentDirRecords = _parseDirectory(dirInfo.first, dirInfo.second, pContext->nLogicalBlockSize, pContext->sCurrentPath, pPdStruct);
-            pContext->nCurrentRecordIndex = 0;
-        } else {
-            // No more directories to process
-            return false;
-        }
-    }
-
-    return true;
+    return (pState->nCurrentIndex < pContext->listAllRecords.count());
 }
 
 bool XISO9660::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    if (!pState) return false;
+    if (!pState) {
+        return false;
+    }
 
     if (pState->pContext) {
         ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
+
+        pContext->listAllRecords.clear();
+
         delete pContext;
         pState->pContext = nullptr;
     }

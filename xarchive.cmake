@@ -127,4 +127,6 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbcj2decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xblake2sp.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xblake2sp.h
 )

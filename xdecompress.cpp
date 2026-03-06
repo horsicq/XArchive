@@ -110,6 +110,9 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
             if (nEncryptedSize > 0 && (nEncryptedSize % AES_BLOCK_SIZE) == 0) {
                 pDecryptedDevice = XBinary::createFileBuffer(nEncryptedSize, pPdStruct);
                 if (pDecryptedDevice) {
+                    // Seek to the encrypted data offset before reading
+                    pState->pDeviceInput->seek(pState->nInputOffset);
+
                     XBinary::DATAPROCESS_STATE decryptState = *pState;
                     decryptState.pDeviceOutput = pDecryptedDevice;
                     decryptState.nCountInput = 0;

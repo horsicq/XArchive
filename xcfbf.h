@@ -116,6 +116,7 @@ public:
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     // Format-specific unpacking context
@@ -124,10 +125,18 @@ private:
         qint64 nMiniSectorSize;           // Mini-sector size (typically 64)
         quint64 nMiniCutoff;              // Mini-stream cutoff size (typically 4096)
         qint64 nDirBaseOffset;            // Base offset of directory entries
-        qint64 nRootStreamStart;          // Root storage stream start (for mini-streams)
-        qint64 nRootStreamSize;           // Root storage stream size
+        quint32 nRootStartSector;         // Root storage start sector ID
+        quint64 nRootStreamSize;          // Root storage stream size
+        QList<quint32> listFAT;           // Full FAT table (sector chain)
+        QList<quint32> listMiniFAT;       // Full MiniFAT table (mini-sector chain)
+        QByteArray baMiniStream;          // Cached mini-stream data (Root Entry stream)
         QList<qint64> listRecordOffsets;  // Offsets to stream directory entries
     };
+
+    QList<quint32> _readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPdStruct);
+    QList<quint32> _readMiniFAT(const StructuredStorageHeader &ssh, const QList<quint32> &listFAT, qint64 nSectorSize, PDSTRUCT *pPdStruct);
+    QByteArray _readStreamBySectorChain(const QList<quint32> &listFAT, quint32 nStartSector, qint64 nSectorSize, qint64 nStreamSize, PDSTRUCT *pPdStruct);
+    QByteArray _readMiniStream(const QList<quint32> &listMiniFAT, const QByteArray &baMiniStreamData, quint32 nStartSector, qint64 nMiniSectorSize, qint64 nStreamSize);
 
     static void _addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset, qint64 size, const QString &name);
 };

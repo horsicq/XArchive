@@ -156,6 +156,85 @@ QString XSevenZip::getMIMEString()
     return "application/x-7z-compressed";
 }
 
+bool XSevenZip::isCommentPresent()
+{
+    return !getComment().isEmpty();
+}
+
+QString XSevenZip::getComment()
+{
+    QString sResult;
+
+    SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
+    qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
+    qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
+
+    if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
+        QByteArray baData;
+        baData.resize(nNextHeaderSize);
+        qint64 nHeaderSize = nNextHeaderSize;
+
+        qint64 nBytesRead = read_array_process(nNextHeaderOffset, baData.data(), nNextHeaderSize, nullptr);
+
+        if (nBytesRead == nNextHeaderSize) {
+            bool bHeader = false;
+            bool bIsEncodedHeader = false;
+
+            if (nBytesRead > 0) {
+                quint8 nFirstByte = (quint8)baData.data()[0];
+                bIsEncodedHeader = (nFirstByte == (quint8)k7zIdEncodedHeader);
+            }
+
+            if (bIsEncodedHeader) {
+                QList<XSevenZip::SZRECORD> listRecords;
+
+                SZSTATE state = {};
+                state.pData = baData.data();
+                state.nSize = nNextHeaderSize;
+                state.nCurrentOffset = 0;
+                state.bIsError = false;
+                state.sErrorString = QString();
+
+                _handleId(&listRecords, XSevenZip::k7zIdEncodedHeader, &state, 1, true, nullptr, IMPTYPE_UNKNOWN);
+
+                baData.clear();
+
+                QBuffer bufferOut;
+                bufferOut.setBuffer(&baData);
+
+                QMap<UNPACK_PROP, QVariant> mapProperties;
+
+                if (bufferOut.open(QIODevice::ReadWrite)) {
+                    bHeader = decompressHeader(mapProperties, &bufferOut, &state, nullptr);
+                    bufferOut.close();
+                    nHeaderSize = baData.size();
+                }
+            } else {
+                bHeader = true;
+            }
+
+            if (bHeader) {
+                QList<XSevenZip::SZRECORD> listRecords;
+
+                SZSTATE state = {};
+                state.pData = baData.data();
+                state.nSize = nHeaderSize;
+                state.nCurrentOffset = 0;
+                state.bIsError = false;
+                state.sErrorString = QString();
+
+                _handleId(&listRecords, XSevenZip::k7zIdHeader, &state, 1, true, nullptr, IMPTYPE_UNKNOWN);
+
+                if (!state.baComment.isEmpty()) {
+                    sResult = QString::fromUtf8(state.baComment);
+                }
+            }
+        }
+    }
+
+    return sResult;
+}
+
 QString XSevenZip::getArch()
 {
     return QString();

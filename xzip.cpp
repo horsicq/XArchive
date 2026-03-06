@@ -127,6 +127,39 @@ bool XZip::isEncrypted()
     return bResult;
 }
 
+bool XZip::isCommentPresent()
+{
+    bool bResult = false;
+
+    qint64 nECDOffset = findECDOffset(nullptr);
+
+    if (nECDOffset != -1) {
+        quint16 nCommentLength = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+        bResult = (nCommentLength > 0);
+    }
+
+    return bResult;
+}
+
+QString XZip::getComment()
+{
+    QString sResult;
+
+    qint64 nECDOffset = findECDOffset(nullptr);
+
+    if (nECDOffset != -1) {
+        quint16 nCommentLength = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+
+        if (nCommentLength > 0) {
+            qint64 nCommentOffset = nECDOffset + sizeof(ENDOFCENTRALDIRECTORYRECORD);
+            QByteArray baComment = read_array(nCommentOffset, nCommentLength);
+            sResult = QString::fromUtf8(baComment);
+        }
+    }
+
+    return sResult;
+}
+
 QString XZip::getCompressMethodString()
 {
     QString sResult;
