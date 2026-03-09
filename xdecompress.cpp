@@ -205,9 +205,12 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
 
             if (bResult) {
                 // Verify CRC of the extracted file
-                XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
-                QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
-                bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+                bool bNoCRC = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_NOCRC).toBool();
+                if (!bNoCRC) {
+                    XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+                    QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                    bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+                }
             }
         }
     }
@@ -265,9 +268,12 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
         bResult = decompress(pState, pPdStruct);
         if (bResult && pState->pDeviceOutput) {
             // Verify CRC of the decompressed result
-            XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
-            QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
-            bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+            bool bNoCRC = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_NOCRC).toBool();
+            if (!bNoCRC) {
+                XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+                QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+            }
         }
     } else if (bIsSolid) {
         // Check if this is a RAR solid archive — RAR solid requires sequential decompression
@@ -329,9 +335,12 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
                     bResult = (nWritten == nDecompressedSize);
                     if (bResult) {
                         // Verify CRC of the extracted sub-stream
-                        XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
-                        QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
-                        bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+                        bool bNoCRC = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_NOCRC).toBool();
+                        if (!bNoCRC) {
+                            XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+                            QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                            bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+                        }
                     }
                 }
             }
@@ -427,9 +436,12 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
 
         if (bResult && pState->pDeviceOutput) {
             // Verify CRC of the final decompressed result
-            XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
-            QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
-            bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+            bool bNoCRC = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_NOCRC).toBool();
+            if (!bNoCRC) {
+                XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+                QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+            }
         }
     }
 
