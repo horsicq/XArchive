@@ -231,6 +231,7 @@ public:
     bool isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct);
 
     virtual QString structIDToString(quint32 nID) override;
+    virtual quint32 ftStringToStructID(const QString &sFtString) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
     virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
     virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
@@ -257,6 +258,8 @@ public:
 
     static QMap<quint64, QString> getHeaderSignatures();
     static QMap<quint64, QString> getHeaderSignaturesS();
+
+    static const QString PREFIX_SIGNATURE;
 
     static quint32 filePermissionsToExternalAttributes(QFile::Permissions permissions);
     static QFile::Permissions externalAttributesToFilePermissions(quint32 nExternalAttributes);

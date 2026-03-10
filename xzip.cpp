@@ -39,6 +39,67 @@ XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
     {XZip::STRUCTID_ENDOFCENTRALDIRECTORYRECORD, "EndOfCentralDirectoryRecord", QString("End of Central Directory Record")},
 };
 
+XBinary::XIDSTRING _TABLE_XZip_CMETHOD[] = {
+    {XZip::CMETHOD_STORE, "Store"},
+    {XZip::CMETHOD_SHRINK, "Shrink"},
+    {XZip::CMETHOD_REDUCED_1, "Reduced1"},
+    {XZip::CMETHOD_REDUCED_2, "Reduced2"},
+    {XZip::CMETHOD_REDUCED_3, "Reduced3"},
+    {XZip::CMETHOD_REDUCED_4, "Reduced4"},
+    {XZip::CMETHOD_IMPLODED, "Imploded"},
+    {XZip::CMETHOD_DEFLATE, "Deflate"},
+    {XZip::CMETHOD_DEFLATE64, "Deflate64"},
+    {XZip::CMETHOD_PKWARE_DCL_IMPLODING, "PKWareDCLImploding"},
+    {XZip::CMETHOD_BZIP2, "BZip2"},
+    {XZip::CMETHOD_LZMA, "LZMA"},
+    {XZip::CMETHOD_XZ, "XZ"},
+    {XZip::CMETHOD_PPMD, "PPMd"},
+    {XZip::CMETHOD_AES, "AES"},
+};
+
+XBinary::XIDSTRING _TABLE_XZip_FLAGS[] = {
+    {0x0001, "Encrypted"},
+    {0x0002, "CompressionOption1"},
+    {0x0004, "CompressionOption2"},
+    {0x0008, "DataDescriptor"},
+    {0x0010, "EnhancedDeflation"},
+    {0x0020, "CompressedPatchedData"},
+    {0x0040, "StrongEncryption"},
+    {0x0800, "LanguageEncoding"},
+    {0x2000, "MaskHeaderValues"},
+};
+
+XBinary::XIDSTRING _TABLE_XZip_OS[] = {
+    {0, "MS-DOS"},
+    {1, "Amiga"},
+    {2, "OpenVMS"},
+    {3, "UNIX"},
+    {4, "VM/CMS"},
+    {5, "Atari ST"},
+    {6, "OS/2 HPFS"},
+    {7, "Macintosh"},
+    {8, "Z-System"},
+    {9, "CP/M"},
+    {10, "Windows NTFS"},
+    {11, "MVS"},
+    {12, "VSE"},
+    {13, "Acorn Risc"},
+    {14, "VFAT"},
+    {15, "alternate MVS"},
+    {16, "BeOS"},
+    {17, "Tandem"},
+    {18, "OS/400"},
+    {19, "OS X"},
+};
+
+XBinary::XIDSTRING _TABLE_XZip_HeaderSignatures[] = {
+    {0x06054B50, "ECD"},
+    {0x02014B50, "CFD"},
+    {0x04034B50, "LFD"},
+};
+
+const QString XZip::PREFIX_SIGNATURE = "SIGNATURE";
+
 XZip::XZip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -606,6 +667,11 @@ QString XZip::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+quint32 XZip::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
                           void *pUserData, PDSTRUCT *pPdStruct)
 {
@@ -635,24 +701,12 @@ qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_R
 
 QMap<quint64, QString> XZip::getHeaderSignatures()
 {
-    QMap<quint64, QString> mapResult;
-
-    mapResult.insert(0x06054B50, "SIGNATURE_ECD");
-    mapResult.insert(0x02014B50, "SIGNATURE_CFD");
-    mapResult.insert(0x04034B50, "SIGNATURE_LFD");
-
-    return mapResult;
+    return XBinary::XIDSTRING_createMapPrefix(_TABLE_XZip_HeaderSignatures, sizeof(_TABLE_XZip_HeaderSignatures) / sizeof(XBinary::XIDSTRING), PREFIX_SIGNATURE);
 }
 
 QMap<quint64, QString> XZip::getHeaderSignaturesS()
 {
-    QMap<quint64, QString> mapResult;
-
-    mapResult.insert(0x06054B50, "ECD");
-    mapResult.insert(0x02014B50, "CFD");
-    mapResult.insert(0x04034B50, "LFD");
-
-    return mapResult;
+    return XBinary::XIDSTRING_createMap(_TABLE_XZip_HeaderSignatures, sizeof(_TABLE_XZip_HeaderSignatures) / sizeof(XBinary::XIDSTRING));
 }
 
 XBinary::_MEMORY_MAP XZip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
@@ -2120,6 +2174,7 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         xfHeader.xLoc = ecdLoc;
         xfHeader.xfType = XFTYPE_HEADER;
         xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_ENDOFCENTRALDIRECTORYRECORD, ecdLoc);
+        xfHeader.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XZip_HeaderSignatures, sizeof(_TABLE_XZip_HeaderSignatures) / sizeof(XBinary::XIDSTRING)});
 
         listResult.append(xfHeader);
 
@@ -2149,6 +2204,12 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         xfHeaderCDH.xLoc = cdhLoc;
         xfHeaderCDH.xfType = XFTYPE_TABLE;
         // xfHeaderCDH.listFields not fixed
+        // CDH field indices: 0=Signature, 2=OS, 4=MinOS, 5=Flags, 6=Method
+        xfHeaderCDH.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XZip_HeaderSignatures, sizeof(_TABLE_XZip_HeaderSignatures) / sizeof(XBinary::XIDSTRING)});
+        xfHeaderCDH.listDataSt.append({2, 0, XFDATASTYPE_LIST, _TABLE_XZip_OS, sizeof(_TABLE_XZip_OS) / sizeof(XBinary::XIDSTRING)});
+        xfHeaderCDH.listDataSt.append({4, 0, XFDATASTYPE_LIST, _TABLE_XZip_OS, sizeof(_TABLE_XZip_OS) / sizeof(XBinary::XIDSTRING)});
+        xfHeaderCDH.listDataSt.append({5, 0xFFFF, XFDATASTYPE_FLAGS, _TABLE_XZip_FLAGS, sizeof(_TABLE_XZip_FLAGS) / sizeof(XBinary::XIDSTRING)});
+        xfHeaderCDH.listDataSt.append({6, 0, XFDATASTYPE_LIST, _TABLE_XZip_CMETHOD, sizeof(_TABLE_XZip_CMETHOD) / sizeof(XBinary::XIDSTRING)});
 
         XFHEADER xfHeaderLFH = {};
         if (xfStruct.bIsParent) {
@@ -2158,7 +2219,13 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             xfHeaderLFH.structID = static_cast<XBinary::STRUCTID>(STRUCTID_LOCALFILEHEADER);
             xfHeaderLFH.xLoc = cdhLoc;
             xfHeaderLFH.xfType = XFTYPE_TABLE;
+            xfHeaderLFH.bIsParentNeeded = true; // Important!
             // xfHeaderLFH.listFields not fixed
+            // LFH field indices: 0=Signature, 2=MinOS, 3=Flags, 4=Method
+            xfHeaderLFH.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XZip_HeaderSignatures, sizeof(_TABLE_XZip_HeaderSignatures) / sizeof(XBinary::XIDSTRING)});
+            xfHeaderLFH.listDataSt.append({2, 0, XFDATASTYPE_LIST, _TABLE_XZip_OS, sizeof(_TABLE_XZip_OS) / sizeof(XBinary::XIDSTRING)});
+            xfHeaderLFH.listDataSt.append({3, 0xFFFF, XFDATASTYPE_FLAGS, _TABLE_XZip_FLAGS, sizeof(_TABLE_XZip_FLAGS) / sizeof(XBinary::XIDSTRING)});
+            xfHeaderLFH.listDataSt.append({4, 0, XFDATASTYPE_LIST, _TABLE_XZip_CMETHOD, sizeof(_TABLE_XZip_CMETHOD) / sizeof(XBinary::XIDSTRING)});
         }
 
         // Enumerate locations for each CDH entry
@@ -2170,12 +2237,12 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
                 break;
             }
 
-            xfHeaderCDH.listLocations.append(nCurrentOffset);
+            xfHeaderCDH.listRowLocations.append(nCurrentOffset);
 
             CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nCurrentOffset, pPdStruct);
 
             if (xfStruct.bIsParent) {
-                xfHeaderLFH.listLocations.append(cdh.nOffsetToLocalFileHeader);
+                xfHeaderLFH.listRowLocations.append(cdh.nOffsetToLocalFileHeader);
             }
 
             nCurrentOffset += sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength;
@@ -2198,67 +2265,67 @@ QList<XBinary::XFRECORD> XZip::getXFRecords(FT fileType, quint32 nStructID, cons
     QList<XBinary::XFRECORD> listResult;
 
     if (nStructID == STRUCTID_ENDOFCENTRALDIRECTORYRECORD) {
-        listResult.append({"Signature", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nSignature), 4, VT_UINT32});
-        listResult.append({"DiskNumber", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumber), 2, VT_UINT16});
-        listResult.append({"StartDisk", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nStartDisk), 2, VT_UINT16});
-        listResult.append({"DiskNumberOfRecords", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumberOfRecords), 2, VT_UINT16});
-        listResult.append({"TotalNumberOfRecords", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords), 2, VT_UINT16});
-        listResult.append({"SizeOfCentralDirectory", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nSizeOfCentralDirectory), 4, VT_UINT32});
-        listResult.append({"OffsetToCentralDirectory", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory), 4, VT_UINT32});
-        listResult.append({"CommentLength", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength), 2, VT_UINT16});
+        listResult.append({"Signature", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nSignature), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"DiskNumber", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumber), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"StartDisk", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nStartDisk), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"DiskNumberOfRecords", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumberOfRecords), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"TotalNumberOfRecords", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"SizeOfCentralDirectory", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nSizeOfCentralDirectory), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"OffsetToCentralDirectory", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"CommentLength", (qint32)offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
         // Variable-length fields
         quint16 nCommentLength = read_uint16(xLoc.nLocation + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
-        listResult.append({"Comment", (qint32)sizeof(ENDOFCENTRALDIRECTORYRECORD), (qint32)nCommentLength, VT_CHAR_ARRAY});
+        listResult.append({"Comment", (qint32)sizeof(ENDOFCENTRALDIRECTORYRECORD), (qint32)nCommentLength, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
     } else if (nStructID == STRUCTID_CENTRALDIRECTORYFILEHEADER) {
-        listResult.append({"Signature", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nSignature), 4, VT_UINT32});
-        listResult.append({"Version", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nVersion), 1, VT_UINT8});
-        listResult.append({"OS", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nOS), 1, VT_UINT8});
-        listResult.append({"MinVersion", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nMinVersion), 1, VT_UINT8});
-        listResult.append({"MinOS", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nMinOS), 1, VT_UINT8});
-        listResult.append({"Flags", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nFlags), 2, VT_UINT16});
-        listResult.append({"Method", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nMethod), 2, VT_UINT16});
-        listResult.append({"LastModTime", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nLastModTime), 2, VT_UINT16});
-        listResult.append({"LastModDate", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nLastModDate), 2, VT_UINT16});
-        listResult.append({"CRC32", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nCRC32), 4, VT_UINT32});
-        listResult.append({"CompressedSize", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nCompressedSize), 4, VT_UINT32});
-        listResult.append({"UncompressedSize", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize), 4, VT_UINT32});
-        listResult.append({"FileNameLength", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength), 2, VT_UINT16});
-        listResult.append({"ExtraFieldLength", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength), 2, VT_UINT16});
-        listResult.append({"FileCommentLength", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength), 2, VT_UINT16});
-        listResult.append({"StartDisk", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nStartDisk), 2, VT_UINT16});
-        listResult.append({"InternalFileAttributes", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nInternalFileAttributes), 2, VT_UINT16});
-        listResult.append({"ExternalFileAttributes", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nExternalFileAttributes), 4, VT_UINT32});
-        listResult.append({"OffsetToLocalFileHeader", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader), 4, VT_UINT32});
+        listResult.append({"Signature", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nSignature), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"Version", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nVersion), 1, XFRECORD_FLAG_VERSION_DIVMOD, VT_UINT8});
+        listResult.append({"OS", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nOS), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"MinVersion", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nMinVersion), 1, XFRECORD_FLAG_VERSION_DIVMOD, VT_UINT8});
+        listResult.append({"MinOS", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nMinOS), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Flags", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nFlags), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Method", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nMethod), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"LastModTime", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nLastModTime), 2, XFRECORD_FLAG_DOSTIME, VT_UINT16});
+        listResult.append({"LastModDate", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nLastModDate), 2, XFRECORD_FLAG_DOSDATE, VT_UINT16});
+        listResult.append({"CRC32", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nCRC32), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"CompressedSize", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nCompressedSize), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"UncompressedSize", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"FileNameLength", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"ExtraFieldLength", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"FileCommentLength", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"StartDisk", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nStartDisk), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"InternalFileAttributes", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nInternalFileAttributes), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"ExternalFileAttributes", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nExternalFileAttributes), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"OffsetToLocalFileHeader", (qint32)offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
         // Variable-length fields
         quint16 nFileNameLength = read_uint16(xLoc.nLocation + offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength));
         quint16 nExtraFieldLength = read_uint16(xLoc.nLocation + offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength));
         quint16 nFileCommentLength = read_uint16(xLoc.nLocation + offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength));
         qint32 nVarOffset = (qint32)sizeof(CENTRALDIRECTORYFILEHEADER);
-        listResult.append({"FileName", nVarOffset, (qint32)nFileNameLength, VT_CHAR_ARRAY});
+        listResult.append({"FileName", nVarOffset, (qint32)nFileNameLength, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
         nVarOffset += nFileNameLength;
-        listResult.append({"ExtraField", nVarOffset, (qint32)nExtraFieldLength, VT_BYTE_ARRAY});
+        listResult.append({"ExtraField", nVarOffset, (qint32)nExtraFieldLength, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
         nVarOffset += nExtraFieldLength;
-        listResult.append({"FileComment", nVarOffset, (qint32)nFileCommentLength, VT_CHAR_ARRAY});
+        listResult.append({"FileComment", nVarOffset, (qint32)nFileCommentLength, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
     } else if (nStructID == STRUCTID_LOCALFILEHEADER) {
-        listResult.append({"Signature", (qint32)offsetof(LOCALFILEHEADER, nSignature), 4, VT_UINT32});
-        listResult.append({"MinVersion", (qint32)offsetof(LOCALFILEHEADER, nMinVersion), 1, VT_UINT8});
-        listResult.append({"MinOS", (qint32)offsetof(LOCALFILEHEADER, nMinOS), 1, VT_UINT8});
-        listResult.append({"Flags", (qint32)offsetof(LOCALFILEHEADER, nFlags), 2, VT_UINT16});
-        listResult.append({"Method", (qint32)offsetof(LOCALFILEHEADER, nMethod), 2, VT_UINT16});
-        listResult.append({"LastModTime", (qint32)offsetof(LOCALFILEHEADER, nLastModTime), 2, VT_UINT16});
-        listResult.append({"LastModDate", (qint32)offsetof(LOCALFILEHEADER, nLastModDate), 2, VT_UINT16});
-        listResult.append({"CRC32", (qint32)offsetof(LOCALFILEHEADER, nCRC32), 4, VT_UINT32});
-        listResult.append({"CompressedSize", (qint32)offsetof(LOCALFILEHEADER, nCompressedSize), 4, VT_UINT32});
-        listResult.append({"UncompressedSize", (qint32)offsetof(LOCALFILEHEADER, nUncompressedSize), 4, VT_UINT32});
-        listResult.append({"FileNameLength", (qint32)offsetof(LOCALFILEHEADER, nFileNameLength), 2, VT_UINT16});
-        listResult.append({"ExtraFieldLength", (qint32)offsetof(LOCALFILEHEADER, nExtraFieldLength), 2, VT_UINT16});
+        listResult.append({"Signature", (qint32)offsetof(LOCALFILEHEADER, nSignature), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"MinVersion", (qint32)offsetof(LOCALFILEHEADER, nMinVersion), 1, XFRECORD_FLAG_VERSION_DIVMOD, VT_UINT8});
+        listResult.append({"MinOS", (qint32)offsetof(LOCALFILEHEADER, nMinOS), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Flags", (qint32)offsetof(LOCALFILEHEADER, nFlags), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Method", (qint32)offsetof(LOCALFILEHEADER, nMethod), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"LastModTime", (qint32)offsetof(LOCALFILEHEADER, nLastModTime), 2, XFRECORD_FLAG_DOSTIME, VT_UINT16});
+        listResult.append({"LastModDate", (qint32)offsetof(LOCALFILEHEADER, nLastModDate), 2, XFRECORD_FLAG_DOSDATE, VT_UINT16});
+        listResult.append({"CRC32", (qint32)offsetof(LOCALFILEHEADER, nCRC32), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"CompressedSize", (qint32)offsetof(LOCALFILEHEADER, nCompressedSize), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"UncompressedSize", (qint32)offsetof(LOCALFILEHEADER, nUncompressedSize), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"FileNameLength", (qint32)offsetof(LOCALFILEHEADER, nFileNameLength), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"ExtraFieldLength", (qint32)offsetof(LOCALFILEHEADER, nExtraFieldLength), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
         // Variable-length fields
         quint16 nFileNameLength = read_uint16(xLoc.nLocation + offsetof(LOCALFILEHEADER, nFileNameLength));
         quint16 nExtraFieldLength = read_uint16(xLoc.nLocation + offsetof(LOCALFILEHEADER, nExtraFieldLength));
         qint32 nVarOffset = (qint32)sizeof(LOCALFILEHEADER);
-        listResult.append({"FileName", nVarOffset, (qint32)nFileNameLength, VT_CHAR_ARRAY});
+        listResult.append({"FileName", nVarOffset, (qint32)nFileNameLength, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
         nVarOffset += nFileNameLength;
-        listResult.append({"ExtraField", nVarOffset, (qint32)nExtraFieldLength, VT_BYTE_ARRAY});
+        listResult.append({"ExtraField", nVarOffset, (qint32)nExtraFieldLength, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
     }
 
     return listResult;
