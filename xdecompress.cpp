@@ -20,6 +20,7 @@
  */
 #include "xdecompress.h"
 #include "subdevice.h"
+#include <QImage>
 
 XDecompress::XDecompress(QObject *parent) : QObject(parent)
 {
@@ -831,6 +832,311 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         }
                     }
                 }
+            }
+        }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_PDF_CCITTIMAGE) {
+        // CCITT Fax image: wrap raw data in a TIFF container
+        if (pState->pDeviceInput && pState->pDeviceOutput) {
+            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
+            pState->nCountInput = baData.size();
+
+            qint32 nWidth = pState->mapProperties.value(XBinary::FPART_PROP_WIDTH).toInt();
+            qint32 nHeight = pState->mapProperties.value(XBinary::FPART_PROP_HEIGHT).toInt();
+            qint32 nCcittK = pState->mapProperties.value(XBinary::FPART_PROP_CCITTK, -1).toInt();
+
+            // TIFF compression type from CCITT /K parameter
+            quint16 nTiffCompression = 4;  // Group 4 (default for /K < 0)
+            if (nCcittK == 0) {
+                nTiffCompression = 3;  // Group 3 1D
+            } else if (nCcittK > 0) {
+                nTiffCompression = 3;  // Group 3 mixed
+            }
+
+            const qint32 nTagCount = 9;
+            const qint32 nIfdSize = 2 + nTagCount * 12 + 4;
+            const qint32 nStripOffset = 8 + nIfdSize;
+            const qint32 nStripSize = baData.size();
+
+            QByteArray baTiff;
+            QBuffer tiffBuffer(&baTiff);
+            tiffBuffer.open(QIODevice::WriteOnly);
+            QDataStream ds(&tiffBuffer);
+            ds.setByteOrder(QDataStream::LittleEndian);
+
+            // TIFF header: "II" (little-endian), magic 42, IFD offset
+            ds.writeRawData("II", 2);
+            ds << (quint16)42;
+            ds << (quint32)8;
+
+            // IFD
+            ds << (quint16)nTagCount;
+            // Tag 256 (0x0100): ImageWidth
+            ds << (quint16)0x0100 << (quint16)3 << (quint32)1 << (quint16)nWidth << (quint16)0;
+            // Tag 257 (0x0101): ImageLength
+            ds << (quint16)0x0101 << (quint16)3 << (quint32)1 << (quint16)nHeight << (quint16)0;
+            // Tag 258 (0x0102): BitsPerSample
+            ds << (quint16)0x0102 << (quint16)3 << (quint32)1 << (quint16)1 << (quint16)0;
+            // Tag 259 (0x0103): Compression
+            ds << (quint16)0x0103 << (quint16)3 << (quint32)1 << (quint16)nTiffCompression << (quint16)0;
+            // Tag 262 (0x0106): PhotometricInterpretation (0=WhiteIsZero)
+            ds << (quint16)0x0106 << (quint16)3 << (quint32)1 << (quint16)0 << (quint16)0;
+            // Tag 273 (0x0111): StripOffsets
+            ds << (quint16)0x0111 << (quint16)4 << (quint32)1 << (quint32)nStripOffset;
+            // Tag 278 (0x0116): RowsPerStrip
+            ds << (quint16)0x0116 << (quint16)3 << (quint32)1 << (quint16)nHeight << (quint16)0;
+            // Tag 279 (0x0117): StripByteCounts
+            ds << (quint16)0x0117 << (quint16)4 << (quint32)1 << (quint32)nStripSize;
+            // Tag 296 (0x0128): ResolutionUnit (1=No absolute unit)
+            ds << (quint16)0x0128 << (quint16)3 << (quint32)1 << (quint16)1 << (quint16)0;
+
+            // Next IFD offset (0 = no more IFDs)
+            ds << (quint32)0;
+
+            // Strip data
+            ds.writeRawData(baData.constData(), nStripSize);
+
+            tiffBuffer.close();
+
+            qint64 nWritten = pState->pDeviceOutput->write(baTiff);
+            pState->nCountOutput = nWritten;
+            bResult = (nWritten == baTiff.size());
+        }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_PDF_PALETTE) {
+        // Palette data: build RIFF PAL container from decompressed RGB data
+        if (pState->pDeviceInput && pState->pDeviceOutput) {
+            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
+            pState->nCountInput = baData.size();
+
+            qint32 nRgbSize = baData.size();
+            qint32 nColorCount = nRgbSize / 3;
+
+            if ((nColorCount > 0) && (nColorCount <= 256)) {
+                qint32 nDataChunkPayload = 4 + nColorCount * 4;
+                qint32 nFileSize = 4 + 8 + nDataChunkPayload;
+
+                QByteArray baPal;
+                QBuffer palBuffer(&baPal);
+                palBuffer.open(QIODevice::WriteOnly);
+                QDataStream ds(&palBuffer);
+                ds.setByteOrder(QDataStream::LittleEndian);
+
+                // RIFF header
+                ds.writeRawData("RIFF", 4);
+                ds << (quint32)nFileSize;
+                ds.writeRawData("PAL ", 4);
+
+                // data chunk
+                ds.writeRawData("data", 4);
+                ds << (quint32)nDataChunkPayload;
+
+                // PAL version and color count
+                ds << (quint16)0x0300;
+                ds << (quint16)nColorCount;
+
+                // RGBX entries
+                const quint8 *pRgb = (const quint8 *)baData.constData();
+
+                for (qint32 i = 0; i < nColorCount; ++i) {
+                    ds << pRgb[i * 3];       // R
+                    ds << pRgb[i * 3 + 1];   // G
+                    ds << pRgb[i * 3 + 2];   // B
+                    ds << (quint8)0;          // Flags
+                }
+
+                palBuffer.close();
+
+                qint64 nWritten = pState->pDeviceOutput->write(baPal);
+                pState->nCountOutput = nWritten;
+                bResult = (nWritten == baPal.size());
+            } else {
+                // Fallback: write raw data
+                qint64 nWritten = pState->pDeviceOutput->write(baData);
+                pState->nCountOutput = nWritten;
+                bResult = (nWritten == baData.size());
+            }
+        }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_PDF_IMAGEDATA) {
+        // Raw pixel data image: convert decompressed data to PNG
+        if (pState->pDeviceInput && pState->pDeviceOutput) {
+            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
+            pState->nCountInput = baData.size();
+
+            qint32 nWidth = pState->mapProperties.value(XBinary::FPART_PROP_WIDTH).toInt();
+            qint32 nHeight = pState->mapProperties.value(XBinary::FPART_PROP_HEIGHT).toInt();
+            qint32 nBitsPerComponent = pState->mapProperties.value(XBinary::FPART_PROP_BITSPERCOMPONENT).toInt();
+            QString sColorSpace = pState->mapProperties.value(XBinary::FPART_PROP_COLORSPACE).toString();
+
+            bool bConverted = false;
+
+            if ((nWidth > 0) && (nHeight > 0) && (nBitsPerComponent > 0)) {
+                QImage::Format imageFormat = QImage::Format_Invalid;
+                qint32 nBytesPerPixel = 0;
+
+                if ((sColorSpace == QLatin1String("/DeviceRGB")) || sColorSpace.isEmpty()) {
+                    if (nBitsPerComponent == 8) {
+                        imageFormat = QImage::Format_RGB888;
+                        nBytesPerPixel = 3;
+                    }
+                } else if (sColorSpace == QLatin1String("/DeviceGray")) {
+                    if (nBitsPerComponent == 8) {
+                        imageFormat = QImage::Format_Grayscale8;
+                        nBytesPerPixel = 1;
+                    } else if (nBitsPerComponent == 1) {
+                        imageFormat = QImage::Format_Mono;
+                        nBytesPerPixel = 0;  // 1 bit per pixel
+                    }
+                } else if (sColorSpace == QLatin1String("/DeviceCMYK")) {
+                    if (nBitsPerComponent == 8) {
+                        nBytesPerPixel = 4;  // CMYK uses 4 bytes per pixel
+                    }
+                } else if (sColorSpace == QLatin1String("/Indexed")) {
+                    if (nBitsPerComponent == 8) {
+                        nBytesPerPixel = 1;
+                    }
+                }
+
+                // Indexed colorspace with palette
+                if ((sColorSpace == QLatin1String("/Indexed")) && (nBitsPerComponent == 8) && (nBytesPerPixel == 1)) {
+                    QByteArray baPalette = pState->mapProperties.value(XBinary::FPART_PROP_PALETTE).toByteArray();
+                    QString sBaseColorSpace = pState->mapProperties.value(XBinary::FPART_PROP_BASECOLORSPACE).toString();
+                    qint64 nExpectedSize = (qint64)nWidth * nHeight;
+
+                    if ((baData.size() >= nExpectedSize) && !baPalette.isEmpty()) {
+                        QImage image(nWidth, nHeight, QImage::Format_Indexed8);
+
+                        qint32 nColorsPerEntry = 3;  // Default: RGB
+
+                        if (sBaseColorSpace == QLatin1String("/DeviceGray")) {
+                            nColorsPerEntry = 1;
+                        } else if (sBaseColorSpace == QLatin1String("/DeviceCMYK")) {
+                            nColorsPerEntry = 4;
+                        }
+
+                        qint32 nPalColorCount = baPalette.size() / nColorsPerEntry;
+                        QVector<QRgb> colorTable;
+                        colorTable.reserve(nPalColorCount);
+                        const quint8 *pPal = (const quint8 *)baPalette.constData();
+
+                        for (qint32 i = 0; i < nPalColorCount; ++i) {
+                            if (nColorsPerEntry == 3) {
+                                colorTable.append(qRgb(pPal[i * 3], pPal[i * 3 + 1], pPal[i * 3 + 2]));
+                            } else if (nColorsPerEntry == 1) {
+                                colorTable.append(qRgb(pPal[i], pPal[i], pPal[i]));
+                            } else if (nColorsPerEntry == 4) {
+                                quint8 nC = pPal[i * 4];
+                                quint8 nM = pPal[i * 4 + 1];
+                                quint8 nY = pPal[i * 4 + 2];
+                                quint8 nK = pPal[i * 4 + 3];
+                                colorTable.append(qRgb(
+                                    (quint8)(255 - qMin(255, nC + nK)),
+                                    (quint8)(255 - qMin(255, nM + nK)),
+                                    (quint8)(255 - qMin(255, nY + nK))));
+                            }
+                        }
+
+                        image.setColorTable(colorTable);
+
+                        for (qint32 y = 0; y < nHeight; ++y) {
+                            memcpy(image.scanLine(y), baData.constData() + y * nWidth, nWidth);
+                        }
+
+                        QBuffer pngBuffer;
+                        pngBuffer.open(QIODevice::WriteOnly);
+                        image.save(&pngBuffer, "PNG");
+                        pngBuffer.close();
+
+                        qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
+                        pState->nCountOutput = nWritten;
+                        bConverted = true;
+                        bResult = (nWritten == pngBuffer.data().size());
+                    }
+                }
+
+                if (!bConverted && (imageFormat != QImage::Format_Invalid) && (nBytesPerPixel > 0)) {
+                    qint64 nExpectedSize = (qint64)nWidth * nHeight * nBytesPerPixel;
+
+                    if (baData.size() >= nExpectedSize) {
+                        QImage image((const uchar *)baData.constData(), nWidth, nHeight, imageFormat);
+
+                        QBuffer pngBuffer;
+                        pngBuffer.open(QIODevice::WriteOnly);
+                        image.save(&pngBuffer, "PNG");
+                        pngBuffer.close();
+
+                        qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
+                        pState->nCountOutput = nWritten;
+                        bConverted = true;
+                        bResult = (nWritten == pngBuffer.data().size());
+                    }
+                }
+
+                if (!bConverted && (sColorSpace == QLatin1String("/DeviceCMYK")) && (nBitsPerComponent == 8)) {
+                    // Manual CMYK to RGB conversion
+                    qint64 nExpectedSize = (qint64)nWidth * nHeight * 4;
+
+                    if (baData.size() >= nExpectedSize) {
+                        QImage image(nWidth, nHeight, QImage::Format_RGB888);
+
+                        const quint8 *pSrc = (const quint8 *)baData.constData();
+
+                        for (qint32 y = 0; y < nHeight; y++) {
+                            quint8 *pDst = image.scanLine(y);
+
+                            for (qint32 x = 0; x < nWidth; x++) {
+                                qint32 nIdx = (y * nWidth + x) * 4;
+                                quint8 nC = pSrc[nIdx];
+                                quint8 nM = pSrc[nIdx + 1];
+                                quint8 nY = pSrc[nIdx + 2];
+                                quint8 nK = pSrc[nIdx + 3];
+
+                                pDst[x * 3] = (quint8)(255 - qMin(255, nC + nK));
+                                pDst[x * 3 + 1] = (quint8)(255 - qMin(255, nM + nK));
+                                pDst[x * 3 + 2] = (quint8)(255 - qMin(255, nY + nK));
+                            }
+                        }
+
+                        QBuffer pngBuffer;
+                        pngBuffer.open(QIODevice::WriteOnly);
+                        image.save(&pngBuffer, "PNG");
+                        pngBuffer.close();
+
+                        qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
+                        pState->nCountOutput = nWritten;
+                        bConverted = true;
+                        bResult = (nWritten == pngBuffer.data().size());
+                    }
+                }
+
+                if (!bConverted && ((imageFormat == QImage::Format_Mono) || (nBitsPerComponent == 1))) {
+                    // 1-bit monochrome
+                    qint32 nBytesPerRow = (nWidth + 7) / 8;
+                    qint64 nExpectedSize = (qint64)nBytesPerRow * nHeight;
+
+                    if (baData.size() >= nExpectedSize) {
+                        QImage image(nWidth, nHeight, QImage::Format_Mono);
+
+                        for (qint32 y = 0; y < nHeight; y++) {
+                            memcpy(image.scanLine(y), baData.constData() + y * nBytesPerRow, nBytesPerRow);
+                        }
+
+                        QBuffer pngBuffer;
+                        pngBuffer.open(QIODevice::WriteOnly);
+                        image.save(&pngBuffer, "PNG");
+                        pngBuffer.close();
+
+                        qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
+                        pState->nCountOutput = nWritten;
+                        bConverted = true;
+                        bResult = (nWritten == pngBuffer.data().size());
+                    }
+                }
+            }
+
+            if (!bConverted) {
+                // Fallback: write raw decompressed data
+                qint64 nWritten = pState->pDeviceOutput->write(baData);
+                pState->nCountOutput = nWritten;
+                bResult = (nWritten == baData.size());
             }
         }
     } else {

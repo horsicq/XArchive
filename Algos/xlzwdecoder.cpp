@@ -332,5 +332,7 @@ bool XLZWDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
     lzwDecodeDevice(pDecompressState->pDeviceInput, pDecompressState->pDeviceOutput);
 
+    pDecompressState->nCountOutput = pDecompressState->pDeviceOutput->pos();
+
     return !(pDecompressState->bReadError || pDecompressState->bWriteError);
 }

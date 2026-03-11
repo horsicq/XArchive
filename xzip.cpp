@@ -2168,13 +2168,13 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         qint64 nECDOffset = locToOffset(xfStruct.pMemoryMap, ecdLoc);
 
         XFHEADER xfHeader = {};
-        xfHeader.sGUID = QUuid::createUuid().toString();
         xfHeader.fileType = xfStruct.fileType;
         xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_ENDOFCENTRALDIRECTORYRECORD);
         xfHeader.xLoc = ecdLoc;
         xfHeader.xfType = XFTYPE_HEADER;
         xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_ENDOFCENTRALDIRECTORYRECORD, ecdLoc);
         xfHeader.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XZip_HeaderSignatures, sizeof(_TABLE_XZip_HeaderSignatures) / sizeof(XBinary::XIDSTRING)});
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_ENDOFCENTRALDIRECTORYRECORD), xfHeader.sParentTag);
 
         listResult.append(xfHeader);
 
@@ -2183,7 +2183,7 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             quint32 nOffsetToCentralDirectory = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
             XFSTRUCT _xfStruct = xfStruct;
-            _xfStruct.sParent = xfHeader.sGUID;
+            _xfStruct.sParent = xfHeader.sTag;
             _xfStruct.nStructID = STRUCTID_CENTRALDIRECTORYFILEHEADER;
             _xfStruct.xLoc = offsetToLoc(nOffsetToCentralDirectory);
             _xfStruct.nCount = nTotalNumberOfRecords;
@@ -2197,8 +2197,7 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         XLOC cdhLoc = xfStruct.xLoc;
 
         XFHEADER xfHeaderCDH = {};
-        xfHeaderCDH.sParentGUID = xfStruct.sParent;
-        xfHeaderCDH.sGUID = QUuid::createUuid().toString();
+        xfHeaderCDH.sParentTag = xfStruct.sParent;
         xfHeaderCDH.fileType = xfStruct.fileType;
         xfHeaderCDH.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CENTRALDIRECTORYFILEHEADER);
         xfHeaderCDH.xLoc = cdhLoc;
@@ -2213,8 +2212,6 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
 
         XFHEADER xfHeaderLFH = {};
         if (xfStruct.bIsParent) {
-            xfHeaderLFH.sParentGUID = xfHeaderCDH.sGUID;
-            xfHeaderLFH.sGUID = QUuid::createUuid().toString();
             xfHeaderLFH.fileType = xfStruct.fileType;
             xfHeaderLFH.structID = static_cast<XBinary::STRUCTID>(STRUCTID_LOCALFILEHEADER);
             xfHeaderLFH.xLoc = cdhLoc;
@@ -2248,9 +2245,13 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             nCurrentOffset += sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength;
         }
 
+        xfHeaderCDH.sTag = xfHeaderToTag(xfHeaderCDH, structIDToString(STRUCTID_CENTRALDIRECTORYFILEHEADER), xfHeaderCDH.sParentTag);
+
         listResult.append(xfHeaderCDH);
 
         if (xfStruct.bIsParent) {
+            xfHeaderLFH.sParentTag = xfHeaderCDH.sTag;
+            xfHeaderLFH.sTag = xfHeaderToTag(xfHeaderLFH, structIDToString(STRUCTID_LOCALFILEHEADER), xfHeaderLFH.sParentTag);
             listResult.append(xfHeaderLFH);
         }
     }
