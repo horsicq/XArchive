@@ -20,7 +20,7 @@
  */
 #include "xdecompress.h"
 #include "subdevice.h"
-#include <QImage>
+#include "xpng.h"
 
 XDecompress::XDecompress(QObject *parent) : QObject(parent)
 {
@@ -969,21 +969,25 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             bool bConverted = false;
 
             if ((nWidth > 0) && (nHeight > 0) && (nBitsPerComponent > 0)) {
-                QImage::Format imageFormat = QImage::Format_Invalid;
+                XPNG::COLOR_TYPE pngColorType = XPNG::COLOR_TYPE_RGB;
                 qint32 nBytesPerPixel = 0;
+                bool bValidFormat = false;
 
                 if ((sColorSpace == QLatin1String("/DeviceRGB")) || sColorSpace.isEmpty()) {
                     if (nBitsPerComponent == 8) {
-                        imageFormat = QImage::Format_RGB888;
+                        pngColorType = XPNG::COLOR_TYPE_RGB;
                         nBytesPerPixel = 3;
+                        bValidFormat = true;
                     }
                 } else if (sColorSpace == QLatin1String("/DeviceGray")) {
                     if (nBitsPerComponent == 8) {
-                        imageFormat = QImage::Format_Grayscale8;
+                        pngColorType = XPNG::COLOR_TYPE_GRAYSCALE;
                         nBytesPerPixel = 1;
+                        bValidFormat = true;
                     } else if (nBitsPerComponent == 1) {
-                        imageFormat = QImage::Format_Mono;
+                        pngColorType = XPNG::COLOR_TYPE_GRAYSCALE;
                         nBytesPerPixel = 0;  // 1 bit per pixel
+                        bValidFormat = true;
                     }
                 } else if (sColorSpace == QLatin1String("/DeviceCMYK")) {
                     if (nBitsPerComponent == 8) {
@@ -1002,8 +1006,6 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                     qint64 nExpectedSize = (qint64)nWidth * nHeight;
 
                     if ((baData.size() >= nExpectedSize) && !baPalette.isEmpty()) {
-                        QImage image(nWidth, nHeight, QImage::Format_Indexed8);
-
                         qint32 nColorsPerEntry = 3;  // Default: RGB
 
                         if (sBaseColorSpace == QLatin1String("/DeviceGray")) {
@@ -1012,61 +1014,67 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                             nColorsPerEntry = 4;
                         }
 
+                        // Convert palette to RGB format (3 bytes per entry) for PNG PLTE chunk
                         qint32 nPalColorCount = baPalette.size() / nColorsPerEntry;
-                        QVector<QRgb> colorTable;
-                        colorTable.reserve(nPalColorCount);
+                        QByteArray baRgbPalette;
+                        baRgbPalette.reserve(nPalColorCount * 3);
                         const quint8 *pPal = (const quint8 *)baPalette.constData();
 
-                        for (qint32 i = 0; i < nPalColorCount; ++i) {
+                        for (qint32 i = 0; i < nPalColorCount; i++) {
+                            quint8 nR = 0;
+                            quint8 nG = 0;
+                            quint8 nB = 0;
+
                             if (nColorsPerEntry == 3) {
-                                colorTable.append(qRgb(pPal[i * 3], pPal[i * 3 + 1], pPal[i * 3 + 2]));
+                                nR = pPal[i * 3];
+                                nG = pPal[i * 3 + 1];
+                                nB = pPal[i * 3 + 2];
                             } else if (nColorsPerEntry == 1) {
-                                colorTable.append(qRgb(pPal[i], pPal[i], pPal[i]));
+                                nR = pPal[i];
+                                nG = pPal[i];
+                                nB = pPal[i];
                             } else if (nColorsPerEntry == 4) {
                                 quint8 nC = pPal[i * 4];
                                 quint8 nM = pPal[i * 4 + 1];
                                 quint8 nY = pPal[i * 4 + 2];
                                 quint8 nK = pPal[i * 4 + 3];
-                                colorTable.append(qRgb(
-                                    (quint8)(255 - qMin(255, nC + nK)),
-                                    (quint8)(255 - qMin(255, nM + nK)),
-                                    (quint8)(255 - qMin(255, nY + nK))));
+                                nR = (quint8)(255 - qMin(255, (qint32)nC + nK));
+                                nG = (quint8)(255 - qMin(255, (qint32)nM + nK));
+                                nB = (quint8)(255 - qMin(255, (qint32)nY + nK));
                             }
-                        }
 
-                        image.setColorTable(colorTable);
-
-                        for (qint32 y = 0; y < nHeight; ++y) {
-                            memcpy(image.scanLine(y), baData.constData() + y * nWidth, nWidth);
+                            baRgbPalette.append((char)nR);
+                            baRgbPalette.append((char)nG);
+                            baRgbPalette.append((char)nB);
                         }
 
                         QBuffer pngBuffer;
-                        pngBuffer.open(QIODevice::WriteOnly);
-                        image.save(&pngBuffer, "PNG");
+                        pngBuffer.open(QIODevice::ReadWrite);
+                        bConverted = XPNG::createPNGIndexed(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), baRgbPalette);
                         pngBuffer.close();
 
-                        qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
-                        pState->nCountOutput = nWritten;
-                        bConverted = true;
-                        bResult = (nWritten == pngBuffer.data().size());
+                        if (bConverted) {
+                            qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
+                            pState->nCountOutput = nWritten;
+                            bResult = (nWritten == pngBuffer.data().size());
+                        }
                     }
                 }
 
-                if (!bConverted && (imageFormat != QImage::Format_Invalid) && (nBytesPerPixel > 0)) {
+                if (!bConverted && bValidFormat && (nBytesPerPixel > 0)) {
                     qint64 nExpectedSize = (qint64)nWidth * nHeight * nBytesPerPixel;
 
                     if (baData.size() >= nExpectedSize) {
-                        QImage image((const uchar *)baData.constData(), nWidth, nHeight, imageFormat);
-
                         QBuffer pngBuffer;
-                        pngBuffer.open(QIODevice::WriteOnly);
-                        image.save(&pngBuffer, "PNG");
+                        pngBuffer.open(QIODevice::ReadWrite);
+                        bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), pngColorType, nBitsPerComponent);
                         pngBuffer.close();
 
-                        qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
-                        pState->nCountOutput = nWritten;
-                        bConverted = true;
-                        bResult = (nWritten == pngBuffer.data().size());
+                        if (bConverted) {
+                            qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
+                            pState->nCountOutput = nWritten;
+                            bResult = (nWritten == pngBuffer.data().size());
+                        }
                     }
                 }
 
@@ -1075,59 +1083,56 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                     qint64 nExpectedSize = (qint64)nWidth * nHeight * 4;
 
                     if (baData.size() >= nExpectedSize) {
-                        QImage image(nWidth, nHeight, QImage::Format_RGB888);
+                        QByteArray baRgbData;
+                        baRgbData.resize(nWidth * nHeight * 3);
 
                         const quint8 *pSrc = (const quint8 *)baData.constData();
+                        quint8 *pDst = (quint8 *)baRgbData.data();
 
                         for (qint32 y = 0; y < nHeight; y++) {
-                            quint8 *pDst = image.scanLine(y);
-
                             for (qint32 x = 0; x < nWidth; x++) {
-                                qint32 nIdx = (y * nWidth + x) * 4;
-                                quint8 nC = pSrc[nIdx];
-                                quint8 nM = pSrc[nIdx + 1];
-                                quint8 nY = pSrc[nIdx + 2];
-                                quint8 nK = pSrc[nIdx + 3];
+                                qint32 nSrcIdx = (y * nWidth + x) * 4;
+                                qint32 nDstIdx = (y * nWidth + x) * 3;
+                                quint8 nC = pSrc[nSrcIdx];
+                                quint8 nM = pSrc[nSrcIdx + 1];
+                                quint8 nY = pSrc[nSrcIdx + 2];
+                                quint8 nK = pSrc[nSrcIdx + 3];
 
-                                pDst[x * 3] = (quint8)(255 - qMin(255, nC + nK));
-                                pDst[x * 3 + 1] = (quint8)(255 - qMin(255, nM + nK));
-                                pDst[x * 3 + 2] = (quint8)(255 - qMin(255, nY + nK));
+                                pDst[nDstIdx] = (quint8)(255 - qMin(255, (qint32)nC + nK));
+                                pDst[nDstIdx + 1] = (quint8)(255 - qMin(255, (qint32)nM + nK));
+                                pDst[nDstIdx + 2] = (quint8)(255 - qMin(255, (qint32)nY + nK));
                             }
                         }
 
                         QBuffer pngBuffer;
-                        pngBuffer.open(QIODevice::WriteOnly);
-                        image.save(&pngBuffer, "PNG");
+                        pngBuffer.open(QIODevice::ReadWrite);
+                        bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baRgbData, XPNG::COLOR_TYPE_RGB);
                         pngBuffer.close();
 
-                        qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
-                        pState->nCountOutput = nWritten;
-                        bConverted = true;
-                        bResult = (nWritten == pngBuffer.data().size());
+                        if (bConverted) {
+                            qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
+                            pState->nCountOutput = nWritten;
+                            bResult = (nWritten == pngBuffer.data().size());
+                        }
                     }
                 }
 
-                if (!bConverted && ((imageFormat == QImage::Format_Mono) || (nBitsPerComponent == 1))) {
+                if (!bConverted && (nBitsPerComponent == 1)) {
                     // 1-bit monochrome
                     qint32 nBytesPerRow = (nWidth + 7) / 8;
                     qint64 nExpectedSize = (qint64)nBytesPerRow * nHeight;
 
                     if (baData.size() >= nExpectedSize) {
-                        QImage image(nWidth, nHeight, QImage::Format_Mono);
-
-                        for (qint32 y = 0; y < nHeight; y++) {
-                            memcpy(image.scanLine(y), baData.constData() + y * nBytesPerRow, nBytesPerRow);
-                        }
-
                         QBuffer pngBuffer;
-                        pngBuffer.open(QIODevice::WriteOnly);
-                        image.save(&pngBuffer, "PNG");
+                        pngBuffer.open(QIODevice::ReadWrite);
+                        bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), XPNG::COLOR_TYPE_GRAYSCALE, 1);
                         pngBuffer.close();
 
-                        qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
-                        pState->nCountOutput = nWritten;
-                        bConverted = true;
-                        bResult = (nWritten == pngBuffer.data().size());
+                        if (bConverted) {
+                            qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
+                            pState->nCountOutput = nWritten;
+                            bResult = (nWritten == pngBuffer.data().size());
+                        }
                     }
                 }
             }
