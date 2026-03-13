@@ -31,6 +31,7 @@ HEADERS += \
     $$PWD/x_ar.h \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
+    $$PWD/xarc.h \
     $$PWD/xarchive.h \
     $$PWD/xcab.h \
     $$PWD/xcfbf.h \
@@ -88,6 +89,7 @@ SOURCES += \
     $$PWD/x_ar.cpp \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \
+    $$PWD/xarc.cpp \
     $$PWD/xarchive.cpp \
     $$PWD/xcab.cpp \
     $$PWD/xcfbf.cpp \

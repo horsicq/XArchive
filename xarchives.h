@@ -23,6 +23,7 @@
 
 // TODO more
 #include "x_ar.h"
+#include "xarc.h"
 #include "xcab.h"
 #include "xcpio.h"
 #include "xgzip.h"
