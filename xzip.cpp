@@ -2055,6 +2055,20 @@ bool XZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     return true;
 }
 
+QList<XBinary::FPART_PROP> XZip::getAvailableFPARTProperties()
+{
+    QList<XBinary::FPART_PROP> listResult;
+
+    listResult.append(FPART_PROP_ORIGINALNAME);
+    listResult.append(FPART_PROP_COMPRESSEDSIZE);
+    listResult.append(FPART_PROP_UNCOMPRESSEDSIZE);
+    listResult.append(FPART_PROP_HANDLEMETHOD);
+    listResult.append(FPART_PROP_STREAMOFFSET);
+    listResult.append(FPART_PROP_STREAMSIZE);
+
+    return listResult;
+}
+
 QVariant XZip::calculateHash(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     if (!pDevice) {

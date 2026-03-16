@@ -576,6 +576,18 @@ bool XTAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     return bResult;
 }
 
+QList<XBinary::FPART_PROP> XTAR::getAvailableFPARTProperties()
+{
+    QList<XBinary::FPART_PROP> listResult;
+
+    listResult.append(FPART_PROP_ORIGINALNAME);
+    listResult.append(FPART_PROP_UNCOMPRESSEDSIZE);
+    listResult.append(FPART_PROP_STREAMOFFSET);
+    listResult.append(FPART_PROP_STREAMSIZE);
+
+    return listResult;
+}
+
 bool XTAR::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

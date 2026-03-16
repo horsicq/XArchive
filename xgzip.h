@@ -76,6 +76,7 @@ public:
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
     GZIP_HEADER _read_GZIP_HEADER(qint64 nOffset);
     qint64 getHeaderSize();

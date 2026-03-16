@@ -1651,6 +1651,20 @@ bool XRar::moveToNext(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
     }
 }
 
+QList<XBinary::FPART_PROP> XRar::getAvailableFPARTProperties()
+{
+    QList<XBinary::FPART_PROP> listResult;
+
+    listResult.append(FPART_PROP_ORIGINALNAME);
+    listResult.append(FPART_PROP_COMPRESSEDSIZE);
+    listResult.append(FPART_PROP_UNCOMPRESSEDSIZE);
+    listResult.append(FPART_PROP_HANDLEMETHOD);
+    listResult.append(FPART_PROP_STREAMOFFSET);
+    listResult.append(FPART_PROP_STREAMSIZE);
+
+    return listResult;
+}
+
 QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEBLOCK4 &fileBlock4)
 {
     QMap<XBinary::FPART_PROP, QVariant> mapResult;

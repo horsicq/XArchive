@@ -189,6 +189,7 @@ public:
     virtual XBinary::ARCHIVERECORD infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
     virtual bool unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutputDevice, PDSTRUCT *pPdStruct) override;
     virtual bool moveToNext(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
+    virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
 private:
     qint32 getInternVersion(PDSTRUCT *pPdStruct);

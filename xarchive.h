@@ -132,6 +132,7 @@ public:
     static quint32 getCompressBufferSize();
     static quint32 getDecompressBufferSize();
     static void showRecords(QList<RECORD> *pListArchive);
+    virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
     virtual MODE getMode();
     //    virtual _MEMORY_MAP getMemoryMap(); // TODO
     virtual qint32 getType();

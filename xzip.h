@@ -253,6 +253,7 @@ public:
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
     virtual QVariant calculateHash(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
 

@@ -839,6 +839,11 @@ void XArchive::showRecords(QList<XArchive::RECORD> *pListArchive)
     }
 }
 
+QList<XBinary::FPART_PROP> XArchive::getAvailableFPARTProperties()
+{
+    return XBinary::getAvailableFPARTProperties();
+}
+
 XBinary::MODE XArchive::getMode()
 {
     return MODE_DATA;

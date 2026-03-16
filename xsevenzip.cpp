@@ -2004,6 +2004,20 @@ bool XSevenZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     return bResult;
 }
 
+QList<XBinary::FPART_PROP> XSevenZip::getAvailableFPARTProperties()
+{
+    QList<XBinary::FPART_PROP> listResult;
+
+    listResult.append(FPART_PROP_ORIGINALNAME);
+    listResult.append(FPART_PROP_COMPRESSEDSIZE);
+    listResult.append(FPART_PROP_UNCOMPRESSEDSIZE);
+    listResult.append(FPART_PROP_HANDLEMETHOD);
+    listResult.append(FPART_PROP_STREAMOFFSET);
+    listResult.append(FPART_PROP_STREAMSIZE);
+
+    return listResult;
+}
+
 void XSevenZip::_printRecords(QList<SZRECORD> *pListRecords)
 {
     if (!pListRecords) {
