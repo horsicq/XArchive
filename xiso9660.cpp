@@ -479,8 +479,7 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_collectAllRecords(qint64 nRootOffset, q
     while (!listDirQueue.isEmpty() && isPdStructNotCanceled(pPdStruct)) {
         DirEntry dirInfo = listDirQueue.takeFirst();
 
-        QList<ARCHIVERECORD> listDirRecords = _parseDirectoryEntries(
-            dirInfo.nOffset, dirInfo.nSize, nBlockSize, dirInfo.sPath, pPdStruct);
+        QList<ARCHIVERECORD> listDirRecords = _parseDirectoryEntries(dirInfo.nOffset, dirInfo.nSize, nBlockSize, dirInfo.sPath, pPdStruct);
 
         for (qint32 i = 0; i < listDirRecords.count() && isPdStructNotCanceled(pPdStruct); i++) {
             ARCHIVERECORD record = listDirRecords.at(i);

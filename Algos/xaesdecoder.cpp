@@ -495,10 +495,19 @@ qint32 XAESDecoder::custom_aes_set_encrypt_key(const quint8 *pUserKey, qint32 nB
     qint32 nRounds = 0;
 
     switch (nBits) {
-        case 128: nKeyWords = 4; nRounds = 10; break;
-        case 192: nKeyWords = 6; nRounds = 12; break;
-        case 256: nKeyWords = 8; nRounds = 14; break;
-        default:  return -2;
+        case 128:
+            nKeyWords = 4;
+            nRounds = 10;
+            break;
+        case 192:
+            nKeyWords = 6;
+            nRounds = 12;
+            break;
+        case 256:
+            nKeyWords = 8;
+            nRounds = 14;
+            break;
+        default: return -2;
     }
 
     pKey->rounds = nRounds;
@@ -545,10 +554,14 @@ static quint8 gf_mul(quint8 a, quint8 b)
     quint8 p = 0;
     quint8 hi_bit_set;
     for (qint32 i = 0; i < 8; i++) {
-        if (b & 1) { p ^= a; }
+        if (b & 1) {
+            p ^= a;
+        }
         hi_bit_set = (a & 0x80);
         a <<= 1;
-        if (hi_bit_set) { a ^= 0x1b; }
+        if (hi_bit_set) {
+            a ^= 0x1b;
+        }
         b >>= 1;
     }
     return p;
@@ -556,27 +569,44 @@ static quint8 gf_mul(quint8 a, quint8 b)
 
 static void SubBytes(quint8 *pState)
 {
-    for (qint32 i = 0; i < 16; i++) { pState[i] = s_aes_sbox[pState[i]]; }
+    for (qint32 i = 0; i < 16; i++) {
+        pState[i] = s_aes_sbox[pState[i]];
+    }
 }
 
 static void ShiftRows(quint8 *pState)
 {
     quint8 temp;
-    temp = pState[1];  pState[1] = pState[5];  pState[5] = pState[9];  pState[9] = pState[13]; pState[13] = temp;
-    temp = pState[2];  pState[2] = pState[10]; pState[10] = temp;
-    temp = pState[6];  pState[6] = pState[14]; pState[14] = temp;
-    temp = pState[15]; pState[15] = pState[11]; pState[11] = pState[7]; pState[7] = pState[3]; pState[3] = temp;
+    temp = pState[1];
+    pState[1] = pState[5];
+    pState[5] = pState[9];
+    pState[9] = pState[13];
+    pState[13] = temp;
+    temp = pState[2];
+    pState[2] = pState[10];
+    pState[10] = temp;
+    temp = pState[6];
+    pState[6] = pState[14];
+    pState[14] = temp;
+    temp = pState[15];
+    pState[15] = pState[11];
+    pState[11] = pState[7];
+    pState[7] = pState[3];
+    pState[3] = temp;
 }
 
 static void MixColumns(quint8 *pState)
 {
     quint8 temp[4];
     for (qint32 i = 0; i < 4; i++) {
-        temp[0] = pState[i * 4 + 0]; temp[1] = pState[i * 4 + 1]; temp[2] = pState[i * 4 + 2]; temp[3] = pState[i * 4 + 3];
-        pState[i * 4 + 0] = gf_mul(temp[0], 2) ^ gf_mul(temp[1], 3) ^ temp[2]           ^ temp[3];
-        pState[i * 4 + 1] = temp[0]           ^ gf_mul(temp[1], 2) ^ gf_mul(temp[2], 3) ^ temp[3];
-        pState[i * 4 + 2] = temp[0]           ^ temp[1]           ^ gf_mul(temp[2], 2) ^ gf_mul(temp[3], 3);
-        pState[i * 4 + 3] = gf_mul(temp[0], 3) ^ temp[1]           ^ temp[2]           ^ gf_mul(temp[3], 2);
+        temp[0] = pState[i * 4 + 0];
+        temp[1] = pState[i * 4 + 1];
+        temp[2] = pState[i * 4 + 2];
+        temp[3] = pState[i * 4 + 3];
+        pState[i * 4 + 0] = gf_mul(temp[0], 2) ^ gf_mul(temp[1], 3) ^ temp[2] ^ temp[3];
+        pState[i * 4 + 1] = temp[0] ^ gf_mul(temp[1], 2) ^ gf_mul(temp[2], 3) ^ temp[3];
+        pState[i * 4 + 2] = temp[0] ^ temp[1] ^ gf_mul(temp[2], 2) ^ gf_mul(temp[3], 3);
+        pState[i * 4 + 3] = gf_mul(temp[0], 3) ^ temp[1] ^ temp[2] ^ gf_mul(temp[3], 2);
     }
 }
 
@@ -593,10 +623,14 @@ static void AddRoundKey(quint8 *pState, const quint32 *pRoundKey)
 
 void XAESDecoder::custom_aes_encrypt(const quint8 *pInput, quint8 *pOutput, const CUSTOM_AES_KEY *pKey)
 {
-    if (!pInput || !pOutput || !pKey) { return; }
+    if (!pInput || !pOutput || !pKey) {
+        return;
+    }
 
     quint8 state[16];
-    for (qint32 i = 0; i < 16; i++) { state[i] = pInput[i]; }
+    for (qint32 i = 0; i < 16; i++) {
+        state[i] = pInput[i];
+    }
 
     AddRoundKey(state, pKey->rd_key);
 
@@ -611,7 +645,9 @@ void XAESDecoder::custom_aes_encrypt(const quint8 *pInput, quint8 *pOutput, cons
     ShiftRows(state);
     AddRoundKey(state, pKey->rd_key + (pKey->rounds * 4));
 
-    for (qint32 i = 0; i < 16; i++) { pOutput[i] = state[i]; }
+    for (qint32 i = 0; i < 16; i++) {
+        pOutput[i] = state[i];
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -620,23 +656,40 @@ void XAESDecoder::custom_aes_encrypt(const quint8 *pInput, quint8 *pOutput, cons
 
 static void InvSubBytes(quint8 *pState)
 {
-    for (qint32 i = 0; i < 16; i++) { pState[i] = s_aes_inv_sbox[pState[i]]; }
+    for (qint32 i = 0; i < 16; i++) {
+        pState[i] = s_aes_inv_sbox[pState[i]];
+    }
 }
 
 static void InvShiftRows(quint8 *pState)
 {
     quint8 temp;
-    temp = pState[13]; pState[13] = pState[9]; pState[9] = pState[5]; pState[5] = pState[1]; pState[1] = temp;
-    temp = pState[2];  pState[2] = pState[10]; pState[10] = temp;
-    temp = pState[6];  pState[6] = pState[14]; pState[14] = temp;
-    temp = pState[3];  pState[3] = pState[7];  pState[7] = pState[11]; pState[11] = pState[15]; pState[15] = temp;
+    temp = pState[13];
+    pState[13] = pState[9];
+    pState[9] = pState[5];
+    pState[5] = pState[1];
+    pState[1] = temp;
+    temp = pState[2];
+    pState[2] = pState[10];
+    pState[10] = temp;
+    temp = pState[6];
+    pState[6] = pState[14];
+    pState[14] = temp;
+    temp = pState[3];
+    pState[3] = pState[7];
+    pState[7] = pState[11];
+    pState[11] = pState[15];
+    pState[15] = temp;
 }
 
 static void InvMixColumns(quint8 *pState)
 {
     quint8 a0, a1, a2, a3;
     for (qint32 i = 0; i < 4; i++) {
-        a0 = pState[i * 4 + 0]; a1 = pState[i * 4 + 1]; a2 = pState[i * 4 + 2]; a3 = pState[i * 4 + 3];
+        a0 = pState[i * 4 + 0];
+        a1 = pState[i * 4 + 1];
+        a2 = pState[i * 4 + 2];
+        a3 = pState[i * 4 + 3];
         pState[i * 4 + 0] = gf_mul(a0, 0x0e) ^ gf_mul(a1, 0x0b) ^ gf_mul(a2, 0x0d) ^ gf_mul(a3, 0x09);
         pState[i * 4 + 1] = gf_mul(a0, 0x09) ^ gf_mul(a1, 0x0e) ^ gf_mul(a2, 0x0b) ^ gf_mul(a3, 0x0d);
         pState[i * 4 + 2] = gf_mul(a0, 0x0d) ^ gf_mul(a1, 0x09) ^ gf_mul(a2, 0x0e) ^ gf_mul(a3, 0x0b);
@@ -649,7 +702,9 @@ static void custom_aes_decrypt_block(const quint8 *pInput, quint8 *pOutput, cons
     quint8 state[16];
     qint32 nRound;
 
-    for (qint32 i = 0; i < 16; i++) { state[i] = pInput[i]; }
+    for (qint32 i = 0; i < 16; i++) {
+        state[i] = pInput[i];
+    }
 
     AddRoundKey(state, pKey->rd_key + pKey->rounds * 4);
 
@@ -664,7 +719,9 @@ static void custom_aes_decrypt_block(const quint8 *pInput, quint8 *pOutput, cons
     InvSubBytes(state);
     AddRoundKey(state, pKey->rd_key);
 
-    for (qint32 i = 0; i < 16; i++) { pOutput[i] = state[i]; }
+    for (qint32 i = 0; i < 16; i++) {
+        pOutput[i] = state[i];
+    }
 }
 
 bool XAESDecoder::decryptAESCBC(const QByteArray &baKey, const QByteArray &baIV, const quint8 *pInputData, quint8 *pOutputData, qint64 nSize)
@@ -698,8 +755,7 @@ bool XAESDecoder::decryptAESCBC(const QByteArray &baKey, const QByteArray &baIV,
     return true;
 }
 
-bool XAESDecoder::decryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize,
-                                XBinary::PDSTRUCT *pPdStruct)
+bool XAESDecoder::decryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(baNonce)
     Q_UNUSED(pPdStruct)
@@ -725,7 +781,9 @@ bool XAESDecoder::decryptAESCTR(const QByteArray &baKey, const QByteArray &baNon
         }
 
         for (qint32 j = 0; j < 8; j++) {
-            if (++counter[j] != 0) { break; }
+            if (++counter[j] != 0) {
+                break;
+            }
         }
 
         nOffset += nBlockSize;
@@ -734,8 +792,7 @@ bool XAESDecoder::decryptAESCTR(const QByteArray &baKey, const QByteArray &baNon
     return true;
 }
 
-bool XAESDecoder::encryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize,
-                                XBinary::PDSTRUCT *pPdStruct)
+bool XAESDecoder::encryptAESCTR(const QByteArray &baKey, const QByteArray &baNonce, const char *pInputData, char *pOutputData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(baNonce)
     Q_UNUSED(pPdStruct)
@@ -761,7 +818,9 @@ bool XAESDecoder::encryptAESCTR(const QByteArray &baKey, const QByteArray &baNon
         }
 
         for (qint32 j = 0; j < 8; j++) {
-            if (++counter[j] != 0) { break; }
+            if (++counter[j] != 0) {
+                break;
+            }
         }
 
         nOffset += nBlockSize;
@@ -809,13 +868,19 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
         }
 
         XBinary::_writeDevice((char *)baSalt.constData(), nSaltSize, pCompressState);
-        if (pCompressState->bWriteError) { return false; }
+        if (pCompressState->bWriteError) {
+            return false;
+        }
 
         XBinary::_writeDevice((char *)baPasswordVerify.constData(), N_PASSWORD_VERIFY_SIZE, pCompressState);
-        if (pCompressState->bWriteError) { return false; }
+        if (pCompressState->bWriteError) {
+            return false;
+        }
 
         qint64 nPlainDataSize = pCompressState->nInputLimit;
-        if (nPlainDataSize <= 0) { return false; }
+        if (nPlainDataSize <= 0) {
+            return false;
+        }
 
         QByteArray baPlainData;
         baPlainData.resize((qint32)nPlainDataSize);
@@ -908,7 +973,7 @@ void XAESDecoder::deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSa
     quint8 aCounter[4] = {0x00, 0x00, 0x00, 0x01};  // Big-endian 1
     XSha256Decoder::update(&ctxInner, aCounter, 4);
 
-    quint8 aU[32];   // Current HMAC result
+    quint8 aU[32];    // Current HMAC result
     quint8 aKey[32];  // XOR accumulator
     hmacSha256Final(&ctxInner, &ctxOuter, aU);
     memcpy(aKey, aU, 32);

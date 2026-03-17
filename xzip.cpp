@@ -58,38 +58,15 @@ XBinary::XIDSTRING _TABLE_XZip_CMETHOD[] = {
 };
 
 XBinary::XIDSTRING _TABLE_XZip_FLAGS[] = {
-    {0x0001, "Encrypted"},
-    {0x0002, "CompressionOption1"},
-    {0x0004, "CompressionOption2"},
-    {0x0008, "DataDescriptor"},
-    {0x0010, "EnhancedDeflation"},
-    {0x0020, "CompressedPatchedData"},
-    {0x0040, "StrongEncryption"},
-    {0x0800, "LanguageEncoding"},
-    {0x2000, "MaskHeaderValues"},
+    {0x0001, "Encrypted"},        {0x0002, "CompressionOption1"}, {0x0004, "CompressionOption2"},
+    {0x0008, "DataDescriptor"},   {0x0010, "EnhancedDeflation"},  {0x0020, "CompressedPatchedData"},
+    {0x0040, "StrongEncryption"}, {0x0800, "LanguageEncoding"},   {0x2000, "MaskHeaderValues"},
 };
 
 XBinary::XIDSTRING _TABLE_XZip_OS[] = {
-    {0, "MS-DOS"},
-    {1, "Amiga"},
-    {2, "OpenVMS"},
-    {3, "UNIX"},
-    {4, "VM/CMS"},
-    {5, "Atari ST"},
-    {6, "OS/2 HPFS"},
-    {7, "Macintosh"},
-    {8, "Z-System"},
-    {9, "CP/M"},
-    {10, "Windows NTFS"},
-    {11, "MVS"},
-    {12, "VSE"},
-    {13, "Acorn Risc"},
-    {14, "VFAT"},
-    {15, "alternate MVS"},
-    {16, "BeOS"},
-    {17, "Tandem"},
-    {18, "OS/400"},
-    {19, "OS X"},
+    {0, "MS-DOS"},    {1, "Amiga"},          {2, "OpenVMS"}, {3, "UNIX"},          {4, "VM/CMS"},  {5, "Atari ST"}, {6, "OS/2 HPFS"},
+    {7, "Macintosh"}, {8, "Z-System"},       {9, "CP/M"},    {10, "Windows NTFS"}, {11, "MVS"},    {12, "VSE"},     {13, "Acorn Risc"},
+    {14, "VFAT"},     {15, "alternate MVS"}, {16, "BeOS"},   {17, "Tandem"},       {18, "OS/400"}, {19, "OS X"},
 };
 
 XBinary::XIDSTRING _TABLE_XZip_HeaderSignatures[] = {
@@ -1012,7 +989,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, cdh.nCompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_RESULTCRC, cdh.nCRC32);
-                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE, cdh.nCRC32 != 0 ? CRC_TYPE_FFFFFFFF_EDB88320_00000000 : CRC_TYPE_UNKNOWN);
+                                                record.mapProperties.insert(FPART_PROP_CRC_TYPE,
+                                                                            cdh.nCRC32 != 0 ? CRC_TYPE_FFFFFFFF_EDB88320_00000000 : CRC_TYPE_UNKNOWN);
 
                                                 if (cdh.nFlags & 0x01) record.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
 
@@ -1929,11 +1907,11 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             } else if (nHeaderID == 0x000A) {
                 // NTFS extra field: 4-byte reserved + TLV attribute entries
                 // Contains high-resolution MTIME, ATIME, CTIME as Windows FILETIMEs
-                if (nDataSize >= (4 + 4 + 24)) {  // reserved(4) + tag(2)+size(2) + 3×FILETIME(24)
+                if (nDataSize >= (4 + 4 + 24)) {                   // reserved(4) + tag(2)+size(2) + 3×FILETIME(24)
                     qint64 nBase = nExtraFieldOffset + i + 4 + 4;  // skip headerID(2)+dataSize(2)+reserved(4)
                     qint64 nBlockEnd = nExtraFieldOffset + i + 4 + nDataSize;
                     while (nBase + 4 <= nBlockEnd) {
-                        quint16 nAttrTag  = read_uint16(nBase);
+                        quint16 nAttrTag = read_uint16(nBase);
                         quint16 nAttrSize = read_uint16(nBase + 2);
                         if (nAttrTag == 0x0001 && nAttrSize >= 24 && nBase + 4 + 24 <= nBlockEnd) {
                             quint64 nMTime = read_uint64(nBase + 4);
@@ -1991,9 +1969,9 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         if (bIsECD && (nOS == 0 || nOS == 10)) {
             quint16 nWinAttrib = (quint16)(nExternalFileAttributes & 0xFFFF);
             result.mapProperties.insert(XBinary::FPART_PROP_ISREADONLY, (nWinAttrib & 0x01) != 0);
-            result.mapProperties.insert(XBinary::FPART_PROP_ISHIDDEN,   (nWinAttrib & 0x02) != 0);
-            result.mapProperties.insert(XBinary::FPART_PROP_ISSYSTEM,   (nWinAttrib & 0x04) != 0);
-            result.mapProperties.insert(XBinary::FPART_PROP_ISARCHIVE,  (nWinAttrib & 0x20) != 0);
+            result.mapProperties.insert(XBinary::FPART_PROP_ISHIDDEN, (nWinAttrib & 0x02) != 0);
+            result.mapProperties.insert(XBinary::FPART_PROP_ISSYSTEM, (nWinAttrib & 0x04) != 0);
+            result.mapProperties.insert(XBinary::FPART_PROP_ISARCHIVE, (nWinAttrib & 0x20) != 0);
         }
     }
 
@@ -2230,7 +2208,7 @@ QList<XBinary::XFHEADER> XZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             xfHeaderLFH.structID = static_cast<XBinary::STRUCTID>(STRUCTID_LOCALFILEHEADER);
             xfHeaderLFH.xLoc = cdhLoc;
             xfHeaderLFH.xfType = XFTYPE_TABLE;
-            xfHeaderLFH.bIsParentNeeded = true; // Important!
+            xfHeaderLFH.bIsParentNeeded = true;  // Important!
             // xfHeaderLFH.listFields not fixed
             // LFH field indices: 0=Signature, 2=MinOS, 3=Flags, 4=Method
             xfHeaderLFH.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XZip_HeaderSignatures, sizeof(_TABLE_XZip_HeaderSignatures) / sizeof(XBinary::XIDSTRING)});

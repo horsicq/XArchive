@@ -324,7 +324,7 @@ XBinary::HANDLE_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCode
         } else if (baCodec.startsWith(QByteArray("\x03\x04\x01", 3))) {
             result = HANDLE_METHOD_PPMD7;  // PPMd (actual codec from 7z)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x03", 4))) {
-            result = HANDLE_METHOD_BCJ;   // BCJ (x86 E8/E9 filter, single stream)
+            result = HANDLE_METHOD_BCJ;  // BCJ (x86 E8/E9 filter, single stream)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x1b", 4))) {
             result = HANDLE_METHOD_BCJ2;  // BCJ2 (x86 4-stream filter) - fix for issue 1
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x0A", 4))) {
@@ -803,7 +803,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                 pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
             }
 
-
             bResult = true;
             break;
         }
@@ -842,7 +841,6 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
             bResult = true;
             break;
         }
-
 
         case XSevenZip::k7zIdEncodedHeader:
             _handleId(pListRecords, XSevenZip::k7zIdPackInfo, pState, 1, true, pPdStruct, IMPTYPE_UNKNOWN);
@@ -909,8 +907,8 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                     }
                 }
             } else {
-// Bitmask format - read bitmask then CRCs for set bits
-// For now, skip this case as it's more complex
+                // Bitmask format - read bitmask then CRCs for set bits
+                // For now, skip this case as it's more complex
             }
             bResult = true;
             break;
@@ -1388,10 +1386,8 @@ bool XSevenZip::_decode7zAttribValue(const QByteArray &baData, qint32 nNumFiles,
         return false;
     }
 
-    *pResult = (quint32)(quint8)pData[nOffset]
-             | ((quint32)(quint8)pData[nOffset + 1] << 8)
-             | ((quint32)(quint8)pData[nOffset + 2] << 16)
-             | ((quint32)(quint8)pData[nOffset + 3] << 24);
+    *pResult = (quint32)(quint8)pData[nOffset] | ((quint32)(quint8)pData[nOffset + 1] << 8) | ((quint32)(quint8)pData[nOffset + 2] << 16) |
+               ((quint32)(quint8)pData[nOffset + 3] << 24);
 
     return true;
 }
@@ -1670,15 +1666,15 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                 qint32 nBCJ2InStreamBase = listInStreamOffsets.at(nBCJ2LocalIdx);
                                                 qint32 nRangeInStreamIdx = nBCJ2InStreamBase + 3;
                                                 if (mapInStreamToGlobal.contains(nRangeInStreamIdx)) {
-                                                    qint32 nRangeGlobal   = mapInStreamToGlobal.value(nRangeInStreamIdx);
+                                                    qint32 nRangeGlobal = mapInStreamToGlobal.value(nRangeInStreamIdx);
                                                     // Scan bonds: each bond that feeds a BCJ2 input (0=main, 1=calls, 2=jumps)
                                                     // tells us which coder provides that compressed stream.
                                                     // If a BCJ2 input has no bond it is a raw (STORE) pack stream.
                                                     qint32 nMainLZMALocal = -1;
                                                     qint32 nCallLZMALocal = -1;
-                                                    qint32 nJmpLZMALocal  = -1;
+                                                    qint32 nJmpLZMALocal = -1;
                                                     for (qint32 bi = 0; bi < nLocalBondCount; bi++) {
-                                                        qint32 nInIdx  = folder.listBonds.at(bi).nInputIndex;
+                                                        qint32 nInIdx = folder.listBonds.at(bi).nInputIndex;
                                                         qint32 nOutIdx = folder.listBonds.at(bi).nOutputIndex;
                                                         qint32 nBCJ2LocalInput = nInIdx - nBCJ2InStreamBase;
                                                         if (nBCJ2LocalInput == 0) {
@@ -1694,18 +1690,19 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                         qint32 nMainInStream = listInStreamOffsets.at(nMainLZMALocal);
                                                         if (mapInStreamToGlobal.contains(nMainInStream)) {
                                                             qint32 nMainGlobal = mapInStreamToGlobal.value(nMainInStream);
-                                                            if (nMainGlobal < state.listInStreams.count() &&
-                                                                nRangeGlobal < state.listInStreams.count()) {
+                                                            if (nMainGlobal < state.listInStreams.count() && nRangeGlobal < state.listInStreams.count()) {
                                                                 nBCJ2MainOffset = state.nStreamsBegin + state.listInStreams.at(nMainGlobal).nOffset;
-                                                                nBCJ2MainSize   = state.listInStreams.at(nMainGlobal).nSize;
-                                                                cmBCJ2Main      = coderToCompressMethod(folder.listCoders.at(nMainLZMALocal).baCoder);
-                                                                baBCJ2MainProp  = folder.listCoders.at(nMainLZMALocal).baProperty;
+                                                                nBCJ2MainSize = state.listInStreams.at(nMainGlobal).nSize;
+                                                                cmBCJ2Main = coderToCompressMethod(folder.listCoders.at(nMainLZMALocal).baCoder);
+                                                                baBCJ2MainProp = folder.listCoders.at(nMainLZMALocal).baProperty;
                                                                 nBCJ2MainUnpack = (nCoderSizesOffset + nMainLZMALocal < state.listCodersSizes.count())
-                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainLZMALocal) : 0;
-                                                                nBCJ2OutputSize = (nCoderSizesOffset + nBCJ2LocalIdx  < state.listCodersSizes.count())
-                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nBCJ2LocalIdx)  : 0;
+                                                                                      ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainLZMALocal)
+                                                                                      : 0;
+                                                                nBCJ2OutputSize = (nCoderSizesOffset + nBCJ2LocalIdx < state.listCodersSizes.count())
+                                                                                      ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nBCJ2LocalIdx)
+                                                                                      : 0;
                                                                 nBCJ2RangeOffset = state.nStreamsBegin + state.listInStreams.at(nRangeGlobal).nOffset;
-                                                                nBCJ2RangeSize   = state.listInStreams.at(nRangeGlobal).nSize;
+                                                                nBCJ2RangeSize = state.listInStreams.at(nRangeGlobal).nSize;
                                                                 // Resolve calls stream: either via compression coder or raw direct pack stream
                                                                 bool bCallOk = false;
                                                                 if (nCallLZMALocal >= 0) {
@@ -1714,11 +1711,12 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                                         qint32 nCallGlobal = mapInStreamToGlobal.value(nCallInStream);
                                                                         if (nCallGlobal < state.listInStreams.count()) {
                                                                             nBCJ2CallOffset = state.nStreamsBegin + state.listInStreams.at(nCallGlobal).nOffset;
-                                                                            nBCJ2CallSize   = state.listInStreams.at(nCallGlobal).nSize;
-                                                                            cmBCJ2Call      = coderToCompressMethod(folder.listCoders.at(nCallLZMALocal).baCoder);
-                                                                            baBCJ2CallProp  = folder.listCoders.at(nCallLZMALocal).baProperty;
+                                                                            nBCJ2CallSize = state.listInStreams.at(nCallGlobal).nSize;
+                                                                            cmBCJ2Call = coderToCompressMethod(folder.listCoders.at(nCallLZMALocal).baCoder);
+                                                                            baBCJ2CallProp = folder.listCoders.at(nCallLZMALocal).baProperty;
                                                                             nBCJ2CallUnpack = (nCoderSizesOffset + nCallLZMALocal < state.listCodersSizes.count())
-                                                                                              ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallLZMALocal) : 0;
+                                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallLZMALocal)
+                                                                                                  : 0;
                                                                             bCallOk = true;
                                                                         }
                                                                     }
@@ -1729,8 +1727,8 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                                         qint32 nCallGlobal = mapInStreamToGlobal.value(nCallRawIdx);
                                                                         if (nCallGlobal < state.listInStreams.count()) {
                                                                             nBCJ2CallOffset = state.nStreamsBegin + state.listInStreams.at(nCallGlobal).nOffset;
-                                                                            nBCJ2CallSize   = state.listInStreams.at(nCallGlobal).nSize;
-                                                                            cmBCJ2Call      = HANDLE_METHOD_STORE;
+                                                                            nBCJ2CallSize = state.listInStreams.at(nCallGlobal).nSize;
+                                                                            cmBCJ2Call = HANDLE_METHOD_STORE;
                                                                             nBCJ2CallUnpack = nBCJ2CallSize;
                                                                             bCallOk = true;
                                                                         }
@@ -1744,11 +1742,12 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                                         qint32 nJmpGlobal = mapInStreamToGlobal.value(nJmpInStream);
                                                                         if (nJmpGlobal < state.listInStreams.count()) {
                                                                             nBCJ2JmpOffset = state.nStreamsBegin + state.listInStreams.at(nJmpGlobal).nOffset;
-                                                                            nBCJ2JmpSize   = state.listInStreams.at(nJmpGlobal).nSize;
-                                                                            cmBCJ2Jmp      = coderToCompressMethod(folder.listCoders.at(nJmpLZMALocal).baCoder);
-                                                                            baBCJ2JmpProp  = folder.listCoders.at(nJmpLZMALocal).baProperty;
+                                                                            nBCJ2JmpSize = state.listInStreams.at(nJmpGlobal).nSize;
+                                                                            cmBCJ2Jmp = coderToCompressMethod(folder.listCoders.at(nJmpLZMALocal).baCoder);
+                                                                            baBCJ2JmpProp = folder.listCoders.at(nJmpLZMALocal).baProperty;
                                                                             nBCJ2JmpUnpack = (nCoderSizesOffset + nJmpLZMALocal < state.listCodersSizes.count())
-                                                                                             ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpLZMALocal) : 0;
+                                                                                                 ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpLZMALocal)
+                                                                                                 : 0;
                                                                             bJmpOk = true;
                                                                         }
                                                                     }
@@ -1759,8 +1758,8 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                                         qint32 nJmpGlobal = mapInStreamToGlobal.value(nJmpRawIdx);
                                                                         if (nJmpGlobal < state.listInStreams.count()) {
                                                                             nBCJ2JmpOffset = state.nStreamsBegin + state.listInStreams.at(nJmpGlobal).nOffset;
-                                                                            nBCJ2JmpSize   = state.listInStreams.at(nJmpGlobal).nSize;
-                                                                            cmBCJ2Jmp      = HANDLE_METHOD_STORE;
+                                                                            nBCJ2JmpSize = state.listInStreams.at(nJmpGlobal).nSize;
+                                                                            cmBCJ2Jmp = HANDLE_METHOD_STORE;
                                                                             nBCJ2JmpUnpack = nBCJ2JmpSize;
                                                                             bJmpOk = true;
                                                                         }
@@ -1816,20 +1815,20 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES3, baCoderProperty3);
                             }
                             if (bBCJ2Resolved) {
-                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD4,      (quint32)cmBCJ2Main);
-                                record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE4,  nBCJ2MainUnpack);
-                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD2,      (quint32)cmBCJ2Call);
+                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD4, (quint32)cmBCJ2Main);
+                                record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE4, nBCJ2MainUnpack);
+                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD2, (quint32)cmBCJ2Call);
                                 record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES2, baBCJ2CallProp);
-                                record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE2,  nBCJ2CallUnpack);
-                                record.mapProperties.insert(FPART_PROP_STREAMOFFSET2,      nBCJ2CallOffset);
-                                record.mapProperties.insert(FPART_PROP_STREAMSIZE2,        nBCJ2CallSize);
-                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD3,      (quint32)cmBCJ2Jmp);
+                                record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE2, nBCJ2CallUnpack);
+                                record.mapProperties.insert(FPART_PROP_STREAMOFFSET2, nBCJ2CallOffset);
+                                record.mapProperties.insert(FPART_PROP_STREAMSIZE2, nBCJ2CallSize);
+                                record.mapProperties.insert(FPART_PROP_HANDLEMETHOD3, (quint32)cmBCJ2Jmp);
                                 record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES3, baBCJ2JmpProp);
-                                record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE3,  nBCJ2JmpUnpack);
-                                record.mapProperties.insert(FPART_PROP_STREAMOFFSET3,      nBCJ2JmpOffset);
-                                record.mapProperties.insert(FPART_PROP_STREAMSIZE3,        nBCJ2JmpSize);
-                                record.mapProperties.insert(FPART_PROP_STREAMOFFSET4,      nBCJ2RangeOffset);
-                                record.mapProperties.insert(FPART_PROP_STREAMSIZE4,        nBCJ2RangeSize);
+                                record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE3, nBCJ2JmpUnpack);
+                                record.mapProperties.insert(FPART_PROP_STREAMOFFSET3, nBCJ2JmpOffset);
+                                record.mapProperties.insert(FPART_PROP_STREAMSIZE3, nBCJ2JmpSize);
+                                record.mapProperties.insert(FPART_PROP_STREAMOFFSET4, nBCJ2RangeOffset);
+                                record.mapProperties.insert(FPART_PROP_STREAMSIZE4, nBCJ2RangeSize);
                             }
                             record.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nFolderDecompressedSize);
                             record.mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, nCurrentUncompressedOffset);
@@ -1885,14 +1884,13 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                         quint32 nWinAttrib = 0;
                         if (_decode7zAttribValue(state.baWinAttrib, nNumberOfFiles, nCurrentFileIndex, &nWinAttrib)) {
                             record.mapProperties.insert(FPART_PROP_ISREADONLY, (nWinAttrib & 0x01) != 0);
-                            record.mapProperties.insert(FPART_PROP_ISHIDDEN,   (nWinAttrib & 0x02) != 0);
-                            record.mapProperties.insert(FPART_PROP_ISSYSTEM,   (nWinAttrib & 0x04) != 0);
-                            record.mapProperties.insert(FPART_PROP_ISARCHIVE,  (nWinAttrib & 0x20) != 0);
+                            record.mapProperties.insert(FPART_PROP_ISHIDDEN, (nWinAttrib & 0x02) != 0);
+                            record.mapProperties.insert(FPART_PROP_ISSYSTEM, (nWinAttrib & 0x04) != 0);
+                            record.mapProperties.insert(FPART_PROP_ISARCHIVE, (nWinAttrib & 0x20) != 0);
                         }
 
                         pContext->listArchiveRecords.append(record);
                     }
-
 
                     if (pContext->listArchiveRecords.count() != nNumberOfFiles) {
 #ifdef QT_DEBUG
@@ -2030,57 +2028,57 @@ void XSevenZip::_printRecords(QList<SZRECORD> *pListRecords)
         const SZRECORD &rec = pListRecords->at(nI);
 
         QString sSrType;
-        if (rec.srType == SRTYPE_UNKNOWN)            sSrType = "UNKNOWN";
-        else if (rec.srType == SRTYPE_ID)            sSrType = "ID";
-        else if (rec.srType == SRTYPE_NUMBER)        sSrType = "NUMBER";
-        else if (rec.srType == SRTYPE_BYTE)          sSrType = "BYTE";
-        else if (rec.srType == SRTYPE_UINT32)        sSrType = "UINT32";
-        else if (rec.srType == SRTYPE_ARRAY)         sSrType = "ARRAY";
-        else                                         sSrType = QString::number((qint32)rec.srType);
+        if (rec.srType == SRTYPE_UNKNOWN) sSrType = "UNKNOWN";
+        else if (rec.srType == SRTYPE_ID) sSrType = "ID";
+        else if (rec.srType == SRTYPE_NUMBER) sSrType = "NUMBER";
+        else if (rec.srType == SRTYPE_BYTE) sSrType = "BYTE";
+        else if (rec.srType == SRTYPE_UINT32) sSrType = "UINT32";
+        else if (rec.srType == SRTYPE_ARRAY) sSrType = "ARRAY";
+        else sSrType = QString::number((qint32)rec.srType);
 
         QString sValType;
-        if (rec.valType == VT_UNKNOWN)               sValType = "UNKNOWN";
-        else if (rec.valType == VT_BYTE)             sValType = "BYTE";
-        else if (rec.valType == VT_UINT16)           sValType = "UINT16";
-        else if (rec.valType == VT_UINT32)           sValType = "UINT32";
-        else if (rec.valType == VT_UINT64)           sValType = "UINT64";
-        else if (rec.valType == VT_INT8)             sValType = "INT8";
-        else if (rec.valType == VT_INT16)            sValType = "INT16";
-        else if (rec.valType == VT_INT32)            sValType = "INT32";
-        else if (rec.valType == VT_INT64)            sValType = "INT64";
-        else if (rec.valType == VT_PACKEDNUMBER)     sValType = "PACKEDNUMBER";
-        else if (rec.valType == VT_STRING)           sValType = "STRING";
-        else if (rec.valType == VT_BYTE_ARRAY)       sValType = "BYTE_ARRAY";
-        else if (rec.valType == VT_CHAR_ARRAY)       sValType = "CHAR_ARRAY";
-        else                                         sValType = QString::number((qint32)rec.valType);
+        if (rec.valType == VT_UNKNOWN) sValType = "UNKNOWN";
+        else if (rec.valType == VT_BYTE) sValType = "BYTE";
+        else if (rec.valType == VT_UINT16) sValType = "UINT16";
+        else if (rec.valType == VT_UINT32) sValType = "UINT32";
+        else if (rec.valType == VT_UINT64) sValType = "UINT64";
+        else if (rec.valType == VT_INT8) sValType = "INT8";
+        else if (rec.valType == VT_INT16) sValType = "INT16";
+        else if (rec.valType == VT_INT32) sValType = "INT32";
+        else if (rec.valType == VT_INT64) sValType = "INT64";
+        else if (rec.valType == VT_PACKEDNUMBER) sValType = "PACKEDNUMBER";
+        else if (rec.valType == VT_STRING) sValType = "STRING";
+        else if (rec.valType == VT_BYTE_ARRAY) sValType = "BYTE_ARRAY";
+        else if (rec.valType == VT_CHAR_ARRAY) sValType = "CHAR_ARRAY";
+        else sValType = QString::number((qint32)rec.valType);
 
         QString sImpType;
-        if (rec.impType == IMPTYPE_UNKNOWN)                    sImpType = "UNKNOWN";
-        else if (rec.impType == IMPTYPE_NUMBEROFFOLDERS)       sImpType = "NUMBEROFFOLDERS";
-        else if (rec.impType == IMPTYPE_NUMBEROFFILES)         sImpType = "NUMBEROFFILES";
-        else if (rec.impType == IMPTYPE_NUMBEROFCODERS)        sImpType = "NUMBEROFCODERS";
-        else if (rec.impType == IMPTYPE_STREAMCRC)             sImpType = "STREAMCRC";
-        else if (rec.impType == IMPTYPE_STREAMOFFSET)          sImpType = "STREAMOFFSET";
-        else if (rec.impType == IMPTYPE_STREAMSIZE)            sImpType = "STREAMSIZE";
-        else if (rec.impType == IMPTYPE_CODERUNPACKEDSIZE)     sImpType = "CODERUNPACKEDSIZE";
-        else if (rec.impType == IMPTYPE_STREAMUNPACKEDCRC)     sImpType = "STREAMUNPACKEDCRC";
-        else if (rec.impType == IMPTYPE_NUMBEROFPACKSTREAMS)   sImpType = "NUMBEROFPACKSTREAMS";
-        else if (rec.impType == IMPTYPE_CODER)                 sImpType = "CODER";
-        else if (rec.impType == IMPTYPE_CODERPROPERTY)         sImpType = "CODERPROPERTY";
-        else if (rec.impType == IMPTYPE_FILENAME)              sImpType = "FILENAME";
-        else if (rec.impType == IMPTYPE_FILECRC)               sImpType = "FILECRC";
-        else if (rec.impType == IMPTYPE_FILEATTRIBUTES)        sImpType = "FILEATTRIBUTES";
-        else if (rec.impType == IMPTYPE_FILETIME)              sImpType = "FILETIME";
-        else if (rec.impType == IMPTYPE_FILEPACKEDSIZE)        sImpType = "FILEPACKEDSIZE";
-        else if (rec.impType == IMPTYPE_FILEUNPACKEDSIZE)      sImpType = "FILEUNPACKEDSIZE";
-        else if (rec.impType == IMPTYPE_NUMBEROFUNPACKSTREAM)  sImpType = "NUMBEROFUNPACKSTREAM";
-        else if (rec.impType == IMPTYPE_EMPTYSTREAMDATA)       sImpType = "EMPTYSTREAMDATA";
-        else if (rec.impType == IMPTYPE_EMPTYFILEDATA)         sImpType = "EMPTYFILEDATA";
-        else if (rec.impType == IMPTYPE_CTIMEDATA)             sImpType = "CTIMEDATA";
-        else if (rec.impType == IMPTYPE_ATIMEDATA)             sImpType = "ATIMEDATA";
-        else if (rec.impType == IMPTYPE_MTIMEDATA)             sImpType = "MTIMEDATA";
-        else if (rec.impType == IMPTYPE_WINATTRIBDATA)         sImpType = "WINATTRIBDATA";
-        else                                                   sImpType = QString::number((qint32)rec.impType);
+        if (rec.impType == IMPTYPE_UNKNOWN) sImpType = "UNKNOWN";
+        else if (rec.impType == IMPTYPE_NUMBEROFFOLDERS) sImpType = "NUMBEROFFOLDERS";
+        else if (rec.impType == IMPTYPE_NUMBEROFFILES) sImpType = "NUMBEROFFILES";
+        else if (rec.impType == IMPTYPE_NUMBEROFCODERS) sImpType = "NUMBEROFCODERS";
+        else if (rec.impType == IMPTYPE_STREAMCRC) sImpType = "STREAMCRC";
+        else if (rec.impType == IMPTYPE_STREAMOFFSET) sImpType = "STREAMOFFSET";
+        else if (rec.impType == IMPTYPE_STREAMSIZE) sImpType = "STREAMSIZE";
+        else if (rec.impType == IMPTYPE_CODERUNPACKEDSIZE) sImpType = "CODERUNPACKEDSIZE";
+        else if (rec.impType == IMPTYPE_STREAMUNPACKEDCRC) sImpType = "STREAMUNPACKEDCRC";
+        else if (rec.impType == IMPTYPE_NUMBEROFPACKSTREAMS) sImpType = "NUMBEROFPACKSTREAMS";
+        else if (rec.impType == IMPTYPE_CODER) sImpType = "CODER";
+        else if (rec.impType == IMPTYPE_CODERPROPERTY) sImpType = "CODERPROPERTY";
+        else if (rec.impType == IMPTYPE_FILENAME) sImpType = "FILENAME";
+        else if (rec.impType == IMPTYPE_FILECRC) sImpType = "FILECRC";
+        else if (rec.impType == IMPTYPE_FILEATTRIBUTES) sImpType = "FILEATTRIBUTES";
+        else if (rec.impType == IMPTYPE_FILETIME) sImpType = "FILETIME";
+        else if (rec.impType == IMPTYPE_FILEPACKEDSIZE) sImpType = "FILEPACKEDSIZE";
+        else if (rec.impType == IMPTYPE_FILEUNPACKEDSIZE) sImpType = "FILEUNPACKEDSIZE";
+        else if (rec.impType == IMPTYPE_NUMBEROFUNPACKSTREAM) sImpType = "NUMBEROFUNPACKSTREAM";
+        else if (rec.impType == IMPTYPE_EMPTYSTREAMDATA) sImpType = "EMPTYSTREAMDATA";
+        else if (rec.impType == IMPTYPE_EMPTYFILEDATA) sImpType = "EMPTYFILEDATA";
+        else if (rec.impType == IMPTYPE_CTIMEDATA) sImpType = "CTIMEDATA";
+        else if (rec.impType == IMPTYPE_ATIMEDATA) sImpType = "ATIMEDATA";
+        else if (rec.impType == IMPTYPE_MTIMEDATA) sImpType = "MTIMEDATA";
+        else if (rec.impType == IMPTYPE_WINATTRIBDATA) sImpType = "WINATTRIBDATA";
+        else sImpType = QString::number((qint32)rec.impType);
 
         QString sValue;
         if (rec.srType == SRTYPE_ARRAY) {
@@ -2090,15 +2088,8 @@ void XSevenZip::_printRecords(QList<SZRECORD> *pListRecords)
             sValue = rec.varValue.toString();
         }
 
-        qDebug("[%d] offset=0x%X size=0x%X name=\"%s\" srType=%s valType=%s impType=%s flags=0x%X value=%s",
-               nI,
-               (quint32)rec.nRelOffset,
-               (quint32)rec.nSize,
-               rec.sName.toUtf8().constData(),
-               sSrType.toUtf8().constData(),
-               sValType.toUtf8().constData(),
-               sImpType.toUtf8().constData(),
-               rec.nFlags,
+        qDebug("[%d] offset=0x%X size=0x%X name=\"%s\" srType=%s valType=%s impType=%s flags=0x%X value=%s", nI, (quint32)rec.nRelOffset, (quint32)rec.nSize,
+               rec.sName.toUtf8().constData(), sSrType.toUtf8().constData(), sValType.toUtf8().constData(), sImpType.toUtf8().constData(), rec.nFlags,
                sValue.toUtf8().constData());
     }
 
@@ -2209,4 +2200,3 @@ bool XSevenZip::decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackPro
 
     return bResult;
 }
-

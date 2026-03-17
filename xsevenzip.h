@@ -233,7 +233,7 @@ private:
         QString sErrorString;
         qint64 nStreamsBegin;
         quint64 nNumberOfFolders;  // Track folder count for SubStreamsInfo
-        quint64 nNumberOfFiles;  // Track file count from FilesInfo (including extended count)
+        quint64 nNumberOfFiles;    // Track file count from FilesInfo (including extended count)
         quint64 nNumberOfCoders;
         QList<SZINSTREAM> listInStreams;
         QList<SZOUTSTREAM> listOutStreams;

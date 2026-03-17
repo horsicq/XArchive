@@ -1375,8 +1375,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                 nBodyOffset += 16;
 
 #ifdef QT_DEBUG
-                qDebug() << "XRar::initUnpack() - ENCRYPTION header: encVer=" << puEncVer.nValue
-                         << "encFlags=" << puEncFlags.nValue << "kdfCount=" << nKdfCount
+                qDebug() << "XRar::initUnpack() - ENCRYPTION header: encVer=" << puEncVer.nValue << "encFlags=" << puEncFlags.nValue << "kdfCount=" << nKdfCount
                          << "saltSize=" << baSalt.size();
 #endif
 
@@ -1414,10 +1413,8 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                             GENERICHEADER5 decGeneric = rarTemp.readGenericHeader5(0);
 
 #ifdef QT_DEBUG
-                            qDebug() << "XRar::initUnpack() - Decrypted header type:" << decGeneric.nType
-                                     << "headerSize(plain):" << decGeneric.nHeaderSize
-                                     << "dataSize:" << decGeneric.nDataSize
-                                     << "consumed(ondisk):" << nConsumed;
+                            qDebug() << "XRar::initUnpack() - Decrypted header type:" << decGeneric.nType << "headerSize(plain):" << decGeneric.nHeaderSize
+                                     << "dataSize:" << decGeneric.nDataSize << "consumed(ondisk):" << nConsumed;
 #endif
 
                             if (decGeneric.nType == HEADERTYPE5_FILE) {
@@ -1431,8 +1428,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                                 pUnpackState->nNumberOfRecords++;
 
 #ifdef QT_DEBUG
-                                qDebug() << "XRar::initUnpack() - Encrypted FILE:" << fileHeader.sFileName
-                                         << "unpackedSize:" << fileHeader.nUnpackedSize
+                                qDebug() << "XRar::initUnpack() - Encrypted FILE:" << fileHeader.sFileName << "unpackedSize:" << fileHeader.nUnpackedSize
                                          << "dataSize:" << fileHeader.nDataSize;
 #endif
                             }

@@ -44,12 +44,16 @@ public:
     static bool decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByteArray &baProperties, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct = nullptr);
 
     // ZIP AES decrypt (AES-CTR, PBKDF2-HMAC-SHA1 key derivation)
-    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod,
+                        XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod,
+                        XBinary::PDSTRUCT *pPdStruct = nullptr);
 
     // ZIP AES encrypt
-    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod,
+                        XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod,
+                        XBinary::PDSTRUCT *pPdStruct = nullptr);
 
     // AES-256-CBC decryption (used by 7z)
     static bool decryptAESCBC(const QByteArray &baKey, const QByteArray &baIV, const quint8 *pInputData, quint8 *pOutputData, qint64 nSize);

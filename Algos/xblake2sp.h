@@ -33,11 +33,11 @@ public:
     static const qint32 PARALLEL_DEGREE = 8;  // 8-way parallelism
 
     struct Blake2sState {
-        quint32 h[8];       // Hash state
-        quint32 t[2];       // Counter (low, high)
-        quint32 f[2];       // Finalization flags
-        quint8 buf[64];     // Input buffer
-        quint32 bufLen;     // Buffered input length
+        quint32 h[8];    // Hash state
+        quint32 t[2];    // Counter (low, high)
+        quint32 f[2];    // Finalization flags
+        quint8 buf[64];  // Input buffer
+        quint32 bufLen;  // Buffered input length
     };
 
     XBlake2sp();
@@ -59,7 +59,7 @@ private:
     static quint32 _load32le(const quint8 *pData);
     static void _store32le(quint8 *pDst, quint32 nValue);
 
-    Blake2sState m_states[PARALLEL_DEGREE];  // 8 parallel leaf states
+    Blake2sState m_states[PARALLEL_DEGREE];      // 8 parallel leaf states
     quint8 m_buf[PARALLEL_DEGREE * BLOCK_SIZE];  // 512-byte input buffer
     qint64 m_nBufLen;
 };

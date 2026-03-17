@@ -1003,8 +1003,8 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     if (!bResult) {
         // Retry with header-only stripping (no Adler32 footer) for streams that omit the checksum
         XBinary::DATAPROCESS_STATE retryState = *pDecompressState;
-        retryState.nInputLimit = pDecompressState->nInputLimit - 2;     // Skip zlib header only
-        retryState.nInputOffset = pDecompressState->nInputOffset + 2;   // Skip zlib header
+        retryState.nInputLimit = pDecompressState->nInputLimit - 2;    // Skip zlib header only
+        retryState.nInputOffset = pDecompressState->nInputOffset + 2;  // Skip zlib header
 
         if (pDecompressState->pDeviceOutput) {
             pDecompressState->pDeviceOutput->seek(0);

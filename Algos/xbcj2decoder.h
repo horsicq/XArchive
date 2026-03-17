@@ -45,8 +45,7 @@ public:
     // pRangeStream : raw range-coder data (4th pack stream, not LZMA)
     // pOutput      : destination device (must be open for writing)
     // nOutputSize  : expected number of output bytes
-    static bool decompress(QIODevice *pMainStream, QIODevice *pCallStream, QIODevice *pJmpStream,
-                           QIODevice *pRangeStream, QIODevice *pOutput, qint64 nOutputSize,
+    static bool decompress(QIODevice *pMainStream, QIODevice *pCallStream, QIODevice *pJmpStream, QIODevice *pRangeStream, QIODevice *pOutput, qint64 nOutputSize,
                            XBinary::PDSTRUCT *pPdStruct = nullptr);
 
 private:

@@ -23,8 +23,8 @@
 
 // BCJ2 range-coder constants
 static const quint32 BCJ2_RC_RANGE_MIN = 0x01000000U;
-static const quint32 BCJ2_PROB_INIT    = 0x400U;  // 50% = 1024 out of 2048
-static const qint32  BCJ2_NUM_PROBS    = 258;      // 0: JCC (0x0F 0x8x, unused); 1: E9 (JMP); 2..257: E8 keyed by prevByte
+static const quint32 BCJ2_PROB_INIT = 0x400U;  // 50% = 1024 out of 2048
+static const qint32 BCJ2_NUM_PROBS = 258;      // 0: JCC (0x0F 0x8x, unused); 1: E9 (JMP); 2..257: E8 keyed by prevByte
 
 XBCJ2Decoder::XBCJ2Decoder(QObject *parent) : QObject(parent)
 {
@@ -38,18 +38,15 @@ bool XBCJ2Decoder::_rcInit(RC_STATE *pRC)
     qint64 nRead = pRC->pStream->read(buf, 5);
 
     if (nRead < 5) {
-        pRC->bEof   = true;
+        pRC->bEof = true;
         pRC->nRange = 0;
-        pRC->nCode  = 0;
+        pRC->nCode = 0;
         return false;
     }
 
-    pRC->bEof   = false;
+    pRC->bEof = false;
     pRC->nRange = 0xFFFFFFFFU;
-    pRC->nCode  = ((quint32)(quint8)buf[1] << 24)
-                | ((quint32)(quint8)buf[2] << 16)
-                | ((quint32)(quint8)buf[3] <<  8)
-                |  (quint32)(quint8)buf[4];
+    pRC->nCode = ((quint32)(quint8)buf[1] << 24) | ((quint32)(quint8)buf[2] << 16) | ((quint32)(quint8)buf[3] << 8) | (quint32)(quint8)buf[4];
 
     return true;
 }
@@ -59,13 +56,13 @@ void XBCJ2Decoder::_rcNormalize(RC_STATE *pRC)
     while (pRC->nRange < BCJ2_RC_RANGE_MIN) {
         char b;
         if (pRC->pStream->read(&b, 1) != 1) {
-            pRC->bEof     = true;
+            pRC->bEof = true;
             pRC->nRange <<= 8;
-            pRC->nCode  <<= 8;
+            pRC->nCode <<= 8;
             return;
         }
         pRC->nRange <<= 8;
-        pRC->nCode   = (pRC->nCode << 8) | (quint8)b;
+        pRC->nCode = (pRC->nCode << 8) | (quint8)b;
     }
 }
 
@@ -76,20 +73,19 @@ quint32 XBCJ2Decoder::_rcDecodeBit(RC_STATE *pRC, quint32 *pProb)
     quint32 nBound = (pRC->nRange >> 11) * (*pProb);
 
     if (pRC->nCode < nBound) {
-        pRC->nRange  = nBound;
-        *pProb      += (2048U - *pProb) >> 5;
+        pRC->nRange = nBound;
+        *pProb += (2048U - *pProb) >> 5;
         return 0U;
     } else {
-        pRC->nCode  -= nBound;
+        pRC->nCode -= nBound;
         pRC->nRange -= nBound;
-        *pProb      -= *pProb >> 5;
+        *pProb -= *pProb >> 5;
         return 1U;
     }
 }
 
-bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QIODevice *pJmpStream,
-                               QIODevice *pRangeStream, QIODevice *pOutput, qint64 nOutputSize,
-                               XBinary::PDSTRUCT *pPdStruct)
+bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QIODevice *pJmpStream, QIODevice *pRangeStream, QIODevice *pOutput, qint64 nOutputSize,
+                              XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pMainStream || !pCallStream || !pJmpStream || !pRangeStream || !pOutput) {
         return false;
@@ -104,15 +100,15 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
     // Initialise range coder
     RC_STATE rc;
     rc.pStream = pRangeStream;
-    rc.nRange  = 0;
-    rc.nCode   = 0;
-    rc.bEof    = false;
+    rc.nRange = 0;
+    rc.nCode = 0;
+    rc.bEof = false;
 
     if (!_rcInit(&rc)) {
         return false;
     }
 
-    quint8 nPrevByte  = 0;
+    quint8 nPrevByte = 0;
     qint64 nOutputPos = 0;
 
     pOutput->seek(0);
@@ -147,17 +143,14 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
                 }
 
                 // Big-endian absolute address stored in stream
-                quint32 nAbsAddr = ((quint32)(quint8)addr[0] << 24)
-                                 | ((quint32)(quint8)addr[1] << 16)
-                                 | ((quint32)(quint8)addr[2] <<  8)
-                                 |  (quint32)(quint8)addr[3];
+                quint32 nAbsAddr = ((quint32)(quint8)addr[0] << 24) | ((quint32)(quint8)addr[1] << 16) | ((quint32)(quint8)addr[2] << 8) | (quint32)(quint8)addr[3];
 
                 // nOutputPos is 1 past the opcode; ip after full instruction = nOutputPos+4
                 quint32 nRelAddr = nAbsAddr - (quint32)(nOutputPos + 4);
 
                 char relAddr[4];
                 relAddr[0] = (char)(nRelAddr);
-                relAddr[1] = (char)(nRelAddr >>  8);
+                relAddr[1] = (char)(nRelAddr >> 8);
                 relAddr[2] = (char)(nRelAddr >> 16);
                 relAddr[3] = (char)(nRelAddr >> 24);
 
@@ -181,17 +174,14 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
                     break;
                 }
 
-                quint32 nAbsAddr = ((quint32)(quint8)addr[0] << 24)
-                                 | ((quint32)(quint8)addr[1] << 16)
-                                 | ((quint32)(quint8)addr[2] <<  8)
-                                 |  (quint32)(quint8)addr[3];
+                quint32 nAbsAddr = ((quint32)(quint8)addr[0] << 24) | ((quint32)(quint8)addr[1] << 16) | ((quint32)(quint8)addr[2] << 8) | (quint32)(quint8)addr[3];
 
                 // ip after full JCC instruction (0x0F + 0x8x + 4 rel bytes) = nOutputPos+4
                 quint32 nRelAddr = nAbsAddr - (quint32)(nOutputPos + 4);
 
                 char relAddr[4];
                 relAddr[0] = (char)(nRelAddr);
-                relAddr[1] = (char)(nRelAddr >>  8);
+                relAddr[1] = (char)(nRelAddr >> 8);
                 relAddr[2] = (char)(nRelAddr >> 16);
                 relAddr[3] = (char)(nRelAddr >> 24);
 
