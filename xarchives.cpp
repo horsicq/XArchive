@@ -62,14 +62,23 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XTAR(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_NPM)) {
         pResult = new XNPM(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TARGZ)) {
-        pResult = new XTGZ(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_GZ) || stFileTypes.contains(XArchive::FT_TAR_BZIP2) || stFileTypes.contains(XArchive::FT_TAR_LZIP) ||
+               stFileTypes.contains(XArchive::FT_TAR_LZMA) || stFileTypes.contains(XArchive::FT_TAR_LZOP) || stFileTypes.contains(XArchive::FT_TAR_XZ) ||
+               stFileTypes.contains(XArchive::FT_TAR_Z) || stFileTypes.contains(XArchive::FT_TAR_ZSTD)) {
+        XTARCOMPRESSED::COMPRESSION_TYPE compressionType = XTARCOMPRESSED::detectCompressionType(pDevice);
+        pResult = (XArchive *)XTARCOMPRESSED::getCompressionClassInstance(compressionType, pDevice);
+
+        if (pResult == nullptr) {
+            pResult = new XTAR_GZ(pDevice);
+        }
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         pResult = new XGzip(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
         pResult = new XZlib(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_LHA)) {
         pResult = new XLHA(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_ARJ)) {
+        pResult = new XARJ(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_ARC)) {
         pResult = new XARC(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
@@ -390,12 +399,20 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_AR);
     result.insert(XBinary::FT_DEB);
     result.insert(XBinary::FT_TAR);
-    result.insert(XBinary::FT_TARGZ);
+    result.insert(XBinary::FT_TAR_GZ);
+    result.insert(XBinary::FT_TAR_BZIP2);
+    result.insert(XBinary::FT_TAR_LZIP);
+    result.insert(XBinary::FT_TAR_LZMA);
+    result.insert(XBinary::FT_TAR_LZOP);
+    result.insert(XBinary::FT_TAR_XZ);
+    result.insert(XBinary::FT_TAR_Z);
+    result.insert(XBinary::FT_TAR_ZSTD);
     result.insert(XBinary::FT_NPM);
     result.insert(XBinary::FT_GZIP);
     result.insert(XBinary::FT_BZIP2);
     result.insert(XBinary::FT_ZLIB);
     result.insert(XBinary::FT_LHA);
+    result.insert(XBinary::FT_ARJ);
     result.insert(XBinary::FT_ARC);
     result.insert(XBinary::FT_SZDD);
     result.insert(XBinary::FT_DOS4G);

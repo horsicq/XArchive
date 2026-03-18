@@ -27,6 +27,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xapks.h
     ${CMAKE_CURRENT_LIST_DIR}/xarc.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xarc.h
+    ${CMAKE_CURRENT_LIST_DIR}/xarj.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xarj.h
     ${CMAKE_CURRENT_LIST_DIR}/xarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xcab.cpp
@@ -65,8 +67,24 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xsquashfs.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xtar.h
-    ${CMAKE_CURRENT_LIST_DIR}/xtgz.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xtgz.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_bzip2.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_bzip2.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_compress.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_compress.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_gz.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_gz.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtarcompressed.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtarcompressed.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_lzip.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_lzip.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_lzma.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_lzma.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_lzop.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_lzop.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_xz.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_xz.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_zstd.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_zstd.h
     ${CMAKE_CURRENT_LIST_DIR}/xzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xzlib.cpp

@@ -24,7 +24,7 @@ XBinary::XCONVERT _TABLE_XNPM_STRUCTID[] = {
     {XNPM::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
 };
 
-XNPM::XNPM(QIODevice *pDevice) : XTGZ(pDevice)
+XNPM::XNPM(QIODevice *pDevice) : XTAR_GZ(pDevice)
 {
 }
 
@@ -32,10 +32,10 @@ bool XNPM::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    XTGZ xtgz(getDevice());
+    XTAR_GZ xtarGz(getDevice());
 
-    if (xtgz.isValid()) {
-        QList<XArchive::RECORD> listArchiveRecords = xtgz.getRecords(20000, pPdStruct);
+    if (xtarGz.isValid()) {
+        QList<XArchive::RECORD> listArchiveRecords = xtarGz.getRecords(20000, pPdStruct);
 
         bResult = isValid(&listArchiveRecords, pPdStruct);
     }

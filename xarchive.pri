@@ -52,7 +52,15 @@ HEADERS += \
     $$PWD/xsevenzip.h \
     $$PWD/xsquashfs.h \
     $$PWD/xtar.h \
-    $$PWD/xtgz.h \
+    $$PWD/xtarcompressed.h \
+    $$PWD/xtar_gz.h \
+    $$PWD/xtar_bzip2.h \
+    $$PWD/xtar_lzip.h \
+    $$PWD/xtar_lzma.h \
+    $$PWD/xtar_lzop.h \
+    $$PWD/xtar_xz.h \
+    $$PWD/xtar_zstd.h \
+    $$PWD/xtar_compress.h \
     $$PWD/xzip.h \
     $$PWD/xnpm.h \
     $$PWD/xszdd.h \
@@ -110,7 +118,15 @@ SOURCES += \
     $$PWD/xsevenzip.cpp \
     $$PWD/xsquashfs.cpp \
     $$PWD/xtar.cpp \
-    $$PWD/xtgz.cpp \
+    $$PWD/xtarcompressed.cpp \
+    $$PWD/xtar_gz.cpp \
+    $$PWD/xtar_bzip2.cpp \
+    $$PWD/xtar_lzip.cpp \
+    $$PWD/xtar_lzma.cpp \
+    $$PWD/xtar_lzop.cpp \
+    $$PWD/xtar_xz.cpp \
+    $$PWD/xtar_zstd.cpp \
+    $$PWD/xtar_compress.cpp \
     $$PWD/xzip.cpp \
     $$PWD/xnpm.cpp \
     $$PWD/xszdd.cpp \

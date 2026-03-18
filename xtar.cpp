@@ -806,7 +806,7 @@ bool XTAR::sub_initUnpack(FT fileType, QIODevice *pDevice, UNPACK_STATE *pState,
     pContext->pDevice = XBinary::createFileBuffer(pDevice->size(), pPdStruct);
 
     // Unpack to device
-    if (fileType == FT_TARGZ) {
+    if (fileType == FT_TAR_GZ) {
         bResult = XGzip(pDevice).unpackSingleStream(pContext->pDevice, mapProperties, pPdStruct);
     }
 

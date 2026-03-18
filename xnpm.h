@@ -21,9 +21,9 @@
 #ifndef XNPM_H
 #define XNPM_H
 
-#include "xtgz.h"
+#include "xtar_gz.h"
 
-class XNPM : public XTGZ {
+class XNPM : public XTAR_GZ {
     Q_OBJECT
 
 public:
