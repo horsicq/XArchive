@@ -32,6 +32,7 @@ HEADERS += \
     $$PWD/xapk.h \
     $$PWD/xapks.h \
     $$PWD/xarc.h \
+    $$PWD/xarj.h \
     $$PWD/xarchive.h \
     $$PWD/xcab.h \
     $$PWD/xcfbf.h \
@@ -98,6 +99,7 @@ SOURCES += \
     $$PWD/xapk.cpp \
     $$PWD/xapks.cpp \
     $$PWD/xarc.cpp \
+    $$PWD/xarj.cpp \
     $$PWD/xarchive.cpp \
     $$PWD/xcab.cpp \
     $$PWD/xcfbf.cpp \
