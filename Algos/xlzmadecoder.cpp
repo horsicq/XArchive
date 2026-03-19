@@ -44,7 +44,10 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
     qint32 nLoopCount = 0;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+        qint32 nBufferSize = _nBufferSize;
+        if (pDecompressState->nInputLimit != -1) {
+            nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+        }
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
         // qDebug("_decompressLZMACommon() loop %d: read %d bytes, nCountInput=%lld, nInputLimit=%lld",
@@ -136,7 +139,10 @@ static bool _decompressLZMA2Common(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE
     ELzmaStatus lastStatus = LZMA_STATUS_NOT_FINISHED;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+        qint32 nBufferSize = _nBufferSize;
+        if (pDecompressState->nInputLimit != -1) {
+            nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+        }
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
         // Process available input

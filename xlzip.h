@@ -35,10 +35,11 @@ public:
     // Lzip file format (RFC 1952 inspired):
     // Magic: "LZIP" (4 bytes: 0x4C, 0x5A, 0x49, 0x50)
     // Version: 1 byte
-    // Dict size code: 1 byte (encodes dictionary size as 2^(n+16) - 35)
+    // Dict size code: 1 byte (encodes dictionary size as 1 << (n & 0x1F))
     // Compressed data
     // CRC32: 4 bytes
-    // Size: 8 bytes (uncompressed size mod 2^32)
+    // Data size: 8 bytes (uncompressed data size)
+    // Member size: 8 bytes (total member size including header and footer)
 
 #pragma pack(push)
 #pragma pack(1)
@@ -95,6 +96,7 @@ private:
         qint64 nCompressedSize;    // Size of compressed data
         qint64 nUncompressedSize;  // Size of uncompressed data
         quint32 nCRC32;            // CRC32 of uncompressed data
+        quint8 nDictSizeCode;      // Dictionary size code from header
     };
 };
 

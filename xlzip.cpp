@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xlzip.h"
+#include "xlzmadecoder.h"
 
 XBinary::XCONVERT _TABLE_XLZIP_STRUCTID[] = {{XLzip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                              {XLzip::STRUCTID_LZIP_HEADER, "LZIP_HEADER", QString("LZIP header")},
@@ -213,7 +214,7 @@ QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     }
 
     qint64 nDataStart = 6;
-    qint64 nDataSize = nFileSize - 13;  // Excluding header (6) and footer (7)
+    qint64 nDataSize = nFileSize - 26;  // Excluding header (6) and footer (20)
 
     if (nFileParts & FILEPART_STREAM) {
         FPART region = {};
@@ -264,14 +265,14 @@ XLzip::LZIP_HEADER XLzip::_read_LZIP_HEADER(qint64 nOffset)
 
 quint32 XLzip::_getDictionarySize(quint8 nDictSizeCode)
 {
-    // Dictionary size = 2^(n+16) - 35
-    // Clamped to reasonable values
-    if (nDictSizeCode > 28) {
+    // LZIP format: dict_size = 1 << (nDictSizeCode & 0x1F)
+    quint8 nExponent = nDictSizeCode & 0x1F;
+
+    if (nExponent < 12 || nExponent > 29) {
         return 0;  // Invalid
     }
 
-    quint32 nSize = (1U << (nDictSizeCode + 16)) - 35;
-    return nSize;
+    return 1U << nExponent;
 }
 
 bool XLzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
@@ -292,14 +293,16 @@ bool XLzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
         LZIP_UNPACK_CONTEXT *pContext = new LZIP_UNPACK_CONTEXT;
         pContext->nHeaderSize = 6;
-        pContext->nCompressedSize = getSize() - 13;  // Approximate
-        pContext->nUncompressedSize = 0;             // Would need to decompress
+        pContext->nCompressedSize = getSize() - 26;  // header(6) + footer(20)
+        pContext->nUncompressedSize = 0;
         pContext->nCRC32 = 0;
+        pContext->nDictSizeCode = read_uint8(5);
 
-        // Read uncompressed size from footer
-        qint64 nFooterPos = getSize() - 8;
-        if (nFooterPos > 0) {
-            pContext->nUncompressedSize = read_uint64(nFooterPos, true);
+        // LZIP footer: CRC32(4) + data_size(8) + member_size(8) = 20 bytes
+        qint64 nDataSizePos = getSize() - 16;
+        if (nDataSizePos > 6) {
+            pContext->nUncompressedSize = read_uint64(nDataSizePos);
+            pContext->nCRC32 = read_uint32(getSize() - 20);
         }
 
         pState->nCurrentOffset = 0;
@@ -351,8 +354,16 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
 
     LZIP_UNPACK_CONTEXT *pContext = (LZIP_UNPACK_CONTEXT *)pState->pContext;
 
-    // Decompress entire lzip stream to output device
-    qint64 nFileSize = getSize();
+    // Build LZMA properties for LZIP: lc=3, lp=0, pb=2 (always fixed in lzip)
+    // Property byte = pb * 45 + lp * 9 + lc = 2*45 + 0*9 + 3 = 93 = 0x5D
+    quint32 nDictSize = _getDictionarySize(pContext->nDictSizeCode);
+    QByteArray baProperty(5, 0);
+    baProperty[0] = (char)0x5D;  // lc=3, lp=0, pb=2
+    baProperty[1] = (char)(nDictSize & 0xFF);
+    baProperty[2] = (char)((nDictSize >> 8) & 0xFF);
+    baProperty[3] = (char)((nDictSize >> 16) & 0xFF);
+    baProperty[4] = (char)((nDictSize >> 24) & 0xFF);
+
     SubDevice sd(getDevice(), pContext->nHeaderSize, pContext->nCompressedSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
@@ -366,7 +377,7 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         state.nProcessedOffset = 0;
         state.nProcessedLimit = -1;
 
-        bResult = XLZMADecoder::decompress(&state, pPdStruct);
+        bResult = XLZMADecoder::decompress(&state, baProperty, pPdStruct);
 
         sd.close();
     }

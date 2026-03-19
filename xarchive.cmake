@@ -85,6 +85,12 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xtar_xz.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar_zstd.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xtar_zstd.h
+    ${CMAKE_CURRENT_LIST_DIR}/xzstd.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xzstd.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlzo.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlzo.h
+    ${CMAKE_CURRENT_LIST_DIR}/xcompressz.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xcompressz.h
     ${CMAKE_CURRENT_LIST_DIR}/xzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xzlib.cpp
@@ -149,4 +155,11 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xblake2sp.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xblake2sp.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzstddecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzstddecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/zstddeclib.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzodecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzodecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xcompressdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xcompressdecoder.h
 )

@@ -97,7 +97,7 @@ XTARCOMPRESSED::COMPRESSION_TYPE XTARCOMPRESSED::detectCompressionType(QIODevice
             result = COMPRESSION_COMPRESS;
         } else if (bRead2 && (nByte0 == 0x89) && (nByte1 == 0x4C) && (nByte2 == 0x5A)) {
             result = COMPRESSION_LZOP;
-        } else if ((nByte0 == 0x4C) && (nByte1 == 0x5A) && bRead2 && bRead3 && (nByte2 == 0x49) && (nByte3 == 0x26)) {
+        } else if ((nByte0 == 0x4C) && (nByte1 == 0x5A) && bRead2 && bRead3 && (nByte2 == 0x49) && (nByte3 == 0x50)) {
             result = COMPRESSION_LZIP;
         } else if (bRead3 && (nByte0 == 0x5D) && (nByte1 == 0x00) && (nByte2 == 0x00) && (nByte3 == 0x00)) {
             result = COMPRESSION_LZMA;

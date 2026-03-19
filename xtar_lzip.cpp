@@ -54,8 +54,8 @@ bool XTAR_LZIP::isValid(QIODevice *pDevice)
         quint8 nByte2 = (quint8)(uchar)baMagic.at(2);
         quint8 nByte3 = (quint8)(uchar)baMagic.at(3);
 
-        // Lzip magic: 4C 5A 49 26
-        bResult = (nByte0 == 0x4C) && (nByte1 == 0x5A) && (nByte2 == 0x49) && (nByte3 == 0x26);
+        // Lzip magic: 4C 5A 49 50 ("LZIP")
+        bResult = (nByte0 == 0x4C) && (nByte1 == 0x5A) && (nByte2 == 0x49) && (nByte3 == 0x50);
     }
 
     pDevice->seek(nOffset);
@@ -85,8 +85,5 @@ QString XTAR_LZIP::getMIMEString()
 
 QIODevice *XTAR_LZIP::decompressData(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    // No dedicated HANDLE_METHOD for lzip in XDecompress yet.
-    return nullptr;
+    return decompressByMethod(HANDLE_METHOD_LZIP, 0, -1, pPdStruct);
 }

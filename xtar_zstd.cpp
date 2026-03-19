@@ -83,9 +83,5 @@ QString XTAR_ZSTD::getMIMEString()
 
 QIODevice *XTAR_ZSTD::decompressData(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    // TODO: Implement Zstandard decompression using libzstd
-    // For now: return nullptr (unsupported)
-    return nullptr;
+    return decompressByMethod(HANDLE_METHOD_ZSTD, 0, -1, pPdStruct);
 }

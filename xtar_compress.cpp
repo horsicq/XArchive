@@ -81,9 +81,5 @@ QString XTAR_COMPRESS::getMIMEString()
 
 QIODevice *XTAR_COMPRESS::decompressData(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    // TODO: Implement compress (.Z) decompression (LZW)
-    // For now: return nullptr (unsupported)
-    return nullptr;
+    return decompressByMethod(HANDLE_METHOD_COMPRESS, 0, -1, pPdStruct);
 }

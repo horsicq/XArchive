@@ -58,6 +58,7 @@
 #include "xcab.h"
 #include "xszdd.h"
 #include "xbzip2.h"
+#include "xlzip.h"
 #include "xxz.h"
 #include "xminidump.h"
 #include "xdmg.h"

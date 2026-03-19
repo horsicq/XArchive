@@ -58,19 +58,26 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new X_Ar(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_DEB)) {
         pResult = new XDEB(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_BZIP2)) {
+        pResult = new XTAR_BZIP2(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_LZIP)) {
+        pResult = new XTAR_LZIP(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_LZMA)) {
+        pResult = new XTAR_LZMA(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_LZOP)) {
+        pResult = new XTAR_LZOP(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_XZ)) {
+        pResult = new XTAR_XZ(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_Z)) {
+        pResult = new XTAR_COMPRESS(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_ZSTD)) {
+        pResult = new XTAR_ZSTD(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_TAR_GZ)) {
+        pResult = new XTAR_GZ(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_TAR)) {
         pResult = new XTAR(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_NPM)) {
         pResult = new XNPM(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_GZ) || stFileTypes.contains(XArchive::FT_TAR_BZIP2) || stFileTypes.contains(XArchive::FT_TAR_LZIP) ||
-               stFileTypes.contains(XArchive::FT_TAR_LZMA) || stFileTypes.contains(XArchive::FT_TAR_LZOP) || stFileTypes.contains(XArchive::FT_TAR_XZ) ||
-               stFileTypes.contains(XArchive::FT_TAR_Z) || stFileTypes.contains(XArchive::FT_TAR_ZSTD)) {
-        XTARCOMPRESSED::COMPRESSION_TYPE compressionType = XTARCOMPRESSED::detectCompressionType(pDevice);
-        pResult = (XArchive *)XTARCOMPRESSED::getCompressionClassInstance(compressionType, pDevice);
-
-        if (pResult == nullptr) {
-            pResult = new XTAR_GZ(pDevice);
-        }
     } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
         pResult = new XGzip(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
@@ -87,6 +94,8 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XSZDD(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_BZIP2)) {
         pResult = new XBZIP2(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_LZIP)) {
+        pResult = new XLzip(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_XZ)) {
         pResult = new XXZ(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_CPIO)) {
@@ -103,7 +112,7 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XDOS16(pDevice);
     } else {
 #ifdef QT_DEBUG
-        qDebug("XArchives::getClass: Unknown file type");
+        qDebug() << "XArchives::getClass: Unknown file type" << XBinary::fileTypeIdToString(fileType);
 #endif
     }
 

@@ -84,8 +84,5 @@ QString XTAR_LZOP::getMIMEString()
 
 QIODevice *XTAR_LZOP::decompressData(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    // No dedicated HANDLE_METHOD for lzop in XDecompress yet.
-    return nullptr;
+    return decompressByMethod(HANDLE_METHOD_LZOP, 0, -1, pPdStruct);
 }

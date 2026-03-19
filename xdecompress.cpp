@@ -1131,6 +1131,34 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 bResult = (nWritten == baData.size());
             }
         }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ZSTD) {
+        bResult = XZstdDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZOP) {
+        bResult = XLZODecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_COMPRESS) {
+        bResult = XCompressDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZIP) {
+        // LZIP uses LZMA internally with fixed properties: lc=3, lp=0, pb=2
+        // Read dict size code from byte 5 of the LZIP header
+        qint64 nSavedInputOffset = pState->nInputOffset;
+        pState->pDeviceInput->seek(nSavedInputOffset + 5);
+        char cDictSizeCode = 0;
+        pState->pDeviceInput->read(&cDictSizeCode, 1);
+        quint8 nDictSizeCode = (quint8)cDictSizeCode;
+        quint8 nExponent = nDictSizeCode & 0x1F;
+        quint32 nDictSize = (nExponent >= 12 && nExponent <= 29) ? (1U << nExponent) : 4096;
+
+        // Build 5-byte LZMA properties: prop_byte + dict_size(4 LE)
+        QByteArray baProperty(5, 0);
+        baProperty[0] = (char)0x5D;  // lc=3, lp=0, pb=2
+        baProperty[1] = (char)(nDictSize & 0xFF);
+        baProperty[2] = (char)((nDictSize >> 8) & 0xFF);
+        baProperty[3] = (char)((nDictSize >> 16) & 0xFF);
+        baProperty[4] = (char)((nDictSize >> 24) & 0xFF);
+
+        pState->nInputOffset = nSavedInputOffset + 6;
+        bResult = XLZMADecoder::decompress(pState, baProperty, pPdStruct);
+        pState->nInputOffset = nSavedInputOffset;
     } else {
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::handleMethodToString(compressMethod);
