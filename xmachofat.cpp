@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xmachofat.h"
+#include "xdecompress.h"
 
 XBinary::XCONVERT _TABLE_XMACHOFAT_STRUCTID[] = {
     {XMACHOFat::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -502,43 +503,19 @@ XBinary::ARCHIVERECORD XMACHOFat::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
 
 bool XMACHOFat::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pDevice || pState->nCurrentIndex >= pState->nNumberOfRecords) {
-        return false;
+    bool bResult = false;
+
+    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
+
+        XDecompress xDecompress;
+        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
+
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
     }
 
-    ARCHIVERECORD ar = infoCurrent(pState, pPdStruct);
-
-    if (ar.nStreamSize == 0) {
-        return false;
-    }
-
-    // Since Mach-O Fat uses STORE compression, just copy the data
-    qint64 nBytesWritten = 0;
-    qint64 nBytesToWrite = ar.nStreamSize;
-    qint64 nCurrentOffset = ar.nStreamOffset;
-    const qint64 nBufferSize = 0x10000;  // 64KB buffer
-
-    QByteArray baBuffer;
-    baBuffer.resize(nBufferSize);
-
-    while ((nBytesWritten < nBytesToWrite) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint64 nChunkSize = qMin(nBufferSize, nBytesToWrite - nBytesWritten);
-        nChunkSize = read_array(nCurrentOffset, baBuffer.data(), nChunkSize);
-
-        if (nChunkSize <= 0) {
-            return false;
-        }
-
-        qint64 nWritten = pDevice->write(baBuffer.data(), nChunkSize);
-        if (nWritten != nChunkSize) {
-            return false;
-        }
-
-        nBytesWritten += nChunkSize;
-        nCurrentOffset += nChunkSize;
-    }
-
-    return (nBytesWritten == nBytesToWrite);
+    return bResult;
 }
 
 bool XMACHOFat::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

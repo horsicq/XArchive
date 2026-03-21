@@ -19,7 +19,7 @@
  * SOFTWARE.
  */
 #include "xminidump.h"
-#include "Algos/xstoredecoder.h"
+#include "xdecompress.h"
 
 XBinary::XCONVERT _TABLE_XMINIDUMP_STRUCTID[] = {
     {XMiniDump::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},         {XMiniDump::STRUCTID_HEADER, "HEADER", QString("Header")},
@@ -984,40 +984,15 @@ bool XMiniDump::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
 {
     bool bResult = false;
 
-    if (!pState || !pState->pContext || !pDevice) {
-        return false;
+    if (pState && pState->pContext && pDevice && (pState->nCurrentIndex < (qint32)pState->nNumberOfRecords)) {
+        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
+
+        XDecompress xDecompress;
+        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
+
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
     }
-
-    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= (qint32)pState->nNumberOfRecords)) {
-        return false;
-    }
-
-    MINIDUMP_UNPACK_CONTEXT *pContext = (MINIDUMP_UNPACK_CONTEXT *)pState->pContext;
-
-    if ((pState->nCurrentIndex >= pContext->listDirectories.count()) || (pState->nCurrentIndex >= pContext->listStreamOffsets.count())) {
-        return false;
-    }
-
-    MINIDUMP_DIRECTORY directory = pContext->listDirectories.at(pState->nCurrentIndex);
-    qint64 nStreamOffset = pContext->listStreamOffsets.at(pState->nCurrentIndex);
-
-    // Skip invalid streams
-    if (nStreamOffset < 0) {
-        return false;
-    }
-
-    qint64 nStreamSize = (qint64)directory.DataSize;
-
-    // MiniDump streams are not compressed - use XStoreDecoder for direct copy
-    XBinary::DATAPROCESS_STATE decompressState = {};
-    decompressState.pDeviceInput = getDevice();
-    decompressState.pDeviceOutput = pDevice;
-    decompressState.nInputOffset = nStreamOffset;
-    decompressState.nInputLimit = nStreamSize;
-    decompressState.nProcessedOffset = 0;
-    decompressState.nProcessedLimit = -1;
-
-    bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
 
     return bResult;
 }

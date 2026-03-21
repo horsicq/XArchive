@@ -19,8 +19,7 @@
  * SOFTWARE.
  */
 #include "xlha.h"
-#include "Algos/xlzhdecoder.h"
-#include "Algos/xstoredecoder.h"
+#include "xdecompress.h"
 
 XBinary::XCONVERT _TABLE_XLHA_STRUCTID[] = {
     {XLHA::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -245,50 +244,13 @@ bool XLHA::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     bool bResult = false;
 
     if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        qint64 nHeaderSize = read_uint8(pState->nCurrentOffset) + 2;
-        qint64 nCompressedSize = read_uint32(pState->nCurrentOffset + 7);
-        qint64 nUncompressedSize = read_uint32(pState->nCurrentOffset + 11);
-        qint64 nDataOffset = pState->nCurrentOffset + nHeaderSize;
-        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
+        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
 
-        // Create a RECORD structure for decompression
+        XDecompress xDecompress;
+        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
 
-        // Get compression method
-        QString sMethod = read_ansiString(pState->nCurrentOffset + 2, 5);
-
-        if ((sMethod == "-lh0-") || (sMethod == "-lz4-") || (sMethod == "-lhd-")) {
-            compressMethod = HANDLE_METHOD_STORE;
-        } else if (sMethod == "-lh5-") {
-            compressMethod = HANDLE_METHOD_LZH5;
-        } else if (sMethod == "-lh6-") {
-            compressMethod = HANDLE_METHOD_LZH6;
-        } else if (sMethod == "-lh7-") {
-            compressMethod = HANDLE_METHOD_LZH7;
-        }
-
-        // Decompress the record
-        XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
-        state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
-
-        SubDevice sd(getDevice(), nDataOffset, nCompressedSize);
-        if (sd.open(QIODevice::ReadOnly)) {
-            state.pDeviceInput = &sd;
-            state.pDeviceOutput = pDevice;
-            state.nInputOffset = 0;
-            state.nInputLimit = nCompressedSize;
-
-            if (compressMethod == HANDLE_METHOD_STORE) {
-                bResult = XStoreDecoder::decompress(&state, pPdStruct);
-            } else if (compressMethod == HANDLE_METHOD_LZH5) {
-                bResult = XLZHDecoder::decompress(&state, 5, pPdStruct);
-            } else if (compressMethod == HANDLE_METHOD_LZH6) {
-                bResult = XLZHDecoder::decompress(&state, 6, pPdStruct);
-            } else if (compressMethod == HANDLE_METHOD_LZH7) {
-                bResult = XLZHDecoder::decompress(&state, 7, pPdStruct);
-            }
-            sd.close();
-        }
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
     }
 
     return bResult;

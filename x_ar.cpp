@@ -854,34 +854,16 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool X_Ar::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
     if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        FRECORD header = readFRECORD(pState->nCurrentOffset);
+        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
 
-        QString sSize = QString(header.fileSize);
-        sSize.resize(sizeof(header.fileSize));
-        qint64 nFileSize = sSize.trimmed().toLongLong();
+        XDecompress xDecompress;
+        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
 
-        qint64 nDataOffset = pState->nCurrentOffset + sizeof(FRECORD);
-        qint64 nDataSize = nFileSize;
-
-        // Handle BSD-style long names
-        QString sFileName = QString::fromUtf8(header.fileId, (qint32)sizeof(header.fileId));
-        sFileName = sFileName.trimmed();
-
-        if (sFileName.section("/", 0, 0) == "#1") {
-            qint32 nFileNameLength = sFileName.section("/", 1, 1).toInt();
-            if (nFileNameLength > 0 && nFileNameLength <= nFileSize) {
-                nDataOffset += nFileNameLength;
-                nDataSize -= nFileNameLength;
-            }
-        }
-
-        // Copy data directly (no compression in AR)
-        bResult = copyDeviceMemory(getDevice(), nDataOffset, pDevice, 0, nDataSize);
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
     }
 
     return bResult;
