@@ -883,7 +883,7 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
             }
 
             if (strm.avail_out > 0) {
-                qint64 nWriteSize = qMin((qint64)strm.avail_out, (qint64)(N_BUFFER_SIZE));
+                qint64 nWriteSize = (qint64)strm.avail_out;
 
                 if (nOutputWritten + nWriteSize > pDecompressState->nProcessedLimit && pDecompressState->nProcessedLimit != -1) {
                     nWriteSize = pDecompressState->nProcessedLimit - nOutputWritten;
@@ -911,6 +911,33 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
 
         if (pDecompressState->bReadError || pDecompressState->bWriteError || nResult == LZH_ARCHIVE_FAILED) {
             break;
+        }
+    }
+
+    // Flush any remaining decoded data from the sliding window
+    if (!pDecompressState->bReadError && !pDecompressState->bWriteError && nResult != LZH_ARCHIVE_FAILED) {
+        strm.avail_in = 0;
+        nResult = lzh_decode(&strm, true);
+
+        if (nResult == LZH_ARCHIVE_FAILED) {
+            pDecompressState->bReadError = true;
+        } else if (strm.avail_out > 0) {
+            qint64 nWriteSize = (qint64)strm.avail_out;
+
+            if (nOutputWritten + nWriteSize > pDecompressState->nProcessedLimit && pDecompressState->nProcessedLimit != -1) {
+                nWriteSize = pDecompressState->nProcessedLimit - nOutputWritten;
+            }
+
+            if (nWriteSize > 0) {
+                qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)strm.ref_ptr, nWriteSize);
+
+                if (nWritten != nWriteSize) {
+                    pDecompressState->bWriteError = true;
+                } else {
+                    nOutputWritten += nWritten;
+                    strm.avail_out = 0;
+                }
+            }
         }
     }
 

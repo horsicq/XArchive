@@ -31,6 +31,24 @@ XLHA::XLHA(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
+// Level 1 archives store skip_sz at bytes 7-10 which equals ext_headers + csz.
+// The extended header chain starts at nOffset+nBaseHeaderSize and each entry
+// ends with a LE16 "next entry size" (0 = end of chain).
+// Returns the total byte count occupied by extended headers.
+qint64 XLHA::_getLevel1ExtHeadersSize(qint64 nOffset, qint64 nBaseHeaderSize)
+{
+    qint64 nExtTotal = 0;
+    qint64 nFnLen = (qint64)read_uint8(nOffset + 21);
+    qint64 nNextHdrSize = (qint64)read_uint16(nOffset + 25 + nFnLen, false);
+    qint64 nExtOffset = nOffset + nBaseHeaderSize;
+    while (nNextHdrSize > 0) {
+        nExtTotal += nNextHdrSize;
+        nExtOffset += nNextHdrSize;
+        nNextHdrSize = (qint64)read_uint16(nExtOffset - 2, false);
+    }
+    return nExtTotal;
+}
+
 bool XLHA::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
@@ -175,7 +193,8 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
             if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset) ||
                 compareSignature(&memoryMap, "....'-pm'..2d", nOffset)) {
-                qint64 nHeaderSize = read_uint8(nOffset) + 2;
+                quint8 nLevel = read_uint8(nOffset + 20);
+                qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nOffset) : (qint64)(read_uint8(nOffset) + 2);
                 qint64 nCompressedSize = read_uint32(nOffset + 7);
 
                 if (nHeaderSize < 21) {
@@ -204,13 +223,18 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     XBinary::ARCHIVERECORD result = {};
 
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        qint64 nHeaderSize = read_uint8(pState->nCurrentOffset) + 2;
-        qint64 nCompressedSize = read_uint32(pState->nCurrentOffset + 7);
+        quint8 nLevel = read_uint8(pState->nCurrentOffset + 20);
+        qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(pState->nCurrentOffset) : (qint64)(read_uint8(pState->nCurrentOffset) + 2);
+        qint64 nSkipSize = (qint64)(quint32)read_uint32(pState->nCurrentOffset + 7);
         qint64 nUncompressedSize = read_uint32(pState->nCurrentOffset + 11);
         QString sFileName = read_ansiString(pState->nCurrentOffset + 22, read_uint8(pState->nCurrentOffset + 21));
         sFileName = sFileName.replace("\\", "/");
 
-        result.nStreamOffset = pState->nCurrentOffset + nHeaderSize;
+        // For Level 1: skip_sz = ext_headers + compressed_data; resolve actual offset/size.
+        qint64 nExtSize = (nLevel == 1) ? _getLevel1ExtHeadersSize(pState->nCurrentOffset, nHeaderSize) : 0;
+        qint64 nCompressedSize = nSkipSize - nExtSize;
+
+        result.nStreamOffset = pState->nCurrentOffset + nHeaderSize + nExtSize;
         result.nStreamSize = nCompressedSize;
         // result.nDecompressedOffset = 0;
         // result.nDecompressedSize = nUncompressedSize;
@@ -263,7 +287,8 @@ bool XLHA::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        qint64 nHeaderSize = read_uint8(pState->nCurrentOffset) + 2;
+        quint8 nLevel = read_uint8(pState->nCurrentOffset + 20);
+        qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(pState->nCurrentOffset) : (qint64)(read_uint8(pState->nCurrentOffset) + 2);
         qint64 nCompressedSize = read_uint32(pState->nCurrentOffset + 7);
 
         pState->nCurrentOffset += (nHeaderSize + nCompressedSize);
@@ -309,7 +334,8 @@ QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
         while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
             if (compareSignature(dataHeadersOptions.pMemoryMap, "....'-lh'..2d", nOffset) || compareSignature(dataHeadersOptions.pMemoryMap, "....'-lz'..2d", nOffset) ||
                 compareSignature(dataHeadersOptions.pMemoryMap, "....'-pm'..2d", nOffset)) {
-                qint64 nHeaderSize = read_uint8(nOffset) + 2;
+                quint8 nLevel = read_uint8(nOffset + 20);
+                qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nOffset) : (qint64)(read_uint8(nOffset) + 2);
                 qint64 nDataSize = read_uint32(nOffset + 7);
 
                 if (nHeaderSize < 21) {
@@ -346,12 +372,15 @@ QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                     if (compareSignature(dataHeadersOptions.pMemoryMap, "....'-lh'..2d", nCurrentOffset) ||
                         compareSignature(dataHeadersOptions.pMemoryMap, "....'-lz'..2d", nCurrentOffset) ||
                         compareSignature(dataHeadersOptions.pMemoryMap, "....'-pm'..2d", nCurrentOffset)) {
-                        qint64 nHeaderSize = read_uint8(nCurrentOffset) + 2;
-                        qint64 nDataSize = read_uint32(nCurrentOffset + 7);
+                        quint8 nLevel = read_uint8(nCurrentOffset + 20);
+                        qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nCurrentOffset) : (qint64)(read_uint8(nCurrentOffset) + 2);
+                        qint64 nSkipSize = (qint64)(quint32)read_uint32(nCurrentOffset + 7);
+                        qint64 nExtSize = (nLevel == 1) ? _getLevel1ExtHeadersSize(nCurrentOffset, nHeaderSize) : 0;
+                        qint64 nDataSize = nSkipSize - nExtSize;
                         QString sFileName = read_ansiString(nCurrentOffset + 22, read_uint8(nCurrentOffset + 21));
 
                         DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
-                        dataHeader.nSize = nHeaderSize + nDataSize;
+                        dataHeader.nSize = nHeaderSize + nSkipSize;
 
                         // Record header fields
                         dataHeader.listRecords.append(getDataRecord(0, 1, "Header Size", VT_UINT8, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
@@ -371,14 +400,19 @@ QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                                                                         "Extended Header", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                         }
 
+                        if (nExtSize > 0) {
+                            dataHeader.listRecords.append(
+                                getDataRecord(nHeaderSize, nExtSize, "Extended Headers", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                        }
+
                         if (nDataSize > 0) {
                             dataHeader.listRecords.append(
-                                getDataRecord(nHeaderSize, nDataSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                                getDataRecord(nHeaderSize + nExtSize, nDataSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                         }
 
                         listResult.append(dataHeader);
 
-                        nCurrentOffset += (nHeaderSize + nDataSize);
+                        nCurrentOffset += (nHeaderSize + nSkipSize);
                         nCount++;
                     } else {
                         break;
@@ -406,8 +440,11 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (compareSignature(&memoryMap, "....'-lh'..2d", nCurrentOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nCurrentOffset) ||
             compareSignature(&memoryMap, "....'-pm'..2d", nCurrentOffset)) {
-            qint64 nHeaderSize = read_uint8(nCurrentOffset) + 2;
-            qint64 nDataSize = read_uint32(nCurrentOffset + 7);
+            quint8 nLevel = read_uint8(nCurrentOffset + 20);
+            qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nCurrentOffset) : (qint64)(read_uint8(nCurrentOffset) + 2);
+            qint64 nSkipSize = (qint64)(quint32)read_uint32(nCurrentOffset + 7);
+            qint64 nExtSize = (nLevel == 1) ? _getLevel1ExtHeadersSize(nCurrentOffset, nHeaderSize) : 0;
+            qint64 nDataSize = nSkipSize - nExtSize;
             QString sFileName = read_ansiString(nCurrentOffset + 22, read_uint8(nCurrentOffset + 21));
 
             if (nHeaderSize < 21) {
@@ -432,7 +469,7 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                 FPART record = {};
 
                 record.filePart = FILEPART_STREAM;
-                record.nFileOffset = nCurrentOffset + nHeaderSize;
+                record.nFileOffset = nCurrentOffset + nHeaderSize + nExtSize;
                 record.nFileSize = nDataSize;
                 record.nVirtualAddress = -1;
                 record.sName = sFileName;
@@ -447,16 +484,16 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                 record.filePart = FILEPART_REGION;
                 record.nFileOffset = nCurrentOffset;
-                record.nFileSize = nHeaderSize + nDataSize;
+                record.nFileSize = nHeaderSize + nSkipSize;
                 record.nVirtualAddress = -1;
                 record.sName = sFileName;
 
                 listResult.append(record);
             }
 
-            nMaxOffset = nCurrentOffset + nHeaderSize + nDataSize;
-            nCurrentOffset += (nHeaderSize + nDataSize);
-            nFileSize -= (nHeaderSize + nDataSize);
+            nMaxOffset = nCurrentOffset + nHeaderSize + nSkipSize;
+            nCurrentOffset += (nHeaderSize + nSkipSize);
+            nFileSize -= (nHeaderSize + nSkipSize);
         } else {
             break;
         }

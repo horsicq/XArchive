@@ -328,6 +328,7 @@ bool XSEAARC::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *
         }
 
         XBinary::DATAPROCESS_STATE state = {};
+        state.nProcessedLimit = -1;
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompressedSize);
 
