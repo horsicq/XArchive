@@ -23,7 +23,8 @@
 
 // TODO more
 #include "x_ar.h"
-#include "xarc.h"
+#include "xseaarc.h"
+#include "xfreearc.h"
 #include "xarj.h"
 #include "xcab.h"
 #include "xcpio.h"

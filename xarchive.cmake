@@ -25,8 +25,10 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xapk.h
     ${CMAKE_CURRENT_LIST_DIR}/xapks.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xapks.h
-    ${CMAKE_CURRENT_LIST_DIR}/xarc.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xarc.h
+    ${CMAKE_CURRENT_LIST_DIR}/xseaarc.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xseaarc.h
+    ${CMAKE_CURRENT_LIST_DIR}/xfreearc.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xfreearc.h
     ${CMAKE_CURRENT_LIST_DIR}/xarj.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xarj.h
     ${CMAKE_CURRENT_LIST_DIR}/xarchive.cpp
