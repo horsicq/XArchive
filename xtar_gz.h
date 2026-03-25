@@ -40,6 +40,7 @@ public:
 
 private:
     virtual QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
+    virtual bool getOuterStreamInfo(qint64 &nOuterStreamOffset, qint64 &nOuterStreamSize, HANDLE_METHOD &handleMethod) override;
 };
 
 #endif  // XTAR_GZ_H

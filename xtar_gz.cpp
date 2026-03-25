@@ -79,6 +79,23 @@ QString XTAR_GZ::getMIMEString()
     return "application/gzip";
 }
 
+bool XTAR_GZ::getOuterStreamInfo(qint64 &nOuterStreamOffset, qint64 &nOuterStreamSize, HANDLE_METHOD &handleMethod)
+{
+    XGzip xgzip(getDevice());
+    if (!xgzip.isValid()) {
+        return false;
+    }
+    qint64 nHeaderSize = xgzip.getHeaderSize();
+    qint64 nTotalSize = getSize();
+    if (nTotalSize <= (nHeaderSize + 8)) {
+        return false;
+    }
+    nOuterStreamOffset = nHeaderSize;
+    nOuterStreamSize = nTotalSize - nHeaderSize - 8;
+    handleMethod = HANDLE_METHOD_DEFLATE;
+    return true;
+}
+
 QIODevice *XTAR_GZ::decompressData(PDSTRUCT *pPdStruct)
 {
     XGzip xgzip(getDevice());

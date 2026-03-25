@@ -83,11 +83,6 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         // Get current record info
         ARCHIVERECORD archiveRecord = infoCurrent(&state, pPdStruct);
 
-        if (archiveRecord.nStreamSize == 0) {
-            // Invalid record, stop iteration
-            break;
-        }
-
         // Convert ARCHIVERECORD to legacy RECORD structure
         RECORD record = {};
 

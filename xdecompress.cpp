@@ -284,6 +284,14 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
         bool bIsRarSolid = (topMethod == XBinary::HANDLE_METHOD_RAR_15) || (topMethod == XBinary::HANDLE_METHOD_RAR_20) || (topMethod == XBinary::HANDLE_METHOD_RAR_29) ||
                            (topMethod == XBinary::HANDLE_METHOD_RAR_50) || (topMethod == XBinary::HANDLE_METHOD_RAR_70);
 
+        // STORE files inside a RAR solid archive must also use decompressRarSolid() to keep
+        // the solid index counter in sync. RAR records have SOLIDFOLDERINDEX but no
+        // SUBSTREAMOFFSET (unlike 7z/CAB), which distinguishes them.
+        if (!bIsRarSolid && (topMethod == XBinary::HANDLE_METHOD_STORE) && pState->mapProperties.contains(XBinary::FPART_PROP_SOLIDFOLDERINDEX) &&
+            !pState->mapProperties.contains(XBinary::FPART_PROP_SUBSTREAMOFFSET)) {
+            bIsRarSolid = true;
+        }
+
         if (bIsRarSolid) {
             // RAR solid: use XRar streaming API to decompress all files with proper decoder state,
             // cache each file's output, and return the requested file from cache.

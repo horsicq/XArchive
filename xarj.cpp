@@ -46,9 +46,10 @@ bool XARJ::isValid(PDSTRUCT *pPdStruct)
 
         if ((nByte0 == 0x60) && (nByte1 == 0xEA) && (nBasicHeaderSize >= FIXED_HEADER_SIZE) && (nBasicHeaderSize <= 2600)) {
             // The first byte of the basic header is first_hdr_size (fixed part size)
+            // ARJ 2.50+ uses 34; older versions use 30. Accept any value >= FIXED_HEADER_SIZE.
             quint8 nFirstHdrSize = read_uint8(4);
 
-            if (nFirstHdrSize == FIXED_HEADER_SIZE) {
+            if (nFirstHdrSize >= FIXED_HEADER_SIZE) {
                 bResult = true;
             }
         }

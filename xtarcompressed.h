@@ -49,11 +49,25 @@ public:
     static XArchive *getCompressionClassInstance(COMPRESSION_TYPE compressionType, QIODevice *pDevice);
 
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 protected:
     QIODevice *m_pDecompressedData;
+    QIODevice *m_pOriginalDevice;
     COMPRESSION_TYPE m_compressionType;
+
+    // Outer (compressed) stream location in the original file, populated during initUnpack
+    // by getOuterStreamInfo(). Used to build solid-block ARCHIVERECORD in infoCurrent().
+    qint64 m_nOuterStreamOffset;
+    qint64 m_nOuterStreamSize;
+    HANDLE_METHOD m_outerHandleMethod;
+
+    // Override in derived classes to provide the outer compressed-stream location.
+    // Returns false when the information is not available (keeps legacy zero behaviour).
+    virtual bool getOuterStreamInfo(qint64 &nOuterStreamOffset, qint64 &nOuterStreamSize, HANDLE_METHOD &handleMethod);
 
     // Virtual method for derived classes to implement decompression
     virtual QIODevice *decompressData(PDSTRUCT *pPdStruct) = 0;

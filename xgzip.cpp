@@ -377,30 +377,35 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
         }
 
-        // Decompress to get sizes
+        // Decompress to get sizes; XDeflateDecoder::decompress requires non-null pDeviceOutput,
+        // so we use a temporary QBuffer as a counting sink.
         qint64 nFileSize = getSize();
         SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
 
         if (sd.open(QIODevice::ReadOnly)) {
+            QBuffer countBuf;
+            countBuf.open(QIODevice::WriteOnly);
+
             XBinary::DATAPROCESS_STATE state = {};
             state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
             state.pDeviceInput = &sd;
-            state.pDeviceOutput = nullptr;
+            state.pDeviceOutput = &countBuf;
             state.nInputOffset = 0;
             state.nInputLimit = -1;
             state.nProcessedOffset = 0;
             state.nProcessedLimit = -1;
 
-            bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
+            bool bDecompressOk = XDeflateDecoder::decompress(&state, pPdStruct);
 
-            if (bResult) {
+            if (bDecompressOk) {
                 pContext->nCompressedSize = state.nCountInput;
-                pContext->nUncompressedSize = state.nCountOutput;
+                pContext->nUncompressedSize = countBuf.size();
             } else {
                 pContext->nCompressedSize = nFileSize - (pContext->nHeaderSize);
                 pContext->nUncompressedSize = 0;
             }
 
+            countBuf.close();
             sd.close();
         }
 
