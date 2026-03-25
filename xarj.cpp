@@ -675,9 +675,10 @@ bool XARJ::_isValidEntry(qint64 nOffset)
 
 QString XARJ::_getFileName(qint64 nOffset)
 {
-    // Filename starts at: offset + 4 (marker+size) + FIXED_HEADER_SIZE (30)
-    // and is null-terminated
-    qint64 nNameOffset = nOffset + 4 + FIXED_HEADER_SIZE;
+    // first_hdr_size (byte at offset+4) gives the actual fixed header size
+    // (30 for old ARJ, 34 for ARJ v2.50+). Filename follows the fixed part.
+    quint8 nFirstHdrSize = read_uint8(nOffset + 4);
+    qint64 nNameOffset = nOffset + 4 + nFirstHdrSize;
     quint16 nBasicHeaderSize = read_uint16(nOffset + 2, false);
     qint64 nMaxNameLen = (nOffset + 4 + nBasicHeaderSize) - nNameOffset;
 
