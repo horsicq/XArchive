@@ -20,8 +20,29 @@
  */
 #include "xbrotlidecoder.h"
 
+#include "brotlideclib.cpp"
+
 XBrotliDecoder::XBrotliDecoder(QObject *pParent) : QObject(pParent)
 {
+}
+
+bool XBrotliDecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint8 *pOutput, qint64 nOutputSize, qint64 *pnBytesWritten)
+{
+    bool bResult = false;
+
+    size_t nDecodedSize = nOutputSize;
+
+    BrotliDecoderResult ret = BrotliDecoderDecompress(nInputSize, pInput, &nDecodedSize, pOutput);
+
+    if (ret == BROTLI_DECODER_RESULT_SUCCESS) {
+        if (pnBytesWritten) {
+            *pnBytesWritten = (qint64)nDecodedSize;
+        }
+
+        bResult = true;
+    }
+
+    return bResult;
 }
 
 bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
@@ -113,4 +134,14 @@ bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     }
 
     return bResult;
+}
+
+quint32 XBrotliDecoder::version()
+{
+    return BrotliDecoderVersion();
+}
+
+QString XBrotliDecoder::errorString(qint32 nErrorCode)
+{
+    return QString(BrotliDecoderErrorString((BrotliDecoderErrorCode)nErrorCode));
 }

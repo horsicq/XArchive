@@ -21,7 +21,6 @@
 #ifndef XBROTLIDECODER_H
 #define XBROTLIDECODER_H
 
-#include <brotli/decode.h>
 #include "../xbinary.h"
 
 class XBrotliDecoder : public QObject {
@@ -30,7 +29,10 @@ class XBrotliDecoder : public QObject {
 public:
     explicit XBrotliDecoder(QObject *pParent = nullptr);
 
+    static bool decompressBlock(const quint8 *pInput, qint64 nInputSize, quint8 *pOutput, qint64 nOutputSize, qint64 *pnBytesWritten);
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static quint32 version();
+    static QString errorString(qint32 nErrorCode);
 };
 
 #endif  // XBROTLIDECODER_H
