@@ -479,6 +479,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP2) {
         bResult = XBZIP2Decoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_BROTLI) {
+        bResult = XBrotliDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZMA) {
         if (!baProperty.isEmpty()) {
             bResult = XLZMADecoder::decompress(pState, baProperty, pPdStruct);
@@ -701,6 +703,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XLZHDecoder::decompress(pState, 6, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH7) {
         bResult = XLZHDecoder::decompress(pState, 7, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARJ) {
+        bResult = XArjDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARJ_FASTEST) {
+        bResult = XArjDecoder::decompressFastest(pState, pPdStruct);
     } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_15) || (compressMethod == XBinary::HANDLE_METHOD_RAR_20) ||
                (compressMethod == XBinary::HANDLE_METHOD_RAR_29) || (compressMethod == XBinary::HANDLE_METHOD_RAR_50) ||
                (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
@@ -1137,6 +1143,95 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 qint64 nWritten = pState->pDeviceOutput->write(baData);
                 pState->nCountOutput = nWritten;
                 bResult = (nWritten == baData.size());
+            }
+        }
+    } else if ((compressMethod == XBinary::HANDLE_METHOD_STORE_CAB) || (compressMethod == XBinary::HANDLE_METHOD_MSZIP_CAB)) {
+        // CAB archive: data is stored in CFDATA blocks with 8-byte headers
+        // CFDATA: checksum(4) + cbData(2) + cbUncomp(2) + [reserved] + payload(cbData)
+        qint64 nSubstreamOffset = pState->mapProperties.value(XBinary::FPART_PROP_SUBSTREAMOFFSET, 0).toLongLong();
+        qint64 nDataReservedSize = pState->mapProperties.value(XBinary::FPART_PROP_OPTHEADER_SIZE, 0).toLongLong();
+        qint64 nStreamSize = pState->nInputLimit;
+        const qint64 nCFDataHeaderSize = 8;  // sizeof(CFDATA): checksum(4) + cbData(2) + cbUncomp(2)
+
+        QByteArray baFolderData;
+        qint64 nOffset = 0;
+        bResult = true;
+
+        while ((nOffset + nCFDataHeaderSize + nDataReservedSize <= nStreamSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            pState->pDeviceInput->seek(pState->nInputOffset + nOffset);
+
+            // Read CFDATA header (little-endian)
+            char header[8];
+            if (pState->pDeviceInput->read(header, 8) != 8) {
+                bResult = false;
+                break;
+            }
+
+            quint16 nCbData = (quint8)header[4] | ((quint16)(quint8)header[5] << 8);
+            quint16 nCbUncomp = (quint8)header[6] | ((quint16)(quint8)header[7] << 8);
+
+            qint64 nPayloadOffset = nOffset + nCFDataHeaderSize + nDataReservedSize;
+
+            if ((nPayloadOffset + nCbData > nStreamSize) || (nCbData == 0)) {
+                break;
+            }
+
+            pState->pDeviceInput->seek(pState->nInputOffset + nPayloadOffset);
+            QByteArray baPayload = pState->pDeviceInput->read(nCbData);
+
+            if (baPayload.size() != nCbData) {
+                bResult = false;
+                break;
+            }
+
+            if (compressMethod == XBinary::HANDLE_METHOD_STORE_CAB) {
+                baFolderData.append(baPayload);
+            } else {
+                // MSZIP: each block starts with "CK" (0x43, 0x4B) followed by DEFLATE data
+                if ((nCbData < 2) || ((quint8)baPayload.at(0) != 0x43) || ((quint8)baPayload.at(1) != 0x4B)) {
+                    bResult = false;
+                    break;
+                }
+
+                QByteArray baCompressed = baPayload.mid(2);
+                QBuffer bufferCompressed(&baCompressed);
+                bufferCompressed.open(QIODevice::ReadOnly);
+
+                QByteArray baUncompressedBlock;
+                QBuffer bufferUncompressed(&baUncompressedBlock);
+                bufferUncompressed.open(QIODevice::WriteOnly);
+
+                XBinary::DATAPROCESS_STATE decompressState = {};
+                decompressState.pDeviceInput = &bufferCompressed;
+                decompressState.pDeviceOutput = &bufferUncompressed;
+                decompressState.nInputOffset = 0;
+                decompressState.nInputLimit = baCompressed.size();
+                decompressState.nProcessedOffset = 0;
+                decompressState.nProcessedLimit = nCbUncomp;
+
+                bool bBlockResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
+
+                bufferCompressed.close();
+                bufferUncompressed.close();
+
+                if (!bBlockResult) {
+                    bResult = false;
+                    break;
+                }
+
+                baFolderData.append(baUncompressedBlock);
+            }
+
+            nOffset = nPayloadOffset + nCbData;
+        }
+
+        if (bResult && pState->pDeviceOutput) {
+            if (nSubstreamOffset + nUncompressedSize <= baFolderData.size()) {
+                qint64 nWritten = pState->pDeviceOutput->write(baFolderData.constData() + nSubstreamOffset, nUncompressedSize);
+                pState->nCountOutput = nWritten;
+                bResult = (nWritten == nUncompressedSize);
+            } else {
+                bResult = false;
             }
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_ZSTD) {

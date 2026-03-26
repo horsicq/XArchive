@@ -105,6 +105,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xszdd.h
     ${CMAKE_CURRENT_LIST_DIR}/xbzip2.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xbzip2.h
+    ${CMAKE_CURRENT_LIST_DIR}/xbrotli.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xbrotli.h
     ${CMAKE_CURRENT_LIST_DIR}/xlzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xxz.cpp
@@ -113,6 +115,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xminidump.h
     ${CMAKE_CURRENT_LIST_DIR}/xdmg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xdmg.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.cpp
@@ -133,6 +137,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xbrotlidecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xbrotlidecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzssdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzssdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xshrinkdecoder.cpp

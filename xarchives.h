@@ -58,6 +58,7 @@
 #include "xcfbf.h"
 #include "xcab.h"
 #include "xszdd.h"
+#include "xbrotli.h"
 #include "xbzip2.h"
 #include "xlzip.h"
 #include "xxz.h"

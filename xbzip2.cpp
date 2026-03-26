@@ -20,6 +20,7 @@
  */
 #include "xbzip2.h"
 #include "Algos/xbzip2decoder.h"
+#include "xdecompress.h"
 
 XBinary::XCONVERT _TABLE_XBZIP2_STRUCTID[] = {{XBZIP2::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                               {XBZIP2::STRUCTID_BZIP2_HEADER, "BZIP2_HEADER", QString("BZip2 header")},
@@ -372,30 +373,14 @@ bool XBZIP2::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *p
 {
     bool bResult = false;
 
-    if (!pState || !pState->pContext || !pDevice) {
-        return false;
-    }
+    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
 
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
-        return false;
-    }
+        XDecompress xDecompress;
+        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
 
-    BZIP2_UNPACK_CONTEXT *pContext = (BZIP2_UNPACK_CONTEXT *)pState->pContext;
-
-    // Decompress entire BZIP2 stream to output device
-    qint64 nFileSize = getSize();
-    SubDevice sd(getDevice(), 0, nFileSize);
-
-    if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.pDeviceInput = &sd;
-        decompressState.pDeviceOutput = pDevice;
-        decompressState.nInputOffset = 0;
-        decompressState.nInputLimit = nFileSize;
-
-        bResult = XBZIP2Decoder::decompress(&decompressState, pPdStruct);
-
-        sd.close();
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
     }
 
     return bResult;

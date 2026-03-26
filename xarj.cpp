@@ -19,7 +19,7 @@
  * SOFTWARE.
  */
 #include "xarj.h"
-#include "Algos/xstoredecoder.h"
+#include "xdecompress.h"
 
 XBinary::XCONVERT _TABLE_XARJ_STRUCTID[] = {
     {XARJ::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -246,15 +246,22 @@ XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.nStreamSize = nCompressedSize;
 
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
+        result.mapProperties.insert(XBinary::FPART_PROP_STREAMOFFSET, result.nStreamOffset);
+        result.mapProperties.insert(XBinary::FPART_PROP_STREAMSIZE, result.nStreamSize);
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nOriginalSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nCompressedSize);
         result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nCRC32);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : XBinary::CRC_TYPE_UNKNOWN);
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nMethod);
 
         HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
 
         if ((nMethod == CMETHOD_STORED) || (nMethod == CMETHOD_NO_COMPRESSION_1) || (nMethod == CMETHOD_NO_COMPRESSION_2)) {
             compressMethod = HANDLE_METHOD_STORE;
+        } else if ((nMethod == CMETHOD_COMPRESSED_MOST) || (nMethod == CMETHOD_COMPRESSED) || (nMethod == CMETHOD_COMPRESSED_FASTER)) {
+            compressMethod = HANDLE_METHOD_ARJ;
+        } else if (nMethod == CMETHOD_COMPRESSED_FASTEST) {
+            compressMethod = HANDLE_METHOD_ARJ_FASTEST;
         }
 
         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
@@ -282,39 +289,13 @@ bool XARJ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     bool bResult = false;
 
     if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        qint64 nEntryHeaderSize = _getEntryHeaderSize(pState->nCurrentOffset);
-        quint32 nCompressedSize = read_uint32(pState->nCurrentOffset + 4 + 12, false);
-        quint32 nOriginalSize = read_uint32(pState->nCurrentOffset + 4 + 16, false);
-        quint8 nMethod = read_uint8(pState->nCurrentOffset + 4 + 5);
-        qint64 nDataOffset = pState->nCurrentOffset + nEntryHeaderSize;
+        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
 
-        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
+        XDecompress xDecompress;
+        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
 
-        if ((nMethod == CMETHOD_STORED) || (nMethod == CMETHOD_NO_COMPRESSION_1) || (nMethod == CMETHOD_NO_COMPRESSION_2)) {
-            compressMethod = HANDLE_METHOD_STORE;
-        }
-
-        XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
-        state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nOriginalSize);
-        state.nProcessedOffset = 0;
-        state.nProcessedLimit = -1;
-
-        SubDevice sd(getDevice(), nDataOffset, nCompressedSize);
-
-        if (sd.open(QIODevice::ReadOnly)) {
-            state.pDeviceInput = &sd;
-            state.pDeviceOutput = pDevice;
-            state.nInputOffset = 0;
-            state.nInputLimit = nCompressedSize;
-
-            if (compressMethod == HANDLE_METHOD_STORE) {
-                bResult = XStoreDecoder::decompress(&state, pPdStruct);
-            }
-            // TODO: add LZW-based decompressors for methods 1-4
-
-            sd.close();
-        }
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
     }
 
     return bResult;

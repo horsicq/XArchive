@@ -441,6 +441,13 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, pRecord->spInfo.compressMethod);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pRecord->spInfo.nUncompressedSize);
         state.mapProperties.insert(XBinary::FPART_PROP_WINDOWSIZE, pRecord->spInfo.nWindowSize);
+
+        if ((pRecord->spInfo.compressMethod == HANDLE_METHOD_STORE_CAB) || (pRecord->spInfo.compressMethod == HANDLE_METHOD_MSZIP_CAB) ||
+            (pRecord->spInfo.compressMethod == HANDLE_METHOD_LZX_CAB)) {
+            state.mapProperties.insert(XBinary::FPART_PROP_SUBSTREAMOFFSET, pRecord->nOptHeaderOffset);
+            state.mapProperties.insert(XBinary::FPART_PROP_OPTHEADER_SIZE, pRecord->nOptHeaderSize);
+        }
+
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDestDevice;
         state.nInputOffset = 0;

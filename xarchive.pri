@@ -6,6 +6,7 @@ INCLUDEPATH += $$PWD/3rdparty/ppmd/src
 DEPENDPATH += $$PWD/3rdparty/ppmd/src
 
 HEADERS += \
+    $$PWD/Algos/xarjdecoder.h \
     $$PWD/Algos/xlzhdecoder.h \
     $$PWD/Algos/xrardecoder.h \
     $$PWD/Algos/xit214decoder.h \
@@ -16,6 +17,7 @@ HEADERS += \
     $$PWD/Algos/xascii85decoder.h \
     $$PWD/Algos/xstoredecoder.h \
     $$PWD/Algos/xbzip2decoder.h \
+    $$PWD/Algos/xbrotlidecoder.h \
     $$PWD/Algos/xlzssdecoder.h \
     $$PWD/Algos/xshrinkdecoder.h \
     $$PWD/Algos/xreducedecoder.h \
@@ -70,13 +72,18 @@ HEADERS += \
     $$PWD/xnpm.h \
     $$PWD/xszdd.h \
     $$PWD/xbzip2.h \
+    $$PWD/xbrotli.h \
     $$PWD/xlzip.h \
     $$PWD/xxz.h \
     $$PWD/xzlib.h \
+    $$PWD/xzstd.h \
+    $$PWD/xlzo.h \
+    $$PWD/xcompressz.h \
     $$PWD/xminidump.h \
     $$PWD/xdmg.h
 
 SOURCES += \
+    $$PWD/Algos/xarjdecoder.cpp \
     $$PWD/Algos/xlzhdecoder.cpp \
     $$PWD/Algos/xrardecoder.cpp \
     $$PWD/Algos/xit214decoder.cpp \
@@ -87,6 +94,7 @@ SOURCES += \
     $$PWD/Algos/xascii85decoder.cpp \
     $$PWD/Algos/xstoredecoder.cpp \
     $$PWD/Algos/xbzip2decoder.cpp \
+    $$PWD/Algos/xbrotlidecoder.cpp \
     $$PWD/Algos/xlzssdecoder.cpp \
     $$PWD/Algos/xshrinkdecoder.cpp \
     $$PWD/Algos/xreducedecoder.cpp \
@@ -142,9 +150,13 @@ SOURCES += \
     $$PWD/xnpm.cpp \
     $$PWD/xszdd.cpp \
     $$PWD/xbzip2.cpp \
+    $$PWD/xbrotli.cpp \
     $$PWD/xlzip.cpp \
     $$PWD/xxz.cpp \
     $$PWD/xzlib.cpp \
+    $$PWD/xzstd.cpp \
+    $$PWD/xlzo.cpp \
+    $$PWD/xcompressz.cpp \
     $$PWD/xminidump.cpp \
     $$PWD/xdmg.cpp
 

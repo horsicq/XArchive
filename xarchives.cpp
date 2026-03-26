@@ -96,6 +96,8 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XSZDD(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_BZIP2)) {
         pResult = new XBZIP2(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_BROTLI)) {
+        pResult = new XBrotli(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_LZIP)) {
         pResult = new XLzip(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_XZ)) {
@@ -113,8 +115,17 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
     } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
         pResult = new XDOS16(pDevice);
     } else {
+        // Fallback: try formats without magic signatures via trial validation
+        if (!pResult) {
+            XBrotli xbrotli(pDevice);
+            if (xbrotli.isValid()) {
+                pResult = new XBrotli(pDevice);
+            }
+        }
 #ifdef QT_DEBUG
-        qDebug() << "XArchives::getClass: Unknown file type" << XBinary::fileTypeIdToString(fileType);
+        if (!pResult) {
+            qDebug() << "XArchives::getClass: Unknown file type" << XBinary::fileTypeIdToString(fileType);
+        }
 #endif
     }
 
@@ -421,6 +432,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_NPM);
     result.insert(XBinary::FT_GZIP);
     result.insert(XBinary::FT_BZIP2);
+    result.insert(XBinary::FT_BROTLI);
     result.insert(XBinary::FT_ZLIB);
     result.insert(XBinary::FT_LHA);
     result.insert(XBinary::FT_ARJ);
