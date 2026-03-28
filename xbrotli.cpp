@@ -23,7 +23,7 @@
 #include "xdecompress.h"
 
 XBinary::XCONVERT _TABLE_XBrotli_STRUCTID[] = {{XBrotli::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                {XBrotli::STRUCTID_BROTLI_STREAM, "BROTLI_STREAM", QString("Brotli stream")}};
+                                               {XBrotli::STRUCTID_BROTLI_STREAM, "BROTLI_STREAM", QString("Brotli stream")}};
 
 XBrotli::XBrotli(QIODevice *pDevice) : XArchive(pDevice)
 {

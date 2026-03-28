@@ -55,8 +55,7 @@ bool XTAR_XZ::isValid(QIODevice *pDevice)
         quint8 nByte5 = (quint8)(uchar)baMagic.at(5);
 
         // XZ magic: 0xFD 0x37 0x7A 0x58 0x5A 0x00 (".7zXZ\0")
-        bResult = (nByte0 == 0xFD) && (nByte1 == 0x37) && (nByte2 == 0x7A) && 
-                  (nByte3 == 0x58) && (nByte4 == 0x5A) && (nByte5 == 0x00);
+        bResult = (nByte0 == 0xFD) && (nByte1 == 0x37) && (nByte2 == 0x7A) && (nByte3 == 0x58) && (nByte4 == 0x5A) && (nByte5 == 0x00);
     }
 
     pDevice->seek(nOffset);

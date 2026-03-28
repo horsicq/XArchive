@@ -22,7 +22,7 @@
 #include "Algos/xcompressdecoder.h"
 
 XBinary::XCONVERT _TABLE_XCompressZ_STRUCTID[] = {{XCompressZ::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                   {XCompressZ::STRUCTID_COMPRESSZ_HEADER, "COMPRESSZ_HEADER", QString("Compress (.Z) header")}};
+                                                  {XCompressZ::STRUCTID_COMPRESSZ_HEADER, "COMPRESSZ_HEADER", QString("Compress (.Z) header")}};
 
 XCompressZ::XCompressZ(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -169,9 +169,12 @@ QList<XBinary::DATA_HEADER> XCompressZ::getDataHeaders(const DATA_HEADERS_OPTION
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XCompressZ::structIDToString(dataHeadersOptions.nID));
                 dataHeader.nSize = sizeof(COMPRESSZ_HEADER);
 
-                dataHeader.listRecords.append(getDataRecord(offsetof(COMPRESSZ_HEADER, nMagic0), 1, "nMagic0", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(COMPRESSZ_HEADER, nMagic1), 1, "nMagic1", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(COMPRESSZ_HEADER, nFlags), 1, "nFlags", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(COMPRESSZ_HEADER, nMagic0), 1, "nMagic0", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(COMPRESSZ_HEADER, nMagic1), 1, "nMagic1", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(
+                    getDataRecord(offsetof(COMPRESSZ_HEADER, nFlags), 1, "nFlags", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
             }

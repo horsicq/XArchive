@@ -22,7 +22,7 @@
 #include "Algos/xzstddecoder.h"
 
 XBinary::XCONVERT _TABLE_XZstd_STRUCTID[] = {{XZstd::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                              {XZstd::STRUCTID_ZSTD_HEADER, "ZSTD_HEADER", QString("Zstandard header")}};
+                                             {XZstd::STRUCTID_ZSTD_HEADER, "ZSTD_HEADER", QString("Zstandard header")}};
 
 XZstd::XZstd(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -163,8 +163,7 @@ QList<XBinary::DATA_HEADER> XZstd::getDataHeaders(const DATA_HEADERS_OPTIONS &da
                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XZstd::structIDToString(dataHeadersOptions.nID));
                 dataHeader.nSize = sizeof(ZSTD_HEADER);
 
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(ZSTD_HEADER, nMagic), 4, "nMagic", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                dataHeader.listRecords.append(getDataRecord(offsetof(ZSTD_HEADER, nMagic), 4, "nMagic", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                 listResult.append(dataHeader);
             }

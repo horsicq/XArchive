@@ -95,8 +95,7 @@ bool XArjDecoder::initGetBits(ArjDecodeState *pState)
     return fillBuf(pState, 16);
 }
 
-bool XArjDecoder::makeTable(ArjDecodeState *pState, qint32 nChar, quint8 *pBitLen,
-                            qint32 nTableBits, quint16 *pTable, qint32 nTableSize)
+bool XArjDecoder::makeTable(ArjDecodeState *pState, qint32 nChar, quint8 *pBitLen, qint32 nTableBits, quint16 *pTable, qint32 nTableSize)
 {
     quint16 arrCount[17];
     quint16 arrWeight[17];

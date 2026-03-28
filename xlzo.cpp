@@ -22,7 +22,7 @@
 #include "Algos/xlzodecoder.h"
 
 XBinary::XCONVERT _TABLE_XLzo_STRUCTID[] = {{XLzo::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                             {XLzo::STRUCTID_LZO_HEADER, "LZO_HEADER", QString("LZOP header")}};
+                                            {XLzo::STRUCTID_LZO_HEADER, "LZO_HEADER", QString("LZOP header")}};
 
 XLzo::XLzo(QIODevice *pDevice) : XArchive(pDevice)
 {

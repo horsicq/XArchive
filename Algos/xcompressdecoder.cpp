@@ -28,13 +28,13 @@
 // Initial code size is 9 bits, grows up to maxbits
 // Code 256 = CLEAR (reset table) when block_compress is set
 
-#define COMPRESS_MAGIC_0    0x1F
-#define COMPRESS_MAGIC_1    0x9D
-#define COMPRESS_CLEAR      256
-#define COMPRESS_FIRST      257
-#define COMPRESS_MINBITS    9
-#define COMPRESS_MAXBITS    16
-#define COMPRESS_TABLESIZE  (1 << COMPRESS_MAXBITS)
+#define COMPRESS_MAGIC_0 0x1F
+#define COMPRESS_MAGIC_1 0x9D
+#define COMPRESS_CLEAR 256
+#define COMPRESS_FIRST 257
+#define COMPRESS_MINBITS 9
+#define COMPRESS_MAXBITS 16
+#define COMPRESS_TABLESIZE (1 << COMPRESS_MAXBITS)
 
 XCompressDecoder::XCompressDecoder(QObject *parent) : QObject(parent)
 {
@@ -196,7 +196,10 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
             outBuf[nOutPos++] = nFinChar;
             nTotalOutput++;
             if (nOutPos >= OUTBUF_SIZE) {
-                if (!flushOutput()) { bResult = false; break; }
+                if (!flushOutput()) {
+                    bResult = false;
+                    break;
+                }
             }
             continue;
         }
@@ -235,7 +238,10 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
             outBuf[nOutPos++] = pStack[i];
             nTotalOutput++;
             if (nOutPos >= OUTBUF_SIZE) {
-                if (!flushOutput()) { bResult = false; break; }
+                if (!flushOutput()) {
+                    bResult = false;
+                    break;
+                }
             }
         }
         if (!bResult) break;

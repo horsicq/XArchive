@@ -257,8 +257,7 @@ QList<XBinary::DATA_HEADER> XFREEARC::getDataHeaders(const DATA_HEADERS_OPTIONS 
 
                     qint32 nCompressorLen = block.sCompressor.length() + 1;
 
-                    dataHeader.listRecords.append(
-                        getDataRecord(5, nCompressorLen, "Compressor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(5, nCompressorLen, "Compressor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                     qint64 nDataSize = block.nSize - 5 - nCompressorLen;
 

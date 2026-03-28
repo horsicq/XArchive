@@ -446,15 +446,13 @@ QList<XBinary::DATA_HEADER> XARJ::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                     dataHeader.listRecords.append(getDataRecord(33, 1, "Last Chapter", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
                     if (nBasicHeaderSize > FIXED_HEADER_SIZE) {
-                        dataHeader.listRecords.append(getDataRecord(4 + FIXED_HEADER_SIZE, nBasicHeaderSize - FIXED_HEADER_SIZE,
-                                                                    "Filename+Comment", VT_CHAR_ARRAY, DRF_UNKNOWN,
-                                                                    dataHeadersOptions.pMemoryMap->endian));
+                        dataHeader.listRecords.append(getDataRecord(4 + FIXED_HEADER_SIZE, nBasicHeaderSize - FIXED_HEADER_SIZE, "Filename+Comment", VT_CHAR_ARRAY,
+                                                                    DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                     }
 
                     if (nCompressedSize > 0) {
                         dataHeader.listRecords.append(
-                            getDataRecord(nEntryHeaderSize, nCompressedSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN,
-                                          dataHeadersOptions.pMemoryMap->endian));
+                            getDataRecord(nEntryHeaderSize, nCompressedSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                     }
 
                     listResult.append(dataHeader);

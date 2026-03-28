@@ -45,15 +45,15 @@ public:
 
     // ARJ file types
     enum FTYPE {
-        FTYPE_BINARY = 0,    // Binary file
-        FTYPE_7BIT_TEXT = 1, // 7-bit text file
-        FTYPE_CHAPTER = 2,   // Chapter label
-        FTYPE_DIRECTORY = 3, // Directory
-        FTYPE_VOLUME = 4,    // Volume label
+        FTYPE_BINARY = 0,     // Binary file
+        FTYPE_7BIT_TEXT = 1,  // 7-bit text file
+        FTYPE_CHAPTER = 2,    // Chapter label
+        FTYPE_DIRECTORY = 3,  // Directory
+        FTYPE_VOLUME = 4,     // Volume label
     };
 
-    static const quint16 MARKER = 0xEA60; // 0x60 0xEA in file (LE)
-    static const qint32 FIXED_HEADER_SIZE = 30; // Size of fixed part of basic header
+    static const quint16 MARKER = 0xEA60;        // 0x60 0xEA in file (LE)
+    static const qint32 FIXED_HEADER_SIZE = 30;  // Size of fixed part of basic header
 
     explicit XARJ(QIODevice *pDevice = nullptr);
 

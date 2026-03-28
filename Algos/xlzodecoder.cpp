@@ -79,7 +79,7 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
             ip += nLitLen;
         }
 
-first_literal_run:
+    first_literal_run:
         t = *ip++;
 
         if (t >= 16) {
@@ -98,7 +98,7 @@ first_literal_run:
         goto match_done;
 
         for (;;) {
-match:
+        match:
             if (t >= 64) {
                 // M2 match: distance = 1 + ((t>>2)&7) + (*ip<<3), length = (t>>5)+1 + 2
                 quint32 nDist = 1 + ((t >> 2) & 7) + ((quint32)*ip++ << 3);
@@ -162,14 +162,14 @@ match:
                 return false;
             }
 
-match_done:
+        match_done:
             t = ip[-2] & 3;
 
             if (t == 0) {
                 break;
             }
 
-match_next:
+        match_next:
             if (op + t > op_end || ip + t > ip_end) return false;
             *op++ = *ip++;
             if (t > 1) {
@@ -225,40 +225,40 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
         return ((quint32)buf[0] << 24) | ((quint32)buf[1] << 16) | ((quint32)buf[2] << 8) | buf[3];
     };
 
-    quint16 nVersion = readBE16();        // lzop version
-    quint16 nLibVersion = readBE16();     // lzo lib version
+    quint16 nVersion = readBE16();     // lzop version
+    quint16 nLibVersion = readBE16();  // lzo lib version
     quint16 nExtractVersion = 0;
 
     if (nVersion >= 0x0940) {
-        nExtractVersion = readBE16();     // version needed to extract
+        nExtractVersion = readBE16();  // version needed to extract
     }
 
     quint8 nMethod = 0;
-    pInput->read((char *)&nMethod, 1);    // compression method
+    pInput->read((char *)&nMethod, 1);  // compression method
     quint8 nLevel = 0;
 
     if (nVersion >= 0x0940) {
-        pInput->read((char *)&nLevel, 1); // compression level
+        pInput->read((char *)&nLevel, 1);  // compression level
     }
 
-    quint32 nFlags = readBE32();          // flags
+    quint32 nFlags = readBE32();  // flags
 
     // Filter (for version >= 0x0940 with filter flag 0x00000800)
     if (nVersion >= 0x0940 && (nFlags & 0x00000800)) {
         readBE32();  // filter
     }
 
-    quint32 nMode = readBE32();           // file mode
-    readBE32();                           // mtime_low
+    quint32 nMode = readBE32();  // file mode
+    readBE32();                  // mtime_low
     if (nVersion >= 0x0940) {
-        readBE32();                       // mtime_high
+        readBE32();  // mtime_high
     }
 
     // Original file name
     quint8 nNameLen = 0;
     pInput->read((char *)&nNameLen, 1);
     if (nNameLen > 0) {
-        pInput->read(nNameLen);           // skip filename
+        pInput->read(nNameLen);  // skip filename
     }
 
     // Header checksum
@@ -322,8 +322,8 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
             QByteArray baUncompressed(nUncompressedBlockSize, 0);
             qint64 nBytesWritten = 0;
 
-            bool bOk = decompressBlock((const quint8 *)baCompressed.constData(), nCompressedBlockSize,
-                                       (quint8 *)baUncompressed.data(), nUncompressedBlockSize, &nBytesWritten);
+            bool bOk =
+                decompressBlock((const quint8 *)baCompressed.constData(), nCompressedBlockSize, (quint8 *)baUncompressed.data(), nUncompressedBlockSize, &nBytesWritten);
 
             if (!bOk || nBytesWritten != (qint64)nUncompressedBlockSize) {
                 return false;
