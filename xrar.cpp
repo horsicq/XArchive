@@ -1107,6 +1107,59 @@ XRar::GENERICBLOCK4 XRar::readGenericBlock4(qint64 nOffset)
     return result;
 }
 
+XRar::FILEBLOCK14 XRar::readFileBlock14(qint64 nOffset)
+{
+    FILEBLOCK14 result = {};
+
+    // RAR 1.4 file block fixed part is 24 bytes.
+    // Bounds check for minimum header (24 bytes).
+    if (nOffset < 0 || nOffset + 24 > getSize()) {
+        return result;
+    }
+
+    qint64 nCurrentOffset = nOffset;
+
+    /* byte [0]: unknown byte (0x07 in all known samples) */
+    nCurrentOffset += 1;
+    /* byte [1]: unknown byte (0x00 in all known samples) */
+    nCurrentOffset += 1;
+    result.nFlags = read_uint8(nCurrentOffset);  // flags (bit 0x08 = solid)
+    nCurrentOffset += 1;
+    result.nPackSize = read_uint32(nCurrentOffset);  // packed size
+    nCurrentOffset += 4;
+    result.nUnpSize = read_uint32(nCurrentOffset);  // unpacked size
+    nCurrentOffset += 4;
+    result.nFileCRC16 = read_uint16(nCurrentOffset);  // CRC16 of unpacked data
+    nCurrentOffset += 2;
+    result.nFileTime = read_uint32(nCurrentOffset);  // DOS date/time
+    nCurrentOffset += 4;
+    /* bytes [17-18]: additional time / unknown (2 bytes) */
+    nCurrentOffset += 2;
+    result.nFileAttr = read_uint16(nCurrentOffset);  // file attributes
+    nCurrentOffset += 2;
+    /* byte [21]: unknown byte (0x02 in all known samples) */
+    nCurrentOffset += 1;
+    result.nNameLen = read_uint8(nCurrentOffset);  // filename length
+    nCurrentOffset += 1;
+    result.nMethod = read_uint8(nCurrentOffset);  // packing method (0=store, 1-5=compress)
+    nCurrentOffset += 1;
+
+    result.nHeaderSize = 24 + (qint64)result.nNameLen;
+
+    // Bounds check for full header including filename
+    if (nOffset + result.nHeaderSize > getSize()) {
+        result.nHeaderSize = 0;
+        return result;
+    }
+
+    if (result.nNameLen > 0) {
+        QByteArray nameData = read_array(nCurrentOffset, result.nNameLen);
+        result.sFileName = QString::fromLatin1(nameData);
+    }
+
+    return result;
+}
+
 QString XRar::decodeRarUnicodeName(const QByteArray &nameData)
 {
     // This is a complex process in RAR - simplified version here
@@ -1215,7 +1268,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
         delete pContext;
         return false;
     }
-    qint64 nFileHeaderSize = (pContext->nVersion == 4) ? 7 : 8;
+    qint64 nFileHeaderSize = (pContext->nVersion == 4) ? 7 : ((pContext->nVersion == 1) ? 4 : 8);
     qint64 nCurrentOffset = nFileHeaderSize;
 
 #ifdef QT_DEBUG
@@ -1248,7 +1301,44 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
     }
 
     // Scan archive and collect file offsets
-    if (pContext->nVersion == 4) {
+    if (pContext->nVersion == 1) {
+        // RAR 1.4 (RE~^): no global archive header; file blocks start right after the 4-byte signature
+        while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+            if (nCurrentOffset >= pUnpackState->nTotalSize) {
+                break;
+            }
+
+            FILEBLOCK14 fileBlock = readFileBlock14(nCurrentOffset);
+
+            if (fileBlock.nHeaderSize == 0) {
+                break;  // read error or truncated archive
+            }
+
+            pContext->listFileOffsets.append(nCurrentOffset);
+            pContext->listFileBlocks14.append(fileBlock);
+            pUnpackState->nNumberOfRecords++;
+
+            nCurrentOffset += fileBlock.nHeaderSize + (qint64)fileBlock.nPackSize;
+        }
+
+        // Solid flag is archive-level in RAR 1.4 (flags bit 0x08)
+        if (!pContext->listFileBlocks14.isEmpty()) {
+            pContext->bArchiveIsSolid = (pContext->listFileBlocks14.at(0).nFlags & 0x08) != 0;
+        }
+
+        // Compute solid folder indices
+        {
+            qint32 nFolderIndex = 0;
+            for (qint32 i = 0; i < pContext->listFileBlocks14.count(); i++) {
+                if (i > 0) {
+                    if (!pContext->bArchiveIsSolid) {
+                        nFolderIndex++;
+                    }
+                }
+                pContext->listSolidFolderIndex.append(nFolderIndex);
+            }
+        }
+    } else if (pContext->nVersion == 4) {
         qint32 nBlockCount = 0;
         while (XBinary::isPdStructNotCanceled(pPdStruct)) {
             if (nCurrentOffset >= pUnpackState->nTotalSize) {
@@ -1514,7 +1604,40 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
     RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
     qint32 nIndex = pUnpackState->nCurrentIndex;
 
-    if (pContext->nVersion == 4) {
+    if (pContext->nVersion == 1) {
+        const FILEBLOCK14 &fileBlock = pContext->listFileBlocks14.at(nIndex);
+
+        record.nStreamOffset = pContext->listFileOffsets.at(nIndex) + fileBlock.nHeaderSize;
+        record.nStreamSize = (qint64)fileBlock.nPackSize;
+
+        record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, fileBlock.sFileName);
+        record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)fileBlock.nPackSize);
+        record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)fileBlock.nUnpSize);
+        // RAR 1.4 stores CRC16, not CRC32; set to 0 to skip CRC32 verification
+        record.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, (quint32)0);
+
+        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
+        if (fileBlock.nMethod == 0) {
+            compressMethod = HANDLE_METHOD_STORE;
+        } else {
+            // Methods 1-5 all use the same RAR 1.5 algorithm
+            compressMethod = HANDLE_METHOD_RAR_15;
+            record.mapProperties.insert(XBinary::FPART_PROP_WINDOWSIZE, (qint32)0x10000);
+        }
+        record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
+
+        bool bIsFolder = (fileBlock.nFileAttr & 0x10) != 0;
+        record.mapProperties.insert(XBinary::FPART_PROP_ISFOLDER, bIsFolder);
+
+        if (pContext->bArchiveIsSolid) {
+            record.mapProperties.insert(XBinary::FPART_PROP_ISSOLID, true);
+        }
+
+        if (nIndex < pContext->listSolidFolderIndex.count()) {
+            record.mapProperties.insert(XBinary::FPART_PROP_SOLIDFOLDERINDEX, (qint64)pContext->listSolidFolderIndex.at(nIndex));
+        }
+
+    } else if (pContext->nVersion == 4) {
         const FILEBLOCK4 &fileBlock = pContext->listFileBlocks4.at(nIndex);
 
         qint64 nPackSize = fileBlock.packSize;

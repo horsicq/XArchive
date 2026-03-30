@@ -111,14 +111,28 @@ class XRar : public XArchive {
         QByteArray baDataArea;   // Optional data area (if 0x0002 header flag set)
     };
 
+    struct FILEBLOCK14 {
+        quint8 nFlags;       // Archive flags (bit 0x08 = solid)
+        quint32 nPackSize;   // Packed file size (LE)
+        quint32 nUnpSize;    // Unpacked file size (LE)
+        quint16 nFileCRC16;  // CRC16 of unpacked file data
+        quint32 nFileTime;   // DOS date/time
+        quint16 nFileAttr;   // File attributes
+        quint8 nNameLen;     // Filename length
+        quint8 nMethod;      // Packing method (0=store, 1-5=compress)
+        QString sFileName;   // Filename
+        qint64 nHeaderSize;  // Total header size (24 + nNameLen)
+    };
+
     struct RAR_UNPACK_CONTEXT {
-        qint32 nVersion;                      // RAR version (4 or 5)
-        bool bArchiveIsSolid;                 // Archive-level solid flag
-        bool bHeadersEncrypted;               // True if archive has encrypted headers (RAR5)
-        QList<qint64> listFileOffsets;        // Offsets of file headers
-        QList<FILEBLOCK4> listFileBlocks4;    // Cache of RAR 4.x file blocks
-        QList<FILEHEADER5> listFileHeaders5;  // Cache of RAR 5.x file headers
-        QList<qint32> listSolidFolderIndex;   // Solid block index per file (incremented on non-solid boundary)
+        qint32 nVersion;                        // RAR version (1, 4, or 5)
+        bool bArchiveIsSolid;                   // Archive-level solid flag
+        bool bHeadersEncrypted;                 // True if archive has encrypted headers (RAR5)
+        QList<qint64> listFileOffsets;          // Offsets of file headers
+        QList<FILEBLOCK14> listFileBlocks14;    // Cache of RAR 1.4 file blocks
+        QList<FILEBLOCK4> listFileBlocks4;      // Cache of RAR 4.x file blocks
+        QList<FILEHEADER5> listFileHeaders5;    // Cache of RAR 5.x file headers
+        QList<qint32> listSolidFolderIndex;     // Solid block index per file (incremented on non-solid boundary)
         XDecompress decompress;
     };
 
@@ -195,6 +209,7 @@ private:
     qint32 getInternVersion(PDSTRUCT *pPdStruct);
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
     GENERICBLOCK4 readGenericBlock4(qint64 nOffset);
+    FILEBLOCK14 readFileBlock14(qint64 nOffset);
     FILEBLOCK4 readFileBlock4(qint64 nOffset);
     FILEHEADER5 readFileHeader5(qint64 nOffset);
     QString decodeRarUnicodeName(const QByteArray &nameData);

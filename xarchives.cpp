@@ -86,6 +86,8 @@ XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
         pResult = new XLHA(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_ARJ)) {
         pResult = new XARJ(pDevice);
+    } else if (stFileTypes.contains(XArchive::FT_ACE)) {
+        pResult = new XACE(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_ARC)) {
         pResult = new XSEAARC(pDevice);
     } else if (stFileTypes.contains(XArchive::FT_FREEARC)) {
@@ -436,6 +438,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ZLIB);
     result.insert(XBinary::FT_LHA);
     result.insert(XBinary::FT_ARJ);
+    result.insert(XBinary::FT_ACE);
     result.insert(XBinary::FT_ARC);
     result.insert(XBinary::FT_FREEARC);
     result.insert(XBinary::FT_SZDD);

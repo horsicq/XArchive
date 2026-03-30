@@ -26,6 +26,7 @@
 #include "xseaarc.h"
 #include "xfreearc.h"
 #include "xarj.h"
+#include "xace.h"
 #include "xcab.h"
 #include "xcpio.h"
 #include "xgzip.h"

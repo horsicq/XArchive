@@ -39,6 +39,7 @@ HEADERS += \
     $$PWD/xseaarc.h \
     $$PWD/xfreearc.h \
     $$PWD/xarj.h \
+    $$PWD/xace.h \
     $$PWD/xarchive.h \
     $$PWD/xcab.h \
     $$PWD/xcfbf.h \
@@ -117,6 +118,7 @@ SOURCES += \
     $$PWD/xseaarc.cpp \
     $$PWD/xfreearc.cpp \
     $$PWD/xarj.cpp \
+    $$PWD/xace.cpp \
     $$PWD/xarchive.cpp \
     $$PWD/xcab.cpp \
     $$PWD/xcfbf.cpp \
