@@ -817,66 +817,6 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     return result;
 }
 
-bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    bool bResult = false;
-
-    if (!pState || !pState->pContext || !pDevice) {
-        return false;
-    }
-
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
-        return false;
-    }
-
-    CFBF_UNPACK_CONTEXT *pContext = (CFBF_UNPACK_CONTEXT *)pState->pContext;
-
-    // Get current record info
-    ARCHIVERECORD record = infoCurrent(pState, pPdStruct);
-
-    qint64 nStreamSize = record.nStreamSize;
-
-    if (nStreamSize <= 0) {
-        return true;  // Empty stream, success
-    }
-
-    quint32 nStartSector = (quint32)record.nStreamOffset;  // We stored sector ID here
-
-    if (nStartSector == 0xFFFFFFFF) {
-        return false;
-    }
-
-    // Determine if this is a mini-stream
-    QString sType = record.mapProperties.value(FPART_PROP_TYPE).toString();
-    bool bIsMini = (sType == "MiniStream");
-
-    QByteArray baStreamData;
-
-    if (bIsMini) {
-        // Read from mini-stream using MiniFAT chain
-        if (pContext->baMiniStream.isEmpty() || pContext->listMiniFAT.isEmpty()) {
-            return false;
-        }
-
-        baStreamData = _readMiniStream(pContext->listMiniFAT, pContext->baMiniStream, nStartSector, pContext->nMiniSectorSize, nStreamSize);
-    } else {
-        // Read from regular sectors using FAT chain
-        if (pContext->listFAT.isEmpty()) {
-            return false;
-        }
-
-        baStreamData = _readStreamBySectorChain(pContext->listFAT, nStartSector, pContext->nSectorSize, nStreamSize, pPdStruct);
-    }
-
-    if (baStreamData.size() >= nStreamSize) {
-        // Write exactly nStreamSize bytes (sector chain may have padding)
-        qint64 nWritten = pDevice->write(baStreamData.constData(), nStreamSize);
-        bResult = (nWritten == nStreamSize);
-    }
-
-    return bResult;
-}
-
 bool XCFBF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

@@ -175,16 +175,6 @@ XBinary::ARCHIVERECORD XFREEARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
     return result;
 }
 
-bool XFREEARC::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pState)
-    Q_UNUSED(pDevice)
-    Q_UNUSED(pPdStruct)
-
-    // TODO: implement when directory block parsing is available
-    return false;
-}
-
 bool XFREEARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

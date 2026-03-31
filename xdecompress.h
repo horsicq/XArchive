@@ -25,6 +25,7 @@
 #include "xzipcryptodecoder.h"
 #include "xlzhdecoder.h"
 #include "xarjdecoder.h"
+#include "xacedecoder.h"
 #include "xrardecoder.h"
 #include "xit214decoder.h"
 #include "xdeflatedecoder.h"

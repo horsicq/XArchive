@@ -582,58 +582,6 @@ XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
     return record;
 }
 
-bool XISO9660::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    if (!pState || !pState->pContext || !pDevice) {
-        return false;
-    }
-
-    ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
-
-    if (pState->nCurrentIndex < 0 || pState->nCurrentIndex >= pContext->listAllRecords.count()) {
-        return false;
-    }
-
-    ARCHIVERECORD record = pContext->listAllRecords.at(pState->nCurrentIndex);
-
-    // Folders have no data to extract
-    if (record.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) {
-        return true;
-    }
-
-    qint64 nStreamSize = record.nStreamSize;
-
-    // Empty files are valid
-    if (nStreamSize <= 0) {
-        return true;
-    }
-
-    qint64 nStreamOffset = record.nStreamOffset;
-    qint64 nFileSize = getSize();
-
-    if (nStreamOffset < 0 || nStreamOffset >= nFileSize) {
-        return false;
-    }
-
-    // Clamp to file size if necessary
-    if (nStreamOffset + nStreamSize > nFileSize) {
-        nStreamSize = nFileSize - nStreamOffset;
-    }
-
-    // ISO 9660 data is stored uncompressed — copy directly
-    XBinary::DATAPROCESS_STATE decompressState = {};
-    decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XArchive::HANDLE_METHOD_STORE);
-    decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nStreamSize);
-    decompressState.pDeviceInput = getDevice();
-    decompressState.pDeviceOutput = pDevice;
-    decompressState.nInputOffset = nStreamOffset;
-    decompressState.nInputLimit = nStreamSize;
-    decompressState.nProcessedOffset = 0;
-    decompressState.nProcessedLimit = -1;
-
-    return XStoreDecoder::decompress(&decompressState, pPdStruct);
-}
-
 bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

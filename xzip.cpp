@@ -1978,23 +1978,6 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     return result;
 }
 
-bool XZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    bool bResult = false;
-
-    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
-
-        XDecompress xDecompress;
-        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
-        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
-
-        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
-    }
-
-    return bResult;
-}
-
 bool XZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

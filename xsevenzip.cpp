@@ -1943,25 +1943,6 @@ XBinary::ARCHIVERECORD XSevenZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
     return result;
 }
 
-bool XSevenZip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    bool bResult = false;
-
-    if (pState && pState->pContext && pDevice) {
-        SEVENZ_UNPACK_CONTEXT *pContext = (SEVENZ_UNPACK_CONTEXT *)pState->pContext;
-        ARCHIVERECORD archiveRecord = pContext->listArchiveRecords.at(pState->nCurrentIndex);
-
-        if (archiveRecord.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) return true;  // Directory
-
-        if (archiveRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() == 0) return true;  // Empty file
-
-        // Delegate to shared XDecompress — handles BCJ2, solid, and all other methods uniformly
-        bResult = pContext->decompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
-    }
-
-    return bResult;
-}
-
 bool XSevenZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

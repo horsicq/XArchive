@@ -305,53 +305,6 @@ XBinary::ARCHIVERECORD XSEAARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
     return result;
 }
 
-bool XSEAARC::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    bool bResult = false;
-
-    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        quint8 nMethod = read_uint8(pState->nCurrentOffset + 1);
-        qint32 nHeaderSize = _getHeaderSize(nMethod);
-        quint32 nCompressedSize = read_uint32(pState->nCurrentOffset + 15, false);
-        quint32 nUncompressedSize = nCompressedSize;
-
-        if (nMethod >= CMETHOD_STORE) {
-            nUncompressedSize = read_uint32(pState->nCurrentOffset + 25, false);
-        }
-
-        qint64 nDataOffset = pState->nCurrentOffset + nHeaderSize;
-
-        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
-
-        if ((nMethod == CMETHOD_STORE_OLD) || (nMethod == CMETHOD_STORE)) {
-            compressMethod = HANDLE_METHOD_STORE;
-        }
-
-        XBinary::DATAPROCESS_STATE state = {};
-        state.nProcessedLimit = -1;
-        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
-        state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompressedSize);
-
-        SubDevice sd(getDevice(), nDataOffset, nCompressedSize);
-
-        if (sd.open(QIODevice::ReadOnly)) {
-            state.pDeviceInput = &sd;
-            state.pDeviceOutput = pDevice;
-            state.nInputOffset = 0;
-            state.nInputLimit = nCompressedSize;
-
-            if (compressMethod == HANDLE_METHOD_STORE) {
-                bResult = XStoreDecoder::decompress(&state, pPdStruct);
-            }
-            // TODO: add decompressors for methods 3-9
-
-            sd.close();
-        }
-    }
-
-    return bResult;
-}
-
 bool XSEAARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

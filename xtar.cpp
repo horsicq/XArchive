@@ -538,23 +538,6 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     return result;
 }
 
-bool XTAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pPdStruct)
-
-    bool bResult = false;
-
-    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        posix_header header = read_posix_header(pState->nCurrentOffset);
-        qint64 nFileSize = _getSize(header);
-        qint64 nDataOffset = pState->nCurrentOffset + 512;
-
-        // Copy data directly (no compression in TAR)
-        bResult = copyDeviceMemory(getDevice(), nDataOffset, pDevice, 0, nFileSize);
-    }
-
-    return bResult;
-}
 
 bool XTAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {

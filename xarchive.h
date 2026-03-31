@@ -134,6 +134,7 @@ public:
     static void showRecords(QList<RECORD> *pListArchive);
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
     virtual MODE getMode();
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     //    virtual _MEMORY_MAP getMemoryMap(); // TODO
     virtual qint32 getType();
     virtual QString typeIdToString(qint32 nType);

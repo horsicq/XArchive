@@ -119,6 +119,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xdmg.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xacedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xacedecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.cpp

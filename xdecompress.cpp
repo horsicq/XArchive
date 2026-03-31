@@ -707,6 +707,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XArjDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARJ_FASTEST) {
         bResult = XArjDecoder::decompressFastest(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ACE) {
+        bResult = XAceDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ACE_DELTA) {
+        bResult = XAceDecoder::decompressDelta(pState, pPdStruct);
     } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_15) || (compressMethod == XBinary::HANDLE_METHOD_RAR_20) ||
                (compressMethod == XBinary::HANDLE_METHOD_RAR_29) || (compressMethod == XBinary::HANDLE_METHOD_RAR_50) ||
                (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {

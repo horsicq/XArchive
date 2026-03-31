@@ -7,6 +7,7 @@ DEPENDPATH += $$PWD/3rdparty/ppmd/src
 
 HEADERS += \
     $$PWD/Algos/xarjdecoder.h \
+    $$PWD/Algos/xacedecoder.h \
     $$PWD/Algos/xlzhdecoder.h \
     $$PWD/Algos/xrardecoder.h \
     $$PWD/Algos/xit214decoder.h \
@@ -85,6 +86,7 @@ HEADERS += \
 
 SOURCES += \
     $$PWD/Algos/xarjdecoder.cpp \
+    $$PWD/Algos/xacedecoder.cpp \
     $$PWD/Algos/xlzhdecoder.cpp \
     $$PWD/Algos/xrardecoder.cpp \
     $$PWD/Algos/xit214decoder.cpp \

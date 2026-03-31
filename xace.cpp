@@ -250,24 +250,25 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         quint32 nCompSize = _getCompressedSize(nBase);
 
         // File header fields (all relative to start of block at nBase)
-        // [7]  uint32 pack_date_time
-        // [11] uint32 attr
-        // [15] uint32 size (uncompressed)
-        // [19] uint32 crc32
-        // [23] uint16 tech_info
-        // [25] uint16 reserved
-        // [27] uint32 compsize
-        // [31] uint8  fname_size
-        // [32] char[] fname
+        // [7]  uint32 pack_size (compressed size)
+        // [11] uint32 orig_size (uncompressed size)
+        // [15] uint32 ftime (DOS date-time)
+        // [19] uint32 attr (file attributes)
+        // [23] uint32 crc32
+        // [27] uint16 tech_info (low byte = method: 0=stored, 1=compressed; high byte = level)
+        // [29] uint16 req_ver
+        // [31] uint16 ???
+        // [33] uint16 fname_size
+        // [35] char[] fname
 
-        quint32 nDateTime = read_uint32(nBase + 7, false);
-        quint32 nAttr = read_uint32(nBase + 11, false);
-        quint32 nUncompSize = read_uint32(nBase + 15, false);
-        quint32 nCRC32 = read_uint32(nBase + 19, false);
-        quint16 nTechInfo = read_uint16(nBase + 23, false);
+        quint32 nDateTime = read_uint32(nBase + 15, false);
+        quint32 nAttr = read_uint32(nBase + 19, false);
+        quint32 nUncompSize = read_uint32(nBase + 11, false);
+        quint32 nCRC32 = read_uint32(nBase + 23, false);
+        quint16 nTechInfo = read_uint16(nBase + 27, false);
         quint16 nHeadFlags = read_uint16(nBase + 5, false);
 
-        quint8 nCompType = (quint8)(nTechInfo & 0x0F);
+        quint8 nCompType = (quint8)(nTechInfo & 0xFF);
 
         QString sFileName = _getFileName(nBase);
         sFileName = sFileName.replace("\\", "/");
@@ -280,7 +281,7 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_STREAMSIZE, result.nStreamSize);
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nCompSize);
-        result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nCRC32);
+        result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nCRC32 ^ 0xFFFFFFFF);
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : XBinary::CRC_TYPE_UNKNOWN);
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nCompType);
 
@@ -298,8 +299,11 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         if (nCompType == CTYPE_STORED) {
             compressMethod = HANDLE_METHOD_STORE;
+        } else if (nCompType == CTYPE_LZ_HUFFMAN) {
+            compressMethod = HANDLE_METHOD_ACE;
+        } else if (nCompType == CTYPE_LZ_HUFFMAN_DELTA) {
+            compressMethod = HANDLE_METHOD_ACE_DELTA;
         }
-        // CTYPE_LZ_HUFFMAN and CTYPE_LZ_HUFFMAN_DELTA are not yet supported
 
         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
@@ -324,23 +328,6 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     }
 
     return result;
-}
-
-bool XACE::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    bool bResult = false;
-
-    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
-
-        XDecompress xDecompress;
-        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
-        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
-
-        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
-    }
-
-    return bResult;
 }
 
 bool XACE::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -531,19 +518,20 @@ QList<XBinary::DATA_HEADER> XACE::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                     dataHeader.listRecords.append(getDataRecord(2, 2, "Head Size", VT_UINT16, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
                     dataHeader.listRecords.append(getDataRecord(4, 1, "Head Type", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                     dataHeader.listRecords.append(getDataRecord(5, 2, "Head Flags", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(7, 4, "Date/Time", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(11, 4, "Attributes", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(15, 4, "Uncompressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(19, 4, "CRC32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(23, 2, "Tech Info", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(25, 2, "Reserved", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(27, 4, "Compressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(31, 1, "Filename Size", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(7, 4, "Compressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(11, 4, "Uncompressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(15, 4, "Date/Time", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(19, 4, "Attributes", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(23, 4, "CRC32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(27, 2, "Tech Info", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(29, 2, "Required Version", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(31, 2, "Reserved", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    dataHeader.listRecords.append(getDataRecord(33, 2, "Filename Size", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                    quint8 nFnameSize = read_uint8(nCurrentOffset + 31);
+                    quint16 nFnameSize = read_uint16(nCurrentOffset + 33, false);
 
                     if (nFnameSize > 0) {
-                        dataHeader.listRecords.append(getDataRecord(32, nFnameSize, "Filename", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                        dataHeader.listRecords.append(getDataRecord(35, nFnameSize, "Filename", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                     }
 
                     if (nCompSize > 0) {
@@ -606,7 +594,7 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
         if (nHeadType == HEADTYPE_FILE) {
             quint32 nCompSize = _getCompressedSize(nCurrentOffset);
-            quint32 nOrigSize = read_uint32(nCurrentOffset + 15, false);
+            quint32 nOrigSize = read_uint32(nCurrentOffset + 11, false);
             QString sFileName = _getFileName(nCurrentOffset);
 
             if (nFileParts & FILEPART_HEADER) {
@@ -721,8 +709,8 @@ bool XACE::_isValidBlock(qint64 nOffset)
 
 quint32 XACE::_getCompressedSize(qint64 nOffset)
 {
-    // File header has compsize at offset +27
-    if ((nOffset + 31) > getSize()) {
+    // File header: pack_size (compressed) at offset +7
+    if ((nOffset + 11) > getSize()) {
         return 0;
     }
 
@@ -730,21 +718,21 @@ quint32 XACE::_getCompressedSize(qint64 nOffset)
         return 0;
     }
 
-    return read_uint32(nOffset + 27, false);
+    return read_uint32(nOffset + 7, false);
 }
 
 QString XACE::_getFileName(qint64 nOffset)
 {
-    // fname_size at offset +31, fname at offset +32
-    if ((nOffset + 32) > getSize()) {
+    // fname_size (uint16) at offset +33, fname at offset +35
+    if ((nOffset + 35) > getSize()) {
         return QString();
     }
 
-    quint8 nFnameSize = read_uint8(nOffset + 31);
+    quint16 nFnameSize = read_uint16(nOffset + 33, false);
 
     if (nFnameSize == 0) {
         return QString();
     }
 
-    return read_ansiString(nOffset + 32, nFnameSize);
+    return read_ansiString(nOffset + 35, nFnameSize);
 }
