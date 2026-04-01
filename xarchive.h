@@ -39,6 +39,8 @@ class XArchive : public XBinary {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum TYPE {
         TYPE_UNKNOWN = 0,
         TYPE_ARCHIVE,

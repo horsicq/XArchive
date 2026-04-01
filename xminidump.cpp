@@ -1045,3 +1045,20 @@ bool XMiniDump::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return true;
 }
+
+QList<QString> XMiniDump::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'MDMP'");
+
+    return listResult;
+}
+
+XBinary *XMiniDump::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XMiniDump(pDevice);
+}

@@ -973,3 +973,18 @@ bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUC
 
 //    return result;
 //}
+
+QList<QString> XArchive::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    return listResult;
+}
+
+XBinary *XArchive::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XArchive(pDevice);
+}

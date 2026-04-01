@@ -174,3 +174,21 @@ QList<XBinary::FPART> XSquashfs::getFileParts(quint32 nFileParts, qint32 nLimit,
 
     return listResult;
 }
+
+QList<QString> XSquashfs::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("73717368");
+    listResult.append("sqsh");
+
+    return listResult;
+}
+
+XBinary *XSquashfs::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XSquashfs(pDevice);
+}

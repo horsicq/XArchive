@@ -451,3 +451,18 @@ QString XUDF::_cleanFileName(const QString &sFileName)
 
     return sResult;
 }
+
+QList<QString> XUDF::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    return listResult;
+}
+
+XBinary *XUDF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XUDF(pDevice);
+}

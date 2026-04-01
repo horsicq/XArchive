@@ -413,3 +413,20 @@ bool XLzip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return bResult;
 }
+
+QList<QString> XLzip::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'LZIP'");
+
+    return listResult;
+}
+
+XBinary *XLzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XLzip(pDevice);
+}

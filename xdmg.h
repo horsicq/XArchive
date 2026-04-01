@@ -98,12 +98,19 @@ public:
     struct DMG_UNPACK_CONTEXT {
         QIODevice *pSourceDevice;
         QByteArray baXmlData;
+        qint64 nDataForkOffset;
+        QList<QString> listPartitionNames;
         QList<MISH_BLOCK> listMishBlocks;
         QList<QList<BLOCK_DATA>> listStripes;
         qint32 nCurrentMishIndex;
         qint32 nCurrentStripeIndex;
         qint64 nCurrentFileIndex;
         QString sCurrentFileName;
+    };
+
+    struct DMG_PARTITION_INFO {
+        QString sName;
+        QByteArray mishData;
     };
 
     explicit XDMG(QIODevice *pDevice = nullptr);
@@ -120,6 +127,8 @@ public:
     virtual MODE getMode() override;
     virtual ENDIAN getEndian() override;
     virtual QString structIDToString(quint32 nID) override;
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
 
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
@@ -140,8 +149,8 @@ public:
     static BLOCK_DATA readBlockData(QIODevice *pDevice, qint64 nOffset);
 
 private:
-    QByteArray _parseXmlForMish(const QByteArray &baXml, PDSTRUCT *pPdStruct);
-    bool _decompressStripe(const BLOCK_DATA &stripe, QIODevice *pDevice, PDSTRUCT *pPdStruct);
+    QList<DMG_PARTITION_INFO> _parseBlkxPartitions(const QByteArray &baXml, PDSTRUCT *pPdStruct);
+    bool _decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, QIODevice *pDevice, PDSTRUCT *pPdStruct);
     bool _writeZeroes(QIODevice *pDevice, qint64 nSize);
 };
 

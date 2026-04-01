@@ -26,6 +26,8 @@
 class XSZDD : public XArchive {
     Q_OBJECT
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_SZDD_HEADER
@@ -76,13 +78,14 @@ public:
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
-    // Format-specific unpacking context
+// Format-specific unpacking context
     struct SZDD_UNPACK_CONTEXT {
         qint64 nHeaderSize;        // Size of SZDD header
         qint64 nCompressedSize;    // Size of compressed data
         qint64 nUncompressedSize;  // Size of uncompressed data
         QString sFileName;         // Original file name
     };
+
 };
 
 #endif  // XSZDD_H

@@ -438,3 +438,20 @@ QList<XBinary::FPART_PROP> XZstd::getAvailableFPARTProperties()
 
     return listResult;
 }
+
+QList<QString> XZstd::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("28B52FFD");
+
+    return listResult;
+}
+
+XBinary *XZstd::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XZstd(pDevice);
+}

@@ -28,6 +28,8 @@ class XZip : public XArchive {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum SIGNATURE {
         SIGNATURE_ECD = 0x06054B50,
         SIGNATURE_CFD = 0x02014B50,
@@ -265,9 +267,10 @@ public:
     static QFile::Permissions externalAttributesToFilePermissions(quint32 nExternalAttributes);
 
 protected:
-    HANDLE_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
+HANDLE_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
     bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith);
     qint32 _getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *pnRealSize, PDSTRUCT *pPdStruct);
+
 };
 
 #endif  // XZIP_H

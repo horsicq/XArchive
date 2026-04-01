@@ -26,6 +26,8 @@
 class XGzip : public XArchive {
     Q_OBJECT
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum GZIP_TYPE {
         TYPE_UNKNOWN = 0,
         TYPE_GZ
@@ -81,13 +83,14 @@ public:
     qint64 getHeaderSize();
 
 private:
-    // Format-specific unpacking context
+// Format-specific unpacking context
     struct GZIP_UNPACK_CONTEXT {
         qint64 nHeaderSize;        // Size of GZIP header (variable)
         qint64 nCompressedSize;    // Size of compressed data
         qint64 nUncompressedSize;  // Size of uncompressed data
         QString sFileName;         // Original file name (if available)
     };
+
 };
 
 #endif  // XGZIP_H

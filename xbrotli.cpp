@@ -398,3 +398,18 @@ QList<XBinary::FPART_PROP> XBrotli::getAvailableFPARTProperties()
 
     return listResult;
 }
+
+QList<QString> XBrotli::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    return listResult;
+}
+
+XBinary *XBrotli::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XBrotli(pDevice);
+}

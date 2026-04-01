@@ -27,6 +27,8 @@ class XCFBF : public XArchive {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     struct StructuredStorageHeader {  // [offset from start (bytes), length (bytes)]
         quint8 _abSig[8];             // [00H,08] {0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1,
                                       // 0x1a, 0xe1} for current version

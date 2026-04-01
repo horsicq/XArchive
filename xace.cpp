@@ -736,3 +736,20 @@ QString XACE::_getFileName(qint64 nOffset)
 
     return read_ansiString(nOffset + 35, nFnameSize);
 }
+
+QList<QString> XACE::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'**ACE**'");
+
+    return listResult;
+}
+
+XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XACE(pDevice);
+}

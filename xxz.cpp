@@ -516,3 +516,20 @@ bool XXZ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return bResult;
 }
+
+QList<QString> XXZ::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("FD377A585A00");
+
+    return listResult;
+}
+
+XBinary *XXZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XXZ(pDevice);
+}

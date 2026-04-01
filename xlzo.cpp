@@ -430,3 +430,20 @@ QList<XBinary::FPART_PROP> XLzo::getAvailableFPARTProperties()
 
     return listResult;
 }
+
+QList<QString> XLzo::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("894C5A4F000D0A1A0A");
+
+    return listResult;
+}
+
+XBinary *XLzo::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XLzo(pDevice);
+}

@@ -1080,3 +1080,20 @@ QByteArray XCFBF::_readMiniStream(const QList<quint32> &listMiniFAT, const QByte
 
     return baResult;
 }
+
+QList<QString> XCFBF::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("D0CF11E0A1B11AE100000000000000000000000000000000");
+
+    return listResult;
+}
+
+XBinary *XCFBF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XCFBF(pDevice);
+}

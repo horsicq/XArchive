@@ -650,3 +650,20 @@ QString XARJ::_getFileName(qint64 nOffset)
 
     return read_ansiString(nNameOffset, (qint32)nMaxNameLen);
 }
+
+QList<QString> XARJ::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("60EA");
+
+    return listResult;
+}
+
+XBinary *XARJ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XARJ(pDevice);
+}

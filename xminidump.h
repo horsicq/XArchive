@@ -27,6 +27,8 @@ class XMiniDump : public XArchive {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     /*!
         \brief XMiniDump class for handling Windows MiniDump (.dmp) files
         MiniDump files are crash dump files created by Windows when an application crashes.

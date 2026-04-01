@@ -511,3 +511,20 @@ QList<XBinary::FPART_PROP> XGzip::getAvailableFPARTProperties()
 
     return listResult;
 }
+
+QList<QString> XGzip::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("1F8B08");
+
+    return listResult;
+}
+
+XBinary *XGzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XGzip(pDevice);
+}

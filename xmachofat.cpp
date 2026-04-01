@@ -529,3 +529,21 @@ bool XMACHOFat::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return true;
 }
+
+QList<QString> XMACHOFat::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("CAFEBABE");
+    listResult.append("BEBAFECA");
+
+    return listResult;
+}
+
+XBinary *XMACHOFat::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XMACHOFat(pDevice);
+}

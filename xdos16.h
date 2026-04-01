@@ -28,6 +28,8 @@ class XDOS16 : public XArchive {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_LOADER,

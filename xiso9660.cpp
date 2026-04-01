@@ -785,3 +785,21 @@ QString XISO9660::getEffectiveDateTime()
 
     return sResult;
 }
+
+QList<QString> XISO9660::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("4344303031");
+    listResult.append("CD001");
+
+    return listResult;
+}
+
+XBinary *XISO9660::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XISO9660(pDevice);
+}

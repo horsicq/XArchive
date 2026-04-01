@@ -158,6 +158,8 @@ class XRar : public XArchive {
     };
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_RAR14_SIGNATURE,
@@ -206,7 +208,7 @@ public:
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
 private:
-    qint32 getInternVersion(PDSTRUCT *pPdStruct);
+qint32 getInternVersion(PDSTRUCT *pPdStruct);
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
     GENERICBLOCK4 readGenericBlock4(qint64 nOffset);
     FILEBLOCK14 readFileBlock14(qint64 nOffset);
@@ -225,6 +227,7 @@ private:
     // Helper functions for packing
     QByteArray createFileBlock4(const QString &sFileName, qint64 nFileSize, quint32 nFileCRC, quint32 nFileTime, quint32 nAttributes);
     quint16 calculateCRC16(const QByteArray &data);
+
 };
 
 #endif  // XRAR_H

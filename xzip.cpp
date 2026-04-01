@@ -2306,3 +2306,21 @@ QList<XBinary::XFRECORD> XZip::getXFRecords(FT fileType, quint32 nStructID, cons
 
     return listResult;
 }
+
+QList<QString> XZip::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'PK'0304");
+    listResult.append("'PK'0506");
+
+    return listResult;
+}
+
+XBinary *XZip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XZip(pDevice);
+}

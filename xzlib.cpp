@@ -614,3 +614,22 @@ bool XZlib::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return true;
 }
+
+QList<QString> XZlib::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("7801");
+    listResult.append("789C");
+    listResult.append("78DA");
+
+    return listResult;
+}
+
+XBinary *XZlib::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XZlib(pDevice);
+}

@@ -426,3 +426,21 @@ QList<XBinary::FPART_PROP> XBZIP2::getAvailableFPARTProperties()
 
     return listResult;
 }
+
+QList<QString> XBZIP2::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'BZh'..314159265359");
+    listResult.append("'BZh'..17724538509000000000");
+
+    return listResult;
+}
+
+XBinary *XBZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XBZIP2(pDevice);
+}

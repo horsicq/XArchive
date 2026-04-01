@@ -93,6 +93,19 @@ qint64 XCPIO::_readHexValue(const char *pValue, qint32 nSize)
     return bOk ? nResult : 0;
 }
 
+qint64 XCPIO::_readOctValue(const char *pValue, qint32 nSize)
+{
+    if (!pValue || nSize <= 0) {
+        return 0;
+    }
+
+    QString sValue = QString::fromLatin1(pValue, nSize).trimmed();
+    bool bOk = false;
+    qint64 nResult = sValue.toLongLong(&bOk, 8);
+
+    return bOk ? nResult : 0;
+}
+
 XCPIO::CPIO_NEWC_HEADER XCPIO::_readNewcHeader(qint64 nOffset)
 {
     CPIO_NEWC_HEADER header = {};
@@ -130,6 +143,135 @@ QString XCPIO::getMIMEString()
 XBinary::FT XCPIO::getFileType()
 {
     return FT_CPIO;
+}
+
+QList<QString> XCPIO::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'070701'");
+    listResult.append("'070702'");
+    listResult.append("'070707'");
+
+    return listResult;
+}
+
+XBinary *XCPIO::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XCPIO(pDevice);
+}
+
+quint64 XCPIO::getNumberOfRecords(PDSTRUCT *pPdStruct)
+{
+    return getRecords(-1, pPdStruct).count();
+}
+
+QList<XArchive::RECORD> XCPIO::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    QList<RECORD> listResult;
+
+    qint64 nOffset = 0;
+    qint64 nTotalSize = getSize();
+
+    while ((nOffset < nTotalSize) && isPdStructNotCanceled(pPdStruct)) {
+        CPIO_FORMAT format = _detectFormat(nOffset);
+        if (format == CPIO_FORMAT_UNKNOWN) {
+            break;
+        }
+
+        qint64 nHeaderSize = 0;
+        qint64 nNameSize = 0;
+        qint64 nDataSize = 0;
+
+        if ((format == CPIO_FORMAT_NEWC) || (format == CPIO_FORMAT_CRC)) {
+            if ((nOffset + (qint64)sizeof(CPIO_NEWC_HEADER)) > nTotalSize) {
+                break;
+            }
+
+            CPIO_NEWC_HEADER header = _readNewcHeader(nOffset);
+            nHeaderSize = sizeof(CPIO_NEWC_HEADER);
+            nNameSize = _readHexValue(header.namesize, 8);
+            nDataSize = _readHexValue(header.filesize, 8);
+        } else if (format == CPIO_FORMAT_ODC) {
+            // Portable old ASCII cpio header size is 76 bytes.
+            if ((nOffset + 76) > nTotalSize) {
+                break;
+            }
+
+            char szNameSize[7] = {0};
+            char szFileSize[12] = {0};
+
+            read_array(nOffset + 59, szNameSize, 6);
+            read_array(nOffset + 65, szFileSize, 11);
+
+            nHeaderSize = 76;
+            nNameSize = _readOctValue(szNameSize, 6);
+            nDataSize = _readOctValue(szFileSize, 11);
+        }
+
+        if ((nNameSize <= 0) || (nNameSize > 0x10000)) {
+            break;
+        }
+
+        qint64 nNameOffset = nOffset + nHeaderSize;
+        qint64 nNameEnd = nNameOffset + nNameSize;
+        if (nNameEnd > nTotalSize) {
+            break;
+        }
+
+        QByteArray baName = read_array(nNameOffset, nNameSize);
+        QString sFileName = QString::fromLatin1(baName.constData());
+        if (sFileName.endsWith(QChar('\0'))) {
+            sFileName.chop(1);
+        }
+
+        qint64 nDataOffset = nNameEnd;
+
+        if ((format == CPIO_FORMAT_NEWC) || (format == CPIO_FORMAT_CRC)) {
+            while ((nDataOffset % 4) != 0) {
+                nDataOffset++;
+            }
+        }
+
+        if ((nDataOffset + nDataSize) > nTotalSize) {
+            break;
+        }
+
+        qint64 nNextOffset = nDataOffset + nDataSize;
+        if ((format == CPIO_FORMAT_NEWC) || (format == CPIO_FORMAT_CRC)) {
+            while ((nNextOffset % 4) != 0) {
+                nNextOffset++;
+            }
+        }
+
+        bool bIsTrailer = _isTrailerRecord(sFileName);
+        if (!bIsTrailer) {
+            RECORD record = {};
+            record.spInfo.sRecordName = sFileName;
+            record.spInfo.nUncompressedSize = nDataSize;
+            record.spInfo.compressMethod = HANDLE_METHOD_STORE;
+            record.nHeaderOffset = nOffset;
+            record.nHeaderSize = nDataOffset - nOffset;
+            record.nDataOffset = nDataOffset;
+            record.nDataSize = nDataSize;
+            listResult.append(record);
+
+            if ((nLimit != -1) && (listResult.count() >= nLimit)) {
+                break;
+            }
+        }
+
+        nOffset = nNextOffset;
+
+        if (bIsTrailer) {
+            break;
+        }
+    }
+
+    return listResult;
 }
 
 QList<XBinary::MAPMODE> XCPIO::getMapModesList()
@@ -281,7 +423,6 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 bool XCPIO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapProperties)
-    Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
@@ -290,11 +431,15 @@ bool XCPIO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     CPIO_UNPACK_CONTEXT *pContext = new CPIO_UNPACK_CONTEXT;
     pContext->format = _detectFormat(0);
     pContext->nHeaderSize = (pContext->format == CPIO_FORMAT_NEWC || pContext->format == CPIO_FORMAT_CRC) ? sizeof(CPIO_NEWC_HEADER) : sizeof(CPIO_ODC_HEADER);
+    pContext->listRecords = getRecords(-1, pPdStruct);
+    pContext->nCurrentRecord = 0;
 
     pState->pContext = pContext;
-    pState->nCurrentOffset = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = pContext->listRecords.count();
+    pState->nCurrentOffset = (pState->nNumberOfRecords > 0) ? pContext->listRecords.at(0).nHeaderOffset : 0;
 
-    return true;
+    return (pState->nNumberOfRecords > 0);
 }
 
 XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -308,16 +453,15 @@ XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
     }
 
     CPIO_UNPACK_CONTEXT *pContext = (CPIO_UNPACK_CONTEXT *)pState->pContext;
-    QList<RECORD> listRecords = getRecords(-1, pPdStruct);
 
-    for (const RECORD &record : listRecords) {
-        if (record.nHeaderOffset == pState->nCurrentOffset) {
-            result.nStreamOffset = record.nDataOffset;
-            result.nStreamSize = record.nDataSize;
-            result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, record.spInfo.sRecordName);
-            result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE);
-            break;
-        }
+    if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listRecords.count())) {
+        const RECORD &record = pContext->listRecords.at(pState->nCurrentIndex);
+        result.nStreamOffset = record.nDataOffset;
+        result.nStreamSize = record.nDataSize;
+        result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, record.spInfo.sRecordName);
+        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, record.spInfo.nUncompressedSize);
+        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, record.nDataSize);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE);
     }
 
     return result;
@@ -325,18 +469,15 @@ XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
 
 bool XCPIO::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     if (!pState || !pState->pContext || !pDevice) {
         return false;
     }
 
-    QList<RECORD> listRecords = getRecords(-1, pPdStruct);
+    CPIO_UNPACK_CONTEXT *pContext = (CPIO_UNPACK_CONTEXT *)pState->pContext;
 
-    for (const RECORD &record : listRecords) {
-        if (record.nHeaderOffset == pState->nCurrentOffset) {
-            return copyDeviceMemory(getDevice(), record.nDataOffset, pDevice, 0, record.nDataSize);
-        }
+    if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listRecords.count())) {
+        const RECORD &record = pContext->listRecords.at(pState->nCurrentIndex);
+        return copyDeviceMemory(getDevice(), record.nDataOffset, pDevice, 0, record.nDataSize, pPdStruct);
     }
 
     return false;
@@ -350,16 +491,14 @@ bool XCPIO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    QList<RECORD> listRecords = getRecords(-1, pPdStruct);
+    CPIO_UNPACK_CONTEXT *pContext = (CPIO_UNPACK_CONTEXT *)pState->pContext;
 
-    for (qint32 i = 0; i < listRecords.count(); i++) {
-        if (listRecords.at(i).nHeaderOffset == pState->nCurrentOffset) {
-            if (i + 1 < listRecords.count()) {
-                pState->nCurrentOffset = listRecords.at(i + 1).nHeaderOffset;
-                return true;
-            }
-            break;
-        }
+    pState->nCurrentIndex++;
+    pContext->nCurrentRecord = pState->nCurrentIndex;
+
+    if (pState->nCurrentIndex < pState->nNumberOfRecords) {
+        pState->nCurrentOffset = pContext->listRecords.at(pState->nCurrentIndex).nHeaderOffset;
+        return true;
     }
 
     return false;

@@ -27,6 +27,8 @@ class XZlib : public XArchive {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     explicit XZlib(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
@@ -58,7 +60,7 @@ public:
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
-    struct ZLIB_UNPACK_CONTEXT {
+struct ZLIB_UNPACK_CONTEXT {
         QString sFileName;
         qint64 nHeaderSize;
         qint64 nCompressedSize;
@@ -69,6 +71,7 @@ private:
     struct ZLIB_PACK_CONTEXT {
         bool bDataAdded;  // Track if data has been added (only one stream allowed)
     };
+
 };
 
 #endif  // XZLIB_H

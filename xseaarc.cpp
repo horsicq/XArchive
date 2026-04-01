@@ -565,3 +565,20 @@ bool XSEAARC::_isValidMethod(quint8 nMethod)
 {
     return (nMethod >= CMETHOD_STORE_OLD) && (nMethod <= CMETHOD_SQUASHED);
 }
+
+QList<QString> XSEAARC::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("1A");
+
+    return listResult;
+}
+
+XBinary *XSEAARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XSEAARC(pDevice);
+}

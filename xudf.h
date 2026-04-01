@@ -102,6 +102,8 @@ class XUDF : public XArchive {
 #pragma pack(pop)
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_TAG,

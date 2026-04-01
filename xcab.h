@@ -27,6 +27,8 @@ class XCab : public XArchive {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_CFHEADER,
@@ -146,8 +148,9 @@ public:
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
-    CFFOLDER _read_CFFOLDER(qint64 nOffset);
+CFFOLDER _read_CFFOLDER(qint64 nOffset);
     qint64 _getStreamSize(qint64 nOffset, qint32 nCount);
+
 };
 
 #endif  // XCAB_H

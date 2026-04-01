@@ -512,3 +512,22 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
     return listResult;
 }
+
+QList<QString> XLHA::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("....'-lh'..2d");
+    listResult.append("....'-lz'..2d");
+    listResult.append("....'-pm'..2d");
+
+    return listResult;
+}
+
+XBinary *XLHA::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XLHA(pDevice);
+}

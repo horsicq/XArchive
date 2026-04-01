@@ -875,3 +875,20 @@ bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return bResult;
 }
+
+QList<QString> X_Ar::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'!<arch>'0a");
+
+    return listResult;
+}
+
+XBinary *X_Ar::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new X_Ar(pDevice);
+}

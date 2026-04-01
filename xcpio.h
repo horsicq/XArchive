@@ -87,11 +87,15 @@ public:
     virtual QString getFileFormatExtsString() override;
     virtual QString getMIMEString() override;
     virtual FT getFileType() override;
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QString structIDToString(quint32 nID) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
+    virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
 
     // Streaming unpacking API
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
@@ -104,10 +108,13 @@ private:
     struct CPIO_UNPACK_CONTEXT {
         CPIO_FORMAT format;
         qint64 nHeaderSize;
+        QList<RECORD> listRecords;
+        qint32 nCurrentRecord;
     };
 
     CPIO_FORMAT _detectFormat(qint64 nOffset);
     qint64 _readHexValue(const char *pValue, qint32 nSize);
+    qint64 _readOctValue(const char *pValue, qint32 nSize);
     CPIO_NEWC_HEADER _readNewcHeader(qint64 nOffset);
     CPIO_ODC_HEADER _readOdcHeader(qint64 nOffset);
     bool _isTrailerRecord(const QString &sFileName);

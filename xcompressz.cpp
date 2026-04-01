@@ -445,3 +445,20 @@ QList<XBinary::FPART_PROP> XCompressZ::getAvailableFPARTProperties()
 
     return listResult;
 }
+
+QList<QString> XCompressZ::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("1F9D");
+
+    return listResult;
+}
+
+XBinary *XCompressZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XCompressZ(pDevice);
+}

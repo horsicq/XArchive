@@ -2181,3 +2181,20 @@ bool XSevenZip::decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackPro
 
     return bResult;
 }
+
+QList<QString> XSevenZip::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'7z'BCAF271C");
+
+    return listResult;
+}
+
+XBinary *XSevenZip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XSevenZip(pDevice);
+}

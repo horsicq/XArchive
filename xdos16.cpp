@@ -458,3 +458,20 @@ QString XDOS16::structIDToString(quint32 nID)
 {
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XDOS16_STRUCTID, sizeof(_TABLE_XDOS16_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
+
+QList<QString> XDOS16::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'MZ'");
+
+    return listResult;
+}
+
+XBinary *XDOS16::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XDOS16(pDevice);
+}

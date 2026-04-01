@@ -450,3 +450,20 @@ QString XFREEARC::_readCompressorString(qint64 nOffset, qint64 nMaxSize)
 
     return sResult;
 }
+
+QList<QString> XFREEARC::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'ArC'01");
+
+    return listResult;
+}
+
+XBinary *XFREEARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XFREEARC(pDevice);
+}

@@ -780,3 +780,20 @@ bool XTAR::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
+
+QList<QString> XTAR::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("00'ustar'");
+
+    return listResult;
+}
+
+XBinary *XTAR::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XTAR(pDevice);
+}

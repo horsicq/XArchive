@@ -745,3 +745,20 @@ bool XCab::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return true;
 }
+
+QList<QString> XCab::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'MSCF'00000000........00000000........00000000");
+
+    return listResult;
+}
+
+XBinary *XCab::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XCab(pDevice);
+}

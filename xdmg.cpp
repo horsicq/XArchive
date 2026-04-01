@@ -20,6 +20,8 @@
 // SOFTWARE.
 //
 #include "xdmg.h"
+#include <QBuffer>
+#include <QRegularExpression>
 #include <zlib.h>
 
 XBinary::XCONVERT _TABLE_XDMG_STRUCTID[] = {
@@ -44,10 +46,19 @@ bool XDMG::isValid(PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     qint64 nSize = getSize();
-    if (nSize > 512) {
+    if (nSize >= 512) {
         KOLY_BLOCK kolyBlock = readKolyBlock(getDevice(), nSize - 512);
-        if (kolyBlock.nMagic == 0x6b6f6c79) {  // "koly"
-            bResult = true;
+
+        if ((kolyBlock.nMagic == 0x6b6f6c79) && (kolyBlock.nHeaderLength == 512)) {  // "koly"
+            bool bXmlRangeOk = true;
+
+            if (kolyBlock.nXmlLength > 0) {
+                bXmlRangeOk = ((kolyBlock.nXmlOffset >= 0) && (kolyBlock.nXmlOffset + kolyBlock.nXmlLength <= (quint64)nSize));
+            }
+
+            if (bXmlRangeOk) {
+                bResult = true;
+            }
         }
     }
 
@@ -154,21 +165,22 @@ quint64 XDMG::getNumberOfRecords(PDSTRUCT *pPdStruct)
         if (kolyBlock.nMagic == 0x6b6f6c79 && kolyBlock.nXmlLength > 0) {
             QByteArray baXml = read_array(kolyBlock.nXmlOffset, kolyBlock.nXmlLength);
 
-            // Count mish blocks in XML
-            qint32 nMishCount = 0;
-            QString sXml = QString::fromUtf8(baXml);
-            qint32 nPos = 0;
+            QList<DMG_PARTITION_INFO> listPartitions = _parseBlkxPartitions(baXml, pPdStruct);
 
-            while ((nPos = sXml.indexOf("<key>blkx</key>", nPos)) != -1) {
-                nMishCount++;
-                nPos += 15;
-
-                if (isPdStructNotCanceled(pPdStruct)) {
+            for (qint32 i = 0; i < listPartitions.count(); i++) {
+                if (!isPdStructNotCanceled(pPdStruct)) {
                     break;
                 }
-            }
 
-            nResult = nMishCount;
+                QByteArray baMishData = listPartitions.at(i).mishData;
+                QBuffer buffer(&baMishData);
+                if (buffer.open(QIODevice::ReadOnly)) {
+                    MISH_BLOCK mishBlock = readMishBlock(&buffer, 0);
+                    if (mishBlock.nMagic == 0x6d697368) {
+                        nResult++;
+                    }
+                }
+            }
         }
     }
 
@@ -186,26 +198,39 @@ QList<XArchive::RECORD> XDMG::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         if (kolyBlock.nMagic == 0x6b6f6c79 && kolyBlock.nXmlLength > 0) {
             QByteArray baXml = read_array(kolyBlock.nXmlOffset, kolyBlock.nXmlLength);
 
-            // Parse XML for mish blocks
-            QString sXml = QString::fromUtf8(baXml);
-            qint32 nPos = 0;
+            QList<DMG_PARTITION_INFO> listPartitions = _parseBlkxPartitions(baXml, pPdStruct);
             qint32 nRecordIndex = 0;
 
-            while ((nPos = sXml.indexOf("<key>blkx</key>", nPos)) != -1 && isPdStructNotCanceled(pPdStruct)) {
+            for (qint32 i = 0; (i < listPartitions.count()) && isPdStructNotCanceled(pPdStruct); i++) {
                 if (nLimit != -1 && nRecordIndex >= nLimit) {
                     break;
                 }
 
+                QByteArray baMishData = listPartitions.at(i).mishData;
+                QBuffer buffer(&baMishData);
+                if (!buffer.open(QIODevice::ReadOnly)) {
+                    continue;
+                }
+
+                MISH_BLOCK mishBlock = readMishBlock(&buffer, 0);
+                if (mishBlock.nMagic != 0x6d697368) {
+                    continue;
+                }
+
                 RECORD record = {};
-                record.spInfo.sRecordName = QString("partition%1").arg(nRecordIndex);
-                record.spInfo.nUncompressedSize = 0;
+                QString sName = listPartitions.at(i).sName;
+                if (sName.isEmpty()) {
+                    sName = QString("partition%1").arg(nRecordIndex);
+                }
+
+                record.spInfo.sRecordName = sName;
+                record.spInfo.nUncompressedSize = mishBlock.nSectorCount * 512;
                 record.spInfo.compressMethod = HANDLE_METHOD_UNKNOWN;
                 record.nDataOffset = 0;
                 record.nDataSize = 0;
 
                 listResult.append(record);
                 nRecordIndex++;
-                nPos += 15;
             }
         }
     }
@@ -222,6 +247,7 @@ bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     if (pState) {
         DMG_UNPACK_CONTEXT *pContext = new DMG_UNPACK_CONTEXT;
         pContext->pSourceDevice = getDevice();
+        pContext->nDataForkOffset = 0;
         pContext->nCurrentMishIndex = 0;
         pContext->nCurrentStripeIndex = 0;
         pContext->nCurrentFileIndex = 0;
@@ -233,20 +259,42 @@ bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             if (kolyBlock.nMagic == 0x6b6f6c79 && kolyBlock.nXmlLength > 0) {
                 pContext->baXmlData = read_array(kolyBlock.nXmlOffset, kolyBlock.nXmlLength);
 
-                // Parse XML for mish blocks
-                QString sXml = QString::fromUtf8(pContext->baXmlData);
-                qint32 nPos = 0;
-                qint32 nRecordCount = 0;
+                pContext->nDataForkOffset = kolyBlock.nDataForkOffset;
 
-                while ((nPos = sXml.indexOf("<key>blkx</key>", nPos)) != -1 && isPdStructNotCanceled(pPdStruct)) {
-                    nRecordCount++;
-                    nPos += 15;
+                QList<DMG_PARTITION_INFO> listPartitions = _parseBlkxPartitions(pContext->baXmlData, pPdStruct);
+
+                for (qint32 i = 0; (i < listPartitions.count()) && isPdStructNotCanceled(pPdStruct); i++) {
+                    QByteArray baMishData = listPartitions.at(i).mishData;
+                    QBuffer buffer(&baMishData);
+                    if (!buffer.open(QIODevice::ReadOnly)) {
+                        continue;
+                    }
+
+                    MISH_BLOCK mishBlock = readMishBlock(&buffer, 0);
+                    if (mishBlock.nMagic != 0x6d697368) {
+                        continue;
+                    }
+
+                    qint64 nExpectedSize = 204 + ((qint64)mishBlock.nBlockDataCount) * 40;
+                    if (listPartitions.at(i).mishData.size() < nExpectedSize) {
+                        continue;
+                    }
+
+                    QList<BLOCK_DATA> listCurrentStripes;
+                    for (qint32 j = 0; j < (qint32)mishBlock.nBlockDataCount; j++) {
+                        BLOCK_DATA stripe = readBlockData(&buffer, 204 + ((qint64)j) * 40);
+                        listCurrentStripes.append(stripe);
+                    }
+
+                    pContext->listMishBlocks.append(mishBlock);
+                    pContext->listStripes.append(listCurrentStripes);
+                    pContext->listPartitionNames.append(listPartitions.at(i).sName);
                 }
 
-                pState->nNumberOfRecords = nRecordCount;
+                pState->nNumberOfRecords = pContext->listMishBlocks.count();
                 pState->nCurrentIndex = 0;
                 pState->pContext = pContext;
-                bResult = true;
+                bResult = (pState->nNumberOfRecords > 0);
             }
         }
 
@@ -267,8 +315,24 @@ XArchive::ARCHIVERECORD XDMG::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     if (pState && pState->pContext) {
         DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
 
-        result.mapProperties.insert(FPART_PROP_ORIGINALNAME, QString("partition%1").arg(pContext->nCurrentFileIndex));
-        result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, 0);
+        if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listMishBlocks.count())) {
+            QString sPartitionName;
+            if (pState->nCurrentIndex < pContext->listPartitionNames.count()) {
+                sPartitionName = pContext->listPartitionNames.at(pState->nCurrentIndex);
+            }
+
+            if (sPartitionName.isEmpty()) {
+                sPartitionName = QString("partition%1").arg(pContext->nCurrentFileIndex);
+            }
+
+            qint64 nUncompressedSize = pContext->listMishBlocks.at(pState->nCurrentIndex).nSectorCount * 512;
+
+            result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sPartitionName + ".img");
+            result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
+            result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, 0);
+            result.mapProperties.insert(FPART_PROP_EXT, "img");
+        }
+
         result.nStreamOffset = 0;
         result.nStreamSize = 0;
     }
@@ -278,14 +342,25 @@ XArchive::ARCHIVERECORD XDMG::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
     if (pState && pState->pContext && pDevice) {
-        // Placeholder - would need to decompress the current mish block
-        // This is a simplified implementation
-        bResult = true;
+        DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
+
+        if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listStripes.count())) {
+            QList<BLOCK_DATA> listCurrentStripes = pContext->listStripes.at(pState->nCurrentIndex);
+            bResult = true;
+
+            for (qint32 i = 0; (i < listCurrentStripes.count()) && bResult && isPdStructNotCanceled(pPdStruct); i++) {
+                const BLOCK_DATA stripe = listCurrentStripes.at(i);
+
+                if ((stripe.nType == DMG_STRIPE_END) || (stripe.nType == DMG_STRIPE_SKIP)) {
+                    continue;
+                }
+
+                bResult = _decompressStripe(stripe, pContext->nDataForkOffset, pDevice, pPdStruct);
+            }
+        }
     }
 
     return bResult;
@@ -397,15 +472,79 @@ XDMG::BLOCK_DATA XDMG::readBlockData(QIODevice *pDevice, qint64 nOffset)
     return result;
 }
 
-QByteArray XDMG::_parseXmlForMish(const QByteArray &baXml, PDSTRUCT *pPdStruct)
+QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseBlkxPartitions(const QByteArray &baXml, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    QList<DMG_PARTITION_INFO> listResult;
 
-    // Placeholder for XML parsing
-    return QByteArray();
+    QString sXml = QString::fromUtf8(baXml);
+    qint64 nCurrentNameIndex = 0;
+
+    qint32 nBlkxPos = sXml.indexOf("<key>blkx</key>");
+    if (nBlkxPos == -1) {
+        return listResult;
+    }
+
+    qint32 nArrayStart = sXml.indexOf("<array>", nBlkxPos);
+    if (nArrayStart == -1) {
+        return listResult;
+    }
+
+    qint32 nArrayEnd = sXml.indexOf("</array>", nArrayStart);
+    if (nArrayEnd == -1) {
+        return listResult;
+    }
+
+    QString sArray = sXml.mid(nArrayStart, nArrayEnd - nArrayStart);
+
+    QRegularExpression reDict("<dict>([\\s\\S]*?)</dict>");
+    QRegularExpressionMatchIterator itDict = reDict.globalMatch(sArray);
+
+    while (itDict.hasNext() && isPdStructNotCanceled(pPdStruct)) {
+        QRegularExpressionMatch matchDict = itDict.next();
+        QString sDict = matchDict.captured(1);
+
+        QString sName;
+
+        QRegularExpression reName("<key>Name</key>\\s*<string>([^<]*)</string>");
+        QRegularExpressionMatch matchName = reName.match(sDict);
+        if (matchName.hasMatch()) {
+            sName = matchName.captured(1).trimmed();
+        }
+
+        if (sName.isEmpty()) {
+            QRegularExpression reCFName("<key>CFName</key>\\s*<string>([^<]*)</string>");
+            QRegularExpressionMatch matchCFName = reCFName.match(sDict);
+            if (matchCFName.hasMatch()) {
+                sName = matchCFName.captured(1).trimmed();
+            }
+        }
+
+        if (sName.isEmpty()) {
+            sName = QString("partition%1").arg(nCurrentNameIndex);
+        }
+
+        QRegularExpression reData("<key>Data</key>\\s*<data>([\\s\\S]*?)</data>");
+        QRegularExpressionMatch matchData = reData.match(sDict);
+        if (matchData.hasMatch()) {
+            QString sBase64 = matchData.captured(1);
+            sBase64.remove(QRegularExpression("\\s+"));
+
+            QByteArray baMish = QByteArray::fromBase64(sBase64.toLatin1());
+            if (!baMish.isEmpty()) {
+                DMG_PARTITION_INFO info = {};
+                info.sName = sName;
+                info.mishData = baMish;
+                listResult.append(info);
+            }
+        }
+
+        nCurrentNameIndex++;
+    }
+
+    return listResult;
 }
 
-bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
@@ -426,7 +565,7 @@ bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, QIODevice *pDevice, PDSTR
         case DMG_STRIPE_STORED:
             // Uncompressed data - direct copy
             if (stripe.nDataLength > 0) {
-                QByteArray baData = read_array(stripe.nDataOffset, stripe.nDataLength);
+                QByteArray baData = read_array(nDataForkOffset + stripe.nDataOffset, stripe.nDataLength);
                 if (!baData.isEmpty()) {
                     qint64 nWritten = pDevice->write(baData);
                     if (nWritten != baData.size()) {
@@ -441,7 +580,7 @@ bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, QIODevice *pDevice, PDSTR
         case DMG_STRIPE_DEFLATE:
             // ZLIB compressed data
             if (stripe.nDataLength > 0) {
-                QByteArray baCompressed = read_array(stripe.nDataOffset, stripe.nDataLength);
+                QByteArray baCompressed = read_array(nDataForkOffset + stripe.nDataOffset, stripe.nDataLength);
                 if (!baCompressed.isEmpty()) {
                     z_stream strm = {};
                     strm.next_in = (Bytef *)baCompressed.data();
@@ -529,4 +668,22 @@ bool XDMG::_writeZeroes(QIODevice *pDevice, qint64 nSize)
     }
 
     return bResult;
+}
+
+QList<QString> XDMG::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    // UDIF DMG trailer signature.
+    listResult.append("'koly'");
+
+    return listResult;
+}
+
+XBinary *XDMG::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XDMG(pDevice);
 }

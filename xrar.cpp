@@ -2117,3 +2117,23 @@ XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)
 
     return result;
 }
+
+QList<QString> XRar::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'RE~^'");
+    listResult.append("'Rar!'1A07");
+    listResult.append("'Rar!'1A0700");
+    listResult.append("'Rar!'1A070100");
+
+    return listResult;
+}
+
+XBinary *XRar::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XRar(pDevice);
+}
