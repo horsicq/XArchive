@@ -1937,7 +1937,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
                     qint64 nTsEnd = nExtraFieldOffset + i + 4 + nDataSize;
                     if ((nTsFlags & 0x01) && (nTsOff + 4 <= nTsEnd)) {
                         quint32 nUnixMTime = read_uint32(nTsOff);
-                        QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nUnixMTime, Qt::UTC);
+                        QDateTime dt = XBinary::valueToTime((qint64)nUnixMTime, XBinary::DT_TYPE_UNIXTIME);
                         if (dt.isValid() && !result.mapProperties.contains(XBinary::FPART_PROP_MTIME)) {
                             result.mapProperties.insert(XBinary::FPART_PROP_MTIME, dt);
                         }
@@ -1945,7 +1945,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
                     }
                     if ((nTsFlags & 0x02) && (nTsOff + 4 <= nTsEnd)) {
                         quint32 nUnixATime = read_uint32(nTsOff);
-                        QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nUnixATime, Qt::UTC);
+                        QDateTime dt = XBinary::valueToTime((qint64)nUnixATime, XBinary::DT_TYPE_UNIXTIME);
                         if (dt.isValid() && !result.mapProperties.contains(XBinary::FPART_PROP_ATIME)) {
                             result.mapProperties.insert(XBinary::FPART_PROP_ATIME, dt);
                         }
@@ -1953,7 +1953,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
                     }
                     if ((nTsFlags & 0x04) && (nTsOff + 4 <= nTsEnd)) {
                         quint32 nUnixCTime = read_uint32(nTsOff);
-                        QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nUnixCTime, Qt::UTC);
+                        QDateTime dt = XBinary::valueToTime((qint64)nUnixCTime, XBinary::DT_TYPE_UNIXTIME);
                         if (dt.isValid() && !result.mapProperties.contains(XBinary::FPART_PROP_CTIME)) {
                             result.mapProperties.insert(XBinary::FPART_PROP_CTIME, dt);
                         }

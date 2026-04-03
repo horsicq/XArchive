@@ -414,11 +414,7 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             bool bOk = false;
             quint64 nModSecs = sMod.toULongLong(&bOk, 10);
             if (bOk) {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
-                QDateTime dt = QDateTime::fromSecsSinceEpoch((qint64)nModSecs, Qt::UTC);
-#else
-                QDateTime dt = QDateTime::fromMSecsSinceEpoch((qint64)nModSecs * 1000, Qt::UTC);
-#endif
+                QDateTime dt = XBinary::valueToTime((qint64)nModSecs, XBinary::DT_TYPE_UNIXTIME);
                 part.mapProperties.insert(FPART_PROP_DATETIME, dt);
             }
             listResult.append(part);
@@ -841,11 +837,7 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         sMTime.resize(sizeof(header.fileMod));
         sMTime = sMTime.trimmed();
         qint64 nMTime = sMTime.toLongLong();
-#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
-        QDateTime dateTime = QDateTime::fromSecsSinceEpoch(nMTime);
-#else
-        QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(nMTime * 1000);
-#endif
+        QDateTime dateTime = XBinary::valueToTime((qint64)nMTime, XBinary::DT_TYPE_UNIXTIME);
         result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
     }
 
