@@ -29,34 +29,44 @@ class XISO9660 : public XArchive {
 #pragma pack(push)
 #pragma pack(1)
     struct ISO9660_PVDESC {
-        quint8 nDescType;           // Descriptor type: 1 for PVD
-        char szStandard[5];         // Standard identifier: "CD001"
-        quint8 nDescVersion;        // Descriptor version
-        quint8 nUnused1;            // Unused
-        char szSystemId[32];        // System identifier
-        char szVolumeId[32];        // Volume identifier
-        quint8 nUnused2[8];         // Unused
-        quint32 nLogicalBlockSize;  // Logical block size (little/big endian)
-        quint32 nBigEndianBlockSize;
-        quint32 nPathTableSize;  // Path table size (little/big endian)
-        quint32 nBigEndianPathTableSize;
-        quint32 nRootDirExtent;  // Logical block number of root directory
-        quint32 nBigEndianRootDirExtent;
-        char szVolSetId[128];         // Volume set identifier
-        char szPublisherId[128];      // Publisher identifier
-        char szDataPreparerId[128];   // Data preparer identifier
-        char szApplicationId[128];    // Application identifier
-        char szCopyrightFile[37];     // Copyright file identifier
-        char szAbstractFile[36];      // Abstract file identifier
-        char szBiblioFile[37];        // Bibliographic file identifier
-        char szCreationTime[17];      // Creation time
-        char szModificationTime[17];  // Modification time
-        char szExpirationTime[17];    // Expiration time
-        char szEffectiveTime[17];     // Effective time
-        quint8 nFileStructVersion;    // File structure version
-        quint8 nUnused3;              // Unused
-        quint8 nAppData[512];         // Application-specific data
-        quint8 nUnused4[653];         // Unused
+        quint8 nDescType;             // [0]   Descriptor type: 1 for PVD
+        char szStandard[5];           // [1]   Standard identifier: "CD001"
+        quint8 nDescVersion;          // [6]   Descriptor version
+        quint8 nUnused1;              // [7]   Unused
+        char szSystemId[32];          // [8]   System identifier
+        char szVolumeId[32];          // [40]  Volume identifier
+        quint8 nUnused2[8];           // [72]  Unused
+        quint32 nVolumeSpaceSizeLE;   // [80]  Total number of logical blocks (LE)
+        quint32 nVolumeSpaceSizeBE;   // [84]  Total number of logical blocks (BE)
+        quint8 nUnused3[32];          // [88]  Unused
+        quint16 nVolumeSetSizeLE;     // [120] Volume set size (LE)
+        quint16 nVolumeSetSizeBE;     // [122] Volume set size (BE)
+        quint16 nVolumeSeqNumLE;      // [124] Volume sequence number (LE)
+        quint16 nVolumeSeqNumBE;      // [126] Volume sequence number (BE)
+        quint16 nLogicalBlockSizeLE;  // [128] Logical block size in bytes (LE)
+        quint16 nLogicalBlockSizeBE;  // [130] Logical block size in bytes (BE)
+        quint32 nPathTableSizeLE;     // [132] Path table size in bytes (LE)
+        quint32 nPathTableSizeBE;     // [136] Path table size in bytes (BE)
+        quint32 nLPathTableLoc;       // [140] Location of Type-L Path Table
+        quint32 nOptLPathTableLoc;    // [144] Location of optional Type-L Path Table
+        quint32 nMPathTableLoc;       // [148] Location of Type-M Path Table
+        quint32 nOptMPathTableLoc;    // [152] Location of optional Type-M Path Table
+        quint8 nRootDirRecord[34];    // [156] Directory Record for Root Directory
+        char szVolSetId[128];         // [190] Volume set identifier
+        char szPublisherId[128];      // [318] Publisher identifier
+        char szDataPreparerId[128];   // [446] Data preparer identifier
+        char szApplicationId[128];    // [574] Application identifier
+        char szCopyrightFile[37];     // [702] Copyright file identifier
+        char szAbstractFile[36];      // [739] Abstract file identifier
+        char szBiblioFile[37];        // [775] Bibliographic file identifier
+        char szCreationTime[17];      // [812] Creation date/time
+        char szModificationTime[17];  // [829] Modification date/time
+        char szExpirationTime[17];    // [846] Expiration date/time
+        char szEffectiveTime[17];     // [863] Effective date/time
+        quint8 nFileStructVersion;    // [880] File structure version
+        quint8 nUnused4;              // [881] Unused
+        quint8 nAppData[512];         // [882] Application-specific data
+        quint8 nUnused5[654];         // [1394] Reserved
     };
 
     struct ISO9660_DIR_RECORD {

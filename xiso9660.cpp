@@ -27,19 +27,22 @@ XBinary::XCONVERT _TABLE_XISO9660_STRUCTID[] = {{XISO9660::STRUCTID_UNKNOWN, "Un
 
 XISO9660::XISO9660(QIODevice *pDevice) : XArchive(pDevice)
 {
-    m_sSystemIdentifier = getSystemIdentifier();
-    m_sVolumeIdentifier = getVolumeIdentifier();
-    m_sVolumeSetIdentifier = getVolumeSetIdentifier();
-    m_sPublisherIdentifier = getPublisherIdentifier();
-    m_sDataPreparerIdentifier = getDataPreparerIdentifier();
-    m_sApplicationIdentifier = getApplicationIdentifier();
-    m_sCopyrightFileIdentifier = getCopyrightFileIdentifier();
-    m_sAbstractFileIdentifier = getAbstractFileIdentifier();
-    m_sBibliographicFileIdentifier = getBibliographicFileIdentifier();
-    m_sCreationDateTime = getCreationDateTime();
-    m_sModificationDateTime = getModificationDateTime();
-    m_sExpirationDateTime = getExpirationDateTime();
-    m_sEffectiveDateTime = getEffectiveDateTime();
+    if (isValid()) {
+        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
+        m_sSystemIdentifier            = QString::fromLatin1(read_array(nPVDOffset + 8,   32)).trimmed();
+        m_sVolumeIdentifier            = QString::fromLatin1(read_array(nPVDOffset + 40,  32)).trimmed();
+        m_sVolumeSetIdentifier         = QString::fromLatin1(read_array(nPVDOffset + 190, 128)).trimmed();
+        m_sPublisherIdentifier         = QString::fromLatin1(read_array(nPVDOffset + 318, 128)).trimmed();
+        m_sDataPreparerIdentifier      = QString::fromLatin1(read_array(nPVDOffset + 446, 128)).trimmed();
+        m_sApplicationIdentifier       = QString::fromLatin1(read_array(nPVDOffset + 574, 128)).trimmed();
+        m_sCopyrightFileIdentifier     = QString::fromLatin1(read_array(nPVDOffset + 702, 37)).trimmed();
+        m_sAbstractFileIdentifier      = QString::fromLatin1(read_array(nPVDOffset + 739, 36)).trimmed();
+        m_sBibliographicFileIdentifier = QString::fromLatin1(read_array(nPVDOffset + 775, 37)).trimmed();
+        m_sCreationDateTime            = QString::fromLatin1(read_array(nPVDOffset + 812, 17)).trimmed();
+        m_sModificationDateTime        = QString::fromLatin1(read_array(nPVDOffset + 829, 17)).trimmed();
+        m_sExpirationDateTime          = QString::fromLatin1(read_array(nPVDOffset + 846, 17)).trimmed();
+        m_sEffectiveDateTime           = QString::fromLatin1(read_array(nPVDOffset + 863, 17)).trimmed();
+    }
 }
 
 XISO9660::~XISO9660()
@@ -215,13 +218,13 @@ QList<XBinary::DATA_HEADER> XISO9660::getDataHeaders(const DATA_HEADERS_OPTIONS 
                 dataHeader.listRecords.append(getDataRecord(446, 128, "Data Preparer Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
                 dataHeader.listRecords.append(getDataRecord(574, 128, "Application Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
                 dataHeader.listRecords.append(getDataRecord(702, 37, "Copyright File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(739, 37, "Abstract File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(776, 37, "Bibliographic File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(813, 17, "Creation Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(830, 17, "Modification Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(847, 17, "Expiration Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(864, 17, "Effective Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(881, 1, "File Structure Version", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(739, 36, "Abstract File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(775, 37, "Bibliographic File Identifier", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(812, 17, "Creation Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(829, 17, "Modification Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(846, 17, "Expiration Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(863, 17, "Effective Date/Time", VT_CHAR_ARRAY, DRF_UNKNOWN, ENDIAN_LITTLE));
+                dataHeader.listRecords.append(getDataRecord(880, 1, "File Structure Version", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
 
                 listResult.append(dataHeader);
 
@@ -619,181 +622,74 @@ bool XISO9660::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 QString XISO9660::getSystemIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baSystemId = read_array(nPVDOffset + 8, 32);
-        sResult = QString::fromLatin1(baSystemId).trimmed();
-    }
-
-    return sResult;
+    return m_sSystemIdentifier;
 }
 
 QString XISO9660::getVolumeIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baVolumeId = read_array(nPVDOffset + 40, 32);
-        sResult = QString::fromLatin1(baVolumeId).trimmed();
-    }
-
-    return sResult;
+    return m_sVolumeIdentifier;
 }
 
 QString XISO9660::getVolumeSetIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baVolSetId = read_array(nPVDOffset + 190, 128);
-        sResult = QString::fromLatin1(baVolSetId).trimmed();
-    }
-
-    return sResult;
+    return m_sVolumeSetIdentifier;
 }
 
 QString XISO9660::getPublisherIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baPublisherId = read_array(nPVDOffset + 318, 128);
-        sResult = QString::fromLatin1(baPublisherId).trimmed();
-    }
-
-    return sResult;
+    return m_sPublisherIdentifier;
 }
 
 QString XISO9660::getDataPreparerIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baDataPreparerId = read_array(nPVDOffset + 446, 128);
-        sResult = QString::fromLatin1(baDataPreparerId).trimmed();
-    }
-
-    return sResult;
+    return m_sDataPreparerIdentifier;
 }
 
 QString XISO9660::getApplicationIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baApplicationId = read_array(nPVDOffset + 574, 128);
-        sResult = QString::fromLatin1(baApplicationId).trimmed();
-    }
-
-    return sResult;
+    return m_sApplicationIdentifier;
 }
 
 QString XISO9660::getCopyrightFileIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baCopyrightFile = read_array(nPVDOffset + 702, 37);
-        sResult = QString::fromLatin1(baCopyrightFile).trimmed();
-    }
-
-    return sResult;
+    return m_sCopyrightFileIdentifier;
 }
 
 QString XISO9660::getAbstractFileIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baAbstractFile = read_array(nPVDOffset + 739, 37);
-        sResult = QString::fromLatin1(baAbstractFile).trimmed();
-    }
-
-    return sResult;
+    return m_sAbstractFileIdentifier;
 }
 
 QString XISO9660::getBibliographicFileIdentifier()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baBiblioFile = read_array(nPVDOffset + 776, 37);
-        sResult = QString::fromLatin1(baBiblioFile).trimmed();
-    }
-
-    return sResult;
+    return m_sBibliographicFileIdentifier;
 }
 
 QString XISO9660::getCreationDateTime()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baCreationTime = read_array(nPVDOffset + 813, 17);
-        sResult = QString::fromLatin1(baCreationTime).trimmed();
-    }
-
-    return sResult;
+    return m_sCreationDateTime;
 }
 
 QString XISO9660::getModificationDateTime()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baModificationTime = read_array(nPVDOffset + 830, 17);
-        sResult = QString::fromLatin1(baModificationTime).trimmed();
-    }
-
-    return sResult;
+    return m_sModificationDateTime;
 }
 
 QString XISO9660::getExpirationDateTime()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baExpirationTime = read_array(nPVDOffset + 847, 17);
-        sResult = QString::fromLatin1(baExpirationTime).trimmed();
-    }
-
-    return sResult;
+    return m_sExpirationDateTime;
 }
 
 QString XISO9660::getEffectiveDateTime()
 {
-    QString sResult;
-
-    if (isValid()) {
-        qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        QByteArray baEffectiveTime = read_array(nPVDOffset + 864, 17);
-        sResult = QString::fromLatin1(baEffectiveTime).trimmed();
-    }
-
-    return sResult;
+    return m_sEffectiveDateTime;
 }
 
 QList<QString> XISO9660::getSearchSignatures()
 {
-    QList<QString> listResult;
-
-    listResult.append("4344303031");
-    listResult.append("CD001");
-
-    return listResult;
+    // ISO 9660 has no fixed magic bytes at offset 0; the "CD001" signature
+    // appears at offset 0x8001 (sector 16), so no start-of-file search is possible.
+    return QList<QString>();
 }
 
 XBinary *XISO9660::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
