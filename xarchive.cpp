@@ -51,30 +51,6 @@ XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice)
 {
 }
 
-bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
-{
-    bool bResult = false;
-
-    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        XBinary::ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
-
-        if (archiveRecord.mapProperties.value(XBinary::FPART_PROP_ISFOLDER).toBool()) {
-            return true;  // Directory
-        }
-        if (archiveRecord.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() == 0) {
-            return true;  // Empty file
-        }
-
-        XDecompress xDecompress;
-        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
-        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
-
-        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
-    }
-
-    return bResult;
-}
-
 quint64 XArchive::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     return getNumberOfArchiveRecords(pPdStruct);
@@ -699,6 +675,8 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
 
     XBinary::createDirectory(fi.absolutePath());
 
+    QString sCanonicalRoot = QDir::cleanPath(QDir(sResultPathName).absolutePath());
+
     qint32 nNumberOfArchives = pListArchive->count();
 
     for (qint32 i = 0; (i < nNumberOfArchives) && isPdStructNotCanceled(pPdStruct); i++) {
@@ -713,7 +691,12 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
                 sFileName = sFileName.mid(sRecordFileName.size(), -1);
             }
 
-            QString sResultFileName = sResultPathName + QDir::separator() + sFileName;
+            QString sResultFileName = QDir::cleanPath(sResultPathName + QDir::separator() + sFileName);
+
+            if (!sResultFileName.startsWith(sCanonicalRoot + "/")) {
+                bResult = false;
+                continue;
+            }
 
             QFileInfo fi(sResultFileName);
             XBinary::createDirectory(fi.absolutePath());
@@ -976,15 +959,15 @@ bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUC
 
 QList<QString> XArchive::getSearchSignatures()
 {
-    QList<QString> listResult;
-
-    return listResult;
+    return XBinary::getSearchSignatures();
 }
 
 XBinary *XArchive::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
 {
-    Q_UNUSED(bIsImage)
-    Q_UNUSED(nModuleAddress)
+    return XBinary::createInstance(pDevice, bIsImage, nModuleAddress);
+}
 
-    return new XArchive(pDevice);
+bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    return XBinary::unpackCurrent(pState, pDevice, pPdStruct);
 }

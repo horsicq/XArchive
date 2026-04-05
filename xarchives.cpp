@@ -317,9 +317,16 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
 
     qint32 nNumberOfRecords = listRecords.count();
 
+    QString sCanonicalRoot = QDir::cleanPath(QDir(sResultFileFolder).absolutePath());
+
     for (qint32 i = 0; (i < nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         XArchive::RECORD record = listRecords.at(i);
-        QString sResultFileName = sResultFileFolder + QDir::separator() + record.spInfo.sRecordName;
+        QString sResultFileName = QDir::cleanPath(sResultFileFolder + QDir::separator() + record.spInfo.sRecordName);
+
+        if (!sResultFileName.startsWith(sCanonicalRoot + "/")) {
+            bResult = false;
+            continue;
+        }
 
         bResult = decompressToFile(pDevice, &record, sResultFileName, pPdStruct);
 
