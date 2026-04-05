@@ -969,5 +969,24 @@ XBinary *XArchive::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
 
 bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    return XBinary::unpackCurrent(pState, pDevice, pPdStruct);
+    bool bResult = false;
+
+    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+        XBinary::ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
+
+        if (archiveRecord.mapProperties.value(XBinary::FPART_PROP_ISFOLDER).toBool()) {
+            return true;  // Directory
+        }
+        if (archiveRecord.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() == 0) {
+            return true;  // Empty file
+        }
+
+        XDecompress xDecompress;
+        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
+        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
+
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
+    }
+
+    return bResult;
 }
