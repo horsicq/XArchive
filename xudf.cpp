@@ -29,8 +29,10 @@ XBinary::XCONVERT _TABLE_XUDF_STRUCTID[] = {{XUDF::STRUCTID_UNKNOWN, "Unknown", 
 
 XUDF::XUDF(QIODevice *pDevice) : XArchive(pDevice)
 {
-    m_sVolumeIdentifier = getVolumeIdentifier();
-    m_sVolumeSetIdentifier = getVolumeSetIdentifier();
+    if (isValid()) {
+        m_sVolumeIdentifier = getVolumeIdentifier();
+        m_sVolumeSetIdentifier = getVolumeSetIdentifier();
+    }
 }
 
 XUDF::~XUDF()
@@ -180,29 +182,51 @@ QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     Q_UNUSED(nLimit)
 
     QList<FPART> listResult;
+    qint64 nTotalSize = getSize();
+    qint64 nFormatSize = getFileFormatSize(pPdStruct);
 
     if (nFileParts & FILEPART_HEADER) {
         qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
 
-        FPART record = {};
-        record.filePart = FILEPART_HEADER;
-        record.nFileOffset = nAnchorOffset;
-        record.nFileSize = 512;
-        record.nVirtualAddress = -1;
-        record.sName = tr("Anchor Volume Descriptor");
+        if (nAnchorOffset != -1) {
+            FPART record = {};
+            record.filePart = FILEPART_HEADER;
+            record.nFileOffset = nAnchorOffset;
+            record.nFileSize = 512;
+            record.nVirtualAddress = -1;
+            record.sName = tr("Anchor Volume Descriptor");
 
-        listResult.append(record);
+            listResult.append(record);
+        }
+    }
+
+    if (nFileParts & FILEPART_STREAM) {
+        qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+        qint64 nStreamOffset = 0;
+        qint64 nStreamSize = nTotalSize;
+
+        if (nAnchorOffset != -1) {
+            nStreamSize = nAnchorOffset;  // Data before anchor
+        }
+
+        if (nStreamSize > 0) {
+            FPART record = {};
+            record.filePart = FILEPART_STREAM;
+            record.nFileOffset = nStreamOffset;
+            record.nFileSize = nStreamSize;
+            record.nVirtualAddress = -1;
+            record.sName = tr("Data");
+
+            listResult.append(record);
+        }
     }
 
     if (nFileParts & FILEPART_OVERLAY) {
-        qint64 nDataEnd = getSize();
-        qint64 nFormatSize = getFileFormatSize(pPdStruct);
-
-        if (nFormatSize < nDataEnd) {
+        if (nFormatSize > 0 && nFormatSize < nTotalSize) {
             FPART record = {};
             record.filePart = FILEPART_OVERLAY;
             record.nFileOffset = nFormatSize;
-            record.nFileSize = nDataEnd - nFormatSize;
+            record.nFileSize = nTotalSize - nFormatSize;
             record.nVirtualAddress = -1;
             record.sName = tr("Overlay");
 
@@ -425,14 +449,267 @@ bool XUDF::_isValidTag(qint64 nOffset, PDSTRUCT *pPdStruct)
 
 QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nBlockSize)
-    Q_UNUSED(pPdStruct)
-
     QList<ARCHIVERECORD> listResult;
 
-    // Placeholder implementation - full UDF parsing is complex
-    // This would need to parse the File Set Descriptor and File Entry structures
-    // to enumerate all files in the file system
+    qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+    if (nAnchorOffset == -1) {
+        return listResult;
+    }
+
+    UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER anchor = _readAnchorVolumeDescriptor(nAnchorOffset);
+    qint64 nVDSOffset = (qint64)anchor.mainVolumeDescriptorSequenceExtent.nLocation * nBlockSize;
+    qint64 nVDSLength = (qint64)anchor.mainVolumeDescriptorSequenceExtent.nLength;
+
+    if (nVDSOffset <= 0 || nVDSLength <= 0 || nVDSOffset >= getSize()) {
+        return listResult;
+    }
+
+    // Scan Volume Descriptor Sequence for Logical Volume Descriptor (tag id 6)
+    qint64 nFSDLocation = -1;
+    qint64 nCurrentVDSOffset = nVDSOffset;
+    qint64 nVDSEnd = nVDSOffset + nVDSLength;
+
+    while (nCurrentVDSOffset + (qint64)sizeof(UDF_TAG) <= nVDSEnd && isPdStructNotCanceled(pPdStruct)) {
+        UDF_TAG tag = _readTag(nCurrentVDSOffset);
+
+        if (tag.nTagIdentifier == TAG_TERMINATING_DESCRIPTOR) {
+            break;
+        }
+
+        if (tag.nTagIdentifier == TAG_LOGICAL_VOLUME_DESCRIPTOR) {
+            // Logical Volume Descriptor: File Set Descriptor location is at offset
+            // sizeof(UDF_TAG) + 440 bytes (integrity sequence extent) within the
+            // LogicalVolumeContentsUse field.
+            // Layout: tag(16) + VolumeDescriptorSequenceNumber(4) + DescriptorCharacterSet(64)
+            // + LogicalVolumeIdentifier(128, dstring) + LogicalBlockSize(4)
+            // + DomainIdentifier(32) + LogicalVolumeContentsUse(16) <-- FSD extent here
+            // + MapTableLength(4) + NumberOfPartitionMaps(4)
+            // LogicalVolumeContentsUse starts at offset 16+4+64+128+4+32 = 248
+            quint32 nFSDLoc = read_uint32(nCurrentVDSOffset + 248);
+            // quint32 nFSDLen = read_uint32(nCurrentVDSOffset + 252);  // extent length
+            if (nFSDLoc > 0) {
+                nFSDLocation = (qint64)nFSDLoc * nBlockSize;
+            }
+        }
+
+        nCurrentVDSOffset += nBlockSize;
+    }
+
+    if (nFSDLocation <= 0 || nFSDLocation >= getSize()) {
+        return listResult;
+    }
+
+    // Read File Set Descriptor (tag id 256)
+    UDF_TAG fsdTag = _readTag(nFSDLocation);
+    if (fsdTag.nTagIdentifier != TAG_FILE_SET_DESCRIPTOR) {
+        return listResult;
+    }
+
+    // File Set Descriptor layout:
+    // tag(16) + RecordingDateAndTime(12) + InterchangeLevel(2) + MaxInterchangeLevel(2)
+    // + CharacterSetList(4) + MaxCharacterSetList(4) + FileSetNumber(4) + FileSetDescriptorNumber(4)
+    // + LogicalVolumeIdentifierCharacterSet(64) + LogicalVolumeIdentifier(128)
+    // + FileSetCharacterSet(64) + FileSetIdentifier(32) + ReferencingTimeStamp(12)
+    // + (ICB exts: 16 bytes each) ...
+    // Root Directory ICB is at offset 16+12+2+2+4+4+4+4+64+128+64+32+12 = 352
+    // It is a long_ad: ExtentLength(4) + ExtentLocation: LogicalBlockNumber(4) + PartitionReferenceNumber(2) + ImplementationUse(6) = 16 bytes total
+    quint32 nRootICBLocation = read_uint32(nFSDLocation + 352 + 4);  // LogicalBlockNumber of root ICB
+    quint16 nRootPartRef    = read_uint16(nFSDLocation + 352 + 4 + 4);  // PartitionReferenceNumber
+    Q_UNUSED(nRootPartRef)
+
+    if (nRootICBLocation == 0) {
+        return listResult;
+    }
+
+    qint64 nRootFileEntryOffset = (qint64)nRootICBLocation * nBlockSize;
+    if (nRootFileEntryOffset >= getSize()) {
+        return listResult;
+    }
+
+    // BFS traversal of directory tree
+    struct DirEntry {
+        qint64 nFileEntryOffset;
+        QString sPath;
+    };
+
+    QList<DirEntry> listQueue;
+    QSet<qint64> setVisited;
+
+    DirEntry rootEntry;
+    rootEntry.nFileEntryOffset = nRootFileEntryOffset;
+    rootEntry.sPath = QString();
+    listQueue.append(rootEntry);
+    setVisited.insert(nRootFileEntryOffset);
+
+    while (!listQueue.isEmpty() && isPdStructNotCanceled(pPdStruct)) {
+        DirEntry dirInfo = listQueue.takeFirst();
+
+        UDF_TAG feTag = _readTag(dirInfo.nFileEntryOffset);
+        if (feTag.nTagIdentifier != TAG_FILE_ENTRY && feTag.nTagIdentifier != TAG_EXTENDED_FILE_ENTRY) {
+            continue;
+        }
+
+        // File Entry layout:
+        // tag(16) + ICBTag(20) + UID(4) + GID(4) + Permissions(4) + FileLinkCount(2)
+        // + RecordFormat(1) + RecordDisplayAttributes(1) + RecordLength(4)
+        // + InformationLength(8) + LogicalBlocksRecorded(8)
+        // + AccessTime(12) + ModificationTime(12) + AttributeTime(12) + Checkpoint(4)
+        // + ExtendedAttributeICB(16) + ImplementationIdentifier(32) + UniqueID(8)
+        // + LengthOfExtendedAttributes(4) + LengthOfAllocationDescriptors(4)
+        // = 16+20+4+4+4+2+1+1+4+8+8+12+12+12+4+16+32+8+4+4 = 176
+        quint32 nLenExtAttrs = read_uint32(dirInfo.nFileEntryOffset + 168);
+        quint32 nLenAllocDescs = read_uint32(dirInfo.nFileEntryOffset + 172);
+        // ICBTag file type is at offset 16+12 = 28 (within ICBTag at offset 16)
+        quint8 nICBFileType = read_uint8(dirInfo.nFileEntryOffset + 28);
+        // ICBTag flags (allocation type) at offset 16+18 = 34
+        quint16 nICBFlags = read_uint16(dirInfo.nFileEntryOffset + 34);
+        quint8 nAllocType = (quint8)(nICBFlags & 0x07);
+
+        bool bIsDirectory = (nICBFileType == 4);
+
+        qint64 nAllocDescsOffset = dirInfo.nFileEntryOffset + 176 + (qint64)nLenExtAttrs;
+
+        if (!bIsDirectory) {
+            // Regular file - read allocation descriptors to get data location
+            quint64 nInfoLength = read_uint64(dirInfo.nFileEntryOffset + 56);
+
+            ARCHIVERECORD record = {};
+            record.mapProperties[FPART_PROP_ORIGINALNAME] = dirInfo.sPath;
+            record.mapProperties[FPART_PROP_UNCOMPRESSEDSIZE] = (qint64)nInfoLength;
+            record.mapProperties[FPART_PROP_COMPRESSEDSIZE] = (qint64)nInfoLength;
+            record.mapProperties[FPART_PROP_HANDLEMETHOD] = HANDLE_METHOD_STORE;
+            record.mapProperties[FPART_PROP_ISFOLDER] = false;
+
+            if (nAllocType == 0 && nLenAllocDescs >= 8) {
+                // Short allocation descriptor: ExtentLength(4) + ExtentPosition(4)
+                quint32 nExtLength = read_uint32(nAllocDescsOffset) & 0x3FFFFFFF;
+                quint32 nExtPos    = read_uint32(nAllocDescsOffset + 4);
+                record.nStreamOffset = (qint64)nExtPos * nBlockSize;
+                record.nStreamSize   = (qint64)nExtLength;
+            } else if (nAllocType == 1 && nLenAllocDescs >= 16) {
+                // Long allocation descriptor: ExtentLength(4) + ExtentLocation: LogicalBlockNum(4) + PartRef(2) + ImplUse(6)
+                quint32 nExtLength = read_uint32(nAllocDescsOffset) & 0x3FFFFFFF;
+                quint32 nExtPos    = read_uint32(nAllocDescsOffset + 4);
+                record.nStreamOffset = (qint64)nExtPos * nBlockSize;
+                record.nStreamSize   = (qint64)nExtLength;
+            } else if (nAllocType == 3 && nLenAllocDescs > 0) {
+                // Data stored directly in allocation descriptors (inline)
+                record.nStreamOffset = nAllocDescsOffset;
+                record.nStreamSize   = (qint64)nLenAllocDescs;
+            }
+
+            listResult.append(record);
+        } else {
+            // Directory - add folder record and enqueue children
+            if (!dirInfo.sPath.isEmpty()) {
+                ARCHIVERECORD record = {};
+                record.mapProperties[FPART_PROP_ORIGINALNAME] = dirInfo.sPath;
+                record.mapProperties[FPART_PROP_UNCOMPRESSEDSIZE] = (qint64)0;
+                record.mapProperties[FPART_PROP_COMPRESSEDSIZE] = (qint64)0;
+                record.mapProperties[FPART_PROP_HANDLEMETHOD] = HANDLE_METHOD_STORE;
+                record.mapProperties[FPART_PROP_ISFOLDER] = true;
+                listResult.append(record);
+            }
+
+            // Read directory data to find File Identifier Descriptors
+            qint64 nDirDataOffset = -1;
+            qint64 nDirDataSize = 0;
+
+            quint64 nInfoLength = read_uint64(dirInfo.nFileEntryOffset + 56);
+
+            if (nAllocType == 0 && nLenAllocDescs >= 8) {
+                quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
+                nDirDataOffset = (qint64)nExtPos * nBlockSize;
+                nDirDataSize   = (qint64)nInfoLength;
+            } else if (nAllocType == 1 && nLenAllocDescs >= 16) {
+                quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
+                nDirDataOffset = (qint64)nExtPos * nBlockSize;
+                nDirDataSize   = (qint64)nInfoLength;
+            }
+
+            if (nDirDataOffset <= 0 || nDirDataSize <= 0 || nDirDataOffset >= getSize()) {
+                continue;
+            }
+
+            // Parse File Identifier Descriptors (tag id 257)
+            qint64 nFIDOffset = nDirDataOffset;
+            qint64 nFIDEnd = nDirDataOffset + nDirDataSize;
+
+            while (nFIDOffset < nFIDEnd && isPdStructNotCanceled(pPdStruct)) {
+                if (nFIDOffset + (qint64)sizeof(UDF_TAG) > getSize()) {
+                    break;
+                }
+
+                UDF_TAG fidTag = _readTag(nFIDOffset);
+
+                if (fidTag.nTagIdentifier != TAG_FILE_IDENTIFIER_DESCRIPTOR) {
+                    break;
+                }
+
+                // File Identifier Descriptor layout:
+                // tag(16) + FileVersionNumber(2) + FileCharacteristics(1) + LengthOfFileIdentifier(1)
+                // + ICB(16) + LengthOfImplementationUse(2) [+ ImplementationUse(var)] [+ FileIdentifier(var)] [+ padding]
+                quint8 nFileCharacteristics = read_uint8(nFIDOffset + 18);
+                quint8 nLenFileId = read_uint8(nFIDOffset + 19);
+                quint16 nLenImplUse = read_uint16(nFIDOffset + 36);
+
+                // ICB (long_ad) of child: ExtentLength(4) + ExtentLocation: LogicalBlockNum(4) + PartRef(2) + ImplUse(6)
+                quint32 nChildICBLocation = read_uint32(nFIDOffset + 20 + 4);
+
+                bool bIsParent = (nFileCharacteristics & 0x08) != 0;  // Parent directory
+                bool bChildIsDir = (nFileCharacteristics & 0x02) != 0;
+                Q_UNUSED(bChildIsDir)
+
+                // Compute name
+                QString sChildName;
+                if (!bIsParent && nLenFileId > 0) {
+                    qint64 nNameOffset = nFIDOffset + 38 + (qint64)nLenImplUse;
+                    if (nNameOffset + nLenFileId <= getSize()) {
+                        QByteArray baName = read_array(nNameOffset, nLenFileId);
+                        // OSTA CS0 encoded: if first byte is 8, rest is ASCII; if 16, UTF-16BE
+                        if (baName.size() > 0) {
+                            quint8 nEncType = (quint8)baName.at(0);
+                            if (nEncType == 16 && baName.size() >= 3) {
+                                sChildName = QString::fromUtf16(reinterpret_cast<const char16_t *>(baName.constData() + 1), (baName.size() - 1) / 2);
+                            } else if (nEncType == 8 && baName.size() >= 2) {
+                                sChildName = QString::fromLatin1(baName.constData() + 1, baName.size() - 1);
+                            }
+                        }
+                    }
+                }
+
+                // Total FID size (must be 4-byte aligned)
+                qint32 nFIDSize = 38 + (qint32)nLenImplUse + (qint32)nLenFileId;
+                qint32 nFIDPadded = (nFIDSize + 3) & ~3;
+
+                if (nFIDPadded <= 0) {
+                    break;
+                }
+
+                if (!bIsParent && !sChildName.isEmpty() && nChildICBLocation > 0) {
+                    QString sChildPath;
+                    if (dirInfo.sPath.isEmpty()) {
+                        sChildPath = sChildName;
+                    } else {
+                        sChildPath = dirInfo.sPath + "/" + sChildName;
+                    }
+
+                    qint64 nChildFileEntryOffset = (qint64)nChildICBLocation * nBlockSize;
+
+                    if (nChildFileEntryOffset > 0 && nChildFileEntryOffset < getSize() && !setVisited.contains(nChildFileEntryOffset)) {
+                        setVisited.insert(nChildFileEntryOffset);
+
+                        DirEntry childEntry;
+                        childEntry.nFileEntryOffset = nChildFileEntryOffset;
+                        childEntry.sPath = sChildPath;
+                        listQueue.append(childEntry);
+                    }
+                }
+
+                nFIDOffset += nFIDPadded;
+            }
+        }
+    }
 
     return listResult;
 }

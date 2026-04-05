@@ -419,6 +419,11 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ZIP);
     result.insert(XBinary::FT_JAR);
     result.insert(XBinary::FT_APK);
+    result.insert(XBinary::FT_IPA);
+    result.insert(XBinary::FT_APKS);
+    result.insert(XBinary::FT_7Z);
+    result.insert(XBinary::FT_CAB);
+    result.insert(XBinary::FT_RAR);
     result.insert(XBinary::FT_MACHOFAT);
     result.insert(XBinary::FT_AR);
     result.insert(XBinary::FT_DEB);
@@ -441,7 +446,14 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ACE);
     result.insert(XBinary::FT_ARC);
     result.insert(XBinary::FT_FREEARC);
+    result.insert(XBinary::FT_CFBF);
     result.insert(XBinary::FT_SZDD);
+    result.insert(XBinary::FT_LZIP);
+    result.insert(XBinary::FT_XZ);
+    result.insert(XBinary::FT_CPIO);
+    result.insert(XBinary::FT_SQUASHFS);
+    result.insert(XBinary::FT_ISO9660);
+    result.insert(XBinary::FT_MINIDUMP);
     result.insert(XBinary::FT_DOS4G);
     result.insert(XBinary::FT_DOS16M);
 
