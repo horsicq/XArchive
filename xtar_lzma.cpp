@@ -85,3 +85,20 @@ QIODevice *XTAR_LZMA::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_LZMA, 0, -1, pPdStruct);
 }
+
+QList<QString> XTAR_LZMA::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("5D000000");
+
+    return listResult;
+}
+
+XBinary *XTAR_LZMA::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XTAR_LZMA(pDevice);
+}

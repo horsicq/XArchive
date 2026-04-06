@@ -85,3 +85,20 @@ QIODevice *XTAR_ZSTD::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_ZSTD, 0, -1, pPdStruct);
 }
+
+QList<QString> XTAR_ZSTD::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("28B52FFD");
+
+    return listResult;
+}
+
+XBinary *XTAR_ZSTD::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XTAR_ZSTD(pDevice);
+}

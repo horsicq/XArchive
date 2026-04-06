@@ -87,3 +87,20 @@ QIODevice *XTAR_XZ::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_XZ, 0, -1, pPdStruct);
 }
+
+QList<QString> XTAR_XZ::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("FD377A585A00");
+
+    return listResult;
+}
+
+XBinary *XTAR_XZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XTAR_XZ(pDevice);
+}

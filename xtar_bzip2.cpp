@@ -82,3 +82,20 @@ QIODevice *XTAR_BZIP2::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_BZIP2, 0, -1, pPdStruct);
 }
+
+QList<QString> XTAR_BZIP2::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'BZh'");
+
+    return listResult;
+}
+
+XBinary *XTAR_BZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XTAR_BZIP2(pDevice);
+}

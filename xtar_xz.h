@@ -27,6 +27,8 @@ class XTAR_XZ : public XTARCOMPRESSED {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     explicit XTAR_XZ(QIODevice *pDevice = nullptr);
     virtual ~XTAR_XZ();
 

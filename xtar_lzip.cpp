@@ -87,3 +87,20 @@ QIODevice *XTAR_LZIP::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_LZIP, 0, -1, pPdStruct);
 }
+
+QList<QString> XTAR_LZIP::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("'LZIP'");
+
+    return listResult;
+}
+
+XBinary *XTAR_LZIP::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XTAR_LZIP(pDevice);
+}

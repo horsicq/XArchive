@@ -86,3 +86,20 @@ QIODevice *XTAR_LZOP::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_LZOP, 0, -1, pPdStruct);
 }
+
+QList<QString> XTAR_LZOP::getSearchSignatures()
+{
+    QList<QString> listResult;
+
+    listResult.append("894C5A");
+
+    return listResult;
+}
+
+XBinary *XTAR_LZOP::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XTAR_LZOP(pDevice);
+}

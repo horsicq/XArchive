@@ -27,6 +27,8 @@ class XTAR_BZIP2 : public XTARCOMPRESSED {
     Q_OBJECT
 
 public:
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     explicit XTAR_BZIP2(QIODevice *pDevice = nullptr);
     virtual ~XTAR_BZIP2();
 
