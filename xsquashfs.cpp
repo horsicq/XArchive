@@ -20,7 +20,7 @@
  */
 #include "xsquashfs.h"
 
-XBinary::XCONVERT _TABLE_XSQUASHFS_STRUCTID[] = {{XSquashfs::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+static XBinary::XCONVERT _TABLE_XSQUASHFS_STRUCTID[] = {{XSquashfs::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                  {XSquashfs::STRUCTID_HEADER, "HEADER", QString("Header")},
                                                  {XSquashfs::STRUCTID_SUPERBLOCK, "SUPERBLOCK", QString("Superblock")}};
 
@@ -179,8 +179,7 @@ QList<QString> XSquashfs::getSearchSignatures()
 {
     QList<QString> listResult;
 
-    listResult.append("73717368");
-    listResult.append("sqsh");
+    listResult.append("'sqsh'");
 
     return listResult;
 }

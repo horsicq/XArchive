@@ -21,7 +21,7 @@
 #include "xudf.h"
 #include "Algos/xstoredecoder.h"
 
-XBinary::XCONVERT _TABLE_XUDF_STRUCTID[] = {{XUDF::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+static XBinary::XCONVERT _TABLE_XUDF_STRUCTID[] = {{XUDF::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                             {XUDF::STRUCTID_TAG, "TAG", QString("Tag")},
                                             {XUDF::STRUCTID_ANCHOR_VOLUME_DESCRIPTOR, "ANCHOR_VOLUME_DESCRIPTOR", QString("Anchor Volume Descriptor")},
                                             {XUDF::STRUCTID_PRIMARY_VOLUME_DESCRIPTOR, "PRIMARY_VOLUME_DESCRIPTOR", QString("Primary Volume Descriptor")},
