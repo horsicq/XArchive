@@ -47,6 +47,13 @@ bool XZstd::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
+bool XZstd::isValid(QIODevice *pDevice)
+{
+    XZstd xzstd(pDevice);
+
+    return xzstd.isValid();
+}
+
 XBinary::MODE XZstd::getMode()
 {
     return MODE_DATA;

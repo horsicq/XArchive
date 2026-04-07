@@ -49,6 +49,7 @@ public:
     ~XBZIP2();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
+    static bool isValid(QIODevice *pDevice);
     virtual MODE getMode() override;
     virtual qint32 getType() override;
     virtual QString typeIdToString(qint32 nType) override;

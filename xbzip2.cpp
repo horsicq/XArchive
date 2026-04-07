@@ -48,6 +48,13 @@ bool XBZIP2::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
+bool XBZIP2::isValid(QIODevice *pDevice)
+{
+    XBZIP2 bzip2(pDevice);
+
+    return bzip2.isValid();
+}
+
 XBinary::MODE XBZIP2::getMode()
 {
     return MODE_DATA;
