@@ -36,7 +36,7 @@ bool XTAR_LZIP::isValid(PDSTRUCT *pPdStruct)
     return isValid(getDevice());
 }
 
-bool XTAR_LZIP::isValid(QIODevice *pDevice)
+bool XTAR_LZIP::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     if (!pDevice) {
         return false;
@@ -104,3 +104,4 @@ XBinary *XTAR_LZIP::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XTAR_LZIP(pDevice);
 }
+

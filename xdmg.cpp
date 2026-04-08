@@ -65,7 +65,7 @@ bool XDMG::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XDMG::isValid(QIODevice *pDevice)
+bool XDMG::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XDMG xdmg(pDevice);
     return xdmg.isValid();
@@ -687,3 +687,4 @@ XBinary *XDMG::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XDMG(pDevice);
 }
+

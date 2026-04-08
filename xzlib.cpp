@@ -50,7 +50,7 @@ bool XZlib::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XZlib::isValid(QIODevice *pDevice)
+bool XZlib::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XZlib xzlib(pDevice);
 
@@ -633,3 +633,4 @@ XBinary *XZlib::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XZlib(pDevice);
 }
+

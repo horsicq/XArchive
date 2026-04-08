@@ -95,7 +95,7 @@ public:
     explicit XSevenZip(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getVersion();
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
@@ -273,3 +273,4 @@ struct SEVENZ_UNPACK_CONTEXT {
 };
 
 #endif  // XSEVENZIP_H
+

@@ -48,7 +48,7 @@ bool XXZ::isValid(PDSTRUCT *pPdStruct)
     return true;
 }
 
-bool XXZ::isValid(QIODevice *pDevice)
+bool XXZ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -533,3 +533,4 @@ XBinary *XXZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAdd
 
     return new XXZ(pDevice);
 }
+

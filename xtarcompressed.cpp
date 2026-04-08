@@ -57,7 +57,7 @@ bool XTARCOMPRESSED::isValid(PDSTRUCT *pPdStruct)
     return isValid(getDevice());
 }
 
-bool XTARCOMPRESSED::isValid(QIODevice *pDevice)
+bool XTARCOMPRESSED::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     if (!pDevice) {
         return false;
@@ -297,3 +297,4 @@ QIODevice *XTARCOMPRESSED::createMemoryBuffer(const QByteArray &baData)
 
     return pBuffer;
 }
+

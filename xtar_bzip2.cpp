@@ -34,7 +34,7 @@ bool XTAR_BZIP2::isValid(PDSTRUCT *pPdStruct)
     return isValid(getDevice());
 }
 
-bool XTAR_BZIP2::isValid(QIODevice *pDevice)
+bool XTAR_BZIP2::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     if (!pDevice) {
         return false;
@@ -99,3 +99,4 @@ XBinary *XTAR_BZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMo
 
     return new XTAR_BZIP2(pDevice);
 }
+

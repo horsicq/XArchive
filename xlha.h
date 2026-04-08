@@ -37,7 +37,7 @@ public:
     explicit XLHA(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
@@ -67,3 +67,4 @@ private:
 };
 
 #endif  // XLHA_H
+

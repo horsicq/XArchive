@@ -79,7 +79,7 @@ bool XSEAARC::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XSEAARC::isValid(QIODevice *pDevice)
+bool XSEAARC::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XSEAARC xseaarc(pDevice);
 
@@ -582,3 +582,4 @@ XBinary *XSEAARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModul
 
     return new XSEAARC(pDevice);
 }
+

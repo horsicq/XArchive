@@ -47,7 +47,7 @@ public:
     explicit XMACHOFat(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual ENDIAN getEndian() override;
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
@@ -88,3 +88,4 @@ public:
 };
 
 #endif  // XMACHOFAT_H
+

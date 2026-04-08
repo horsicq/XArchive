@@ -51,7 +51,7 @@ bool X_Ar::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool X_Ar::isValid(QIODevice *pDevice)
+bool X_Ar::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     X_Ar x_ar(pDevice);
 
@@ -872,7 +872,7 @@ QList<QString> X_Ar::getSearchSignatures()
 {
     QList<QString> listResult;
 
-    listResult.append("'!<arch>'0a");
+    listResult.append("'!<arch>\n'");
 
     return listResult;
 }
@@ -884,3 +884,4 @@ XBinary *X_Ar::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new X_Ar(pDevice);
 }
+

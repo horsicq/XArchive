@@ -38,7 +38,7 @@ bool XAPK::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XAPK::isValid(QIODevice *pDevice)
+bool XAPK::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XAPK xapk(pDevice);
 
@@ -286,3 +286,4 @@ qint64 XAPK::findAPKSignBlockOffset(PDSTRUCT *pPdStruct)
 
     return nResult;
 }
+

@@ -34,7 +34,7 @@ bool XTAR_COMPRESS::isValid(PDSTRUCT *pPdStruct)
     return isValid(getDevice());
 }
 
-bool XTAR_COMPRESS::isValid(QIODevice *pDevice)
+bool XTAR_COMPRESS::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     if (!pDevice) {
         return false;
@@ -83,3 +83,4 @@ QIODevice *XTAR_COMPRESS::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_COMPRESS, 0, -1, pPdStruct);
 }
+

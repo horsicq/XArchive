@@ -94,7 +94,7 @@ bool XZip::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XZip::isValid(QIODevice *pDevice)
+bool XZip::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XZip xzip(pDevice);
 
@@ -2324,3 +2324,4 @@ XBinary *XZip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XZip(pDevice);
 }
+

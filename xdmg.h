@@ -117,7 +117,7 @@ public:
     virtual ~XDMG();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getArch() override;
     virtual FT getFileType() override;
     virtual QString getFileFormatExt() override;
@@ -155,3 +155,4 @@ private:
 };
 
 #endif  // XDMG_H
+

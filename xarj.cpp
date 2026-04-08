@@ -58,7 +58,7 @@ bool XARJ::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XARJ::isValid(QIODevice *pDevice)
+bool XARJ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XARJ xarj(pDevice);
 
@@ -667,3 +667,4 @@ XBinary *XARJ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XARJ(pDevice);
 }
+

@@ -41,7 +41,7 @@ public:
     virtual ~XDOS16();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
@@ -62,3 +62,4 @@ public:
 };
 
 #endif  // XDOS16_H
+

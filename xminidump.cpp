@@ -67,7 +67,7 @@ bool XMiniDump::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XMiniDump::isValid(QIODevice *pDevice)
+bool XMiniDump::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XMiniDump xminidump(pDevice);
 
@@ -1062,3 +1062,4 @@ XBinary *XMiniDump::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XMiniDump(pDevice);
 }
+

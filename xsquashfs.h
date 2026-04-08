@@ -74,7 +74,7 @@ public:
     ~XSquashfs();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
     virtual QString getMIMEString() override;
@@ -93,3 +93,4 @@ private:
 };
 
 #endif  // XSQUASHFS_H
+

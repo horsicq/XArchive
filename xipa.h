@@ -29,10 +29,11 @@ class XIPA : public XJAR {
 public:
     explicit XIPA(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     // virtual QString getMIMEString();
 };
 
 #endif  // XIPA_H
+

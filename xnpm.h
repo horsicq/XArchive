@@ -40,7 +40,7 @@ public:
     explicit XNPM(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     virtual QString getFileFormatExt();
@@ -56,3 +56,4 @@ public:
 };
 
 #endif  // XNPM_H
+

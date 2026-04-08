@@ -173,7 +173,7 @@ public:
     explicit XRar(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getVersion() override;
     virtual bool isCommentPresent() override;
     virtual QString getComment() override;
@@ -231,3 +231,4 @@ qint32 getInternVersion(PDSTRUCT *pPdStruct);
 };
 
 #endif  // XRAR_H
+

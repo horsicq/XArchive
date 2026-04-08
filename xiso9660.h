@@ -106,7 +106,7 @@ public:
     ~XISO9660();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct = nullptr) override;
@@ -174,3 +174,4 @@ private:
 };
 
 #endif  // XISO9660_H
+

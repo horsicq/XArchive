@@ -51,11 +51,11 @@ bool XRar::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XRar::isValid(QIODevice *pDevice)
+bool XRar::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XRar xrar(pDevice);
 
-    return xrar.isValid();
+    return xrar.isValid(pPdStruct);
 }
 
 QString XRar::getVersion()

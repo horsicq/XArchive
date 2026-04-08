@@ -108,7 +108,7 @@ bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XSevenZip::isValid(QIODevice *pDevice)
+bool XSevenZip::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XSevenZip xsevenzip(pDevice);
 
@@ -2198,3 +2198,4 @@ XBinary *XSevenZip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XSevenZip(pDevice);
 }
+

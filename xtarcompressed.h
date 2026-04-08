@@ -44,7 +44,7 @@ public:
     virtual ~XTARCOMPRESSED();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static COMPRESSION_TYPE detectCompressionType(QIODevice *pDevice);
     static XArchive *getCompressionClassInstance(COMPRESSION_TYPE compressionType, QIODevice *pDevice);
 
@@ -80,3 +80,4 @@ protected:
 };
 
 #endif  // XTARCOMPRESSED_H
+

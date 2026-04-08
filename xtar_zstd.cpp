@@ -34,7 +34,7 @@ bool XTAR_ZSTD::isValid(PDSTRUCT *pPdStruct)
     return isValid(getDevice());
 }
 
-bool XTAR_ZSTD::isValid(QIODevice *pDevice)
+bool XTAR_ZSTD::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     if (!pDevice) {
         return false;
@@ -102,3 +102,4 @@ XBinary *XTAR_ZSTD::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XTAR_ZSTD(pDevice);
 }
+

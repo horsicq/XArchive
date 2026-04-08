@@ -39,7 +39,7 @@ bool XLzo::isValid(PDSTRUCT *pPdStruct)
     return isValid(getDevice());
 }
 
-bool XLzo::isValid(QIODevice *pDevice)
+bool XLzo::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -447,3 +447,4 @@ XBinary *XLzo::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XLzo(pDevice);
 }
+

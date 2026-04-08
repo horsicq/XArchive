@@ -33,7 +33,7 @@ public:
 
     explicit XDEB(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
     virtual QString getVersion() override;
     virtual FT getFileType() override;
@@ -44,3 +44,4 @@ public:
 };
 
 #endif  // XDEB_H
+

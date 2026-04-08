@@ -32,7 +32,7 @@ public:
     explicit XZlib(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
 
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
 
@@ -75,3 +75,4 @@ struct ZLIB_UNPACK_CONTEXT {
 };
 
 #endif  // XZLIB_H
+

@@ -50,7 +50,7 @@ bool XDOS16::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XDOS16::isValid(QIODevice *pDevice)
+bool XDOS16::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XDOS16 xdos16(pDevice);
 
@@ -475,3 +475,4 @@ XBinary *XDOS16::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModule
 
     return new XDOS16(pDevice);
 }
+

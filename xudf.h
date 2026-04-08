@@ -139,7 +139,7 @@ public:
     virtual ~XUDF();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct = nullptr) override;
@@ -188,3 +188,4 @@ private:
 };
 
 #endif  // XUDF_H
+

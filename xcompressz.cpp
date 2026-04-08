@@ -39,7 +39,7 @@ bool XCompressZ::isValid(PDSTRUCT *pPdStruct)
     return isValid(getDevice());
 }
 
-bool XCompressZ::isValid(QIODevice *pDevice)
+bool XCompressZ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -462,3 +462,4 @@ XBinary *XCompressZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMo
 
     return new XCompressZ(pDevice);
 }
+

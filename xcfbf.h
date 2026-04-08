@@ -91,7 +91,7 @@ public:
     ~XCFBF();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
 
     virtual QString getArch() override;
     virtual MODE getMode() override;
@@ -143,3 +143,4 @@ private:
 };
 
 #endif  // XCFBF_H
+

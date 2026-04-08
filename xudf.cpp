@@ -74,7 +74,7 @@ bool XUDF::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XUDF::isValid(QIODevice *pDevice)
+bool XUDF::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XUDF xudf(pDevice);
     return xudf.isValid();
@@ -743,3 +743,4 @@ XBinary *XUDF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XUDF(pDevice);
 }
+

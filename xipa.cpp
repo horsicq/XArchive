@@ -44,9 +44,10 @@ bool XIPA::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 
 // }
 
-bool XIPA::isValid(QIODevice *pDevice)
+bool XIPA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XIPA xipa(pDevice);
 
     return xipa.isValid();
 }
+

@@ -204,7 +204,7 @@ public:
 
     explicit XZip(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getVersion() override;
     virtual bool isEncrypted() override;
     virtual bool isCommentPresent() override;
@@ -274,3 +274,4 @@ HANDLE_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
 };
 
 #endif  // XZIP_H
+

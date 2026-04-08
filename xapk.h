@@ -38,7 +38,7 @@ public:
 
     explicit XAPK(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     virtual FT getFileType() override;
@@ -68,3 +68,4 @@ private:
 };
 
 #endif  // XAPK_H
+

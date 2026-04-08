@@ -68,7 +68,7 @@ public:
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     bool _isValid(_MEMORY_MAP *pMemoryMap, qint64 nOffset, PDSTRUCT *pPdStruct = nullptr);
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
     virtual QList<MAPMODE> getMapModesList() override;
@@ -105,3 +105,4 @@ signals:
 };
 
 #endif  // XTAR_H
+

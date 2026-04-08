@@ -31,7 +31,7 @@ public:
     virtual ~XTAR_GZ();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
 
     virtual FT getFileType() override;
     virtual QString getFileFormatExt() override;
@@ -44,3 +44,4 @@ private:
 };
 
 #endif  // XTAR_GZ_H
+

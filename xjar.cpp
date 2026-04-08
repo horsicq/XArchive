@@ -42,7 +42,7 @@ bool XJAR::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XJAR::isValid(QIODevice *pDevice)
+bool XJAR::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XJAR xjar(pDevice);
 
@@ -154,3 +154,4 @@ QString XJAR::structIDToString(quint32 nID)
 {
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XJAR_STRUCTID, sizeof(_TABLE_XJAR_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
+

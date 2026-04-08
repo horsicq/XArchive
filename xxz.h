@@ -70,7 +70,7 @@ public:
     ~XXZ();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType() override;
     virtual MODE getMode() override;
     virtual QString getMIMEString() override;
@@ -119,3 +119,4 @@ private:
 };
 
 #endif  // XXZ_H
+

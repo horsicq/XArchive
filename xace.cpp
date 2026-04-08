@@ -62,7 +62,7 @@ bool XACE::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XACE::isValid(QIODevice *pDevice)
+bool XACE::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XACE xace(pDevice);
 
@@ -741,7 +741,7 @@ QList<QString> XACE::getSearchSignatures()
 {
     QList<QString> listResult;
 
-    listResult.append("'**ACE**'");
+    listResult.append("...............'**ACE**'");
 
     return listResult;
 }
@@ -753,3 +753,4 @@ XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XACE(pDevice);
 }
+

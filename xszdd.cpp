@@ -32,7 +32,7 @@ XSZDD::~XSZDD()
 {
 }
 
-bool XSZDD::isValid(QIODevice *pDevice)
+bool XSZDD::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XSZDD xszdd(pDevice);
 
@@ -495,3 +495,4 @@ XBinary *XSZDD::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XSZDD(pDevice);
 }
+

@@ -42,7 +42,7 @@ bool XAPKS::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XAPKS::isValid(QIODevice *pDevice)
+bool XAPKS::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XAPKS xapks(pDevice);
 
@@ -91,3 +91,4 @@ XBinary::FT XAPKS::getFileType()
 {
     return FT_APKS;
 }
+

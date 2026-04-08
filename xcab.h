@@ -113,7 +113,7 @@ public:
     explicit XCab(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getVersion() override;
 
     CFHEADER readCFHeader(qint64 nOffset);
@@ -148,9 +148,9 @@ public:
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
-CFFOLDER _read_CFFOLDER(qint64 nOffset);
     qint64 _getStreamSize(qint64 nOffset, qint32 nCount);
 
 };
 
 #endif  // XCAB_H
+

@@ -66,7 +66,7 @@ bool XISO9660::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XISO9660::isValid(QIODevice *pDevice)
+bool XISO9660::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XISO9660 xiso(pDevice);
     return xiso.isValid();
@@ -699,3 +699,4 @@ XBinary *XISO9660::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
 
     return new XISO9660(pDevice);
 }
+

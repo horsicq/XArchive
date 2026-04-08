@@ -57,7 +57,7 @@ public:
     explicit X_Ar(QIODevice *pDevice = nullptr);
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getFileFormatExt() override;
     virtual QList<MAPMODE> getMapModesList() override;
     virtual FT getFileType() override;
@@ -88,3 +88,4 @@ private:
 };
 
 #endif  // X_AR_H
+

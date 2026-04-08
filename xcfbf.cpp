@@ -56,7 +56,7 @@ bool XCFBF::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XCFBF::isValid(QIODevice *pDevice)
+bool XCFBF::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XCFBF xcfbf(pDevice);
 
@@ -1097,3 +1097,4 @@ XBinary *XCFBF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XCFBF(pDevice);
 }
+

@@ -74,7 +74,7 @@ bool XLHA::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XLHA::isValid(QIODevice *pDevice)
+bool XLHA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XLHA xhla(pDevice);
 
@@ -531,3 +531,4 @@ XBinary *XLHA::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XLHA(pDevice);
 }
+

@@ -50,7 +50,7 @@ bool XCPIO::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XCPIO::isValid(QIODevice *pDevice)
+bool XCPIO::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XCPIO xcpio(pDevice);
     return xcpio.isValid();
@@ -522,3 +522,4 @@ bool XCPIO::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     return true;
 }
+

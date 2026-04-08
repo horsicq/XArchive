@@ -47,7 +47,7 @@ bool XSquashfs::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XSquashfs::isValid(QIODevice *pDevice)
+bool XSquashfs::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XSquashfs xsquashfs(pDevice);
     return xsquashfs.isValid();
@@ -191,3 +191,4 @@ XBinary *XSquashfs::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XSquashfs(pDevice);
 }
+

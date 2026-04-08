@@ -43,7 +43,7 @@ bool XNPM::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XNPM::isValid(QIODevice *pDevice)
+bool XNPM::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XNPM xtar(pDevice);
 
@@ -118,3 +118,4 @@ QString XNPM::structIDToString(quint32 nID)
 {
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XNPM_STRUCTID, sizeof(_TABLE_XNPM_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
+

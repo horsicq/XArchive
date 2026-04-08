@@ -75,7 +75,7 @@ bool XMACHOFat::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XMACHOFat::isValid(QIODevice *pDevice)
+bool XMACHOFat::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XMACHOFat xmachofat(pDevice);
 
@@ -547,3 +547,4 @@ XBinary *XMACHOFat::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XMACHOFat(pDevice);
 }
+

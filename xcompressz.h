@@ -49,7 +49,7 @@ public:
     ~XCompressZ();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual MODE getMode() override;
     virtual qint32 getType() override;
     virtual QString typeIdToString(qint32 nType) override;
@@ -85,3 +85,4 @@ private:
 };
 
 #endif  // XCOMPRESSZ_H
+

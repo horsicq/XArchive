@@ -246,7 +246,7 @@ public:
     virtual ~XMiniDump();
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    static bool isValid(QIODevice *pDevice);
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual FT getFileType() override;
     virtual QString getMIMEString() override;
     virtual QString getArch() override;
@@ -295,3 +295,4 @@ private:
 };
 
 #endif  // XMINIDUMP_H
+

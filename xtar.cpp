@@ -49,7 +49,7 @@ bool XTAR::_isValid(_MEMORY_MAP *pMemoryMap, qint64 nOffset, PDSTRUCT *pPdStruct
     return bResult;
 }
 
-bool XTAR::isValid(QIODevice *pDevice)
+bool XTAR::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XTAR xtar(pDevice);
 
@@ -797,3 +797,4 @@ XBinary *XTAR::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XTAR(pDevice);
 }
+

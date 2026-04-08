@@ -43,7 +43,7 @@ bool XDEB::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XDEB::isValid(QIODevice *pDevice)
+bool XDEB::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XDEB xdeb(pDevice);
 
@@ -110,3 +110,4 @@ QString XDEB::structIDToString(quint32 nID)
 {
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XDEB_STRUCTID, sizeof(_TABLE_XDEB_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
+

@@ -49,7 +49,7 @@ bool XLzip::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XLzip::isValid(QIODevice *pDevice)
+bool XLzip::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
@@ -430,3 +430,4 @@ XBinary *XLzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XLzip(pDevice);
 }
+

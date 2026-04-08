@@ -57,7 +57,7 @@ bool XFREEARC::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XFREEARC::isValid(QIODevice *pDevice)
+bool XFREEARC::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XFREEARC xfreearc(pDevice);
 
@@ -467,3 +467,4 @@ XBinary *XFREEARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
 
     return new XFREEARC(pDevice);
 }
+

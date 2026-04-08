@@ -48,7 +48,7 @@ bool XBZIP2::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XBZIP2::isValid(QIODevice *pDevice)
+bool XBZIP2::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XBZIP2 bzip2(pDevice);
 
@@ -451,3 +451,4 @@ XBinary *XBZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModule
 
     return new XBZIP2(pDevice);
 }
+

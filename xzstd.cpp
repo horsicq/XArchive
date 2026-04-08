@@ -47,7 +47,7 @@ bool XZstd::isValid(PDSTRUCT *pPdStruct)
     return bResult;
 }
 
-bool XZstd::isValid(QIODevice *pDevice)
+bool XZstd::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XZstd xzstd(pDevice);
 
@@ -462,3 +462,4 @@ XBinary *XZstd::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XZstd(pDevice);
 }
+
