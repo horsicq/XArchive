@@ -178,7 +178,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
 
     QList<FPART> listResult;
 
-    const qint64 fileSize = getSize();
+    const qint64 nFileSize = getSize();
 
     quint16 nCP = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cp));
     quint16 nCblp = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cblp));
@@ -188,14 +188,14 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     }
 
     qint64 nSignatureOffset = (nCP - 1) * 512 + nCblp;
-    nSignatureOffset = qBound<qint64>(0, nSignatureOffset, fileSize);
+    nSignatureOffset = qBound<qint64>(0, nSignatureOffset, nFileSize);
 
     // Optional: header part (loader before first signature)
     if ((nFileParts & FILEPART_HEADER) && (nSignatureOffset > 0)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
-        header.nFileSize = qMin<qint64>(nSignatureOffset, fileSize);
+        header.nFileSize = qMin<qint64>(nSignatureOffset, nFileSize);
         header.nVirtualAddress = -1;
         header.sName = tr("Header");
         listResult.append(header);
@@ -204,15 +204,15 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     // Regions: walk BW/MF/MZ chain similar to getRecords/getMemoryMap
     qint32 nIndex = 0;
     qint64 nCur = nSignatureOffset;
-    if (fileSize > nCur) {
+    if (nFileSize > nCur) {
         while (isPdStructNotCanceled(pPdStruct)) {
             if (!isOffsetValid(nCur + 1)) break;
-            quint16 sig = read_uint16(nCur);
+            quint16 nSig = read_uint16(nCur);
 
-            if (sig == 0x5742) {  // BW
+            if (nSig == 0x5742) {  // BW
                 qint64 nNext = read_uint32(nCur + offsetof(XMSDOS_DEF::dos16m_exe_header, next_header_pos));
                 QString sName = read_ansiString(nCur + offsetof(XMSDOS_DEF::dos16m_exe_header, EXP_path));
-                if ((nNext <= 0) || (nNext > fileSize)) nNext = fileSize;  // clamp
+                if ((nNext <= 0) || (nNext > nFileSize)) nNext = nFileSize;  // clamp
 
                 if (nFileParts & FILEPART_REGION) {
                     FPART part = {};
@@ -226,15 +226,15 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
 
                 nCur = nNext;
                 nIndex++;
-            } else if (sig == 0x464D) {  // MF - info block, skip length at +2
+            } else if (nSig == 0x464D) {  // MF - info block, skip length at +2
                 qint64 nSkip = read_uint32(nCur + 2);
                 nCur += qMax<qint64>(0, nSkip);
-            } else if (sig == 0x5A4D) {  // MZ payload
+            } else if (nSig == 0x5A4D) {  // MZ payload
                 if (nFileParts & (FILEPART_REGION | FILEPART_DATA)) {
                     FPART data = {};
                     data.filePart = (nFileParts & FILEPART_DATA) ? FILEPART_DATA : FILEPART_REGION;
                     data.nFileOffset = nCur;
-                    data.nFileSize = qMax<qint64>(0, fileSize - nCur);
+                    data.nFileSize = qMax<qint64>(0, nFileSize - nCur);
                     data.nVirtualAddress = -1;
                     data.sName = (data.filePart == FILEPART_DATA) ? tr("Data") : tr("Payload");
                     listResult.append(data);
@@ -248,18 +248,18 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
 
     // Overlay: any tail not covered by the above when not using DATA-only
     if ((nFileParts & FILEPART_OVERLAY) && !listResult.isEmpty()) {
-        qint64 coveredEnd = 0;
-        for (int i = 0; i < listResult.size(); i++) {
-            const FPART &p = listResult.at(i);
-            if (p.filePart != FILEPART_OVERLAY) {
-                coveredEnd = qMax(coveredEnd, p.nFileOffset + qMax<qint64>(0, p.nFileSize));
+        qint64 nCoveredEnd = 0;
+        for (qint32 nI = 0; nI < listResult.size(); nI++) {
+            const FPART &record = listResult.at(nI);
+            if (record.filePart != FILEPART_OVERLAY) {
+                nCoveredEnd = qMax(nCoveredEnd, record.nFileOffset + qMax<qint64>(0, record.nFileSize));
             }
         }
-        if (coveredEnd < fileSize) {
+        if (nCoveredEnd < nFileSize) {
             FPART ov = {};
             ov.filePart = FILEPART_OVERLAY;
-            ov.nFileOffset = coveredEnd;
-            ov.nFileSize = fileSize - coveredEnd;
+            ov.nFileOffset = nCoveredEnd;
+            ov.nFileSize = nFileSize - nCoveredEnd;
             ov.nVirtualAddress = -1;
             ov.sName = tr("Overlay");
             listResult.append(ov);

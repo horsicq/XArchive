@@ -703,6 +703,192 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     return result;
 }
 
+bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pContext || !pDevice) {
+        return false;
+    }
+
+    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+        return false;
+    }
+
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) {
+        pPdStruct = &pdStructEmpty;
+    }
+
+    CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
+    qint64 nFileOffset = pContext->listFileOffsets.at(pState->nCurrentIndex);
+
+    CFFILE cfFile = readCFFILE(nFileOffset);
+
+    if (cfFile.iFolder >= (quint16)pContext->listFolders.size()) {
+        return false;
+    }
+
+    CFFOLDER cfFolder = pContext->listFolders.at(cfFile.iFolder);
+
+    // Determine compression type (lower 4 bits)
+    quint16 nCompressionType = cfFolder.typeCompress & 0x000F;
+    qint64 nTotalSize = getSize();
+    // Per-datablock reserved area size
+    qint64 nDataReservedSize = (qint64)pContext->nCbCFData;
+
+    if (nCompressionType == 0x0000) {
+        // STORE method (no compression) - direct copy from data blocks
+        qint64 nDataOffset = cfFolder.coffCabStart;
+        qint64 nCurrentUncompressedOffset = 0;
+        qint64 nTargetOffset = cfFile.uoffFolderStart;
+        qint64 nRemainingSize = cfFile.cbFile;
+        qint64 nWriteOffset = 0;
+
+        for (quint16 i = 0; (i < cfFolder.cCFData) && (nRemainingSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+            if ((nDataOffset + (qint64)sizeof(CFDATA) + nDataReservedSize) > nTotalSize) {
+                break;
+            }
+
+            CFDATA cfData = readCFData(nDataOffset);
+            qint64 nPayloadOffset = nDataOffset + (qint64)sizeof(CFDATA) + nDataReservedSize;
+
+            if (nCurrentUncompressedOffset + cfData.cbUncomp <= nTargetOffset) {
+                // Skip this block entirely
+                nCurrentUncompressedOffset += cfData.cbUncomp;
+                nDataOffset = nPayloadOffset + cfData.cbData;
+                continue;
+            }
+
+            // This block contains data we need
+            qint64 nBlockStart = nTargetOffset - nCurrentUncompressedOffset;
+            qint64 nCopySize = qMin(nRemainingSize, (qint64)cfData.cbUncomp - nBlockStart);
+
+            if (nCopySize > 0) {
+                qint64 nSourceOffset = nPayloadOffset + nBlockStart;
+
+                if ((nSourceOffset + nCopySize) > nTotalSize) {
+                    return false;
+                }
+
+                if (!copyDeviceMemory(getDevice(), nSourceOffset, pDevice, nWriteOffset, nCopySize)) {
+                    return false;
+                }
+
+                nWriteOffset += nCopySize;
+            }
+
+            nTargetOffset += nCopySize;
+            nRemainingSize -= nCopySize;
+            nCurrentUncompressedOffset += cfData.cbUncomp;
+            nDataOffset = nPayloadOffset + cfData.cbData;
+        }
+
+        return (nRemainingSize == 0);
+    } else if (nCompressionType == 0x0001) {
+        // MSZIP method (DEFLATE with 2-byte "CK" signature per block)
+        // Use folder cache to avoid re-decompressing the same folder for multiple files
+        quint16 nFolderIndex = cfFile.iFolder;
+
+        if (!pContext->mapFolderCache.contains(nFolderIndex)) {
+            // Decompress entire folder into cache
+            QByteArray baFolderData;
+
+            qint64 nDataOffset = cfFolder.coffCabStart;
+
+            for (quint16 i = 0; (i < cfFolder.cCFData) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+                if ((nDataOffset + (qint64)sizeof(CFDATA) + nDataReservedSize) > nTotalSize) {
+                    break;
+                }
+
+                CFDATA cfData = readCFData(nDataOffset);
+                qint64 nPayloadOffset = nDataOffset + (qint64)sizeof(CFDATA) + nDataReservedSize;
+
+                if (cfData.cbData < 2) {
+                    return false;  // Invalid block (needs at least 2-byte "CK" signature)
+                }
+
+                // Verify MSZIP signature "CK" (0x43 0x4B)
+                quint8 nSig0 = read_uint8(nPayloadOffset);
+                quint8 nSig1 = read_uint8(nPayloadOffset + 1);
+
+                if (nSig0 != 0x43 || nSig1 != 0x4B) {
+                    return false;  // Invalid MSZIP block signature
+                }
+
+                qint64 nCompressedDataOffset = nPayloadOffset + 2;
+                qint64 nCompressedDataSize = cfData.cbData - 2;
+
+                if (nCompressedDataSize <= 0) {
+                    return false;
+                }
+
+                if ((nCompressedDataOffset + nCompressedDataSize) > nTotalSize) {
+                    return false;
+                }
+
+                QByteArray baCompressedData = read_array(nCompressedDataOffset, nCompressedDataSize);
+
+                if (baCompressedData.size() != nCompressedDataSize) {
+                    return false;
+                }
+
+                QBuffer bufferCompressed(&baCompressedData);
+                if (!bufferCompressed.open(QIODevice::ReadOnly)) {
+                    return false;
+                }
+
+                QByteArray baUncompressedBlock;
+                QBuffer bufferUncompressed(&baUncompressedBlock);
+                if (!bufferUncompressed.open(QIODevice::WriteOnly)) {
+                    bufferCompressed.close();
+                    return false;
+                }
+
+                DATAPROCESS_STATE decompressState = {};
+                decompressState.pDeviceInput = &bufferCompressed;
+                decompressState.pDeviceOutput = &bufferUncompressed;
+                decompressState.nInputOffset = 0;
+                decompressState.nInputLimit = nCompressedDataSize;
+                decompressState.nProcessedOffset = 0;
+                decompressState.nProcessedLimit = cfData.cbUncomp;
+
+                bool bDecompressResult = XDeflateDecoder::decompress(&decompressState, pPdStruct);
+
+                bufferCompressed.close();
+                bufferUncompressed.close();
+
+                if (!bDecompressResult) {
+                    return false;
+                }
+
+                if (baUncompressedBlock.size() != (qint32)cfData.cbUncomp) {
+                    return false;
+                }
+
+                baFolderData.append(baUncompressedBlock);
+                nDataOffset = nPayloadOffset + cfData.cbData;
+            }
+
+            pContext->mapFolderCache.insert(nFolderIndex, baFolderData);
+        }
+
+        // Extract file data from the cached folder
+        const QByteArray &baFolderData = pContext->mapFolderCache.value(nFolderIndex);
+
+        if (baFolderData.size() < (qint64)cfFile.uoffFolderStart + (qint64)cfFile.cbFile) {
+            return false;
+        }
+
+        qint64 nBytesWritten = pDevice->write(baFolderData.constData() + cfFile.uoffFolderStart, cfFile.cbFile);
+        return (nBytesWritten == (qint64)cfFile.cbFile);
+    } else if (nCompressionType == 0x0003) {
+        // LZX method - not yet implemented (requires specialized LZX decoder)
+        // LZX window size is encoded in upper bits: (typeCompress >> 8) & 0x1F
+        return false;
+    }
+
+    return false;  // Unsupported compression type
+}
+
 bool XCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -744,21 +930,4 @@ bool XCab::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->nNumberOfRecords = 0;
 
     return true;
-}
-
-QList<QString> XCab::getSearchSignatures()
-{
-    QList<QString> listResult;
-
-    listResult.append("'MSCF'00000000........00000000........00000000");
-
-    return listResult;
-}
-
-XBinary *XCab::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
-{
-    Q_UNUSED(bIsImage)
-    Q_UNUSED(nModuleAddress)
-
-    return new XCab(pDevice);
 }
