@@ -24,121 +24,11 @@ XArchives::XArchives(QObject *pParent) : QObject(pParent)
 {
 }
 
-XArchive *XArchives::getClass(XBinary::FT fileType, QIODevice *pDevice)
-{
-    XArchive *pResult = nullptr;
-
-    QSet<XBinary::FT> stFileTypes;
-
-    if (fileType == XBinary::FT_UNKNOWN) {
-        stFileTypes = XBinary::getFileTypes(pDevice, true);
-    } else {
-        stFileTypes += fileType;
-    }
-
-    if (stFileTypes.contains(XArchive::FT_ZIP)) {
-        pResult = new XZip(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_JAR)) {
-        pResult = new XJAR(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_APK)) {
-        pResult = new XAPK(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_IPA)) {
-        pResult = new XIPA(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_APKS)) {
-        pResult = new XAPKS(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_7Z)) {
-        pResult = new XSevenZip(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_CAB)) {
-        pResult = new XCab(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_RAR)) {
-        pResult = new XRar(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_MACHOFAT)) {
-        pResult = new XMACHOFat(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_AR)) {
-        pResult = new X_Ar(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_DEB)) {
-        pResult = new XDEB(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_BZIP2)) {
-        pResult = new XTAR_BZIP2(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_LZIP)) {
-        pResult = new XTAR_LZIP(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_LZMA)) {
-        pResult = new XTAR_LZMA(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_LZOP)) {
-        pResult = new XTAR_LZOP(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_XZ)) {
-        pResult = new XTAR_XZ(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_Z)) {
-        pResult = new XTAR_COMPRESS(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_ZSTD)) {
-        pResult = new XTAR_ZSTD(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR_GZ)) {
-        pResult = new XTAR_GZ(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_TAR)) {
-        pResult = new XTAR(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_NPM)) {
-        pResult = new XNPM(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_GZIP)) {
-        pResult = new XGzip(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_ZLIB)) {
-        pResult = new XZlib(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_LHA)) {
-        pResult = new XLHA(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_ARJ)) {
-        pResult = new XARJ(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_ACE)) {
-        pResult = new XACE(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_ARC)) {
-        pResult = new XSEAARC(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_FREEARC)) {
-        pResult = new XFREEARC(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_CFBF)) {
-        pResult = new XCFBF(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_SZDD)) {
-        pResult = new XSZDD(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_BZIP2)) {
-        pResult = new XBZIP2(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_BROTLI)) {
-        pResult = new XBrotli(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_LZIP)) {
-        pResult = new XLzip(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_XZ)) {
-        pResult = new XXZ(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_CPIO)) {
-        pResult = new XCPIO(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_SQUASHFS)) {
-        pResult = new XSquashfs(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_ISO9660)) {
-        pResult = new XISO9660(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_AR)) {
-        pResult = new X_Ar(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_MINIDUMP)) {
-        pResult = new XMiniDump(pDevice);
-    } else if (stFileTypes.contains(XArchive::FT_DOS4G) || stFileTypes.contains(XArchive::FT_DOS16M)) {
-        pResult = new XDOS16(pDevice);
-    } else {
-        // Fallback: try formats without magic signatures via trial validation
-        if (!pResult) {
-            XBrotli xbrotli(pDevice);
-            if (xbrotli.isValid()) {
-                pResult = new XBrotli(pDevice);
-            }
-        }
-#ifdef QT_DEBUG
-        if (!pResult) {
-            qDebug() << "XArchives::getClass: Unknown file type" << XBinary::fileTypeIdToString(fileType);
-        }
-#endif
-    }
-
-    return pResult;
-}
-
 QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fileType, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)
 {
     QList<XArchive::RECORD> listResult;
 
-    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
 
     if (pArchives) {
         listResult = pArchives->getRecords(nLimit, pPdStruct);
@@ -178,9 +68,9 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
 {
     QByteArray baResult;
 
-    XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
+    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
 
-    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
 
     if (pArchives) {
         baResult = pArchives->decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
@@ -234,9 +124,9 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 {
     bool bResult = false;
 
-    XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
+    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
 
-    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
 
     if (pArchives) {
         bResult = pArchives->decompressToFile(pRecord, sResultFileName, pPdStruct);
@@ -251,9 +141,9 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
 {
     bool bResult = false;
 
-    XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
+    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
 
-    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
 
     if (pArchives) {
         bResult = pArchives->decompressToDevice(pRecord, pDestDevice, pPdStruct);
@@ -357,9 +247,9 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
 {
     bool bResult = false;
 
-    XBinary::FT fileType = XBinary::getPrefFileType(pDevice, true);
+    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
 
-    XArchive *pArchives = XArchives::getClass(fileType, pDevice);
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
 
     if (pArchives) {
         bResult = pArchives->isArchiveRecordPresent(sRecordFileName, pPdStruct);
