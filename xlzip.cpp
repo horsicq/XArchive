@@ -391,9 +391,10 @@ bool XLzip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     bool bResult = false;
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords - 1)) {
+    if (pState && pState->pContext) {
         pState->nCurrentIndex++;
-        bResult = true;
+        // Lzip has only one record, so moving to next always returns false
+        bResult = false;
     }
 
     return bResult;

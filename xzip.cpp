@@ -990,7 +990,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
                                                 record.mapProperties.insert(FPART_PROP_RESULTCRC, cdh.nCRC32);
                                                 record.mapProperties.insert(FPART_PROP_CRC_TYPE,
-                                                                            cdh.nCRC32 != 0 ? CRC_TYPE_FFFFFFFF_EDB88320_00000000 : CRC_TYPE_UNKNOWN);
+                                                                            cdh.nCRC32 != 0 ? CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : CRC_TYPE_UNKNOWN);
 
                                                 if (cdh.nFlags & 0x01) record.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
 
@@ -1046,7 +1046,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, lfh.nUncompressedSize);
                             record.mapProperties.insert(FPART_PROP_RESULTCRC, lfh.nCRC32);
-                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, lfh.nCRC32 != 0 ? CRC_TYPE_FFFFFFFF_EDB88320_00000000 : CRC_TYPE_UNKNOWN);
+                            record.mapProperties.insert(FPART_PROP_CRC_TYPE, lfh.nCRC32 != 0 ? CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : CRC_TYPE_UNKNOWN);
                             record.mapProperties.insert(FPART_PROP_DATETIME, XBinary::dosDateTimeToQDateTime(lfh.nLastModDate, lfh.nLastModTime));
 
                             listResult.append(record);
@@ -1852,7 +1852,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // CRC32
         result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nCRC32);
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_00000000 : XBinary::CRC_TYPE_UNKNOWN);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : XBinary::CRC_TYPE_UNKNOWN);
 
         // Sizes
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nCompressedSize);
