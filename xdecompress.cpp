@@ -467,8 +467,30 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
     qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
 
-    // state.compressMethod = (XBinary::HANDLE_METHOD)fpart.mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD1, XBinary::HANDLE_METHOD_UNKNOWN).toUInt();
-    // state.nUncompressedSize = fpart.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
+    // ARJ GARBLE pre-decryption: if PASSWORD_MODIFIER is present, XOR the compressed stream
+    // with (modifier + password[i % len]) mod 256 before decompressing.
+    QByteArray baArjGarbleDecrypted;
+    QBuffer arjGarbleBuf;
+    if (pState->mapProperties.contains(XBinary::FPART_PROP_PASSWORD_MODIFIER)) {
+        quint8 nModifier = (quint8)pState->mapProperties.value(XBinary::FPART_PROP_PASSWORD_MODIFIER).toUInt();
+        QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+        if (!sPassword.isEmpty() && pState->pDeviceInput && pState->nInputLimit > 0) {
+            baArjGarbleDecrypted.resize((qint32)pState->nInputLimit);
+            pState->pDeviceInput->seek(pState->nInputOffset);
+            qint32 nRead = pState->pDeviceInput->read(baArjGarbleDecrypted.data(), (qint32)pState->nInputLimit);
+            if (nRead == (qint32)pState->nInputLimit) {
+                const qint32 nPwdLen = sPassword.length();
+                for (qint32 i = 0; i < nRead; i++) {
+                    quint8 k = (quint8)(nModifier + (quint8)sPassword[i % nPwdLen].toLatin1());
+                    baArjGarbleDecrypted.data()[i] = (char)((quint8)baArjGarbleDecrypted[i] ^ k);
+                }
+                arjGarbleBuf.setBuffer(&baArjGarbleDecrypted);
+                arjGarbleBuf.open(QIODevice::ReadOnly);
+                pState->pDeviceInput = &arjGarbleBuf;
+                pState->nInputOffset = 0;
+            }
+        }
+    }
 
     if (compressMethod == XBinary::HANDLE_METHOD_STORE) {
         // For STORE after AES decryption, the input may include AES padding bytes.
@@ -774,9 +796,59 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             qint64 nOutputSize = nUncompressedSize;  // BCJ2 total output set by multiDecompress
 
+            // BCJ2 AES-encrypted layout: each sub-stream separately AES-encrypted before compression
+            QString sBCJ2Password = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+            QByteArray aBCJ2AESProps[4];
+            qint64 aBCJ2AESUnpack[4] = {0, 0, 0, 0};
+            aBCJ2AESProps[0] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_PROPS_0).toByteArray();
+            aBCJ2AESUnpack[0] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_UNPACK_0, (qint64)0).toLongLong();
+            aBCJ2AESProps[1] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_PROPS_1).toByteArray();
+            aBCJ2AESUnpack[1] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_UNPACK_1, (qint64)0).toLongLong();
+            aBCJ2AESProps[2] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_PROPS_2).toByteArray();
+            aBCJ2AESUnpack[2] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_UNPACK_2, (qint64)0).toLongLong();
+            aBCJ2AESProps[3] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_PROPS_3).toByteArray();
+            aBCJ2AESUnpack[3] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_UNPACK_3, (qint64)0).toLongLong();
+            bool bBCJ2HasAES = !aBCJ2AESProps[0].isEmpty();
+
+            // Pre-decrypt AES-encrypted BCJ2 sub-streams into temp buffers
+            QByteArray aBCJ2Decrypted[4];
+            bool bAESDecryptOk = true;
+            if (bBCJ2HasAES) {
+                qint64 aEncOffsets[3] = {pState->nInputOffset, nCallOffset, nJmpOffset};
+                qint64 aEncSizes[3] = {pState->nInputLimit, nCallSize, nJmpSize};
+                for (qint32 ni = 0; ni < 3 && bAESDecryptOk; ni++) {
+                    if (aBCJ2AESProps[ni].isEmpty()) continue;
+                    QBuffer decBuf(&aBCJ2Decrypted[ni]);
+                    decBuf.open(QIODevice::WriteOnly);
+                    XBinary::DATAPROCESS_STATE aesState = {};
+                    aesState.pDeviceInput = pState->pDeviceInput;
+                    aesState.pDeviceOutput = &decBuf;
+                    aesState.nInputOffset = aEncOffsets[ni];
+                    aesState.nInputLimit = aEncSizes[ni];
+                    aesState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, aBCJ2AESUnpack[ni]);
+                    pState->pDeviceInput->seek(aEncOffsets[ni]);
+                    bAESDecryptOk = XAESDecoder::decrypt(&aesState, aBCJ2AESProps[ni], sBCJ2Password, pPdStruct);
+                    decBuf.close();
+                }
+                // Range stream
+                if (bAESDecryptOk && !aBCJ2AESProps[3].isEmpty()) {
+                    QBuffer decBuf(&aBCJ2Decrypted[3]);
+                    decBuf.open(QIODevice::WriteOnly);
+                    XBinary::DATAPROCESS_STATE aesState = {};
+                    aesState.pDeviceInput = pState->pDeviceInput;
+                    aesState.pDeviceOutput = &decBuf;
+                    aesState.nInputOffset = nRangeOffset;
+                    aesState.nInputLimit = nRangeSize;
+                    aesState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, aBCJ2AESUnpack[3]);
+                    pState->pDeviceInput->seek(nRangeOffset);
+                    bAESDecryptOk = XAESDecoder::decrypt(&aesState, aBCJ2AESProps[3], sBCJ2Password, pPdStruct);
+                    decBuf.close();
+                }
+            }
+
             // nCallUnpack / nJmpUnpack may be 0 when the data contains no CALL/JMP instructions
             // (e.g. pure image or text files). Only require nMainUnpack > 0 and nOutputSize > 0.
-            if (nMainUnpack > 0 && nOutputSize > 0) {
+            if (nMainUnpack > 0 && nOutputSize > 0 && bAESDecryptOk) {
                 QByteArray baMain, baCall, baJmp;
                 baMain.resize((qint32)nMainUnpack);
                 baCall.resize((qint32)nCallUnpack);
@@ -804,24 +876,40 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         break;
                     }
                     XBinary::DATAPROCESS_STATE dpState = {};
-                    dpState.pDeviceInput = pState->pDeviceInput;
                     dpState.pDeviceOutput = &outBuf;
-                    dpState.nInputOffset = tasks[nTask].nOffset;
-                    dpState.nInputLimit = tasks[nTask].nSize;
                     dpState.nProcessedOffset = 0;
                     dpState.nProcessedLimit = tasks[nTask].nOutputSize;
                     dpState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, (quint32)tasks[nTask].cm);
                     dpState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSPROPERTIES, *tasks[nTask].pProperty);
                     dpState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, tasks[nTask].nOutputSize);
-                    bLZMAOk = decompress(&dpState, pPdStruct);
+                    if (bBCJ2HasAES && !aBCJ2Decrypted[nTask].isEmpty()) {
+                        // Use AES-decrypted buffer as LZMA input
+                        QBuffer lzmaBuf(&aBCJ2Decrypted[nTask]);
+                        lzmaBuf.open(QIODevice::ReadOnly);
+                        dpState.pDeviceInput = &lzmaBuf;
+                        dpState.nInputOffset = 0;
+                        dpState.nInputLimit = aBCJ2Decrypted[nTask].size();
+                        bLZMAOk = decompress(&dpState, pPdStruct);
+                        lzmaBuf.close();
+                    } else {
+                        dpState.pDeviceInput = pState->pDeviceInput;
+                        dpState.nInputOffset = tasks[nTask].nOffset;
+                        dpState.nInputLimit = tasks[nTask].nSize;
+                        bLZMAOk = decompress(&dpState, pPdStruct);
+                    }
                     outBuf.close();
                 }
 
                 if (bLZMAOk && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                    // Range coder stream is raw (not LZMA-compressed), read directly
-                    pState->pDeviceInput->seek(nRangeOffset);
-                    QByteArray baRange = pState->pDeviceInput->read(nRangeSize);
-                    if (baRange.size() == (qint32)nRangeSize) {
+                    // Range coder stream: raw or AES-decrypted
+                    QByteArray baRange;
+                    if (bBCJ2HasAES && !aBCJ2Decrypted[3].isEmpty()) {
+                        baRange = aBCJ2Decrypted[3];
+                    } else {
+                        pState->pDeviceInput->seek(nRangeOffset);
+                        baRange = pState->pDeviceInput->read(nRangeSize);
+                    }
+                    if (baRange.size() > 0) {
                         QBuffer mainBuf(&baMain);
                         QBuffer callBuf(&baCall);
                         QBuffer jmpBuf(&baJmp);

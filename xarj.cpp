@@ -147,7 +147,6 @@ XBinary::MODE XARJ::getMode()
 
 bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
 
     bool bResult = false;
 
@@ -163,6 +162,7 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = 0;
         pState->pContext = nullptr;
+        pState->mapUnpackProperties = mapProperties;
 
         // Skip main archive header first
         qint64 nOffset = 0;
@@ -236,7 +236,9 @@ XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         quint32 nCompressedSize = read_uint32(pState->nCurrentOffset + 4 + 12, false);
         quint32 nOriginalSize = read_uint32(pState->nCurrentOffset + 4 + 16, false);
         quint32 nCRC32 = read_uint32(pState->nCurrentOffset + 4 + 20, false);
+        quint8 nArjFlags = read_uint8(pState->nCurrentOffset + 4 + 4);
         quint8 nMethod = read_uint8(pState->nCurrentOffset + 4 + 5);
+        quint8 nPasswordModifier = read_uint8(pState->nCurrentOffset + 4 + 7);
         quint32 nDosDateTime = read_uint32(pState->nCurrentOffset + 4 + 8, false);
 
         QString sFileName = _getFileName(pState->nCurrentOffset);
@@ -265,6 +267,11 @@ XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         }
 
         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
+
+        // ARJ GARBLE encryption: bit 0 of arj_flags
+        if (nArjFlags & 0x01) {
+            result.mapProperties.insert(XBinary::FPART_PROP_PASSWORD_MODIFIER, (quint32)nPasswordModifier);
+        }
 
         // Convert DOS date/time
         qint32 nYear = ((nDosDateTime >> 25) & 0x7F) + 1980;

@@ -52,7 +52,7 @@ bool XBZIP2::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XBZIP2 bzip2(pDevice);
 
-    return bzip2.isValid();
+    return bzip2.isValid(pPdStruct);
 }
 
 XBinary::MODE XBZIP2::getMode()
@@ -304,6 +304,8 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
         BZIP2_UNPACK_CONTEXT *pContext = new BZIP2_UNPACK_CONTEXT;
         pContext->nHeaderSize = 4;  // "BZh" + blockSize byte
         pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+        pContext->nCompressedSize = 0;
+        pContext->nUncompressedSize = 0;
 
         // Decompress to get sizes
         qint64 nFileSize = getSize();
@@ -321,9 +323,7 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
                 if (XBZIP2Decoder::decompress(&decompressState, pPdStruct)) {
                     pContext->nCompressedSize = decompressState.nCountInput;
                     pContext->nUncompressedSize = decompressState.nCountOutput;
-                } else {
-                    pContext->nCompressedSize = nFileSize;
-                    pContext->nUncompressedSize = 0;
+                    bResult = true;
                 }
 
                 buffer.close();
@@ -332,14 +332,16 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
             sd.close();
         }
 
-        // Initialize state
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 1;  // BZIP2 contains single compressed stream
-        pState->pContext = pContext;
-
-        bResult = true;
+        if (bResult) {
+            // Initialize state
+            pState->nCurrentOffset = 0;
+            pState->nTotalSize = getSize();
+            pState->nCurrentIndex = 0;
+            pState->nNumberOfRecords = 1;  // BZIP2 contains single compressed stream
+            pState->pContext = pContext;
+        } else {
+            delete pContext;
+        }
     }
 
     return bResult;

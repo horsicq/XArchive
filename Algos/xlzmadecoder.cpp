@@ -36,6 +36,8 @@ static ISzAlloc g_Alloc = {SzAlloc, SzFree};
 static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+    qint64 nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    qint64 nTotalOutput = 0;
 
     char *bufferIn = new char[_nBufferSize];
     char *bufferOut = new char[_nBufferSize];
@@ -62,8 +64,24 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
             ELzmaStatus status;
             SizeT inProcessed = nSize - nPos;
             SizeT outProcessed = _nBufferSize;
+            ELzmaFinishMode finishMode = LZMA_FINISH_ANY;
 
-            SRes ret = LzmaDec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
+            if (nExpectedOutput >= 0) {
+                qint64 nRemainingOutput = nExpectedOutput - nTotalOutput;
+
+                if (nRemainingOutput <= 0) {
+                    lastStatus = LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK;
+                    bContinueReading = false;
+                    break;
+                }
+
+                if (outProcessed > (SizeT)nRemainingOutput) {
+                    outProcessed = (SizeT)nRemainingOutput;
+                    finishMode = LZMA_FINISH_END;
+                }
+            }
+
+            SRes ret = LzmaDec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, finishMode, &status);
 
             if (ret != 0) {  // Check for decompression error
                 // qDebug("_decompressLZMACommon() FAILED: LzmaDec_DecodeToBuf returned %d", ret);
@@ -90,6 +108,7 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
                     delete[] bufferOut;
                     return false;
                 }
+                nTotalOutput += outProcessed;
             }
 
             lastStatus = status;
@@ -97,7 +116,8 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
             // qDebug("_decompressLZMACommon() inner loop: inProcessed=%zu, outProcessed=%zu, status=%d",
             //        inProcessed, outProcessed, status);
 
-            if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
+            if ((status == LZMA_STATUS_FINISHED_WITH_MARK) ||
+                ((status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK) && (nExpectedOutput >= 0) && (nTotalOutput == nExpectedOutput))) {
                 // Decompression completed successfully
                 // qDebug("_decompressLZMACommon() LZMA_STATUS_FINISHED_WITH_MARK received");
                 bContinueReading = false;
@@ -105,14 +125,15 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
             }
 
             // If we couldn't process any input, stop
-            if (inProcessed == 0) {
+            if ((inProcessed == 0) && (outProcessed == 0)) {
                 // qDebug("_decompressLZMACommon() no input processed, stopping");
                 break;
             }
         }
 
         // If we got stream end mark, stop reading more
-        if (lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) {
+        if ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) ||
+            ((lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK) && (nExpectedOutput >= 0) && (nTotalOutput == nExpectedOutput))) {
             break;
         }
 
@@ -125,6 +146,11 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
 
     delete[] bufferIn;
     delete[] bufferOut;
+
+    if (nExpectedOutput >= 0) {
+        return (nTotalOutput == nExpectedOutput) &&
+               ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
+    }
 
     return true;
 }

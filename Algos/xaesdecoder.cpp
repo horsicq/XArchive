@@ -209,11 +209,19 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
 
     qint64 nTotalDecrypted = nTotalEncrypted;
 
-    // 7z uses zero-padding (not PKCS#7): the expected output size is stored in FPART_PROP_UNCOMPRESSEDSIZE
-    // Truncate the decrypted output to the expected size
+    // 7z uses the known unpacked size to define the meaningful plaintext length.
+    // If that size is available, trust it and skip any PKCS#7-style fallback logic.
     qint64 nExpectedSize = pDecryptState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
-    if (nExpectedSize > 0 && nExpectedSize < nTotalDecrypted) {
-        baDecrypted.resize((qint32)nExpectedSize);
+    if (nExpectedSize >= 0) {
+        if (nExpectedSize > nTotalDecrypted) {
+            qWarning() << "[XAESDecoder] Expected decrypted size exceeds available data:" << nExpectedSize << ">" << nTotalDecrypted;
+            memset(aKey, 0, sizeof(aKey));
+            return false;
+        }
+
+        if (nExpectedSize != nTotalDecrypted) {
+            baDecrypted.resize((qint32)nExpectedSize);
+        }
         nTotalDecrypted = nExpectedSize;
     } else {
         // Fallback: try PKCS#7 padding removal
@@ -232,8 +240,6 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
                 if (bValidPadding) {
                     baDecrypted.resize(nPaddingStart);
                     nTotalDecrypted = nPaddingStart;
-                } else {
-                    qWarning() << "[XAESDecoder] Invalid PKCS#7 padding byte pattern, keeping all data";
                 }
             }
         }

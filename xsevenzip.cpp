@@ -1583,6 +1583,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             QByteArray baCoderProperty3;
                             bool bHasSecondCoder = false;
                             bool bHasThirdCoder = false;
+                            qint32 nSecondCoderSizeIdx = -1;  // index into listCodersSizes for cm2's output size
                             bool bBCJ2Resolved = false;
                             qint64 nBCJ2MainOffset = 0;
                             qint64 nBCJ2MainSize = 0;
@@ -1602,6 +1603,15 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             qint64 nBCJ2RangeOffset = 0;
                             qint64 nBCJ2RangeSize = 0;
                             qint64 nBCJ2OutputSize = 0;
+                            // Per-stream AES properties for AES-encrypted BCJ2 archives
+                            QByteArray baBCJ2MainAESProp;
+                            qint64 nBCJ2MainAESUnpack = 0;
+                            QByteArray baBCJ2CallAESProp;
+                            qint64 nBCJ2CallAESUnpack = 0;
+                            QByteArray baBCJ2JmpAESProp;
+                            qint64 nBCJ2JmpAESUnpack = 0;
+                            QByteArray baBCJ2RangeAESProp;
+                            qint64 nBCJ2RangeAESUnpack = 0;
                             if (nCurrentFolder < (qint32)state.listFolders.count()) {
                                 const SZFOLDER &folder = state.listFolders.at(nCurrentFolder);
                                 qint32 nNumCoders = folder.listCoders.count();
@@ -1625,6 +1635,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                         cm2 = coderToCompressMethod(folder.listCoders.at(nLastCoder - 1).baCoder);
                                         baCoderProperty2 = folder.listCoders.at(nLastCoder - 1).baProperty;
                                         bHasSecondCoder = true;
+                                        nSecondCoderSizeIdx = nCoderSizesOffset + (nLastCoder - 1);
                                     }
                                     if (nNumCoders >= 3 && cm != HANDLE_METHOD_BCJ2) {
                                         cm3 = coderToCompressMethod(folder.listCoders.at(0).baCoder);
@@ -1664,12 +1675,49 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                             }
                                             if (nBCJ2LocalIdx >= 0) {
                                                 qint32 nBCJ2InStreamBase = listInStreamOffsets.at(nBCJ2LocalIdx);
-                                                qint32 nRangeInStreamIdx = nBCJ2InStreamBase + 3;
-                                                if (mapInStreamToGlobal.contains(nRangeInStreamIdx)) {
-                                                    qint32 nRangeGlobal = mapInStreamToGlobal.value(nRangeInStreamIdx);
-                                                    // Scan bonds: each bond that feeds a BCJ2 input (0=main, 1=calls, 2=jumps)
-                                                    // tells us which coder provides that compressed stream.
-                                                    // If a BCJ2 input has no bond it is a raw (STORE) pack stream.
+
+                                                // Build bond map: in-stream index → source coder index
+                                                QMap<qint32, qint32> mapBondInToCoderOut;
+                                                for (qint32 bi = 0; bi < nLocalBondCount; bi++) {
+                                                    mapBondInToCoderOut[folder.listBonds.at(bi).nInputIndex] = folder.listBonds.at(bi).nOutputIndex;
+                                                }
+
+                                                // Resolve an in-stream to its global pack-stream index.
+                                                // Tries direct lookup first; if not found, follows one bond to handle
+                                                // AES-encrypted sub-streams (encrypted BCJ2 layout).
+                                                // If resolved via a bond, *pAESCoderIdx is set to that coder's local index.
+                                                auto resolveInStream = [&](qint32 nInStream, qint32 *pAESCoderIdx) -> qint32 {
+                                                    if (pAESCoderIdx) *pAESCoderIdx = -1;
+                                                    if (mapInStreamToGlobal.contains(nInStream)) {
+                                                        return mapInStreamToGlobal.value(nInStream);
+                                                    }
+                                                    if (mapBondInToCoderOut.contains(nInStream)) {
+                                                        qint32 nProducerCoder = mapBondInToCoderOut.value(nInStream);
+                                                        if (nProducerCoder >= 0 && nProducerCoder < nNumCoders) {
+                                                            qint32 nProducerInStream = listInStreamOffsets.at(nProducerCoder);
+                                                            if (mapInStreamToGlobal.contains(nProducerInStream)) {
+                                                                if (pAESCoderIdx) *pAESCoderIdx = nProducerCoder;
+                                                                return mapInStreamToGlobal.value(nProducerInStream);
+                                                            }
+                                                        }
+                                                    }
+                                                    return -1;
+                                                };
+
+                                                // Resolve range stream (BCJ2.in[3])
+                                                qint32 nRangeAESCoderIdx = -1;
+                                                qint32 nRangeGlobal = resolveInStream(nBCJ2InStreamBase + 3, &nRangeAESCoderIdx);
+
+                                                if (nRangeGlobal >= 0 && nRangeGlobal < state.listInStreams.count()) {
+                                                    nBCJ2RangeOffset = state.nStreamsBegin + state.listInStreams.at(nRangeGlobal).nOffset;
+                                                    nBCJ2RangeSize = state.listInStreams.at(nRangeGlobal).nSize;
+                                                    if (nRangeAESCoderIdx >= 0) {
+                                                        baBCJ2RangeAESProp = folder.listCoders.at(nRangeAESCoderIdx).baProperty;
+                                                        nBCJ2RangeAESUnpack = (nCoderSizesOffset + nRangeAESCoderIdx < state.listCodersSizes.count())
+                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nRangeAESCoderIdx) : 0;
+                                                    }
+
+                                                    // Scan bonds for BCJ2 inputs 0=main, 1=calls, 2=jumps
                                                     qint32 nMainLZMALocal = -1;
                                                     qint32 nCallLZMALocal = -1;
                                                     qint32 nJmpLZMALocal = -1;
@@ -1685,89 +1733,101 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                             nJmpLZMALocal = nOutIdx;
                                                         }
                                                     }
-                                                    // Main stream must always be provided by a compression coder
+
                                                     if (nMainLZMALocal >= 0) {
-                                                        qint32 nMainInStream = listInStreamOffsets.at(nMainLZMALocal);
-                                                        if (mapInStreamToGlobal.contains(nMainInStream)) {
-                                                            qint32 nMainGlobal = mapInStreamToGlobal.value(nMainInStream);
-                                                            if (nMainGlobal < state.listInStreams.count() && nRangeGlobal < state.listInStreams.count()) {
-                                                                nBCJ2MainOffset = state.nStreamsBegin + state.listInStreams.at(nMainGlobal).nOffset;
-                                                                nBCJ2MainSize = state.listInStreams.at(nMainGlobal).nSize;
-                                                                cmBCJ2Main = coderToCompressMethod(folder.listCoders.at(nMainLZMALocal).baCoder);
-                                                                baBCJ2MainProp = folder.listCoders.at(nMainLZMALocal).baProperty;
-                                                                nBCJ2MainUnpack = (nCoderSizesOffset + nMainLZMALocal < state.listCodersSizes.count())
-                                                                                      ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainLZMALocal)
-                                                                                      : 0;
-                                                                nBCJ2OutputSize = (nCoderSizesOffset + nBCJ2LocalIdx < state.listCodersSizes.count())
-                                                                                      ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nBCJ2LocalIdx)
-                                                                                      : 0;
-                                                                nBCJ2RangeOffset = state.nStreamsBegin + state.listInStreams.at(nRangeGlobal).nOffset;
-                                                                nBCJ2RangeSize = state.listInStreams.at(nRangeGlobal).nSize;
-                                                                // Resolve calls stream: either via compression coder or raw direct pack stream
-                                                                bool bCallOk = false;
-                                                                if (nCallLZMALocal >= 0) {
-                                                                    qint32 nCallInStream = listInStreamOffsets.at(nCallLZMALocal);
-                                                                    if (mapInStreamToGlobal.contains(nCallInStream)) {
-                                                                        qint32 nCallGlobal = mapInStreamToGlobal.value(nCallInStream);
-                                                                        if (nCallGlobal < state.listInStreams.count()) {
-                                                                            nBCJ2CallOffset = state.nStreamsBegin + state.listInStreams.at(nCallGlobal).nOffset;
-                                                                            nBCJ2CallSize = state.listInStreams.at(nCallGlobal).nSize;
-                                                                            cmBCJ2Call = coderToCompressMethod(folder.listCoders.at(nCallLZMALocal).baCoder);
-                                                                            baBCJ2CallProp = folder.listCoders.at(nCallLZMALocal).baProperty;
-                                                                            nBCJ2CallUnpack = (nCoderSizesOffset + nCallLZMALocal < state.listCodersSizes.count())
-                                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallLZMALocal)
-                                                                                                  : 0;
-                                                                            bCallOk = true;
-                                                                        }
+                                                        qint32 nMainAESCoderIdx = -1;
+                                                        qint32 nMainGlobal = resolveInStream(listInStreamOffsets.at(nMainLZMALocal), &nMainAESCoderIdx);
+                                                        if (nMainGlobal >= 0 && nMainGlobal < state.listInStreams.count()) {
+                                                            nBCJ2MainOffset = state.nStreamsBegin + state.listInStreams.at(nMainGlobal).nOffset;
+                                                            nBCJ2MainSize = state.listInStreams.at(nMainGlobal).nSize;
+                                                            cmBCJ2Main = coderToCompressMethod(folder.listCoders.at(nMainLZMALocal).baCoder);
+                                                            baBCJ2MainProp = folder.listCoders.at(nMainLZMALocal).baProperty;
+                                                            nBCJ2MainUnpack = (nCoderSizesOffset + nMainLZMALocal < state.listCodersSizes.count())
+                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainLZMALocal) : 0;
+                                                            nBCJ2OutputSize = (nCoderSizesOffset + nBCJ2LocalIdx < state.listCodersSizes.count())
+                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nBCJ2LocalIdx) : 0;
+                                                            if (nMainAESCoderIdx >= 0) {
+                                                                baBCJ2MainAESProp = folder.listCoders.at(nMainAESCoderIdx).baProperty;
+                                                                nBCJ2MainAESUnpack = (nCoderSizesOffset + nMainAESCoderIdx < state.listCodersSizes.count())
+                                                                                         ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainAESCoderIdx) : 0;
+                                                            }
+
+                                                            // Resolve calls stream
+                                                            bool bCallOk = false;
+                                                            if (nCallLZMALocal >= 0) {
+                                                                qint32 nCallAESCoderIdx = -1;
+                                                                qint32 nCallGlobal = resolveInStream(listInStreamOffsets.at(nCallLZMALocal), &nCallAESCoderIdx);
+                                                                if (nCallGlobal >= 0 && nCallGlobal < state.listInStreams.count()) {
+                                                                    nBCJ2CallOffset = state.nStreamsBegin + state.listInStreams.at(nCallGlobal).nOffset;
+                                                                    nBCJ2CallSize = state.listInStreams.at(nCallGlobal).nSize;
+                                                                    cmBCJ2Call = coderToCompressMethod(folder.listCoders.at(nCallLZMALocal).baCoder);
+                                                                    baBCJ2CallProp = folder.listCoders.at(nCallLZMALocal).baProperty;
+                                                                    nBCJ2CallUnpack = (nCoderSizesOffset + nCallLZMALocal < state.listCodersSizes.count())
+                                                                                          ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallLZMALocal) : 0;
+                                                                    if (nCallAESCoderIdx >= 0) {
+                                                                        baBCJ2CallAESProp = folder.listCoders.at(nCallAESCoderIdx).baProperty;
+                                                                        nBCJ2CallAESUnpack = (nCoderSizesOffset + nCallAESCoderIdx < state.listCodersSizes.count())
+                                                                                                 ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallAESCoderIdx) : 0;
                                                                     }
-                                                                } else {
-                                                                    // Compact layout: BCJ2.in[1] (calls) is a raw direct pack stream
-                                                                    qint32 nCallRawIdx = nBCJ2InStreamBase + 1;
-                                                                    if (mapInStreamToGlobal.contains(nCallRawIdx)) {
-                                                                        qint32 nCallGlobal = mapInStreamToGlobal.value(nCallRawIdx);
-                                                                        if (nCallGlobal < state.listInStreams.count()) {
-                                                                            nBCJ2CallOffset = state.nStreamsBegin + state.listInStreams.at(nCallGlobal).nOffset;
-                                                                            nBCJ2CallSize = state.listInStreams.at(nCallGlobal).nSize;
-                                                                            cmBCJ2Call = HANDLE_METHOD_STORE;
-                                                                            nBCJ2CallUnpack = nBCJ2CallSize;
-                                                                            bCallOk = true;
-                                                                        }
-                                                                    }
+                                                                    bCallOk = true;
                                                                 }
-                                                                // Resolve jumps stream: either via compression coder or raw direct pack stream
-                                                                bool bJmpOk = false;
-                                                                if (nJmpLZMALocal >= 0) {
-                                                                    qint32 nJmpInStream = listInStreamOffsets.at(nJmpLZMALocal);
-                                                                    if (mapInStreamToGlobal.contains(nJmpInStream)) {
-                                                                        qint32 nJmpGlobal = mapInStreamToGlobal.value(nJmpInStream);
-                                                                        if (nJmpGlobal < state.listInStreams.count()) {
-                                                                            nBCJ2JmpOffset = state.nStreamsBegin + state.listInStreams.at(nJmpGlobal).nOffset;
-                                                                            nBCJ2JmpSize = state.listInStreams.at(nJmpGlobal).nSize;
-                                                                            cmBCJ2Jmp = coderToCompressMethod(folder.listCoders.at(nJmpLZMALocal).baCoder);
-                                                                            baBCJ2JmpProp = folder.listCoders.at(nJmpLZMALocal).baProperty;
-                                                                            nBCJ2JmpUnpack = (nCoderSizesOffset + nJmpLZMALocal < state.listCodersSizes.count())
-                                                                                                 ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpLZMALocal)
-                                                                                                 : 0;
-                                                                            bJmpOk = true;
-                                                                        }
+                                                            } else {
+                                                                // Compact layout: BCJ2.in[1] (calls) is a raw/encrypted direct stream
+                                                                qint32 nCallAESCoderIdx = -1;
+                                                                qint32 nCallGlobal = resolveInStream(nBCJ2InStreamBase + 1, &nCallAESCoderIdx);
+                                                                if (nCallGlobal >= 0 && nCallGlobal < state.listInStreams.count()) {
+                                                                    nBCJ2CallOffset = state.nStreamsBegin + state.listInStreams.at(nCallGlobal).nOffset;
+                                                                    nBCJ2CallSize = state.listInStreams.at(nCallGlobal).nSize;
+                                                                    cmBCJ2Call = HANDLE_METHOD_STORE;
+                                                                    nBCJ2CallUnpack = nBCJ2CallSize;
+                                                                    if (nCallAESCoderIdx >= 0) {
+                                                                        baBCJ2CallAESProp = folder.listCoders.at(nCallAESCoderIdx).baProperty;
+                                                                        nBCJ2CallAESUnpack = (nCoderSizesOffset + nCallAESCoderIdx < state.listCodersSizes.count())
+                                                                                                 ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallAESCoderIdx) : 0;
                                                                     }
-                                                                } else {
-                                                                    // Compact layout: BCJ2.in[2] (jumps) is a raw direct pack stream
-                                                                    qint32 nJmpRawIdx = nBCJ2InStreamBase + 2;
-                                                                    if (mapInStreamToGlobal.contains(nJmpRawIdx)) {
-                                                                        qint32 nJmpGlobal = mapInStreamToGlobal.value(nJmpRawIdx);
-                                                                        if (nJmpGlobal < state.listInStreams.count()) {
-                                                                            nBCJ2JmpOffset = state.nStreamsBegin + state.listInStreams.at(nJmpGlobal).nOffset;
-                                                                            nBCJ2JmpSize = state.listInStreams.at(nJmpGlobal).nSize;
-                                                                            cmBCJ2Jmp = HANDLE_METHOD_STORE;
-                                                                            nBCJ2JmpUnpack = nBCJ2JmpSize;
-                                                                            bJmpOk = true;
-                                                                        }
+                                                                    bCallOk = true;
+                                                                }
+                                                            }
+
+                                                            // Resolve jumps stream
+                                                            bool bJmpOk = false;
+                                                            if (nJmpLZMALocal >= 0) {
+                                                                qint32 nJmpAESCoderIdx = -1;
+                                                                qint32 nJmpGlobal = resolveInStream(listInStreamOffsets.at(nJmpLZMALocal), &nJmpAESCoderIdx);
+                                                                if (nJmpGlobal >= 0 && nJmpGlobal < state.listInStreams.count()) {
+                                                                    nBCJ2JmpOffset = state.nStreamsBegin + state.listInStreams.at(nJmpGlobal).nOffset;
+                                                                    nBCJ2JmpSize = state.listInStreams.at(nJmpGlobal).nSize;
+                                                                    cmBCJ2Jmp = coderToCompressMethod(folder.listCoders.at(nJmpLZMALocal).baCoder);
+                                                                    baBCJ2JmpProp = folder.listCoders.at(nJmpLZMALocal).baProperty;
+                                                                    nBCJ2JmpUnpack = (nCoderSizesOffset + nJmpLZMALocal < state.listCodersSizes.count())
+                                                                                         ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpLZMALocal) : 0;
+                                                                    if (nJmpAESCoderIdx >= 0) {
+                                                                        baBCJ2JmpAESProp = folder.listCoders.at(nJmpAESCoderIdx).baProperty;
+                                                                        nBCJ2JmpAESUnpack = (nCoderSizesOffset + nJmpAESCoderIdx < state.listCodersSizes.count())
+                                                                                                ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpAESCoderIdx) : 0;
                                                                     }
+                                                                    bJmpOk = true;
                                                                 }
-                                                                if (bCallOk && bJmpOk) {
-                                                                    bBCJ2Resolved = true;
+                                                            } else {
+                                                                // Compact layout: BCJ2.in[2] (jumps) is a raw/encrypted direct stream
+                                                                qint32 nJmpAESCoderIdx = -1;
+                                                                qint32 nJmpGlobal = resolveInStream(nBCJ2InStreamBase + 2, &nJmpAESCoderIdx);
+                                                                if (nJmpGlobal >= 0 && nJmpGlobal < state.listInStreams.count()) {
+                                                                    nBCJ2JmpOffset = state.nStreamsBegin + state.listInStreams.at(nJmpGlobal).nOffset;
+                                                                    nBCJ2JmpSize = state.listInStreams.at(nJmpGlobal).nSize;
+                                                                    cmBCJ2Jmp = HANDLE_METHOD_STORE;
+                                                                    nBCJ2JmpUnpack = nBCJ2JmpSize;
+                                                                    if (nJmpAESCoderIdx >= 0) {
+                                                                        baBCJ2JmpAESProp = folder.listCoders.at(nJmpAESCoderIdx).baProperty;
+                                                                        nBCJ2JmpAESUnpack = (nCoderSizesOffset + nJmpAESCoderIdx < state.listCodersSizes.count())
+                                                                                                ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpAESCoderIdx) : 0;
+                                                                    }
+                                                                    bJmpOk = true;
                                                                 }
+                                                            }
+
+                                                            if (bCallOk && bJmpOk) {
+                                                                bBCJ2Resolved = true;
                                                             }
                                                         }
                                                     }
@@ -1809,10 +1869,18 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             if (bHasSecondCoder) {
                                 record.mapProperties.insert(FPART_PROP_HANDLEMETHOD2, (quint32)cm2);
                                 record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES2, baCoderProperty2);
+                                // AES output size = coder[N-2] output = intermediate size needed for proper truncation
+                                if (nSecondCoderSizeIdx >= 0 && nSecondCoderSizeIdx < (qint32)state.listCodersSizes.count()) {
+                                    record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE2, (qint64)state.listCodersSizes.at(nSecondCoderSizeIdx));
+                                }
                             }
                             if (bHasThirdCoder) {
                                 record.mapProperties.insert(FPART_PROP_HANDLEMETHOD3, (quint32)cm3);
                                 record.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES3, baCoderProperty3);
+                                // Outermost coder (coder[0]) output size
+                                if (nCoderSizesOffset < (qint32)state.listCodersSizes.count()) {
+                                    record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE3, (qint64)state.listCodersSizes.at(nCoderSizesOffset));
+                                }
                             }
                             if (bBCJ2Resolved) {
                                 record.mapProperties.insert(FPART_PROP_HANDLEMETHOD4, (quint32)cmBCJ2Main);
@@ -1829,6 +1897,23 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 record.mapProperties.insert(FPART_PROP_STREAMSIZE3, nBCJ2JmpSize);
                                 record.mapProperties.insert(FPART_PROP_STREAMOFFSET4, nBCJ2RangeOffset);
                                 record.mapProperties.insert(FPART_PROP_STREAMSIZE4, nBCJ2RangeSize);
+                                // AES encryption properties for BCJ2 sub-streams (encrypted BCJ2 layout)
+                                if (!baBCJ2MainAESProp.isEmpty()) {
+                                    record.mapProperties.insert(FPART_PROP_BCJ2_AES_PROPS_0, baBCJ2MainAESProp);
+                                    record.mapProperties.insert(FPART_PROP_BCJ2_AES_UNPACK_0, nBCJ2MainAESUnpack);
+                                }
+                                if (!baBCJ2CallAESProp.isEmpty()) {
+                                    record.mapProperties.insert(FPART_PROP_BCJ2_AES_PROPS_1, baBCJ2CallAESProp);
+                                    record.mapProperties.insert(FPART_PROP_BCJ2_AES_UNPACK_1, nBCJ2CallAESUnpack);
+                                }
+                                if (!baBCJ2JmpAESProp.isEmpty()) {
+                                    record.mapProperties.insert(FPART_PROP_BCJ2_AES_PROPS_2, baBCJ2JmpAESProp);
+                                    record.mapProperties.insert(FPART_PROP_BCJ2_AES_UNPACK_2, nBCJ2JmpAESUnpack);
+                                }
+                                if (!baBCJ2RangeAESProp.isEmpty()) {
+                                    record.mapProperties.insert(FPART_PROP_BCJ2_AES_PROPS_3, baBCJ2RangeAESProp);
+                                    record.mapProperties.insert(FPART_PROP_BCJ2_AES_UNPACK_3, nBCJ2RangeAESUnpack);
+                                }
                             }
                             record.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nFolderDecompressedSize);
                             record.mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, nCurrentUncompressedOffset);
