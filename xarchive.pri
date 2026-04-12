@@ -2,6 +2,12 @@ INCLUDEPATH += $$PWD
 DEPENDPATH += $$PWD
 INCLUDEPATH += $$PWD/Algos
 DEPENDPATH += $$PWD/Algos
+INCLUDEPATH += $$PWD/../../_3rdparty/upx/vendor/ucl/include
+DEPENDPATH += $$PWD/../../_3rdparty/upx/vendor/ucl/include
+INCLUDEPATH += $$PWD/../../_3rdparty/upx/vendor/ucl
+DEPENDPATH += $$PWD/../../_3rdparty/upx/vendor/ucl
+INCLUDEPATH += $$PWD/../../_3rdparty/upx/vendor/ucl/src
+DEPENDPATH += $$PWD/../../_3rdparty/upx/vendor/ucl/src
 INCLUDEPATH += $$PWD/3rdparty/ppmd/src
 DEPENDPATH += $$PWD/3rdparty/ppmd/src
 
@@ -32,6 +38,7 @@ HEADERS += \
     $$PWD/Algos/xsha256decoder.h \
     $$PWD/Algos/xblake2sp.h \
     $$PWD/Algos/xzstddecoder.h \
+    $$PWD/Algos/xucldecoder.h \
     $$PWD/Algos/xlzodecoder.h \
     $$PWD/Algos/xcompressdecoder.h \
     $$PWD/x_ar.h \
@@ -111,6 +118,7 @@ SOURCES += \
     $$PWD/Algos/xsha256decoder.cpp \
     $$PWD/Algos/xblake2sp.cpp \
     $$PWD/Algos/xzstddecoder.cpp \
+    $$PWD/Algos/xucldecoder.cpp \
     $$PWD/Algos/zstddeclib.cpp \
     $$PWD/Algos/xlzodecoder.cpp \
     $$PWD/Algos/xcompressdecoder.cpp \

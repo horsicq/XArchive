@@ -4,6 +4,9 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/bzip2/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/lzma/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/zlib/src/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/ppmd/src/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/../../_3rdparty/upx/vendor/ucl/include)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/../../_3rdparty/upx/vendor/ucl)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/../../_3rdparty/upx/vendor/ucl/src)
 
 if (NOT DEFINED XBINARY_SOURCES)
     include(${CMAKE_CURRENT_LIST_DIR}/../Formats/xbinary.cmake)
@@ -121,6 +124,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xacedecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xacedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.cpp
