@@ -2,12 +2,6 @@ INCLUDEPATH += $$PWD
 DEPENDPATH += $$PWD
 INCLUDEPATH += $$PWD/Algos
 DEPENDPATH += $$PWD/Algos
-INCLUDEPATH += $$PWD/../../_3rdparty/upx/vendor/ucl/include
-DEPENDPATH += $$PWD/../../_3rdparty/upx/vendor/ucl/include
-INCLUDEPATH += $$PWD/../../_3rdparty/upx/vendor/ucl
-DEPENDPATH += $$PWD/../../_3rdparty/upx/vendor/ucl
-INCLUDEPATH += $$PWD/../../_3rdparty/upx/vendor/ucl/src
-DEPENDPATH += $$PWD/../../_3rdparty/upx/vendor/ucl/src
 INCLUDEPATH += $$PWD/3rdparty/ppmd/src
 DEPENDPATH += $$PWD/3rdparty/ppmd/src
 
