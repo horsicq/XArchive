@@ -123,6 +123,20 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xacedecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_init.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_os.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_cc.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_arch.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_mm.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_defs.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_auto.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_type.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_incd.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_ince.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_inci.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_chk.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc_hmemcpy.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.cpp

@@ -438,7 +438,7 @@ UCL_EXTERN(unsigned) __ucl_align_gap(const ucl_voidp _ptr, ucl_uint _size);
 #  define ACC_CONFIG_NO_HEADER 1
 #endif
 #define __ACCLIB_FUNCNAME(f)        error_do_not_use_acclib
-#include "acc/acc.h"
+#include "xucldecoder_acc.h"
 
 #if (ACC_CC_MSC && (_MSC_VER >= 1300))
    /* avoid `-Wall' warnings in system header files */
@@ -486,10 +486,10 @@ UCL_EXTERN(unsigned) __ucl_align_gap(const ucl_voidp _ptr, ucl_uint _size);
 #endif
 
 
-#include "acc/acc_incd.h"
+#include "xucldecoder_acc_incd.h"
 #if (ACC_OS_DOS16 || ACC_OS_OS216 || ACC_OS_WIN16)
-#  include "acc/acc_ince.h"
-#  include "acc/acc_inci.h"
+#  include "xucldecoder_acc_ince.h"
+#  include "xucldecoder_acc_inci.h"
 #endif
 
 #undef NDEBUG
@@ -3972,7 +3972,7 @@ static ucl_bool __ucl_assert_fail(const char *s, unsigned line)
 #undef ACCCHK_ASSERT
 #define ACCCHK_ASSERT(expr)     ACC_COMPILE_TIME_ASSERT_HEADER(expr)
 
-#include "acc/acc_chk.ch"
+#include "xucldecoder_acc_chk.h"
 
     ACCCHK_ASSERT_IS_SIGNED_T(ucl_int)
     ACCCHK_ASSERT_IS_UNSIGNED_T(ucl_uint)
@@ -4233,7 +4233,7 @@ __ucl_init2(ucl_uint32 v, int s1, int s2, int s3, int s4, int s5,
 
 #if (ACC_CC_MSC && ((_MSC_VER) < 700))
 #else
-#include "acc/acc_chk.ch"
+#include "xucldecoder_acc_chk.h"
 #undef ACCCHK_ASSERT
 #endif
 
@@ -4357,7 +4357,7 @@ __ucl_align_gap(const ucl_voidp ptr, ucl_uint size)
 #define acc_hmemcpy             ucl_memcpy
 #define acc_hmemmove            ucl_memmove
 #define acc_hmemset             ucl_memset
-#include "acc/acclib/hmemcpy.ch"
+#include "xucldecoder_acc_hmemcpy.h"
 #undef ACCLIB_PUBLIC
 
 
