@@ -486,10 +486,16 @@ UCL_EXTERN(unsigned) __ucl_align_gap(const ucl_voidp _ptr, ucl_uint _size);
 #endif
 
 
-#include "xucldecoder_acc_incd.h"
+#define ACC_WANT_INCD 1
+#include "xucldecoder_acc.h"
+#undef ACC_WANT_INCD
 #if (ACC_OS_DOS16 || ACC_OS_OS216 || ACC_OS_WIN16)
-#  include "xucldecoder_acc_ince.h"
-#  include "xucldecoder_acc_inci.h"
+#  define ACC_WANT_INCE 1
+#  include "xucldecoder_acc.h"
+#  undef ACC_WANT_INCE
+#  define ACC_WANT_INCI 1
+#  include "xucldecoder_acc.h"
+#  undef ACC_WANT_INCI
 #endif
 
 #undef NDEBUG
@@ -3972,7 +3978,9 @@ static ucl_bool __ucl_assert_fail(const char *s, unsigned line)
 #undef ACCCHK_ASSERT
 #define ACCCHK_ASSERT(expr)     ACC_COMPILE_TIME_ASSERT_HEADER(expr)
 
-#include "xucldecoder_acc_chk.h"
+#define ACC_WANT_CHK 1
+#include "xucldecoder_acc.h"
+#undef ACC_WANT_CHK
 
     ACCCHK_ASSERT_IS_SIGNED_T(ucl_int)
     ACCCHK_ASSERT_IS_UNSIGNED_T(ucl_uint)
@@ -4233,7 +4241,9 @@ __ucl_init2(ucl_uint32 v, int s1, int s2, int s3, int s4, int s5,
 
 #if (ACC_CC_MSC && ((_MSC_VER) < 700))
 #else
-#include "xucldecoder_acc_chk.h"
+#define ACC_WANT_CHK 1
+#include "xucldecoder_acc.h"
+#undef ACC_WANT_CHK
 #undef ACCCHK_ASSERT
 #endif
 
@@ -4357,7 +4367,9 @@ __ucl_align_gap(const ucl_voidp ptr, ucl_uint size)
 #define acc_hmemcpy             ucl_memcpy
 #define acc_hmemmove            ucl_memmove
 #define acc_hmemset             ucl_memset
-#include "xucldecoder_acc_hmemcpy.h"
+#define ACC_WANT_HMEMCPY 1
+#include "xucldecoder_acc.h"
+#undef ACC_WANT_HMEMCPY
 #undef ACCLIB_PUBLIC
 
 

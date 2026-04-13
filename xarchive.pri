@@ -34,19 +34,6 @@ HEADERS += \
     $$PWD/Algos/xzstddecoder.h \
     $$PWD/Algos/xucldecoder.h \
     $$PWD/Algos/xucldecoder_acc.h \
-    $$PWD/Algos/xucldecoder_acc_init.h \
-    $$PWD/Algos/xucldecoder_acc_os.h \
-    $$PWD/Algos/xucldecoder_acc_cc.h \
-    $$PWD/Algos/xucldecoder_acc_arch.h \
-    $$PWD/Algos/xucldecoder_acc_mm.h \
-    $$PWD/Algos/xucldecoder_acc_defs.h \
-    $$PWD/Algos/xucldecoder_acc_auto.h \
-    $$PWD/Algos/xucldecoder_acc_type.h \
-    $$PWD/Algos/xucldecoder_acc_incd.h \
-    $$PWD/Algos/xucldecoder_acc_ince.h \
-    $$PWD/Algos/xucldecoder_acc_inci.h \
-    $$PWD/Algos/xucldecoder_acc_chk.h \
-    $$PWD/Algos/xucldecoder_acc_hmemcpy.h \
     $$PWD/Algos/xlzodecoder.h \
     $$PWD/Algos/xcompressdecoder.h \
     $$PWD/x_ar.h \
