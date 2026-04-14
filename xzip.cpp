@@ -644,6 +644,11 @@ QString XZip::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XZip::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 quint32 XZip::ftStringToStructID(const QString &sFtString)
 {
     return XCONVERT_ftStringToId(sFtString, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));

@@ -59,6 +59,8 @@ public:
     virtual ENDIAN getEndian() override;
     virtual qint32 getType() override;
     virtual QString structIDToString(quint32 nID) override;
+    virtual QString structIDToFtString(quint32 nID) override;
+    virtual quint32 ftStringToStructID(const QString &sFtString) override;
 };
 
 #endif  // XDOS16_H

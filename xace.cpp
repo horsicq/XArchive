@@ -394,6 +394,16 @@ QString XACE::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XACE::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XACE::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 QList<XBinary::DATA_HEADER> XACE::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<DATA_HEADER> listResult;

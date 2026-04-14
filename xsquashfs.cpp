@@ -132,6 +132,16 @@ QString XSquashfs::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XSQUASHFS_STRUCTID, sizeof(_TABLE_XSQUASHFS_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XSquashfs::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XSQUASHFS_STRUCTID, sizeof(_TABLE_XSQUASHFS_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XSquashfs::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XSQUASHFS_STRUCTID, sizeof(_TABLE_XSQUASHFS_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 QList<XBinary::DATA_HEADER> XSquashfs::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(dataHeadersOptions)

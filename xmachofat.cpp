@@ -319,6 +319,16 @@ QString XMACHOFat::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XMACHOFAT_STRUCTID, sizeof(_TABLE_XMACHOFAT_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XMACHOFat::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XMACHOFAT_STRUCTID, sizeof(_TABLE_XMACHOFAT_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XMACHOFat::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XMACHOFAT_STRUCTID, sizeof(_TABLE_XMACHOFAT_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 // qint64 XMACHOFat::getNumberOfArchiveRecords(PDSTRUCT *pPdStruct)
 // {
 //     return (qint64)getNumberOfRecords(pPdStruct);

@@ -38,6 +38,8 @@ public:
     virtual QString getVersion() override;
     virtual FT getFileType() override;
     QString structIDToString(quint32 nID) override;
+    QString structIDToFtString(quint32 nID) override;
+    quint32 ftStringToStructID(const QString &sFtString) override;
     virtual QString getFileFormatExt() override;
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
     virtual QString getMIMEString() override;

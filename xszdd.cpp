@@ -221,6 +221,16 @@ QString XSZDD::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XSZDD_STRUCTID, sizeof(_TABLE_XSZDD_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XSZDD::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XSZDD_STRUCTID, sizeof(_TABLE_XSZDD_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XSZDD::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XSZDD_STRUCTID, sizeof(_TABLE_XSZDD_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 QList<XBinary::DATA_HEADER> XSZDD::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)

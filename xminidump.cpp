@@ -190,6 +190,16 @@ QString XMiniDump::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XMINIDUMP_STRUCTID, sizeof(_TABLE_XMINIDUMP_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XMiniDump::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XMINIDUMP_STRUCTID, sizeof(_TABLE_XMINIDUMP_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XMiniDump::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XMINIDUMP_STRUCTID, sizeof(_TABLE_XMINIDUMP_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 QList<XBinary::DATA_HEADER> XMiniDump::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::DATA_HEADER> listResult;

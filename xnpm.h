@@ -53,6 +53,8 @@ public:
     virtual QString typeIdToString(qint32 nType);
     virtual QString getMIMEString();
     virtual QString structIDToString(quint32 nID);
+    virtual QString structIDToFtString(quint32 nID);
+    virtual quint32 ftStringToStructID(const QString &sFtString);
 };
 
 #endif  // XNPM_H

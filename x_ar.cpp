@@ -94,6 +94,16 @@ QString X_Ar::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XAr_STRUCTID, sizeof(_TABLE_XAr_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString X_Ar::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XAr_STRUCTID, sizeof(_TABLE_XAr_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 X_Ar::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XAr_STRUCTID, sizeof(_TABLE_XAr_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 bool X_Ar::readTableInit(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void **ppUserData, PDSTRUCT *pPdStruct)
 {
     if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {

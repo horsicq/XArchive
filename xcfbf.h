@@ -111,6 +111,8 @@ public:
     StructuredStorageHeader read_StructuredStorageHeader(qint64 nOffset, PDSTRUCT *pPdStruct);
 
     virtual QString structIDToString(quint32 nID);
+    virtual QString structIDToFtString(quint32 nID);
+    virtual quint32 ftStringToStructID(const QString &sFtString);
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
 
     // Streaming unpacking API

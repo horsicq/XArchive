@@ -155,3 +155,13 @@ QString XJAR::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XJAR_STRUCTID, sizeof(_TABLE_XJAR_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XJAR::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XJAR_STRUCTID, sizeof(_TABLE_XJAR_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XJAR::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XJAR_STRUCTID, sizeof(_TABLE_XJAR_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+

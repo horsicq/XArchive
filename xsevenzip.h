@@ -123,6 +123,8 @@ public:
     static QMap<quint64, QString> get_k7zId_s();
 
     virtual QString structIDToString(quint32 nID) override;
+    virtual QString structIDToFtString(quint32 nID) override;
+    virtual quint32 ftStringToStructID(const QString &sFtString) override;
     virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
 
     // Streaming unpacking API

@@ -156,6 +156,16 @@ QString XLzip::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XLZIP_STRUCTID, sizeof(_TABLE_XLZIP_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XLzip::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XLZIP_STRUCTID, sizeof(_TABLE_XLZIP_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XLzip::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XLZIP_STRUCTID, sizeof(_TABLE_XLZIP_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 QList<XBinary::DATA_HEADER> XLzip::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::DATA_HEADER> listResult;

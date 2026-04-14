@@ -296,6 +296,16 @@ QString XLHA::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XLHA_STRUCTID, sizeof(_TABLE_XLHA_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XLHA::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XLHA_STRUCTID, sizeof(_TABLE_XLHA_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XLHA::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XLHA_STRUCTID, sizeof(_TABLE_XLHA_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<DATA_HEADER> listResult;

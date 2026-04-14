@@ -155,6 +155,16 @@ QString XBrotli::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XBrotli_STRUCTID, sizeof(_TABLE_XBrotli_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XBrotli::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XBrotli_STRUCTID, sizeof(_TABLE_XBrotli_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XBrotli::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XBrotli_STRUCTID, sizeof(_TABLE_XBrotli_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 QList<XBinary::DATA_HEADER> XBrotli::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::DATA_HEADER> listResult;

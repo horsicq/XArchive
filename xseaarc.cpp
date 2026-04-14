@@ -338,6 +338,16 @@ QString XSEAARC::structIDToString(quint32 nID)
     return XBinary::XCONVERT_idToTransString(nID, _TABLE_XSEAARC_STRUCTID, sizeof(_TABLE_XSEAARC_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QString XSEAARC::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XSEAARC_STRUCTID, sizeof(_TABLE_XSEAARC_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XSEAARC::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XSEAARC_STRUCTID, sizeof(_TABLE_XSEAARC_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
 QList<XBinary::DATA_HEADER> XSEAARC::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 {
     QList<DATA_HEADER> listResult;
