@@ -21,7 +21,7 @@
 #ifndef XLZODECODER_H
 #define XLZODECODER_H
 
-#include "../xbinary.h"
+#include "xbinary.h"
 
 class XLZODecoder : public QObject {
     Q_OBJECT

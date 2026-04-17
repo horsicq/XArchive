@@ -21,7 +21,7 @@
 #ifndef XZSTDDECODER_H
 #define XZSTDDECODER_H
 
-#include "../xbinary.h"
+#include "xbinary.h"
 
 extern "C" {
 typedef struct ZSTD_DCtx_s ZSTD_DCtx;

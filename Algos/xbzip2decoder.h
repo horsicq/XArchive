@@ -22,7 +22,7 @@
 #define XBZIP2DECODER_H
 
 #include "bzlib.h"
-#include "../xbinary.h"
+#include "xbinary.h"
 
 class XBZIP2Decoder : public QObject {
     Q_OBJECT

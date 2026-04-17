@@ -21,7 +21,7 @@
 #ifndef XCOMPRESSDECODER_H
 #define XCOMPRESSDECODER_H
 
-#include "../xbinary.h"
+#include "xbinary.h"
 
 class XCompressDecoder : public QObject {
     Q_OBJECT

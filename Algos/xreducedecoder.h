@@ -23,7 +23,7 @@
 
 #include <QObject>
 #include <QIODevice>
-#include "../xbinary.h"
+#include "xbinary.h"
 
 class XReduceDecoder : public QObject {
     Q_OBJECT

@@ -21,7 +21,7 @@
 #ifndef XBROTLIDECODER_H
 #define XBROTLIDECODER_H
 
-#include "../xbinary.h"
+#include "xbinary.h"
 
 class XBrotliDecoder : public QObject {
     Q_OBJECT
