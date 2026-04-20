@@ -178,7 +178,7 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     recHeader.nSize = nHeaderSize;
     recHeader.nIndex = nIndex++;
     recHeader.filePart = FILEPART_HEADER;
-    recHeader.sName = tr("SZDD Header");
+    recHeader.sName = QString("SZDD ") + tr("Header");
     result.listRecords.append(recHeader);
 
     SubDevice sd(getDevice(), nHeaderSize, -1);

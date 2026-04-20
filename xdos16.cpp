@@ -220,7 +220,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
                     part.nFileOffset = nCur;
                     part.nFileSize = qMax<qint64>(0, nNext - nCur);
                     part.nVirtualAddress = -1;
-                    part.sName = sName.isEmpty() ? tr("Segment %1").arg(nIndex) : sName;
+                    part.sName = sName.isEmpty() ? (tr("Segment") + QString(" %1")).arg(nIndex) : sName;
                     listResult.append(part);
                 }
 
