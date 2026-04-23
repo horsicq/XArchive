@@ -210,7 +210,7 @@ public:
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
 private:
-qint32 getInternVersion(PDSTRUCT *pPdStruct);
+    qint32 getInternVersion(PDSTRUCT *pPdStruct);
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
     GENERICBLOCK4 readGenericBlock4(qint64 nOffset);
     FILEBLOCK14 readFileBlock14(qint64 nOffset);

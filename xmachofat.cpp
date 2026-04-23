@@ -21,7 +21,7 @@
 #include "xmachofat.h"
 #include "xdecompress.h"
 
-XBinary::XCONVERT _TABLE_XMACHOFAT_STRUCTID[] = {
+static XBinary::XCONVERT _TABLE_XMACHOFAT_STRUCTID[] = {
     {XMACHOFat::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
     {XMACHOFat::STRUCTID_HEADER, "HEADER", QObject::tr("Header")},
     {XMACHOFat::STRUCTID_ARCHITECTURE, "ARCHITECTURE", QObject::tr("Architecture")},
@@ -79,7 +79,7 @@ bool XMACHOFat::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XMACHOFat xmachofat(pDevice);
 
-    return xmachofat.isValid();
+    return xmachofat.isValid(pPdStruct);
 }
 
 XBinary::ENDIAN XMACHOFat::getEndian()

@@ -77,7 +77,7 @@ bool XUDF::isValid(PDSTRUCT *pPdStruct)
 bool XUDF::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XUDF xudf(pDevice);
-    return xudf.isValid();
+    return xudf.isValid(pPdStruct);
 }
 
 QString XUDF::getFileFormatExt()
