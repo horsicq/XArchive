@@ -463,4 +463,3 @@ XBinary *XBZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModule
 
     return new XBZIP2(pDevice);
 }
-

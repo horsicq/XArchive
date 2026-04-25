@@ -121,4 +121,3 @@ private:
 };
 
 #endif  // XXZ_H
-

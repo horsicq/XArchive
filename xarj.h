@@ -98,4 +98,3 @@ private:
 };
 
 #endif  // XARJ_H
-

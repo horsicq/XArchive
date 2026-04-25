@@ -125,14 +125,14 @@ class XRar : public XArchive {
     };
 
     struct RAR_UNPACK_CONTEXT {
-        qint32 nVersion;                        // RAR version (1, 4, or 5)
-        bool bArchiveIsSolid;                   // Archive-level solid flag
-        bool bHeadersEncrypted;                 // True if archive has encrypted headers (RAR5)
-        QList<qint64> listFileOffsets;          // Offsets of file headers
-        QList<FILEBLOCK14> listFileBlocks14;    // Cache of RAR 1.4 file blocks
-        QList<FILEBLOCK4> listFileBlocks4;      // Cache of RAR 4.x file blocks
-        QList<FILEHEADER5> listFileHeaders5;    // Cache of RAR 5.x file headers
-        QList<qint32> listSolidFolderIndex;     // Solid block index per file (incremented on non-solid boundary)
+        qint32 nVersion;                      // RAR version (1, 4, or 5)
+        bool bArchiveIsSolid;                 // Archive-level solid flag
+        bool bHeadersEncrypted;               // True if archive has encrypted headers (RAR5)
+        QList<qint64> listFileOffsets;        // Offsets of file headers
+        QList<FILEBLOCK14> listFileBlocks14;  // Cache of RAR 1.4 file blocks
+        QList<FILEBLOCK4> listFileBlocks4;    // Cache of RAR 4.x file blocks
+        QList<FILEHEADER5> listFileHeaders5;  // Cache of RAR 5.x file headers
+        QList<qint32> listSolidFolderIndex;   // Solid block index per file (incremented on non-solid boundary)
         XDecompress decompress;
     };
 
@@ -229,8 +229,6 @@ private:
     // Helper functions for packing
     QByteArray createFileBlock4(const QString &sFileName, qint64 nFileSize, quint32 nFileCRC, quint32 nFileTime, quint32 nAttributes);
     quint16 calculateCRC16(const QByteArray &data);
-
 };
 
 #endif  // XRAR_H
-

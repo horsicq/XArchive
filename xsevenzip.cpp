@@ -1724,7 +1724,8 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                     if (nRangeAESCoderIdx >= 0) {
                                                         baBCJ2RangeAESProp = folder.listCoders.at(nRangeAESCoderIdx).baProperty;
                                                         nBCJ2RangeAESUnpack = (nCoderSizesOffset + nRangeAESCoderIdx < state.listCodersSizes.count())
-                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nRangeAESCoderIdx) : 0;
+                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nRangeAESCoderIdx)
+                                                                                  : 0;
                                                     }
 
                                                     // Scan bonds for BCJ2 inputs 0=main, 1=calls, 2=jumps
@@ -1753,13 +1754,16 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                             cmBCJ2Main = coderToCompressMethod(folder.listCoders.at(nMainLZMALocal).baCoder);
                                                             baBCJ2MainProp = folder.listCoders.at(nMainLZMALocal).baProperty;
                                                             nBCJ2MainUnpack = (nCoderSizesOffset + nMainLZMALocal < state.listCodersSizes.count())
-                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainLZMALocal) : 0;
+                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainLZMALocal)
+                                                                                  : 0;
                                                             nBCJ2OutputSize = (nCoderSizesOffset + nBCJ2LocalIdx < state.listCodersSizes.count())
-                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nBCJ2LocalIdx) : 0;
+                                                                                  ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nBCJ2LocalIdx)
+                                                                                  : 0;
                                                             if (nMainAESCoderIdx >= 0) {
                                                                 baBCJ2MainAESProp = folder.listCoders.at(nMainAESCoderIdx).baProperty;
                                                                 nBCJ2MainAESUnpack = (nCoderSizesOffset + nMainAESCoderIdx < state.listCodersSizes.count())
-                                                                                         ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainAESCoderIdx) : 0;
+                                                                                         ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nMainAESCoderIdx)
+                                                                                         : 0;
                                                             }
 
                                                             // Resolve calls stream
@@ -1773,11 +1777,13 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                                     cmBCJ2Call = coderToCompressMethod(folder.listCoders.at(nCallLZMALocal).baCoder);
                                                                     baBCJ2CallProp = folder.listCoders.at(nCallLZMALocal).baProperty;
                                                                     nBCJ2CallUnpack = (nCoderSizesOffset + nCallLZMALocal < state.listCodersSizes.count())
-                                                                                          ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallLZMALocal) : 0;
+                                                                                          ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallLZMALocal)
+                                                                                          : 0;
                                                                     if (nCallAESCoderIdx >= 0) {
                                                                         baBCJ2CallAESProp = folder.listCoders.at(nCallAESCoderIdx).baProperty;
                                                                         nBCJ2CallAESUnpack = (nCoderSizesOffset + nCallAESCoderIdx < state.listCodersSizes.count())
-                                                                                                 ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallAESCoderIdx) : 0;
+                                                                                                 ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallAESCoderIdx)
+                                                                                                 : 0;
                                                                     }
                                                                     bCallOk = true;
                                                                 }
@@ -1793,7 +1799,8 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                                     if (nCallAESCoderIdx >= 0) {
                                                                         baBCJ2CallAESProp = folder.listCoders.at(nCallAESCoderIdx).baProperty;
                                                                         nBCJ2CallAESUnpack = (nCoderSizesOffset + nCallAESCoderIdx < state.listCodersSizes.count())
-                                                                                                 ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallAESCoderIdx) : 0;
+                                                                                                 ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nCallAESCoderIdx)
+                                                                                                 : 0;
                                                                     }
                                                                     bCallOk = true;
                                                                 }
@@ -1810,11 +1817,13 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                                     cmBCJ2Jmp = coderToCompressMethod(folder.listCoders.at(nJmpLZMALocal).baCoder);
                                                                     baBCJ2JmpProp = folder.listCoders.at(nJmpLZMALocal).baProperty;
                                                                     nBCJ2JmpUnpack = (nCoderSizesOffset + nJmpLZMALocal < state.listCodersSizes.count())
-                                                                                         ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpLZMALocal) : 0;
+                                                                                         ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpLZMALocal)
+                                                                                         : 0;
                                                                     if (nJmpAESCoderIdx >= 0) {
                                                                         baBCJ2JmpAESProp = folder.listCoders.at(nJmpAESCoderIdx).baProperty;
                                                                         nBCJ2JmpAESUnpack = (nCoderSizesOffset + nJmpAESCoderIdx < state.listCodersSizes.count())
-                                                                                                ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpAESCoderIdx) : 0;
+                                                                                                ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpAESCoderIdx)
+                                                                                                : 0;
                                                                     }
                                                                     bJmpOk = true;
                                                                 }
@@ -1830,7 +1839,8 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                                     if (nJmpAESCoderIdx >= 0) {
                                                                         baBCJ2JmpAESProp = folder.listCoders.at(nJmpAESCoderIdx).baProperty;
                                                                         nBCJ2JmpAESUnpack = (nCoderSizesOffset + nJmpAESCoderIdx < state.listCodersSizes.count())
-                                                                                                ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpAESCoderIdx) : 0;
+                                                                                                ? (qint64)state.listCodersSizes.at(nCoderSizesOffset + nJmpAESCoderIdx)
+                                                                                                : 0;
                                                                     }
                                                                     bJmpOk = true;
                                                                 }
@@ -2293,4 +2303,3 @@ XBinary *XSevenZip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XSevenZip(pDevice);
 }
-

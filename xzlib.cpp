@@ -633,4 +633,3 @@ XBinary *XZlib::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XZlib(pDevice);
 }
-

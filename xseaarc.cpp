@@ -592,4 +592,3 @@ XBinary *XSEAARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModul
 
     return new XSEAARC(pDevice);
 }
-

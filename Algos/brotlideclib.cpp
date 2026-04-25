@@ -881,7 +881,8 @@ static BROTLI_INLINE void BrotliRBit(void)
         return a > b ? a : b;                       \
     }
 BROTLI_MIN_MAX(double)
-BROTLI_MIN_MAX(float) BROTLI_MIN_MAX(int) BROTLI_MIN_MAX(size_t) BROTLI_MIN_MAX(uint32_t) BROTLI_MIN_MAX(uint8_t)
+BROTLI_MIN_MAX(float)
+BROTLI_MIN_MAX(int) BROTLI_MIN_MAX(size_t) BROTLI_MIN_MAX(uint32_t) BROTLI_MIN_MAX(uint8_t)
 #undef BROTLI_MIN_MAX
 #define BROTLI_MIN(T, A, B) (brotli_min_##T((A), (B)))
 #define BROTLI_MAX(T, A, B) (brotli_max_##T((A), (B)))

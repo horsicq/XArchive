@@ -91,4 +91,3 @@ XBinary::FT XAPKS::getFileType()
 {
     return FT_APKS;
 }
-

@@ -58,4 +58,3 @@ public:
 };
 
 #endif  // XNPM_H
-

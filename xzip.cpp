@@ -2329,4 +2329,3 @@ XBinary *XZip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XZip(pDevice);
 }
-

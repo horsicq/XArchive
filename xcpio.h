@@ -60,17 +60,17 @@ class XCPIO : public XArchive {
     };
 
     struct CPIO_BINARY_HEADER {
-        quint16 magic;       // 070707 in host byte order
-        quint16 dev;         // Device number
-        quint16 ino;         // Inode number
-        quint16 mode;        // File mode
-        quint16 uid;         // User ID
-        quint16 gid;         // Group ID
-        quint16 nlink;       // Number of hard links
-        quint16 rdev;        // Special device number
-        quint16 mtimeHigh;   // High 16 bits of modification time
-        quint16 mtimeLow;    // Low 16 bits of modification time
-        quint16 namesize;    // Filename size
+        quint16 magic;         // 070707 in host byte order
+        quint16 dev;           // Device number
+        quint16 ino;           // Inode number
+        quint16 mode;          // File mode
+        quint16 uid;           // User ID
+        quint16 gid;           // Group ID
+        quint16 nlink;         // Number of hard links
+        quint16 rdev;          // Special device number
+        quint16 mtimeHigh;     // High 16 bits of modification time
+        quint16 mtimeLow;      // Low 16 bits of modification time
+        quint16 namesize;      // Filename size
         quint16 filesizeHigh;  // High 16 bits of file size
         quint16 filesizeLow;   // Low 16 bits of file size
     };
@@ -159,4 +159,3 @@ private:
 };
 
 #endif  // XCPIO_H
-

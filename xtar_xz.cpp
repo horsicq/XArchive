@@ -104,4 +104,3 @@ XBinary *XTAR_XZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModul
 
     return new XTAR_XZ(pDevice);
 }
-

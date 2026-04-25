@@ -88,4 +88,3 @@ private:
 };
 
 #endif  // XFREEARC_H
-

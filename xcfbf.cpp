@@ -1107,4 +1107,3 @@ XBinary *XCFBF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XCFBF(pDevice);
 }
-

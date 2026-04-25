@@ -99,4 +99,3 @@ XBinary *XTAR_BZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMo
 
     return new XTAR_BZIP2(pDevice);
 }
-

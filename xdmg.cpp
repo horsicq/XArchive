@@ -697,4 +697,3 @@ XBinary *XDMG::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XDMG(pDevice);
 }
-

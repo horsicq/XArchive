@@ -29,19 +29,19 @@ XISO9660::XISO9660(QIODevice *pDevice) : XArchive(pDevice)
 {
     if (isValid()) {
         qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        m_sSystemIdentifier            = QString::fromLatin1(read_array(nPVDOffset + 8,   32)).trimmed();
-        m_sVolumeIdentifier            = QString::fromLatin1(read_array(nPVDOffset + 40,  32)).trimmed();
-        m_sVolumeSetIdentifier         = QString::fromLatin1(read_array(nPVDOffset + 190, 128)).trimmed();
-        m_sPublisherIdentifier         = QString::fromLatin1(read_array(nPVDOffset + 318, 128)).trimmed();
-        m_sDataPreparerIdentifier      = QString::fromLatin1(read_array(nPVDOffset + 446, 128)).trimmed();
-        m_sApplicationIdentifier       = QString::fromLatin1(read_array(nPVDOffset + 574, 128)).trimmed();
-        m_sCopyrightFileIdentifier     = QString::fromLatin1(read_array(nPVDOffset + 702, 37)).trimmed();
-        m_sAbstractFileIdentifier      = QString::fromLatin1(read_array(nPVDOffset + 739, 36)).trimmed();
+        m_sSystemIdentifier = QString::fromLatin1(read_array(nPVDOffset + 8, 32)).trimmed();
+        m_sVolumeIdentifier = QString::fromLatin1(read_array(nPVDOffset + 40, 32)).trimmed();
+        m_sVolumeSetIdentifier = QString::fromLatin1(read_array(nPVDOffset + 190, 128)).trimmed();
+        m_sPublisherIdentifier = QString::fromLatin1(read_array(nPVDOffset + 318, 128)).trimmed();
+        m_sDataPreparerIdentifier = QString::fromLatin1(read_array(nPVDOffset + 446, 128)).trimmed();
+        m_sApplicationIdentifier = QString::fromLatin1(read_array(nPVDOffset + 574, 128)).trimmed();
+        m_sCopyrightFileIdentifier = QString::fromLatin1(read_array(nPVDOffset + 702, 37)).trimmed();
+        m_sAbstractFileIdentifier = QString::fromLatin1(read_array(nPVDOffset + 739, 36)).trimmed();
         m_sBibliographicFileIdentifier = QString::fromLatin1(read_array(nPVDOffset + 775, 37)).trimmed();
-        m_sCreationDateTime            = QString::fromLatin1(read_array(nPVDOffset + 812, 17)).trimmed();
-        m_sModificationDateTime        = QString::fromLatin1(read_array(nPVDOffset + 829, 17)).trimmed();
-        m_sExpirationDateTime          = QString::fromLatin1(read_array(nPVDOffset + 846, 17)).trimmed();
-        m_sEffectiveDateTime           = QString::fromLatin1(read_array(nPVDOffset + 863, 17)).trimmed();
+        m_sCreationDateTime = QString::fromLatin1(read_array(nPVDOffset + 812, 17)).trimmed();
+        m_sModificationDateTime = QString::fromLatin1(read_array(nPVDOffset + 829, 17)).trimmed();
+        m_sExpirationDateTime = QString::fromLatin1(read_array(nPVDOffset + 846, 17)).trimmed();
+        m_sEffectiveDateTime = QString::fromLatin1(read_array(nPVDOffset + 863, 17)).trimmed();
     }
 }
 
@@ -709,4 +709,3 @@ XBinary *XISO9660::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
 
     return new XISO9660(pDevice);
 }
-

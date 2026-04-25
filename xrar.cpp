@@ -24,12 +24,12 @@
 #include <QBuffer>
 
 static XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                            {XRar::STRUCTID_RAR14_SIGNATURE, "RAR14_SIGNATURE", QString("RAR 1.4 signature")},
-                                            {XRar::STRUCTID_RAR40_SIGNATURE, "RAR40_SIGNATURE", QString("RAR 4.0 signature")},
-                                            {XRar::STRUCTID_RAR50_SIGNATURE, "RAR50_SIGNATURE", QString("RAR 5.0 signature)")},
-                                            {XRar::STRUCTID_RAR14_HEADER, "RAR14_HEADER", QString("RAR 1.4 header")},
-                                            {XRar::STRUCTID_RAR40_HEADER, "RAR40_HEADER", QString("RAR 4.0 header")},
-                                            {XRar::STRUCTID_RAR50_HEADER, "RAR50_HEADER", QString("RAR 5.0 header")}};
+                                                   {XRar::STRUCTID_RAR14_SIGNATURE, "RAR14_SIGNATURE", QString("RAR 1.4 signature")},
+                                                   {XRar::STRUCTID_RAR40_SIGNATURE, "RAR40_SIGNATURE", QString("RAR 4.0 signature")},
+                                                   {XRar::STRUCTID_RAR50_SIGNATURE, "RAR50_SIGNATURE", QString("RAR 5.0 signature)")},
+                                                   {XRar::STRUCTID_RAR14_HEADER, "RAR14_HEADER", QString("RAR 1.4 header")},
+                                                   {XRar::STRUCTID_RAR40_HEADER, "RAR40_HEADER", QString("RAR 4.0 header")},
+                                                   {XRar::STRUCTID_RAR50_HEADER, "RAR50_HEADER", QString("RAR 5.0 header")}};
 
 XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
 {

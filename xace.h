@@ -36,9 +36,9 @@ public:
 
     // ACE compression types (low nibble of tech_info)
     enum CTYPE {
-        CTYPE_STORED = 0,          // Stored (no compression)
-        CTYPE_LZ_HUFFMAN = 1,      // LZ77 + Huffman (ACE 1.x)
-        CTYPE_LZ_HUFFMAN_DELTA = 2, // LZ77 + Huffman + Delta (ACE 2.x)
+        CTYPE_STORED = 0,            // Stored (no compression)
+        CTYPE_LZ_HUFFMAN = 1,        // LZ77 + Huffman (ACE 1.x)
+        CTYPE_LZ_HUFFMAN_DELTA = 2,  // LZ77 + Huffman + Delta (ACE 2.x)
     };
 
     // ACE head_type values
@@ -50,15 +50,15 @@ public:
     };
 
     // head_flags bits for archive header
-    static const quint16 ARCHFLAG_ADVERT  = 0x0100;  // AV string present
+    static const quint16 ARCHFLAG_ADVERT = 0x0100;   // AV string present
     static const quint16 ARCHFLAG_COMMENT = 0x0200;  // Comment present
-    static const quint16 ARCHFLAG_SOLID   = 0x0080;  // Solid archive
+    static const quint16 ARCHFLAG_SOLID = 0x0080;    // Solid archive
 
     // head_flags bits for file header
     static const quint16 FILEFLAG_ADDSIZE = 0x0001;  // Additional data (compsize) present
     static const quint16 FILEFLAG_COMMENT = 0x0002;  // Comment present
     static const quint16 FILEFLAG_ENCRYPT = 0x0004;  // Encrypted
-    static const quint16 FILEFLAG_SOLID   = 0x0008;  // Part of solid archive
+    static const quint16 FILEFLAG_SOLID = 0x0008;    // Part of solid archive
 
     // ACE magic at offset 7 of archive header block: "**ACE**"
     static const quint8 MAGIC[7];
@@ -105,4 +105,3 @@ private:
 };
 
 #endif  // XACE_H
-

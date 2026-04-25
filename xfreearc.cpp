@@ -477,4 +477,3 @@ XBinary *XFREEARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
 
     return new XFREEARC(pDevice);
 }
-

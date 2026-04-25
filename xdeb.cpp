@@ -120,4 +120,3 @@ quint32 XDEB::ftStringToStructID(const QString &sFtString)
 {
     return XCONVERT_ftStringToId(sFtString, _TABLE_XDEB_STRUCTID, sizeof(_TABLE_XDEB_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
-

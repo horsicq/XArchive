@@ -107,4 +107,3 @@ signals:
 };
 
 #endif  // XTAR_H
-

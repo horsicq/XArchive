@@ -87,4 +87,3 @@ private:
 };
 
 #endif  // XCOMPRESSZ_H
-

@@ -102,4 +102,3 @@ XBinary *XTAR_LZMA::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XTAR_LZMA(pDevice);
 }
-

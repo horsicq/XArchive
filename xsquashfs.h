@@ -95,4 +95,3 @@ private:
 };
 
 #endif  // XSQUASHFS_H
-

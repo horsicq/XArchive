@@ -151,8 +151,6 @@ public:
 
 private:
     qint64 _getStreamSize(qint64 nOffset, qint32 nCount);
-
 };
 
 #endif  // XCAB_H
-

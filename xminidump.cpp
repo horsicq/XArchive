@@ -1072,4 +1072,3 @@ XBinary *XMiniDump::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XMiniDump(pDevice);
 }
-

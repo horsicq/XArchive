@@ -894,4 +894,3 @@ XBinary *X_Ar::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new X_Ar(pDevice);
 }
-

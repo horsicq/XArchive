@@ -548,7 +548,6 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     return result;
 }
 
-
 bool XTAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -807,4 +806,3 @@ XBinary *XTAR::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XTAR(pDevice);
 }
-

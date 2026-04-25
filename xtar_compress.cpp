@@ -83,4 +83,3 @@ QIODevice *XTAR_COMPRESS::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_COMPRESS, 0, -1, pPdStruct);
 }
-

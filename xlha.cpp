@@ -541,4 +541,3 @@ XBinary *XLHA::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XLHA(pDevice);
 }
-

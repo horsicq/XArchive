@@ -49,16 +49,15 @@ bool XSZDD::isValid(PDSTRUCT *pPdStruct)
         QByteArray baSig = read_array(0, 8);
 
         // Standard: 53 5A 44 44 88 F0 27 33/3A  ("SZDD...")
-        if ((baSig.size() == 8) && (baSig.at(0) == 'S') && (baSig.at(1) == 'Z') && (baSig.at(2) == 'D') && (baSig.at(3) == 'D') &&
-            ((quint8)baSig.at(4) == 0x88) && ((quint8)baSig.at(5) == 0xF0) && ((quint8)baSig.at(6) == 0x27) &&
-            (((quint8)baSig.at(7) == 0x33) || ((quint8)baSig.at(7) == 0x3A))) {
+        if ((baSig.size() == 8) && (baSig.at(0) == 'S') && (baSig.at(1) == 'Z') && (baSig.at(2) == 'D') && (baSig.at(3) == 'D') && ((quint8)baSig.at(4) == 0x88) &&
+            ((quint8)baSig.at(5) == 0xF0) && ((quint8)baSig.at(6) == 0x27) && (((quint8)baSig.at(7) == 0x33) || ((quint8)baSig.at(7) == 0x3A))) {
             bResult = true;
         }
 
         // Compact/legacy variant seen in tests: 5A 44 44 88 F0 27 33/3A 41  ("ZDD...")
-        if ((baSig.size() == 8) && (baSig.at(0) == 'Z') && (baSig.at(1) == 'D') && (baSig.at(2) == 'D') &&
-            ((quint8)baSig.at(3) == 0x88) && ((quint8)baSig.at(4) == 0xF0) && ((quint8)baSig.at(5) == 0x27) &&
-            (((quint8)baSig.at(6) == 0x33) || ((quint8)baSig.at(6) == 0x3A)) && ((quint8)baSig.at(7) == 0x41)) {
+        if ((baSig.size() == 8) && (baSig.at(0) == 'Z') && (baSig.at(1) == 'D') && (baSig.at(2) == 'D') && ((quint8)baSig.at(3) == 0x88) &&
+            ((quint8)baSig.at(4) == 0xF0) && ((quint8)baSig.at(5) == 0x27) && (((quint8)baSig.at(6) == 0x33) || ((quint8)baSig.at(6) == 0x3A)) &&
+            ((quint8)baSig.at(7) == 0x41)) {
             bResult = true;
         }
     }
@@ -505,4 +504,3 @@ XBinary *XSZDD::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XSZDD(pDevice);
 }
-

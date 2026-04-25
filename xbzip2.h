@@ -78,15 +78,13 @@ public:
     BZIP2_HEADER _read_BZIP2_HEADER(qint64 nOffset);
 
 private:
-// Format-specific unpacking context
+    // Format-specific unpacking context
     struct BZIP2_UNPACK_CONTEXT {
         qint64 nHeaderSize;        // Size of BZIP2 header (4 bytes)
         qint64 nCompressedSize;    // Size of compressed data
         qint64 nUncompressedSize;  // Size of uncompressed data
         QString sFileName;         // Original file name (if available)
     };
-
 };
 
 #endif  // XBZIP2_H
-

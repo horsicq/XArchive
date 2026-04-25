@@ -50,4 +50,3 @@ bool XIPA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
     return xipa.isValid();
 }
-

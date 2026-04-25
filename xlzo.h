@@ -83,4 +83,3 @@ private:
 };
 
 #endif  // XLZO_H
-

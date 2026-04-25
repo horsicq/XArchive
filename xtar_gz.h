@@ -44,4 +44,3 @@ private:
 };
 
 #endif  // XTAR_GZ_H
-

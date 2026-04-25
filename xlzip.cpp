@@ -441,4 +441,3 @@ XBinary *XLzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XLzip(pDevice);
 }
-

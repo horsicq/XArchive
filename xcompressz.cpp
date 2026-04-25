@@ -472,4 +472,3 @@ XBinary *XCompressZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMo
 
     return new XCompressZ(pDevice);
 }
-

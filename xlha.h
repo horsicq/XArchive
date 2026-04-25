@@ -62,11 +62,9 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
-// For Level 1 archives: bytes 7-10 = skip_sz = ext_headers + compressed_data.
+    // For Level 1 archives: bytes 7-10 = skip_sz = ext_headers + compressed_data.
     // Returns the total size of extended headers that follow the base header.
     qint64 _getLevel1ExtHeadersSize(qint64 nOffset, qint64 nBaseHeaderSize);
-
 };
 
 #endif  // XLHA_H
-

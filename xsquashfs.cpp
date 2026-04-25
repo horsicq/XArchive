@@ -21,8 +21,8 @@
 #include "xsquashfs.h"
 
 static XBinary::XCONVERT _TABLE_XSQUASHFS_STRUCTID[] = {{XSquashfs::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                 {XSquashfs::STRUCTID_HEADER, "HEADER", QString("Header")},
-                                                 {XSquashfs::STRUCTID_SUPERBLOCK, "SUPERBLOCK", QString("Superblock")}};
+                                                        {XSquashfs::STRUCTID_HEADER, "HEADER", QString("Header")},
+                                                        {XSquashfs::STRUCTID_SUPERBLOCK, "SUPERBLOCK", QString("Superblock")}};
 
 XSquashfs::XSquashfs(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -201,4 +201,3 @@ XBinary *XSquashfs::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XSquashfs(pDevice);
 }
-

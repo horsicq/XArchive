@@ -135,7 +135,7 @@ public:
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
 private:
-struct SEVENZ_UNPACK_CONTEXT {
+    struct SEVENZ_UNPACK_CONTEXT {
         QList<ARCHIVERECORD> listArchiveRecords;  // Pre-parsed archive records
         XDecompress decompress;
     };
@@ -271,8 +271,6 @@ struct SEVENZ_UNPACK_CONTEXT {
     // Format: AllAreDefined[1] + optional bitmap[ceil(n/8)] + values.
     static bool _decode7zTimeValue(const QByteArray &baData, qint32 nNumFiles, qint32 nFileIndex, quint64 *pResult);
     static bool _decode7zAttribValue(const QByteArray &baData, qint32 nNumFiles, qint32 nFileIndex, quint32 *pResult);
-
 };
 
 #endif  // XSEVENZIP_H
-

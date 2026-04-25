@@ -102,4 +102,3 @@ XBinary *XTAR_ZSTD::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XTAR_ZSTD(pDevice);
 }
-

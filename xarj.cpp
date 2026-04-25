@@ -147,7 +147,6 @@ XBinary::MODE XARJ::getMode()
 
 bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -684,4 +683,3 @@ XBinary *XARJ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XARJ(pDevice);
 }
-

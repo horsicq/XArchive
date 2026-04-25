@@ -944,4 +944,3 @@ XBinary *XCab::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
     Q_UNUSED(nModuleAddress)
     return new XCab(pDevice);
 }
-

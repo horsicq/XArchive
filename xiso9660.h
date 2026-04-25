@@ -176,4 +176,3 @@ private:
 };
 
 #endif  // XISO9660_H
-

@@ -463,7 +463,6 @@ XBinary::ARCHIVERECORD XGzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     return result;
 }
 
-
 bool XGzip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -538,4 +537,3 @@ XBinary *XGzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XGzip(pDevice);
 }
-

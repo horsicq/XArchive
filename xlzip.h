@@ -105,4 +105,3 @@ private:
 };
 
 #endif  // XLZIP_H
-

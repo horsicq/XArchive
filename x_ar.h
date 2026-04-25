@@ -90,4 +90,3 @@ private:
 };
 
 #endif  // X_AR_H
-

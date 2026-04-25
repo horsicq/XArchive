@@ -557,4 +557,3 @@ XBinary *XMACHOFat::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XMACHOFat(pDevice);
 }
-

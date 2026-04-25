@@ -485,4 +485,3 @@ XBinary *XDOS16::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModule
 
     return new XDOS16(pDevice);
 }
-

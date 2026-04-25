@@ -315,10 +315,10 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         qint32 nSecond = (nDosTime & 0x1F) * 2;
         qint32 nMinute = (nDosTime >> 5) & 0x3F;
-        qint32 nHour   = (nDosTime >> 11) & 0x1F;
-        qint32 nDay    = nDosDate & 0x1F;
-        qint32 nMonth  = (nDosDate >> 5) & 0x0F;
-        qint32 nYear   = ((nDosDate >> 9) & 0x7F) + 1980;
+        qint32 nHour = (nDosTime >> 11) & 0x1F;
+        qint32 nDay = nDosDate & 0x1F;
+        qint32 nMonth = (nDosDate >> 5) & 0x0F;
+        qint32 nYear = ((nDosDate >> 9) & 0x7F) + 1980;
 
         QDateTime dtMTime(QDate(nYear, nMonth, nDay), QTime(nHour, nMinute, nSecond));
 
@@ -763,4 +763,3 @@ XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XACE(pDevice);
 }
-

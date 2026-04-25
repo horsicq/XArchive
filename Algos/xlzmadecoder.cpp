@@ -148,8 +148,7 @@ static bool _decompressLZMACommon(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *
     delete[] bufferOut;
 
     if (nExpectedOutput >= 0) {
-        return (nTotalOutput == nExpectedOutput) &&
-               ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
+        return (nTotalOutput == nExpectedOutput) && ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
     }
 
     return true;

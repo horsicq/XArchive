@@ -472,4 +472,3 @@ XBinary *XZstd::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
     return new XZstd(pDevice);
 }
-

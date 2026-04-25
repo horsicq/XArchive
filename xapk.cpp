@@ -286,4 +286,3 @@ qint64 XAPK::findAPKSignBlockOffset(PDSTRUCT *pPdStruct)
 
     return nResult;
 }
-

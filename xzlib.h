@@ -60,7 +60,7 @@ public:
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
-struct ZLIB_UNPACK_CONTEXT {
+    struct ZLIB_UNPACK_CONTEXT {
         QString sFileName;
         qint64 nHeaderSize;
         qint64 nCompressedSize;
@@ -71,8 +71,6 @@ struct ZLIB_UNPACK_CONTEXT {
     struct ZLIB_PACK_CONTEXT {
         bool bDataAdded;  // Track if data has been added (only one stream allowed)
     };
-
 };
 
 #endif  // XZLIB_H
-

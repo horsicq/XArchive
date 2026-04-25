@@ -22,10 +22,10 @@
 #include "Algos/xstoredecoder.h"
 
 static XBinary::XCONVERT _TABLE_XUDF_STRUCTID[] = {{XUDF::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                            {XUDF::STRUCTID_TAG, "TAG", QString("Tag")},
-                                            {XUDF::STRUCTID_ANCHOR_VOLUME_DESCRIPTOR, "ANCHOR_VOLUME_DESCRIPTOR", QString("Anchor Volume Descriptor")},
-                                            {XUDF::STRUCTID_PRIMARY_VOLUME_DESCRIPTOR, "PRIMARY_VOLUME_DESCRIPTOR", QString("Primary Volume Descriptor")},
-                                            {XUDF::STRUCTID_FILE_ENTRY, "FILE_ENTRY", QString("File Entry")}};
+                                                   {XUDF::STRUCTID_TAG, "TAG", QString("Tag")},
+                                                   {XUDF::STRUCTID_ANCHOR_VOLUME_DESCRIPTOR, "ANCHOR_VOLUME_DESCRIPTOR", QString("Anchor Volume Descriptor")},
+                                                   {XUDF::STRUCTID_PRIMARY_VOLUME_DESCRIPTOR, "PRIMARY_VOLUME_DESCRIPTOR", QString("Primary Volume Descriptor")},
+                                                   {XUDF::STRUCTID_FILE_ENTRY, "FILE_ENTRY", QString("File Entry")}};
 
 XUDF::XUDF(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -524,7 +524,7 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
     // Root Directory ICB is at offset 16+12+2+2+4+4+4+4+64+128+64+32+12 = 352
     // It is a long_ad: ExtentLength(4) + ExtentLocation: LogicalBlockNumber(4) + PartitionReferenceNumber(2) + ImplementationUse(6) = 16 bytes total
     quint32 nRootICBLocation = read_uint32(nFSDLocation + 352 + 4);  // LogicalBlockNumber of root ICB
-    quint16 nRootPartRef    = read_uint16(nFSDLocation + 352 + 4 + 4);  // PartitionReferenceNumber
+    quint16 nRootPartRef = read_uint16(nFSDLocation + 352 + 4 + 4);  // PartitionReferenceNumber
     Q_UNUSED(nRootPartRef)
 
     if (nRootICBLocation == 0) {
@@ -593,19 +593,19 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
             if (nAllocType == 0 && nLenAllocDescs >= 8) {
                 // Short allocation descriptor: ExtentLength(4) + ExtentPosition(4)
                 quint32 nExtLength = read_uint32(nAllocDescsOffset) & 0x3FFFFFFF;
-                quint32 nExtPos    = read_uint32(nAllocDescsOffset + 4);
+                quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
                 record.nStreamOffset = (qint64)nExtPos * nBlockSize;
-                record.nStreamSize   = (qint64)nExtLength;
+                record.nStreamSize = (qint64)nExtLength;
             } else if (nAllocType == 1 && nLenAllocDescs >= 16) {
                 // Long allocation descriptor: ExtentLength(4) + ExtentLocation: LogicalBlockNum(4) + PartRef(2) + ImplUse(6)
                 quint32 nExtLength = read_uint32(nAllocDescsOffset) & 0x3FFFFFFF;
-                quint32 nExtPos    = read_uint32(nAllocDescsOffset + 4);
+                quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
                 record.nStreamOffset = (qint64)nExtPos * nBlockSize;
-                record.nStreamSize   = (qint64)nExtLength;
+                record.nStreamSize = (qint64)nExtLength;
             } else if (nAllocType == 3 && nLenAllocDescs > 0) {
                 // Data stored directly in allocation descriptors (inline)
                 record.nStreamOffset = nAllocDescsOffset;
-                record.nStreamSize   = (qint64)nLenAllocDescs;
+                record.nStreamSize = (qint64)nLenAllocDescs;
             }
 
             listResult.append(record);
@@ -630,11 +630,11 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
             if (nAllocType == 0 && nLenAllocDescs >= 8) {
                 quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
                 nDirDataOffset = (qint64)nExtPos * nBlockSize;
-                nDirDataSize   = (qint64)nInfoLength;
+                nDirDataSize = (qint64)nInfoLength;
             } else if (nAllocType == 1 && nLenAllocDescs >= 16) {
                 quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
                 nDirDataOffset = (qint64)nExtPos * nBlockSize;
-                nDirDataSize   = (qint64)nInfoLength;
+                nDirDataSize = (qint64)nInfoLength;
             }
 
             if (nDirDataOffset <= 0 || nDirDataSize <= 0 || nDirDataOffset >= getSize()) {
@@ -753,4 +753,3 @@ XBinary *XUDF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
     return new XUDF(pDevice);
 }
-

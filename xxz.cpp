@@ -543,4 +543,3 @@ XBinary *XXZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAdd
 
     return new XXZ(pDevice);
 }
-

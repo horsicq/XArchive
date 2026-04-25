@@ -297,4 +297,3 @@ private:
 };
 
 #endif  // XMINIDUMP_H
-

@@ -58,4 +58,3 @@ public:
 };
 
 #endif  // XJAR_H
-

@@ -297,4 +297,3 @@ QIODevice *XTARCOMPRESSED::createMemoryBuffer(const QByteArray &baData)
 
     return pBuffer;
 }
-
