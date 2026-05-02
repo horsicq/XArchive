@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xdeflatedecoder.h"
+#include <zutil.h>
 
 const qint32 N_BUFFER_SIZE = 65536;
 
@@ -860,21 +861,20 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
     bool bResult = false;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
+        pDecompressState->bReadError = false;
+        pDecompressState->bWriteError = false;
+        pDecompressState->nCountInput = 0;
+        pDecompressState->nCountOutput = 0;
+
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+        pDecompressState->pDeviceOutput->seek(0);
+
         qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
 
         char *bufferIn = new char[_nBufferSize];
         char *bufferOut = new char[_nBufferSize];
 
-        if (pDecompressState->pDeviceInput) {
-            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        }
-
-        if (pDecompressState->pDeviceOutput) {
-            pDecompressState->pDeviceOutput->seek(0);
-        }
-
         z_stream strm;
-
         strm.zalloc = nullptr;
         strm.zfree = nullptr;
         strm.opaque = nullptr;
@@ -883,8 +883,7 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
         qint32 ret = Z_OK;
 
-        if (inflateInit2(&strm, -MAX_WBITS) == Z_OK)  // -MAX_WBITS for raw data
-        {
+        if (inflateInit2(&strm, -MAX_WBITS) == Z_OK) {
             do {
                 qint32 nBufferSize =
                     (pDecompressState->nInputLimit == -1) ? _nBufferSize : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
@@ -899,10 +898,8 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
                 do {
                     strm.avail_out = _nBufferSize;
-                    //                    strm.avail_out=1;
                     strm.next_out = (quint8 *)bufferOut;
                     ret = inflate(&strm, Z_NO_FLUSH);
-                    //                    ret=inflate(&strm,Z_SYNC_FLUSH);
 
                     if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT)) {
                         break;
@@ -917,6 +914,7 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
                         }
                     }
                 } while (strm.avail_out == 0);
+
                 if ((ret == Z_DATA_ERROR) || (ret == Z_MEM_ERROR) || (ret == Z_NEED_DICT) || (ret == Z_ERRNO)) {
                     break;
                 }
@@ -968,7 +966,7 @@ bool XDeflateDecoder::decompress64(XBinary::DATAPROCESS_STATE *pDecompressState,
 
         inflateBack9End(&strm);
 
-        bResult = true;  // TODO
+        bResult = (ret == Z_STREAM_END);
     }
 
     delete[] pDecompressState->pInputBuffer;
@@ -1022,34 +1020,25 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     return bResult;
 }
 
-bool XDeflateDecoder::compress(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel)
+static bool _compress_impl(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel, int nWindowBits)
 {
     bool bResult = false;
 
     if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput) {
-        // Initialize error states
         pCompressState->bReadError = false;
         pCompressState->bWriteError = false;
         pCompressState->nCountInput = 0;
         pCompressState->nCountOutput = 0;
 
-        // Set input device position
-        if (pCompressState->nInputOffset > 0) {
-            pCompressState->pDeviceInput->seek(pCompressState->nInputOffset);
-        }
-
-        // Set output device position
-        if (pCompressState->pDeviceOutput) {
-            pCompressState->pDeviceOutput->seek(0);
-        }
+        pCompressState->pDeviceInput->seek(pCompressState->nInputOffset);
+        pCompressState->pDeviceOutput->seek(0);
 
         z_stream stream;
         stream.zalloc = Z_NULL;
         stream.zfree = Z_NULL;
         stream.opaque = Z_NULL;
 
-        // Initialize deflate
-        if (deflateInit2(&stream, nCompressionLevel, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        if (deflateInit2(&stream, nCompressionLevel, Z_DEFLATED, nWindowBits, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
             return false;
         }
 
@@ -1061,10 +1050,10 @@ bool XDeflateDecoder::compress(XBinary::DATAPROCESS_STATE *pCompressState, XBina
         int ret = Z_OK;
 
         do {
-            // Read input data
             qint32 nToRead = qMin((qint32)(pCompressState->nInputLimit - nTotalProcessed), N_BUFFER_SIZE);
             if (nToRead == 0) {
                 flush = Z_FINISH;
+                stream.avail_in = 0;
             } else {
                 qint32 nRead = pCompressState->pDeviceInput->read(inputBuffer, nToRead);
                 if (nRead <= 0) {
@@ -1078,7 +1067,6 @@ bool XDeflateDecoder::compress(XBinary::DATAPROCESS_STATE *pCompressState, XBina
                 }
             }
 
-            // Compress data
             do {
                 stream.avail_out = N_BUFFER_SIZE;
                 stream.next_out = (Bytef *)outputBuffer;
@@ -1099,16 +1087,12 @@ bool XDeflateDecoder::compress(XBinary::DATAPROCESS_STATE *pCompressState, XBina
                     }
                     pCompressState->nCountOutput += nCompressed;
                 }
-
-                // Continue until all output is consumed or stream ends
             } while (stream.avail_out == 0 && ret != Z_STREAM_END);
 
-            // Check for cancellation
             if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
                 deflateEnd(&stream);
                 return false;
             }
-
         } while (flush != Z_FINISH || ret != Z_STREAM_END);
 
         deflateEnd(&stream);
@@ -1118,96 +1102,12 @@ bool XDeflateDecoder::compress(XBinary::DATAPROCESS_STATE *pCompressState, XBina
     return bResult;
 }
 
+bool XDeflateDecoder::compress(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel)
+{
+    return _compress_impl(pCompressState, pPdStruct, nCompressionLevel, -MAX_WBITS);
+}
+
 bool XDeflateDecoder::compress_zlib(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel)
 {
-    bool bResult = false;
-
-    if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput) {
-        // Initialize error states
-        pCompressState->bReadError = false;
-        pCompressState->bWriteError = false;
-        pCompressState->nCountInput = 0;
-        pCompressState->nCountOutput = 0;
-
-        // Set input device position
-        if (pCompressState->nInputOffset > 0) {
-            pCompressState->pDeviceInput->seek(pCompressState->nInputOffset);
-        }
-
-        // Set output device position
-        if (pCompressState->pDeviceOutput) {
-            pCompressState->pDeviceOutput->seek(0);
-        }
-
-        z_stream stream;
-        stream.zalloc = Z_NULL;
-        stream.zfree = Z_NULL;
-        stream.opaque = Z_NULL;
-
-        // Initialize deflate with zlib wrapper
-        if (deflateInit(&stream, nCompressionLevel) != Z_OK) {
-            return false;
-        }
-
-        char inputBuffer[N_BUFFER_SIZE];
-        char outputBuffer[N_BUFFER_SIZE];
-
-        qint64 nTotalProcessed = 0;
-        int flush = Z_NO_FLUSH;
-
-        do {
-            // Read input data
-            qint32 nToRead = qMin((qint32)(pCompressState->nInputLimit - nTotalProcessed), N_BUFFER_SIZE);
-            if (nToRead == 0) {
-                flush = Z_FINISH;
-            } else {
-                qint32 nRead = pCompressState->pDeviceInput->read(inputBuffer, nToRead);
-                if (nRead <= 0) {
-                    flush = Z_FINISH;
-                    stream.avail_in = 0;
-                } else {
-                    pCompressState->nCountInput += nRead;
-                    nTotalProcessed += nRead;
-                    stream.avail_in = nRead;
-                    stream.next_in = (Bytef *)inputBuffer;
-                }
-            }
-
-            // Compress data
-            do {
-                stream.avail_out = N_BUFFER_SIZE;
-                stream.next_out = (Bytef *)outputBuffer;
-
-                int ret = deflate(&stream, flush);
-                if (ret == Z_STREAM_ERROR) {
-                    deflateEnd(&stream);
-                    return false;
-                }
-
-                qint32 nCompressed = N_BUFFER_SIZE - stream.avail_out;
-                if (nCompressed > 0) {
-                    qint64 nWritten = pCompressState->pDeviceOutput->write(outputBuffer, nCompressed);
-                    if (nWritten != nCompressed) {
-                        pCompressState->bWriteError = true;
-                        deflateEnd(&stream);
-                        return false;
-                    }
-                    pCompressState->nCountOutput += nCompressed;
-                }
-
-            } while (stream.avail_out == 0);
-
-            // Check for cancellation
-            if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-                deflateEnd(&stream);
-                return false;
-            }
-
-        } while (flush != Z_FINISH);
-
-        deflateEnd(&stream);
-        bResult = !pCompressState->bReadError && !pCompressState->bWriteError;
-    }
-
-    return bResult;
+    return _compress_impl(pCompressState, pPdStruct, nCompressionLevel, MAX_WBITS);
 }
