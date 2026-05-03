@@ -20,7 +20,6 @@
  */
 #include "xzipcryptodecoder.h"
 
-const qint32 N_BUFFER_SIZE = 65536;
 const qint32 N_ENCRYPTION_HEADER_SIZE = 12;
 
 XZipCryptoDecoder::XZipCryptoDecoder(QObject *pParent) : QObject(pParent)
@@ -37,100 +36,60 @@ bool XZipCryptoDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, co
     bool bResult = false;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && !baPassword.isEmpty()) {
-        // Initialize error states
+        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+        char *bufferIn = new char[_nBufferSize];
+
         pDecompressState->bReadError = false;
         pDecompressState->bWriteError = false;
         pDecompressState->nCountInput = 0;
         pDecompressState->nCountOutput = 0;
 
-        // Set input device position
-        if (pDecompressState->pDeviceInput) {
-            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        }
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+        pDecompressState->pDeviceOutput->seek(0);
 
-        // Set output device position
-        if (pDecompressState->pDeviceOutput) {
-            pDecompressState->pDeviceOutput->seek(0);
-        }
-
-        // Initialize encryption keys
         quint32 nKeys[3];
         initKeys(nKeys, baPassword);
 
-        // Read and decrypt the 12-byte encryption header
         char bufferHeader[N_ENCRYPTION_HEADER_SIZE];
         qint32 nHeaderRead = XBinary::_readDevice(bufferHeader, N_ENCRYPTION_HEADER_SIZE, pDecompressState);
 
-        if (nHeaderRead != N_ENCRYPTION_HEADER_SIZE) {
-            pDecompressState->bReadError = true;
-            return false;
-        }
-
-        // Decrypt encryption header to verify password
-        for (qint32 i = 0; i < N_ENCRYPTION_HEADER_SIZE; i++) {
-            quint8 nDecryptedByte = (quint8)bufferHeader[i] ^ decryptByte(nKeys);
-            bufferHeader[i] = (char)nDecryptedByte;
-            updateKeys(nKeys, nDecryptedByte);
-        }
-
-        // The last byte of the encryption header should match either:
-        // - High byte of CRC32 (for old-style encryption)
-        // - High byte of last modification time (for newer implementations)
-        // We'll validate this if CRC32 is provided in properties
-        quint8 nLastHeaderByte = (quint8)bufferHeader[N_ENCRYPTION_HEADER_SIZE - 1];
-
-        // Check if we have CRC32 for validation
-        if (pDecompressState->mapProperties.contains(XBinary::FPART_PROP_RESULTCRC)) {
-            quint32 nCRC32 = pDecompressState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC).toUInt();
-            quint8 nExpectedByte = (nCRC32 >> 24) & 0xFF;
-
-            // Also check for DOS time format (high byte of modification time)
-            bool bCRCMatch = (nLastHeaderByte == nExpectedByte);
-
-            // If CRC doesn't match, this might be incorrect password
-            // But we continue anyway as some implementations use different validation
-            if (!bCRCMatch) {
-                // Try alternate validation: high byte of DOS time
-                // We'll continue processing regardless
+        if (nHeaderRead == N_ENCRYPTION_HEADER_SIZE) {
+            for (qint32 i = 0; i < N_ENCRYPTION_HEADER_SIZE; i++) {
+                quint8 nDecryptedByte = (quint8)bufferHeader[i] ^ decryptByte(nKeys);
+                bufferHeader[i] = (char)nDecryptedByte;
+                updateKeys(nKeys, nDecryptedByte);
             }
-        }
 
-        // Now decrypt the actual data
-        // Allocate buffer for decrypting data
-        char bufferIn[N_BUFFER_SIZE];
+            qint64 nDataSize = pDecompressState->nInputLimit - N_ENCRYPTION_HEADER_SIZE;
 
-        qint64 nDataSize = pDecompressState->nInputLimit - N_ENCRYPTION_HEADER_SIZE;
+            for (qint64 nOffset = 0; (nOffset < nDataSize) && XBinary::isPdStructNotCanceled(pPdStruct);) {
+                qint32 nBufferSize = qMin((qint32)(nDataSize - nOffset), _nBufferSize);
+                qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
-        // Decrypt data from input to output
-        for (qint64 nOffset = 0; (nOffset < nDataSize) && XBinary::isPdStructNotCanceled(pPdStruct);) {
-            qint32 nBufferSize = qMin((qint32)(nDataSize - nOffset), N_BUFFER_SIZE);
-
-            qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
-
-            if (nRead > 0) {
-                // Decrypt the buffer
-                for (qint32 i = 0; i < nRead; i++) {
-                    quint8 nEncryptedByte = (quint8)bufferIn[i];
-                    quint8 nDecryptedByte = nEncryptedByte ^ decryptByte(nKeys);
-                    bufferIn[i] = (char)nDecryptedByte;
-                    updateKeys(nKeys, nDecryptedByte);
+                if (nRead > 0) {
+                    for (qint32 i = 0; i < nRead; i++) {
+                        quint8 nDecryptedByte = (quint8)bufferIn[i] ^ decryptByte(nKeys);
+                        bufferIn[i] = (char)nDecryptedByte;
+                        updateKeys(nKeys, nDecryptedByte);
+                    }
+                    XBinary::_writeDevice(bufferIn, nRead, pDecompressState);
+                } else {
+                    break;
                 }
 
-                // Write decrypted data
-                XBinary::_writeDevice(bufferIn, nRead, pDecompressState);
-            } else {
-                break;
+                if (pDecompressState->bReadError || pDecompressState->bWriteError) {
+                    break;
+                }
+
+                nOffset += nRead;
             }
 
-            if (pDecompressState->bReadError || pDecompressState->bWriteError) {
-                break;
-            }
-
-            nOffset += nRead;
+            bResult = !pDecompressState->bReadError && !pDecompressState->bWriteError;
+        } else {
+            pDecompressState->bReadError = true;
         }
 
-        // Success if no errors occurred
-        bResult = !pDecompressState->bReadError && !pDecompressState->bWriteError;
+        delete[] bufferIn;
     }
 
     return bResult;
@@ -138,12 +97,10 @@ bool XZipCryptoDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, co
 
 void XZipCryptoDecoder::initKeys(quint32 *pnKeys, const QByteArray &baPassword)
 {
-    // Initialize the three 32-bit keys
     pnKeys[0] = 0x12345678;
     pnKeys[1] = 0x23456789;
     pnKeys[2] = 0x34567890;
 
-    // Update keys with password bytes
     for (qint32 i = 0; i < baPassword.size(); i++) {
         updateKeys(pnKeys, (quint8)baPassword[i]);
     }
@@ -151,7 +108,6 @@ void XZipCryptoDecoder::initKeys(quint32 *pnKeys, const QByteArray &baPassword)
 
 void XZipCryptoDecoder::updateKeys(quint32 *pnKeys, quint8 nByte)
 {
-    // CRC32 polynomial table (standard CRC32)
     static const quint32 CRC32_TABLE[256] = {
         0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3, 0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988, 0x09B64C2B,
         0x7EB17CBD, 0xE7B82D07, 0x90BF1D91, 0x1DB71064, 0x6AB020F2, 0xF3B97148, 0x84BE41DE, 0x1ADAD47D, 0x6DDDE4EB, 0xF4D4B551, 0x83D385C7, 0x136C9856, 0x646BA8C0,
@@ -174,19 +130,13 @@ void XZipCryptoDecoder::updateKeys(quint32 *pnKeys, quint8 nByte)
         0x40DF0B66, 0x37D83BF0, 0xA9BCAE53, 0xDEBB9EC5, 0x47B2CF7F, 0x30B5FFE9, 0xBDBDF21C, 0xCABAC28A, 0x53B39330, 0x24B4A3A6, 0xBAD03605, 0xCDD70693, 0x54DE5729,
         0x23D967BF, 0xB3667A2E, 0xC4614AB8, 0x5D681B02, 0x2A6F2B94, 0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D};
 
-    // Update key 0 with CRC32
     pnKeys[0] = CRC32_TABLE[(pnKeys[0] ^ nByte) & 0xFF] ^ (pnKeys[0] >> 8);
-
-    // Update key 1
     pnKeys[1] = (pnKeys[1] + (pnKeys[0] & 0xFF)) * 0x08088405 + 1;
-
-    // Update key 2 with CRC32 of key 1's high byte
     pnKeys[2] = CRC32_TABLE[(pnKeys[2] ^ (pnKeys[1] >> 24)) & 0xFF] ^ (pnKeys[2] >> 8);
 }
 
 quint8 XZipCryptoDecoder::decryptByte(const quint32 *pnKeys)
 {
-    // Generate a pseudo-random byte from key 2
     quint16 nTemp = pnKeys[2] | 2;
     return (quint8)(((nTemp * (nTemp ^ 1)) >> 8) & 0xFF);
 }
@@ -201,70 +151,48 @@ bool XZipCryptoDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, cons
     bool bResult = false;
 
     if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput && !baPassword.isEmpty()) {
-        // Initialize error states
+        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+        char *bufferIn = new char[_nBufferSize];
+
         pCompressState->bReadError = false;
         pCompressState->bWriteError = false;
         pCompressState->nCountInput = 0;
         pCompressState->nCountOutput = 0;
 
-        // Set input device position
-        if (pCompressState->pDeviceInput) {
-            pCompressState->pDeviceInput->seek(pCompressState->nInputOffset);
-        }
+        pCompressState->pDeviceInput->seek(pCompressState->nInputOffset);
+        pCompressState->pDeviceOutput->seek(0);
 
-        // Set output device position
-        if (pCompressState->pDeviceOutput) {
-            pCompressState->pDeviceOutput->seek(0);
-        }
-
-        // Initialize encryption keys
         quint32 nKeys[3];
         initKeys(nKeys, baPassword);
 
-        // Create and encrypt the 12-byte encryption header
         char bufferHeader[N_ENCRYPTION_HEADER_SIZE];
-
-        // Fill header with random bytes (using simple pseudo-random based on password and CRC)
         quint32 nSeed = nCRC32;
         for (qint32 i = 0; i < N_ENCRYPTION_HEADER_SIZE - 1; i++) {
-            nSeed = nSeed * 214013 + 2531011;  // Simple LCG
+            nSeed = nSeed * 214013 + 2531011;
             bufferHeader[i] = (char)((nSeed >> 16) & 0xFF);
         }
-
-        // Last byte of header should be high byte of CRC32 for password verification
         bufferHeader[N_ENCRYPTION_HEADER_SIZE - 1] = (char)((nCRC32 >> 24) & 0xFF);
 
-        // Encrypt the header
         for (qint32 i = 0; i < N_ENCRYPTION_HEADER_SIZE; i++) {
             quint8 nByte = (quint8)bufferHeader[i];
-            quint8 nEncryptedByte = nByte ^ decryptByte(nKeys);
-            bufferHeader[i] = (char)nEncryptedByte;
+            bufferHeader[i] = (char)(nByte ^ decryptByte(nKeys));
             updateKeys(nKeys, nByte);
         }
 
-        // Write encrypted header
         XBinary::_writeDevice(bufferHeader, N_ENCRYPTION_HEADER_SIZE, pCompressState);
 
-        // Now encrypt the actual data
-        char bufferIn[N_BUFFER_SIZE];
         qint64 nDataSize = pCompressState->nInputLimit;
 
-        // Encrypt data from input to output
         for (qint64 nOffset = 0; (nOffset < nDataSize) && XBinary::isPdStructNotCanceled(pPdStruct);) {
-            qint32 nBufferSize = qMin((qint32)(nDataSize - nOffset), N_BUFFER_SIZE);
-
+            qint32 nBufferSize = qMin((qint32)(nDataSize - nOffset), _nBufferSize);
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pCompressState);
 
             if (nRead > 0) {
-                // Encrypt the buffer
                 for (qint32 i = 0; i < nRead; i++) {
                     quint8 nByte = (quint8)bufferIn[i];
-                    quint8 nEncryptedByte = nByte ^ decryptByte(nKeys);
-                    bufferIn[i] = (char)nEncryptedByte;
+                    bufferIn[i] = (char)(nByte ^ decryptByte(nKeys));
                     updateKeys(nKeys, nByte);
                 }
-
-                // Write encrypted data
                 XBinary::_writeDevice(bufferIn, nRead, pCompressState);
             } else {
                 break;
@@ -277,8 +205,9 @@ bool XZipCryptoDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, cons
             nOffset += nRead;
         }
 
-        // Success if no errors occurred
         bResult = !pCompressState->bReadError && !pCompressState->bWriteError;
+
+        delete[] bufferIn;
     }
 
     return bResult;
