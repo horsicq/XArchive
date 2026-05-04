@@ -27,6 +27,314 @@ XBinary::XCONVERT _TABLE_XARJ_STRUCTID[] = {
     {XARJ::STRUCTID_RECORD, "RECORD", QString("Record")},
 };
 
+namespace {
+const qint64 ARJ_MARKER_SIZE = 2;
+const qint64 ARJ_BASIC_HEADER_SIZE_FIELD_SIZE = 2;
+const qint64 ARJ_ENTRY_PREFIX_SIZE = ARJ_MARKER_SIZE + ARJ_BASIC_HEADER_SIZE_FIELD_SIZE;
+const qint64 ARJ_HEADER_CRC_SIZE = 4;
+const qint64 ARJ_EXT_HEADER_SIZE_FIELD_SIZE = 2;
+const qint64 ARJ_MIN_VALID_SIZE = ARJ_ENTRY_PREFIX_SIZE + XARJ::FIXED_HEADER_SIZE;
+const quint16 ARJ_MAX_BASIC_HEADER_SIZE = 2600;
+const quint8 ARJ_MARKER_BYTE0 = 0x60;
+const quint8 ARJ_MARKER_BYTE1 = 0xEA;
+const quint8 ARJ_FLAG_GARBLE = 0x01;
+
+const qint64 ARJ_BASIC_FIRST_HEADER_SIZE = 0;
+const qint64 ARJ_BASIC_ARCHIVER_VERSION = 1;
+const qint64 ARJ_BASIC_MIN_VERSION = 2;
+const qint64 ARJ_BASIC_HOST_OS = 3;
+const qint64 ARJ_BASIC_FLAGS = 4;
+const qint64 ARJ_BASIC_METHOD = 5;
+const qint64 ARJ_BASIC_FILE_TYPE = 6;
+const qint64 ARJ_BASIC_PASSWORD_MODIFIER = 7;
+const qint64 ARJ_BASIC_DOS_DATE_TIME = 8;
+const qint64 ARJ_BASIC_COMPRESSED_SIZE = 12;
+const qint64 ARJ_BASIC_ORIGINAL_SIZE = 16;
+const qint64 ARJ_BASIC_CRC32 = 20;
+const qint64 ARJ_BASIC_ENTRY_NAME_POS = 24;
+const qint64 ARJ_BASIC_FILE_ACCESS_MODE = 26;
+const qint64 ARJ_BASIC_FIRST_CHAPTER = 28;
+const qint64 ARJ_BASIC_LAST_CHAPTER = 29;
+
+struct ARJ_RECORD_FIELD {
+    const char *pszDataName;
+    const char *pszXFName;
+    qint32 nOffset;
+    qint32 nSize;
+    XBinary::VT valueType;
+    quint32 nDataRecordFlags;
+    quint64 nXFRecordFlags;
+};
+
+const ARJ_RECORD_FIELD g_arjRecordFields[] = {
+    {"Marker", "Marker", 0, 2, XBinary::VT_UINT16, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"Basic Header Size", "Basic Header Size", 2, 2, XBinary::VT_UINT16, XBinary::DRF_SIZE, XBinary::XFRECORD_FLAG_SIZE},
+    {"First Hdr Size", "First Header Size", 4, 1, XBinary::VT_UINT8, XBinary::DRF_SIZE, XBinary::XFRECORD_FLAG_SIZE},
+    {"Archiver Version", "Archiver Version", 5, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_VERSION},
+    {"Min Version", "Min Version", 6, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_VERSION},
+    {"Host OS", "Host OS", 7, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"ARJ Flags", "ARJ Flags", 8, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"Method", "Method", 9, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"File Type", "File Type", 10, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"Reserved", "Reserved", 11, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"Date/Time", "Date/Time", 12, 4, XBinary::VT_UINT32, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"Compressed Size", "Compressed Size", 16, 4, XBinary::VT_UINT32, XBinary::DRF_SIZE, XBinary::XFRECORD_FLAG_SIZE},
+    {"Original Size", "Original Size", 20, 4, XBinary::VT_UINT32, XBinary::DRF_SIZE, XBinary::XFRECORD_FLAG_SIZE},
+    {"CRC32", "CRC32", 24, 4, XBinary::VT_UINT32, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"Entry Name Pos", "Entry Name Pos", 28, 2, XBinary::VT_UINT16, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_OFFSET},
+    {"File Access Mode", "File Access Mode", 30, 2, XBinary::VT_UINT16, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"First Chapter", "First Chapter", 32, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+    {"Last Chapter", "Last Chapter", 33, 1, XBinary::VT_UINT8, XBinary::DRF_UNKNOWN, XBinary::XFRECORD_FLAG_NONE},
+};
+
+struct ARJ_ENTRY_INFO {
+    qint64 nOffset;
+    quint16 nBasicHeaderSize;
+    qint64 nHeaderSize;
+    quint8 nFirstHeaderSize;
+    quint8 nFlags;
+    quint8 nMethod;
+    quint8 nPasswordModifier;
+    quint32 nDosDateTime;
+    quint32 nCompressedSize;
+    quint32 nOriginalSize;
+    quint32 nCRC32;
+    QString sFileName;
+    bool bEndOfArchive;
+};
+
+qint32 xarjStructIdCount()
+{
+    return sizeof(_TABLE_XARJ_STRUCTID) / sizeof(_TABLE_XARJ_STRUCTID[0]);
+}
+
+qint32 arjRecordFieldCount()
+{
+    return sizeof(g_arjRecordFields) / sizeof(g_arjRecordFields[0]);
+}
+
+qint64 basicHeaderOffset(qint64 nEntryOffset)
+{
+    return nEntryOffset + ARJ_ENTRY_PREFIX_SIZE;
+}
+
+qint64 basicFieldOffset(qint64 nEntryOffset, qint64 nRelativeOffset)
+{
+    return basicHeaderOffset(nEntryOffset) + nRelativeOffset;
+}
+
+bool hasArjMarker(XARJ *pArj, qint64 nOffset)
+{
+    return pArj && ((nOffset + ARJ_ENTRY_PREFIX_SIZE) <= pArj->getSize()) && (pArj->read_uint8(nOffset) == ARJ_MARKER_BYTE0) &&
+           (pArj->read_uint8(nOffset + 1) == ARJ_MARKER_BYTE1);
+}
+
+quint16 readBasicHeaderSize(XARJ *pArj, qint64 nOffset)
+{
+    return pArj->read_uint16(nOffset + ARJ_MARKER_SIZE, false);
+}
+
+bool isEndOfArchiveHeader(quint16 nBasicHeaderSize)
+{
+    return nBasicHeaderSize == 0;
+}
+
+qint64 readEntryHeaderSize(XARJ *pArj, qint64 nOffset)
+{
+    if (!hasArjMarker(pArj, nOffset)) {
+        return -1;
+    }
+
+    quint16 nBasicHeaderSize = readBasicHeaderSize(pArj, nOffset);
+
+    if (isEndOfArchiveHeader(nBasicHeaderSize)) {
+        return ARJ_ENTRY_PREFIX_SIZE;
+    }
+
+    if ((nOffset + ARJ_ENTRY_PREFIX_SIZE + nBasicHeaderSize + ARJ_HEADER_CRC_SIZE) > pArj->getSize()) {
+        return -1;
+    }
+
+    qint64 nPos = nOffset + ARJ_ENTRY_PREFIX_SIZE + nBasicHeaderSize + ARJ_HEADER_CRC_SIZE;
+
+    while (true) {
+        if ((nPos + ARJ_EXT_HEADER_SIZE_FIELD_SIZE) > pArj->getSize()) {
+            break;
+        }
+
+        quint16 nExtSize = pArj->read_uint16(nPos, false);
+        nPos += ARJ_EXT_HEADER_SIZE_FIELD_SIZE;
+
+        if (nExtSize == 0) {
+            break;
+        }
+
+        nPos += nExtSize + ARJ_HEADER_CRC_SIZE;
+
+        if (nPos > pArj->getSize()) {
+            break;
+        }
+    }
+
+    return nPos - nOffset;
+}
+
+QString readEntryFileName(XARJ *pArj, qint64 nOffset)
+{
+    quint8 nFirstHeaderSize = pArj->read_uint8(basicFieldOffset(nOffset, ARJ_BASIC_FIRST_HEADER_SIZE));
+    qint64 nNameOffset = basicHeaderOffset(nOffset) + nFirstHeaderSize;
+    quint16 nBasicHeaderSize = readBasicHeaderSize(pArj, nOffset);
+    qint64 nMaxNameLen = (basicHeaderOffset(nOffset) + nBasicHeaderSize) - nNameOffset;
+
+    if (nMaxNameLen <= 0) {
+        return QString();
+    }
+
+    return pArj->read_ansiString(nNameOffset, (qint32)nMaxNameLen);
+}
+
+bool readEntryInfo(XARJ *pArj, qint64 nOffset, ARJ_ENTRY_INFO *pInfo)
+{
+    if (!pInfo) {
+        return false;
+    }
+
+    ARJ_ENTRY_INFO info = {};
+
+    if (!hasArjMarker(pArj, nOffset)) {
+        return false;
+    }
+
+    info.nOffset = nOffset;
+    info.nBasicHeaderSize = readBasicHeaderSize(pArj, nOffset);
+    info.bEndOfArchive = isEndOfArchiveHeader(info.nBasicHeaderSize);
+    info.nHeaderSize = readEntryHeaderSize(pArj, nOffset);
+
+    if (info.nHeaderSize <= 0) {
+        return false;
+    }
+
+    if (info.bEndOfArchive) {
+        *pInfo = info;
+        return true;
+    }
+
+    if (info.nBasicHeaderSize < XARJ::FIXED_HEADER_SIZE) {
+        return false;
+    }
+
+    info.nFirstHeaderSize = pArj->read_uint8(basicFieldOffset(nOffset, ARJ_BASIC_FIRST_HEADER_SIZE));
+    info.nFlags = pArj->read_uint8(basicFieldOffset(nOffset, ARJ_BASIC_FLAGS));
+    info.nMethod = pArj->read_uint8(basicFieldOffset(nOffset, ARJ_BASIC_METHOD));
+    info.nPasswordModifier = pArj->read_uint8(basicFieldOffset(nOffset, ARJ_BASIC_PASSWORD_MODIFIER));
+    info.nDosDateTime = pArj->read_uint32(basicFieldOffset(nOffset, ARJ_BASIC_DOS_DATE_TIME), false);
+    info.nCompressedSize = pArj->read_uint32(basicFieldOffset(nOffset, ARJ_BASIC_COMPRESSED_SIZE), false);
+    info.nOriginalSize = pArj->read_uint32(basicFieldOffset(nOffset, ARJ_BASIC_ORIGINAL_SIZE), false);
+    info.nCRC32 = pArj->read_uint32(basicFieldOffset(nOffset, ARJ_BASIC_CRC32), false);
+    info.sFileName = readEntryFileName(pArj, nOffset);
+
+    *pInfo = info;
+
+    return true;
+}
+
+qint64 entryStreamOffset(const ARJ_ENTRY_INFO &info)
+{
+    return info.nOffset + info.nHeaderSize;
+}
+
+qint64 entryEndOffset(const ARJ_ENTRY_INFO &info)
+{
+    return entryStreamOffset(info) + info.nCompressedSize;
+}
+
+qint64 firstFileRecordOffset(XARJ *pArj)
+{
+    ARJ_ENTRY_INFO info = {};
+
+    if (readEntryInfo(pArj, 0, &info) && !info.bEndOfArchive) {
+        return info.nHeaderSize;
+    }
+
+    return 0;
+}
+
+qint32 countFileRecords(XARJ *pArj, qint64 nStartOffset, XBinary::PDSTRUCT *pPdStruct, qint64 *pEndOffset)
+{
+    qint32 nResult = 0;
+    qint64 nCurrentOffset = nStartOffset;
+    qint64 nLastEndOffset = nStartOffset;
+    qint64 nFileSize = pArj->getSize();
+
+    while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        ARJ_ENTRY_INFO info = {};
+
+        if (!readEntryInfo(pArj, nCurrentOffset, &info) || info.bEndOfArchive) {
+            break;
+        }
+
+        nResult++;
+        nLastEndOffset = entryEndOffset(info);
+        nCurrentOffset = nLastEndOffset;
+    }
+
+    if (pEndOffset) {
+        *pEndOffset = nLastEndOffset;
+    }
+
+    return nResult;
+}
+
+XBinary::HANDLE_METHOD handleMethodForArjMethod(quint8 nMethod)
+{
+    XBinary::HANDLE_METHOD result = XBinary::HANDLE_METHOD_UNKNOWN;
+
+    if ((nMethod == XARJ::CMETHOD_STORED) || (nMethod == XARJ::CMETHOD_NO_COMPRESSION_1) || (nMethod == XARJ::CMETHOD_NO_COMPRESSION_2)) {
+        result = XBinary::HANDLE_METHOD_STORE;
+    } else if ((nMethod == XARJ::CMETHOD_COMPRESSED_MOST) || (nMethod == XARJ::CMETHOD_COMPRESSED) || (nMethod == XARJ::CMETHOD_COMPRESSED_FASTER)) {
+        result = XBinary::HANDLE_METHOD_ARJ;
+    } else if (nMethod == XARJ::CMETHOD_COMPRESSED_FASTEST) {
+        result = XBinary::HANDLE_METHOD_ARJ_FASTEST;
+    }
+
+    return result;
+}
+
+QDateTime dosDateTimeToDateTime(quint32 nDosDateTime)
+{
+    qint32 nYear = ((nDosDateTime >> 25) & 0x7F) + 1980;
+    qint32 nMonth = (nDosDateTime >> 21) & 0x0F;
+    qint32 nDay = (nDosDateTime >> 16) & 0x1F;
+    qint32 nHour = (nDosDateTime >> 11) & 0x1F;
+    qint32 nMinute = (nDosDateTime >> 5) & 0x3F;
+    qint32 nSecond = (nDosDateTime & 0x1F) * 2;
+
+    return QDateTime(QDate(nYear, nMonth, nDay), QTime(nHour, nMinute, nSecond));
+}
+
+void appendArjDataRecords(XARJ *pArj, QList<XBinary::DATA_RECORD> *pListRecords, XBinary::ENDIAN endian)
+{
+    qint32 nNumberOfRecords = arjRecordFieldCount();
+
+    for (qint32 i = 0; i < nNumberOfRecords; i++) {
+        const ARJ_RECORD_FIELD &field = g_arjRecordFields[i];
+        pListRecords->append(pArj->getDataRecord(field.nOffset, field.nSize, field.pszDataName, field.valueType, field.nDataRecordFlags, endian));
+    }
+}
+
+XBinary::FPART createFilePart(XBinary::FILEPART filePart, qint64 nOffset, qint64 nSize, const QString &sName)
+{
+    XBinary::FPART result = {};
+    result.filePart = filePart;
+    result.nFileOffset = nOffset;
+    result.nFileSize = nSize;
+    result.nVirtualAddress = -1;
+    result.sName = sName;
+
+    return result;
+}
+}  // namespace
+
 XARJ::XARJ(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -37,19 +345,13 @@ bool XARJ::isValid(PDSTRUCT *pPdStruct)
 
     bool bResult = false;
 
-    // ARJ archive starts with 0x60 0xEA followed by a 2-byte basic header size
-    // The basic header size must be >= 30 (minimum fixed part)
-    if (getSize() >= 34) {  // 2 marker + 2 hdr_size + 30 minimum header
-        quint8 nByte0 = read_uint8(0);
-        quint8 nByte1 = read_uint8(1);
-        quint16 nBasicHeaderSize = read_uint16(2, false);  // LE
+    if (getSize() >= ARJ_MIN_VALID_SIZE) {
+        quint16 nBasicHeaderSize = readBasicHeaderSize(this, 0);
 
-        if ((nByte0 == 0x60) && (nByte1 == 0xEA) && (nBasicHeaderSize >= FIXED_HEADER_SIZE) && (nBasicHeaderSize <= 2600)) {
-            // The first byte of the basic header is first_hdr_size (fixed part size)
-            // ARJ 2.50+ uses 34; older versions use 30. Accept any value >= FIXED_HEADER_SIZE.
-            quint8 nFirstHdrSize = read_uint8(4);
+        if (hasArjMarker(this, 0) && (nBasicHeaderSize >= FIXED_HEADER_SIZE) && (nBasicHeaderSize <= ARJ_MAX_BASIC_HEADER_SIZE)) {
+            quint8 nFirstHeaderSize = read_uint8(basicFieldOffset(0, ARJ_BASIC_FIRST_HEADER_SIZE));
 
-            if (nFirstHdrSize >= FIXED_HEADER_SIZE) {
+            if (nFirstHeaderSize >= FIXED_HEADER_SIZE) {
                 bResult = true;
             }
         }
@@ -120,9 +422,10 @@ QString XARJ::getMIMEString()
 
 QString XARJ::getVersion()
 {
-    // Archiver version is at offset 5 (index 1 within basic header data starting at offset 4)
-    if (getSize() >= 6) {
-        quint8 nVersion = read_uint8(5);
+    qint64 nVersionOffset = basicFieldOffset(0, ARJ_BASIC_ARCHIVER_VERSION);
+
+    if (getSize() > nVersionOffset) {
+        quint8 nVersion = read_uint8(nVersionOffset);
 
         return QString::number(nVersion);
     }
@@ -163,60 +466,9 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pState->pContext = nullptr;
         pState->mapUnpackProperties = mapProperties;
 
-        // Skip main archive header first
-        qint64 nOffset = 0;
-        qint64 nFileSize = pState->nTotalSize;
-
-        if (nFileSize >= 4) {
-            quint8 nByte0 = read_uint8(nOffset);
-            quint8 nByte1 = read_uint8(nOffset + 1);
-            quint16 nBasicHeaderSize = read_uint16(nOffset + 2, false);
-
-            if ((nByte0 == 0x60) && (nByte1 == 0xEA) && (nBasicHeaderSize > 0)) {
-                qint64 nMainHeaderSize = _getEntryHeaderSize(nOffset);
-
-                if (nMainHeaderSize > 0) {
-                    nOffset += nMainHeaderSize;
-                    nFileSize -= nMainHeaderSize;
-                }
-            }
-        }
-
+        qint64 nOffset = firstFileRecordOffset(this);
         pState->nCurrentOffset = nOffset;
-
-        // Count file records
-        qint64 nCountOffset = nOffset;
-
-        while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            if ((nFileSize - (nCountOffset - nOffset)) < 4) {
-                break;
-            }
-
-            quint8 nByte0 = read_uint8(nCountOffset);
-            quint8 nByte1 = read_uint8(nCountOffset + 1);
-            quint16 nBasicHeaderSize = read_uint16(nCountOffset + 2, false);
-
-            if ((nByte0 != 0x60) || (nByte1 != 0xEA)) {
-                break;
-            }
-
-            // End-of-archive marker: header size == 0
-            if (nBasicHeaderSize == 0) {
-                break;
-            }
-
-            qint64 nEntryHeaderSize = _getEntryHeaderSize(nCountOffset);
-
-            if (nEntryHeaderSize <= 0) {
-                break;
-            }
-
-            quint32 nCompressedSize = read_uint32(nCountOffset + 4 + 12, false);
-
-            pState->nNumberOfRecords++;
-
-            nCountOffset += nEntryHeaderSize + nCompressedSize;
-        }
+        pState->nNumberOfRecords = countFileRecords(this, nOffset, pPdStruct, nullptr);
 
         bResult = (pState->nNumberOfRecords > 0);
     }
@@ -231,56 +483,33 @@ XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     XBinary::ARCHIVERECORD result = {};
 
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        qint64 nEntryHeaderSize = _getEntryHeaderSize(pState->nCurrentOffset);
-        quint32 nCompressedSize = read_uint32(pState->nCurrentOffset + 4 + 12, false);
-        quint32 nOriginalSize = read_uint32(pState->nCurrentOffset + 4 + 16, false);
-        quint32 nCRC32 = read_uint32(pState->nCurrentOffset + 4 + 20, false);
-        quint8 nArjFlags = read_uint8(pState->nCurrentOffset + 4 + 4);
-        quint8 nMethod = read_uint8(pState->nCurrentOffset + 4 + 5);
-        quint8 nPasswordModifier = read_uint8(pState->nCurrentOffset + 4 + 7);
-        quint32 nDosDateTime = read_uint32(pState->nCurrentOffset + 4 + 8, false);
+        ARJ_ENTRY_INFO info = {};
 
-        QString sFileName = _getFileName(pState->nCurrentOffset);
-        sFileName = sFileName.replace("\\", "/");
+        if (!readEntryInfo(this, pState->nCurrentOffset, &info) || info.bEndOfArchive) {
+            return result;
+        }
 
-        result.nStreamOffset = pState->nCurrentOffset + nEntryHeaderSize;
-        result.nStreamSize = nCompressedSize;
+        QString sFileName = info.sFileName.replace("\\", "/");
+
+        result.nStreamOffset = entryStreamOffset(info);
+        result.nStreamSize = info.nCompressedSize;
 
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
         result.mapProperties.insert(XBinary::FPART_PROP_STREAMOFFSET, result.nStreamOffset);
         result.mapProperties.insert(XBinary::FPART_PROP_STREAMSIZE, result.nStreamSize);
-        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nOriginalSize);
-        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nCompressedSize);
-        result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nCRC32);
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : XBinary::CRC_TYPE_UNKNOWN);
-        result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)info.nOriginalSize);
+        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)info.nCompressedSize);
+        result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, info.nCRC32);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, info.nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : XBinary::CRC_TYPE_UNKNOWN);
+        result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)info.nMethod);
 
-        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, handleMethodForArjMethod(info.nMethod));
 
-        if ((nMethod == CMETHOD_STORED) || (nMethod == CMETHOD_NO_COMPRESSION_1) || (nMethod == CMETHOD_NO_COMPRESSION_2)) {
-            compressMethod = HANDLE_METHOD_STORE;
-        } else if ((nMethod == CMETHOD_COMPRESSED_MOST) || (nMethod == CMETHOD_COMPRESSED) || (nMethod == CMETHOD_COMPRESSED_FASTER)) {
-            compressMethod = HANDLE_METHOD_ARJ;
-        } else if (nMethod == CMETHOD_COMPRESSED_FASTEST) {
-            compressMethod = HANDLE_METHOD_ARJ_FASTEST;
+        if (info.nFlags & ARJ_FLAG_GARBLE) {
+            result.mapProperties.insert(XBinary::FPART_PROP_PASSWORD_MODIFIER, (quint32)info.nPasswordModifier);
         }
 
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
-
-        // ARJ GARBLE encryption: bit 0 of arj_flags
-        if (nArjFlags & 0x01) {
-            result.mapProperties.insert(XBinary::FPART_PROP_PASSWORD_MODIFIER, (quint32)nPasswordModifier);
-        }
-
-        // Convert DOS date/time
-        qint32 nYear = ((nDosDateTime >> 25) & 0x7F) + 1980;
-        qint32 nMonth = (nDosDateTime >> 21) & 0x0F;
-        qint32 nDay = (nDosDateTime >> 16) & 0x1F;
-        qint32 nHour = (nDosDateTime >> 11) & 0x1F;
-        qint32 nMinute = (nDosDateTime >> 5) & 0x3F;
-        qint32 nSecond = (nDosDateTime & 0x1F) * 2;
-
-        QDateTime dtMTime(QDate(nYear, nMonth, nDay), QTime(nHour, nMinute, nSecond));
+        QDateTime dtMTime = dosDateTimeToDateTime(info.nDosDateTime);
 
         if (dtMTime.isValid()) {
             result.mapProperties.insert(XBinary::FPART_PROP_MTIME, dtMTime);
@@ -297,13 +526,14 @@ bool XARJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        qint64 nEntryHeaderSize = _getEntryHeaderSize(pState->nCurrentOffset);
-        quint32 nCompressedSize = read_uint32(pState->nCurrentOffset + 4 + 12, false);
+        ARJ_ENTRY_INFO info = {};
 
-        pState->nCurrentOffset += nEntryHeaderSize + nCompressedSize;
-        pState->nCurrentIndex++;
+        if (readEntryInfo(this, pState->nCurrentOffset, &info) && !info.bEndOfArchive) {
+            pState->nCurrentOffset = entryEndOffset(info);
+            pState->nCurrentIndex++;
 
-        bResult = (pState->nCurrentIndex < pState->nNumberOfRecords);
+            bResult = (pState->nCurrentIndex < pState->nNumberOfRecords);
+        }
     }
 
     return bResult;
@@ -319,17 +549,17 @@ bool XARJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 QString XARJ::structIDToString(quint32 nID)
 {
-    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XARJ_STRUCTID, sizeof(_TABLE_XARJ_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XARJ_STRUCTID, xarjStructIdCount());
 }
 
 QString XARJ::structIDToFtString(quint32 nID)
 {
-    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XARJ_STRUCTID, sizeof(_TABLE_XARJ_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XARJ_STRUCTID, xarjStructIdCount());
 }
 
 quint32 XARJ::ftStringToStructID(const QString &sFtString)
 {
-    return XCONVERT_ftStringToId(sFtString, _TABLE_XARJ_STRUCTID, sizeof(_TABLE_XARJ_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XARJ_STRUCTID, xarjStructIdCount());
 }
 
 QList<XBinary::DATA_HEADER> XARJ::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
@@ -343,51 +573,9 @@ QList<XBinary::DATA_HEADER> XARJ::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
-        qint64 nRealSize = 0;
-        qint32 nCount = 0;
-        qint64 nOffset = 0;
-        qint64 nFileSize = getSize();
-
-        // Skip main archive header
-        if (nFileSize >= 4) {
-            quint8 nByte0 = read_uint8(0);
-            quint8 nByte1 = read_uint8(1);
-            quint16 nHdrSize = read_uint16(2, false);
-
-            if ((nByte0 == 0x60) && (nByte1 == 0xEA) && (nHdrSize > 0)) {
-                qint64 nMainHeaderSize = _getEntryHeaderSize(0);
-
-                if (nMainHeaderSize > 0) {
-                    nOffset = nMainHeaderSize;
-                }
-            }
-        }
-
-        // Count file records
-        qint64 nCurOffset = nOffset;
-
-        while ((nCurOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            quint8 nByte0 = read_uint8(nCurOffset);
-            quint8 nByte1 = read_uint8(nCurOffset + 1);
-            quint16 nBasicHeaderSize = read_uint16(nCurOffset + 2, false);
-
-            if ((nByte0 != 0x60) || (nByte1 != 0xEA) || (nBasicHeaderSize == 0)) {
-                break;
-            }
-
-            qint64 nEntryHeaderSize = _getEntryHeaderSize(nCurOffset);
-
-            if (nEntryHeaderSize <= 0) {
-                break;
-            }
-
-            quint32 nCompressedSize = read_uint32(nCurOffset + 4 + 12, false);
-
-            nCount++;
-            nRealSize = nCurOffset + nEntryHeaderSize + nCompressedSize;
-
-            nCurOffset += nEntryHeaderSize + nCompressedSize;
-        }
+        qint64 nOffset = firstFileRecordOffset(this);
+        qint64 nRealSize = nOffset;
+        qint32 nCount = countFileRecords(this, nOffset, pPdStruct, &nRealSize);
 
         _dataHeadersOptions.nID = STRUCTID_RECORD;
         _dataHeadersOptions.nLocation = nOffset;
@@ -405,58 +593,29 @@ QList<XBinary::DATA_HEADER> XARJ::getDataHeaders(const DATA_HEADERS_OPTIONS &dat
                 qint32 nCount = 0;
 
                 while ((nCount < dataHeadersOptions.nCount) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                    quint8 nByte0 = read_uint8(nCurrentOffset);
-                    quint8 nByte1 = read_uint8(nCurrentOffset + 1);
-                    quint16 nBasicHeaderSize = read_uint16(nCurrentOffset + 2, false);
+                    ARJ_ENTRY_INFO info = {};
 
-                    if ((nByte0 != 0x60) || (nByte1 != 0xEA) || (nBasicHeaderSize == 0)) {
+                    if (!readEntryInfo(this, nCurrentOffset, &info) || info.bEndOfArchive) {
                         break;
                     }
-
-                    qint64 nEntryHeaderSize = _getEntryHeaderSize(nCurrentOffset);
-
-                    if (nEntryHeaderSize <= 0) {
-                        break;
-                    }
-
-                    quint32 nCompressedSize = read_uint32(nCurrentOffset + 4 + 12, false);
 
                     DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
-                    dataHeader.nSize = nEntryHeaderSize + nCompressedSize;
+                    dataHeader.nSize = info.nHeaderSize + info.nCompressedSize;
+                    appendArjDataRecords(this, &dataHeader.listRecords, dataHeadersOptions.pMemoryMap->endian);
 
-                    // Basic header fields (offsets relative to start of entry)
-                    dataHeader.listRecords.append(getDataRecord(0, 2, "Marker", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(2, 2, "Basic Header Size", VT_UINT16, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(4, 1, "First Hdr Size", VT_UINT8, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(5, 1, "Archiver Version", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(6, 1, "Min Version", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(7, 1, "Host OS", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(8, 1, "ARJ Flags", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(9, 1, "Method", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(10, 1, "File Type", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(11, 1, "Reserved", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(12, 4, "Date/Time", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(16, 4, "Compressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(20, 4, "Original Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(24, 4, "CRC32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(28, 2, "Entry Name Pos", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(30, 2, "File Access Mode", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(32, 1, "First Chapter", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(33, 1, "Last Chapter", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-
-                    if (nBasicHeaderSize > FIXED_HEADER_SIZE) {
-                        dataHeader.listRecords.append(getDataRecord(4 + FIXED_HEADER_SIZE, nBasicHeaderSize - FIXED_HEADER_SIZE, "Filename+Comment", VT_CHAR_ARRAY,
-                                                                    DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                    if (info.nBasicHeaderSize > FIXED_HEADER_SIZE) {
+                        dataHeader.listRecords.append(getDataRecord(ARJ_ENTRY_PREFIX_SIZE + FIXED_HEADER_SIZE, info.nBasicHeaderSize - FIXED_HEADER_SIZE,
+                                                                    "Filename+Comment", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                     }
 
-                    if (nCompressedSize > 0) {
+                    if (info.nCompressedSize > 0) {
                         dataHeader.listRecords.append(
-                            getDataRecord(nEntryHeaderSize, nCompressedSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+                            getDataRecord(info.nHeaderSize, info.nCompressedSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
                     }
 
                     listResult.append(dataHeader);
 
-                    nCurrentOffset += nEntryHeaderSize + nCompressedSize;
+                    nCurrentOffset = entryEndOffset(info);
                     nCount++;
                 }
             }
@@ -519,24 +678,12 @@ QList<XBinary::XFRECORD> XARJ::getXFRecords(FT fileType, quint32 nStructID, cons
     QList<XBinary::XFRECORD> listResult;
 
     if ((nStructID == STRUCTID_HEADER) || (nStructID == STRUCTID_RECORD)) {
-        listResult.append({"Marker", 0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
-        listResult.append({"Basic Header Size", 2, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
-        listResult.append({"First Header Size", 4, 1, XFRECORD_FLAG_SIZE, VT_UINT8});
-        listResult.append({"Archiver Version", 5, 1, XFRECORD_FLAG_VERSION, VT_UINT8});
-        listResult.append({"Min Version", 6, 1, XFRECORD_FLAG_VERSION, VT_UINT8});
-        listResult.append({"Host OS", 7, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"ARJ Flags", 8, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"Method", 9, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"File Type", 10, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"Reserved", 11, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"Date/Time", 12, 4, XFRECORD_FLAG_NONE, VT_UINT32});
-        listResult.append({"Compressed Size", 16, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
-        listResult.append({"Original Size", 20, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
-        listResult.append({"CRC32", 24, 4, XFRECORD_FLAG_NONE, VT_UINT32});
-        listResult.append({"Entry Name Pos", 28, 2, XFRECORD_FLAG_OFFSET, VT_UINT16});
-        listResult.append({"File Access Mode", 30, 2, XFRECORD_FLAG_NONE, VT_UINT16});
-        listResult.append({"First Chapter", 32, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"Last Chapter", 33, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        qint32 nNumberOfRecords = arjRecordFieldCount();
+
+        for (qint32 i = 0; i < nNumberOfRecords; i++) {
+            const ARJ_RECORD_FIELD &field = g_arjRecordFields[i];
+            listResult.append({field.pszXFName, field.nOffset, field.nSize, field.nXFRecordFlags, field.valueType});
+        }
     }
 
     return listResult;
@@ -549,96 +696,38 @@ QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     QList<FPART> listResult;
 
     qint64 nFileSize = getSize();
-    qint64 nCurrentOffset = 0;
+    qint64 nCurrentOffset = firstFileRecordOffset(this);
     qint64 nMaxOffset = 0;
 
-    // Skip main archive header
-    if (nFileSize >= 4) {
-        quint8 nByte0 = read_uint8(0);
-        quint8 nByte1 = read_uint8(1);
-        quint16 nHdrSize = read_uint16(2, false);
-
-        if ((nByte0 == 0x60) && (nByte1 == 0xEA) && (nHdrSize > 0)) {
-            qint64 nMainHeaderSize = _getEntryHeaderSize(0);
-
-            if (nMainHeaderSize > 0) {
-                nCurrentOffset = nMainHeaderSize;
-            }
-        }
-    }
-
     while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        quint8 nByte0 = read_uint8(nCurrentOffset);
-        quint8 nByte1 = read_uint8(nCurrentOffset + 1);
-        quint16 nBasicHeaderSize = read_uint16(nCurrentOffset + 2, false);
+        ARJ_ENTRY_INFO info = {};
 
-        if ((nByte0 != 0x60) || (nByte1 != 0xEA) || (nBasicHeaderSize == 0)) {
+        if (!readEntryInfo(this, nCurrentOffset, &info) || info.bEndOfArchive) {
             break;
         }
-
-        qint64 nEntryHeaderSize = _getEntryHeaderSize(nCurrentOffset);
-
-        if (nEntryHeaderSize <= 0) {
-            break;
-        }
-
-        quint32 nCompressedSize = read_uint32(nCurrentOffset + 4 + 12, false);
-        quint32 nOriginalSize = read_uint32(nCurrentOffset + 4 + 16, false);
-        QString sFileName = _getFileName(nCurrentOffset);
 
         if (nFileParts & FILEPART_HEADER) {
-            FPART record = {};
-
-            record.filePart = FILEPART_HEADER;
-            record.nFileOffset = nCurrentOffset;
-            record.nFileSize = nEntryHeaderSize;
-            record.nVirtualAddress = -1;
-            record.sName = tr("Header");
-
-            listResult.append(record);
+            listResult.append(createFilePart(FILEPART_HEADER, nCurrentOffset, info.nHeaderSize, tr("Header")));
         }
 
         if (nFileParts & FILEPART_STREAM) {
-            FPART record = {};
-
-            record.filePart = FILEPART_STREAM;
-            record.nFileOffset = nCurrentOffset + nEntryHeaderSize;
-            record.nFileSize = nCompressedSize;
-            record.nVirtualAddress = -1;
-            record.sName = sFileName;
-            record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nOriginalSize);
+            FPART record = createFilePart(FILEPART_STREAM, entryStreamOffset(info), info.nCompressedSize, info.sFileName);
+            record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)info.nOriginalSize);
 
             listResult.append(record);
         }
 
         if (nFileParts & FILEPART_REGION) {
-            FPART record = {};
-
-            record.filePart = FILEPART_REGION;
-            record.nFileOffset = nCurrentOffset;
-            record.nFileSize = nEntryHeaderSize + nCompressedSize;
-            record.nVirtualAddress = -1;
-            record.sName = sFileName;
-
-            listResult.append(record);
+            listResult.append(createFilePart(FILEPART_REGION, nCurrentOffset, info.nHeaderSize + info.nCompressedSize, info.sFileName));
         }
 
-        nMaxOffset = nCurrentOffset + nEntryHeaderSize + nCompressedSize;
-        nCurrentOffset += nEntryHeaderSize + nCompressedSize;
+        nMaxOffset = entryEndOffset(info);
+        nCurrentOffset = nMaxOffset;
     }
 
-    // Overlay
     if (nFileParts & FILEPART_OVERLAY) {
         if (nMaxOffset < nFileSize) {
-            FPART record = {};
-
-            record.filePart = FILEPART_OVERLAY;
-            record.nFileOffset = nMaxOffset;
-            record.nFileSize = nFileSize - nMaxOffset;
-            record.nVirtualAddress = -1;
-            record.sName = tr("Overlay");
-
-            listResult.append(record);
+            listResult.append(createFilePart(FILEPART_OVERLAY, nMaxOffset, nFileSize - nMaxOffset, tr("Overlay")));
         }
     }
 
@@ -649,22 +738,15 @@ QString XARJ::cmethodToString(CMETHOD cmethod)
 {
     QString sResult;
 
-    if (cmethod == CMETHOD_STORED) {
-        sResult = "Stored";
-    } else if (cmethod == CMETHOD_COMPRESSED_MOST) {
-        sResult = "Compressed (most)";
-    } else if (cmethod == CMETHOD_COMPRESSED) {
-        sResult = "Compressed";
-    } else if (cmethod == CMETHOD_COMPRESSED_FASTER) {
-        sResult = "Compressed (faster)";
-    } else if (cmethod == CMETHOD_COMPRESSED_FASTEST) {
-        sResult = "Compressed (fastest)";
-    } else if (cmethod == CMETHOD_NO_COMPRESSION_1) {
-        sResult = "No compression";
-    } else if (cmethod == CMETHOD_NO_COMPRESSION_2) {
-        sResult = "No compression (type 2)";
-    } else {
-        sResult = "Unknown";
+    switch (cmethod) {
+        case CMETHOD_STORED: sResult = "Stored"; break;
+        case CMETHOD_COMPRESSED_MOST: sResult = "Compressed (most)"; break;
+        case CMETHOD_COMPRESSED: sResult = "Compressed"; break;
+        case CMETHOD_COMPRESSED_FASTER: sResult = "Compressed (faster)"; break;
+        case CMETHOD_COMPRESSED_FASTEST: sResult = "Compressed (fastest)"; break;
+        case CMETHOD_NO_COMPRESSION_1: sResult = "No compression"; break;
+        case CMETHOD_NO_COMPRESSION_2: sResult = "No compression (type 2)"; break;
+        default: sResult = "Unknown"; break;
     }
 
     return sResult;
@@ -672,75 +754,17 @@ QString XARJ::cmethodToString(CMETHOD cmethod)
 
 qint64 XARJ::_getEntryHeaderSize(qint64 nOffset)
 {
-    // Entry starts with: 2 bytes marker, 2 bytes basic_header_size
-    if ((nOffset + 4) > getSize()) {
-        return -1;
-    }
-
-    quint16 nBasicHeaderSize = read_uint16(nOffset + 2, false);
-
-    if (nBasicHeaderSize == 0) {
-        return 4;  // End-of-archive marker
-    }
-
-    if ((nOffset + 4 + nBasicHeaderSize + 4) > getSize()) {
-        return -1;
-    }
-
-    // Skip: marker(2) + basic_hdr_size_field(2) + basic_header(nBasicHeaderSize) + CRC32(4)
-    qint64 nPos = nOffset + 2 + 2 + nBasicHeaderSize + 4;
-
-    // Skip extended headers: each is 2-byte length + data + 4-byte CRC32
-    // Terminated by 0x0000
-    while (true) {
-        if ((nPos + 2) > getSize()) {
-            break;
-        }
-
-        quint16 nExtSize = read_uint16(nPos, false);
-        nPos += 2;
-
-        if (nExtSize == 0) {
-            break;
-        }
-
-        // extended header data + CRC32
-        nPos += nExtSize + 4;
-
-        if (nPos > getSize()) {
-            break;
-        }
-    }
-
-    return nPos - nOffset;
+    return readEntryHeaderSize(this, nOffset);
 }
 
 bool XARJ::_isValidEntry(qint64 nOffset)
 {
-    if ((nOffset + 4) > getSize()) {
-        return false;
-    }
-
-    quint8 nByte0 = read_uint8(nOffset);
-    quint8 nByte1 = read_uint8(nOffset + 1);
-
-    return (nByte0 == 0x60) && (nByte1 == 0xEA);
+    return hasArjMarker(this, nOffset);
 }
 
 QString XARJ::_getFileName(qint64 nOffset)
 {
-    // first_hdr_size (byte at offset+4) gives the actual fixed header size
-    // (30 for old ARJ, 34 for ARJ v2.50+). Filename follows the fixed part.
-    quint8 nFirstHdrSize = read_uint8(nOffset + 4);
-    qint64 nNameOffset = nOffset + 4 + nFirstHdrSize;
-    quint16 nBasicHeaderSize = read_uint16(nOffset + 2, false);
-    qint64 nMaxNameLen = (nOffset + 4 + nBasicHeaderSize) - nNameOffset;
-
-    if (nMaxNameLen <= 0) {
-        return QString();
-    }
-
-    return read_ansiString(nNameOffset, (qint32)nMaxNameLen);
+    return readEntryFileName(this, nOffset);
 }
 
 QList<QString> XARJ::getSearchSignatures()
