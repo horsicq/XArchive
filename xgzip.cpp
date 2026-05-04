@@ -25,6 +25,20 @@ XBinary::XCONVERT _TABLE_XGZIP_STRUCTID[] = {{XGzip::STRUCTID_UNKNOWN, "Unknown"
                                              {XGzip::STRUCTID_GZIP_HEADER, "GZIP_HEADER", QString("GZIP header")},
                                              {XGzip::STRUCTID_STREAM, "STREAM", QString("Stream")}};
 
+static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
+                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
+                                     XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
+{
+    XBinary::PM_INFO result = {};
+
+    result.hm[0] = hm0;
+    result.hm[1] = hm1;
+    result.hm[2] = hm2;
+    result.hm[3] = hm3;
+
+    return result;
+}
+
 XGzip::XGzip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -408,6 +422,15 @@ qint64 XGzip::getHeaderSize()
     }
 
     return nOffset;
+}
+
+QList<XBinary::PM_INFO> XGzip::unpackImplemented()
+{
+    QList<PM_INFO> listResult;
+
+    listResult.append(createPMInfo(HANDLE_METHOD_DEFLATE));
+
+    return listResult;
 }
 
 bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)

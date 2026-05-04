@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xaesdecoder.h"
+#include "algo_utils.h"
 #include <QBuffer>
 #include <QCryptographicHash>
 #include <QDebug>
@@ -279,40 +280,6 @@ static const qint32 N_PASSWORD_VERIFY_SIZE = 2;
 static const qint32 N_HMAC_SIZE = 10;
 static const qint32 N_AES_BLOCK_SIZE = 16;
 
-static QByteArray custom_hmac_sha1(const QByteArray &baKey, const QByteArray &baMessage)
-{
-    const qint32 BLOCK_SIZE = 64;
-    const quint8 IPAD = 0x36;
-    const quint8 OPAD = 0x5c;
-
-    QByteArray baKeyPadded;
-    if (baKey.size() > BLOCK_SIZE) {
-        baKeyPadded = QCryptographicHash::hash(baKey, QCryptographicHash::Sha1);
-    } else {
-        baKeyPadded = baKey;
-    }
-    while (baKeyPadded.size() < BLOCK_SIZE) {
-        baKeyPadded.append((char)0);
-    }
-
-    QByteArray baInnerKey(BLOCK_SIZE, 0);
-    QByteArray baOuterKey(BLOCK_SIZE, 0);
-    for (qint32 i = 0; i < BLOCK_SIZE; i++) {
-        baInnerKey[i] = baKeyPadded[i] ^ IPAD;
-        baOuterKey[i] = baKeyPadded[i] ^ OPAD;
-    }
-
-    QCryptographicHash innerHash(QCryptographicHash::Sha1);
-    innerHash.addData(baInnerKey);
-    innerHash.addData(baMessage);
-    QByteArray baInnerResult = innerHash.result();
-
-    QCryptographicHash outerHash(QCryptographicHash::Sha1);
-    outerHash.addData(baOuterKey);
-    outerHash.addData(baInnerResult);
-    return outerHash.result();
-}
-
 bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
 {
     return decrypt(pDecompressState, sPassword.toLatin1(), cryptoMethod, pPdStruct);
@@ -391,7 +358,7 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QB
         }
         QByteArray baExpectedHmac(bufferHmac, N_HMAC_SIZE);
 
-        QByteArray baComputedHmac = custom_hmac_sha1(baHMACKey, baEncryptedData);
+        QByteArray baComputedHmac = Algo_utils::hmacSha1(baHMACKey, baEncryptedData);
         if (baComputedHmac.left(N_HMAC_SIZE) != baExpectedHmac) {
             return false;
         }
@@ -425,11 +392,11 @@ void XAESDecoder::pbkdf2(const QByteArray &baPassword, const QByteArray &baSalt,
         baBlockIndex[2] = (char)((nBlock >> 8) & 0xFF);
         baBlockIndex[3] = (char)(nBlock & 0xFF);
 
-        QByteArray baU = custom_hmac_sha1(baPassword, baSalt + baBlockIndex);
+        QByteArray baU = Algo_utils::hmacSha1(baPassword, baSalt + baBlockIndex);
         QByteArray baT = baU;
 
         for (qint32 i = 1; i < nIterations; i++) {
-            baU = custom_hmac_sha1(baPassword, baU);
+            baU = Algo_utils::hmacSha1(baPassword, baU);
             for (qint32 j = 0; j < baT.size(); j++) {
                 baT.data()[j] ^= baU.at(j);
             }
@@ -907,7 +874,7 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
         bResult = encryptAESCTR(baAESKey, baNonce, baPlainData.constData(), baEncryptedData.data(), nPlainDataSize, pPdStruct);
 
         if (bResult) {
-            QByteArray baComputedHmac = custom_hmac_sha1(baHMACKey, baEncryptedData);
+            QByteArray baComputedHmac = Algo_utils::hmacSha1(baHMACKey, baEncryptedData);
             XBinary::_writeDevice((char *)baEncryptedData.constData(), (qint32)nPlainDataSize, pCompressState);
             XBinary::_writeDevice((char *)baComputedHmac.constData(), N_HMAC_SIZE, pCompressState);
         }

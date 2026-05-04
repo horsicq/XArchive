@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xreducedecoder.h"
+#include "algo_utils.h"
 
 #define OZUR_VERSION 20191011
 
@@ -362,14 +363,12 @@ done:
 
 static size_t example_ozur_read(ozur_ctx *ozur, OZUR_UINT8 *buf, size_t size)
 {
-    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ozur->userdata;
-    return XBinary::_readDevice((char *)buf, size, pDecompressState);
+    return Algo_utils::readFromState(ozur->userdata, buf, size, true);
 }
 
 static size_t example_ozur_write(ozur_ctx *ozur, const OZUR_UINT8 *buf, size_t size)
 {
-    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ozur->userdata;
-    return XBinary::_writeDevice((char *)buf, size, pDecompressState);
+    return Algo_utils::readFromState(ozur->userdata, buf, size, false);
 }
 
 XReduceDecoder::XReduceDecoder(QObject *parent) : QObject(parent)

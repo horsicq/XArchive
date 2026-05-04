@@ -19,26 +19,7 @@
  * SOFTWARE.
  */
 #include "xascii85decoder.h"
-
-// Internal helpers for ASCII85 decoding
-namespace {
-static int _ascii85_readByte(XBinary::DATAPROCESS_STATE *st)
-{
-    char c;
-    qint64 r = st->pDeviceInput->read(&c, 1);
-    if (r != 1) {
-        st->bReadError = true;
-        return -1;
-    }
-    st->nCountInput++;
-    return (unsigned char)c;
-}
-
-static void _ascii85_writeBytes(XBinary::DATAPROCESS_STATE *st, const unsigned char *buf, int n)
-{
-    if (n > 0) XBinary::_writeDevice((char *)buf, n, st);
-}
-}  // namespace
+#include "algo_utils.h"
 
 XASCII85Decoder::XASCII85Decoder(QObject *parent) : QObject(parent)
 {
@@ -54,8 +35,6 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
 
     if (pDecompressState->nInputOffset > 0) pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     if (pDecompressState->pDeviceOutput) pDecompressState->pDeviceOutput->seek(0);
-
-    // (Moved helper lambdas to file-scope static functions above.)
 
     // Detect optional opening marker <~ (Adobe style) but it's not required in PDF.
     // Peek first two bytes if at beginning of provided range.
@@ -85,7 +64,7 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
 
     while (!end && !pDecompressState->bReadError && XBinary::isPdStructNotCanceled(pPdStruct) &&
            (pDecompressState->nInputLimit < 0 || pDecompressState->nCountInput < pDecompressState->nInputLimit)) {
-        int ch = _ascii85_readByte(pDecompressState);
+        int ch = Algo_utils::ascii85ReadByte(pDecompressState);
         if (ch < 0) break;  // read error or EOF
         unsigned char c = (unsigned char)ch;
 
@@ -95,7 +74,7 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
         }
 
         if (c == '~') {  // EOD marker start
-            int c2 = _ascii85_readByte(pDecompressState);
+            int c2 = Algo_utils::ascii85ReadByte(pDecompressState);
             if (c2 >= 0 && (unsigned char)c2 == '>') {
                 end = true;
                 break;
@@ -110,7 +89,7 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
                 continue;
             }
             unsigned char zeros[4] = {0, 0, 0, 0};
-            _ascii85_writeBytes(pDecompressState, zeros, 4);
+            Algo_utils::ascii85WriteBytes(pDecompressState, zeros, 4);
             continue;
         } else if (c < '!' || c > 'u') {
             // Out of range character – skip (could set error flag, but being liberal aids damaged PDFs)
@@ -128,7 +107,7 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
                 tuple[1] = (unsigned char)((accum >> 16) & 0xFF);
                 tuple[2] = (unsigned char)((accum >> 8) & 0xFF);
                 tuple[3] = (unsigned char)(accum & 0xFF);
-                _ascii85_writeBytes(pDecompressState, tuple, 4);
+                Algo_utils::ascii85WriteBytes(pDecompressState, tuple, 4);
                 accum = 0;
                 count = 0;
             }
@@ -149,7 +128,7 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
                 tail[1] = (unsigned char)((accum >> 16) & 0xFF);
                 tail[2] = (unsigned char)((accum >> 8) & 0xFF);
                 tail[3] = (unsigned char)(accum & 0xFF);
-                _ascii85_writeBytes(pDecompressState, tail, count - 1);
+                Algo_utils::ascii85WriteBytes(pDecompressState, tail, count - 1);
             }
         }
     }

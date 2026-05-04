@@ -57,6 +57,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xiso9660.h
     ${CMAKE_CURRENT_LIST_DIR}/xudf.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xudf.h
+    ${CMAKE_CURRENT_LIST_DIR}/xwim.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xwim.h
     ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xjar.h
     ${CMAKE_CURRENT_LIST_DIR}/xlha.cpp
@@ -121,6 +123,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xminidump.h
     ${CMAKE_CURRENT_LIST_DIR}/xdmg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xdmg.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/algo_utils.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/algo_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xacedecoder.cpp

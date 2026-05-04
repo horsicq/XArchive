@@ -77,6 +77,20 @@ XBinary::XIDSTRING _TABLE_XZip_HeaderSignatures[] = {
 
 const QString XZip::PREFIX_SIGNATURE = "SIGNATURE";
 
+static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
+                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
+                                     XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
+{
+    XBinary::PM_INFO result = {};
+
+    result.hm[0] = hm0;
+    result.hm[1] = hm1;
+    result.hm[2] = hm2;
+    result.hm[3] = hm3;
+
+    return result;
+}
+
 XZip::XZip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -1681,6 +1695,62 @@ bool XZip::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->pContext = nullptr;
 
     return bResult;
+}
+
+QList<XBinary::PM_INFO> XZip::unpackImplemented()
+{
+    QList<XBinary::PM_INFO> listResult;
+
+    static const HANDLE_METHOD g_zipUnpackMethods[] = {
+        HANDLE_METHOD_STORE,
+        HANDLE_METHOD_SHRINK,
+        HANDLE_METHOD_REDUCE_1,
+        HANDLE_METHOD_REDUCE_2,
+        HANDLE_METHOD_REDUCE_3,
+        HANDLE_METHOD_REDUCE_4,
+        HANDLE_METHOD_IMPLODED_4KDICT_2TREES,
+        HANDLE_METHOD_IMPLODED_4KDICT_3TREES,
+        HANDLE_METHOD_IMPLODED_8KDICT_2TREES,
+        HANDLE_METHOD_IMPLODED_8KDICT_3TREES,
+        HANDLE_METHOD_DEFLATE,
+        HANDLE_METHOD_DEFLATE64,
+        HANDLE_METHOD_BZIP2,
+        HANDLE_METHOD_LZMA,
+        HANDLE_METHOD_XZ,
+        HANDLE_METHOD_PPMD8,
+    };
+
+    static const HANDLE_METHOD g_zipUnpackCryptoMethods[] = {
+        HANDLE_METHOD_ZIPCRYPTO,
+        HANDLE_METHOD_ZIP_AES128,
+        HANDLE_METHOD_ZIP_AES192,
+        HANDLE_METHOD_ZIP_AES256,
+    };
+
+    const qint32 nNumberOfMethods = sizeof(g_zipUnpackMethods) / sizeof(g_zipUnpackMethods[0]);
+    const qint32 nNumberOfCryptoMethods = sizeof(g_zipUnpackCryptoMethods) / sizeof(g_zipUnpackCryptoMethods[0]);
+
+    for (qint32 i = 0; i < nNumberOfMethods; i++) {
+        listResult.append(createPMInfo(g_zipUnpackMethods[i]));
+
+        for (qint32 j = 0; j < nNumberOfCryptoMethods; j++) {
+            listResult.append(createPMInfo(g_zipUnpackMethods[i], g_zipUnpackCryptoMethods[j]));
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::PM_INFO> XZip::packImplemented()
+{
+    QList<XBinary::PM_INFO> listResult;
+
+    listResult.append(createPMInfo(HANDLE_METHOD_STORE));
+    listResult.append(createPMInfo(HANDLE_METHOD_STORE, HANDLE_METHOD_ZIPCRYPTO));
+    listResult.append(createPMInfo(HANDLE_METHOD_DEFLATE));
+    listResult.append(createPMInfo(HANDLE_METHOD_DEFLATE, HANDLE_METHOD_ZIPCRYPTO));
+
+    return listResult;
 }
 
 bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)

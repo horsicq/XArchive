@@ -20,48 +20,11 @@
  */
 
 #include "xppmdmodel.h"
+#include "algo_utils.h"
 
-#include <cstdlib>
 #include <cstring>
 
-static void *XPPMdAlloc(ISzAllocPtr, size_t nSize)
-{
-    return malloc(nSize);
-}
-
-static void XPPMdFree(ISzAllocPtr, void *pAddress)
-{
-    free(pAddress);
-}
-
-static ISzAlloc g_XPPMdAlloc = {XPPMdAlloc, XPPMdFree};
-
-// Input stream adapter to connect 7-Zip's IByteIn with QIODevice
-typedef struct {
-    IByteIn vt;
-    QIODevice *pDevice;
-    bool bError;
-} XPPMdInputStream;
-
-static Byte XPPMdInputStream_Read(const IByteIn *p)
-{
-    XPPMdInputStream *pStream = Z7_CONTAINER_FROM_VTBL(p, XPPMdInputStream, vt);
-
-    if (pStream->bError || !pStream->pDevice) {
-        pStream->bError = true;
-        return 0;
-    }
-
-    char cByte = 0;
-    qint64 nRead = pStream->pDevice->read(&cByte, 1);
-
-    if (nRead != 1) {
-        pStream->bError = true;
-        return 0;
-    }
-
-    return (Byte)cByte;
-}
+typedef Algo_utils::QIODeviceByteInStream XPPMdInputStream;
 
 // Private implementation using 7-Zip PPMd model
 struct XPPMdModelPrivate {
@@ -98,7 +61,7 @@ bool XPPMdModel::allocate(quint32 nMemorySize)
         free();
     }
 
-    m_pPrivate->bAllocated = (Ppmd8_Alloc(&m_pPrivate->sPpmd, nMemorySize, &g_XPPMdAlloc) != 0);
+    m_pPrivate->bAllocated = (Ppmd8_Alloc(&m_pPrivate->sPpmd, nMemorySize, Algo_utils::ppmdAlloc()) != 0);
     return m_pPrivate->bAllocated;
 }
 
@@ -111,7 +74,7 @@ void XPPMdModel::init(quint8 nOrder, quint8 nRestoreMethod)
 void XPPMdModel::setInputStream(QIODevice *pDevice)
 {
     // Set up input stream for 7-Zip's internal range decoder
-    m_pPrivate->sInputStream.vt.Read = XPPMdInputStream_Read;
+    m_pPrivate->sInputStream.vt.Read = Algo_utils::readFromQIODeviceStream;
     m_pPrivate->sInputStream.pDevice = pDevice;
     m_pPrivate->sInputStream.bError = false;
 
@@ -140,7 +103,7 @@ qint32 XPPMdModel::decodeSymbol()
 void XPPMdModel::free()
 {
     if (m_pPrivate->bAllocated) {
-        Ppmd8_Free(&m_pPrivate->sPpmd, &g_XPPMdAlloc);
+        Ppmd8_Free(&m_pPrivate->sPpmd, Algo_utils::ppmdAlloc());
         m_pPrivate->bAllocated = false;
     }
 }

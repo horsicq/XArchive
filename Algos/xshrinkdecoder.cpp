@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xshrinkdecoder.h"
+#include "algo_utils.h"
 
 #define OZUS_VERSION 20200213
 
@@ -440,14 +441,12 @@ done:
 
 static size_t example_ozus_read(ozus_ctx *ozus, OZUS_UINT8 *buf, size_t size)
 {
-    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ozus->userdata;
-    return XBinary::_readDevice((char *)buf, size, pDecompressState);
+    return Algo_utils::readFromState(ozus->userdata, buf, size, true);
 }
 
 static size_t example_ozus_write(ozus_ctx *ozus, const OZUS_UINT8 *buf, size_t size)
 {
-    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ozus->userdata;
-    return XBinary::_writeDevice((char *)buf, size, pDecompressState);
+    return Algo_utils::readFromState(ozus->userdata, buf, size, false);
 }
 
 XShrinkDecoder::XShrinkDecoder(QObject *parent) : QObject(parent)

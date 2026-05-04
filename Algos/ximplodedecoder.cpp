@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "ximplodedecoder.h"
+#include "algo_utils.h"
 
 #define UI6A_VERSION 20210124
 
@@ -869,14 +870,12 @@ UI6A_API(void) ui6a_destroy(ui6a_ctx *ui6a)
 
 static size_t my_read(ui6a_ctx *ui6a, UI6A_UINT8 *buf, size_t size)
 {
-    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ui6a->userdata;
-    return XBinary::_readDevice((char *)buf, size, pDecompressState);
+    return Algo_utils::readFromState(ui6a->userdata, buf, size, true);
 }
 
 static size_t my_write(ui6a_ctx *ui6a, const UI6A_UINT8 *buf, size_t size)
 {
-    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)ui6a->userdata;
-    return XBinary::_writeDevice((char *)buf, size, pDecompressState);
+    return Algo_utils::readFromState(ui6a->userdata, buf, size, false);
 }
 
 XImplodeDecoder::XImplodeDecoder(QObject *parent) : QObject(parent)

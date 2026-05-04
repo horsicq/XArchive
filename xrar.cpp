@@ -31,6 +31,19 @@ static XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unk
                                                    {XRar::STRUCTID_RAR40_HEADER, "RAR4.0HEADER", QString("RAR 4.0 header")},
                                                    {XRar::STRUCTID_RAR50_HEADER, "RAR5.0HEADER", QString("RAR 5.0 header")}};
 
+static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
+                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
+                                     XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
+{
+    XBinary::PM_INFO result = {};
+    result.hm[0] = hm0;
+    result.hm[1] = hm1;
+    result.hm[2] = hm2;
+    result.hm[3] = hm3;
+
+    return result;
+}
+
 XRar::XRar(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -1434,6 +1447,23 @@ QByteArray XRar::createFileBlock4(const QString &sFileName, qint64 nFileSize, qu
     baResult = baCRC + baHeader;
 
     return baResult;
+}
+
+QList<XBinary::PM_INFO> XRar::unpackImplemented()
+{
+    QList<PM_INFO> listResult;
+
+    listResult.append(createPMInfo(HANDLE_METHOD_STORE));
+    listResult.append(createPMInfo(HANDLE_METHOD_RAR_15));
+    listResult.append(createPMInfo(HANDLE_METHOD_RAR_20));
+    listResult.append(createPMInfo(HANDLE_METHOD_RAR_29));
+    listResult.append(createPMInfo(HANDLE_METHOD_RAR_50));
+    listResult.append(createPMInfo(HANDLE_METHOD_RAR_70));
+    listResult.append(createPMInfo(HANDLE_METHOD_STORE, HANDLE_METHOD_RAR5_AES));
+    listResult.append(createPMInfo(HANDLE_METHOD_RAR_50, HANDLE_METHOD_RAR5_AES));
+    listResult.append(createPMInfo(HANDLE_METHOD_RAR_70, HANDLE_METHOD_RAR5_AES));
+
+    return listResult;
 }
 
 bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)

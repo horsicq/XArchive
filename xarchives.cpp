@@ -319,6 +319,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_IPA);
     result.insert(XBinary::FT_APKS);
     result.insert(XBinary::FT_7Z);
+    result.insert(XBinary::FT_WIM);
     result.insert(XBinary::FT_CAB);
     result.insert(XBinary::FT_RAR);
     result.insert(XBinary::FT_MACHOFAT);

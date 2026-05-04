@@ -205,6 +205,7 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Streaming Unpacking API
+    virtual QList<PM_INFO> unpackImplemented() override;
     virtual bool initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual XBinary::ARCHIVERECORD infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
     virtual bool unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutputDevice, PDSTRUCT *pPdStruct) override;

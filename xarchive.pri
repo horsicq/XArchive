@@ -6,6 +6,7 @@ INCLUDEPATH += $$PWD/3rdparty/ppmd/src
 DEPENDPATH += $$PWD/3rdparty/ppmd/src
 
 HEADERS += \
+    $$PWD/Algos/algo_utils.h \
     $$PWD/Algos/xarjdecoder.h \
     $$PWD/Algos/xacedecoder.h \
     $$PWD/Algos/xlzhdecoder.h \
@@ -56,6 +57,7 @@ HEADERS += \
     $$PWD/xipa.h \
     $$PWD/xiso9660.h \
     $$PWD/xudf.h \
+    $$PWD/xwim.h \
     $$PWD/xjar.h \
     $$PWD/xlha.h \
     $$PWD/xmachofat.h \
@@ -89,6 +91,7 @@ HEADERS += \
     $$PWD/xdmg.h
 
 SOURCES += \
+    $$PWD/Algos/algo_utils.cpp \
     $$PWD/Algos/xarjdecoder.cpp \
     $$PWD/Algos/xacedecoder.cpp \
     $$PWD/Algos/xlzhdecoder.cpp \
@@ -139,6 +142,7 @@ SOURCES += \
     $$PWD/xipa.cpp \
     $$PWD/xiso9660.cpp \
     $$PWD/xudf.cpp \
+    $$PWD/xwim.cpp \
     $$PWD/xjar.cpp \
     $$PWD/xlha.cpp \
     $$PWD/xmachofat.cpp \

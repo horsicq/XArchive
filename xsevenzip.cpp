@@ -73,6 +73,20 @@ static const XBinary::XFIXEDFIELD _TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER[] = 
 
 const QString XSevenZip::PREFIX_k7zId = "k7zId";
 
+static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
+                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
+                                     XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
+{
+    XBinary::PM_INFO result = {};
+
+    result.hm[0] = hm0;
+    result.hm[1] = hm1;
+    result.hm[2] = hm2;
+    result.hm[3] = hm3;
+
+    return result;
+}
+
 QMap<quint64, QString> XSevenZip::get_k7zId()
 {
     return XBinary::XIDSTRING_createMapPrefix(_TABLE_XSevenZip_EIdEnum, sizeof(_TABLE_XSevenZip_EIdEnum) / sizeof(XBinary::XIDSTRING), PREFIX_k7zId);
@@ -85,6 +99,48 @@ QMap<quint64, QString> XSevenZip::get_k7zId_s()
 
 XSevenZip::XSevenZip(QIODevice *pDevice) : XArchive(pDevice)
 {
+}
+
+QList<XBinary::PM_INFO> XSevenZip::unpackImplemented()
+{
+    QList<XBinary::PM_INFO> listResult;
+
+    static const HANDLE_METHOD g_7zUnpackMethods[] = {
+        HANDLE_METHOD_STORE,
+        HANDLE_METHOD_LZMA,
+        HANDLE_METHOD_LZMA2,
+        HANDLE_METHOD_PPMD7,
+        HANDLE_METHOD_BZIP2,
+        HANDLE_METHOD_DEFLATE,
+        HANDLE_METHOD_DEFLATE64,
+    };
+
+    static const HANDLE_METHOD g_7zFilters[] = {
+        HANDLE_METHOD_BCJ,
+        HANDLE_METHOD_ARM64_BCJ,
+    };
+
+    const qint32 nNumberOfMethods = sizeof(g_7zUnpackMethods) / sizeof(g_7zUnpackMethods[0]);
+    const qint32 nNumberOfFilters = sizeof(g_7zFilters) / sizeof(g_7zFilters[0]);
+
+    for (qint32 i = 0; i < nNumberOfMethods; i++) {
+        const HANDLE_METHOD method = g_7zUnpackMethods[i];
+
+        listResult.append(createPMInfo(method));
+        listResult.append(createPMInfo(method, HANDLE_METHOD_7Z_AES));
+
+        for (qint32 j = 0; j < nNumberOfFilters; j++) {
+            const HANDLE_METHOD filter = g_7zFilters[j];
+
+            listResult.append(createPMInfo(filter, method));
+            listResult.append(createPMInfo(filter, method, HANDLE_METHOD_7Z_AES));
+        }
+    }
+
+    listResult.append(createPMInfo(HANDLE_METHOD_BCJ2));
+    listResult.append(createPMInfo(HANDLE_METHOD_BCJ2, HANDLE_METHOD_7Z_AES));
+
+    return listResult;
 }
 
 bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
