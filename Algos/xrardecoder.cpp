@@ -3038,16 +3038,16 @@ void ModelPPM::RestartModelRare()
     SubAlloc.InitSubAllocator();
     InitRL = -(MaxOrder < 12 ? MaxOrder : 12) - 1;
     MinContext = MaxContext = (RARPPM_CONTEXT *)SubAlloc.AllocContext();
-    if (MinContext == NULL) throw std::bad_alloc();
-    MinContext->Suffix = NULL;
+    if (MinContext == nullptr) throw std::bad_alloc();
+    MinContext->Suffix = nullptr;
     OrderFall = MaxOrder;
     MinContext->U.SummFreq = (MinContext->NumStats = 256) + 1;
     FoundState = MinContext->U.Stats = (RARPPM_STATE *)SubAlloc.AllocUnits(256 / 2);
-    if (FoundState == NULL) throw std::bad_alloc();
+    if (FoundState == nullptr) throw std::bad_alloc();
     for (RunLength = InitRL, PrevSuccess = i = 0; i < 256; i++) {
         MinContext->U.Stats[i].Symbol = i;
         MinContext->U.Stats[i].Freq = 1;
-        MinContext->U.Stats[i].Successor = NULL;
+        MinContext->U.Stats[i].Successor = nullptr;
     }
 
     static const ushort InitBinEsc[] = {0x3CDD, 0x1F3F, 0x59BF, 0x48F3, 0x64A1, 0x5ABC, 0x6632, 0x6051};
@@ -3129,7 +3129,7 @@ RARPPM_CONTEXT *ModelPPM::CreateSuccessors(bool Skip, RARPPM_STATE *p1)
         // We ensure that PPM order input parameter does not exceed MAX_O (64),
         // so we do not really need this check and added it for extra safety.
         // See CVE-2017-17969 for details.
-        if (pps >= ps + ASIZE(ps)) return NULL;
+        if (pps >= ps + ASIZE(ps)) return nullptr;
 
         *pps++ = p;
     } while (pc->Suffix);
@@ -3138,7 +3138,7 @@ NO_LOOP:
     UpState.Symbol = *(quint8 *)UpBranch;
     UpState.Successor = (RARPPM_CONTEXT *)(((quint8 *)UpBranch) + 1);
     if (pc->NumStats != 1) {
-        if ((quint8 *)pc <= SubAlloc.pText) return (NULL);
+        if ((quint8 *)pc <= SubAlloc.pText) return nullptr;
         if ((p = pc->U.Stats)->Symbol != UpState.Symbol) do {
                 p++;
             } while (p->Symbol != UpState.Symbol);
@@ -3148,17 +3148,17 @@ NO_LOOP:
     } else UpState.Freq = pc->OneState.Freq;
     do {
         pc = pc->createChild(this, *--pps, UpState);
-        if (!pc) return NULL;
+        if (!pc) return nullptr;
     } while (pps != ps);
     return pc;
 }
 
 void ModelPPM::UpdateModel()
 {
-    RARPPM_STATE fs = *FoundState, *p = NULL;
+    RARPPM_STATE fs = *FoundState, *p = nullptr;
     RARPPM_CONTEXT *pc, *Successor;
     uint ns1, ns, cf, sf, s0;
-    if (fs.Freq < MAX_FREQ / 4 && (pc = MinContext->Suffix) != NULL) {
+    if (fs.Freq < MAX_FREQ / 4 && (pc = MinContext->Suffix) != nullptr) {
         if (pc->NumStats != 1) {
             if ((p = pc->U.Stats)->Symbol != fs.Symbol) {
                 do {
@@ -3187,7 +3187,7 @@ void ModelPPM::UpdateModel()
     Successor = (RARPPM_CONTEXT *)SubAlloc.pText;
     if (SubAlloc.pText >= SubAlloc.FakeUnitsStart) goto RESTART_MODEL;
     if (fs.Successor) {
-        if ((quint8 *)fs.Successor <= SubAlloc.pText && (fs.Successor = CreateSuccessors(false, p)) == NULL) goto RESTART_MODEL;
+        if ((quint8 *)fs.Successor <= SubAlloc.pText && (fs.Successor = CreateSuccessors(false, p)) == nullptr) goto RESTART_MODEL;
         if (!--OrderFall) {
             Successor = fs.Successor;
             SubAlloc.pText -= (MaxContext != MinContext);
@@ -3243,9 +3243,9 @@ void ModelPPM::ClearMask()
 
 ModelPPM::ModelPPM()
 {
-    MinContext = NULL;
-    MaxContext = NULL;
-    MedContext = NULL;
+    MinContext = nullptr;
+    MaxContext = nullptr;
+    MedContext = nullptr;
 }
 
 void ModelPPM::CleanUp()
@@ -3262,7 +3262,7 @@ bool ModelPPM::DecodeInit(rar_Unpack *UnpackRead, int &EscChar)
 
     int MaxMB;
     if (Reset) MaxMB = UnpackRead->GetChar();
-    else if (SubAlloc.GetAllocatedMemory() == 0) return (false);
+    else if (SubAlloc.GetAllocatedMemory() == 0) return false;
     if (MaxOrder & 0x40) EscChar = UnpackRead->GetChar();
     Coder.InitDecoder(UnpackRead);
     if (Reset) {
@@ -3270,20 +3270,20 @@ bool ModelPPM::DecodeInit(rar_Unpack *UnpackRead, int &EscChar)
         if (MaxOrder > 16) MaxOrder = 16 + (MaxOrder - 16) * 3;
         if (MaxOrder == 1) {
             SubAlloc.StopSubAllocator();
-            return (false);
+            return false;
         }
         SubAlloc.StartSubAllocator(MaxMB + 1);
         StartModelRare(MaxOrder);
     }
-    return (MinContext != NULL);
+    return MinContext != nullptr;
 }
 
 int ModelPPM::DecodeChar()
 {
-    if ((quint8 *)MinContext <= SubAlloc.pText || (quint8 *)MinContext > SubAlloc.HeapEnd) return (-1);
+    if ((quint8 *)MinContext <= SubAlloc.pText || (quint8 *)MinContext > SubAlloc.HeapEnd) return -1;
     if (MinContext->NumStats != 1) {
-        if ((quint8 *)MinContext->U.Stats <= SubAlloc.pText || (quint8 *)MinContext->U.Stats > SubAlloc.HeapEnd) return (-1);
-        if (!MinContext->decodeSymbol1(this)) return (-1);
+        if ((quint8 *)MinContext->U.Stats <= SubAlloc.pText || (quint8 *)MinContext->U.Stats > SubAlloc.HeapEnd) return -1;
+        if (!MinContext->decodeSymbol1(this)) return -1;
     } else MinContext->decodeBinSymbol(this);
     Coder.Decode();
     while (!FoundState) {
@@ -3291,9 +3291,9 @@ int ModelPPM::DecodeChar()
         do {
             OrderFall++;
             MinContext = MinContext->Suffix;
-            if ((quint8 *)MinContext <= SubAlloc.pText || (quint8 *)MinContext > SubAlloc.HeapEnd) return (-1);
+            if ((quint8 *)MinContext <= SubAlloc.pText || (quint8 *)MinContext > SubAlloc.HeapEnd) return -1;
         } while (MinContext->NumStats == NumMasked);
-        if (!MinContext->decodeSymbol2(this)) return (-1);
+        if (!MinContext->decodeSymbol2(this)) return -1;
         Coder.Decode();
     }
     int Symbol = FoundState->Symbol;
@@ -3303,7 +3303,7 @@ int ModelPPM::DecodeChar()
         if (EscCount == 0) ClearMask();
     }
     ARI_DEC_NORMALIZE(Coder.code, Coder.low, Coder.range, Coder.UnpackRead);
-    return (Symbol);
+    return Symbol;
 }
 
 void *LargePageAlloc::new_large(size_t Size)

@@ -364,7 +364,7 @@ bool XARJ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XARJ xarj(pDevice);
 
-    return xarj.isValid();
+    return xarj.isValid(pPdStruct);
 }
 
 qint64 XARJ::getFileFormatSize(PDSTRUCT *pPdStruct)
@@ -649,7 +649,7 @@ QList<XBinary::XFHEADER> XARJ::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             qint64 nHeaderSize = xfStruct.nSize;
 
             if (nHeaderSize <= 0) {
-                nHeaderSize = _getEntryHeaderSize(nHeaderOffset);
+                nHeaderSize = readEntryHeaderSize(this, nHeaderOffset);
             }
 
             if ((nHeaderSize > 0) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, nHeaderSize)) {
@@ -750,21 +750,6 @@ QString XARJ::cmethodToString(CMETHOD cmethod)
     }
 
     return sResult;
-}
-
-qint64 XARJ::_getEntryHeaderSize(qint64 nOffset)
-{
-    return readEntryHeaderSize(this, nOffset);
-}
-
-bool XARJ::_isValidEntry(qint64 nOffset)
-{
-    return hasArjMarker(this, nOffset);
-}
-
-QString XARJ::_getFileName(qint64 nOffset)
-{
-    return readEntryFileName(this, nOffset);
 }
 
 QList<QString> XARJ::getSearchSignatures()

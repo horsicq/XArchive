@@ -87,16 +87,6 @@ public:
 
     static QString cmethodToString(CMETHOD cmethod);
 
-private:
-    // Returns the total number of bytes to skip past the entry header
-    // (marker + basic_hdr_size_field + basic_header + CRC32 + extended headers)
-    // Returns -1 on error
-    qint64 _getEntryHeaderSize(qint64 nOffset);
-    // Returns true if bytes at nOffset look like a valid ARJ entry header
-    bool _isValidEntry(qint64 nOffset);
-    // Returns the null-terminated filename from within the basic header data
-    // (basic header data begins at nOffset+4; filename is at +30 within that)
-    QString _getFileName(qint64 nOffset);
 };
 
 #endif  // XARJ_H
