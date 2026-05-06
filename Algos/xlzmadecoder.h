@@ -22,8 +22,7 @@
 #define XLZMADECODER_H
 
 #include "xbinary.h"
-#include "LzmaDec.h"
-#include "Lzma2Dec.h"
+#include "xalgo_local.h"
 
 class XLZMADecoder : public QObject {
     Q_OBJECT

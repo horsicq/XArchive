@@ -21,6 +21,7 @@
 
 #include "xppmdmodel.h"
 #include "algo_utils.h"
+#include "xalgo_local.h"
 
 #include <cstring>
 
@@ -46,7 +47,7 @@ struct XPPMdModelPrivate {
 XPPMdModel::XPPMdModel()
 {
     m_pPrivate = new XPPMdModelPrivate();
-    Ppmd8_Construct(&m_pPrivate->sPpmd);
+    X_Ppmd8_Construct(&m_pPrivate->sPpmd);
 }
 
 XPPMdModel::~XPPMdModel()
@@ -61,14 +62,14 @@ bool XPPMdModel::allocate(quint32 nMemorySize)
         free();
     }
 
-    m_pPrivate->bAllocated = (Ppmd8_Alloc(&m_pPrivate->sPpmd, nMemorySize, Algo_utils::ppmdAlloc()) != 0);
+    m_pPrivate->bAllocated = (X_Ppmd8_Alloc(&m_pPrivate->sPpmd, nMemorySize, Algo_utils::ppmdAlloc()) != 0);
     return m_pPrivate->bAllocated;
 }
 
 void XPPMdModel::init(quint8 nOrder, quint8 nRestoreMethod)
 {
     // Initialize the PPMd model with the specified parameters
-    Ppmd8_Init(&m_pPrivate->sPpmd, nOrder, nRestoreMethod);
+    X_Ppmd8_Init(&m_pPrivate->sPpmd, nOrder, nRestoreMethod);
 }
 
 void XPPMdModel::setInputStream(QIODevice *pDevice)
@@ -82,7 +83,7 @@ void XPPMdModel::setInputStream(QIODevice *pDevice)
     m_pPrivate->sPpmd.Stream.In = &m_pPrivate->sInputStream.vt;
 
     // Initialize 7-Zip's internal range decoder
-    if (!Ppmd8_Init_RangeDec(&m_pPrivate->sPpmd)) {
+    if (!X_Ppmd8_Init_RangeDec(&m_pPrivate->sPpmd)) {
         // Range decoder initialization failed
         m_pPrivate->sInputStream.bError = true;
     }
@@ -95,7 +96,7 @@ qint32 XPPMdModel::decodeSymbol()
     }
 
     // Use 7-Zip's proven decoder
-    int nSymbol = Ppmd8_DecodeSymbol(&m_pPrivate->sPpmd);
+    int nSymbol = X_Ppmd8_DecodeSymbol(&m_pPrivate->sPpmd);
 
     return nSymbol;
 }
@@ -103,7 +104,7 @@ qint32 XPPMdModel::decodeSymbol()
 void XPPMdModel::free()
 {
     if (m_pPrivate->bAllocated) {
-        Ppmd8_Free(&m_pPrivate->sPpmd, Algo_utils::ppmdAlloc());
+        X_Ppmd8_Free(&m_pPrivate->sPpmd, Algo_utils::ppmdAlloc());
         m_pPrivate->bAllocated = false;
     }
 }

@@ -22,7 +22,7 @@
 #define XDEFLATEDECODER_H
 
 #include "xbinary.h"
-#include <zlib.h>
+#include "xalgo_local.h"
 
 class XDeflateDecoder : public QObject {
     Q_OBJECT

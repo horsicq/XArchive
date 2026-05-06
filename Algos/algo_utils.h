@@ -21,11 +21,9 @@
 #ifndef ALGO_UTILS_H
 #define ALGO_UTILS_H
 
-#include "Lzma2Dec.h"
-#include "LzmaDec.h"
+#include "xalgo_local.h"
 #include "xucldecoder.h"
 #include "xbinary.h"
-#include "../3rdparty/ppmd/src/7zTypes.h"
 
 #include <QIODevice>
 #include <QByteArray>

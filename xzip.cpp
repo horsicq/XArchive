@@ -1819,9 +1819,6 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         if (bResult) {
             pState->pContext = new ZIP_UNPACK_CONTEXT;
             ((ZIP_UNPACK_CONTEXT *)pState->pContext)->bIsECD = bIsECD;
-
-            QString sMD5 = XBinary::getHash(XBinary::HASH_MD5, getDevice(), pPdStruct);
-            pState->mapArchiveProperties.insert(FPART_PROP_FILEMD5, sMD5);
         }
     }
 

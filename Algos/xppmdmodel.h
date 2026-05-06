@@ -32,8 +32,7 @@
 #include <QIODevice>
 #include "xbinary.h"
 
-#include "../3rdparty/ppmd/src/Ppmd.h"
-#include "../3rdparty/ppmd/src/Ppmd8.h"
+#include "xalgo_local.h"
 
 // Forward declaration for internal implementation
 struct XPPMdModelPrivate;

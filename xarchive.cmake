@@ -125,6 +125,7 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xdmg.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/algo_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/algo_utils.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xalgo_local.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xacedecoder.cpp

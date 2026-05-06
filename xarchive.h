@@ -21,10 +21,7 @@
 #ifndef XARCHIVE_H
 #define XARCHIVE_H
 
-#include "LzmaDec.h"
-#include "bzlib.h"
 #include "xbinary.h"
-#include "zlib.h"
 #include "xcompress.h"
 #include "xdecompress.h"
 #include "Algos/xlzhdecoder.h"

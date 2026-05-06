@@ -7,6 +7,7 @@ DEPENDPATH += $$PWD/3rdparty/ppmd/src
 
 HEADERS += \
     $$PWD/Algos/algo_utils.h \
+    $$PWD/Algos/xalgo_local.h \
     $$PWD/Algos/xarjdecoder.h \
     $$PWD/Algos/xacedecoder.h \
     $$PWD/Algos/xlzhdecoder.h \

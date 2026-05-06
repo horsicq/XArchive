@@ -19,10 +19,10 @@
  * SOFTWARE.
  */
 #include "algo_utils.h"
+#include "xalgo_local.h"
 
 #include <QCryptographicHash>
 #include <cstdlib>
-#include <zlib.h>
 
 namespace {
 const qint32 N_ALGO_UTILS_BUFFER_SIZE = 65536;
@@ -121,7 +121,7 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
                 }
             }
 
-            SRes ret = LzmaDec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, finishMode, &status);
+            SRes ret = X_LzmaDec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, finishMode, &status);
 
             if (ret != 0) {
                 delete[] bufferIn;
@@ -197,7 +197,7 @@ bool Algo_utils::decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *
             SizeT inProcessed = nSize - nPos;
             SizeT outProcessed = _nBufferSize;
 
-            SRes ret = Lzma2Dec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
+            SRes ret = X_Lzma2Dec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
 
             if (ret != 0) {
                 delete[] bufferIn;
@@ -330,7 +330,7 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
         stream.zfree = Z_NULL;
         stream.opaque = Z_NULL;
 
-        if (deflateInit2(&stream, nCompressionLevel, Z_DEFLATED, nWindowBits, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        if (X_deflateInit2(&stream, nCompressionLevel, Z_DEFLATED, nWindowBits, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
             return false;
         }
 
@@ -363,9 +363,9 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
                 stream.avail_out = N_ALGO_UTILS_BUFFER_SIZE;
                 stream.next_out = (Bytef *)outputBuffer;
 
-                ret = deflate(&stream, flush);
+                ret = X_deflate(&stream, flush);
                 if (ret == Z_STREAM_ERROR) {
-                    deflateEnd(&stream);
+                    X_deflateEnd(&stream);
                     return false;
                 }
 
@@ -374,7 +374,7 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
                     qint64 nWritten = pCompressState->pDeviceOutput->write(outputBuffer, nCompressed);
                     if (nWritten != nCompressed) {
                         pCompressState->bWriteError = true;
-                        deflateEnd(&stream);
+                        X_deflateEnd(&stream);
                         return false;
                     }
                     pCompressState->nCountOutput += nCompressed;
@@ -382,12 +382,12 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
             } while ((stream.avail_out == 0) && (ret != Z_STREAM_END));
 
             if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-                deflateEnd(&stream);
+                X_deflateEnd(&stream);
                 return false;
             }
         } while ((flush != Z_FINISH) || (ret != Z_STREAM_END));
 
-        deflateEnd(&stream);
+        X_deflateEnd(&stream);
         bResult = !pCompressState->bReadError && !pCompressState->bWriteError;
     }
 
