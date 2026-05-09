@@ -60,10 +60,9 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, qint32 method)
     struct lzh_dec *ds;
     qint32 w_bits, w_size;
 
-    if (strm->ds == NULL) {
-        strm->ds = (lzh_dec *)calloc(1, sizeof(*strm->ds));
+    if (strm == NULL) {
+        return false;
     }
-    ds = strm->ds;
 
     switch (method) {
         case 5:
@@ -77,6 +76,17 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, qint32 method)
             break;
         default: return false; /* Not supported. */
     }
+
+    if (strm->ds == NULL) {
+        strm->ds = (lzh_dec *)calloc(1, sizeof(*strm->ds));
+    }
+
+    if (strm->ds == NULL) {
+        return false;
+    }
+
+    ds = strm->ds;
+
     /* Expand a window size up to 128 KiB for decompressing process
      * performance whatever its original window size is. */
     ds->w_size = 1U << 17;
@@ -84,6 +94,12 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, qint32 method)
     if (ds->w_buff == NULL) {
         ds->w_buff = (quint8 *)malloc(ds->w_size);
     }
+
+    if (ds->w_buff == NULL) {
+        lzh_decode_free(strm);
+        return false;
+    }
+
     w_size = 1U << w_bits;
     memset(ds->w_buff + ds->w_size - w_size, 0x20, w_size);
     ds->w_pos = 0;
@@ -95,8 +111,11 @@ bool XCompress::lzh_decode_init(lzh_stream *strm, qint32 method)
     ds->br.cache_buffer = 0;
     ds->br.cache_avail = 0;
 
-    lzh_huffman_init(&(ds->lt), LZH_LT_BITLEN_SIZE, 16);
-    lzh_huffman_init(&(ds->pt), LZH_PT_BITLEN_SIZE, 16);
+    if (!lzh_huffman_init(&(ds->lt), LZH_LT_BITLEN_SIZE, 16) || !lzh_huffman_init(&(ds->pt), LZH_PT_BITLEN_SIZE, 16)) {
+        lzh_decode_free(strm);
+        return false;
+    }
+
     ds->lt.len_bits = 9;
 
     ds->error = 0;
@@ -108,18 +127,37 @@ bool XCompress::lzh_huffman_init(lzh_huffman *hf, size_t len_size, qint32 tbl_bi
 {
     qint32 bits;
 
+    if (hf == NULL) {
+        return false;
+    }
+
     if (hf->bitlen == NULL) {
         hf->bitlen = (quint8 *)malloc(len_size * sizeof(hf->bitlen[0]));
     }
+
+    if (hf->bitlen == NULL) {
+        return false;
+    }
+
     if (hf->tbl == NULL) {
         if (tbl_bits < LZH_HTBL_BITS) bits = tbl_bits;
         else bits = LZH_HTBL_BITS;
         hf->tbl = (quint16 *)malloc(((size_t)1 << bits) * sizeof(hf->tbl[0]));
     }
+
+    if (hf->tbl == NULL) {
+        return false;
+    }
+
     if (hf->tree == NULL && tbl_bits > LZH_HTBL_BITS) {
         hf->tree_avail = 1 << (tbl_bits - LZH_HTBL_BITS + 4);
         hf->tree = (lzh_htree_t *)malloc(hf->tree_avail * sizeof(hf->tree[0]));
     }
+
+    if ((tbl_bits > LZH_HTBL_BITS) && (hf->tree == NULL)) {
+        return false;
+    }
+
     hf->len_size = (int)len_size;
     hf->tbl_bits = tbl_bits;
 
