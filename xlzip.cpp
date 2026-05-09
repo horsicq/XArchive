@@ -31,22 +31,14 @@ XLzip::XLzip(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-XLzip::~XLzip()
-{
-}
-
 bool XLzip::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     if (getSize() >= 6) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
-        if (compareSignature(&memoryMap, "'LZIP'", 0, pPdStruct)) {
-            bResult = true;
-        }
+        return compareSignature(&memoryMap, "'LZIP'", 0, pPdStruct);
     }
 
-    return bResult;
+    return false;
 }
 
 bool XLzip::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -123,13 +115,7 @@ XBinary::OSNAME XLzip::getOsName()
 
 QList<XBinary::MAPMODE> XLzip::getMapModesList()
 {
-    QList<MAPMODE> listResult;
-
-    listResult.append(MAPMODE_REGIONS);
-    listResult.append(MAPMODE_STREAMS);
-    listResult.append(MAPMODE_DATA);
-
-    return listResult;
+    return {MAPMODE_REGIONS, MAPMODE_STREAMS, MAPMODE_DATA};
 }
 
 XBinary::_MEMORY_MAP XLzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
@@ -248,9 +234,9 @@ QList<XBinary::XFRECORD> XLzip::getXFRecords(FT fileType, quint32 nStructID, con
     QList<XBinary::XFRECORD> listResult;
 
     if (nStructID == STRUCTID_LZIP_HEADER) {
-        listResult.append({"magic", (qint32)offsetof(LZIP_HEADER, magic), 4, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
-        listResult.append({"nVersion", (qint32)offsetof(LZIP_HEADER, nVersion), 1, XFRECORD_FLAG_VERSION, VT_UINT8});
-        listResult.append({"nDictSizeCode", (qint32)offsetof(LZIP_HEADER, nDictSizeCode), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"magic", static_cast<qint32>(offsetof(LZIP_HEADER, magic)), 4, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"nVersion", static_cast<qint32>(offsetof(LZIP_HEADER, nVersion)), 1, XFRECORD_FLAG_VERSION, VT_UINT8});
+        listResult.append({"nDictSizeCode", static_cast<qint32>(offsetof(LZIP_HEADER, nDictSizeCode)), 1, XFRECORD_FLAG_NONE, VT_UINT8});
     }
 
     return listResult;
@@ -387,7 +373,7 @@ XBinary::ARCHIVERECORD XLzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     XBinary::ARCHIVERECORD result = {};
 
     if (pState && pState->pContext) {
-        LZIP_UNPACK_CONTEXT *pContext = (LZIP_UNPACK_CONTEXT *)pState->pContext;
+        LZIP_UNPACK_CONTEXT *pContext = static_cast<LZIP_UNPACK_CONTEXT *>(pState->pContext);
 
         result.nStreamOffset = pContext->nHeaderSize;
         result.nStreamSize = pContext->nCompressedSize;
@@ -415,17 +401,17 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         return false;
     }
 
-    LZIP_UNPACK_CONTEXT *pContext = (LZIP_UNPACK_CONTEXT *)pState->pContext;
+    LZIP_UNPACK_CONTEXT *pContext = static_cast<LZIP_UNPACK_CONTEXT *>(pState->pContext);
 
     // Build LZMA properties for LZIP: lc=3, lp=0, pb=2 (always fixed in lzip)
     // Property byte = pb * 45 + lp * 9 + lc = 2*45 + 0*9 + 3 = 93 = 0x5D
     quint32 nDictSize = _getDictionarySize(pContext->nDictSizeCode);
     QByteArray baProperty(5, 0);
-    baProperty[0] = (char)0x5D;  // lc=3, lp=0, pb=2
-    baProperty[1] = (char)(nDictSize & 0xFF);
-    baProperty[2] = (char)((nDictSize >> 8) & 0xFF);
-    baProperty[3] = (char)((nDictSize >> 16) & 0xFF);
-    baProperty[4] = (char)((nDictSize >> 24) & 0xFF);
+    baProperty[0] = static_cast<char>(0x5D);  // lc=3, lp=0, pb=2
+    baProperty[1] = static_cast<char>(nDictSize & 0xFF);
+    baProperty[2] = static_cast<char>((nDictSize >> 8) & 0xFF);
+    baProperty[3] = static_cast<char>((nDictSize >> 16) & 0xFF);
+    baProperty[4] = static_cast<char>((nDictSize >> 24) & 0xFF);
 
     SubDevice sd(getDevice(), pContext->nHeaderSize, pContext->nCompressedSize);
 
@@ -452,15 +438,11 @@ bool XLzip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    bool bResult = false;
-
     if (pState && pState->pContext) {
         pState->nCurrentIndex++;
-        // Lzip has only one record, so moving to next always returns false
-        bResult = false;
     }
 
-    return bResult;
+    return false;
 }
 
 bool XLzip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -470,7 +452,7 @@ bool XLzip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     if (pState && pState->pContext) {
-        delete (LZIP_UNPACK_CONTEXT *)pState->pContext;
+        delete static_cast<LZIP_UNPACK_CONTEXT *>(pState->pContext);
         pState->pContext = nullptr;
         bResult = true;
     }
@@ -480,11 +462,7 @@ bool XLzip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 QList<QString> XLzip::getSearchSignatures()
 {
-    QList<QString> listResult;
-
-    listResult.append("'LZIP'");
-
-    return listResult;
+    return {"'LZIP'"};
 }
 
 XBinary *XLzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)

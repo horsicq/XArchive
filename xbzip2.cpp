@@ -30,22 +30,14 @@ XBZIP2::XBZIP2(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-XBZIP2::~XBZIP2()
-{
-}
-
 bool XBZIP2::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     if (getSize() >= 14) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
-        if (compareSignature(&memoryMap, "'BZh'..314159265359", 0, pPdStruct) || compareSignature(&memoryMap, "'BZh'..17724538509000000000", 0, pPdStruct)) {
-            bResult = true;
-        }
+        return compareSignature(&memoryMap, "'BZh'..314159265359", 0, pPdStruct) || compareSignature(&memoryMap, "'BZh'..17724538509000000000", 0, pPdStruct);
     }
 
-    return bResult;
+    return false;
 }
 
 bool XBZIP2::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -67,7 +59,7 @@ qint32 XBZIP2::getType()
 
 XBinary::ENDIAN XBZIP2::getEndian()
 {
-    return ENDIAN_LITTLE;  // BZip2 is always little-endian
+    return ENDIAN_LITTLE;
 }
 
 QString XBZIP2::typeIdToString(qint32 nType)
@@ -113,13 +105,7 @@ XBinary::OSNAME XBZIP2::getOsName()
 
 QList<XBinary::MAPMODE> XBZIP2::getMapModesList()
 {
-    QList<MAPMODE> listResult;
-
-    listResult.append(MAPMODE_REGIONS);
-    listResult.append(MAPMODE_STREAMS);
-    listResult.append(MAPMODE_DATA);
-
-    return listResult;
+    return {MAPMODE_REGIONS, MAPMODE_STREAMS, MAPMODE_DATA};
 }
 
 XBinary::_MEMORY_MAP XBZIP2::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
@@ -127,7 +113,7 @@ XBinary::_MEMORY_MAP XBZIP2::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     XBinary::_MEMORY_MAP result = {};
 
     if (mapMode == MAPMODE_UNKNOWN) {
-        mapMode = MAPMODE_DATA;  // Default mode
+        mapMode = MAPMODE_DATA;
     }
 
     if (mapMode == MAPMODE_REGIONS) {
@@ -239,8 +225,8 @@ QList<XBinary::XFRECORD> XBZIP2::getXFRecords(FT fileType, quint32 nStructID, co
     QList<XBinary::XFRECORD> listResult;
 
     if (nStructID == STRUCTID_BZIP2_HEADER) {
-        listResult.append({"magic", (qint32)offsetof(BZIP2_HEADER, magic), 3, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
-        listResult.append({"blockSize", (qint32)offsetof(BZIP2_HEADER, blockSize), 1, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"magic", static_cast<qint32>(offsetof(BZIP2_HEADER, magic)), 3, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"blockSize", static_cast<qint32>(offsetof(BZIP2_HEADER, blockSize)), 1, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
     }
 
     return listResult;
@@ -254,7 +240,6 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     const qint64 nFileSize = getSize();
     if (nFileSize <= 0) return listResult;
 
-    // Header: fixed 4 bytes ("BZh" + level)
     if (nFileParts & FILEPART_HEADER) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
@@ -305,7 +290,6 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
         }
     }
 
-    // Data: entire file
     if (nFileParts & FILEPART_DATA) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
@@ -316,7 +300,6 @@ QList<XBinary::FPART> XBZIP2::getFileParts(quint32 nFileParts, qint32 nLimit, PD
         listResult.append(data);
     }
 
-    // Overlay: any trailing bytes not covered (none in our simple model)
     if (nFileParts & FILEPART_OVERLAY) {
         if (mMaxOffset < nFileSize) {
             FPART ov = {};
@@ -336,10 +319,7 @@ XBZIP2::BZIP2_HEADER XBZIP2::_read_BZIP2_HEADER(qint64 nOffset)
 {
     BZIP2_HEADER result = {};
 
-    // Read the magic "BZh" signature
-    read_array(nOffset, (char *)&result.magic, 3);
-
-    // Read the block size
+    read_array(nOffset, reinterpret_cast<char *>(&result.magic), 3);
     result.blockSize = read_uint8(nOffset + 3);
 
     return result;
@@ -357,19 +337,16 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     }
 
     if (pState) {
-        // Validate BZIP2 file
         if (!isValid(pPdStruct)) {
             return false;
         }
 
-        // Create and initialize context
         BZIP2_UNPACK_CONTEXT *pContext = new BZIP2_UNPACK_CONTEXT;
-        pContext->nHeaderSize = 4;  // "BZh" + blockSize byte
+        pContext->nHeaderSize = 4;
         pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
         pContext->nCompressedSize = 0;
         pContext->nUncompressedSize = 0;
 
-        // Decompress to get sizes
         qint64 nFileSize = getSize();
         SubDevice sd(getDevice(), 0, nFileSize);
 
@@ -395,11 +372,10 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
         }
 
         if (bResult) {
-            // Initialize state
             pState->nCurrentOffset = 0;
             pState->nTotalSize = getSize();
             pState->nCurrentIndex = 0;
-            pState->nNumberOfRecords = 1;  // BZIP2 contains single compressed stream
+            pState->nNumberOfRecords = 1;
             pState->pContext = pContext;
         } else {
             delete pContext;
@@ -423,15 +399,11 @@ XBinary::ARCHIVERECORD XBZIP2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
         return result;
     }
 
-    BZIP2_UNPACK_CONTEXT *pContext = (BZIP2_UNPACK_CONTEXT *)pState->pContext;
+    BZIP2_UNPACK_CONTEXT *pContext = reinterpret_cast<BZIP2_UNPACK_CONTEXT *>(pState->pContext);
 
-    // Fill ARCHIVERECORD
     result.nStreamOffset = 0;
     result.nStreamSize = pContext->nCompressedSize;
-    // result.nDecompressedOffset = 0;
-    // result.nDecompressedSize = pContext->nUncompressedSize;
 
-    // Set properties
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
@@ -444,20 +416,13 @@ bool XBZIP2::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    bool bResult = false;
-
     if (!pState || !pState->pContext) {
         return false;
     }
 
-    // Move to next record
     pState->nCurrentIndex++;
 
-    // BZIP2 has only one record, so moving to next always returns false
-    // This indicates end of archive
-    bResult = false;
-
-    return bResult;
+    return false;
 }
 
 bool XBZIP2::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -468,14 +433,12 @@ bool XBZIP2::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    // Delete format-specific context
     if (pState->pContext) {
-        BZIP2_UNPACK_CONTEXT *pContext = (BZIP2_UNPACK_CONTEXT *)pState->pContext;
+        BZIP2_UNPACK_CONTEXT *pContext = reinterpret_cast<BZIP2_UNPACK_CONTEXT *>(pState->pContext);
         delete pContext;
         pState->pContext = nullptr;
     }
 
-    // Reset state fields
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
@@ -486,26 +449,12 @@ bool XBZIP2::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 QList<XBinary::FPART_PROP> XBZIP2::getAvailableFPARTProperties()
 {
-    QList<XBinary::FPART_PROP> listResult;
-
-    listResult.append(FPART_PROP_ORIGINALNAME);
-    listResult.append(FPART_PROP_COMPRESSEDSIZE);
-    listResult.append(FPART_PROP_UNCOMPRESSEDSIZE);
-    listResult.append(FPART_PROP_HANDLEMETHOD);
-    listResult.append(FPART_PROP_STREAMOFFSET);
-    listResult.append(FPART_PROP_STREAMSIZE);
-
-    return listResult;
+    return {FPART_PROP_ORIGINALNAME, FPART_PROP_COMPRESSEDSIZE, FPART_PROP_UNCOMPRESSEDSIZE, FPART_PROP_HANDLEMETHOD, FPART_PROP_STREAMOFFSET, FPART_PROP_STREAMSIZE};
 }
 
 QList<QString> XBZIP2::getSearchSignatures()
 {
-    QList<QString> listResult;
-
-    listResult.append("'BZh'..314159265359");
-    listResult.append("'BZh'..17724538509000000000");
-
-    return listResult;
+    return {"'BZh'..314159265359", "'BZh'..17724538509000000000"};
 }
 
 XBinary *XBZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)

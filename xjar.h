@@ -40,21 +40,21 @@ public:
 
     explicit XJAR(QIODevice *pDevice = nullptr);
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
+    bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
-    virtual FT getFileType() override;
-    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
-    virtual QString getFileFormatExt() override;
-    virtual ENDIAN getEndian() override;
-    virtual MODE getMode() override;
-    virtual QString getArch() override;
-    virtual qint32 getType() override;
-    virtual QString typeIdToString(qint32 nType) override;
-    virtual QString structIDToString(quint32 nID) override;
-    virtual QString structIDToFtString(quint32 nID) override;
-    virtual quint32 ftStringToStructID(const QString &sFtString) override;
+    FT getFileType() override;
+    FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
+    QString getFileFormatExt() override;
+    ENDIAN getEndian() override;
+    MODE getMode() override;
+    QString getArch() override;
+    qint32 getType() override;
+    QString typeIdToString(qint32 nType) override;
+    QString structIDToString(quint32 nID) override;
+    QString structIDToFtString(quint32 nID) override;
+    quint32 ftStringToStructID(const QString &sFtString) override;
 };
 
 #endif  // XJAR_H

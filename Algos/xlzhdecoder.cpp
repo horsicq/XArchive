@@ -60,8 +60,8 @@ bool XLZHDecoder::lzh_decode_init(lzh_stream *strm, qint32 method)
     struct lzh_dec *ds;
     qint32 w_bits, w_size;
 
-    if (strm->ds == NULL) {
-        strm->ds = (lzh_dec *)calloc(1, sizeof(*strm->ds));
+    if (strm->ds == nullptr) {
+        strm->ds = static_cast<lzh_dec *>(calloc(1, sizeof(*strm->ds)));
     }
     ds = strm->ds;
 
@@ -81,8 +81,8 @@ bool XLZHDecoder::lzh_decode_init(lzh_stream *strm, qint32 method)
      * performance whatever its original window size is. */
     ds->w_size = 1U << 17;
     ds->w_mask = ds->w_size - 1;
-    if (ds->w_buff == NULL) {
-        ds->w_buff = (quint8 *)malloc(ds->w_size);
+    if (ds->w_buff == nullptr) {
+        ds->w_buff = static_cast<quint8 *>(malloc(ds->w_size));
     }
     w_size = 1U << w_bits;
     memset(ds->w_buff + ds->w_size - w_size, 0x20, w_size);
@@ -108,19 +108,19 @@ bool XLZHDecoder::lzh_huffman_init(lzh_huffman *hf, size_t len_size, qint32 tbl_
 {
     qint32 bits;
 
-    if (hf->bitlen == NULL) {
-        hf->bitlen = (quint8 *)malloc(len_size * sizeof(hf->bitlen[0]));
+    if (hf->bitlen == nullptr) {
+        hf->bitlen = static_cast<quint8 *>(malloc(len_size * sizeof(hf->bitlen[0])));
     }
-    if (hf->tbl == NULL) {
+    if (hf->tbl == nullptr) {
         if (tbl_bits < LZH_HTBL_BITS) bits = tbl_bits;
         else bits = LZH_HTBL_BITS;
-        hf->tbl = (quint16 *)malloc(((size_t)1 << bits) * sizeof(hf->tbl[0]));
+        hf->tbl = static_cast<quint16 *>(malloc(((size_t)1 << bits) * sizeof(hf->tbl[0])));
     }
-    if (hf->tree == NULL && tbl_bits > LZH_HTBL_BITS) {
+    if (hf->tree == nullptr && tbl_bits > LZH_HTBL_BITS) {
         hf->tree_avail = 1 << (tbl_bits - LZH_HTBL_BITS + 4);
-        hf->tree = (lzh_htree_t *)malloc(hf->tree_avail * sizeof(hf->tree[0]));
+        hf->tree = static_cast<lzh_htree_t *>(malloc(hf->tree_avail * sizeof(hf->tree[0])));
     }
-    hf->len_size = (int)len_size;
+    hf->len_size = static_cast<int>(len_size);
     hf->tbl_bits = tbl_bits;
 
     return true;
@@ -572,7 +572,7 @@ qint32 XLZHDecoder::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
 void XLZHDecoder::lzh_emit_window(lzh_stream *strm, size_t s)
 {
     strm->ref_ptr = strm->ds->w_buff;
-    strm->avail_out = (int)s;
+    strm->avail_out = static_cast<int>(s);
     strm->total_out += s;
 }
 
@@ -812,12 +812,12 @@ qint32 XLZHDecoder::lzh_make_huffman_table(lzh_huffman *hf)
 
 void XLZHDecoder::lzh_decode_free(lzh_stream *strm)
 {
-    if (strm->ds == NULL) return;
+    if (strm->ds == nullptr) return;
     free(strm->ds->w_buff);
     lzh_huffman_free(&(strm->ds->lt));
     lzh_huffman_free(&(strm->ds->pt));
     free(strm->ds);
-    strm->ds = NULL;
+    strm->ds = nullptr;
 }
 
 void XLZHDecoder::lzh_huffman_free(lzh_huffman *hf)
@@ -829,8 +829,6 @@ void XLZHDecoder::lzh_huffman_free(lzh_huffman *hf)
 
 bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nMethod, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
     }
@@ -863,8 +861,8 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
     qint64 nInputLimit = pDecompressState->nInputLimit;
 
     while ((nBytesProcessed < nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nReadSize = qMin((qint32)(nInputLimit - nBytesProcessed), N_BUFFER_SIZE);
-        qint32 nBytesRead = pDecompressState->pDeviceInput->read((char *)pBufferIn, nReadSize);
+        qint32 nReadSize = qMin(static_cast<qint32>(nInputLimit - nBytesProcessed), N_BUFFER_SIZE);
+        qint32 nBytesRead = pDecompressState->pDeviceInput->read(reinterpret_cast<char *>(pBufferIn), nReadSize);
 
         if (nBytesRead <= 0) {
             break;
@@ -883,14 +881,14 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
             }
 
             if (strm.avail_out > 0) {
-                qint64 nWriteSize = (qint64)strm.avail_out;
+                qint64 nWriteSize = static_cast<qint64>(strm.avail_out);
 
                 if (nOutputWritten + nWriteSize > pDecompressState->nProcessedLimit && pDecompressState->nProcessedLimit != -1) {
                     nWriteSize = pDecompressState->nProcessedLimit - nOutputWritten;
                 }
 
                 if (nWriteSize > 0) {
-                    qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)strm.ref_ptr, nWriteSize);
+                    qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<const char *>(strm.ref_ptr), nWriteSize);
 
                     if (nWritten != nWriteSize) {
                         pDecompressState->bWriteError = true;
@@ -929,7 +927,7 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
             }
 
             if (nWriteSize > 0) {
-                qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)strm.ref_ptr, nWriteSize);
+                qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<const char *>(strm.ref_ptr), nWriteSize);
 
                 if (nWritten != nWriteSize) {
                     pDecompressState->bWriteError = true;
@@ -949,7 +947,5 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
     delete[] pBufferIn;
     delete[] pBufferOut;
 
-    bResult = (!pDecompressState->bReadError && !pDecompressState->bWriteError && nResult != LZH_ARCHIVE_FAILED);
-
-    return bResult;
+    return !pDecompressState->bReadError && !pDecompressState->bWriteError && nResult != LZH_ARCHIVE_FAILED;
 }

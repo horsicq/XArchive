@@ -27,21 +27,20 @@ class XTAR_BZIP2 : public XTARCOMPRESSED {
     Q_OBJECT
 
 public:
-    virtual QList<QString> getSearchSignatures() override;
-    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
+    QList<QString> getSearchSignatures() override;
+    XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     explicit XTAR_BZIP2(QIODevice *pDevice = nullptr);
-    virtual ~XTAR_BZIP2();
 
-    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
+    bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
 
-    virtual FT getFileType() override;
-    virtual QString getFileFormatExt() override;
-    virtual QString getFileFormatExtsString() override;
-    virtual QString getMIMEString() override;
+    FT getFileType() override;
+    QString getFileFormatExt() override;
+    QString getFileFormatExtsString() override;
+    QString getMIMEString() override;
 
 private:
-    virtual QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
+    QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
 };
 
 #endif  // XTAR_BZIP2_H

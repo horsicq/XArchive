@@ -28,10 +28,6 @@ XSZDD::XSZDD(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-XSZDD::~XSZDD()
-{
-}
-
 bool XSZDD::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XSZDD xszdd(pDevice);
@@ -68,7 +64,7 @@ bool XSZDD::isValid(PDSTRUCT *pPdStruct)
 XSZDD::SZDD_HEADER XSZDD::_read_SZDD_HEADER(qint64 nOffset)
 {
     SZDD_HEADER header = {};
-    read_array(nOffset, (char *)&header, sizeof(SZDD_HEADER));
+    read_array(nOffset, reinterpret_cast<char *>(&header), sizeof(SZDD_HEADER));
     return header;
 }
 
@@ -145,9 +141,7 @@ bool XSZDD::isEncrypted()
 
 QList<XBinary::MAPMODE> XSZDD::getMapModesList()
 {
-    QList<MAPMODE> list;
-    list.append(MAPMODE_REGIONS);
-    return list;
+    return {MAPMODE_REGIONS};
 }
 
 XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
@@ -170,7 +164,6 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         nHeaderSize = 12;
     }
 
-    // Add file header
     _MEMORY_RECORD recHeader = {};
     recHeader.nAddress = -1;
     recHeader.nOffset = 0;
@@ -328,12 +321,10 @@ bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
 
     if (pState) {
-        // Validate SZDD file
         if (!isValid(pPdStruct)) {
             return false;
         }
 
-        // Create and initialize context
         SZDD_UNPACK_CONTEXT *pContext = new SZDD_UNPACK_CONTEXT;
 
         qint64 nHeaderSize = sizeof(SZDD_HEADER);
@@ -355,11 +346,10 @@ bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             pContext->nUncompressedSize = 0;
         }
 
-        // Initialize state
         pState->nCurrentOffset = 0;
         pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 1;  // SZDD contains single compressed stream
+        pState->nNumberOfRecords = 1;
         pState->pContext = pContext;
 
         bResult = true;
@@ -382,15 +372,11 @@ XBinary::ARCHIVERECORD XSZDD::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         return result;
     }
 
-    SZDD_UNPACK_CONTEXT *pContext = (SZDD_UNPACK_CONTEXT *)pState->pContext;
+    SZDD_UNPACK_CONTEXT *pContext = reinterpret_cast<SZDD_UNPACK_CONTEXT *>(pState->pContext);
 
-    // Fill ARCHIVERECORD
     result.nStreamOffset = pContext->nHeaderSize;
     result.nStreamSize = pContext->nCompressedSize;
-    // result.nDecompressedOffset = 0;
-    // result.nDecompressedSize = pContext->nUncompressedSize;
 
-    // Set properties
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
@@ -411,9 +397,8 @@ bool XSZDD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         return false;
     }
 
-    SZDD_UNPACK_CONTEXT *pContext = (SZDD_UNPACK_CONTEXT *)pState->pContext;
+    SZDD_UNPACK_CONTEXT *pContext = reinterpret_cast<SZDD_UNPACK_CONTEXT *>(pState->pContext);
 
-    // Decompress entire SZDD stream to output device
     qint64 nFileSize = getSize();
     SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
 
@@ -445,20 +430,13 @@ bool XSZDD::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    bool bResult = false;
-
     if (!pState || !pState->pContext) {
         return false;
     }
 
-    // Move to next record
     pState->nCurrentIndex++;
 
-    // SZDD has only one record, so moving to next always returns false
-    // This indicates end of archive
-    bResult = false;
-
-    return bResult;
+    return false;
 }
 
 bool XSZDD::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -469,14 +447,12 @@ bool XSZDD::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    // Delete format-specific context
     if (pState->pContext) {
-        SZDD_UNPACK_CONTEXT *pContext = (SZDD_UNPACK_CONTEXT *)pState->pContext;
+        SZDD_UNPACK_CONTEXT *pContext = reinterpret_cast<SZDD_UNPACK_CONTEXT *>(pState->pContext);
         delete pContext;
         pState->pContext = nullptr;
     }
 
-    // Reset state fields
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
@@ -487,14 +463,7 @@ bool XSZDD::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 QList<QString> XSZDD::getSearchSignatures()
 {
-    QList<QString> listResult;
-
-    listResult.append("'SZDD'88F027'33'");
-    listResult.append("'SZDD'88F027'3A'");
-    listResult.append("'ZDD'88F027'33''A'");
-    listResult.append("'ZDD'88F027'3A''A'");
-
-    return listResult;
+    return {"'SZDD'88F027'33'", "'SZDD'88F027'3A'", "'ZDD'88F027'33''A'", "'ZDD'88F027'3A''A'"};
 }
 
 XBinary *XSZDD::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)

@@ -27,7 +27,6 @@
 
 typedef Algo_utils::QIODeviceByteInStream XPPMd7InputStream;
 
-// Private implementation using 7-Zip Ppmd7 model
 struct XPPMd7ModelPrivate {
     CPpmd7 sPpmd;
     XPPMd7InputStream sInputStream;
@@ -39,10 +38,6 @@ struct XPPMd7ModelPrivate {
         memset(&sInputStream, 0, sizeof(sInputStream));
     }
 };
-
-// ============================================================================
-// XPPMd7Model public methods
-// ============================================================================
 
 XPPMd7Model::XPPMd7Model()
 {
@@ -68,23 +63,18 @@ bool XPPMd7Model::allocate(quint32 nMemorySize)
 
 void XPPMd7Model::init(quint8 nOrder)
 {
-    // Initialize the Ppmd7 model with the specified order
     X_Ppmd7_Init(&m_pPrivate->sPpmd, nOrder);
 }
 
 void XPPMd7Model::setInputStream(QIODevice *pDevice)
 {
-    // Set up input stream for 7-Zip's internal range decoder
     m_pPrivate->sInputStream.vt.Read = Algo_utils::readFromQIODeviceStream;
     m_pPrivate->sInputStream.pDevice = pDevice;
     m_pPrivate->sInputStream.bError = false;
 
-    // Connect the stream to the Ppmd7 decoder
     m_pPrivate->sPpmd.rc.dec.Stream = &m_pPrivate->sInputStream.vt;
 
-    // Initialize 7-Zip's internal range decoder for 7z format
     if (!X_Ppmd7z_RangeDec_Init(&m_pPrivate->sPpmd.rc.dec)) {
-        // Range decoder initialization failed
         m_pPrivate->sInputStream.bError = true;
     }
 }
@@ -92,13 +82,10 @@ void XPPMd7Model::setInputStream(QIODevice *pDevice)
 qint32 XPPMd7Model::decodeSymbol()
 {
     if (!m_pPrivate->bAllocated) {
-        return -2;  // Error: model not allocated
+        return -2;
     }
 
-    // Use 7-Zip's Ppmd7z decoder (for 7z format)
-    int nSymbol = X_Ppmd7z_DecodeSymbol(&m_pPrivate->sPpmd);
-
-    return nSymbol;
+    return X_Ppmd7z_DecodeSymbol(&m_pPrivate->sPpmd);
 }
 
 void XPPMd7Model::free()

@@ -25,13 +25,9 @@ XTAR_BZIP2::XTAR_BZIP2(QIODevice *pDevice) : XTARCOMPRESSED(pDevice)
     m_compressionType = COMPRESSION_BZIP2;
 }
 
-XTAR_BZIP2::~XTAR_BZIP2()
-{
-}
-
 bool XTAR_BZIP2::isValid(PDSTRUCT *pPdStruct)
 {
-    return isValid(getDevice());
+    return isValid(getDevice(), pPdStruct);
 }
 
 bool XTAR_BZIP2::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -46,8 +42,8 @@ bool XTAR_BZIP2::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
     QByteArray baMagic = pDevice->read(2);
     if (baMagic.size() == 2) {
-        quint8 nByte1 = (quint8)(uchar)baMagic.at(0);
-        quint8 nByte2 = (quint8)(uchar)baMagic.at(1);
+        quint8 nByte1 = static_cast<quint8>(baMagic.at(0));
+        quint8 nByte2 = static_cast<quint8>(baMagic.at(1));
 
         // Bzip2 magic: 0x42 0x5A ("BZ")
         bResult = (nByte1 == 0x42) && (nByte2 == 0x5A);
@@ -85,11 +81,7 @@ QIODevice *XTAR_BZIP2::decompressData(PDSTRUCT *pPdStruct)
 
 QList<QString> XTAR_BZIP2::getSearchSignatures()
 {
-    QList<QString> listResult;
-
-    listResult.append("'BZh'");
-
-    return listResult;
+    return {"'BZh'"};
 }
 
 XBinary *XTAR_BZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)

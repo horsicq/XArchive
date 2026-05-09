@@ -30,7 +30,7 @@ void XArjDecoder::refillInputBuffer(ArjDecodeState *pState)
 {
     if (pState->pInput) {
         qint32 nToRead = pState->nReadBufferSize;
-        qint32 nRead = pState->pInput->read((char *)pState->pReadBuffer, nToRead);
+        qint32 nRead = pState->pInput->read(reinterpret_cast<char *>(pState->pReadBuffer), nToRead);
 
         if (nRead > 0) {
             pState->pBuf = pState->pReadBuffer;
@@ -266,7 +266,7 @@ bool XArjDecoder::readPtLen(ArjDecodeState *pState, qint32 nCount, qint32 nBitWi
                 return false;
             }
 
-            pState->arrPtLen[i++] = (quint8)nC;
+            pState->arrPtLen[i++] = static_cast<quint8>(nC);
 
             if (i == nSpecial) {
                 qint32 nSkip = getBits(pState, 2);
@@ -378,7 +378,7 @@ bool XArjDecoder::readCLen(ArjDecodeState *pState)
                     return false;
                 }
 
-                pState->arrCLen[i++] = (quint8)(nC - 2);
+                pState->arrCLen[i++] = static_cast<quint8>(nC - 2);
             }
         }
 
@@ -484,7 +484,7 @@ quint16 XArjDecoder::decodeLen(ArjDecodeState *pState)
         }
 
         nC = (pState->nGetBuf & 0x8000) != 0 ? 1 : 0;
-        pState->nGetBuf = (quint16)(pState->nGetBuf * 2);
+        pState->nGetBuf = static_cast<quint16>(pState->nGetBuf * 2);
         pState->nGetLen--;
 
         if (pState->bError) {
@@ -510,7 +510,7 @@ quint16 XArjDecoder::decodeLen(ArjDecodeState *pState)
         nC = (quint16)pState->nGetBuf >> (CODE_BIT - nWidth);
 
         for (qint32 i = 0; i < nWidth; i++) {
-            pState->nGetBuf = (quint16)(pState->nGetBuf * 2);
+            pState->nGetBuf = static_cast<quint16>(pState->nGetBuf * 2);
         }
 
         pState->nGetLen -= nWidth;
@@ -537,7 +537,7 @@ quint16 XArjDecoder::decodePtr(ArjDecodeState *pState)
         }
 
         nC = (pState->nGetBuf & 0x8000) != 0 ? 1 : 0;
-        pState->nGetBuf = (quint16)(pState->nGetBuf * 2);
+        pState->nGetBuf = static_cast<quint16>(pState->nGetBuf * 2);
         pState->nGetLen--;
 
         if (pState->bError) {
@@ -563,7 +563,7 @@ quint16 XArjDecoder::decodePtr(ArjDecodeState *pState)
         nC = (quint16)pState->nGetBuf >> (CODE_BIT - nWidth);
 
         for (qint32 i = 0; i < nWidth; i++) {
-            pState->nGetBuf = (quint16)(pState->nGetBuf * 2);
+            pState->nGetBuf = static_cast<quint16>(pState->nGetBuf * 2);
         }
 
         pState->nGetLen -= nWidth;
@@ -576,8 +576,6 @@ quint16 XArjDecoder::decodePtr(ArjDecodeState *pState)
 
 bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
     }
@@ -591,8 +589,6 @@ bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     qint64 nOrigSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
 
     ArjDecodeState state = {};
-    state.bError = false;
-    state.nBlockSize = 0;
     state.nReadBufferSize = 8192;
     state.pReadBuffer = new quint8[state.nReadBufferSize];
     state.pText = new quint8[DDICSIZ];
@@ -608,7 +604,7 @@ bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     pDecompressState->pDeviceOutput->seek(0);
 
-    state.nCompLeft = (quint32)pDecompressState->nInputLimit;
+    state.nCompLeft = static_cast<quint32>(pDecompressState->nInputLimit);
     state.pInput = pDecompressState->pDeviceInput;
     state.nInputBytesRead = 0;
     state.pBuf = nullptr;
@@ -625,7 +621,7 @@ bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     qint64 nOutputWritten = 0;
 
     while ((nCount < (quint32)nOrigSize) && !state.bError && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint16 nChr = (qint16)decodeC(&state);
+        qint16 nChr = static_cast<qint16>(decodeC(&state));
 
         if (state.bError) {
             break;
@@ -637,7 +633,7 @@ bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
 
             if (++nOutPtr >= (quint32)DDICSIZ) {
                 nOutPtr = 0;
-                qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)state.pText, DDICSIZ);
+                qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), DDICSIZ);
 
                 if (nWritten != DDICSIZ) {
                     state.bError = true;
@@ -677,7 +673,7 @@ bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
 
                     if (++nOutPtr >= (quint32)DDICSIZ) {
                         nOutPtr = 0;
-                        qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)state.pText, DDICSIZ);
+                        qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), DDICSIZ);
 
                         if (nWritten != DDICSIZ) {
                             state.bError = true;
@@ -696,9 +692,9 @@ bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     }
 
     if (!state.bError && (nOutPtr != 0)) {
-        qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)state.pText, nOutPtr);
+        qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), nOutPtr);
 
-        if (nWritten != (qint64)nOutPtr) {
+        if (nWritten != static_cast<qint64>(nOutPtr)) {
             state.bError = true;
         } else {
             nOutputWritten += nWritten;
@@ -711,15 +707,11 @@ bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     delete[] state.pReadBuffer;
     delete[] state.pText;
 
-    bResult = !state.bError;
-
-    return bResult;
+    return !state.bError;
 }
 
 bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
     }
@@ -733,9 +725,6 @@ bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState
     qint64 nOrigSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
 
     ArjDecodeState state = {};
-    state.bError = false;
-    state.nGetLen = 0;
-    state.nGetBuf = 0;
     state.nReadBufferSize = 8192;
     state.pReadBuffer = new quint8[state.nReadBufferSize];
     state.pText = new quint8[DDICSIZ];
@@ -751,7 +740,7 @@ bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState
     pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     pDecompressState->pDeviceOutput->seek(0);
 
-    state.nCompLeft = (quint32)pDecompressState->nInputLimit;
+    state.nCompLeft = static_cast<quint32>(pDecompressState->nInputLimit);
     state.pInput = pDecompressState->pDeviceInput;
     state.nInputBytesRead = 0;
     state.pBuf = nullptr;
@@ -768,7 +757,7 @@ bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState
     qint64 nOutputWritten = 0;
 
     while ((nCount < (quint32)nOrigSize) && !state.bError && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint16 nChr = (qint16)decodeLen(&state);
+        qint16 nChr = static_cast<qint16>(decodeLen(&state));
 
         if (state.bError) {
             break;
@@ -799,7 +788,7 @@ bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState
 
             if (++nOutPtr >= (quint32)DDICSIZ) {
                 nOutPtr = 0;
-                qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)state.pText, DDICSIZ);
+                qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), DDICSIZ);
 
                 if (nWritten != DDICSIZ) {
                     state.bError = true;
@@ -834,7 +823,7 @@ bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState
 
                 if (++nOutPtr >= (quint32)DDICSIZ) {
                     nOutPtr = 0;
-                    qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)state.pText, DDICSIZ);
+                    qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), DDICSIZ);
 
                     if (nWritten != DDICSIZ) {
                         state.bError = true;
@@ -852,9 +841,9 @@ bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState
     }
 
     if (!state.bError && (nOutPtr != 0)) {
-        qint64 nWritten = pDecompressState->pDeviceOutput->write((char *)state.pText, nOutPtr);
+        qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), nOutPtr);
 
-        if (nWritten != (qint64)nOutPtr) {
+        if (nWritten != static_cast<qint64>(nOutPtr)) {
             state.bError = true;
         } else {
             nOutputWritten += nWritten;
@@ -867,7 +856,5 @@ bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState
     delete[] state.pReadBuffer;
     delete[] state.pText;
 
-    bResult = !state.bError;
-
-    return bResult;
+    return !state.bError;
 }

@@ -19,9 +19,6 @@
  * SOFTWARE.
  */
 #include "xstoredecoder.h"
-#include <QDebug>
-
-const qint32 N_BUFFER_SIZE = 65536;
 
 XStoreDecoder::XStoreDecoder(QObject *parent) : QObject(parent)
 {
@@ -42,19 +39,12 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
         pDecompressState->nCountInput = 0;
         pDecompressState->nCountOutput = 0;
 
-        // Set input device position
-        if (pDecompressState->pDeviceInput) {
-            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        }
-
-        // Set output device position
-        if (pDecompressState->pDeviceOutput) {
-            pDecompressState->pDeviceOutput->seek(0);
-        }
+        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
+        pDecompressState->pDeviceOutput->seek(0);
 
         // Copy data from input to output
         for (qint64 nOffset = 0; (nOffset < pDecompressState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
-            qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - nOffset), _nBufferSize);
+            qint32 nBufferSize = qMin(static_cast<qint32>(pDecompressState->nInputLimit - nOffset), _nBufferSize);
 
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 

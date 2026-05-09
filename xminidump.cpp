@@ -31,10 +31,6 @@ XMiniDump::XMiniDump(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-XMiniDump::~XMiniDump()
-{
-}
-
 bool XMiniDump::isValid(PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -71,7 +67,7 @@ bool XMiniDump::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XMiniDump xminidump(pDevice);
 
-    return xminidump.isValid();
+    return xminidump.isValid(pPdStruct);
 }
 
 XBinary::FT XMiniDump::getFileType()
@@ -150,22 +146,12 @@ qint64 XMiniDump::getFileFormatSize(PDSTRUCT *pPdStruct)
 
 QString XMiniDump::getVersion()
 {
-    QString sResult;
-
-    MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
-    sResult = QString::number(header.Version, 16).toUpper();
-
-    return sResult;
+    return QString::number(read_MINIDUMP_HEADER().Version, 16).toUpper();
 }
 
 QList<XBinary::MAPMODE> XMiniDump::getMapModesList()
 {
-    QList<MAPMODE> listResult;
-
-    listResult.append(MAPMODE_REGIONS);
-    listResult.append(MAPMODE_STREAMS);
-
-    return listResult;
+    return {MAPMODE_REGIONS, MAPMODE_STREAMS};
 }
 
 XBinary::_MEMORY_MAP XMiniDump::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
@@ -574,17 +560,7 @@ QList<XMiniDump::MINIDUMP_DIRECTORY> XMiniDump::read_MINIDUMP_DIRECTORY_list(PDS
 
 QString XMiniDump::streamTypeToString(quint32 nStreamType)
 {
-    QString sResult;
-
-    QMap<quint64, QString> mapStreamTypes = getStreamTypesS();
-
-    if (mapStreamTypes.contains(nStreamType)) {
-        sResult = mapStreamTypes.value(nStreamType);
-    } else {
-        sResult = QString("Stream_%1").arg(nStreamType);
-    }
-
-    return sResult;
+    return getStreamTypesS().value(nStreamType, QString("Stream_%1").arg(nStreamType));
 }
 
 QMap<quint64, QString> XMiniDump::getStreamTypes()
@@ -691,17 +667,7 @@ XMiniDump::MINIDUMP_DIRECTORY XMiniDump::findStream(quint32 nStreamType, PDSTRUC
 
 QString XMiniDump::processorArchitectureToString(quint16 nArchitecture)
 {
-    QString sResult;
-
-    QMap<quint64, QString> mapArchitectures = getProcessorArchitectures();
-
-    if (mapArchitectures.contains(nArchitecture)) {
-        sResult = mapArchitectures.value(nArchitecture);
-    } else {
-        sResult = QString("ARCH_%1").arg(nArchitecture);
-    }
-
-    return sResult;
+    return getProcessorArchitectures().value(nArchitecture, QString("ARCH_%1").arg(nArchitecture));
 }
 
 QMap<quint64, QString> XMiniDump::getProcessorArchitectures()
@@ -962,7 +928,7 @@ XBinary::ARCHIVERECORD XMiniDump::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
         return result;
     }
 
-    MINIDUMP_UNPACK_CONTEXT *pContext = (MINIDUMP_UNPACK_CONTEXT *)pState->pContext;
+    MINIDUMP_UNPACK_CONTEXT *pContext = static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
 
     if ((pState->nCurrentIndex >= pContext->listDirectories.count()) || (pState->nCurrentIndex >= pContext->listStreamOffsets.count())) {
         return result;
@@ -1017,7 +983,7 @@ bool XMiniDump::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    MINIDUMP_UNPACK_CONTEXT *pContext = (MINIDUMP_UNPACK_CONTEXT *)pState->pContext;
+    MINIDUMP_UNPACK_CONTEXT *pContext = static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
 
     // Move to next stream (skip invalid ones)
     for (qint32 i = pState->nCurrentIndex + 1; i < pContext->listStreamOffsets.count(); i++) {
@@ -1042,7 +1008,7 @@ bool XMiniDump::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     // Delete format-specific context
     if (pState->pContext) {
-        MINIDUMP_UNPACK_CONTEXT *pContext = (MINIDUMP_UNPACK_CONTEXT *)pState->pContext;
+        MINIDUMP_UNPACK_CONTEXT *pContext = static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
         delete pContext;
         pState->pContext = nullptr;
     }
@@ -1058,11 +1024,7 @@ bool XMiniDump::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 QList<QString> XMiniDump::getSearchSignatures()
 {
-    QList<QString> listResult;
-
-    listResult.append("'MDMP'");
-
-    return listResult;
+    return {"'MDMP'"};
 }
 
 XBinary *XMiniDump::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)

@@ -30,32 +30,26 @@ XJAR::XJAR(QIODevice *pDevice) : XZip(pDevice)
 
 bool XJAR::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     XZip xzip(getDevice());
 
     if (xzip.isValid()) {
         qint64 nECDOffset = xzip.findECDOffset(pPdStruct);
-        bResult = xzip.isJAR(nECDOffset, pPdStruct);
+        return xzip.isJAR(nECDOffset, pPdStruct);
     }
 
-    return bResult;
+    return false;
 }
 
 bool XJAR::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XJAR xjar(pDevice);
 
-    return xjar.isValid();
+    return xjar.isValid(pPdStruct);
 }
 
 bool XJAR::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    bResult = XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords, pPdStruct);
-
-    return bResult;
+    return XArchive::isArchiveRecordPresent("META-INF/MANIFEST.MF", pListRecords, pPdStruct);
 }
 
 XBinary::FT XJAR::getFileType()
