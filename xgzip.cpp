@@ -451,7 +451,7 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         }
 
         // Create and initialize context
-        GZIP_UNPACK_CONTEXT *pContext = new GZIP_UNPACK_CONTEXT;
+        GZIP_UNPACK_CONTEXT *pContext = new GZIP_UNPACK_CONTEXT();
 
         // Get header size
         pContext->nHeaderSize = getHeaderSize();
@@ -473,28 +473,33 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
         if (sd.open(QIODevice::ReadOnly)) {
             QBuffer countBuf;
-            countBuf.open(QIODevice::WriteOnly);
 
-            XBinary::DATAPROCESS_STATE state = {};
-            state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
-            state.pDeviceInput = &sd;
-            state.pDeviceOutput = &countBuf;
-            state.nInputOffset = 0;
-            state.nInputLimit = -1;
-            state.nProcessedOffset = 0;
-            state.nProcessedLimit = -1;
+            if (countBuf.open(QIODevice::WriteOnly)) {
+                XBinary::DATAPROCESS_STATE state = {};
+                state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
+                state.pDeviceInput = &sd;
+                state.pDeviceOutput = &countBuf;
+                state.nInputOffset = 0;
+                state.nInputLimit = -1;
+                state.nProcessedOffset = 0;
+                state.nProcessedLimit = -1;
 
-            bool bDecompressOk = XDeflateDecoder::decompress(&state, pPdStruct);
+                bool bDecompressOk = XDeflateDecoder::decompress(&state, pPdStruct);
 
-            if (bDecompressOk) {
-                pContext->nCompressedSize = state.nCountInput;
-                pContext->nUncompressedSize = countBuf.size();
+                if (bDecompressOk) {
+                    pContext->nCompressedSize = state.nCountInput;
+                    pContext->nUncompressedSize = countBuf.size();
+                } else {
+                    pContext->nCompressedSize = nFileSize - (pContext->nHeaderSize);
+                    pContext->nUncompressedSize = 0;
+                }
+
+                countBuf.close();
             } else {
                 pContext->nCompressedSize = nFileSize - (pContext->nHeaderSize);
                 pContext->nUncompressedSize = 0;
             }
 
-            countBuf.close();
             sd.close();
         }
 

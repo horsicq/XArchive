@@ -81,7 +81,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
     return baResult;
 }
 
-QByteArray XArchives::decompress(const QString &sFileName, XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedSize)
+QByteArray XArchives::decompress(const QString &sFileName, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedSize)
 {
     QByteArray baResult;
 

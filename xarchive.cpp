@@ -629,23 +629,32 @@ QByteArray XArchive::decompress(const QString &sRecordFileName, PDSTRUCT *pPdStr
 
 bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    if (!pRecord) {
+        return false;
+    }
 
     QFileInfo fi(sResultFileName);
 
-    bResult = XBinary::createDirectory(fi.absolutePath());
-
-    if (pRecord->nDataSize) {
-        QFile file;
-        file.setFileName(sResultFileName);
-
-        if (file.open(QIODevice::ReadWrite)) {
-            bResult = _decompressRecord(pRecord, getDevice(), &file, pPdStruct, 0, -1);
-            file.close();
-        }
+    if (!XBinary::createDirectory(fi.absolutePath())) {
+        return false;
     }
 
-    return bResult;
+    QFile file;
+    file.setFileName(sResultFileName);
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+
+    bool bResult = true;
+
+    if (pRecord->nDataSize) {
+        bResult = _decompressRecord(pRecord, getDevice(), &file, pPdStruct, 0, -1);
+    }
+
+    file.close();
+
+    return (bResult && (file.error() == QFile::NoError));
 }
 
 bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
@@ -678,13 +687,14 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
     QString sCanonicalRoot = QDir::cleanPath(QDir(sResultPathName).absolutePath());
 
     qint32 nNumberOfArchives = pListArchive->count();
+    bool bExtractAll = sRecordFileName.isEmpty() || (sRecordFileName == "/");
 
     for (qint32 i = 0; (i < nNumberOfArchives) && isPdStructNotCanceled(pPdStruct); i++) {
         XArchive::RECORD record = pListArchive->at(i);
 
-        bool bNamePresent = XBinary::isRegExpPresent(QString("^%1").arg(sRecordFileName), record.spInfo.sRecordName);
+        bool bNamePresent = (!bExtractAll) && record.spInfo.sRecordName.startsWith(sRecordFileName);
 
-        if (bNamePresent || (sRecordFileName == "/") || (sRecordFileName == "")) {
+        if (bNamePresent || bExtractAll) {
             QString sFileName = record.spInfo.sRecordName;
 
             if (bNamePresent) {

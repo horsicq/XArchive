@@ -870,12 +870,12 @@ UI6A_API(void) ui6a_destroy(ui6a_ctx *ui6a)
 
 static size_t my_read(ui6a_ctx *ui6a, UI6A_UINT8 *buf, size_t size)
 {
-    return Algo_utils::readFromState(ui6a->userdata, buf, size, true);
+    return Algo_utils::readFromState(ui6a->userdata, buf, size);
 }
 
 static size_t my_write(ui6a_ctx *ui6a, const UI6A_UINT8 *buf, size_t size)
 {
-    return Algo_utils::readFromState(ui6a->userdata, buf, size, false);
+    return Algo_utils::writeToState(ui6a->userdata, buf, size);
 }
 
 XImplodeDecoder::XImplodeDecoder(QObject *parent) : QObject(parent)

@@ -40,7 +40,7 @@ public:
     static QList<XArchive::RECORD> getRecordsFromDirectory(const QString &sDirectoryName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QIODevice *pDevice, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0,
                                  qint64 nDecompressedSize = -1);
-    static QByteArray decompress(const QString &sFileName, XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0,
+    static QByteArray decompress(const QString &sFileName, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0,
                                  qint64 nDecompressedSize = -1);
     static QByteArray decompress(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);

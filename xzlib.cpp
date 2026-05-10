@@ -224,7 +224,7 @@ bool XZlib::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         }
 
         // Create and initialize context
-        ZLIB_UNPACK_CONTEXT *pContext = new ZLIB_UNPACK_CONTEXT;
+        ZLIB_UNPACK_CONTEXT *pContext = new ZLIB_UNPACK_CONTEXT();
 
         // Zlib format: 2-byte header + DEFLATE compressed data + 4-byte Adler32
         qint64 nOffset = 0;
@@ -248,23 +248,29 @@ bool XZlib::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
             state.pDeviceInput = &sd;
             QBuffer tempBuffer;
-            tempBuffer.open(QIODevice::WriteOnly);
-            state.pDeviceOutput = &tempBuffer;
-            state.nInputOffset = 0;
-            state.nInputLimit = nCompressedDataSize;
-            state.nProcessedOffset = 0;
-            state.nProcessedLimit = -1;
 
-            bool bDecompress = XDeflateDecoder::decompress(&state, pPdStruct);
+            if (tempBuffer.open(QIODevice::WriteOnly)) {
+                state.pDeviceOutput = &tempBuffer;
+                state.nInputOffset = 0;
+                state.nInputLimit = nCompressedDataSize;
+                state.nProcessedOffset = 0;
+                state.nProcessedLimit = -1;
 
-            tempBuffer.close();
+                bool bDecompress = XDeflateDecoder::decompress(&state, pPdStruct);
 
-            if (bDecompress) {
-                pContext->nCompressedSize = state.nCountInput;
-                pContext->nUncompressedSize = state.nCountOutput;
+                tempBuffer.close();
 
-                // Read Adler32 checksum (4 bytes after compressed data)
-                pContext->nAdler32 = read_uint32(2 + state.nCountInput, true);
+                if (bDecompress) {
+                    pContext->nCompressedSize = state.nCountInput;
+                    pContext->nUncompressedSize = state.nCountOutput;
+
+                    // Read Adler32 checksum (4 bytes after compressed data)
+                    pContext->nAdler32 = read_uint32(2 + state.nCountInput, true);
+                } else {
+                    pContext->nCompressedSize = nCompressedDataSize;
+                    pContext->nUncompressedSize = 0;
+                    pContext->nAdler32 = 0;
+                }
             } else {
                 pContext->nCompressedSize = nCompressedDataSize;
                 pContext->nUncompressedSize = 0;

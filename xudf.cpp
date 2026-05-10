@@ -680,7 +680,10 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
                         if (baName.size() > 0) {
                             quint8 nEncType = (quint8)baName.at(0);
                             if (nEncType == 16 && baName.size() >= 3) {
-                                sChildName = QString::fromUtf16(reinterpret_cast<const char16_t *>(baName.constData() + 1), (baName.size() - 1) / 2);
+                                for (qint32 j = 1; (j + 1) < baName.size(); j += 2) {
+                                    ushort nChar = ((ushort)(quint8)baName.at(j) << 8) | (ushort)(quint8)baName.at(j + 1);
+                                    sChildName.append(QChar(nChar));
+                                }
                             } else if (nEncType == 8 && baName.size() >= 2) {
                                 sChildName = QString::fromLatin1(baName.constData() + 1, baName.size() - 1);
                             }

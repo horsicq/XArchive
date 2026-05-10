@@ -43,6 +43,11 @@ public:
     XPPMd7Model();
     ~XPPMd7Model();
 
+    XPPMd7Model(const XPPMd7Model &) = delete;
+    XPPMd7Model &operator=(const XPPMd7Model &) = delete;
+    XPPMd7Model(XPPMd7Model &&) = delete;
+    XPPMd7Model &operator=(XPPMd7Model &&) = delete;
+
     bool allocate(quint32 nMemorySize);
     void init(quint8 nOrder);
     void setInputStream(QIODevice *pDevice);

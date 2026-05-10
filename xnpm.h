@@ -27,11 +27,11 @@ class XNPM : public XTAR_GZ {
     Q_OBJECT
 
 public:
-    enum STRUCTID {
+    enum STRUCTID : qint32 {
         STRUCTID_UNKNOWN = 0,
     };
 
-    enum TYPE {
+    enum TYPE : qint32 {
         TYPE_UNKNOWN = 0,
         TYPE_PACKAGE,
         // TODO more

@@ -23,6 +23,8 @@
 #include "xalgo_local.h"
 #include <QBuffer>
 
+#include <algorithm>
+
 XLZMADecoder::XLZMADecoder(QObject *parent) : QObject(parent)
 {
 }
@@ -285,7 +287,9 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     }
 
     QBuffer compressedBuffer(&baCompressed);
-    compressedBuffer.open(QIODevice::ReadOnly);
+    if (!compressedBuffer.open(QIODevice::ReadOnly)) {
+        return false;
+    }
 
     QByteArray baPropByte;
     baPropByte.append((char)nLZMA2PropsByte);
@@ -296,7 +300,9 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
         // Decompress LZMA2 to intermediate buffer, then apply BCJ x86 reverse
         QByteArray baIntermediate;
         QBuffer intermediateBuffer(&baIntermediate);
-        intermediateBuffer.open(QIODevice::WriteOnly);
+        if (!intermediateBuffer.open(QIODevice::WriteOnly)) {
+            return false;
+        }
 
         XBinary::DATAPROCESS_STATE lzma2State = {};
         lzma2State.pDeviceInput = &compressedBuffer;
@@ -317,7 +323,7 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
             if (nWriteLimit == -1) {
                 nWriteLimit = baIntermediate.size();
             }
-            qint64 nToWrite = qMin(nWriteLimit, (qint64)(baIntermediate.size() - nWriteFrom));
+            qint64 nToWrite = (std::min)(nWriteLimit, (qint64)(baIntermediate.size() - nWriteFrom));
             if (nToWrite > 0 && nWriteFrom >= 0) {
                 pDecompressState->pDeviceOutput->seek(0);
                 pDecompressState->pDeviceOutput->write(baIntermediate.constData() + nWriteFrom, nToWrite);

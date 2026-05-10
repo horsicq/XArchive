@@ -22,6 +22,7 @@
 #include "xalgo_local.h"
 
 #include <QCryptographicHash>
+#include <algorithm>
 #include <cstdlib>
 
 namespace {
@@ -90,9 +91,18 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
         qint32 nBufferSize = _nBufferSize;
         if (pDecompressState->nInputLimit != -1) {
-            nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+            qint64 nRemainingInput = pDecompressState->nInputLimit - pDecompressState->nCountInput;
+            if (nRemainingInput <= 0) {
+                break;
+            }
+            nBufferSize = (qint32)(std::min)(nRemainingInput, (qint64)_nBufferSize);
         }
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
+        if (nSize < 0) {
+            delete[] bufferIn;
+            delete[] bufferOut;
+            return false;
+        }
 
         nLoopCount++;
         Q_UNUSED(nLoopCount)
@@ -167,10 +177,11 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
     delete[] bufferOut;
 
     if (nExpectedOutput >= 0) {
-        return (nTotalOutput == nExpectedOutput) && ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
+        return !pDecompressState->bReadError && !pDecompressState->bWriteError && (nTotalOutput == nExpectedOutput) &&
+               ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
     }
 
-    return true;
+    return !pDecompressState->bReadError && !pDecompressState->bWriteError;
 }
 
 bool Algo_utils::decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
@@ -185,9 +196,18 @@ bool Algo_utils::decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
         qint32 nBufferSize = _nBufferSize;
         if (pDecompressState->nInputLimit != -1) {
-            nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+            qint64 nRemainingInput = pDecompressState->nInputLimit - pDecompressState->nCountInput;
+            if (nRemainingInput <= 0) {
+                break;
+            }
+            nBufferSize = (qint32)(std::min)(nRemainingInput, (qint64)_nBufferSize);
         }
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
+        if (nSize < 0) {
+            delete[] bufferIn;
+            delete[] bufferOut;
+            return false;
+        }
 
         qint64 nPos = 0;
         bool bContinueReading = true;
@@ -239,7 +259,7 @@ bool Algo_utils::decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *
     delete[] bufferIn;
     delete[] bufferOut;
 
-    return true;
+    return !pDecompressState->bReadError && !pDecompressState->bWriteError;
 }
 
 bool Algo_utils::xzReadVarInt(const QByteArray &baData, qint32 &nPos, quint64 &nValue)
@@ -300,7 +320,13 @@ unsigned Algo_utils::deflate64ReadFunc(void *pInDesc, unsigned char **ppBuffer)
 
     *ppBuffer = (unsigned char *)(pDecompressState->pInputBuffer);
 
-    return XBinary::_readDevice(pDecompressState);
+    qint32 nRead = XBinary::_readDevice(pDecompressState);
+    if (nRead < 0) {
+        pDecompressState->bReadError = true;
+        return 0;
+    }
+
+    return (unsigned)nRead;
 }
 
 int Algo_utils::deflate64WriteFunc(void *pOutDesc, unsigned char *pBuffer, unsigned nSize)
@@ -309,7 +335,7 @@ int Algo_utils::deflate64WriteFunc(void *pOutDesc, unsigned char *pBuffer, unsig
 
     XBinary::_writeDevice((char *)pBuffer, nSize, pDecompressState);
 
-    return 0;
+    return pDecompressState->bWriteError ? 1 : 0;
 }
 
 bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel, int nWindowBits)
@@ -342,13 +368,25 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
         int ret = Z_OK;
 
         do {
-            qint32 nToRead = qMin((qint32)(pCompressState->nInputLimit - nTotalProcessed), N_ALGO_UTILS_BUFFER_SIZE);
+            qint32 nToRead = N_ALGO_UTILS_BUFFER_SIZE;
+            if (pCompressState->nInputLimit != -1) {
+                nToRead = (qint32)(std::min)(pCompressState->nInputLimit - nTotalProcessed, (qint64)N_ALGO_UTILS_BUFFER_SIZE);
+            }
             if (nToRead == 0) {
                 flush = Z_FINISH;
                 stream.avail_in = 0;
             } else {
                 qint32 nRead = pCompressState->pDeviceInput->read(inputBuffer, nToRead);
-                if (nRead <= 0) {
+                if (nRead < 0) {
+                    pCompressState->bReadError = true;
+                    X_deflateEnd(&stream);
+                    return false;
+                } else if (nRead == 0) {
+                    if ((pCompressState->nInputLimit != -1) && (nTotalProcessed < pCompressState->nInputLimit)) {
+                        pCompressState->bReadError = true;
+                        X_deflateEnd(&stream);
+                        return false;
+                    }
                     flush = Z_FINISH;
                     stream.avail_in = 0;
                 } else {
@@ -388,7 +426,8 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
         } while ((flush != Z_FINISH) || (ret != Z_STREAM_END));
 
         X_deflateEnd(&stream);
-        bResult = !pCompressState->bReadError && !pCompressState->bWriteError;
+        bResult = !pCompressState->bReadError && !pCompressState->bWriteError &&
+                  ((pCompressState->nInputLimit == -1) || (nTotalProcessed == pCompressState->nInputLimit));
     }
 
     return bResult;
@@ -435,15 +474,20 @@ bool Algo_utils::readInputData(XBinary::DATAPROCESS_STATE *pDecompressState, QBy
                     break;
                 }
 
-                nReadSize = qMin((qint32)nRemaining, nChunkSize);
+                nReadSize = (qint32)(std::min)(nRemaining, (qint64)nChunkSize);
             }
 
-            QByteArray baChunk = pDecompressState->pDeviceInput->read(nReadSize);
+            QByteArray baChunk;
+            baChunk.resize(nReadSize);
 
-            if (baChunk.size() < 0) {
+            qint64 nRead = pDecompressState->pDeviceInput->read(baChunk.data(), nReadSize);
+
+            if (nRead < 0) {
                 pDecompressState->bReadError = true;
                 break;
             }
+
+            baChunk.resize((qint32)nRead);
 
             if (baChunk.isEmpty()) {
                 bResult = (nRemaining == -1) || (nRemaining == 0);
@@ -527,15 +571,18 @@ Byte Algo_utils::readFromQIODeviceStream(const IByteIn *pStream)
     return (Byte)c;
 }
 
-size_t Algo_utils::readFromState(void *pState, const void *pBuffer, size_t nSize, bool bRead)
+size_t Algo_utils::readFromState(void *pState, void *pBuffer, size_t nSize)
 {
     XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)pState;
 
-    if (bRead) {
-        qint32 nRead = XBinary::_readDevice((char *)pBuffer, (qint32)nSize, pDecompressState);
-        return nRead > 0 ? (size_t)nRead : 0;
-    }
+    qint32 nRead = XBinary::_readDevice((char *)pBuffer, (qint32)nSize, pDecompressState);
+    return nRead > 0 ? (size_t)nRead : 0;
+}
+
+size_t Algo_utils::writeToState(void *pState, const void *pBuffer, size_t nSize)
+{
+    XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)pState;
 
     qint32 nWritten = XBinary::_writeDevice((char *)pBuffer, (qint32)nSize, pDecompressState);
-    return nWritten > 0 ? (size_t)nWritten : 0;
+    return (!pDecompressState->bWriteError && (nWritten > 0)) ? (size_t)nWritten : 0;
 }

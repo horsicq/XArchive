@@ -441,12 +441,12 @@ done:
 
 static size_t example_ozus_read(ozus_ctx *ozus, OZUS_UINT8 *buf, size_t size)
 {
-    return Algo_utils::readFromState(ozus->userdata, buf, size, true);
+    return Algo_utils::readFromState(ozus->userdata, buf, size);
 }
 
 static size_t example_ozus_write(ozus_ctx *ozus, const OZUS_UINT8 *buf, size_t size)
 {
-    return Algo_utils::readFromState(ozus->userdata, buf, size, false);
+    return Algo_utils::writeToState(ozus->userdata, buf, size);
 }
 
 XShrinkDecoder::XShrinkDecoder(QObject *parent) : QObject(parent)

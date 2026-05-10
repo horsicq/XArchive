@@ -231,10 +231,15 @@ bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
             }
 
             quint32 nCompressedSize = read_uint32(nOffset + 15, false);
+            qint64 nAvailableData = nFileSize - nOffset - nHeaderSize;
+
+            if ((nAvailableData < 0) || (nCompressedSize > (quint64)nAvailableData)) {
+                break;
+            }
 
             pState->nNumberOfRecords++;
 
-            nOffset += nHeaderSize + nCompressedSize;
+            nOffset += nHeaderSize + (qint64)nCompressedSize;
         }
 
         bResult = (pState->nNumberOfRecords > 0);

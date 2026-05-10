@@ -177,7 +177,7 @@ quint64 XDMG::getNumberOfRecords(PDSTRUCT *pPdStruct)
 
             QList<DMG_PARTITION_INFO> listPartitions = _parseBlkxPartitions(baXml, pPdStruct);
 
-            for (qint32 i = 0; i < listPartitions.count(); i++) {
+            for (qint32 i = 0; i < listPartitions.size(); i++) {
                 if (!isPdStructNotCanceled(pPdStruct)) {
                     break;
                 }
@@ -211,7 +211,7 @@ QList<XArchive::RECORD> XDMG::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             QList<DMG_PARTITION_INFO> listPartitions = _parseBlkxPartitions(baXml, pPdStruct);
             qint32 nRecordIndex = 0;
 
-            for (qint32 i = 0; (i < listPartitions.count()) && isPdStructNotCanceled(pPdStruct); i++) {
+            for (qint32 i = 0; (i < listPartitions.size()) && isPdStructNotCanceled(pPdStruct); i++) {
                 if (nLimit != -1 && nRecordIndex >= nLimit) {
                     break;
                 }
@@ -273,7 +273,7 @@ bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
                 QList<DMG_PARTITION_INFO> listPartitions = _parseBlkxPartitions(pContext->baXmlData, pPdStruct);
 
-                for (qint32 i = 0; (i < listPartitions.count()) && isPdStructNotCanceled(pPdStruct); i++) {
+                for (qint32 i = 0; (i < listPartitions.size()) && isPdStructNotCanceled(pPdStruct); i++) {
                     QByteArray baMishData = listPartitions.at(i).mishData;
                     QBuffer buffer(&baMishData);
                     if (!buffer.open(QIODevice::ReadOnly)) {
@@ -301,7 +301,7 @@ bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
                     pContext->listPartitionNames.append(listPartitions.at(i).sName);
                 }
 
-                pState->nNumberOfRecords = pContext->listMishBlocks.count();
+                pState->nNumberOfRecords = pContext->listMishBlocks.size();
                 pState->nCurrentIndex = 0;
                 pState->pContext = pContext;
                 bResult = (pState->nNumberOfRecords > 0);
@@ -325,9 +325,9 @@ XArchive::ARCHIVERECORD XDMG::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     if (pState && pState->pContext) {
         DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
 
-        if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listMishBlocks.count())) {
+        if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listMishBlocks.size())) {
             QString sPartitionName;
-            if (pState->nCurrentIndex < pContext->listPartitionNames.count()) {
+            if (pState->nCurrentIndex < pContext->listPartitionNames.size()) {
                 sPartitionName = pContext->listPartitionNames.at(pState->nCurrentIndex);
             }
 
@@ -357,11 +357,11 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     if (pState && pState->pContext && pDevice) {
         DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
 
-        if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listStripes.count())) {
+        if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listStripes.size())) {
             QList<BLOCK_DATA> listCurrentStripes = pContext->listStripes.at(pState->nCurrentIndex);
             bResult = true;
 
-            for (qint32 i = 0; (i < listCurrentStripes.count()) && bResult && isPdStructNotCanceled(pPdStruct); i++) {
+            for (qint32 i = 0; (i < listCurrentStripes.size()) && bResult && isPdStructNotCanceled(pPdStruct); i++) {
                 const BLOCK_DATA stripe = listCurrentStripes.at(i);
 
                 if ((stripe.nType == DMG_STRIPE_END) || (stripe.nType == DMG_STRIPE_SKIP)) {

@@ -68,6 +68,12 @@ void XPPMd7Model::init(quint8 nOrder)
 
 void XPPMd7Model::setInputStream(QIODevice *pDevice)
 {
+    if (!pDevice) {
+        m_pPrivate->sInputStream.pDevice = nullptr;
+        m_pPrivate->sInputStream.bError = true;
+        return;
+    }
+
     m_pPrivate->sInputStream.vt.Read = Algo_utils::readFromQIODeviceStream;
     m_pPrivate->sInputStream.pDevice = pDevice;
     m_pPrivate->sInputStream.bError = false;

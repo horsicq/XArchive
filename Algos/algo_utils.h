@@ -58,7 +58,8 @@ public:
     static QByteArray hmacSha1(const QByteArray &baKey, const QByteArray &baMessage);
     static ISzAlloc *ppmdAlloc();
     static Byte readFromQIODeviceStream(const IByteIn *pStream);
-    static size_t readFromState(void *pState, const void *pBuffer, size_t nSize, bool bRead);
+    static size_t readFromState(void *pState, void *pBuffer, size_t nSize);
+    static size_t writeToState(void *pState, const void *pBuffer, size_t nSize);
 };
 
 #endif  // ALGO_UTILS_H

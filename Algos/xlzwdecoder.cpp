@@ -123,7 +123,12 @@ LZWSTATE *init_lzw_read(int earlychange, READFUNC rf, void *user_read)
     if (!stack) {
         return NULL;
     }
-    return init_lzw(earlychange, rf, NULL, user_read, NULL, 1 << LZW_MAXBITS, stack);
+    LZWSTATE *state = init_lzw(earlychange, rf, NULL, user_read, NULL, 1 << LZW_MAXBITS, stack);
+    if (!state) {
+        free(stack);
+    }
+
+    return state;
 }
 
 static int readbits(LZWSTATE *state)

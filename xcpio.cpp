@@ -634,7 +634,7 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                 header.nFileOffset = info.nHeaderOffset;
                 header.nFileSize = info.nHeaderSize;
                 header.nVirtualAddress = -1;
-                header.sName = info.sFileName.isEmpty() ? tr("Header") : QString("%1 (%2)").arg(info.sFileName, tr("Header"));
+                header.sName = info.sFileName.isEmpty() ? tr("Header") : QString("%1 (%2)").arg(info.sFileName).arg(tr("Header"));
                 listResult.append(header);
             }
 

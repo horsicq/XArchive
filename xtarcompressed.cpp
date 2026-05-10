@@ -172,6 +172,9 @@ bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
 
     if (bResult) {
         getOuterStreamInfo(m_nOuterStreamOffset, m_nOuterStreamSize, m_outerHandleMethod);
+    } else {
+        delete m_pDecompressedData;
+        m_pDecompressedData = nullptr;
     }
 
     return bResult;

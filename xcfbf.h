@@ -78,7 +78,7 @@ public:
         quint64 streamSize;           // Size of the stream in bytes
     };
 
-    enum STRUCTID {
+    enum STRUCTID : qint32 {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_StructuredStorageHeader,
         STRUCTID_CFBF_DIRECTORY_ENTRY,
@@ -131,15 +131,11 @@ private:
         quint32 nRootStartSector;         // Root storage start sector ID
         quint64 nRootStreamSize;          // Root storage stream size
         QList<quint32> listFAT;           // Full FAT table (sector chain)
-        QList<quint32> listMiniFAT;       // Full MiniFAT table (mini-sector chain)
-        QByteArray baMiniStream;          // Cached mini-stream data (Root Entry stream)
         QList<qint64> listRecordOffsets;  // Offsets to stream directory entries
     };
 
     QList<quint32> _readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPdStruct);
-    QList<quint32> _readMiniFAT(const StructuredStorageHeader &ssh, const QList<quint32> &listFAT, qint64 nSectorSize, PDSTRUCT *pPdStruct);
     QByteArray _readStreamBySectorChain(const QList<quint32> &listFAT, quint32 nStartSector, qint64 nSectorSize, qint64 nStreamSize, PDSTRUCT *pPdStruct);
-    QByteArray _readMiniStream(const QList<quint32> &listMiniFAT, const QByteArray &baMiniStreamData, quint32 nStartSector, qint64 nMiniSectorSize, qint64 nStreamSize);
 
     static void _addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset, qint64 size, const QString &name);
 };

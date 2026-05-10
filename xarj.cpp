@@ -233,6 +233,13 @@ bool readEntryInfo(XARJ *pArj, qint64 nOffset, ARJ_ENTRY_INFO *pInfo)
     info.nCRC32 = pArj->read_uint32(basicFieldOffset(nOffset, ARJ_BASIC_CRC32), false);
     info.sFileName = readEntryFileName(pArj, nOffset);
 
+    qint64 nStreamOffset = info.nOffset + info.nHeaderSize;
+    qint64 nFileSize = pArj->getSize();
+
+    if ((nStreamOffset < info.nOffset) || (nStreamOffset > nFileSize) || (info.nCompressedSize > (quint64)(nFileSize - nStreamOffset))) {
+        return false;
+    }
+
     *pInfo = info;
 
     return true;

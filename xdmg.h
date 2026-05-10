@@ -29,7 +29,7 @@ class XDMG : public XArchive {
 
 public:
     // DMG stripe types (from Apple Disk Image format)
-    enum DMG_STRIPE_TYPE {
+    enum DMG_STRIPE_TYPE : quint32 {
         DMG_STRIPE_EMPTY = 0x00000000,
         DMG_STRIPE_STORED = 0x00000001,
         DMG_STRIPE_ZEROES = 0x00000002,
@@ -40,7 +40,7 @@ public:
         DMG_STRIPE_END = 0xFFFFFFFF
     };
 
-    enum STRUCTID {
+    enum STRUCTID : qint32 {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_KOLY_BLOCK,
         STRUCTID_MISH_BLOCK,

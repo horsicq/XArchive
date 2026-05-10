@@ -111,7 +111,24 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
     quint8 nPrevByte = 0;
     qint64 nOutputPos = 0;
 
-    pOutput->seek(0);
+    if (!pOutput->seek(0)) {
+        return false;
+    }
+
+    auto writeOutput = [pOutput, &nOutputPos](const char *pData, qint64 nSize) {
+        if (nSize <= 0) {
+            return true;
+        }
+
+        qint64 nWritten = pOutput->write(pData, nSize);
+        if (nWritten != nSize) {
+            return false;
+        }
+
+        nOutputPos += nWritten;
+
+        return true;
+    };
 
     while ((nOutputPos < nOutputSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         char bMain;
@@ -121,8 +138,9 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
         }
 
         quint8 nByte = (quint8)bMain;
-        pOutput->write(&bMain, 1);
-        nOutputPos++;
+        if (!writeOutput(&bMain, 1)) {
+            return false;
+        }
 
         if (nByte == 0xE8 || nByte == 0xE9) {
             // 7-zip BCJ2 probability table layout (from Bcj2.c):
@@ -154,8 +172,13 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
                 relAddr[2] = (char)(nRelAddr >> 16);
                 relAddr[3] = (char)(nRelAddr >> 24);
 
-                pOutput->write(relAddr, 4);
-                nOutputPos += 4;
+                if ((nOutputSize - nOutputPos) < 4) {
+                    return false;
+                }
+
+                if (!writeOutput(relAddr, 4)) {
+                    return false;
+                }
 
                 // prevByte for next E8 lookup = last byte of relative address written
                 nPrevByte = (quint8)relAddr[3];
@@ -185,8 +208,13 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
                 relAddr[2] = (char)(nRelAddr >> 16);
                 relAddr[3] = (char)(nRelAddr >> 24);
 
-                pOutput->write(relAddr, 4);
-                nOutputPos += 4;
+                if ((nOutputSize - nOutputPos) < 4) {
+                    return false;
+                }
+
+                if (!writeOutput(relAddr, 4)) {
+                    return false;
+                }
 
                 nPrevByte = (quint8)relAddr[3];
             } else {

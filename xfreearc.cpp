@@ -310,7 +310,7 @@ QList<XBinary::FPART> XFREEARC::getFileParts(quint32 nFileParts, qint32 nLimit, 
             record.nFileOffset = block.nOffset;
             record.nFileSize = block.nSize;
             record.nVirtualAddress = -1;
-            record.sName = QString("%1 (%2)").arg(blockTypeToString(block.nType), block.sCompressor);
+            record.sName = QString("%1 (%2)").arg(blockTypeToString(block.nType)).arg(block.sCompressor);
 
             listResult.append(record);
         }
@@ -322,7 +322,7 @@ QList<XBinary::FPART> XFREEARC::getFileParts(quint32 nFileParts, qint32 nLimit, 
             record.nFileOffset = block.nOffset;
             record.nFileSize = block.nSize;
             record.nVirtualAddress = -1;
-            record.sName = QString("%1 (%2)").arg(blockTypeToString(block.nType), block.sCompressor);
+            record.sName = QString("%1 (%2)").arg(blockTypeToString(block.nType)).arg(block.sCompressor);
 
             listResult.append(record);
         }

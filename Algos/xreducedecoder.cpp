@@ -363,12 +363,12 @@ done:
 
 static size_t example_ozur_read(ozur_ctx *ozur, OZUR_UINT8 *buf, size_t size)
 {
-    return Algo_utils::readFromState(ozur->userdata, buf, size, true);
+    return Algo_utils::readFromState(ozur->userdata, buf, size);
 }
 
 static size_t example_ozur_write(ozur_ctx *ozur, const OZUR_UINT8 *buf, size_t size)
 {
-    return Algo_utils::readFromState(ozur->userdata, buf, size, false);
+    return Algo_utils::writeToState(ozur->userdata, buf, size);
 }
 
 XReduceDecoder::XReduceDecoder(QObject *parent) : QObject(parent)
@@ -377,6 +377,8 @@ XReduceDecoder::XReduceDecoder(QObject *parent) : QObject(parent)
 
 bool XReduceDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nFactor, XBinary::PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     if (pDecompressState->pDeviceInput) {
         pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
     }
@@ -387,7 +389,7 @@ bool XReduceDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qi
 
     bool bResult = true;
 
-    ozur_ctx *ozur = NULL;
+    ozur_ctx *ozur = nullptr;
 
     // Allocate an ozur_ctx object, and (**important!**) initialize it to all
     // zero bytes.

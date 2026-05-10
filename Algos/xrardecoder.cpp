@@ -304,10 +304,18 @@ void rar_Unpack::UnpWriteBuf()
 
                     Filters[I].Type = FILTER_NONE;
 
-                    if (OutMem != NULL) m_pDeviceOutput->write((char *)OutMem, BlockLength);
+                    if (OutMem != NULL) {
+                        qint64 nWritten = m_pDeviceOutput->write((char *)OutMem, BlockLength);
+                        if (nWritten > 0) {
+                            WrittenFileSize += nWritten;
+                        }
+                        if (nWritten != (qint64)BlockLength) {
+                            DestUnpSize = WrittenFileSize;
+                            return;
+                        }
+                    }
 
                     UnpSomeRead = true;
-                    WrittenFileSize += BlockLength;
                     WrittenBorder = BlockEnd;
                     WriteSizeLeft = WrapDown(UnpPtr - WrittenBorder);
                 }
@@ -456,8 +464,13 @@ void rar_Unpack::UnpWriteData(quint8 *Data, size_t Size)
     size_t WriteSize = Size;
     qint64 LeftToWrite = DestUnpSize - WrittenFileSize;
     if ((qint64)WriteSize > LeftToWrite) WriteSize = (size_t)LeftToWrite;
-    m_pDeviceOutput->write((char *)Data, WriteSize);
-    WrittenFileSize += Size;
+    qint64 nWritten = m_pDeviceOutput->write((char *)Data, WriteSize);
+    if (nWritten > 0) {
+        WrittenFileSize += nWritten;
+    }
+    if (nWritten != (qint64)WriteSize) {
+        DestUnpSize = WrittenFileSize;
+    }
 }
 
 uint rar_Unpack::SlotToLength(BitInput &Inp, uint Slot)
@@ -2214,9 +2227,15 @@ void rar_Unpack::UnpWriteBuf30()
                     PrgStack[I] = nullptr;
                 }
                 // UnpIO->UnpWrite(FilteredData,FilteredDataSize);
-                m_pDeviceOutput->write((char *)FilteredData, FilteredDataSize);
+                qint64 nWritten = m_pDeviceOutput->write((char *)FilteredData, FilteredDataSize);
+                if (nWritten > 0) {
+                    WrittenFileSize += nWritten;
+                }
+                if (nWritten != (qint64)FilteredDataSize) {
+                    DestUnpSize = WrittenFileSize;
+                    return;
+                }
                 UnpSomeRead = true;
-                WrittenFileSize += FilteredDataSize;
                 WrittenBorder = BlockEnd;
                 WriteSize = uint((UnpPtr - WrittenBorder) & MaxWinMask);
             } else {

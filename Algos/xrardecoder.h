@@ -65,10 +65,10 @@ inline void RawPut4(uint Field, void *Data)
 inline quint32 RawGet4(const void *Data)
 {
 #if defined(BIG_ENDIAN) || !defined(ALLOW_MISALIGNED)
-    quint8 *D = (quint8 *)Data;
-    return D[0] + (D[1] << 8) + (D[2] << 16) + (D[3] << 24);
+    const quint8 *D = (const quint8 *)Data;
+    return (quint32)D[0] | ((quint32)D[1] << 8) | ((quint32)D[2] << 16) | ((quint32)D[3] << 24);
 #else
-    return *(quint32 *)Data;
+    return *(const quint32 *)Data;
 #endif
 }
 // Combine pack and unpack constants to class to avoid polluting global
@@ -115,7 +115,7 @@ public:
     static const uint LARGEST_TABLE_SIZE = 306;
 };
 
-enum FilterType {
+enum FilterType : qint32 {
     // These values must not be changed, because we use them directly
     // in RAR5 compression and decompression code.
     FILTER_DELTA = 0,
@@ -185,7 +185,7 @@ enum FilterType {
 
 class BitInput {
 public:
-    enum BufferSize {
+    enum BufferSize : qint32 {
         MAX_SIZE = 0x8000
     };  // Size of input buffer.
 
@@ -318,7 +318,7 @@ public:
     quint8 *pText, *UnitsStart, *HeapEnd, *FakeUnitsStart;
 };
 
-enum VM_StandardFilters {
+enum VM_StandardFilters : qint32 {
     VMSF_NONE,
     VMSF_E8,
     VMSF_E8E9,
@@ -733,7 +733,7 @@ private:
     /***************************** rar_Unpack v 2.0 *********************************/
 
     /***************************** rar_Unpack v 3.0 *********************************/
-    enum BLOCK_TYPES {
+    enum BLOCK_TYPES : qint32 {
         BLOCK_LZ,
         BLOCK_PPM
     };

@@ -21,6 +21,7 @@
 #include "xcfbf.h"
 
 #include <QtEndian>
+#include <algorithm>
 
 XBinary::XCONVERT _TABLE_CFBF_STRUCTID[] = {
     {XCFBF::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -41,15 +42,17 @@ XCFBF::~XCFBF()
 
 bool XCFBF::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
     if (getSize() >= 512) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
         if (compareSignature(&memoryMap, "D0CF11E0A1B11AE100000000000000000000000000000000", 0, pPdStruct)) {
-            bResult = true;
+            StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
+
+            bResult = (ssh._uByteOrder == 0xFFFE) && (ssh._uMiniSectorShift == 6) && (ssh._usReserved == 0) && (ssh._ulReserved1 == 0) &&
+                      (ssh._ulMiniSectorCutoff == 4096) &&
+                      (((ssh._uDllVersion == 3) && (ssh._uSectorShift == 9) && (ssh._csectDir == 0)) || ((ssh._uDllVersion == 4) && (ssh._uSectorShift == 12)));
         }
     }
 
@@ -358,13 +361,13 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
-        header.nFileSize = qMin<qint64>(sectorSize, fileSize);
+        header.nFileSize = (std::min)(sectorSize, fileSize);
         header.nVirtualAddress = -1;
         header.sName = tr("Header");
         listResult.append(header);
     }
 
-    nMaxOffset = qMax(nMaxOffset, sectorSize);
+    nMaxOffset = (std::max)(nMaxOffset, sectorSize);
 
     {
         // FAT sectors: first 109 in header
@@ -375,7 +378,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             quint32 firstFatSect = 0xFFFFFFFF;
             for (int i = 0; i < 109; ++i) {
                 if (ssh._sectFat[i] != 0xFFFFFFFF) {
-                    firstFatSect = qMin(firstFatSect, ssh._sectFat[i]);
+                    firstFatSect = (std::min)(firstFatSect, ssh._sectFat[i]);
                 }
             }
             if (firstFatSect != 0xFFFFFFFF) {
@@ -383,7 +386,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                 if (nFileParts & FILEPART_REGION) {
                     _addRegion(&listResult, fileSize, fatOffset, totalFat, QString("%1").arg("FAT"));
                 }
-                nMaxOffset = qMax(nMaxOffset, fatOffset + totalFat);
+                nMaxOffset = (std::max)(nMaxOffset, fatOffset + totalFat);
             }
         }
 
@@ -395,7 +398,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             if (nFileParts & FILEPART_REGION) {
                 _addRegion(&listResult, fileSize, miniFatOffset, miniFatSize, QString("%1").arg("MiniFAT"));
             }
-            nMaxOffset = qMax(nMaxOffset, miniFatOffset + miniFatSize);
+            nMaxOffset = (std::max)(nMaxOffset, miniFatOffset + miniFatSize);
         }
 
         // DIFAT
@@ -406,7 +409,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             if (nFileParts & FILEPART_REGION) {
                 _addRegion(&listResult, fileSize, difatOffset, difatSize, QString("%1").arg("DIFAT"));
             }
-            nMaxOffset = qMax(nMaxOffset, difatOffset + difatSize);
+            nMaxOffset = (std::max)(nMaxOffset, difatOffset + difatSize);
         }
     }
 
@@ -458,7 +461,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                 nFixedSize += entrySize;
             }
 
-            nMaxOffset = qMax(nMaxOffset, dirBaseOffset + nFixedSize);
+            nMaxOffset = (std::max)(nMaxOffset, dirBaseOffset + nFixedSize);
 
             if (nFileParts & FILEPART_REGION) {
                 _addRegion(&listResult, fileSize, dirBaseOffset, nFixedSize, QString("%1").arg("Directory"));
@@ -530,7 +533,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                     quint16 nNameLength = read_uint16(entryOffset + 64, false);
                     QString sName;
                     if ((nNameLength >= 2) && (nNameLength <= 64)) {
-                        sName = QString::fromUtf16((ushort *)baName.constData(), (nNameLength - 2) / 2);
+                        sName = QString::fromUtf16((const ushort *)baName.constData(), (nNameLength - 2) / 2);
                     }
 
                     FPART part = {};
@@ -542,7 +545,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                     listResult.append(part);
                 }
 
-                nMaxOffset = qMax(nMaxOffset, streamOffset + clampedSize);
+                nMaxOffset = (std::max)(nMaxOffset, streamOffset + clampedSize);
 
                 nEmitted++;
             }
@@ -555,7 +558,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = sectorSize;
-        data.nFileSize = qMin(nMaxOffset, fileSize);
+        data.nFileSize = (std::min)(nMaxOffset, fileSize);
         data.nVirtualAddress = -1;
         data.sName = tr("Data");
         listResult.append(data);
@@ -652,9 +655,6 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
         pContext->nDirBaseOffset = 0;  // Now using baDirData directly
 
-        // Read MiniFAT
-        pContext->listMiniFAT = _readMiniFAT(ssh, pContext->listFAT, pContext->nSectorSize, pPdStruct);
-
         // Initialize state
         pState->nCurrentOffset = 0;
         pState->nTotalSize = nFileSize;
@@ -709,12 +709,6 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
                     pState->nNumberOfRecords++;
                 }
             }
-        }
-
-        // Read the mini-stream data (Root Entry's stream via regular FAT chain)
-        if (pContext->nRootStartSector != 0xFFFFFFFF && pContext->nRootStreamSize > 0) {
-            pContext->baMiniStream =
-                _readStreamBySectorChain(pContext->listFAT, pContext->nRootStartSector, pContext->nSectorSize, (qint64)pContext->nRootStreamSize, pPdStruct);
         }
 
         // Convert baDirData-relative offsets to actual file offsets
@@ -861,8 +855,6 @@ bool XCFBF::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
             // Release cached data
             pContext->listFAT.clear();
-            pContext->listMiniFAT.clear();
-            pContext->baMiniStream.clear();
             pContext->listRecordOffsets.clear();
 
             delete pContext;
@@ -907,10 +899,10 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
             break;
         }
 
-        const quint32 *pEntries = (const quint32 *)baSector.constData();
+        const uchar *pEntries = (const uchar *)baSector.constData();
 
         for (qint32 j = 0; j < nEntriesPerSector; j++) {
-            listResult.append(qFromLittleEndian<quint32>(pEntries[j]));
+            listResult.append(qFromLittleEndian<quint32>(pEntries + j * sizeof(quint32)));
         }
     }
 
@@ -935,11 +927,11 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
                 break;
             }
 
-            const quint32 *pEntries = (const quint32 *)baSector.constData();
+            const uchar *pEntries = (const uchar *)baSector.constData();
 
             // Read FAT sector IDs from this DIFAT sector
             for (qint32 j = 0; j < nDIFATEntriesPerSector && XBinary::isPdStructNotCanceled(pPdStruct); j++) {
-                quint32 nFATSector = qFromLittleEndian<quint32>(pEntries[j]);
+                quint32 nFATSector = qFromLittleEndian<quint32>(pEntries + j * sizeof(quint32));
 
                 if (nFATSector == 0xFFFFFFFF || nFATSector == 0xFFFFFFFE) {
                     continue;
@@ -957,65 +949,17 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
                     break;
                 }
 
-                const quint32 *pFATEntries = (const quint32 *)baFATSector.constData();
+                const uchar *pFATEntries = (const uchar *)baFATSector.constData();
 
                 for (qint32 k = 0; k < nEntriesPerSector; k++) {
-                    listResult.append(qFromLittleEndian<quint32>(pFATEntries[k]));
+                    listResult.append(qFromLittleEndian<quint32>(pFATEntries + k * sizeof(quint32)));
                 }
             }
 
             // Next DIFAT sector pointer is the last entry
-            nDIFATSector = qFromLittleEndian<quint32>(pEntries[nEntriesPerSector - 1]);
+            nDIFATSector = qFromLittleEndian<quint32>(pEntries + (nEntriesPerSector - 1) * sizeof(quint32));
             nDIFATCount++;
         }
-    }
-
-    return listResult;
-}
-
-QList<quint32> XCFBF::_readMiniFAT(const StructuredStorageHeader &ssh, const QList<quint32> &listFAT, qint64 nSectorSize, PDSTRUCT *pPdStruct)
-{
-    QList<quint32> listResult;
-
-    if (ssh._sectMiniFatStart == 0xFFFFFFFF || ssh._csectMiniFat == 0) {
-        return listResult;
-    }
-
-    qint64 nFileSize = getSize();
-    qint32 nEntriesPerSector = (qint32)(nSectorSize / 4);
-
-    // Follow the MiniFAT chain via FAT
-    quint32 nCurrentSector = ssh._sectMiniFatStart;
-    qint32 nSectorsRead = 0;
-    qint32 nMaxSectors = (qint32)ssh._csectMiniFat;
-
-    while (nCurrentSector != 0xFFFFFFFF && nCurrentSector != 0xFFFFFFFE && nSectorsRead < nMaxSectors && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint64 nOffset = nSectorSize + (qint64)nCurrentSector * nSectorSize;
-
-        if (nOffset + nSectorSize > nFileSize) {
-            break;
-        }
-
-        QByteArray baSector = read_array(nOffset, nSectorSize);
-
-        if (baSector.size() != nSectorSize) {
-            break;
-        }
-
-        const quint32 *pEntries = (const quint32 *)baSector.constData();
-
-        for (qint32 j = 0; j < nEntriesPerSector; j++) {
-            listResult.append(qFromLittleEndian<quint32>(pEntries[j]));
-        }
-
-        // Follow the FAT chain to the next MiniFAT sector
-        if ((qint32)nCurrentSector < listFAT.size()) {
-            nCurrentSector = listFAT.at(nCurrentSector);
-        } else {
-            break;
-        }
-
-        nSectorsRead++;
     }
 
     return listResult;
@@ -1041,8 +985,8 @@ QByteArray XCFBF::_readStreamBySectorChain(const QList<quint32> &listFAT, quint3
             break;
         }
 
-        qint64 nAvailable = qMin(nSectorSize, nFileSize - nOffset);
-        qint64 nReadSize = qMin(nAvailable, nBytesRemaining);
+        qint64 nAvailable = (std::min)(nSectorSize, nFileSize - nOffset);
+        qint64 nReadSize = (std::min)(nAvailable, nBytesRemaining);
         QByteArray baSector = read_array(nOffset, nAvailable);
 
         if (baSector.size() < nReadSize) {
@@ -1058,33 +1002,6 @@ QByteArray XCFBF::_readStreamBySectorChain(const QList<quint32> &listFAT, quint3
         }
 
         nCurrentSector = listFAT.at(nCurrentSector);
-        nChainCount++;
-    }
-
-    return baResult;
-}
-
-QByteArray XCFBF::_readMiniStream(const QList<quint32> &listMiniFAT, const QByteArray &baMiniStreamData, quint32 nStartSector, qint64 nMiniSectorSize, qint64 nStreamSize)
-{
-    QByteArray baResult;
-
-    quint32 nCurrentSector = nStartSector;
-    qint32 nMaxChain = listMiniFAT.size();
-    qint32 nChainCount = 0;
-    qint64 nBytesRemaining = nStreamSize;
-
-    while (nCurrentSector < (quint32)nMaxChain && nCurrentSector != 0xFFFFFFFE && nCurrentSector != 0xFFFFFFFF && nBytesRemaining > 0 && nChainCount < nMaxChain) {
-        qint64 nOffset = (qint64)nCurrentSector * nMiniSectorSize;
-
-        if (nOffset + nMiniSectorSize > baMiniStreamData.size()) {
-            break;
-        }
-
-        qint64 nReadSize = qMin(nMiniSectorSize, nBytesRemaining);
-        baResult.append(baMiniStreamData.constData() + nOffset, (int)nReadSize);
-        nBytesRemaining -= nReadSize;
-
-        nCurrentSector = listMiniFAT.at(nCurrentSector);
         nChainCount++;
     }
 

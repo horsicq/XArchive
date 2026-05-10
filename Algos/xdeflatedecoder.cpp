@@ -10905,7 +10905,7 @@ bool XDeflateDecoder::decompress64(XBinary::DATAPROCESS_STATE *pDecompressState,
 
         inflateBack9End(&strm);
 
-        bResult = (ret == Z_STREAM_END);
+        bResult = (ret == Z_STREAM_END) && !pDecompressState->bReadError && !pDecompressState->bWriteError;
     }
 
     delete[] pDecompressState->pInputBuffer;

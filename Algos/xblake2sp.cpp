@@ -21,6 +21,7 @@
 
 #include "xblake2sp.h"
 
+#include <algorithm>
 #include <cstring>
 
 // BLAKE2s IV constants (same as SHA-256 initial values)
@@ -261,7 +262,7 @@ void XBlake2sp::final(quint8 *pDigest)
     qint32 nLeafIdx = 0;
 
     while (nRemaining > 0) {
-        qint64 nChunk = qMin((qint64)BLOCK_SIZE, nRemaining);
+        qint64 nChunk = (std::min)((qint64)BLOCK_SIZE, nRemaining);
         _blake2sUpdate(&m_states[nLeafIdx], m_buf + (m_nBufLen - nRemaining), (quint32)nChunk);
         nRemaining -= nChunk;
         nLeafIdx++;
@@ -322,26 +323,33 @@ QByteArray XBlake2sp::hash(QIODevice *pDevice)
         blake.init();
 
         qint64 nPos = pDevice->pos();
-        pDevice->seek(0);
+        bool bSuccess = pDevice->seek(0);
 
         const qint32 nBufSize = 4096;
         quint8 buf[4096];
 
-        while (!pDevice->atEnd()) {
-            qint64 nRead = pDevice->read((char *)buf, nBufSize);
-            if (nRead > 0) {
-                blake.update(buf, nRead);
-            } else {
-                break;
+        if (bSuccess) {
+            while (!pDevice->atEnd()) {
+                qint64 nRead = pDevice->read((char *)buf, nBufSize);
+                if (nRead > 0) {
+                    blake.update(buf, nRead);
+                } else if (nRead < 0) {
+                    bSuccess = false;
+                    break;
+                } else {
+                    break;
+                }
             }
+
+            bSuccess = pDevice->seek(nPos) && bSuccess;
         }
 
-        pDevice->seek(nPos);
+        if (bSuccess) {
+            quint8 digest[DIGEST_SIZE];
+            blake.final(digest);
 
-        quint8 digest[DIGEST_SIZE];
-        blake.final(digest);
-
-        baResult = QByteArray((const char *)digest, DIGEST_SIZE);
+            baResult = QByteArray((const char *)digest, DIGEST_SIZE);
+        }
     }
 
     return baResult;

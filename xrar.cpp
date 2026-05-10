@@ -1720,7 +1720,9 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
                             // Parse decrypted header using QBuffer + temporary XRar
                             QBuffer bufHeader(&baDecHeader);
-                            bufHeader.open(QIODevice::ReadOnly);
+                            if (!bufHeader.open(QIODevice::ReadOnly)) {
+                                break;
+                            }
                             XRar rarTemp(&bufHeader);
 
                             GENERICHEADER5 decGeneric = rarTemp.readGenericHeader5(0);
@@ -2120,7 +2122,7 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
     if (!fileHeader5.baExtraArea.isEmpty()) {
         qint64 nExtraOffset = 0;
         qint64 nExtraSize = fileHeader5.baExtraArea.size();
-        char *pExtraData = const_cast<char *>(fileHeader5.baExtraArea.constData());
+        const char *pExtraData = fileHeader5.baExtraArea.constData();
 
         while (nExtraOffset < nExtraSize) {
             // Read record size (varint)

@@ -21,6 +21,8 @@
 
 #include "xsevenzip.h"
 
+#include <limits>
+
 XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {{XSevenZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                  {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
                                                  {XSevenZip::STRUCTID_HEADER, "HEADER", QObject::tr("Header")}};
@@ -72,6 +74,36 @@ static const XBinary::XFIXEDFIELD _TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER[] = 
 };
 
 const QString XSevenZip::PREFIX_k7zId = "k7zId";
+
+static bool getNextHeaderRange(const XSevenZip::SIGNATUREHEADER &signatureHeader, qint64 nFileSize, qint64 *pOffset, qint64 *pSize)
+{
+    if (nFileSize < (qint64)sizeof(XSevenZip::SIGNATUREHEADER)) {
+        return false;
+    }
+
+    quint64 nFileSize64 = (quint64)nFileSize;
+    quint64 nBase = sizeof(XSevenZip::SIGNATUREHEADER);
+
+    if (signatureHeader.NextHeaderOffset > (nFileSize64 - nBase)) {
+        return false;
+    }
+
+    quint64 nOffset = nBase + signatureHeader.NextHeaderOffset;
+
+    if (signatureHeader.NextHeaderSize > (nFileSize64 - nOffset)) {
+        return false;
+    }
+
+    if (pOffset) {
+        *pOffset = (qint64)nOffset;
+    }
+
+    if (pSize) {
+        *pSize = (qint64)signatureHeader.NextHeaderSize;
+    }
+
+    return true;
+}
 
 static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
                                      XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
@@ -158,10 +190,10 @@ bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
             qDebug("XSevenZip::isValid: NextHeaderOffset = %lld, NextHeaderSize = %lld", signatureHeader.NextHeaderOffset, signatureHeader.NextHeaderSize);
 #endif
 
-            qint64 nOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
-            qint64 nSize = signatureHeader.NextHeaderSize;
+            qint64 nOffset = 0;
+            qint64 nSize = 0;
 
-            bResult = isOffsetAndSizeValid(&memoryMap, nOffset, nSize);
+            bResult = getNextHeaderRange(signatureHeader, getSize(), &nOffset, &nSize) && isOffsetAndSizeValid(&memoryMap, nOffset, nSize);
 #ifdef QT_DEBUG
             qDebug("XSevenZip::isValid: isOffsetAndSizeValid(offset=%lld, size=%lld) result: %d", nOffset, nSize, bResult);
 #endif
@@ -193,7 +225,12 @@ qint64 XSevenZip::getFileFormatSize(PDSTRUCT *pPdStruct)
 
     // TODO Check
     if (read_array(0, (char *)&signatureHeader, sizeof(SIGNATUREHEADER)) == sizeof(SIGNATUREHEADER)) {
-        nResult = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset + signatureHeader.NextHeaderSize;
+        qint64 nNextHeaderOffset = 0;
+        qint64 nNextHeaderSize = 0;
+
+        if (getNextHeaderRange(signatureHeader, getSize(), &nNextHeaderOffset, &nNextHeaderSize)) {
+            nResult = nNextHeaderOffset + nNextHeaderSize;
+        }
     }
 
     return nResult;
@@ -229,10 +266,11 @@ QString XSevenZip::getComment()
     QString sResult;
 
     SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
-    qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
-    qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
+    qint64 nNextHeaderOffset = 0;
+    qint64 nNextHeaderSize = 0;
 
-    if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
+    if (getNextHeaderRange(signatureHeader, getSize(), &nNextHeaderOffset, &nNextHeaderSize) && (nNextHeaderSize > 0) &&
+        (nNextHeaderSize <= std::numeric_limits<int>::max())) {
         QByteArray baData;
         baData.resize(nNextHeaderSize);
         qint64 nHeaderSize = nNextHeaderSize;
@@ -429,7 +467,8 @@ void XSevenZip::_applyBCJFilter(QByteArray &baData, qint32 nOffset)
         // Check for CALL (0xE8) or JMP (0xE9) instructions
         if (b == 0xE8 || b == 0xE9) {
             // Read the 32-bit relative offset (little-endian)
-            qint32 nSrc = static_cast<qint32>(pData[nPos + 1] | (pData[nPos + 2] << 8) | (pData[nPos + 3] << 16) | (pData[nPos + 4] << 24));
+            quint32 nSrcValue = (quint32)pData[nPos + 1] | ((quint32)pData[nPos + 2] << 8) | ((quint32)pData[nPos + 3] << 16) | ((quint32)pData[nPos + 4] << 24);
+            qint32 nSrc = static_cast<qint32>(nSrcValue);
 
             // Convert absolute address back to relative
             qint32 nDest = nSrc - (nOffset + nPos + 5);
@@ -502,8 +541,10 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                 listResult.append(dataHeader);
 
                 if (dataHeadersOptions.bChildren) {
-                    qint64 nNextHeaderOffset = read_uint64(nStartOffset + offsetof(SIGNATUREHEADER, NextHeaderOffset));
-                    qint64 nNextHeaderSize = read_uint64(nStartOffset + offsetof(SIGNATUREHEADER, NextHeaderSize));
+                    SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(nStartOffset);
+                    qint64 nNextHeaderFileOffset = 0;
+                    qint64 nNextHeaderSize = 0;
+                    bool bNextHeaderValid = getNextHeaderRange(signatureHeader, getSize(), &nNextHeaderFileOffset, &nNextHeaderSize);
                     // Add hex for StartHeader (the 3 fields after StartHeaderCRC)
                     {
                         const qint64 startHeaderHexOff = nStartOffset + 12;  // bytes 12..31
@@ -515,19 +556,23 @@ QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS
                         }
                     }
 
-                    DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-                    _dataHeadersOptions.nLocation += (sizeof(SIGNATUREHEADER) + nNextHeaderOffset);
-                    _dataHeadersOptions.nSize = nNextHeaderSize;
-                    _dataHeadersOptions.dsID_parent = dataHeader.dsID;
-                    _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-                    _dataHeadersOptions.nID = STRUCTID_HEADER;
-                    listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+                    if (bNextHeaderValid) {
+                        qint64 nNextHeaderDelta = nNextHeaderFileOffset - nStartOffset;
+
+                        if (nNextHeaderDelta >= 0) {
+                            DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+                            _dataHeadersOptions.nLocation += nNextHeaderDelta;
+                            _dataHeadersOptions.nSize = nNextHeaderSize;
+                            _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+                            _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+                            _dataHeadersOptions.nID = STRUCTID_HEADER;
+                            listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+                        }
+                    }
 
                     // Add hex view for NextHeader block
-                    qint64 nNextHeaderFileOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType,
-                                                                    dataHeadersOptions.nLocation + sizeof(SIGNATUREHEADER) + nNextHeaderOffset);
-                    if ((nNextHeaderFileOffset != -1) && isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, nNextHeaderFileOffset, nNextHeaderSize) &&
-                        (nNextHeaderSize > 0)) {
+                    if (bNextHeaderValid && (nNextHeaderSize > 0) &&
+                        isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, nNextHeaderFileOffset, nNextHeaderSize)) {
                         DATA_HEADER hexNext = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("NextHeader (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
                                                              nNextHeaderFileOffset, nNextHeaderSize);
                         listResult.append(hexNext);
@@ -650,10 +695,14 @@ QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit,
 
     SIGNATUREHEADER sh = _read_SIGNATUREHEADER(0);
     const qint64 nBase = sizeof(SIGNATUREHEADER);
-    const qint64 nextHeaderOffset = nBase + (qint64)sh.NextHeaderOffset;
-    const qint64 nextHeaderSize = (qint64)sh.NextHeaderSize;
+    qint64 nextHeaderOffset = 0;
+    qint64 nextHeaderSize = 0;
 
-    qint64 nMaxOffset = qMin<qint64>(nFileSize, nextHeaderOffset + nextHeaderSize);
+    qint64 nMaxOffset = nBase;
+
+    if (getNextHeaderRange(sh, nFileSize, &nextHeaderOffset, &nextHeaderSize)) {
+        nMaxOffset = nextHeaderOffset + nextHeaderSize;
+    }
 
     if (nFileParts & FILEPART_HEADER) {
         // Signature header
@@ -741,7 +790,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
     if (!puTag.bIsValid) {
         if (bCheck) {
             pState->bIsError = true;
-            pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
+            pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset)).arg(tr("Invalid data"));
 #ifdef QT_DEBUG
             qDebug("Invalid packed number at offset: 0x%llX", (qint64)pState->nCurrentOffset);
 #endif
@@ -753,7 +802,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
     if (puTag.nValue != id) {
         if (bCheck) {
             pState->bIsError = true;
-            pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
+            pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset)).arg(tr("Invalid data"));
 #ifdef QT_DEBUG
             qDebug("Invalid value: 0x%llX (expected: 0x%llX) at offset 0x%llX", (quint64)puTag.nValue, (quint64)id, pState->nCurrentOffset);
 #endif
@@ -927,7 +976,7 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                 _handleNumber(pListRecords, pState, pPdStruct, QString("Data Stream Index"), DRF_COUNT, IMPTYPE_UNKNOWN);
             } else {
                 pState->bIsError = true;
-                pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"));
+                pState->sErrorString = QString("%1: %2").arg(XBinary::valueToHexEx(pState->nCurrentOffset)).arg(tr("Invalid data"));
             }
 
             bResult = true;
@@ -1288,7 +1337,7 @@ quint64 XSevenZip::_handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState,
 
     if (!puNumber.bIsValid) {
         pState->bIsError = true;
-        pState->sErrorString = QString("%1: %2 (%3)").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"), sCaption);
+        pState->sErrorString = QString("%1: %2 (%3)").arg(XBinary::valueToHexEx(pState->nCurrentOffset)).arg(tr("Invalid data")).arg(sCaption);
 #ifdef QT_DEBUG
         qDebug("Invalid packed number for '%s' at offset: 0x%llX", qPrintable(sCaption), (qint64)pState->nCurrentOffset);
 #endif
@@ -1347,7 +1396,7 @@ quint32 XSevenZip::_handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState,
     // Check if we have enough bytes for a UINT32
     if (pState->nCurrentOffset > (pState->nSize - 4)) {
         pState->bIsError = true;
-        pState->sErrorString = QString("%1: %2 (%3)").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"), sCaption);
+        pState->sErrorString = QString("%1: %2 (%3)").arg(XBinary::valueToHexEx(pState->nCurrentOffset)).arg(tr("Invalid data")).arg(sCaption);
 #ifdef QT_DEBUG
         qDebug("Not enough bytes for UINT32 '%s' at offset: 0x%llX (need 4, have %lld)", qPrintable(sCaption), (qint64)pState->nCurrentOffset,
                pState->nSize - pState->nCurrentOffset);
@@ -1398,7 +1447,7 @@ QByteArray XSevenZip::_handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pStat
         pState->nCurrentOffset += nSize;
     } else {
         pState->bIsError = true;
-        pState->sErrorString = QString("%1: %2 (%3, size: %4)").arg(XBinary::valueToHexEx(pState->nCurrentOffset), tr("Invalid data"), sCaption).arg(nSize);
+        pState->sErrorString = QString("%1: %2 (%3, size: %4)").arg(XBinary::valueToHexEx(pState->nCurrentOffset)).arg(tr("Invalid data")).arg(sCaption).arg(nSize);
     }
 
     return baResult;
@@ -1539,10 +1588,11 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
         // Parse archive structure directly using streaming approach
         SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(0);
-        qint64 nNextHeaderOffset = sizeof(SIGNATUREHEADER) + signatureHeader.NextHeaderOffset;
-        qint64 nNextHeaderSize = signatureHeader.NextHeaderSize;
+        qint64 nNextHeaderOffset = 0;
+        qint64 nNextHeaderSize = 0;
 
-        if ((nNextHeaderSize > 0) && isOffsetValid(nNextHeaderOffset)) {
+        if (getNextHeaderRange(signatureHeader, pState->nTotalSize, &nNextHeaderOffset, &nNextHeaderSize) && (nNextHeaderSize > 0) &&
+            (nNextHeaderSize <= std::numeric_limits<int>::max())) {
             QByteArray baData;
             baData.resize(nNextHeaderSize);
             // char *pData = new char[nNextHeaderSize];
@@ -2135,7 +2185,13 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
             } else {
                 pState->mapArchiveProperties.insert(FPART_PROP_FILEMD5, sMD5);
             }
-        }  // End if (pState)
+
+        }  // End if next header is present
+
+        if (!bResult && (pState->pContext == pContext)) {
+            delete pContext;
+            pState->pContext = nullptr;
+        }
     }  // End outer scope
 
     return bResult;

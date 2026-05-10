@@ -21,6 +21,7 @@
 #include "xdecompress.h"
 #include "subdevice.h"
 #include "xpng.h"
+#include <limits>
 
 XDecompress::XDecompress(QObject *parent) : QObject(parent)
 {
@@ -474,9 +475,12 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     if (pState->mapProperties.contains(XBinary::FPART_PROP_PASSWORD_MODIFIER)) {
         quint8 nModifier = (quint8)pState->mapProperties.value(XBinary::FPART_PROP_PASSWORD_MODIFIER).toUInt();
         QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
-        if (!sPassword.isEmpty() && pState->pDeviceInput && pState->nInputLimit > 0) {
+        if (!sPassword.isEmpty() && pState->pDeviceInput) {
+            if ((pState->nInputLimit <= 0) || (pState->nInputLimit > (std::numeric_limits<qint32>::max)()) ||
+                !pState->pDeviceInput->seek(pState->nInputOffset)) {
+                return false;
+            }
             baArjGarbleDecrypted.resize((qint32)pState->nInputLimit);
-            pState->pDeviceInput->seek(pState->nInputOffset);
             qint32 nRead = pState->pDeviceInput->read(baArjGarbleDecrypted.data(), (qint32)pState->nInputLimit);
             if (nRead == (qint32)pState->nInputLimit) {
                 const qint32 nPwdLen = sPassword.length();
@@ -485,7 +489,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                     baArjGarbleDecrypted.data()[i] = (char)((quint8)baArjGarbleDecrypted[i] ^ k);
                 }
                 arjGarbleBuf.setBuffer(&baArjGarbleDecrypted);
-                arjGarbleBuf.open(QIODevice::ReadOnly);
+                if (!arjGarbleBuf.open(QIODevice::ReadOnly)) {
+                    return false;
+                }
                 pState->pDeviceInput = &arjGarbleBuf;
                 pState->nInputOffset = 0;
             }
@@ -819,7 +825,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 for (qint32 ni = 0; ni < 3 && bAESDecryptOk; ni++) {
                     if (aBCJ2AESProps[ni].isEmpty()) continue;
                     QBuffer decBuf(&aBCJ2Decrypted[ni]);
-                    decBuf.open(QIODevice::WriteOnly);
+                    if (!decBuf.open(QIODevice::WriteOnly)) {
+                        bAESDecryptOk = false;
+                        break;
+                    }
                     XBinary::DATAPROCESS_STATE aesState = {};
                     aesState.pDeviceInput = pState->pDeviceInput;
                     aesState.pDeviceOutput = &decBuf;
@@ -833,22 +842,28 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 // Range stream
                 if (bAESDecryptOk && !aBCJ2AESProps[3].isEmpty()) {
                     QBuffer decBuf(&aBCJ2Decrypted[3]);
-                    decBuf.open(QIODevice::WriteOnly);
-                    XBinary::DATAPROCESS_STATE aesState = {};
-                    aesState.pDeviceInput = pState->pDeviceInput;
-                    aesState.pDeviceOutput = &decBuf;
-                    aesState.nInputOffset = nRangeOffset;
-                    aesState.nInputLimit = nRangeSize;
-                    aesState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, aBCJ2AESUnpack[3]);
-                    pState->pDeviceInput->seek(nRangeOffset);
-                    bAESDecryptOk = XAESDecoder::decrypt(&aesState, aBCJ2AESProps[3], sBCJ2Password, pPdStruct);
-                    decBuf.close();
+                    if (decBuf.open(QIODevice::WriteOnly)) {
+                        XBinary::DATAPROCESS_STATE aesState = {};
+                        aesState.pDeviceInput = pState->pDeviceInput;
+                        aesState.pDeviceOutput = &decBuf;
+                        aesState.nInputOffset = nRangeOffset;
+                        aesState.nInputLimit = nRangeSize;
+                        aesState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, aBCJ2AESUnpack[3]);
+                        pState->pDeviceInput->seek(nRangeOffset);
+                        bAESDecryptOk = XAESDecoder::decrypt(&aesState, aBCJ2AESProps[3], sBCJ2Password, pPdStruct);
+                        decBuf.close();
+                    } else {
+                        bAESDecryptOk = false;
+                    }
                 }
             }
 
+            auto isValidBufferSize = [](qint64 nSize) { return (nSize >= 0) && (nSize <= (std::numeric_limits<qint32>::max)()); };
+
             // nCallUnpack / nJmpUnpack may be 0 when the data contains no CALL/JMP instructions
             // (e.g. pure image or text files). Only require nMainUnpack > 0 and nOutputSize > 0.
-            if (nMainUnpack > 0 && nOutputSize > 0 && bAESDecryptOk) {
+            if (nMainUnpack > 0 && nOutputSize > 0 && bAESDecryptOk && isValidBufferSize(nMainUnpack) && isValidBufferSize(nCallUnpack) &&
+                isValidBufferSize(nJmpUnpack)) {
                 QByteArray baMain, baCall, baJmp;
                 baMain.resize((qint32)nMainUnpack);
                 baCall.resize((qint32)nCallUnpack);
@@ -885,12 +900,15 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                     if (bBCJ2HasAES && !aBCJ2Decrypted[nTask].isEmpty()) {
                         // Use AES-decrypted buffer as LZMA input
                         QBuffer lzmaBuf(&aBCJ2Decrypted[nTask]);
-                        lzmaBuf.open(QIODevice::ReadOnly);
-                        dpState.pDeviceInput = &lzmaBuf;
-                        dpState.nInputOffset = 0;
-                        dpState.nInputLimit = aBCJ2Decrypted[nTask].size();
-                        bLZMAOk = decompress(&dpState, pPdStruct);
-                        lzmaBuf.close();
+                        if (lzmaBuf.open(QIODevice::ReadOnly)) {
+                            dpState.pDeviceInput = &lzmaBuf;
+                            dpState.nInputOffset = 0;
+                            dpState.nInputLimit = aBCJ2Decrypted[nTask].size();
+                            bLZMAOk = decompress(&dpState, pPdStruct);
+                            lzmaBuf.close();
+                        } else {
+                            bLZMAOk = false;
+                        }
                     } else {
                         dpState.pDeviceInput = pState->pDeviceInput;
                         dpState.nInputOffset = tasks[nTask].nOffset;
@@ -914,13 +932,16 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         QBuffer callBuf(&baCall);
                         QBuffer jmpBuf(&baJmp);
                         QBuffer rangeBuf(&baRange);
-                        if (mainBuf.open(QIODevice::ReadOnly) && callBuf.open(QIODevice::ReadOnly) && jmpBuf.open(QIODevice::ReadOnly) &&
-                            rangeBuf.open(QIODevice::ReadOnly)) {
-                            bResult = XBCJ2Decoder::decompress(&mainBuf, &callBuf, &jmpBuf, &rangeBuf, pState->pDeviceOutput, nOutputSize, pPdStruct);
-                            pState->nCountOutput = nOutputSize;
+                        if (mainBuf.open(QIODevice::ReadOnly) && callBuf.open(QIODevice::ReadOnly) && jmpBuf.open(QIODevice::ReadOnly)) {
+                            if (rangeBuf.open(QIODevice::ReadOnly)) {
+                                bResult = XBCJ2Decoder::decompress(&mainBuf, &callBuf, &jmpBuf, &rangeBuf, pState->pDeviceOutput, nOutputSize, pPdStruct);
+                                pState->nCountOutput = nOutputSize;
+                            }
                         }
                     }
                 }
+            } else {
+                bResult = false;
             }
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_PDF_CCITTIMAGE) {
@@ -948,7 +969,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             QByteArray baTiff;
             QBuffer tiffBuffer(&baTiff);
-            tiffBuffer.open(QIODevice::WriteOnly);
+            if (!tiffBuffer.open(QIODevice::WriteOnly)) {
+                return false;
+            }
             QDataStream ds(&tiffBuffer);
             ds.setByteOrder(QDataStream::LittleEndian);
 
@@ -1005,7 +1028,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
                 QByteArray baPal;
                 QBuffer palBuffer(&baPal);
-                palBuffer.open(QIODevice::WriteOnly);
+                if (!palBuffer.open(QIODevice::WriteOnly)) {
+                    return false;
+                }
                 QDataStream ds(&palBuffer);
                 ds.setByteOrder(QDataStream::LittleEndian);
 
@@ -1138,9 +1163,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         }
 
                         QBuffer pngBuffer;
-                        pngBuffer.open(QIODevice::ReadWrite);
-                        bConverted = XPNG::createPNGIndexed(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), baRgbPalette);
-                        pngBuffer.close();
+                        if (pngBuffer.open(QIODevice::ReadWrite)) {
+                            bConverted = XPNG::createPNGIndexed(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), baRgbPalette);
+                            pngBuffer.close();
+                        }
 
                         if (bConverted) {
                             qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
@@ -1155,9 +1181,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
                     if (baData.size() >= nExpectedSize) {
                         QBuffer pngBuffer;
-                        pngBuffer.open(QIODevice::ReadWrite);
-                        bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), pngColorType, nBitsPerComponent);
-                        pngBuffer.close();
+                        if (pngBuffer.open(QIODevice::ReadWrite)) {
+                            bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), pngColorType, nBitsPerComponent);
+                            pngBuffer.close();
+                        }
 
                         if (bConverted) {
                             qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
@@ -1194,9 +1221,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         }
 
                         QBuffer pngBuffer;
-                        pngBuffer.open(QIODevice::ReadWrite);
-                        bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baRgbData, XPNG::COLOR_TYPE_RGB);
-                        pngBuffer.close();
+                        if (pngBuffer.open(QIODevice::ReadWrite)) {
+                            bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baRgbData, XPNG::COLOR_TYPE_RGB);
+                            pngBuffer.close();
+                        }
 
                         if (bConverted) {
                             qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
@@ -1213,9 +1241,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
                     if (baData.size() >= nExpectedSize) {
                         QBuffer pngBuffer;
-                        pngBuffer.open(QIODevice::ReadWrite);
-                        bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), XPNG::COLOR_TYPE_GRAYSCALE, 1);
-                        pngBuffer.close();
+                        if (pngBuffer.open(QIODevice::ReadWrite)) {
+                            bConverted = XPNG::createPNG(&pngBuffer, nWidth, nHeight, baData.left(nExpectedSize), XPNG::COLOR_TYPE_GRAYSCALE, 1);
+                            pngBuffer.close();
+                        }
 
                         if (bConverted) {
                             qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
@@ -1283,11 +1312,16 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
                 QByteArray baCompressed = baPayload.mid(2);
                 QBuffer bufferCompressed(&baCompressed);
-                bufferCompressed.open(QIODevice::ReadOnly);
 
                 QByteArray baUncompressedBlock;
                 QBuffer bufferUncompressed(&baUncompressedBlock);
-                bufferUncompressed.open(QIODevice::WriteOnly);
+
+                if (!bufferCompressed.open(QIODevice::ReadOnly) || !bufferUncompressed.open(QIODevice::WriteOnly)) {
+                    bufferCompressed.close();
+                    bufferUncompressed.close();
+                    bResult = false;
+                    break;
+                }
 
                 XBinary::DATAPROCESS_STATE decompressState = {};
                 decompressState.pDeviceInput = &bufferCompressed;
@@ -1354,7 +1388,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::handleMethodToString(compressMethod);
 #endif
-        emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method"), XBinary::handleMethodToString(compressMethod)));
+        emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method")).arg(XBinary::handleMethodToString(compressMethod)));
     }
 
     return bResult;

@@ -60,11 +60,6 @@ bool XLZHDecoder::lzh_decode_init(lzh_stream *strm, qint32 method)
     struct lzh_dec *ds;
     qint32 w_bits, w_size;
 
-    if (strm->ds == nullptr) {
-        strm->ds = static_cast<lzh_dec *>(calloc(1, sizeof(*strm->ds)));
-    }
-    ds = strm->ds;
-
     switch (method) {
         case 5:
             w_bits = 13; /* 8KiB for window */
@@ -77,12 +72,25 @@ bool XLZHDecoder::lzh_decode_init(lzh_stream *strm, qint32 method)
             break;
         default: return false; /* Not supported. */
     }
+
+    if (strm->ds == nullptr) {
+        strm->ds = static_cast<lzh_dec *>(calloc(1, sizeof(*strm->ds)));
+    }
+    if (strm->ds == nullptr) {
+        return false;
+    }
+
+    ds = strm->ds;
+
     /* Expand a window size up to 128 KiB for decompressing process
      * performance whatever its original window size is. */
     ds->w_size = 1U << 17;
     ds->w_mask = ds->w_size - 1;
     if (ds->w_buff == nullptr) {
         ds->w_buff = static_cast<quint8 *>(malloc(ds->w_size));
+    }
+    if (ds->w_buff == nullptr) {
+        return false;
     }
     w_size = 1U << w_bits;
     memset(ds->w_buff + ds->w_size - w_size, 0x20, w_size);
@@ -851,6 +859,7 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
     qint32 nResult = LZH_ARCHIVE_OK;
 
     if (!lzh_decode_init(&strm, nMethod)) {
+        lzh_decode_free(&strm);
         delete[] pBufferIn;
         delete[] pBufferOut;
         return false;

@@ -423,25 +423,43 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     localFileHeader.nCRC32 = pZipFileRecord->nCRC32;
     localFileHeader.nCompressedSize = 0;
     localFileHeader.nUncompressedSize = pZipFileRecord->nUncompressedSize;
-    localFileHeader.nFileNameLength = pZipFileRecord->sFileName.size();
+    QByteArray baFileName = pZipFileRecord->sFileName.toUtf8();
+
+    localFileHeader.nFileNameLength = baFileName.size();
     localFileHeader.nExtraFieldLength = 0;
 
-    pDest->write((char *)&localFileHeader, sizeof(localFileHeader));
-    pDest->write(pZipFileRecord->sFileName.toUtf8().data(), pZipFileRecord->sFileName.toUtf8().size());
+    if (pDest->write((char *)&localFileHeader, sizeof(localFileHeader)) != sizeof(localFileHeader)) {
+        return false;
+    }
+
+    if (pDest->write(baFileName.data(), baFileName.size()) != baFileName.size()) {
+        return false;
+    }
 
     pZipFileRecord->nDataOffset = pDest->pos();
 
-    XArchive::_compress(XArchive::HANDLE_METHOD_DEFLATE, pSource, pDest, pPdStruct);
+    if (XArchive::_compress(XArchive::HANDLE_METHOD_DEFLATE, pSource, pDest, pPdStruct) != XArchive::COMPRESS_RESULT_OK) {
+        return false;
+    }
 
     qint64 nEndPosition = pDest->pos();
 
     pZipFileRecord->nCompressedSize = (nEndPosition) - (pZipFileRecord->nDataOffset);
 
-    XBinary binary(pDest);
+    if (!pDest->seek(pZipFileRecord->nHeaderOffset + offsetof(XZip::LOCALFILEHEADER, nCompressedSize))) {
+        return false;
+    }
 
-    binary.write_uint32(pZipFileRecord->nHeaderOffset + offsetof(XZip::LOCALFILEHEADER, nCompressedSize), pZipFileRecord->nCompressedSize);
+    char szCompressedSize[sizeof(quint32)] = {};
+    XBinary::_write_uint32(szCompressedSize, (quint32)pZipFileRecord->nCompressedSize);
 
-    pDest->seek(nEndPosition);
+    if (pDest->write(szCompressedSize, sizeof(szCompressedSize)) != sizeof(szCompressedSize)) {
+        return false;
+    }
+
+    if (!pDest->seek(nEndPosition)) {
+        return false;
+    }
 
     return true;
 }
@@ -475,10 +493,15 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
         cdFileHeader.nExternalFileAttributes = pListZipFileRecords->at(i).nExternalFileAttributes;
         cdFileHeader.nOffsetToLocalFileHeader = (quint32)pListZipFileRecords->at(i).nHeaderOffset;
 
-        pDest->write((char *)&cdFileHeader, sizeof(cdFileHeader));
+        if (pDest->write((char *)&cdFileHeader, sizeof(cdFileHeader)) != sizeof(cdFileHeader)) {
+            return false;
+        }
 
         QByteArray baFileName = pListZipFileRecords->at(i).sFileName.toUtf8();
-        pDest->write(baFileName.data(), baFileName.size());
+
+        if (pDest->write(baFileName.data(), baFileName.size()) != baFileName.size()) {
+            return false;
+        }
     }
 
     qint64 nCentralDirectorySize = pDest->pos() - nStartPosition;
@@ -492,10 +515,17 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
     endofCD.nTotalNumberOfRecords = nNumberOfRecords;
     endofCD.nSizeOfCentralDirectory = nCentralDirectorySize;
     endofCD.nOffsetToCentralDirectory = nStartPosition;
-    endofCD.nCommentLength = sComment.size();
+    QByteArray baComment = sComment.toUtf8();
 
-    pDest->write((char *)&endofCD, sizeof(endofCD));
-    pDest->write(sComment.toUtf8().data(), sComment.toUtf8().size());
+    endofCD.nCommentLength = baComment.size();
+
+    if (pDest->write((char *)&endofCD, sizeof(endofCD)) != sizeof(endofCD)) {
+        return false;
+    }
+
+    if (pDest->write(baComment.data(), baComment.size()) != baComment.size()) {
+        return false;
+    }
 
     return true;
 }
@@ -965,7 +995,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                     record.nFileOffset = nOffset;
                                     record.nFileSize = (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
                                     record.nVirtualAddress = -1;
-                                    record.sName = QString("%1 %2").arg(tr("Stream"), QString::number(i));
+                                    record.sName = QString("%1 %2").arg(tr("Stream")).arg(QString::number(i));
                                     QString sOriginalName = read_ansiString(nOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength);
                                     record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
 
@@ -979,7 +1009,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                                     if (lfh.nSignature == SIGNATURE_LFD) {
                                         if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
-                                            QString sName = QString("%1 %2").arg(tr("Stream"), QString::number(i));
+                                            QString sName = QString("%1 %2").arg(tr("Stream")).arg(QString::number(i));
                                             QString sOriginalName = read_ansiString(nLocalOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength);
 
                                             if (nFileParts & FILEPART_HEADER) {
@@ -1463,7 +1493,10 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
         if (bEncrypt) {
             // Encrypt the file data
             QBuffer dataBuffer;
-            dataBuffer.open(QIODevice::WriteOnly);
+            if (!dataBuffer.open(QIODevice::WriteOnly)) {
+                file.close();
+                return false;
+            }
 
             // First, read all data to a buffer for encryption
             QByteArray baFileData = file.readAll();
@@ -1475,7 +1508,10 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
 
             // Prepare encryption
             QBuffer inputBuffer(&baFileData);
-            inputBuffer.open(QIODevice::ReadOnly);
+            if (!inputBuffer.open(QIODevice::ReadOnly)) {
+                file.close();
+                return false;
+            }
 
             XBinary::DATAPROCESS_STATE encryptState = {};
             encryptState.pDeviceInput = &inputBuffer;
@@ -1522,7 +1558,10 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     } else if (zipFileRecord.method == CMETHOD_DEFLATE) {
         // Compress data using DEFLATE (with optional encryption)
         QBuffer compressedBuffer;
-        compressedBuffer.open(QIODevice::WriteOnly);
+        if (!compressedBuffer.open(QIODevice::WriteOnly)) {
+            file.close();
+            return false;
+        }
 
         XBinary::DATAPROCESS_STATE compressState = {};
         compressState.pDeviceInput = &file;
@@ -1539,10 +1578,16 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
             if (bEncrypt) {
                 // Encrypt the compressed data
                 QBuffer encryptedBuffer;
-                encryptedBuffer.open(QIODevice::WriteOnly);
+                if (!encryptedBuffer.open(QIODevice::WriteOnly)) {
+                    file.close();
+                    return false;
+                }
 
                 QBuffer inputBuffer(&baCompressed);
-                inputBuffer.open(QIODevice::ReadOnly);
+                if (!inputBuffer.open(QIODevice::ReadOnly)) {
+                    file.close();
+                    return false;
+                }
 
                 XBinary::DATAPROCESS_STATE encryptState = {};
                 encryptState.pDeviceInput = &inputBuffer;
@@ -1600,7 +1645,11 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     localFileHeader.nMethod = zipFileRecord.method;
 
     // Write updated local file header
-    if (pState->pDevice->seek(zipFileRecord.nHeaderOffset) && pState->pDevice->write((char *)&localFileHeader, sizeof(localFileHeader)) != sizeof(localFileHeader)) {
+    if (!pState->pDevice->seek(zipFileRecord.nHeaderOffset)) {
+        return false;
+    }
+
+    if (pState->pDevice->write((char *)&localFileHeader, sizeof(localFileHeader)) != sizeof(localFileHeader)) {
         return false;
     }
 
@@ -1608,7 +1657,9 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     pState->nCurrentOffset += zipFileRecord.nCompressedSize;
 
     // Seek to end of data
-    pState->pDevice->seek(pState->nCurrentOffset);
+    if (!pState->pDevice->seek(pState->nCurrentOffset)) {
+        return false;
+    }
 
     // Store the record for later when writing central directory
     pListZipFileRecords->append(zipFileRecord);
