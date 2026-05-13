@@ -938,6 +938,9 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
    trailer creation by deflate().  NO_GZIP would be used to avoid linking in
    the crc code when it is not needed.  For shared libraries, gzip encoding
    should be left enabled. */
+#ifdef GZIP
+#  undef GZIP
+#endif
 #ifndef NO_GZIP
 #  define GZIP
 #endif
@@ -9392,6 +9395,12 @@ uLong ZEXPORT crc32_combine64(uLong crc1, uLong crc2, z_off64_t len2)
 {
     return crc32_combine_(crc1, crc2, len2);
 }
+#ifdef DO1
+#undef DO1
+#endif
+#ifdef DO8
+#undef DO8
+#endif
 /* ===== End embedded xzlib_crc32.c ===== */
 
 /* ===== Begin embedded xzlib_adler32.c ===== */
@@ -10045,6 +10054,25 @@ int inflateBack9Init(z_stream *strm, unsigned char *window)
 }
 
 /* Macros for inflateBack(): */
+
+#ifdef INITBITS
+#undef INITBITS
+#endif
+#ifdef PULLBYTE
+#undef PULLBYTE
+#endif
+#ifdef NEEDBITS
+#undef NEEDBITS
+#endif
+#ifdef BITS
+#undef BITS
+#endif
+#ifdef DROPBITS
+#undef DROPBITS
+#endif
+#ifdef BYTEBITS
+#undef BYTEBITS
+#endif
 
 /* Clear the input bit accumulator */
 #define INITBITS() \
