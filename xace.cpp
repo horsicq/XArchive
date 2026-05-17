@@ -404,162 +404,162 @@ quint32 XACE::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-QList<XBinary::DATA_HEADER> XACE::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XACE::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
-        qint64 nRealSize = 0;
-        qint32 nCount = 0;
-        qint64 nFileSize = getSize();
+//         qint64 nRealSize = 0;
+//         qint32 nCount = 0;
+//         qint64 nFileSize = getSize();
 
-        // Skip archive header
-        qint64 nOffset = 0;
+//         // Skip archive header
+//         qint64 nOffset = 0;
 
-        if (nFileSize >= 5) {
-            quint8 nHeadType = read_uint8(4);
+//         if (nFileSize >= 5) {
+//             quint8 nHeadType = read_uint8(4);
 
-            if (nHeadType == HEADTYPE_ARCHIVE) {
-                qint64 nArchHdrSize = _getBlockHeaderSize(0);
+//             if (nHeadType == HEADTYPE_ARCHIVE) {
+//                 qint64 nArchHdrSize = _getBlockHeaderSize(0);
 
-                if (nArchHdrSize > 0) {
-                    nOffset = nArchHdrSize;
-                }
-            }
-        }
+//                 if (nArchHdrSize > 0) {
+//                     nOffset = nArchHdrSize;
+//                 }
+//             }
+//         }
 
-        // Count file records
-        qint64 nCurOffset = nOffset;
+//         // Count file records
+//         qint64 nCurOffset = nOffset;
 
-        while ((nCurOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            if ((nFileSize - nCurOffset) < 5) {
-                break;
-            }
+//         while ((nCurOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+//             if ((nFileSize - nCurOffset) < 5) {
+//                 break;
+//             }
 
-            quint8 nHeadType = read_uint8(nCurOffset + 4);
-            quint16 nHeadSize = read_uint16(nCurOffset + 2, false);
+//             quint8 nHeadType = read_uint8(nCurOffset + 4);
+//             quint16 nHeadSize = read_uint16(nCurOffset + 2, false);
 
-            if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
-                break;
-            }
+//             if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
+//                 break;
+//             }
 
-            qint64 nBlockHdrSize = _getBlockHeaderSize(nCurOffset);
+//             qint64 nBlockHdrSize = _getBlockHeaderSize(nCurOffset);
 
-            if (nBlockHdrSize <= 0) {
-                break;
-            }
+//             if (nBlockHdrSize <= 0) {
+//                 break;
+//             }
 
-            if (nHeadType == HEADTYPE_FILE) {
-                quint32 nCompSize = _getCompressedSize(nCurOffset);
+//             if (nHeadType == HEADTYPE_FILE) {
+//                 quint32 nCompSize = _getCompressedSize(nCurOffset);
 
-                nCount++;
-                nRealSize = nCurOffset + nBlockHdrSize + nCompSize;
-                nCurOffset += nBlockHdrSize + nCompSize;
-            } else {
-                quint16 nHeadFlags = read_uint16(nCurOffset + 5, false);
-                quint32 nAddSize = 0;
+//                 nCount++;
+//                 nRealSize = nCurOffset + nBlockHdrSize + nCompSize;
+//                 nCurOffset += nBlockHdrSize + nCompSize;
+//             } else {
+//                 quint16 nHeadFlags = read_uint16(nCurOffset + 5, false);
+//                 quint32 nAddSize = 0;
 
-                if (nHeadFlags & FILEFLAG_ADDSIZE) {
-                    nAddSize = read_uint32(nCurOffset + 7, false);
-                }
+//                 if (nHeadFlags & FILEFLAG_ADDSIZE) {
+//                     nAddSize = read_uint32(nCurOffset + 7, false);
+//                 }
 
-                nCurOffset += nBlockHdrSize + nAddSize;
-            }
-        }
+//                 nCurOffset += nBlockHdrSize + nAddSize;
+//             }
+//         }
 
-        _dataHeadersOptions.nID = STRUCTID_RECORD;
-        _dataHeadersOptions.nLocation = nOffset;
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
-        _dataHeadersOptions.nCount = nCount;
-        _dataHeadersOptions.nSize = nRealSize - nOffset;
+//         _dataHeadersOptions.nID = STRUCTID_RECORD;
+//         _dataHeadersOptions.nLocation = nOffset;
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//         _dataHeadersOptions.nCount = nCount;
+//         _dataHeadersOptions.nSize = nRealSize - nOffset;
 
-        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-    } else {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//     } else {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            if (dataHeadersOptions.nID == STRUCTID_RECORD) {
-                qint64 nCurrentOffset = nStartOffset;
-                qint32 nCount = 0;
-                qint64 nFileSize = getSize();
+//         if (nStartOffset != -1) {
+//             if (dataHeadersOptions.nID == STRUCTID_RECORD) {
+//                 qint64 nCurrentOffset = nStartOffset;
+//                 qint32 nCount = 0;
+//                 qint64 nFileSize = getSize();
 
-                while ((nCount < dataHeadersOptions.nCount) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                    if ((nFileSize - nCurrentOffset) < 5) {
-                        break;
-                    }
+//                 while ((nCount < dataHeadersOptions.nCount) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+//                     if ((nFileSize - nCurrentOffset) < 5) {
+//                         break;
+//                     }
 
-                    quint8 nHeadType = read_uint8(nCurrentOffset + 4);
-                    quint16 nHeadSize = read_uint16(nCurrentOffset + 2, false);
+//                     quint8 nHeadType = read_uint8(nCurrentOffset + 4);
+//                     quint16 nHeadSize = read_uint16(nCurrentOffset + 2, false);
 
-                    if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
-                        break;
-                    }
+//                     if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
+//                         break;
+//                     }
 
-                    qint64 nBlockHdrSize = _getBlockHeaderSize(nCurrentOffset);
+//                     qint64 nBlockHdrSize = _getBlockHeaderSize(nCurrentOffset);
 
-                    if (nBlockHdrSize <= 0) {
-                        break;
-                    }
+//                     if (nBlockHdrSize <= 0) {
+//                         break;
+//                     }
 
-                    if (nHeadType != HEADTYPE_FILE) {
-                        quint16 nHeadFlags = read_uint16(nCurrentOffset + 5, false);
-                        quint32 nAddSize = 0;
+//                     if (nHeadType != HEADTYPE_FILE) {
+//                         quint16 nHeadFlags = read_uint16(nCurrentOffset + 5, false);
+//                         quint32 nAddSize = 0;
 
-                        if (nHeadFlags & FILEFLAG_ADDSIZE) {
-                            nAddSize = read_uint32(nCurrentOffset + 7, false);
-                        }
+//                         if (nHeadFlags & FILEFLAG_ADDSIZE) {
+//                             nAddSize = read_uint32(nCurrentOffset + 7, false);
+//                         }
 
-                        nCurrentOffset += nBlockHdrSize + nAddSize;
-                        continue;
-                    }
+//                         nCurrentOffset += nBlockHdrSize + nAddSize;
+//                         continue;
+//                     }
 
-                    quint32 nCompSize = _getCompressedSize(nCurrentOffset);
+//                     quint32 nCompSize = _getCompressedSize(nCurrentOffset);
 
-                    DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
-                    dataHeader.nSize = nBlockHdrSize + nCompSize;
+//                     DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
+//                     dataHeader.nSize = nBlockHdrSize + nCompSize;
 
-                    dataHeader.listRecords.append(getDataRecord(0, 2, "Head CRC", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(2, 2, "Head Size", VT_UINT16, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(4, 1, "Head Type", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(5, 2, "Head Flags", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(7, 4, "Compressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(11, 4, "Uncompressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(15, 4, "Date/Time", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(19, 4, "Attributes", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(23, 4, "CRC32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(27, 2, "Tech Info", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(29, 2, "Required Version", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(31, 2, "Reserved", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(33, 2, "Filename Size", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(0, 2, "Head CRC", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(2, 2, "Head Size", VT_UINT16, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(4, 1, "Head Type", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(5, 2, "Head Flags", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(7, 4, "Compressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(11, 4, "Uncompressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(15, 4, "Date/Time", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(19, 4, "Attributes", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(23, 4, "CRC32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(27, 2, "Tech Info", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(29, 2, "Required Version", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(31, 2, "Reserved", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(33, 2, "Filename Size", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                    quint16 nFnameSize = read_uint16(nCurrentOffset + 33, false);
+//                     quint16 nFnameSize = read_uint16(nCurrentOffset + 33, false);
 
-                    if (nFnameSize > 0) {
-                        dataHeader.listRecords.append(getDataRecord(35, nFnameSize, "Filename", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    }
+//                     if (nFnameSize > 0) {
+//                         dataHeader.listRecords.append(getDataRecord(35, nFnameSize, "Filename", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     }
 
-                    if (nCompSize > 0) {
-                        dataHeader.listRecords.append(
-                            getDataRecord(nBlockHdrSize, nCompSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    }
+//                     if (nCompSize > 0) {
+//                         dataHeader.listRecords.append(
+//                             getDataRecord(nBlockHdrSize, nCompSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     }
 
-                    listResult.append(dataHeader);
+//                     listResult.append(dataHeader);
 
-                    nCurrentOffset += nBlockHdrSize + nCompSize;
-                    nCount++;
-                }
-            }
-        }
-    }
+//                     nCurrentOffset += nBlockHdrSize + nCompSize;
+//                     nCount++;
+//                 }
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {

@@ -104,127 +104,127 @@ quint32 X_Ar::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XAr_STRUCTID, sizeof(_TABLE_XAr_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-bool X_Ar::readTableInit(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void **ppUserData, PDSTRUCT *pPdStruct)
-{
-    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
-        qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, dataRecordsOptions.dataHeaderFirst.locType, dataRecordsOptions.dataHeaderFirst.nLocation);
+// bool X_Ar::readTableInit(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void **ppUserData, PDSTRUCT *pPdStruct)
+// {
+//     if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
+//         qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, dataRecordsOptions.dataHeaderFirst.locType, dataRecordsOptions.dataHeaderFirst.nLocation);
 
-        if (nStartOffset != -1) {
-            TABLE_LIST *pTableList = new TABLE_LIST;
-            qint64 nOffset = nStartOffset;
-            qint64 nTotalSize = getSize();
+//         if (nStartOffset != -1) {
+//             TABLE_LIST *pTableList = new TABLE_LIST;
+//             qint64 nOffset = nStartOffset;
+//             qint64 nTotalSize = getSize();
 
-            while ((nOffset + (qint64)sizeof(FRECORD) <= nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                FRECORD frecord = readFRECORD(nOffset);
+//             while ((nOffset + (qint64)sizeof(FRECORD) <= nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+//                 FRECORD frecord = readFRECORD(nOffset);
 
-                // Validate member terminator
-                if (!((frecord.endChar[0] == 0x60) && (frecord.endChar[1] == 0x0a))) {
-                    break;
-                }
+//                 // Validate member terminator
+//                 if (!((frecord.endChar[0] == 0x60) && (frecord.endChar[1] == 0x0a))) {
+//                     break;
+//                 }
 
-                QString sSize = QString(frecord.fileSize);
-                sSize.resize(sizeof(frecord.fileSize));
-                qint64 nRecordSize = sSize.trimmed().toLongLong();
-                if (nRecordSize < 0) {
-                    break;
-                }
+//                 QString sSize = QString(frecord.fileSize);
+//                 sSize.resize(sizeof(frecord.fileSize));
+//                 qint64 nRecordSize = sSize.trimmed().toLongLong();
+//                 if (nRecordSize < 0) {
+//                     break;
+//                 }
 
-                QString sName = QString(frecord.fileId);
-                sName.resize(sizeof(frecord.fileId));
-                sName = sName.trimmed();
+//                 QString sName = QString(frecord.fileId);
+//                 sName.resize(sizeof(frecord.fileId));
+//                 sName = sName.trimmed();
 
-                qint64 nDataSize = nRecordSize;
+//                 qint64 nDataSize = nRecordSize;
 
-                // BSD style filename stored in data area immediately after header
-                if (sName.section('/', 0, 0) == "#1") {
-                    qint32 nFileNameLength = sName.section('/', 1, 1).toInt();
-                    if (nFileNameLength > 0) {
-                        if (nRecordSize >= nFileNameLength) {
-                            nDataSize = nRecordSize - (qint64)nFileNameLength;
-                        } else {
-                            // Malformed entry; avoid underflow
-                            nDataSize = 0;
-                        }
-                    }
-                }
+//                 // BSD style filename stored in data area immediately after header
+//                 if (sName.section('/', 0, 0) == "#1") {
+//                     qint32 nFileNameLength = sName.section('/', 1, 1).toInt();
+//                     if (nFileNameLength > 0) {
+//                         if (nRecordSize >= nFileNameLength) {
+//                             nDataSize = nRecordSize - (qint64)nFileNameLength;
+//                         } else {
+//                             // Malformed entry; avoid underflow
+//                             nDataSize = 0;
+//                         }
+//                     }
+//                 }
 
-                if (nDataSize < 0) {
-                    nDataSize = 0;
-                }
+//                 if (nDataSize < 0) {
+//                     nDataSize = 0;
+//                 }
 
-                XBinary::OFFSETSIZE os = {};
-                os.nOffset = nOffset;
-                os.nSize = nDataSize;
-                pTableList->listOffsetsSizes.append(os);
+//                 XBinary::OFFSETSIZE os = {};
+//                 os.nOffset = nOffset;
+//                 os.nSize = nDataSize;
+//                 pTableList->listOffsetsSizes.append(os);
 
-                qint64 nStep = (qint64)sizeof(FRECORD) + (qint64)S_ALIGN_UP(nRecordSize, 2);
-                nOffset += nStep;
-            }
+//                 qint64 nStep = (qint64)sizeof(FRECORD) + (qint64)S_ALIGN_UP(nRecordSize, 2);
+//                 nOffset += nStep;
+//             }
 
-            *ppUserData = (void *)pTableList;
-        }
-    }
+//             *ppUserData = (void *)pTableList;
+//         }
+//     }
 
-    return true;
-}
+//     return true;
+// }
 
-QList<XBinary::DATA_HEADER> X_Ar::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<XBinary::DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> X_Ar::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<XBinary::DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
-        _dataHeadersOptions.nID = STRUCTID_SIGNATURE;
-        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-    } else {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//         _dataHeadersOptions.nID = STRUCTID_SIGNATURE;
+//         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//     } else {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            if (dataHeadersOptions.nID == STRUCTID_SIGNATURE) {
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
-                dataHeader.listRecords.append(getDataRecord(0, 8, "Magic", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.nSize = 8;
-                listResult.append(dataHeader);
+//         if (nStartOffset != -1) {
+//             if (dataHeadersOptions.nID == STRUCTID_SIGNATURE) {
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
+//                 dataHeader.listRecords.append(getDataRecord(0, 8, "Magic", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.nSize = 8;
+//                 listResult.append(dataHeader);
 
-                DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-                _dataHeadersOptions.nLocation += 8;
-                _dataHeadersOptions.dsID_parent = dataHeader.dsID;
-                _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-                _dataHeadersOptions.nID = STRUCTID_FRECORD;
-                _dataHeadersOptions.nCount = _getNumberOfStreams(8, pPdStruct);
-                listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-            } else if (dataHeadersOptions.nID == STRUCTID_FRECORD) {
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
+//                 DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//                 _dataHeadersOptions.nLocation += 8;
+//                 _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+//                 _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//                 _dataHeadersOptions.nID = STRUCTID_FRECORD;
+//                 _dataHeadersOptions.nCount = _getNumberOfStreams(8, pPdStruct);
+//                 listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//             } else if (dataHeadersOptions.nID == STRUCTID_FRECORD) {
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
 
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileId), sizeof(((FRECORD *)0)->fileId), "FileId", VT_CHAR_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMod), sizeof(((FRECORD *)0)->fileMod), "FileMod", VT_CHAR_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, ownerId), sizeof(((FRECORD *)0)->ownerId), "OwnerId", VT_CHAR_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, groupId), sizeof(((FRECORD *)0)->groupId), "GroupId", VT_CHAR_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMode), sizeof(((FRECORD *)0)->fileMode), "FileMode", VT_CHAR_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileSize), sizeof(((FRECORD *)0)->fileSize), "FileSize", VT_CHAR_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, endChar), sizeof(((FRECORD *)0)->endChar), "EndChar", VT_BYTE_ARRAY, DRF_UNKNOWN,
-                                                            dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.nSize = sizeof(FRECORD);
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileId), sizeof(((FRECORD *)0)->fileId), "FileId", VT_CHAR_ARRAY, DRF_UNKNOWN,
+//                                                             dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMod), sizeof(((FRECORD *)0)->fileMod), "FileMod", VT_CHAR_ARRAY, DRF_UNKNOWN,
+//                                                             dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, ownerId), sizeof(((FRECORD *)0)->ownerId), "OwnerId", VT_CHAR_ARRAY, DRF_UNKNOWN,
+//                                                             dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, groupId), sizeof(((FRECORD *)0)->groupId), "GroupId", VT_CHAR_ARRAY, DRF_UNKNOWN,
+//                                                             dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileMode), sizeof(((FRECORD *)0)->fileMode), "FileMode", VT_CHAR_ARRAY, DRF_UNKNOWN,
+//                                                             dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, fileSize), sizeof(((FRECORD *)0)->fileSize), "FileSize", VT_CHAR_ARRAY, DRF_UNKNOWN,
+//                                                             dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(FRECORD, endChar), sizeof(((FRECORD *)0)->endChar), "EndChar", VT_BYTE_ARRAY, DRF_UNKNOWN,
+//                                                             dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.nSize = sizeof(FRECORD);
 
-                listResult.append(dataHeader);
-            }
-        }
-    }
+//                 listResult.append(dataHeader);
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::XFHEADER> X_Ar::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
 {
@@ -285,40 +285,40 @@ QList<XBinary::XFRECORD> X_Ar::getXFRecords(FT fileType, quint32 nStructID, cons
     return listResult;
 }
 
-qint32 X_Ar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
-                          void *pUserData, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(pUserData)
-    qint32 nResult = 0;
+// qint32 X_Ar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+//                           void *pUserData, PDSTRUCT *pPdStruct)
+// {
+//     Q_UNUSED(pUserData)
+//     qint32 nResult = 0;
 
-    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
-        TABLE_LIST *pTableList = (TABLE_LIST *)pUserData;
+//     if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
+//         TABLE_LIST *pTableList = (TABLE_LIST *)pUserData;
 
-        if (pTableList) {
-            if (nRow < pTableList->listOffsetsSizes.count()) {
-                OFFSETSIZE os = pTableList->listOffsetsSizes.at(nRow);
+//         if (pTableList) {
+//             if (nRow < pTableList->listOffsetsSizes.count()) {
+//                 OFFSETSIZE os = pTableList->listOffsetsSizes.at(nRow);
 
-                XBinary::readTableRow(nRow, LT_OFFSET, os.nOffset, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
-                nResult = os.nSize;
-            }
-        }
-    } else {
-        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
-    }
+//                 XBinary::readTableRow(nRow, LT_OFFSET, os.nOffset, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+//                 nResult = os.nSize;
+//             }
+//         }
+//     } else {
+//         nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+//     }
 
-    return nResult;
-}
+//     return nResult;
+// }
 
-void X_Ar::readTableFinalize(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void *pUserData, PDSTRUCT *pPdStruct)
-{
-    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
-        TABLE_LIST *pTableList = (TABLE_LIST *)pUserData;
+// void X_Ar::readTableFinalize(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void *pUserData, PDSTRUCT *pPdStruct)
+// {
+//     if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
+//         TABLE_LIST *pTableList = (TABLE_LIST *)pUserData;
 
-        if (pTableList) {
-            delete pTableList;
-        }
-    }
-}
+//         if (pTableList) {
+//             delete pTableList;
+//         }
+//     }
+// }
 
 quint64 X_Ar::_getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct)
 {

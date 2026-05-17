@@ -306,117 +306,117 @@ quint32 XLHA::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XLHA_STRUCTID, sizeof(_TABLE_XLHA_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
-        // Count records for table
-        qint64 nRealSize = 0;
-        qint32 nCount = 0;
+//         // Count records for table
+//         qint64 nRealSize = 0;
+//         qint32 nCount = 0;
 
-        qint64 nFileSize = getSize();
-        qint64 nOffset = 0;
+//         qint64 nFileSize = getSize();
+//         qint64 nOffset = 0;
 
-        while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            if (compareSignature(dataHeadersOptions.pMemoryMap, "....'-lh'..2d", nOffset) || compareSignature(dataHeadersOptions.pMemoryMap, "....'-lz'..2d", nOffset) ||
-                compareSignature(dataHeadersOptions.pMemoryMap, "....'-pm'..2d", nOffset)) {
-                quint8 nLevel = read_uint8(nOffset + 20);
-                qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nOffset) : (qint64)(read_uint8(nOffset) + 2);
-                qint64 nDataSize = read_uint32(nOffset + 7);
+//         while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+//             if (compareSignature(dataHeadersOptions.pMemoryMap, "....'-lh'..2d", nOffset) || compareSignature(dataHeadersOptions.pMemoryMap, "....'-lz'..2d", nOffset) ||
+//                 compareSignature(dataHeadersOptions.pMemoryMap, "....'-pm'..2d", nOffset)) {
+//                 quint8 nLevel = read_uint8(nOffset + 20);
+//                 qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nOffset) : (qint64)(read_uint8(nOffset) + 2);
+//                 qint64 nDataSize = read_uint32(nOffset + 7);
 
-                if (nHeaderSize < 21) {
-                    break;
-                }
+//                 if (nHeaderSize < 21) {
+//                     break;
+//                 }
 
-                nCount++;
-                nRealSize = nOffset + nHeaderSize + nDataSize;
+//                 nCount++;
+//                 nRealSize = nOffset + nHeaderSize + nDataSize;
 
-                nOffset += (nHeaderSize + nDataSize);
-                nFileSize -= (nHeaderSize + nDataSize);
-            } else {
-                break;
-            }
-        }
+//                 nOffset += (nHeaderSize + nDataSize);
+//                 nFileSize -= (nHeaderSize + nDataSize);
+//             } else {
+//                 break;
+//             }
+//         }
 
-        _dataHeadersOptions.nID = STRUCTID_RECORD;
-        _dataHeadersOptions.nLocation = 0;
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
-        _dataHeadersOptions.nCount = nCount;
-        _dataHeadersOptions.nSize = nRealSize;
+//         _dataHeadersOptions.nID = STRUCTID_RECORD;
+//         _dataHeadersOptions.nLocation = 0;
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//         _dataHeadersOptions.nCount = nCount;
+//         _dataHeadersOptions.nSize = nRealSize;
 
-        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-    } else {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//     } else {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            if (dataHeadersOptions.nID == STRUCTID_RECORD) {
-                // Table of records
-                qint64 nCurrentOffset = nStartOffset;
-                qint32 nCount = 0;
+//         if (nStartOffset != -1) {
+//             if (dataHeadersOptions.nID == STRUCTID_RECORD) {
+//                 // Table of records
+//                 qint64 nCurrentOffset = nStartOffset;
+//                 qint32 nCount = 0;
 
-                while ((nCount < dataHeadersOptions.nCount) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                    if (compareSignature(dataHeadersOptions.pMemoryMap, "....'-lh'..2d", nCurrentOffset) ||
-                        compareSignature(dataHeadersOptions.pMemoryMap, "....'-lz'..2d", nCurrentOffset) ||
-                        compareSignature(dataHeadersOptions.pMemoryMap, "....'-pm'..2d", nCurrentOffset)) {
-                        quint8 nLevel = read_uint8(nCurrentOffset + 20);
-                        qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nCurrentOffset) : (qint64)(read_uint8(nCurrentOffset) + 2);
-                        qint64 nSkipSize = (qint64)(quint32)read_uint32(nCurrentOffset + 7);
-                        qint64 nExtSize = (nLevel == 1) ? _getLevel1ExtHeadersSize(nCurrentOffset, nHeaderSize) : 0;
-                        qint64 nDataSize = nSkipSize - nExtSize;
-                        QString sFileName = read_ansiString(nCurrentOffset + 22, read_uint8(nCurrentOffset + 21));
+//                 while ((nCount < dataHeadersOptions.nCount) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+//                     if (compareSignature(dataHeadersOptions.pMemoryMap, "....'-lh'..2d", nCurrentOffset) ||
+//                         compareSignature(dataHeadersOptions.pMemoryMap, "....'-lz'..2d", nCurrentOffset) ||
+//                         compareSignature(dataHeadersOptions.pMemoryMap, "....'-pm'..2d", nCurrentOffset)) {
+//                         quint8 nLevel = read_uint8(nCurrentOffset + 20);
+//                         qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nCurrentOffset) : (qint64)(read_uint8(nCurrentOffset) + 2);
+//                         qint64 nSkipSize = (qint64)(quint32)read_uint32(nCurrentOffset + 7);
+//                         qint64 nExtSize = (nLevel == 1) ? _getLevel1ExtHeadersSize(nCurrentOffset, nHeaderSize) : 0;
+//                         qint64 nDataSize = nSkipSize - nExtSize;
+//                         QString sFileName = read_ansiString(nCurrentOffset + 22, read_uint8(nCurrentOffset + 21));
 
-                        DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
-                        dataHeader.nSize = nHeaderSize + nSkipSize;
+//                         DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
+//                         dataHeader.nSize = nHeaderSize + nSkipSize;
 
-                        // Record header fields
-                        dataHeader.listRecords.append(getDataRecord(0, 1, "Header Size", VT_UINT8, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(getDataRecord(1, 1, "Header CRC", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(getDataRecord(2, 5, "Compression Method", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(getDataRecord(7, 4, "Compressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(getDataRecord(11, 4, "Uncompressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(getDataRecord(15, 2, "Last Mod Time", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(getDataRecord(17, 2, "Last Mod Date", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(getDataRecord(19, 1, "File Attribute", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(getDataRecord(20, 1, "Name Length", VT_UINT8, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
-                        dataHeader.listRecords.append(
-                            getDataRecord(21, read_uint8(nCurrentOffset + 21), "File Name", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         // Record header fields
+//                         dataHeader.listRecords.append(getDataRecord(0, 1, "Header Size", VT_UINT8, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(getDataRecord(1, 1, "Header CRC", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(getDataRecord(2, 5, "Compression Method", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(getDataRecord(7, 4, "Compressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(getDataRecord(11, 4, "Uncompressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(getDataRecord(15, 2, "Last Mod Time", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(getDataRecord(17, 2, "Last Mod Date", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(getDataRecord(19, 1, "File Attribute", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(getDataRecord(20, 1, "Name Length", VT_UINT8, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
+//                         dataHeader.listRecords.append(
+//                             getDataRecord(21, read_uint8(nCurrentOffset + 21), "File Name", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                        if (nHeaderSize > 22 + read_uint8(nCurrentOffset + 21)) {
-                            dataHeader.listRecords.append(getDataRecord(22 + read_uint8(nCurrentOffset + 21), nHeaderSize - (22 + read_uint8(nCurrentOffset + 21)),
-                                                                        "Extended Header", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                        }
+//                         if (nHeaderSize > 22 + read_uint8(nCurrentOffset + 21)) {
+//                             dataHeader.listRecords.append(getDataRecord(22 + read_uint8(nCurrentOffset + 21), nHeaderSize - (22 + read_uint8(nCurrentOffset + 21)),
+//                                                                         "Extended Header", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         }
 
-                        if (nExtSize > 0) {
-                            dataHeader.listRecords.append(
-                                getDataRecord(nHeaderSize, nExtSize, "Extended Headers", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                        }
+//                         if (nExtSize > 0) {
+//                             dataHeader.listRecords.append(
+//                                 getDataRecord(nHeaderSize, nExtSize, "Extended Headers", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         }
 
-                        if (nDataSize > 0) {
-                            dataHeader.listRecords.append(
-                                getDataRecord(nHeaderSize + nExtSize, nDataSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                        }
+//                         if (nDataSize > 0) {
+//                             dataHeader.listRecords.append(
+//                                 getDataRecord(nHeaderSize + nExtSize, nDataSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                         }
 
-                        listResult.append(dataHeader);
+//                         listResult.append(dataHeader);
 
-                        nCurrentOffset += (nHeaderSize + nSkipSize);
-                        nCount++;
-                    } else {
-                        break;
-                    }
-                }
-            }
-        }
-    }
+//                         nCurrentOffset += (nHeaderSize + nSkipSize);
+//                         nCount++;
+//                     } else {
+//                         break;
+//                     }
+//                 }
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {

@@ -698,32 +698,32 @@ quint32 XZip::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XZip_STRUCTID, sizeof(_TABLE_XZip_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
-                          void *pUserData, PDSTRUCT *pPdStruct)
-{
-    qint32 nResult = 0;
+// qint32 XZip::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+//                           void *pUserData, PDSTRUCT *pPdStruct)
+// {
+//     qint32 nResult = 0;
 
-    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_LOCALFILEHEADER) {
-        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+//     if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_LOCALFILEHEADER) {
+//         nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
 
-        qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, locType, nLocation);
-#ifdef QT_DEBUG
-        qDebug("XZip::readTableRow nStartOffset=%llX", nStartOffset);
-#endif
-        quint32 nLocalSignature = read_uint32(nStartOffset + offsetof(LOCALFILEHEADER, nSignature));
-        quint32 nLocalFileNameSize = read_uint16(nStartOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
-        quint32 nLocalExtraFieldSize = read_uint16(nStartOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
-        quint32 nCompressedSize = read_uint32(nStartOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
+//         qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, locType, nLocation);
+// #ifdef QT_DEBUG
+//         qDebug("XZip::readTableRow nStartOffset=%llX", nStartOffset);
+// #endif
+//         quint32 nLocalSignature = read_uint32(nStartOffset + offsetof(LOCALFILEHEADER, nSignature));
+//         quint32 nLocalFileNameSize = read_uint16(nStartOffset + offsetof(LOCALFILEHEADER, nFileNameLength));
+//         quint32 nLocalExtraFieldSize = read_uint16(nStartOffset + offsetof(LOCALFILEHEADER, nExtraFieldLength));
+//         quint32 nCompressedSize = read_uint32(nStartOffset + offsetof(LOCALFILEHEADER, nCompressedSize));
 
-        if (nLocalSignature == SIGNATURE_LFD) {
-            nResult = sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
-        }
-    } else {
-        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
-    }
+//         if (nLocalSignature == SIGNATURE_LFD) {
+//             nResult = sizeof(LOCALFILEHEADER) + nLocalFileNameSize + nLocalExtraFieldSize + nCompressedSize;
+//         }
+//     } else {
+//         nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+//     }
 
-    return nResult;
-}
+//     return nResult;
+// }
 
 QMap<quint64, QString> XZip::getHeaderSignatures()
 {
@@ -765,190 +765,190 @@ QList<XBinary::MAPMODE> XZip::getMapModesList()
     return listResult;
 }
 
-QList<XBinary::DATA_HEADER> XZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<XBinary::DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<XBinary::DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
 
-        qint64 nECDOffset = findECDOffset(pPdStruct);
+//         qint64 nECDOffset = findECDOffset(pPdStruct);
 
-        if (nECDOffset != -1) {
-            _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-            _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
-            _dataHeadersOptions.nID = STRUCTID_ENDOFCENTRALDIRECTORYRECORD;
-            _dataHeadersOptions.locType = LT_OFFSET;
-            _dataHeadersOptions.nLocation = nECDOffset;
+//         if (nECDOffset != -1) {
+//             _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+//             _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//             _dataHeadersOptions.nID = STRUCTID_ENDOFCENTRALDIRECTORYRECORD;
+//             _dataHeadersOptions.locType = LT_OFFSET;
+//             _dataHeadersOptions.nLocation = nECDOffset;
 
-            listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-        } else {
-            qint64 nRealSize = 0;
-            qint32 nCount = _getNumberOfLocalFileHeaders(0, getSize(), &nRealSize, pPdStruct);
+//             listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//         } else {
+//             qint64 nRealSize = 0;
+//             qint32 nCount = _getNumberOfLocalFileHeaders(0, getSize(), &nRealSize, pPdStruct);
 
-            _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-            _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
-            _dataHeadersOptions.nID = STRUCTID_LOCALFILEHEADER;
-            _dataHeadersOptions.locType = LT_OFFSET;
-            _dataHeadersOptions.nLocation = 0;
-            _dataHeadersOptions.nCount = nCount;
-            _dataHeadersOptions.nSize = nRealSize;
+//             _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//             _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//             _dataHeadersOptions.nID = STRUCTID_LOCALFILEHEADER;
+//             _dataHeadersOptions.locType = LT_OFFSET;
+//             _dataHeadersOptions.nLocation = 0;
+//             _dataHeadersOptions.nCount = nCount;
+//             _dataHeadersOptions.nSize = nRealSize;
 
-            listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-        }
-    } else {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//             listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//         }
+//     } else {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            if (dataHeadersOptions.nID == STRUCTID_ENDOFCENTRALDIRECTORYRECORD) {
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
+//         if (nStartOffset != -1) {
+//             if (dataHeadersOptions.nID == STRUCTID_ENDOFCENTRALDIRECTORYRECORD) {
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
 
-                qint16 nCommentLength = read_uint16(nStartOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
+//                 qint16 nCommentLength = read_uint16(nStartOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength));
 
-                dataHeader.nSize = sizeof(ENDOFCENTRALDIRECTORYRECORD) + nCommentLength;
+//                 dataHeader.nSize = sizeof(ENDOFCENTRALDIRECTORYRECORD) + nCommentLength;
 
-                dataHeader.listRecords.append(getDataRecordDV(offsetof(ENDOFCENTRALDIRECTORYRECORD, nSignature), sizeof(quint32), "Signature", XBinary::VT_UINT32, 0,
-                                                              XBinary::ENDIAN_LITTLE, XZip::getHeaderSignaturesS(), VL_TYPE_LIST));
-                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumber), sizeof(quint16), "DiskNumber", XBinary::VT_UINT16,
-                                                            DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nStartDisk), sizeof(quint16), "StartDisk", XBinary::VT_UINT16,
-                                                            DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumberOfRecords), sizeof(quint16), "DiskNumberOfRecords",
-                                                            XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords), sizeof(quint16), "TotalNumberOfRecords",
-                                                            XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nSizeOfCentralDirectory), sizeof(quint32), "SizeOfCentralDirectory",
-                                                            XBinary::VT_UINT32, DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory), sizeof(quint32), "OffsetToCentralDirectory",
-                                                            XBinary::VT_UINT32, DRF_OFFSET, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength), sizeof(quint16), "CommentLength", XBinary::VT_UINT16,
-                                                            DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(sizeof(ENDOFCENTRALDIRECTORYRECORD), nCommentLength, "Comment", XBinary::VT_CHAR_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecordDV(offsetof(ENDOFCENTRALDIRECTORYRECORD, nSignature), sizeof(quint32), "Signature", XBinary::VT_UINT32, 0,
+//                                                               XBinary::ENDIAN_LITTLE, XZip::getHeaderSignaturesS(), VL_TYPE_LIST));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumber), sizeof(quint16), "DiskNumber", XBinary::VT_UINT16,
+//                                                             DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nStartDisk), sizeof(quint16), "StartDisk", XBinary::VT_UINT16,
+//                                                             DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nDiskNumberOfRecords), sizeof(quint16), "DiskNumberOfRecords",
+//                                                             XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords), sizeof(quint16), "TotalNumberOfRecords",
+//                                                             XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nSizeOfCentralDirectory), sizeof(quint32), "SizeOfCentralDirectory",
+//                                                             XBinary::VT_UINT32, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory), sizeof(quint32), "OffsetToCentralDirectory",
+//                                                             XBinary::VT_UINT32, DRF_OFFSET, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(ENDOFCENTRALDIRECTORYRECORD, nCommentLength), sizeof(quint16), "CommentLength", XBinary::VT_UINT16,
+//                                                             DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(sizeof(ENDOFCENTRALDIRECTORYRECORD), nCommentLength, "Comment", XBinary::VT_CHAR_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
 
-                listResult.append(dataHeader);
+//                 listResult.append(dataHeader);
 
-                if (dataHeadersOptions.bChildren) {
-                    quint16 nTotalNumberOfRecords = read_uint16(nStartOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
-                    quint32 nSizeOfCentralDirectory = read_uint32(nStartOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nSizeOfCentralDirectory));
-                    quint32 nOffsetToCentralDirectory = read_uint32(nStartOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
+//                 if (dataHeadersOptions.bChildren) {
+//                     quint16 nTotalNumberOfRecords = read_uint16(nStartOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
+//                     quint32 nSizeOfCentralDirectory = read_uint32(nStartOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nSizeOfCentralDirectory));
+//                     quint32 nOffsetToCentralDirectory = read_uint32(nStartOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
 
-                    {
-                        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-                        _dataHeadersOptions.nLocation = nOffsetToCentralDirectory;
-                        _dataHeadersOptions.dsID_parent = dataHeader.dsID;
-                        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-                        _dataHeadersOptions.nCount = nTotalNumberOfRecords;
-                        _dataHeadersOptions.nSize = nSizeOfCentralDirectory;
-                        _dataHeadersOptions.nID = STRUCTID_CENTRALDIRECTORYFILEHEADER;
-                        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-                    }
-                    {
-                        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-                        _dataHeadersOptions.nLocation = 0;
-                        _dataHeadersOptions.dsID_parent = dataHeader.dsID;
-                        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-                        _dataHeadersOptions.nCount = nTotalNumberOfRecords;
-                        _dataHeadersOptions.nSize = nOffsetToCentralDirectory;
-                        _dataHeadersOptions.nID = STRUCTID_LOCALFILEHEADER;
-                        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-                    }
-                }
-            } else if (dataHeadersOptions.nID == STRUCTID_CENTRALDIRECTORYFILEHEADER) {
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
+//                     {
+//                         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//                         _dataHeadersOptions.nLocation = nOffsetToCentralDirectory;
+//                         _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+//                         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//                         _dataHeadersOptions.nCount = nTotalNumberOfRecords;
+//                         _dataHeadersOptions.nSize = nSizeOfCentralDirectory;
+//                         _dataHeadersOptions.nID = STRUCTID_CENTRALDIRECTORYFILEHEADER;
+//                         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//                     }
+//                     {
+//                         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//                         _dataHeadersOptions.nLocation = 0;
+//                         _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+//                         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//                         _dataHeadersOptions.nCount = nTotalNumberOfRecords;
+//                         _dataHeadersOptions.nSize = nOffsetToCentralDirectory;
+//                         _dataHeadersOptions.nID = STRUCTID_LOCALFILEHEADER;
+//                         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//                     }
+//                 }
+//             } else if (dataHeadersOptions.nID == STRUCTID_CENTRALDIRECTORYFILEHEADER) {
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
 
-                CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nStartOffset, pPdStruct);
+//                 CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nStartOffset, pPdStruct);
 
-                dataHeader.nSize = sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength;
+//                 dataHeader.nSize = sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength;
 
-                dataHeader.listRecords.append(getDataRecordDV(offsetof(CENTRALDIRECTORYFILEHEADER, nSignature), sizeof(quint32), "Signature", XBinary::VT_UINT32, 0,
-                                                              XBinary::ENDIAN_LITTLE, XZip::getHeaderSignaturesS(), VL_TYPE_LIST));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nVersion), sizeof(quint8), "Version", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nOS), sizeof(quint8), "OS", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nMinVersion), sizeof(quint8), "MinVersion", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nMinOS), sizeof(quint8), "MinOS", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nFlags), sizeof(quint16), "Flags", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nMethod), sizeof(quint16), "Method", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nLastModTime), sizeof(quint16), "LastModTime", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nLastModDate), sizeof(quint16), "LastModDate", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nCRC32), sizeof(quint32), "CRC32", XBinary::VT_UINT32, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nCompressedSize), sizeof(quint32), "CompressedSize", XBinary::VT_UINT32,
-                                                            DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize), sizeof(quint32), "UncompressedSize",
-                                                            XBinary::VT_UINT32, DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength), sizeof(quint16), "FileNameLength", XBinary::VT_UINT16,
-                                                            DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength), sizeof(quint16), "ExtraFieldLength",
-                                                            XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength), sizeof(quint16), "FileCommentLength",
-                                                            XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nStartDisk), sizeof(quint16), "StartDisk", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nInternalFileAttributes), sizeof(quint16), "InternalFileAttributes",
-                                                            XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nExternalFileAttributes), sizeof(quint32), "ExternalFileAttributes",
-                                                            XBinary::VT_UINT32, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader), sizeof(quint32), "OffsetToLocalFileHeader",
-                                                            XBinary::VT_UINT32, DRF_OFFSET, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength, "FileName", XBinary::VT_CHAR_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength, cdh.nExtraFieldLength, "ExtraField",
-                                                            XBinary::VT_BYTE_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength, cdh.nFileCommentLength,
-                                                            "FileComment", XBinary::VT_CHAR_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecordDV(offsetof(CENTRALDIRECTORYFILEHEADER, nSignature), sizeof(quint32), "Signature", XBinary::VT_UINT32, 0,
+//                                                               XBinary::ENDIAN_LITTLE, XZip::getHeaderSignaturesS(), VL_TYPE_LIST));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nVersion), sizeof(quint8), "Version", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nOS), sizeof(quint8), "OS", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nMinVersion), sizeof(quint8), "MinVersion", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nMinOS), sizeof(quint8), "MinOS", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nFlags), sizeof(quint16), "Flags", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nMethod), sizeof(quint16), "Method", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nLastModTime), sizeof(quint16), "LastModTime", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nLastModDate), sizeof(quint16), "LastModDate", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nCRC32), sizeof(quint32), "CRC32", XBinary::VT_UINT32, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nCompressedSize), sizeof(quint32), "CompressedSize", XBinary::VT_UINT32,
+//                                                             DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize), sizeof(quint32), "UncompressedSize",
+//                                                             XBinary::VT_UINT32, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength), sizeof(quint16), "FileNameLength", XBinary::VT_UINT16,
+//                                                             DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nExtraFieldLength), sizeof(quint16), "ExtraFieldLength",
+//                                                             XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nFileCommentLength), sizeof(quint16), "FileCommentLength",
+//                                                             XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nStartDisk), sizeof(quint16), "StartDisk", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nInternalFileAttributes), sizeof(quint16), "InternalFileAttributes",
+//                                                             XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nExternalFileAttributes), sizeof(quint32), "ExternalFileAttributes",
+//                                                             XBinary::VT_UINT32, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(CENTRALDIRECTORYFILEHEADER, nOffsetToLocalFileHeader), sizeof(quint32), "OffsetToLocalFileHeader",
+//                                                             XBinary::VT_UINT32, DRF_OFFSET, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(sizeof(CENTRALDIRECTORYFILEHEADER), cdh.nFileNameLength, "FileName", XBinary::VT_CHAR_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength, cdh.nExtraFieldLength, "ExtraField",
+//                                                             XBinary::VT_BYTE_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength, cdh.nFileCommentLength,
+//                                                             "FileComment", XBinary::VT_CHAR_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
 
-                listResult.append(dataHeader);
-            } else if (dataHeadersOptions.nID == STRUCTID_LOCALFILEHEADER) {
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
+//                 listResult.append(dataHeader);
+//             } else if (dataHeadersOptions.nID == STRUCTID_LOCALFILEHEADER) {
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(dataHeadersOptions.nID));
 
-                LOCALFILEHEADER lfh = read_LOCALFILEHEADER(nStartOffset, pPdStruct);
+//                 LOCALFILEHEADER lfh = read_LOCALFILEHEADER(nStartOffset, pPdStruct);
 
-                dataHeader.nSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
+//                 dataHeader.nSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
 
-                dataHeader.listRecords.append(getDataRecordDV(offsetof(LOCALFILEHEADER, nSignature), sizeof(quint32), "Signature", XBinary::VT_UINT32, 0,
-                                                              XBinary::ENDIAN_LITTLE, XZip::getHeaderSignaturesS(), VL_TYPE_LIST));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nMinVersion), sizeof(quint8), "MinVersion", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nMinOS), sizeof(quint8), "MinOS", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nFlags), sizeof(quint16), "Flags", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nMethod), sizeof(quint16), "Method", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nLastModTime), sizeof(quint16), "LastModTime", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nLastModDate), sizeof(quint16), "LastModDate", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nCRC32), sizeof(quint32), "CRC32", XBinary::VT_UINT32, 0, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nCompressedSize), sizeof(quint32), "CompressedSize", XBinary::VT_UINT32, DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nUncompressedSize), sizeof(quint32), "UncompressedSize", XBinary::VT_UINT32,
-                                                            DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(LOCALFILEHEADER, nFileNameLength), sizeof(quint16), "FileNameLength", XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nExtraFieldLength), sizeof(quint16), "ExtraFieldLength", XBinary::VT_UINT16,
-                                                            DRF_COUNT, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(
-                    getDataRecord(sizeof(LOCALFILEHEADER), lfh.nFileNameLength, "FileName", XBinary::VT_CHAR_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(sizeof(LOCALFILEHEADER) + lfh.nFileNameLength, lfh.nExtraFieldLength, "ExtraField", XBinary::VT_BYTE_ARRAY,
-                                                            DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecordDV(offsetof(LOCALFILEHEADER, nSignature), sizeof(quint32), "Signature", XBinary::VT_UINT32, 0,
+//                                                               XBinary::ENDIAN_LITTLE, XZip::getHeaderSignaturesS(), VL_TYPE_LIST));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(LOCALFILEHEADER, nMinVersion), sizeof(quint8), "MinVersion", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nMinOS), sizeof(quint8), "MinOS", XBinary::VT_UINT8, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nFlags), sizeof(quint16), "Flags", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(LOCALFILEHEADER, nMethod), sizeof(quint16), "Method", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(LOCALFILEHEADER, nLastModTime), sizeof(quint16), "LastModTime", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(LOCALFILEHEADER, nLastModDate), sizeof(quint16), "LastModDate", XBinary::VT_UINT16, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nCRC32), sizeof(quint32), "CRC32", XBinary::VT_UINT32, 0, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(LOCALFILEHEADER, nCompressedSize), sizeof(quint32), "CompressedSize", XBinary::VT_UINT32, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nUncompressedSize), sizeof(quint32), "UncompressedSize", XBinary::VT_UINT32,
+//                                                             DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(LOCALFILEHEADER, nFileNameLength), sizeof(quint16), "FileNameLength", XBinary::VT_UINT16, DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(LOCALFILEHEADER, nExtraFieldLength), sizeof(quint16), "ExtraFieldLength", XBinary::VT_UINT16,
+//                                                             DRF_COUNT, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(sizeof(LOCALFILEHEADER), lfh.nFileNameLength, "FileName", XBinary::VT_CHAR_ARRAY, DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(sizeof(LOCALFILEHEADER) + lfh.nFileNameLength, lfh.nExtraFieldLength, "ExtraField", XBinary::VT_BYTE_ARRAY,
+//                                                             DRF_VOLATILE, XBinary::ENDIAN_LITTLE));
 
-                listResult.append(dataHeader);
-            }
-        }
-    }
+//                 listResult.append(dataHeader);
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {

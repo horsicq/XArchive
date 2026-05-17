@@ -569,68 +569,68 @@ quint32 XARJ::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XARJ_STRUCTID, xarjStructIdCount());
 }
 
-QList<XBinary::DATA_HEADER> XARJ::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XARJ::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
-        qint64 nOffset = firstFileRecordOffset(this);
-        qint64 nRealSize = nOffset;
-        qint32 nCount = countFileRecords(this, nOffset, pPdStruct, &nRealSize);
+//         qint64 nOffset = firstFileRecordOffset(this);
+//         qint64 nRealSize = nOffset;
+//         qint32 nCount = countFileRecords(this, nOffset, pPdStruct, &nRealSize);
 
-        _dataHeadersOptions.nID = STRUCTID_RECORD;
-        _dataHeadersOptions.nLocation = nOffset;
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
-        _dataHeadersOptions.nCount = nCount;
-        _dataHeadersOptions.nSize = nRealSize - nOffset;
+//         _dataHeadersOptions.nID = STRUCTID_RECORD;
+//         _dataHeadersOptions.nLocation = nOffset;
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//         _dataHeadersOptions.nCount = nCount;
+//         _dataHeadersOptions.nSize = nRealSize - nOffset;
 
-        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-    } else {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//     } else {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            if (dataHeadersOptions.nID == STRUCTID_RECORD) {
-                qint64 nCurrentOffset = nStartOffset;
-                qint32 nCount = 0;
+//         if (nStartOffset != -1) {
+//             if (dataHeadersOptions.nID == STRUCTID_RECORD) {
+//                 qint64 nCurrentOffset = nStartOffset;
+//                 qint32 nCount = 0;
 
-                while ((nCount < dataHeadersOptions.nCount) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                    ARJ_ENTRY_INFO info = {};
+//                 while ((nCount < dataHeadersOptions.nCount) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+//                     ARJ_ENTRY_INFO info = {};
 
-                    if (!readEntryInfo(this, nCurrentOffset, &info) || info.bEndOfArchive) {
-                        break;
-                    }
+//                     if (!readEntryInfo(this, nCurrentOffset, &info) || info.bEndOfArchive) {
+//                         break;
+//                     }
 
-                    DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
-                    dataHeader.nSize = info.nHeaderSize + info.nCompressedSize;
-                    appendArjDataRecords(this, &dataHeader.listRecords, dataHeadersOptions.pMemoryMap->endian);
+//                     DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
+//                     dataHeader.nSize = info.nHeaderSize + info.nCompressedSize;
+//                     appendArjDataRecords(this, &dataHeader.listRecords, dataHeadersOptions.pMemoryMap->endian);
 
-                    if (info.nBasicHeaderSize > FIXED_HEADER_SIZE) {
-                        dataHeader.listRecords.append(getDataRecord(ARJ_ENTRY_PREFIX_SIZE + FIXED_HEADER_SIZE, info.nBasicHeaderSize - FIXED_HEADER_SIZE,
-                                                                    "Filename+Comment", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    }
+//                     if (info.nBasicHeaderSize > FIXED_HEADER_SIZE) {
+//                         dataHeader.listRecords.append(getDataRecord(ARJ_ENTRY_PREFIX_SIZE + FIXED_HEADER_SIZE, info.nBasicHeaderSize - FIXED_HEADER_SIZE,
+//                                                                     "Filename+Comment", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     }
 
-                    if (info.nCompressedSize > 0) {
-                        dataHeader.listRecords.append(
-                            getDataRecord(info.nHeaderSize, info.nCompressedSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    }
+//                     if (info.nCompressedSize > 0) {
+//                         dataHeader.listRecords.append(
+//                             getDataRecord(info.nHeaderSize, info.nCompressedSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     }
 
-                    listResult.append(dataHeader);
+//                     listResult.append(dataHeader);
 
-                    nCurrentOffset = entryEndOffset(info);
-                    nCount++;
-                }
-            }
-        }
-    }
+//                     nCurrentOffset = entryEndOffset(info);
+//                     nCount++;
+//                 }
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::XFHEADER> XARJ::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
 {

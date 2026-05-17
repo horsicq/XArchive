@@ -142,15 +142,15 @@ quint32 XSquashfs::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XSQUASHFS_STRUCTID, sizeof(_TABLE_XSQUASHFS_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-QList<XBinary::DATA_HEADER> XSquashfs::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(dataHeadersOptions)
-    Q_UNUSED(pPdStruct)
+// QList<XBinary::DATA_HEADER> XSquashfs::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     Q_UNUSED(dataHeadersOptions)
+//     Q_UNUSED(pPdStruct)
 
-    QList<DATA_HEADER> listResult;
-    // TODO: Implement data header extraction
-    return listResult;
-}
+//     QList<DATA_HEADER> listResult;
+//     // TODO: Implement data header extraction
+//     return listResult;
+// }
 
 QList<XBinary::FPART> XSquashfs::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {

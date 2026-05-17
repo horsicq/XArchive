@@ -528,38 +528,38 @@ QList<XBinary::XFRECORD> XRar::getXFRecords(FT fileType, quint32 nStructID, cons
     return listResult;
 }
 
-qint32 XRar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
-                          void *pUserData, PDSTRUCT *pPdStruct)
-{
-    Q_UNUSED(locType)
-    Q_UNUSED(nLocation)
-    Q_UNUSED(dataRecordsOptions)
-    Q_UNUSED(pUserData)
+// qint32 XRar::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+//                           void *pUserData, PDSTRUCT *pPdStruct)
+// {
+//     Q_UNUSED(locType)
+//     Q_UNUSED(nLocation)
+//     Q_UNUSED(dataRecordsOptions)
+//     Q_UNUSED(pUserData)
 
-    qint32 nResult = 0;
+//     qint32 nResult = 0;
 
-    if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_RAR40_HEADER) {
-        XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+//     if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_RAR40_HEADER) {
+//         XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
 
-        qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, locType, nLocation);
+//         qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, locType, nLocation);
 
-        quint8 nType = read_uint8(nStartOffset + 2);
-        nResult = read_uint16(nStartOffset + 5);
+//         quint8 nType = read_uint8(nStartOffset + 2);
+//         nResult = read_uint16(nStartOffset + 5);
 
-        if (nType == BLOCKTYPE4_FILE) {
-            FILEBLOCK4 fileBlock4 = readFileBlock4(nStartOffset);
+//         if (nType == BLOCKTYPE4_FILE) {
+//             FILEBLOCK4 fileBlock4 = readFileBlock4(nStartOffset);
 
-            qint64 nFileSize = fileBlock4.packSize;
-            nFileSize |= ((qint64)fileBlock4.highPackSize) << 32;
+//             qint64 nFileSize = fileBlock4.packSize;
+//             nFileSize |= ((qint64)fileBlock4.highPackSize) << 32;
 
-            nResult += nFileSize;
-        }
-    } else {
-        nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
-    }
+//             nResult += nFileSize;
+//         }
+//     } else {
+//         nResult = XBinary::readTableRow(nRow, locType, nLocation, dataRecordsOptions, pListDataRecords, pUserData, pPdStruct);
+//     }
 
-    return nResult;
-}
+//     return nResult;
+// }
 
 QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
@@ -751,203 +751,203 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     return listResult;
 }
 
-QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<XBinary::DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XRar::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<XBinary::DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
-        qint32 nVersion = getInternVersion(pPdStruct);
+//         qint32 nVersion = getInternVersion(pPdStruct);
 
-        if (nVersion == 1) {
-            _dataHeadersOptions.nID = STRUCTID_RAR14_SIGNATURE;
-            _dataHeadersOptions.nSize = 4;
-        } else if (nVersion == 4) {
-            _dataHeadersOptions.nID = STRUCTID_RAR40_SIGNATURE;
-            _dataHeadersOptions.nSize = 7;
-        } else if (nVersion == 5) {
-            _dataHeadersOptions.nID = STRUCTID_RAR50_SIGNATURE;
-            _dataHeadersOptions.nSize = 8;
-        }
+//         if (nVersion == 1) {
+//             _dataHeadersOptions.nID = STRUCTID_RAR14_SIGNATURE;
+//             _dataHeadersOptions.nSize = 4;
+//         } else if (nVersion == 4) {
+//             _dataHeadersOptions.nID = STRUCTID_RAR40_SIGNATURE;
+//             _dataHeadersOptions.nSize = 7;
+//         } else if (nVersion == 5) {
+//             _dataHeadersOptions.nID = STRUCTID_RAR50_SIGNATURE;
+//             _dataHeadersOptions.nSize = 8;
+//         }
 
-        _dataHeadersOptions.nLocation = 0;
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//         _dataHeadersOptions.nLocation = 0;
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
 
-        if (isPdStructNotCanceled(pPdStruct)) {
-            listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-        }
-    } else {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         if (isPdStructNotCanceled(pPdStruct)) {
+//             listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//         }
+//     } else {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            if (dataHeadersOptions.nID == STRUCTID_RAR14_SIGNATURE) {
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+//         if (nStartOffset != -1) {
+//             if (dataHeadersOptions.nID == STRUCTID_RAR14_SIGNATURE) {
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
 
-                dataHeader.listRecords.append(getDataRecord(0, 4, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(0, 4, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                listResult.append(dataHeader);
-            } else if (dataHeadersOptions.nID == STRUCTID_RAR40_SIGNATURE) {
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+//                 listResult.append(dataHeader);
+//             } else if (dataHeadersOptions.nID == STRUCTID_RAR40_SIGNATURE) {
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
 
-                dataHeader.listRecords.append(getDataRecord(0, 7, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(0, 7, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                listResult.append(dataHeader);
+//                 listResult.append(dataHeader);
 
-                if (dataHeadersOptions.bChildren) {
-                    // Count RAR 4.0 blocks for table
-                    qint64 nCurrentOffset = 7;
-                    qint64 nTotalSize = getSize();
-                    qint32 nNumberOfBlocks = 0;
+//                 if (dataHeadersOptions.bChildren) {
+//                     // Count RAR 4.0 blocks for table
+//                     qint64 nCurrentOffset = 7;
+//                     qint64 nTotalSize = getSize();
+//                     qint32 nNumberOfBlocks = 0;
 
-                    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-                        if (nCurrentOffset >= nTotalSize - sizeof(GENERICBLOCK4)) {
-                            break;
-                        }
+//                     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+//                         if (nCurrentOffset >= nTotalSize - sizeof(GENERICBLOCK4)) {
+//                             break;
+//                         }
 
-                        GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+//                         GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
 
-                        if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
-                            nNumberOfBlocks++;
+//                         if (genericBlock.nType >= 0x72 && genericBlock.nType <= 0x7B) {
+//                             nNumberOfBlocks++;
 
-                            if (genericBlock.nType == BLOCKTYPE4_FILE) {
-                                FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
-                                qint64 nPackSize = fileBlock4.packSize;
-                                if (fileBlock4.genericBlock4.nFlags & RAR4_FILE_LARGE) {
-                                    nPackSize |= ((qint64)fileBlock4.highPackSize << 32);
-                                }
-                                nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + nPackSize;
-                            } else {
-                                nCurrentOffset += genericBlock.nHeaderSize;
-                            }
+//                             if (genericBlock.nType == BLOCKTYPE4_FILE) {
+//                                 FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
+//                                 qint64 nPackSize = fileBlock4.packSize;
+//                                 if (fileBlock4.genericBlock4.nFlags & RAR4_FILE_LARGE) {
+//                                     nPackSize |= ((qint64)fileBlock4.highPackSize << 32);
+//                                 }
+//                                 nCurrentOffset += fileBlock4.genericBlock4.nHeaderSize + nPackSize;
+//                             } else {
+//                                 nCurrentOffset += genericBlock.nHeaderSize;
+//                             }
 
-                            if (genericBlock.nType == BLOCKTYPE4_END) {
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
-                    }
+//                             if (genericBlock.nType == BLOCKTYPE4_END) {
+//                                 break;
+//                             }
+//                         } else {
+//                             break;
+//                         }
+//                     }
 
-                    // Create table of RAR 4.0 blocks
-                    DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-                    _dataHeadersOptions.dsID_parent = dataHeader.dsID;
-                    _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-                    _dataHeadersOptions.nID = STRUCTID_RAR40_HEADER;
-                    _dataHeadersOptions.nLocation += 7;
-                    _dataHeadersOptions.nCount = nNumberOfBlocks;
-                    _dataHeadersOptions.nSize = nCurrentOffset - 7;
+//                     // Create table of RAR 4.0 blocks
+//                     DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//                     _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+//                     _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//                     _dataHeadersOptions.nID = STRUCTID_RAR40_HEADER;
+//                     _dataHeadersOptions.nLocation += 7;
+//                     _dataHeadersOptions.nCount = nNumberOfBlocks;
+//                     _dataHeadersOptions.nSize = nCurrentOffset - 7;
 
-                    listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-                }
-            } else if (dataHeadersOptions.nID == STRUCTID_RAR50_SIGNATURE) {
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+//                     listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//                 }
+//             } else if (dataHeadersOptions.nID == STRUCTID_RAR50_SIGNATURE) {
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
 
-                dataHeader.listRecords.append(getDataRecord(0, 8, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(0, 8, "Signature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                listResult.append(dataHeader);
+//                 listResult.append(dataHeader);
 
-                if (dataHeadersOptions.bChildren) {
-                    // Count RAR 5.0 headers for table
-                    qint64 nCurrentOffset = 8;
-                    qint32 nNumberOfHeaders = 0;
-                    qint64 nFileSize = getSize();
+//                 if (dataHeadersOptions.bChildren) {
+//                     // Count RAR 5.0 headers for table
+//                     qint64 nCurrentOffset = 8;
+//                     qint32 nNumberOfHeaders = 0;
+//                     qint64 nFileSize = getSize();
 
-                    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-                        if (nCurrentOffset >= nFileSize) break;
+//                     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+//                         if (nCurrentOffset >= nFileSize) break;
 
-                        GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+//                         GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
 
-                        if (genericHeader.nHeaderSize == 0) break;
+//                         if (genericHeader.nHeaderSize == 0) break;
 
-                        // Stop at encryption header
-                        if (genericHeader.nType == HEADERTYPE5_ENCRYPTION) {
-                            nNumberOfHeaders++;
-                            nCurrentOffset += genericHeader.nHeaderSize;
-                            break;
-                        }
+//                         // Stop at encryption header
+//                         if (genericHeader.nType == HEADERTYPE5_ENCRYPTION) {
+//                             nNumberOfHeaders++;
+//                             nCurrentOffset += genericHeader.nHeaderSize;
+//                             break;
+//                         }
 
-                        if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
-                            nNumberOfHeaders++;
-                            nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
+//                         if ((genericHeader.nType > 0) && (genericHeader.nType <= 5)) {
+//                             nNumberOfHeaders++;
+//                             nCurrentOffset += genericHeader.nHeaderSize + genericHeader.nDataSize;
 
-                            if (genericHeader.nType == HEADERTYPE5_ENDARC) {
-                                break;
-                            }
-                        } else {
-                            break;
-                        }
-                    }
+//                             if (genericHeader.nType == HEADERTYPE5_ENDARC) {
+//                                 break;
+//                             }
+//                         } else {
+//                             break;
+//                         }
+//                     }
 
-                    // Create table of RAR 5.0 headers
-                    DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-                    _dataHeadersOptions.dsID_parent = dataHeader.dsID;
-                    _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-                    _dataHeadersOptions.nID = STRUCTID_RAR50_HEADER;
-                    _dataHeadersOptions.nLocation += 8;
-                    _dataHeadersOptions.nCount = nNumberOfHeaders;
-                    _dataHeadersOptions.nSize = nCurrentOffset - 8;
+//                     // Create table of RAR 5.0 headers
+//                     DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//                     _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+//                     _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//                     _dataHeadersOptions.nID = STRUCTID_RAR50_HEADER;
+//                     _dataHeadersOptions.nLocation += 8;
+//                     _dataHeadersOptions.nCount = nNumberOfHeaders;
+//                     _dataHeadersOptions.nSize = nCurrentOffset - 8;
 
-                    listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-                }
-            } else if (dataHeadersOptions.nID == STRUCTID_RAR40_HEADER) {
-                GENERICBLOCK4 genericBlock = readGenericBlock4(nStartOffset);
+//                     listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//                 }
+//             } else if (dataHeadersOptions.nID == STRUCTID_RAR40_HEADER) {
+//                 GENERICBLOCK4 genericBlock = readGenericBlock4(nStartOffset);
 
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
-                dataHeader.nSize = genericBlock.nHeaderSize;
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+//                 dataHeader.nSize = genericBlock.nHeaderSize;
 
-                dataHeader.listRecords.append(getDataRecord(0, 2, "CRC16", XBinary::VT_UINT16, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(2, 1, "Type", XBinary::VT_UINT8, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(3, 2, "Flags", XBinary::VT_UINT16, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
-                dataHeader.listRecords.append(getDataRecord(5, 2, "Header Size", XBinary::VT_UINT16, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(0, 2, "CRC16", XBinary::VT_UINT16, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(2, 1, "Type", XBinary::VT_UINT8, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(3, 2, "Flags", XBinary::VT_UINT16, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+//                 dataHeader.listRecords.append(getDataRecord(5, 2, "Header Size", XBinary::VT_UINT16, DRF_SIZE, XBinary::ENDIAN_LITTLE));
 
-                listResult.append(dataHeader);
-            } else if (dataHeadersOptions.nID == STRUCTID_RAR50_HEADER) {
-                GENERICHEADER5 genericHeader = readGenericHeader5(nStartOffset);
+//                 listResult.append(dataHeader);
+//             } else if (dataHeadersOptions.nID == STRUCTID_RAR50_HEADER) {
+//                 GENERICHEADER5 genericHeader = readGenericHeader5(nStartOffset);
 
-                XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
-                dataHeader.nSize = genericHeader.nHeaderSize;
+//                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XRar::structIDToString(dataHeadersOptions.nID));
+//                 dataHeader.nSize = genericHeader.nHeaderSize;
 
-                qint64 nOffset = 0;
-                dataHeader.listRecords.append(getDataRecord(nOffset, 4, "CRC32", XBinary::VT_UINT32, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
-                nOffset += 4;
+//                 qint64 nOffset = 0;
+//                 dataHeader.listRecords.append(getDataRecord(nOffset, 4, "CRC32", XBinary::VT_UINT32, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+//                 nOffset += 4;
 
-                // Variable-length fields (ULEB128)
-                PACKED_UINT packeInt = read_uleb128(nStartOffset + nOffset, 4);
-                dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Header Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                nOffset += packeInt.nByteSize;
+//                 // Variable-length fields (ULEB128)
+//                 PACKED_UINT packeInt = read_uleb128(nStartOffset + nOffset, 4);
+//                 dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Header Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                 nOffset += packeInt.nByteSize;
 
-                packeInt = read_uleb128(nStartOffset + nOffset, 4);
-                dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Type", XBinary::VT_ULEB128, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
-                nOffset += packeInt.nByteSize;
+//                 packeInt = read_uleb128(nStartOffset + nOffset, 4);
+//                 dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Type", XBinary::VT_ULEB128, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+//                 nOffset += packeInt.nByteSize;
 
-                packeInt = read_uleb128(nStartOffset + nOffset, 4);
-                dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Flags", XBinary::VT_ULEB128, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
-                nOffset += packeInt.nByteSize;
+//                 packeInt = read_uleb128(nStartOffset + nOffset, 4);
+//                 dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Flags", XBinary::VT_ULEB128, DRF_UNKNOWN, XBinary::ENDIAN_LITTLE));
+//                 nOffset += packeInt.nByteSize;
 
-                if (genericHeader.nFlags & 0x0001) {
-                    packeInt = read_uleb128(nStartOffset + nOffset, 4);
-                    dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Extra Area Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                    nOffset += packeInt.nByteSize;
-                }
+//                 if (genericHeader.nFlags & 0x0001) {
+//                     packeInt = read_uleb128(nStartOffset + nOffset, 4);
+//                     dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Extra Area Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                     nOffset += packeInt.nByteSize;
+//                 }
 
-                if (genericHeader.nFlags & 0x0002) {
-                    packeInt = read_uleb128(nStartOffset + nOffset, 8);
-                    dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Data Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
-                    nOffset += packeInt.nByteSize;
-                }
+//                 if (genericHeader.nFlags & 0x0002) {
+//                     packeInt = read_uleb128(nStartOffset + nOffset, 8);
+//                     dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Data Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
+//                     nOffset += packeInt.nByteSize;
+//                 }
 
-                listResult.append(dataHeader);
-            }
-        }
-    }
+//                 listResult.append(dataHeader);
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {

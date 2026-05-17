@@ -215,76 +215,76 @@ quint32 XWIM::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XWIM_STRUCTID, sizeof(_TABLE_XWIM_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-QList<XBinary::DATA_HEADER> XWIM::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XWIM::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap ? dataHeadersOptions.pMemoryMap->fileType : getFileType();
-        _dataHeadersOptions.nID = STRUCTID_WIM_HEADER;
-        _dataHeadersOptions.nLocation = 0;
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap ? dataHeadersOptions.pMemoryMap->fileType : getFileType();
+//         _dataHeadersOptions.nID = STRUCTID_WIM_HEADER;
+//         _dataHeadersOptions.nLocation = 0;
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
 
-        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-    } else if (dataHeadersOptions.nID == STRUCTID_WIM_HEADER) {
-        qint64 nStartOffset = -1;
+//         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//     } else if (dataHeadersOptions.nID == STRUCTID_WIM_HEADER) {
+//         qint64 nStartOffset = -1;
 
-        if (dataHeadersOptions.pMemoryMap) {
-            nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
-        } else if (dataHeadersOptions.locType == LT_OFFSET) {
-            nStartOffset = dataHeadersOptions.nLocation;
-        }
+//         if (dataHeadersOptions.pMemoryMap) {
+//             nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         } else if (dataHeadersOptions.locType == LT_OFFSET) {
+//             nStartOffset = dataHeadersOptions.nLocation;
+//         }
 
-        if (nStartOffset != -1) {
-            quint32 nHeaderSize = read_uint32(nStartOffset + 8);
+//         if (nStartOffset != -1) {
+//             quint32 nHeaderSize = read_uint32(nStartOffset + 8);
 
-            if ((nHeaderSize >= WIM_HEADER_SIZE_OLD) && (nHeaderSize <= WIM_HEADER_SIZE_NEW)) {
-                ENDIAN endian = dataHeadersOptions.pMemoryMap ? dataHeadersOptions.pMemoryMap->endian : getEndian();
-                quint32 nVersion = read_uint32(nStartOffset + 0x0C);
-                bool bHasNewFields = (nVersion == 0x00000E00) || (nVersion >= 0x00010D00) || (nHeaderSize == WIM_HEADER_SIZE_NEW);
-                DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XWIM::structIDToString(dataHeadersOptions.nID));
-                dataHeader.nSize = nHeaderSize;
+//             if ((nHeaderSize >= WIM_HEADER_SIZE_OLD) && (nHeaderSize <= WIM_HEADER_SIZE_NEW)) {
+//                 ENDIAN endian = dataHeadersOptions.pMemoryMap ? dataHeadersOptions.pMemoryMap->endian : getEndian();
+//                 quint32 nVersion = read_uint32(nStartOffset + 0x0C);
+//                 bool bHasNewFields = (nVersion == 0x00000E00) || (nVersion >= 0x00010D00) || (nHeaderSize == WIM_HEADER_SIZE_NEW);
+//                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XWIM::structIDToString(dataHeadersOptions.nID));
+//                 dataHeader.nSize = nHeaderSize;
 
-                dataHeader.listRecords.append(getDataRecord(0x00, 8, "signature", VT_CHAR_ARRAY, DRF_UNKNOWN, endian));
-                dataHeader.listRecords.append(getDataRecord(0x08, 4, "headerSize", VT_UINT32, DRF_SIZE, endian));
-                dataHeader.listRecords.append(getDataRecord(0x0C, 4, "version", VT_UINT32, DRF_VERSION, endian));
-                dataHeader.listRecords.append(getDataRecord(0x10, 4, "flags", VT_UINT32, DRF_UNKNOWN, endian));
-                dataHeader.listRecords.append(getDataRecord(0x14, 4, "chunkSize", VT_UINT32, DRF_SIZE, endian));
+//                 dataHeader.listRecords.append(getDataRecord(0x00, 8, "signature", VT_CHAR_ARRAY, DRF_UNKNOWN, endian));
+//                 dataHeader.listRecords.append(getDataRecord(0x08, 4, "headerSize", VT_UINT32, DRF_SIZE, endian));
+//                 dataHeader.listRecords.append(getDataRecord(0x0C, 4, "version", VT_UINT32, DRF_VERSION, endian));
+//                 dataHeader.listRecords.append(getDataRecord(0x10, 4, "flags", VT_UINT32, DRF_UNKNOWN, endian));
+//                 dataHeader.listRecords.append(getDataRecord(0x14, 4, "chunkSize", VT_UINT32, DRF_SIZE, endian));
 
-                if (nHeaderSize > WIM_HEADER_SIZE_OLD) {
-                    dataHeader.listRecords.append(getDataRecord(0x18, 16, "guid", VT_BYTE_ARRAY, DRF_UNKNOWN, endian));
-                    dataHeader.listRecords.append(getDataRecord(0x28, 2, "partNumber", VT_UINT16, DRF_UNKNOWN, endian));
-                    dataHeader.listRecords.append(getDataRecord(0x2A, 2, "numberOfParts", VT_UINT16, DRF_COUNT, endian));
+//                 if (nHeaderSize > WIM_HEADER_SIZE_OLD) {
+//                     dataHeader.listRecords.append(getDataRecord(0x18, 16, "guid", VT_BYTE_ARRAY, DRF_UNKNOWN, endian));
+//                     dataHeader.listRecords.append(getDataRecord(0x28, 2, "partNumber", VT_UINT16, DRF_UNKNOWN, endian));
+//                     dataHeader.listRecords.append(getDataRecord(0x2A, 2, "numberOfParts", VT_UINT16, DRF_COUNT, endian));
 
-                    if (bHasNewFields) {
-                        dataHeader.listRecords.append(getDataRecord(0x2C, 4, "numberOfImages", VT_UINT32, DRF_COUNT, endian));
-                        dataHeader.listRecords.append(getDataRecord(0x30, WIM_RESOURCE_SIZE, "offsetTableResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                        dataHeader.listRecords.append(getDataRecord(0x48, WIM_RESOURCE_SIZE, "xmlResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                        dataHeader.listRecords.append(getDataRecord(0x60, WIM_RESOURCE_SIZE, "bootMetadataResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                        dataHeader.listRecords.append(getDataRecord(0x78, 4, "bootIndex", VT_UINT32, DRF_UNKNOWN, endian));
-                        dataHeader.listRecords.append(getDataRecord(0x7C, WIM_RESOURCE_SIZE, "integrityResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                    } else {
-                        dataHeader.listRecords.append(getDataRecord(0x2C, WIM_RESOURCE_SIZE, "offsetTableResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                        dataHeader.listRecords.append(getDataRecord(0x44, WIM_RESOURCE_SIZE, "xmlResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                        dataHeader.listRecords.append(getDataRecord(0x5C, WIM_RESOURCE_SIZE, "bootMetadataResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                    }
-                } else {
-                    dataHeader.listRecords.append(getDataRecord(0x18, WIM_RESOURCE_SIZE, "offsetTableResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                    dataHeader.listRecords.append(getDataRecord(0x30, WIM_RESOURCE_SIZE, "xmlResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                    dataHeader.listRecords.append(getDataRecord(0x48, WIM_RESOURCE_SIZE, "bootMetadataResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
-                }
+//                     if (bHasNewFields) {
+//                         dataHeader.listRecords.append(getDataRecord(0x2C, 4, "numberOfImages", VT_UINT32, DRF_COUNT, endian));
+//                         dataHeader.listRecords.append(getDataRecord(0x30, WIM_RESOURCE_SIZE, "offsetTableResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                         dataHeader.listRecords.append(getDataRecord(0x48, WIM_RESOURCE_SIZE, "xmlResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                         dataHeader.listRecords.append(getDataRecord(0x60, WIM_RESOURCE_SIZE, "bootMetadataResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                         dataHeader.listRecords.append(getDataRecord(0x78, 4, "bootIndex", VT_UINT32, DRF_UNKNOWN, endian));
+//                         dataHeader.listRecords.append(getDataRecord(0x7C, WIM_RESOURCE_SIZE, "integrityResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                     } else {
+//                         dataHeader.listRecords.append(getDataRecord(0x2C, WIM_RESOURCE_SIZE, "offsetTableResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                         dataHeader.listRecords.append(getDataRecord(0x44, WIM_RESOURCE_SIZE, "xmlResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                         dataHeader.listRecords.append(getDataRecord(0x5C, WIM_RESOURCE_SIZE, "bootMetadataResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                     }
+//                 } else {
+//                     dataHeader.listRecords.append(getDataRecord(0x18, WIM_RESOURCE_SIZE, "offsetTableResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                     dataHeader.listRecords.append(getDataRecord(0x30, WIM_RESOURCE_SIZE, "xmlResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                     dataHeader.listRecords.append(getDataRecord(0x48, WIM_RESOURCE_SIZE, "bootMetadataResource", VT_BYTE_ARRAY, DRF_OFFSET, endian));
+//                 }
 
-                listResult.append(dataHeader);
-            }
-        }
-    }
+//                 listResult.append(dataHeader);
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::FPART> XWIM::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {

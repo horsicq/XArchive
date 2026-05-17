@@ -212,68 +212,68 @@ quint32 XFREEARC::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XFREEARC_STRUCTID, sizeof(_TABLE_XFREEARC_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-QList<XBinary::DATA_HEADER> XFREEARC::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XFREEARC::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
-        QList<BLOCK> listBlocks = getBlocks(pPdStruct);
+//         QList<BLOCK> listBlocks = getBlocks(pPdStruct);
 
-        qint64 nRealSize = 0;
+//         qint64 nRealSize = 0;
 
-        if (!listBlocks.isEmpty()) {
-            BLOCK lastBlock = listBlocks.last();
-            nRealSize = lastBlock.nOffset + lastBlock.nSize;
-        }
+//         if (!listBlocks.isEmpty()) {
+//             BLOCK lastBlock = listBlocks.last();
+//             nRealSize = lastBlock.nOffset + lastBlock.nSize;
+//         }
 
-        _dataHeadersOptions.nID = STRUCTID_BLOCK;
-        _dataHeadersOptions.nLocation = 0;
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
-        _dataHeadersOptions.nCount = listBlocks.count();
-        _dataHeadersOptions.nSize = nRealSize;
+//         _dataHeadersOptions.nID = STRUCTID_BLOCK;
+//         _dataHeadersOptions.nLocation = 0;
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//         _dataHeadersOptions.nCount = listBlocks.count();
+//         _dataHeadersOptions.nSize = nRealSize;
 
-        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-    } else {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//     } else {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            if (dataHeadersOptions.nID == STRUCTID_BLOCK) {
-                QList<BLOCK> listBlocks = getBlocks(pPdStruct);
+//         if (nStartOffset != -1) {
+//             if (dataHeadersOptions.nID == STRUCTID_BLOCK) {
+//                 QList<BLOCK> listBlocks = getBlocks(pPdStruct);
 
-                for (qint32 i = 0; i < listBlocks.count(); i++) {
-                    BLOCK block = listBlocks.at(i);
+//                 for (qint32 i = 0; i < listBlocks.count(); i++) {
+//                     BLOCK block = listBlocks.at(i);
 
-                    DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_BLOCK));
-                    dataHeader.nSize = block.nSize;
+//                     DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_BLOCK));
+//                     dataHeader.nSize = block.nSize;
 
-                    dataHeader.listRecords.append(getDataRecord(0, 4, "Signature", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    dataHeader.listRecords.append(getDataRecord(4, 1, "Block Type", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(0, 4, "Signature", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(4, 1, "Block Type", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                    qint32 nCompressorLen = block.sCompressor.length() + 1;
+//                     qint32 nCompressorLen = block.sCompressor.length() + 1;
 
-                    dataHeader.listRecords.append(getDataRecord(5, nCompressorLen, "Compressor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     dataHeader.listRecords.append(getDataRecord(5, nCompressorLen, "Compressor", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                    qint64 nDataSize = block.nSize - 5 - nCompressorLen;
+//                     qint64 nDataSize = block.nSize - 5 - nCompressorLen;
 
-                    if (nDataSize > 0) {
-                        dataHeader.listRecords.append(
-                            getDataRecord(5 + nCompressorLen, nDataSize, "Block Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                    }
+//                     if (nDataSize > 0) {
+//                         dataHeader.listRecords.append(
+//                             getDataRecord(5 + nCompressorLen, nDataSize, "Block Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     }
 
-                    listResult.append(dataHeader);
-                }
-            }
-        }
-    }
+//                     listResult.append(dataHeader);
+//                 }
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::FPART> XFREEARC::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {

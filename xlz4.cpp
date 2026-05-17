@@ -148,40 +148,40 @@ quint32 XLZ4::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XLZ4_STRUCTID, sizeof(_TABLE_XLZ4_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-QList<XBinary::DATA_HEADER> XLZ4::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<XBinary::DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XLZ4::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<XBinary::DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
-        _dataHeadersOptions.nID = STRUCTID_LZ4_FRAME_HEADER;
-        _dataHeadersOptions.nLocation = 0;
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//         _dataHeadersOptions.nID = STRUCTID_LZ4_FRAME_HEADER;
+//         _dataHeadersOptions.nLocation = 0;
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
 
-        if (isPdStructNotCanceled(pPdStruct)) {
-            listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-        }
-    } else if (dataHeadersOptions.nID == STRUCTID_LZ4_FRAME_HEADER) {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         if (isPdStructNotCanceled(pPdStruct)) {
+//             listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//         }
+//     } else if (dataHeadersOptions.nID == STRUCTID_LZ4_FRAME_HEADER) {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XLZ4::structIDToString(dataHeadersOptions.nID));
-            dataHeader.nSize = sizeof(LZ4_FRAME_HEADER);
-            dataHeader.listRecords.append(getDataRecord(offsetof(LZ4_FRAME_HEADER, nMagic), 4, "nMagic", VT_UINT32, DRF_UNKNOWN, ENDIAN_LITTLE));
-            dataHeader.listRecords.append(getDataRecord(offsetof(LZ4_FRAME_HEADER, nFLG), 1, "nFLG", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
-            dataHeader.listRecords.append(getDataRecord(offsetof(LZ4_FRAME_HEADER, nBD), 1, "nBD", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
-            dataHeader.listRecords.append(
-                getDataRecord(offsetof(LZ4_FRAME_HEADER, nHeaderChecksum), 1, "nHeaderChecksum", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
-            listResult.append(dataHeader);
-        }
-    }
+//         if (nStartOffset != -1) {
+//             XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XLZ4::structIDToString(dataHeadersOptions.nID));
+//             dataHeader.nSize = sizeof(LZ4_FRAME_HEADER);
+//             dataHeader.listRecords.append(getDataRecord(offsetof(LZ4_FRAME_HEADER, nMagic), 4, "nMagic", VT_UINT32, DRF_UNKNOWN, ENDIAN_LITTLE));
+//             dataHeader.listRecords.append(getDataRecord(offsetof(LZ4_FRAME_HEADER, nFLG), 1, "nFLG", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+//             dataHeader.listRecords.append(getDataRecord(offsetof(LZ4_FRAME_HEADER, nBD), 1, "nBD", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+//             dataHeader.listRecords.append(
+//                 getDataRecord(offsetof(LZ4_FRAME_HEADER, nHeaderChecksum), 1, "nHeaderChecksum", VT_UINT8, DRF_UNKNOWN, ENDIAN_LITTLE));
+//             listResult.append(dataHeader);
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::XFHEADER> XLZ4::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
 {

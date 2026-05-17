@@ -501,135 +501,135 @@ quint32 XSevenZip::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XSevenZip_STRUCTID, sizeof(_TABLE_XSevenZip_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-{
-    QList<DATA_HEADER> listResult;
+// QList<XBinary::DATA_HEADER> XSevenZip::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
+// {
+//     QList<DATA_HEADER> listResult;
 
-    if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-        DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-        _dataHeadersOptions.bChildren = true;
-        _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-        _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-        _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
+//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
+//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//         _dataHeadersOptions.bChildren = true;
+//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
+//         _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
 
-        _dataHeadersOptions.nID = STRUCTID_SIGNATUREHEADER;
-        _dataHeadersOptions.nLocation = 0;
-        _dataHeadersOptions.locType = XBinary::LT_OFFSET;
+//         _dataHeadersOptions.nID = STRUCTID_SIGNATUREHEADER;
+//         _dataHeadersOptions.nLocation = 0;
+//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
 
-        listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-    } else {
-        qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
+//         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//     } else {
+//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
 
-        if (nStartOffset != -1) {
-            if (dataHeadersOptions.nID == STRUCTID_SIGNATUREHEADER) {
-                DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
-                dataHeader.nSize = sizeof(SIGNATUREHEADER);
+//         if (nStartOffset != -1) {
+//             if (dataHeadersOptions.nID == STRUCTID_SIGNATUREHEADER) {
+//                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
+//                 dataHeader.nSize = sizeof(SIGNATUREHEADER);
 
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, kSignature), 6, "kSignature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Major), 1, "Major", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Minor), 1, "Minor", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, StartHeaderCRC), 4, "StartHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderOffset), 8, "NextHeaderOffset", VT_UINT64, DRF_OFFSET, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderSize), 8, "NextHeaderSize", VT_UINT64, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-                dataHeader.listRecords.append(
-                    getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderCRC), 4, "NextHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(SIGNATUREHEADER, kSignature), 6, "kSignature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Major), 1, "Major", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Minor), 1, "Minor", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(SIGNATUREHEADER, StartHeaderCRC), 4, "StartHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderOffset), 8, "NextHeaderOffset", VT_UINT64, DRF_OFFSET, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderSize), 8, "NextHeaderSize", VT_UINT64, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(
+//                     getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderCRC), 4, "NextHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 
-                listResult.append(dataHeader);
+//                 listResult.append(dataHeader);
 
-                if (dataHeadersOptions.bChildren) {
-                    SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(nStartOffset);
-                    qint64 nNextHeaderFileOffset = 0;
-                    qint64 nNextHeaderSize = 0;
-                    bool bNextHeaderValid = getNextHeaderRange(signatureHeader, getSize(), &nNextHeaderFileOffset, &nNextHeaderSize);
-                    // Add hex for StartHeader (the 3 fields after StartHeaderCRC)
-                    {
-                        const qint64 startHeaderHexOff = nStartOffset + 12;  // bytes 12..31
-                        const qint64 startHeaderHexSize = 20;
-                        if (isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, startHeaderHexOff, startHeaderHexSize)) {
-                            DATA_HEADER hexStart = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("StartHeader (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
-                                                                  startHeaderHexOff, startHeaderHexSize);
-                            listResult.append(hexStart);
-                        }
-                    }
+//                 if (dataHeadersOptions.bChildren) {
+//                     SIGNATUREHEADER signatureHeader = _read_SIGNATUREHEADER(nStartOffset);
+//                     qint64 nNextHeaderFileOffset = 0;
+//                     qint64 nNextHeaderSize = 0;
+//                     bool bNextHeaderValid = getNextHeaderRange(signatureHeader, getSize(), &nNextHeaderFileOffset, &nNextHeaderSize);
+//                     // Add hex for StartHeader (the 3 fields after StartHeaderCRC)
+//                     {
+//                         const qint64 startHeaderHexOff = nStartOffset + 12;  // bytes 12..31
+//                         const qint64 startHeaderHexSize = 20;
+//                         if (isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, startHeaderHexOff, startHeaderHexSize)) {
+//                             DATA_HEADER hexStart = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("StartHeader (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
+//                                                                   startHeaderHexOff, startHeaderHexSize);
+//                             listResult.append(hexStart);
+//                         }
+//                     }
 
-                    if (bNextHeaderValid) {
-                        qint64 nNextHeaderDelta = nNextHeaderFileOffset - nStartOffset;
+//                     if (bNextHeaderValid) {
+//                         qint64 nNextHeaderDelta = nNextHeaderFileOffset - nStartOffset;
 
-                        if (nNextHeaderDelta >= 0) {
-                            DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-                            _dataHeadersOptions.nLocation += nNextHeaderDelta;
-                            _dataHeadersOptions.nSize = nNextHeaderSize;
-                            _dataHeadersOptions.dsID_parent = dataHeader.dsID;
-                            _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
-                            _dataHeadersOptions.nID = STRUCTID_HEADER;
-                            listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-                        }
-                    }
+//                         if (nNextHeaderDelta >= 0) {
+//                             DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
+//                             _dataHeadersOptions.nLocation += nNextHeaderDelta;
+//                             _dataHeadersOptions.nSize = nNextHeaderSize;
+//                             _dataHeadersOptions.dsID_parent = dataHeader.dsID;
+//                             _dataHeadersOptions.dhMode = XBinary::DHMODE_HEADER;
+//                             _dataHeadersOptions.nID = STRUCTID_HEADER;
+//                             listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
+//                         }
+//                     }
 
-                    // Add hex view for NextHeader block
-                    if (bNextHeaderValid && (nNextHeaderSize > 0) &&
-                        isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, nNextHeaderFileOffset, nNextHeaderSize)) {
-                        DATA_HEADER hexNext = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("NextHeader (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
-                                                             nNextHeaderFileOffset, nNextHeaderSize);
-                        listResult.append(hexNext);
-                    }
-                }
-            } else if (dataHeadersOptions.nID == STRUCTID_HEADER) {
-                DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
-                dataHeader.nSize = dataHeadersOptions.nSize;
+//                     // Add hex view for NextHeader block
+//                     if (bNextHeaderValid && (nNextHeaderSize > 0) &&
+//                         isOffsetAndSizeValid(dataHeadersOptions.pMemoryMap, nNextHeaderFileOffset, nNextHeaderSize)) {
+//                         DATA_HEADER hexNext = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("NextHeader (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX,
+//                                                              nNextHeaderFileOffset, nNextHeaderSize);
+//                         listResult.append(hexNext);
+//                     }
+//                 }
+//             } else if (dataHeadersOptions.nID == STRUCTID_HEADER) {
+//                 DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XSevenZip::structIDToString(dataHeadersOptions.nID));
+//                 dataHeader.nSize = dataHeadersOptions.nSize;
 
-                char *pData = new char[dataHeadersOptions.nSize];
-                qint64 nBytesRead = read_array_process(nStartOffset, pData, dataHeadersOptions.nSize, pPdStruct);
+//                 char *pData = new char[dataHeadersOptions.nSize];
+//                 qint64 nBytesRead = read_array_process(nStartOffset, pData, dataHeadersOptions.nSize, pPdStruct);
 
-                QList<XSevenZip::SZRECORD> listRecords;
-                if (nBytesRead == dataHeadersOptions.nSize) {
-                    listRecords = _handleData(pData, dataHeadersOptions.nSize, pPdStruct);
-                }
+//                 QList<XSevenZip::SZRECORD> listRecords;
+//                 if (nBytesRead == dataHeadersOptions.nSize) {
+//                     listRecords = _handleData(pData, dataHeadersOptions.nSize, pPdStruct);
+//                 }
 
-                qint32 nNumberOfRecords = listRecords.count();
+//                 qint32 nNumberOfRecords = listRecords.count();
 
-                for (qint32 i = 0; i < nNumberOfRecords; i++) {
-                    XSevenZip::SZRECORD szRecord = listRecords.at(i);
+//                 for (qint32 i = 0; i < nNumberOfRecords; i++) {
+//                     XSevenZip::SZRECORD szRecord = listRecords.at(i);
 
-                    DATA_RECORD dataRecord = {};
-                    dataRecord.nRelOffset = szRecord.nRelOffset;
-                    dataRecord.nSize = szRecord.nSize;
-                    dataRecord.sName = szRecord.sName;
-                    dataRecord.valType = szRecord.valType;
-                    dataRecord.nFlags = szRecord.nFlags;
-                    dataRecord.endian = dataHeadersOptions.pMemoryMap->endian;
+//                     DATA_RECORD dataRecord = {};
+//                     dataRecord.nRelOffset = szRecord.nRelOffset;
+//                     dataRecord.nSize = szRecord.nSize;
+//                     dataRecord.sName = szRecord.sName;
+//                     dataRecord.valType = szRecord.valType;
+//                     dataRecord.nFlags = szRecord.nFlags;
+//                     dataRecord.endian = dataHeadersOptions.pMemoryMap->endian;
 
-                    if (szRecord.srType == SRTYPE_ID) {
-                        DATAVALUESET dataValueSet;
-                        dataValueSet.mapValues = get_k7zId_s();
-                        dataValueSet.vlType = VL_TYPE_LIST;
-                        dataValueSet.nMask = 0xFFFFFFFFFFFFFFFF;
-                        dataRecord.listDataValueSets.append(dataValueSet);
-                    }
+//                     if (szRecord.srType == SRTYPE_ID) {
+//                         DATAVALUESET dataValueSet;
+//                         dataValueSet.mapValues = get_k7zId_s();
+//                         dataValueSet.vlType = VL_TYPE_LIST;
+//                         dataValueSet.nMask = 0xFFFFFFFFFFFFFFFF;
+//                         dataRecord.listDataValueSets.append(dataValueSet);
+//                     }
 
-                    dataHeader.listRecords.append(dataRecord);
-                }
+//                     dataHeader.listRecords.append(dataRecord);
+//                 }
 
-                listResult.append(dataHeader);
+//                 listResult.append(dataHeader);
 
-                if (dataHeadersOptions.bChildren && (dataHeadersOptions.nSize > 0)) {
-                    // Also add hex view for this parsed header block
-                    DATA_HEADER hexHdr = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("Header (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX, nStartOffset,
-                                                        dataHeadersOptions.nSize);
-                    listResult.append(hexHdr);
-                }
+//                 if (dataHeadersOptions.bChildren && (dataHeadersOptions.nSize > 0)) {
+//                     // Also add hex view for this parsed header block
+//                     DATA_HEADER hexHdr = _dataHeaderHex(dataHeadersOptions, QString("%1").arg("Header (hex)"), dataHeader.dsID, XBinary::STRUCTID_HEX, nStartOffset,
+//                                                         dataHeadersOptions.nSize);
+//                     listResult.append(hexHdr);
+//                 }
 
-                delete[] pData;
-            }
-        }
-    }
+//                 delete[] pData;
+//             }
+//         }
+//     }
 
-    return listResult;
-}
+//     return listResult;
+// }
 
 QList<XBinary::XFHEADER> XSevenZip::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
 {

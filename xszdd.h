@@ -66,7 +66,7 @@ public:
     QString structIDToString(quint32 nID) override;
     QString structIDToFtString(quint32 nID) override;
     quint32 ftStringToStructID(const QString &sFtString) override;
-    QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
+    // QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
     QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     SZDD_HEADER _read_SZDD_HEADER(qint64 nOffset);
