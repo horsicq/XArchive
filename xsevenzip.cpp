@@ -21,7 +21,6 @@
 
 #include "xsevenzip.h"
 
-#include <limits>
 
 XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {{XSevenZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                  {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
@@ -270,7 +269,7 @@ QString XSevenZip::getComment()
     qint64 nNextHeaderSize = 0;
 
     if (getNextHeaderRange(signatureHeader, getSize(), &nNextHeaderOffset, &nNextHeaderSize) && (nNextHeaderSize > 0) &&
-        (nNextHeaderSize <= std::numeric_limits<int>::max())) {
+        (nNextHeaderSize <= 0x7FFFFFFF)) {
         QByteArray baData;
         baData.resize(nNextHeaderSize);
         qint64 nHeaderSize = nNextHeaderSize;
@@ -1592,7 +1591,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         qint64 nNextHeaderSize = 0;
 
         if (getNextHeaderRange(signatureHeader, pState->nTotalSize, &nNextHeaderOffset, &nNextHeaderSize) && (nNextHeaderSize > 0) &&
-            (nNextHeaderSize <= std::numeric_limits<int>::max())) {
+            (nNextHeaderSize <= 0x7FFFFFFF)) {
             QByteArray baData;
             baData.resize(nNextHeaderSize);
             // char *pData = new char[nNextHeaderSize];
