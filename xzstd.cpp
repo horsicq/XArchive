@@ -180,7 +180,8 @@ quint32 XZstd::ftStringToStructID(const QString &sFtString)
 //                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XZstd::structIDToString(dataHeadersOptions.nID));
 //                 dataHeader.nSize = sizeof(ZSTD_HEADER);
 
-//                 dataHeader.listRecords.append(getDataRecord(offsetof(ZSTD_HEADER, nMagic), 4, "nMagic", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(ZSTD_HEADER, nMagic), 4, "nMagic", VT_UINT32, DRF_UNKNOWN,
+//                 dataHeadersOptions.pMemoryMap->endian));
 
 //                 listResult.append(dataHeader);
 //             }

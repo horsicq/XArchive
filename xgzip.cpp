@@ -26,8 +26,7 @@ XBinary::XCONVERT _TABLE_XGZIP_STRUCTID[] = {{XGzip::STRUCTID_UNKNOWN, "Unknown"
                                              {XGzip::STRUCTID_STREAM, "STREAM", QString("Stream")}};
 
 static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
-                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
-                                     XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
+                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN, XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
 {
     XBinary::PM_INFO result = {};
 
@@ -325,8 +324,8 @@ quint32 XGzip::ftStringToStructID(const QString &sFtString)
 //                 XBinary::DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, XGzip::structIDToString(dataHeadersOptions.nID));
 //                 dataHeader.nSize = sizeof(GZIP_HEADER);
 
-//                 dataHeader.listRecords.append(getDataRecord(offsetof(GZIP_HEADER, nMagic), 2, "nMagic", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                 dataHeader.listRecords.append(
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(GZIP_HEADER, nMagic), 2, "nMagic", VT_UINT16, DRF_UNKNOWN,
+//                 dataHeadersOptions.pMemoryMap->endian)); dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(GZIP_HEADER, nCompressionMethod), 1, "nCompressionMethod", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(GZIP_HEADER, nFileFlags), 1, "nFileFlags", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));

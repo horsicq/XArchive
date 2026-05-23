@@ -476,8 +476,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         quint8 nModifier = (quint8)pState->mapProperties.value(XBinary::FPART_PROP_PASSWORD_MODIFIER).toUInt();
         QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
         if (!sPassword.isEmpty() && pState->pDeviceInput) {
-            if ((pState->nInputLimit <= 0) || (pState->nInputLimit > (std::numeric_limits<qint32>::max)()) ||
-                !pState->pDeviceInput->seek(pState->nInputOffset)) {
+            if ((pState->nInputLimit <= 0) || (pState->nInputLimit > (std::numeric_limits<qint32>::max)()) || !pState->pDeviceInput->seek(pState->nInputOffset)) {
                 return false;
             }
             baArjGarbleDecrypted.resize((qint32)pState->nInputLimit);

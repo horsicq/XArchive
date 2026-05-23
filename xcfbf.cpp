@@ -152,13 +152,15 @@ quint32 XCFBF::ftStringToStructID(const QString &sFtString)
 
 //                 // Note: _clsid is 16 bytes (GUID), _uSectorShift is 2 bytes, ensure correct sizes
 //                 dataHeader.listRecords.append(
-//                     getDataRecord(offsetof(StructuredStorageHeader, _uMinorVersion), 2, "_uMinorVersion", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     getDataRecord(offsetof(StructuredStorageHeader, _uMinorVersion), 2, "_uMinorVersion", VT_UINT16, DRF_UNKNOWN,
+//                     dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(StructuredStorageHeader, _uDllVersion), 2, "_uDllVersion", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(StructuredStorageHeader, _uByteOrder), 2, "_uByteOrder", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
-//                     getDataRecord(offsetof(StructuredStorageHeader, _uSectorShift), 2, "_uSectorShift", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     getDataRecord(offsetof(StructuredStorageHeader, _uSectorShift), 2, "_uSectorShift", VT_UINT16, DRF_UNKNOWN,
+//                     dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(getDataRecord(offsetof(StructuredStorageHeader, _uMiniSectorShift), 2, "_uMiniSectorShift", VT_UINT16, DRF_UNKNOWN,
 //                                                             dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
@@ -170,7 +172,8 @@ quint32 XCFBF::ftStringToStructID(const QString &sFtString)
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(StructuredStorageHeader, _csectFat), 4, "_csectFat", VT_UINT32, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
-//                     getDataRecord(offsetof(StructuredStorageHeader, _sectDirStart), 4, "_sectDirStart", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     getDataRecord(offsetof(StructuredStorageHeader, _sectDirStart), 4, "_sectDirStart", VT_UINT32, DRF_UNKNOWN,
+//                     dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(StructuredStorageHeader, _signature), 4, "_signature", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(getDataRecord(offsetof(StructuredStorageHeader, _ulMiniSectorCutoff), 4, "_ulMiniSectorCutoff", VT_UINT32, DRF_UNKNOWN,
@@ -181,7 +184,8 @@ quint32 XCFBF::ftStringToStructID(const QString &sFtString)
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(StructuredStorageHeader, _csectMiniFat), 4, "_csectMiniFat", VT_UINT32, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
-//                     getDataRecord(offsetof(StructuredStorageHeader, _sectDifStart), 4, "_sectDifStart", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                     getDataRecord(offsetof(StructuredStorageHeader, _sectDifStart), 4, "_sectDifStart", VT_UINT32, DRF_UNKNOWN,
+//                     dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(StructuredStorageHeader, _csectDif), 4, "_csectDif", VT_UINT32, DRF_COUNT, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(

@@ -63,8 +63,7 @@ static quint64 read_uint64_le(const QByteArray &baData, qint64 nOffset)
 }
 
 static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
-                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
-                                     XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
+                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN, XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
 {
     XBinary::PM_INFO result = {};
 
@@ -98,7 +97,8 @@ bool XWIM::isValid(PDSTRUCT *pPdStruct)
             quint32 nHeaderSize = read_uint32(8);
             quint32 nVersion = read_uint32(0x0C);
 
-            if ((nHeaderSize >= WIM_HEADER_SIZE_OLD) && (nHeaderSize <= WIM_HEADER_SIZE_NEW) && ((qint64)nHeaderSize <= nSize) && _isSupportedVersion(nVersion, nHeaderSize)) {
+            if ((nHeaderSize >= WIM_HEADER_SIZE_OLD) && (nHeaderSize <= WIM_HEADER_SIZE_NEW) && ((qint64)nHeaderSize <= nSize) &&
+                _isSupportedVersion(nVersion, nHeaderSize)) {
                 if (nHeaderSize == WIM_HEADER_SIZE_OLD) {
                     bResult = true;
                 } else {
@@ -831,7 +831,8 @@ bool XWIM::_parseMetadataDir(const QByteArray &baMetadata, qint64 nOffset, const
     return true;
 }
 
-XWIM::WIM_RECORD XWIM::_createRecordFromMetadataItem(const QByteArray &baMetadata, qint64 nOffset, const QString &sParent, const QMap<QByteArray, STREAM_INFO> &mapStreams)
+XWIM::WIM_RECORD XWIM::_createRecordFromMetadataItem(const QByteArray &baMetadata, qint64 nOffset, const QString &sParent,
+                                                     const QMap<QByteArray, STREAM_INFO> &mapStreams)
 {
     WIM_RECORD record = {};
 

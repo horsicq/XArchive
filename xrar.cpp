@@ -32,8 +32,7 @@ static XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unk
                                                    {XRar::STRUCTID_RAR50_HEADER, "RAR5.0HEADER", QString("RAR 5.0 header")}};
 
 static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
-                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
-                                     XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
+                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN, XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
 {
     XBinary::PM_INFO result = {};
     result.hm[0] = hm0;
@@ -356,9 +355,16 @@ QList<XBinary::XFHEADER> XRar::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         quint32 nSigID = STRUCTID_UNKNOWN;
         qint64 nSigSize = 0;
 
-        if (nVersion == 1) { nSigID = STRUCTID_RAR14_SIGNATURE; nSigSize = 4; }
-        else if (nVersion == 4) { nSigID = STRUCTID_RAR40_SIGNATURE; nSigSize = 7; }
-        else if (nVersion == 5) { nSigID = STRUCTID_RAR50_SIGNATURE; nSigSize = 8; }
+        if (nVersion == 1) {
+            nSigID = STRUCTID_RAR14_SIGNATURE;
+            nSigSize = 4;
+        } else if (nVersion == 4) {
+            nSigID = STRUCTID_RAR40_SIGNATURE;
+            nSigSize = 7;
+        } else if (nVersion == 5) {
+            nSigID = STRUCTID_RAR50_SIGNATURE;
+            nSigSize = 8;
+        }
 
         if (nSigID != STRUCTID_UNKNOWN) {
             XFSTRUCT _xfStruct = xfStruct;
@@ -400,8 +406,7 @@ QList<XBinary::XFHEADER> XRar::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
                 if (block.nType == BLOCKTYPE4_FILE) {
                     FILEBLOCK4 fileBlock4 = readFileBlock4(nCurrentOffset);
                     qint64 nPackSize = fileBlock4.packSize;
-                    if (fileBlock4.genericBlock4.nFlags & RAR4_FILE_LARGE)
-                        nPackSize |= ((qint64)fileBlock4.highPackSize << 32);
+                    if (fileBlock4.genericBlock4.nFlags & RAR4_FILE_LARGE) nPackSize |= ((qint64)fileBlock4.highPackSize << 32);
                     nCurrentOffset += block.nHeaderSize + nPackSize;
                 } else {
                     nCurrentOffset += block.nHeaderSize;
@@ -469,8 +474,7 @@ QList<XBinary::XFHEADER> XRar::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
                     if (block.nType == BLOCKTYPE4_FILE) {
                         FILEBLOCK4 fb4 = readFileBlock4(nCurrentOffset);
                         qint64 nPackSize = fb4.packSize;
-                        if (fb4.genericBlock4.nFlags & RAR4_FILE_LARGE)
-                            nPackSize |= ((qint64)fb4.highPackSize << 32);
+                        if (fb4.genericBlock4.nFlags & RAR4_FILE_LARGE) nPackSize |= ((qint64)fb4.highPackSize << 32);
                         nCurrentOffset += block.nHeaderSize + nPackSize;
                     } else {
                         nCurrentOffset += block.nHeaderSize;
@@ -517,9 +521,9 @@ QList<XBinary::XFRECORD> XRar::getXFRecords(FT fileType, quint32 nStructID, cons
         qint32 nSigSize = (nStructID == STRUCTID_RAR50_SIGNATURE) ? 8 : (nStructID == STRUCTID_RAR14_SIGNATURE) ? 4 : 7;
         listResult.append({"Signature", 0, nSigSize, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
     } else if (nStructID == STRUCTID_RAR40_HEADER) {
-        listResult.append({"CRC16",      0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
-        listResult.append({"Type",       2, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"Flags",      3, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"CRC16", 0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Type", 2, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Flags", 3, 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"HeaderSize", 5, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
     } else if (nStructID == STRUCTID_RAR50_HEADER) {
         listResult.append({"CRC32", 0, 4, XFRECORD_FLAG_NONE, VT_UINT32});
@@ -931,8 +935,8 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
 //                 if (genericHeader.nFlags & 0x0001) {
 //                     packeInt = read_uleb128(nStartOffset + nOffset, 4);
-//                     dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Extra Area Size", XBinary::VT_ULEB128, DRF_SIZE, XBinary::ENDIAN_LITTLE));
-//                     nOffset += packeInt.nByteSize;
+//                     dataHeader.listRecords.append(getDataRecord(nOffset, packeInt.nByteSize, "Extra Area Size", XBinary::VT_ULEB128, DRF_SIZE,
+//                     XBinary::ENDIAN_LITTLE)); nOffset += packeInt.nByteSize;
 //                 }
 
 //                 if (genericHeader.nFlags & 0x0002) {

@@ -617,7 +617,8 @@ quint32 XARJ::ftStringToStructID(const QString &sFtString)
 
 //                     if (info.nCompressedSize > 0) {
 //                         dataHeader.listRecords.append(
-//                             getDataRecord(info.nHeaderSize, info.nCompressedSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                             getDataRecord(info.nHeaderSize, info.nCompressedSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN,
+//                             dataHeadersOptions.pMemoryMap->endian));
 //                     }
 
 //                     listResult.append(dataHeader);

@@ -186,9 +186,6 @@ quint32 XMiniDump::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XMINIDUMP_STRUCTID, sizeof(_TABLE_XMINIDUMP_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-
-
-
 QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

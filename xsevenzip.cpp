@@ -21,7 +21,6 @@
 
 #include "xsevenzip.h"
 
-
 XBinary::XCONVERT _TABLE_XSevenZip_STRUCTID[] = {{XSevenZip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                  {XSevenZip::STRUCTID_SIGNATUREHEADER, "SIGNATUREHEADER", QString("SIGNATUREHEADER")},
                                                  {XSevenZip::STRUCTID_HEADER, "HEADER", QObject::tr("Header")}};
@@ -56,12 +55,12 @@ XBinary::XIDSTRING _TABLE_XSevenZip_EIdEnum[] = {
 };
 
 static const XBinary::XFIXEDFIELD _TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER[] = {
-    {"kSignature", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, kSignature), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->kSignature),
-     XBinary::XFRECORD_FLAG_NONE, XBinary::VT_BYTE_ARRAY},
-    {"Major", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, Major), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->Major),
-     XBinary::XFRECORD_FLAG_VERSION_MAJOR, XBinary::VT_UINT8},
-    {"Minor", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, Minor), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->Minor),
-     XBinary::XFRECORD_FLAG_VERSION_MINOR, XBinary::VT_UINT8},
+    {"kSignature", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, kSignature), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->kSignature), XBinary::XFRECORD_FLAG_NONE,
+     XBinary::VT_BYTE_ARRAY},
+    {"Major", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, Major), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->Major), XBinary::XFRECORD_FLAG_VERSION_MAJOR,
+     XBinary::VT_UINT8},
+    {"Minor", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, Minor), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->Minor), XBinary::XFRECORD_FLAG_VERSION_MINOR,
+     XBinary::VT_UINT8},
     {"StartHeaderCRC", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, StartHeaderCRC), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->StartHeaderCRC),
      XBinary::XFRECORD_FLAG_NONE, XBinary::VT_UINT32},
     {"NextHeaderOffset", (qint32)offsetof(XSevenZip::SIGNATUREHEADER, NextHeaderOffset), (qint32)sizeof(((XSevenZip::SIGNATUREHEADER *)0)->NextHeaderOffset),
@@ -105,8 +104,7 @@ static bool getNextHeaderRange(const XSevenZip::SIGNATUREHEADER &signatureHeader
 }
 
 static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
-                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN,
-                                     XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
+                                     XBinary::HANDLE_METHOD hm2 = XBinary::HANDLE_METHOD_UNKNOWN, XBinary::HANDLE_METHOD hm3 = XBinary::HANDLE_METHOD_UNKNOWN)
 {
     XBinary::PM_INFO result = {};
 
@@ -137,13 +135,7 @@ QList<XBinary::PM_INFO> XSevenZip::unpackImplemented()
     QList<XBinary::PM_INFO> listResult;
 
     static const HANDLE_METHOD g_7zUnpackMethods[] = {
-        HANDLE_METHOD_STORE,
-        HANDLE_METHOD_LZMA,
-        HANDLE_METHOD_LZMA2,
-        HANDLE_METHOD_PPMD7,
-        HANDLE_METHOD_BZIP2,
-        HANDLE_METHOD_DEFLATE,
-        HANDLE_METHOD_DEFLATE64,
+        HANDLE_METHOD_STORE, HANDLE_METHOD_LZMA, HANDLE_METHOD_LZMA2, HANDLE_METHOD_PPMD7, HANDLE_METHOD_BZIP2, HANDLE_METHOD_DEFLATE, HANDLE_METHOD_DEFLATE64,
     };
 
     static const HANDLE_METHOD g_7zFilters[] = {
@@ -268,8 +260,7 @@ QString XSevenZip::getComment()
     qint64 nNextHeaderOffset = 0;
     qint64 nNextHeaderSize = 0;
 
-    if (getNextHeaderRange(signatureHeader, getSize(), &nNextHeaderOffset, &nNextHeaderSize) && (nNextHeaderSize > 0) &&
-        (nNextHeaderSize <= 0x7FFFFFFF)) {
+    if (getNextHeaderRange(signatureHeader, getSize(), &nNextHeaderOffset, &nNextHeaderSize) && (nNextHeaderSize > 0) && (nNextHeaderSize <= 0x7FFFFFFF)) {
         QByteArray baData;
         baData.resize(nNextHeaderSize);
         qint64 nHeaderSize = nNextHeaderSize;
@@ -526,9 +517,9 @@ quint32 XSevenZip::ftStringToStructID(const QString &sFtString)
 
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(SIGNATUREHEADER, kSignature), 6, "kSignature", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                 dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Major), 1, "Major", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                 dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Minor), 1, "Minor", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                 dataHeader.listRecords.append(
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Major), 1, "Major", VT_UINT8, DRF_UNKNOWN,
+//                 dataHeadersOptions.pMemoryMap->endian)); dataHeader.listRecords.append(getDataRecord(offsetof(SIGNATUREHEADER, Minor), 1, "Minor", VT_UINT8,
+//                 DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian)); dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(SIGNATUREHEADER, StartHeaderCRC), 4, "StartHeaderCRC", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(SIGNATUREHEADER, NextHeaderOffset), 8, "NextHeaderOffset", VT_UINT64, DRF_OFFSET, dataHeadersOptions.pMemoryMap->endian));
@@ -677,8 +668,8 @@ QList<XBinary::XFRECORD> XSevenZip::getXFRecords(FT fileType, quint32 nStructID,
     QList<XBinary::XFRECORD> listResult;
 
     if (nStructID == STRUCTID_SIGNATUREHEADER) {
-        listResult = XBinary::XFIXEDFIELD_toXFRecords(_TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER,
-                                                      sizeof(_TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER) / sizeof(XBinary::XFIXEDFIELD));
+        listResult =
+            XBinary::XFIXEDFIELD_toXFRecords(_TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER, sizeof(_TABLE_XSevenZip_STRUCTID_SIGNATUREHEADER) / sizeof(XBinary::XFIXEDFIELD));
     }
 
     return listResult;
@@ -1590,8 +1581,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         qint64 nNextHeaderOffset = 0;
         qint64 nNextHeaderSize = 0;
 
-        if (getNextHeaderRange(signatureHeader, pState->nTotalSize, &nNextHeaderOffset, &nNextHeaderSize) && (nNextHeaderSize > 0) &&
-            (nNextHeaderSize <= 0x7FFFFFFF)) {
+        if (getNextHeaderRange(signatureHeader, pState->nTotalSize, &nNextHeaderOffset, &nNextHeaderSize) && (nNextHeaderSize > 0) && (nNextHeaderSize <= 0x7FFFFFFF)) {
             QByteArray baData;
             baData.resize(nNextHeaderSize);
             // char *pData = new char[nNextHeaderSize];

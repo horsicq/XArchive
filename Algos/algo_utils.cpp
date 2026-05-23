@@ -303,8 +303,8 @@ void Algo_utils::applyBCJX86Decode(QByteArray &baData)
             continue;
         }
 
-        quint32 nStored = (quint32)(quint8)baData[i + 1] | ((quint32)(quint8)baData[i + 2] << 8) | ((quint32)(quint8)baData[i + 3] << 16) |
-                          ((quint32)(quint8)baData[i + 4] << 24);
+        quint32 nStored =
+            (quint32)(quint8)baData[i + 1] | ((quint32)(quint8)baData[i + 2] << 8) | ((quint32)(quint8)baData[i + 3] << 16) | ((quint32)(quint8)baData[i + 4] << 24);
         quint32 nRelAddr = nStored - (quint32)(i + 5);
         baData[i + 1] = (char)(nRelAddr & 0xFF);
         baData[i + 2] = (char)((nRelAddr >> 8) & 0xFF);
@@ -426,8 +426,8 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
         } while ((flush != Z_FINISH) || (ret != Z_STREAM_END));
 
         X_deflateEnd(&stream);
-        bResult = !pCompressState->bReadError && !pCompressState->bWriteError &&
-                  ((pCompressState->nInputLimit == -1) || (nTotalProcessed == pCompressState->nInputLimit));
+        bResult =
+            !pCompressState->bReadError && !pCompressState->bWriteError && ((pCompressState->nInputLimit == -1) || (nTotalProcessed == pCompressState->nInputLimit));
     }
 
     return bResult;

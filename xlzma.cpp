@@ -55,8 +55,8 @@ bool XLZMA::isValid(PDSTRUCT *pPdStruct)
         quint8 nDictByte2 = read_uint8(3);
         quint32 nDictionarySize = read_uint32(1, false);
 
-        bResult = (nProperties == 0x5D) && (nDictByte0 == 0x00) && (nDictByte1 == 0x00) && (nDictByte2 == 0x00) &&
-                  _isValidLZMAProperties(nProperties) && (nDictionarySize != 0);
+        bResult = (nProperties == 0x5D) && (nDictByte0 == 0x00) && (nDictByte1 == 0x00) && (nDictByte2 == 0x00) && _isValidLZMAProperties(nProperties) &&
+                  (nDictionarySize != 0);
     }
 
     return bResult;

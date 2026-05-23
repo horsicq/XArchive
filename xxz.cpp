@@ -264,11 +264,12 @@ quint32 XXZ::ftStringToStructID(const QString &sFtString)
 //                     getDataRecord(offsetof(STREAM_HEADER, header_magic), 6, "header_magic", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(STREAM_HEADER, stream_flags), 2, "stream_flags", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                 dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_HEADER, crc32), 4, "crc32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_HEADER, crc32), 4, "crc32", VT_UINT32, DRF_UNKNOWN,
+//                 dataHeadersOptions.pMemoryMap->endian));
 //             } else if (dataHeadersOptions.nID == STRUCTID_STREAM_FOOTER) {
 //                 dataHeader.nSize = 12;
-//                 dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_FOOTER, crc32), 4, "crc32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                 dataHeader.listRecords.append(
+//                 dataHeader.listRecords.append(getDataRecord(offsetof(STREAM_FOOTER, crc32), 4, "crc32", VT_UINT32, DRF_UNKNOWN,
+//                 dataHeadersOptions.pMemoryMap->endian)); dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(STREAM_FOOTER, backward_size), 4, "backward_size", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
 //                 dataHeader.listRecords.append(
 //                     getDataRecord(offsetof(STREAM_FOOTER, stream_flags), 2, "stream_flags", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));

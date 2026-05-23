@@ -107,7 +107,8 @@ quint32 X_Ar::ftStringToStructID(const QString &sFtString)
 // bool X_Ar::readTableInit(const DATA_RECORDS_OPTIONS &dataRecordsOptions, void **ppUserData, PDSTRUCT *pPdStruct)
 // {
 //     if (dataRecordsOptions.dataHeaderFirst.dsID.nID == STRUCTID_FRECORD) {
-//         qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, dataRecordsOptions.dataHeaderFirst.locType, dataRecordsOptions.dataHeaderFirst.nLocation);
+//         qint64 nStartOffset = locationToOffset(dataRecordsOptions.pMemoryMap, dataRecordsOptions.dataHeaderFirst.locType,
+//         dataRecordsOptions.dataHeaderFirst.nLocation);
 
 //         if (nStartOffset != -1) {
 //             TABLE_LIST *pTableList = new TABLE_LIST;
