@@ -195,7 +195,8 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
     QByteArray baDecrypted;
     baDecrypted.resize(static_cast<qint32>(nTotalEncrypted));
 
-    if (!XAESDecoder::decryptAESCBC(baKey32, baIV, reinterpret_cast<const quint8 *>(baEncrypted.constData()), reinterpret_cast<quint8 *>(baDecrypted.data()), nTotalEncrypted)) {
+    if (!XAESDecoder::decryptAESCBC(baKey32, baIV, reinterpret_cast<const quint8 *>(baEncrypted.constData()), reinterpret_cast<quint8 *>(baDecrypted.data()),
+                                    nTotalEncrypted)) {
         qWarning() << "[XAESDecoder] AES-CBC decryption failed";
         memset(aKey, 0, sizeof(aKey));
         return false;
@@ -449,8 +450,8 @@ static const quint32 s_aes_rcon[10] = {0x00000001, 0x00000002, 0x00000004, 0x000
 
 static quint32 SubWord(quint32 nWord)
 {
-    return (static_cast<quint32>(s_aes_sbox[(nWord >> 0) & 0xFF]) << 0) | (static_cast<quint32>(s_aes_sbox[(nWord >> 8) & 0xFF]) << 8) | (static_cast<quint32>(s_aes_sbox[(nWord >> 16) & 0xFF]) << 16) |
-           (static_cast<quint32>(s_aes_sbox[(nWord >> 24) & 0xFF]) << 24);
+    return (static_cast<quint32>(s_aes_sbox[(nWord >> 0) & 0xFF]) << 0) | (static_cast<quint32>(s_aes_sbox[(nWord >> 8) & 0xFF]) << 8) |
+           (static_cast<quint32>(s_aes_sbox[(nWord >> 16) & 0xFF]) << 16) | (static_cast<quint32>(s_aes_sbox[(nWord >> 24) & 0xFF]) << 24);
 }
 
 static quint32 RotWord(quint32 nWord)
@@ -486,8 +487,8 @@ qint32 XAESDecoder::custom_aes_set_encrypt_key(const quint8 *pUserKey, qint32 nB
     pKey->rounds = nRounds;
 
     for (qint32 i = 0; i < nKeyWords; i++) {
-        pKey->rd_key[i] =
-            (static_cast<quint32>(pUserKey[4 * i + 0]) << 0) | (static_cast<quint32>(pUserKey[4 * i + 1]) << 8) | (static_cast<quint32>(pUserKey[4 * i + 2]) << 16) | (static_cast<quint32>(pUserKey[4 * i + 3]) << 24);
+        pKey->rd_key[i] = (static_cast<quint32>(pUserKey[4 * i + 0]) << 0) | (static_cast<quint32>(pUserKey[4 * i + 1]) << 8) |
+                          (static_cast<quint32>(pUserKey[4 * i + 2]) << 16) | (static_cast<quint32>(pUserKey[4 * i + 3]) << 24);
     }
 
     qint32 nTotalWords = 4 * (nRounds + 1);
@@ -1094,7 +1095,8 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
     QByteArray baDecrypted;
     baDecrypted.resize(static_cast<qint32>(nTotalEncrypted));
 
-    if (!XAESDecoder::decryptAESCBC(baKey32, baIV, reinterpret_cast<const quint8 *>(baEncrypted.constData()), reinterpret_cast<quint8 *>(baDecrypted.data()), nTotalEncrypted)) {
+    if (!XAESDecoder::decryptAESCBC(baKey32, baIV, reinterpret_cast<const quint8 *>(baEncrypted.constData()), reinterpret_cast<quint8 *>(baDecrypted.data()),
+                                    nTotalEncrypted)) {
         qWarning() << "[XAESDecoder::decryptRar5] AES-CBC decryption failed";
         memset(aAesKey, 0, 32);
         memset(aHashKey, 0, 32);

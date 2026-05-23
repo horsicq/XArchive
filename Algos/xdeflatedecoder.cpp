@@ -46,256 +46,271 @@
 #define ZUTIL_H
 
 #ifdef HAVE_HIDDEN
-#  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+#define ZLIB_INTERNAL __attribute__((visibility("hidden")))
 #else
-#  define ZLIB_INTERNAL
+#define ZLIB_INTERNAL
 #endif
 #if defined(STDC) && !defined(Z_SOLO)
-#  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
-#    include <stddef.h>
-#  endif
-#  include <string.h>
-#  include <stdlib.h>
+#if !(defined(_WIN32_WCE) && defined(_MSC_VER))
+#include <stddef.h>
+#endif
+#include <string.h>
+#include <stdlib.h>
 #endif
 
 #ifdef Z_SOLO
-   typedef long ptrdiff_t;  /* guess -- will be caught if guess is wrong */
+typedef long ptrdiff_t; /* guess -- will be caught if guess is wrong */
 #endif
 
 #ifndef local
-#  define local static
+#define local static
 #endif
 /* since "static" is used to mean two completely different things in C, we
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-typedef unsigned char  uch;
+typedef unsigned char uch;
 typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
-typedef unsigned long  ulg;
+typedef unsigned long ulg;
 
-extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
+#define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
 
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = ERR_MSG(err), (err))
+#define ERR_RETURN(strm, err) return (strm->msg = ERR_MSG(err), (err))
 /* To be used only when the state is known to be valid */
 
-        /* common constants */
+/* common constants */
 
 #ifndef DEF_WBITS
-#  define DEF_WBITS MAX_WBITS
+#define DEF_WBITS MAX_WBITS
 #endif
 /* default windowBits for decompression. MAX_WBITS is for compression only */
 
 #if MAX_MEM_LEVEL >= 8
-#  define DEF_MEM_LEVEL 8
+#define DEF_MEM_LEVEL 8
 #else
-#  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
+#define DEF_MEM_LEVEL MAX_MEM_LEVEL
 #endif
 /* default memLevel */
 
 #define STORED_BLOCK 0
 #define STATIC_TREES 1
-#define DYN_TREES    2
+#define DYN_TREES 2
 /* The three kinds of block type */
 
-#define MIN_MATCH  3
-#define MAX_MATCH  258
+#define MIN_MATCH 3
+#define MAX_MATCH 258
 /* The minimum and maximum match lengths */
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
-        /* target dependencies */
+/* target dependencies */
 
 #if defined(MSDOS) || (defined(WINDOWS) && !defined(WIN32))
-#  define OS_CODE  0x00
-#  ifndef Z_SOLO
-#    if defined(__TURBOC__) || defined(__BORLANDC__)
-#      if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
-         /* Allow compilation with ANSI keywords only enabled */
-         void _Cdecl farfree( void *block );
-         void *_Cdecl farmalloc( unsigned long nbytes );
-#      else
-#        include <alloc.h>
-#      endif
-#    else /* MSC or DJGPP */
-#      include <malloc.h>
-#    endif
-#  endif
+#define OS_CODE 0x00
+#ifndef Z_SOLO
+#if defined(__TURBOC__) || defined(__BORLANDC__)
+#if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
+/* Allow compilation with ANSI keywords only enabled */
+void _Cdecl farfree(void *block);
+void *_Cdecl farmalloc(unsigned long nbytes);
+#else
+#include <alloc.h>
+#endif
+#else /* MSC or DJGPP */
+#include <malloc.h>
+#endif
+#endif
 #endif
 
 #ifdef AMIGA
-#  define OS_CODE  1
+#define OS_CODE 1
 #endif
 
 #if defined(VAXC) || defined(VMS)
-#  define OS_CODE  2
-#  define F_OPEN(name, mode) \
-     fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
+#define OS_CODE 2
+#define F_OPEN(name, mode) fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
 #endif
 
 #ifdef __370__
-#  if __TARGET_LIB__ < 0x20000000
-#    define OS_CODE 4
-#  elif __TARGET_LIB__ < 0x40000000
-#    define OS_CODE 11
-#  else
-#    define OS_CODE 8
-#  endif
+#if __TARGET_LIB__ < 0x20000000
+#define OS_CODE 4
+#elif __TARGET_LIB__ < 0x40000000
+#define OS_CODE 11
+#else
+#define OS_CODE 8
+#endif
 #endif
 
 #if defined(ATARI) || defined(atarist)
-#  define OS_CODE  5
+#define OS_CODE 5
 #endif
 
 #ifdef OS2
-#  define OS_CODE  6
-#  if defined(M_I86) && !defined(Z_SOLO)
-#    include <malloc.h>
-#  endif
+#define OS_CODE 6
+#if defined(M_I86) && !defined(Z_SOLO)
+#include <malloc.h>
+#endif
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
-#  ifndef Z_SOLO
-#    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
-#      include <unix.h> /* for fdopen */
-#    else
-#      ifndef fdopen
-#        define fdopen(fd,mode) NULL /* No fdopen() */
-#      endif
-#    endif
-#  endif
+#define OS_CODE 7
+#ifndef Z_SOLO
+#if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+#include <unix.h> /* for fdopen */
+#else
+#ifndef fdopen
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#endif
+#endif
+#endif
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#define OS_CODE 13
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#define OS_CODE 10
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#define OS_CODE 16
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#define OS_CODE 18
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#define OS_CODE 19
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)
-#  define fdopen(fd,mode) NULL /* No fdopen() */
+#define fdopen(fd, mode) NULL /* No fdopen() */
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER > 600)) && !defined __INTERIX
-#  if defined(_WIN32_WCE)
-#    define fdopen(fd,mode) NULL /* No fdopen() */
-#    ifndef _PTRDIFF_T_DEFINED
-       typedef int ptrdiff_t;
-#      define _PTRDIFF_T_DEFINED
-#    endif
-#  else
-#    define fdopen(fd,type)  _fdopen(fd,type)
-#  endif
+#if defined(_WIN32_WCE)
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
+#else
+#define fdopen(fd, type) _fdopen(fd, type)
+#endif
 #endif
 
 #if defined(__BORLANDC__) && !defined(MSDOS)
-  #pragma warn -8004
-  #pragma warn -8008
-  #pragma warn -8066
+#pragma warn - 8004
+#pragma warn - 8008
+#pragma warn - 8066
 #endif
 
 /* provide prototypes for these when building zlib without LFS */
-#if !defined(_WIN32) && \
-    (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE-0 == 0)
-    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
-    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
+#if !defined(_WIN32) && (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE - 0 == 0)
+ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
+ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
 #endif
 
-        /* common defaults */
+/* common defaults */
 
 #ifndef OS_CODE
-#  define OS_CODE  3     /* assume Unix */
+#define OS_CODE 3 /* assume Unix */
 #endif
 
 #ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
+#define F_OPEN(name, mode) fopen((name), (mode))
 #endif
 
-         /* functions */
+/* functions */
 
 #if defined(pyr) || defined(Z_SOLO)
-#  define NO_MEMCPY
+#define NO_MEMCPY
 #endif
 #if defined(SMALL_MEDIUM) && !defined(_MSC_VER) && !defined(__SC__)
- /* Use our own functions for small and medium model with MSC <= 5.0.
-  * You may have to use the same strategy for Borland C (untested).
-  * The __SC__ check is for Symantec.
-  */
-#  define NO_MEMCPY
+/* Use our own functions for small and medium model with MSC <= 5.0.
+ * You may have to use the same strategy for Borland C (untested).
+ * The __SC__ check is for Symantec.
+ */
+#define NO_MEMCPY
 #endif
 #if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
-#  define HAVE_MEMCPY
+#define HAVE_MEMCPY
 #endif
 #ifdef HAVE_MEMCPY
-#  ifdef SMALL_MEDIUM /* MSDOS small or medium model */
-#    define zmemcpy _fmemcpy
-#    define zmemcmp _fmemcmp
-#    define zmemzero(dest, len) _fmemset(dest, 0, len)
-#  else
-#    define zmemcpy memcpy
-#    define zmemcmp memcmp
-#    define zmemzero(dest, len) memset(dest, 0, len)
-#  endif
+#ifdef SMALL_MEDIUM /* MSDOS small or medium model */
+#define zmemcpy _fmemcpy
+#define zmemcmp _fmemcmp
+#define zmemzero(dest, len) _fmemset(dest, 0, len)
 #else
-   void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
-   int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
-   void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#define zmemcpy memcpy
+#define zmemcmp memcmp
+#define zmemzero(dest, len) memset(dest, 0, len)
+#endif
+#else
+void ZLIB_INTERNAL zmemcpy OF((Bytef * dest, const Bytef *source, uInt len));
+int ZLIB_INTERNAL zmemcmp OF((const Bytef *s1, const Bytef *s2, uInt len));
+void ZLIB_INTERNAL zmemzero OF((Bytef * dest, uInt len));
 #endif
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
+#include <stdio.h>
+extern int ZLIB_INTERNAL z_verbose;
+extern void ZLIB_INTERNAL z_error OF((char *m));
+#define Assert(cond, msg)          \
+    {                              \
+        if (!(cond)) z_error(msg); \
+    }
+#define Trace(x)                       \
+    {                                  \
+        if (z_verbose >= 0) fprintf x; \
+    }
+#define Tracev(x)                     \
+    {                                 \
+        if (z_verbose > 0) fprintf x; \
+    }
+#define Tracevv(x)                    \
+    {                                 \
+        if (z_verbose > 1) fprintf x; \
+    }
+#define Tracec(c, x)                         \
+    {                                        \
+        if (z_verbose > 0 && (c)) fprintf x; \
+    }
+#define Tracecv(c, x)                        \
+    {                                        \
+        if (z_verbose > 1 && (c)) fprintf x; \
+    }
 #else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
+#define Assert(cond, msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c, x)
+#define Tracecv(c, x)
 #endif
 
 #ifndef Z_SOLO
-   voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr));
+voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items, unsigned size));
+void ZLIB_INTERNAL zcfree OF((voidpf opaque, voidpf ptr));
 #endif
 
-#define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size))
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
+#define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
+#define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
+#define TRY_FREE(s, p)      \
+    {                       \
+        if (p) ZFREE(s, p); \
+    }
 
 /* Reverse the bytes in a 32-bit value */
-#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
-                    (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
 #endif /* ZUTIL_H */
 /* zutil.c -- target dependent utility functions for the compression library
@@ -305,24 +320,21 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 
 /* @(#) $Id$ */
 #ifndef Z_SOLO
-#  include "gzguts.h"
+#include "gzguts.h"
 #endif
 
-z_const char * const z_errmsg[10] = {
-    (z_const char *)"need dictionary",     /* Z_NEED_DICT       2  */
-    (z_const char *)"stream end",          /* Z_STREAM_END      1  */
-    (z_const char *)"",                    /* Z_OK              0  */
-    (z_const char *)"file error",          /* Z_ERRNO         (-1) */
-    (z_const char *)"stream error",        /* Z_STREAM_ERROR  (-2) */
-    (z_const char *)"data error",          /* Z_DATA_ERROR    (-3) */
-    (z_const char *)"insufficient memory", /* Z_MEM_ERROR     (-4) */
-    (z_const char *)"buffer error",        /* Z_BUF_ERROR     (-5) */
-    (z_const char *)"incompatible version",/* Z_VERSION_ERROR (-6) */
-    (z_const char *)""
-};
+z_const char *const z_errmsg[10] = {(z_const char *)"need dictionary",      /* Z_NEED_DICT       2  */
+                                    (z_const char *)"stream end",           /* Z_STREAM_END      1  */
+                                    (z_const char *)"",                     /* Z_OK              0  */
+                                    (z_const char *)"file error",           /* Z_ERRNO         (-1) */
+                                    (z_const char *)"stream error",         /* Z_STREAM_ERROR  (-2) */
+                                    (z_const char *)"data error",           /* Z_DATA_ERROR    (-3) */
+                                    (z_const char *)"insufficient memory",  /* Z_MEM_ERROR     (-4) */
+                                    (z_const char *)"buffer error",         /* Z_BUF_ERROR     (-5) */
+                                    (z_const char *)"incompatible version", /* Z_VERSION_ERROR (-6) */
+                                    (z_const char *)""};
 
-
-const char * ZEXPORT zlibVersion()
+const char *ZEXPORT zlibVersion()
 {
     return ZLIB_VERSION;
 }
@@ -333,28 +345,28 @@ uLong ZEXPORT zlibCompileFlags()
 
     flags = 0;
     switch ((int)(sizeof(uInt))) {
-    case 2:     break;
-    case 4:     flags += 1;     break;
-    case 8:     flags += 2;     break;
-    default:    flags += 3;
+        case 2: break;
+        case 4: flags += 1; break;
+        case 8: flags += 2; break;
+        default: flags += 3;
     }
     switch ((int)(sizeof(uLong))) {
-    case 2:     break;
-    case 4:     flags += 1 << 2;        break;
-    case 8:     flags += 2 << 2;        break;
-    default:    flags += 3 << 2;
+        case 2: break;
+        case 4: flags += 1 << 2; break;
+        case 8: flags += 2 << 2; break;
+        default: flags += 3 << 2;
     }
     switch ((int)(sizeof(voidpf))) {
-    case 2:     break;
-    case 4:     flags += 1 << 4;        break;
-    case 8:     flags += 2 << 4;        break;
-    default:    flags += 3 << 4;
+        case 2: break;
+        case 4: flags += 1 << 4; break;
+        case 8: flags += 2 << 4; break;
+        default: flags += 3 << 4;
     }
     switch ((int)(sizeof(z_off_t))) {
-    case 2:     break;
-    case 4:     flags += 1 << 6;        break;
-    case 8:     flags += 2 << 6;        break;
-    default:    flags += 3 << 6;
+        case 2: break;
+        case 4: flags += 1 << 6; break;
+        case 8: flags += 2 << 6; break;
+        default: flags += 3 << 6;
     }
 #ifdef ZLIB_DEBUG
     flags += 1 << 8;
@@ -384,40 +396,40 @@ uLong ZEXPORT zlibCompileFlags()
     flags += 1L << 21;
 #endif
 #if defined(STDC) || defined(Z_HAVE_STDARG_H)
-#  ifdef NO_vsnprintf
+#ifdef NO_vsnprintf
     flags += 1L << 25;
-#    ifdef HAS_vsprintf_void
+#ifdef HAS_vsprintf_void
     flags += 1L << 26;
-#    endif
-#  else
-#    ifdef HAS_vsnprintf_void
+#endif
+#else
+#ifdef HAS_vsnprintf_void
     flags += 1L << 26;
-#    endif
-#  endif
+#endif
+#endif
 #else
     flags += 1L << 24;
-#  ifdef NO_snprintf
+#ifdef NO_snprintf
     flags += 1L << 25;
-#    ifdef HAS_sprintf_void
+#ifdef HAS_sprintf_void
     flags += 1L << 26;
-#    endif
-#  else
-#    ifdef HAS_snprintf_void
+#endif
+#else
+#ifdef HAS_snprintf_void
     flags += 1L << 26;
-#    endif
-#  endif
+#endif
+#endif
 #endif
     return flags;
 }
 
 #ifdef ZLIB_DEBUG
 #include <stdlib.h>
-#  ifndef verbose
-#    define verbose 0
-#  endif
+#ifndef verbose
+#define verbose 0
+#endif
 int ZLIB_INTERNAL z_verbose = verbose;
 
-void ZLIB_INTERNAL z_error(char * m)
+void ZLIB_INTERNAL z_error(char *m)
 {
     fprintf(stderr, "%s\n", m);
     exit(1);
@@ -427,22 +439,22 @@ void ZLIB_INTERNAL z_error(char * m)
 /* exported to allow conversion of error code to string for compress() and
  * uncompress()
  */
-const char * ZEXPORT zError(int err)
+const char *ZEXPORT zError(int err)
 {
     return ERR_MSG(err);
 }
 
 #if defined(_WIN32_WCE)
-    /* The Microsoft C Run-Time Library for Windows CE doesn't have
-     * errno.  We define it as a global variable to simplify porting.
-     * Its value is always 0 and should not be used.
-     */
-    int errno = 0;
+/* The Microsoft C Run-Time Library for Windows CE doesn't have
+ * errno.  We define it as a global variable to simplify porting.
+ * Its value is always 0 and should not be used.
+ */
+int errno = 0;
 #endif
 
 #ifndef HAVE_MEMCPY
 
-void ZLIB_INTERNAL zmemcpy(Bytef* dest, const Bytef* source, uInt len)
+void ZLIB_INTERNAL zmemcpy(Bytef *dest, const Bytef *source, uInt len)
 {
     if (len == 0) return;
     do {
@@ -450,21 +462,21 @@ void ZLIB_INTERNAL zmemcpy(Bytef* dest, const Bytef* source, uInt len)
     } while (--len != 0);
 }
 
-int ZLIB_INTERNAL zmemcmp(const Bytef* s1, const Bytef* s2, uInt len)
+int ZLIB_INTERNAL zmemcmp(const Bytef *s1, const Bytef *s2, uInt len)
 {
     uInt j;
 
     for (j = 0; j < len; j++) {
-        if (s1[j] != s2[j]) return 2*(s1[j] > s2[j])-1;
+        if (s1[j] != s2[j]) return 2 * (s1[j] > s2[j]) - 1;
     }
     return 0;
 }
 
-void ZLIB_INTERNAL zmemzero(Bytef* dest, uInt len)
+void ZLIB_INTERNAL zmemzero(Bytef *dest, uInt len)
 {
     if (len == 0) return;
     do {
-        *dest++ = 0;  /* ??? to be unrolled */
+        *dest++ = 0; /* ??? to be unrolled */
     } while (--len != 0);
 }
 #endif
@@ -476,7 +488,7 @@ void ZLIB_INTERNAL zmemzero(Bytef* dest, uInt len)
 #ifdef __TURBOC__
 /* Turbo C in 16-bit mode */
 
-#  define MY_ZCALLOC
+#define MY_ZCALLOC
 
 /* Turbo C malloc() does not allow dynamic allocation of 64K bytes
  * and farmalloc(64K) returns a pointer with an offset of 8, so we
@@ -502,10 +514,10 @@ local ptr_table table[MAX_PTR];
  * a protected system like OS/2. Use Microsoft C instead.
  */
 
-voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, unsigned items, unsigned size)
+voidpf ZLIB_INTERNAL zcalloc(voidpf opaque, unsigned items, unsigned size)
 {
     voidpf buf;
-    ulg bsize = (ulg)items*size;
+    ulg bsize = (ulg)items * size;
 
     (void)opaque;
 
@@ -514,7 +526,7 @@ voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, unsigned items, unsigned size)
      */
     if (bsize < 65520L) {
         buf = farmalloc(bsize);
-        if (*(ush*)&buf != 0) return buf;
+        if (*(ush *)&buf != 0) return buf;
     } else {
         buf = farmalloc(bsize + 16L);
     }
@@ -522,19 +534,19 @@ voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, unsigned items, unsigned size)
     table[next_ptr].org_ptr = buf;
 
     /* Normalize the pointer to seg:0 */
-    *((ush*)&buf+1) += ((ush)((uch*)buf-0) + 15) >> 4;
-    *(ush*)&buf = 0;
+    *((ush *)&buf + 1) += ((ush)((uch *)buf - 0) + 15) >> 4;
+    *(ush *)&buf = 0;
     table[next_ptr++].new_ptr = buf;
     return buf;
 }
 
-void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
+void ZLIB_INTERNAL zcfree(voidpf opaque, voidpf ptr)
 {
     int n;
 
     (void)opaque;
 
-    if (*(ush*)&ptr != 0) { /* object < 64K */
+    if (*(ush *)&ptr != 0) { /* object < 64K */
         farfree(ptr);
         return;
     }
@@ -544,7 +556,7 @@ void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
 
         farfree(table[n].org_ptr);
         while (++n < next_ptr) {
-            table[n-1] = table[n];
+            table[n - 1] = table[n];
         }
         next_ptr--;
         return;
@@ -554,24 +566,23 @@ void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
 
 #endif /* __TURBOC__ */
 
-
 #ifdef M_I86
 /* Microsoft C in 16-bit mode */
 
-#  define MY_ZCALLOC
+#define MY_ZCALLOC
 
 #if (!defined(_MSC_VER) || (_MSC_VER <= 600))
-#  define _halloc  halloc
-#  define _hfree   hfree
+#define _halloc halloc
+#define _hfree hfree
 #endif
 
-voidpf ZLIB_INTERNAL zcalloc (voidpf opaque, uInt items, uInt size)
+voidpf ZLIB_INTERNAL zcalloc(voidpf opaque, uInt items, uInt size)
 {
     (void)opaque;
     return _halloc((long)items, size);
 }
 
-void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
+void ZLIB_INTERNAL zcfree(voidpf opaque, voidpf ptr)
 {
     (void)opaque;
     _hfree(ptr);
@@ -581,20 +592,18 @@ void ZLIB_INTERNAL zcfree (voidpf opaque, voidpf ptr)
 
 #endif /* SYS16BIT */
 
-
 #ifndef MY_ZCALLOC /* Any system without a special alloc function */
 
 #ifndef STDC
-extern voidp  malloc OF((uInt size));
-extern voidp  calloc OF((uInt items, uInt size));
-extern void   free   OF((voidpf ptr));
+extern voidp malloc OF((uInt size));
+extern voidp calloc OF((uInt items, uInt size));
+extern void free OF((voidpf ptr));
 #endif
 
 voidpf ZLIB_INTERNAL zcalloc(voidpf opaque, unsigned items, unsigned size)
 {
     (void)opaque;
-    return sizeof(uInt) > 2 ? (voidpf)malloc(items * size) :
-                              (voidpf)calloc(items, size);
+    return sizeof(uInt) > 2 ? (voidpf)malloc(items * size) : (voidpf)calloc(items, size);
 }
 
 void ZLIB_INTERNAL zcfree(voidpf opaque, voidpf ptr)
@@ -631,256 +640,271 @@ void ZLIB_INTERNAL zcfree(voidpf opaque, voidpf ptr)
 #define ZUTIL_H
 
 #ifdef HAVE_HIDDEN
-#  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+#define ZLIB_INTERNAL __attribute__((visibility("hidden")))
 #else
-#  define ZLIB_INTERNAL
+#define ZLIB_INTERNAL
 #endif
 #if defined(STDC) && !defined(Z_SOLO)
-#  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
-#    include <stddef.h>
-#  endif
-#  include <string.h>
-#  include <stdlib.h>
+#if !(defined(_WIN32_WCE) && defined(_MSC_VER))
+#include <stddef.h>
+#endif
+#include <string.h>
+#include <stdlib.h>
 #endif
 
 #ifdef Z_SOLO
-   typedef long ptrdiff_t;  /* guess -- will be caught if guess is wrong */
+typedef long ptrdiff_t; /* guess -- will be caught if guess is wrong */
 #endif
 
 #ifndef local
-#  define local static
+#define local static
 #endif
 /* since "static" is used to mean two completely different things in C, we
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-typedef unsigned char  uch;
+typedef unsigned char uch;
 typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
-typedef unsigned long  ulg;
+typedef unsigned long ulg;
 
-extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
+#define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
 
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = ERR_MSG(err), (err))
+#define ERR_RETURN(strm, err) return (strm->msg = ERR_MSG(err), (err))
 /* To be used only when the state is known to be valid */
 
-        /* common constants */
+/* common constants */
 
 #ifndef DEF_WBITS
-#  define DEF_WBITS MAX_WBITS
+#define DEF_WBITS MAX_WBITS
 #endif
 /* default windowBits for decompression. MAX_WBITS is for compression only */
 
 #if MAX_MEM_LEVEL >= 8
-#  define DEF_MEM_LEVEL 8
+#define DEF_MEM_LEVEL 8
 #else
-#  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
+#define DEF_MEM_LEVEL MAX_MEM_LEVEL
 #endif
 /* default memLevel */
 
 #define STORED_BLOCK 0
 #define STATIC_TREES 1
-#define DYN_TREES    2
+#define DYN_TREES 2
 /* The three kinds of block type */
 
-#define MIN_MATCH  3
-#define MAX_MATCH  258
+#define MIN_MATCH 3
+#define MAX_MATCH 258
 /* The minimum and maximum match lengths */
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
-        /* target dependencies */
+/* target dependencies */
 
 #if defined(MSDOS) || (defined(WINDOWS) && !defined(WIN32))
-#  define OS_CODE  0x00
-#  ifndef Z_SOLO
-#    if defined(__TURBOC__) || defined(__BORLANDC__)
-#      if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
-         /* Allow compilation with ANSI keywords only enabled */
-         void _Cdecl farfree( void *block );
-         void *_Cdecl farmalloc( unsigned long nbytes );
-#      else
-#        include <alloc.h>
-#      endif
-#    else /* MSC or DJGPP */
-#      include <malloc.h>
-#    endif
-#  endif
+#define OS_CODE 0x00
+#ifndef Z_SOLO
+#if defined(__TURBOC__) || defined(__BORLANDC__)
+#if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
+/* Allow compilation with ANSI keywords only enabled */
+void _Cdecl farfree(void *block);
+void *_Cdecl farmalloc(unsigned long nbytes);
+#else
+#include <alloc.h>
+#endif
+#else /* MSC or DJGPP */
+#include <malloc.h>
+#endif
+#endif
 #endif
 
 #ifdef AMIGA
-#  define OS_CODE  1
+#define OS_CODE 1
 #endif
 
 #if defined(VAXC) || defined(VMS)
-#  define OS_CODE  2
-#  define F_OPEN(name, mode) \
-     fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
+#define OS_CODE 2
+#define F_OPEN(name, mode) fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
 #endif
 
 #ifdef __370__
-#  if __TARGET_LIB__ < 0x20000000
-#    define OS_CODE 4
-#  elif __TARGET_LIB__ < 0x40000000
-#    define OS_CODE 11
-#  else
-#    define OS_CODE 8
-#  endif
+#if __TARGET_LIB__ < 0x20000000
+#define OS_CODE 4
+#elif __TARGET_LIB__ < 0x40000000
+#define OS_CODE 11
+#else
+#define OS_CODE 8
+#endif
 #endif
 
 #if defined(ATARI) || defined(atarist)
-#  define OS_CODE  5
+#define OS_CODE 5
 #endif
 
 #ifdef OS2
-#  define OS_CODE  6
-#  if defined(M_I86) && !defined(Z_SOLO)
-#    include <malloc.h>
-#  endif
+#define OS_CODE 6
+#if defined(M_I86) && !defined(Z_SOLO)
+#include <malloc.h>
+#endif
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
-#  ifndef Z_SOLO
-#    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
-#      include <unix.h> /* for fdopen */
-#    else
-#      ifndef fdopen
-#        define fdopen(fd,mode) NULL /* No fdopen() */
-#      endif
-#    endif
-#  endif
+#define OS_CODE 7
+#ifndef Z_SOLO
+#if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+#include <unix.h> /* for fdopen */
+#else
+#ifndef fdopen
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#endif
+#endif
+#endif
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#define OS_CODE 13
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#define OS_CODE 10
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#define OS_CODE 16
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#define OS_CODE 18
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#define OS_CODE 19
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)
-#  define fdopen(fd,mode) NULL /* No fdopen() */
+#define fdopen(fd, mode) NULL /* No fdopen() */
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER > 600)) && !defined __INTERIX
-#  if defined(_WIN32_WCE)
-#    define fdopen(fd,mode) NULL /* No fdopen() */
-#    ifndef _PTRDIFF_T_DEFINED
-       typedef int ptrdiff_t;
-#      define _PTRDIFF_T_DEFINED
-#    endif
-#  else
-#    define fdopen(fd,type)  _fdopen(fd,type)
-#  endif
+#if defined(_WIN32_WCE)
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
+#else
+#define fdopen(fd, type) _fdopen(fd, type)
+#endif
 #endif
 
 #if defined(__BORLANDC__) && !defined(MSDOS)
-  #pragma warn -8004
-  #pragma warn -8008
-  #pragma warn -8066
+#pragma warn - 8004
+#pragma warn - 8008
+#pragma warn - 8066
 #endif
 
 /* provide prototypes for these when building zlib without LFS */
-#if !defined(_WIN32) && \
-    (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE-0 == 0)
-    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
-    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
+#if !defined(_WIN32) && (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE - 0 == 0)
+ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
+ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
 #endif
 
-        /* common defaults */
+/* common defaults */
 
 #ifndef OS_CODE
-#  define OS_CODE  3     /* assume Unix */
+#define OS_CODE 3 /* assume Unix */
 #endif
 
 #ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
+#define F_OPEN(name, mode) fopen((name), (mode))
 #endif
 
-         /* functions */
+/* functions */
 
 #if defined(pyr) || defined(Z_SOLO)
-#  define NO_MEMCPY
+#define NO_MEMCPY
 #endif
 #if defined(SMALL_MEDIUM) && !defined(_MSC_VER) && !defined(__SC__)
- /* Use our own functions for small and medium model with MSC <= 5.0.
-  * You may have to use the same strategy for Borland C (untested).
-  * The __SC__ check is for Symantec.
-  */
-#  define NO_MEMCPY
+/* Use our own functions for small and medium model with MSC <= 5.0.
+ * You may have to use the same strategy for Borland C (untested).
+ * The __SC__ check is for Symantec.
+ */
+#define NO_MEMCPY
 #endif
 #if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
-#  define HAVE_MEMCPY
+#define HAVE_MEMCPY
 #endif
 #ifdef HAVE_MEMCPY
-#  ifdef SMALL_MEDIUM /* MSDOS small or medium model */
-#    define zmemcpy _fmemcpy
-#    define zmemcmp _fmemcmp
-#    define zmemzero(dest, len) _fmemset(dest, 0, len)
-#  else
-#    define zmemcpy memcpy
-#    define zmemcmp memcmp
-#    define zmemzero(dest, len) memset(dest, 0, len)
-#  endif
+#ifdef SMALL_MEDIUM /* MSDOS small or medium model */
+#define zmemcpy _fmemcpy
+#define zmemcmp _fmemcmp
+#define zmemzero(dest, len) _fmemset(dest, 0, len)
 #else
-   void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
-   int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
-   void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#define zmemcpy memcpy
+#define zmemcmp memcmp
+#define zmemzero(dest, len) memset(dest, 0, len)
+#endif
+#else
+void ZLIB_INTERNAL zmemcpy OF((Bytef * dest, const Bytef *source, uInt len));
+int ZLIB_INTERNAL zmemcmp OF((const Bytef *s1, const Bytef *s2, uInt len));
+void ZLIB_INTERNAL zmemzero OF((Bytef * dest, uInt len));
 #endif
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
+#include <stdio.h>
+extern int ZLIB_INTERNAL z_verbose;
+extern void ZLIB_INTERNAL z_error OF((char *m));
+#define Assert(cond, msg)          \
+    {                              \
+        if (!(cond)) z_error(msg); \
+    }
+#define Trace(x)                       \
+    {                                  \
+        if (z_verbose >= 0) fprintf x; \
+    }
+#define Tracev(x)                     \
+    {                                 \
+        if (z_verbose > 0) fprintf x; \
+    }
+#define Tracevv(x)                    \
+    {                                 \
+        if (z_verbose > 1) fprintf x; \
+    }
+#define Tracec(c, x)                         \
+    {                                        \
+        if (z_verbose > 0 && (c)) fprintf x; \
+    }
+#define Tracecv(c, x)                        \
+    {                                        \
+        if (z_verbose > 1 && (c)) fprintf x; \
+    }
 #else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
+#define Assert(cond, msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c, x)
+#define Tracecv(c, x)
 #endif
 
 #ifndef Z_SOLO
-   voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr));
+voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items, unsigned size));
+void ZLIB_INTERNAL zcfree OF((voidpf opaque, voidpf ptr));
 #endif
 
-#define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size))
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
+#define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
+#define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
+#define TRY_FREE(s, p)      \
+    {                       \
+        if (p) ZFREE(s, p); \
+    }
 
 /* Reverse the bytes in a 32-bit value */
-#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
-                    (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
 #endif /* ZUTIL_H */
 /* trees.c -- output deflated data using Huffman coding
@@ -936,13 +960,14 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #define DEFLATE_H
 /* define NO_GZIP when compiling if you want to disable gzip header and
    trailer creation by deflate().  NO_GZIP would be used to avoid linking in
-   the crc code when it is not needed.  For shared libraries, gzip encoding
+   the crc code when
+ * it is not needed.  For shared libraries, gzip encoding
    should be left enabled. */
 #ifdef GZIP
-#  undef GZIP
+#undef GZIP
 #endif
 #ifndef NO_GZIP
-#  define GZIP
+#define GZIP
 #endif
 
 /* ===========================================================================
@@ -952,19 +977,19 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #define LENGTH_CODES 29
 /* number of length codes, not counting the special END_BLOCK code */
 
-#define LITERALS  256
+#define LITERALS 256
 /* number of literal bytes 0..255 */
 
-#define L_CODES (LITERALS+1+LENGTH_CODES)
+#define L_CODES (LITERALS + 1 + LENGTH_CODES)
 /* number of Literal or Length codes, including the END_BLOCK code */
 
-#define D_CODES   30
+#define D_CODES 30
 /* number of distance codes */
 
-#define BL_CODES  19
+#define BL_CODES 19
 /* number of codes used to transfer the bit lengths */
 
-#define HEAP_SIZE (2*L_CODES+1)
+#define HEAP_SIZE (2 * L_CODES + 1)
 /* maximum heap size */
 
 #define MAX_BITS 15
@@ -973,42 +998,41 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #define Buf_size 16
 /* size of bit buffer in bi_buf */
 
-#define INIT_STATE    42    /* zlib header -> BUSY_STATE */
+#define INIT_STATE 42 /* zlib header -> BUSY_STATE */
 #ifdef GZIP
-#  define GZIP_STATE  57    /* gzip header -> BUSY_STATE | EXTRA_STATE */
+#define GZIP_STATE 57 /* gzip header -> BUSY_STATE | EXTRA_STATE */
 #endif
-#define EXTRA_STATE   69    /* gzip extra block -> NAME_STATE */
-#define NAME_STATE    73    /* gzip file name -> COMMENT_STATE */
-#define COMMENT_STATE 91    /* gzip comment -> HCRC_STATE */
-#define HCRC_STATE   103    /* gzip header CRC -> BUSY_STATE */
-#define BUSY_STATE   113    /* deflate -> FINISH_STATE */
-#define FINISH_STATE 666    /* stream complete */
+#define EXTRA_STATE 69   /* gzip extra block -> NAME_STATE */
+#define NAME_STATE 73    /* gzip file name -> COMMENT_STATE */
+#define COMMENT_STATE 91 /* gzip comment -> HCRC_STATE */
+#define HCRC_STATE 103   /* gzip header CRC -> BUSY_STATE */
+#define BUSY_STATE 113   /* deflate -> FINISH_STATE */
+#define FINISH_STATE 666 /* stream complete */
 /* Stream status */
-
 
 /* Data structure describing a single value and its code string. */
 typedef struct ct_data_s {
     union {
-        ush  freq;       /* frequency count */
-        ush  code;       /* bit string */
+        ush freq; /* frequency count */
+        ush code; /* bit string */
     } fc;
     union {
-        ush  dad;        /* father node in Huffman tree */
-        ush  len;        /* length of bit string */
+        ush dad; /* father node in Huffman tree */
+        ush len; /* length of bit string */
     } dl;
 } FAR ct_data;
 
 #define Freq fc.freq
 #define Code fc.code
-#define Dad  dl.dad
-#define Len  dl.len
+#define Dad dl.dad
+#define Len dl.len
 
-typedef struct static_tree_desc_s  static_tree_desc;
+typedef struct static_tree_desc_s static_tree_desc;
 
 typedef struct tree_desc_s {
-    ct_data *dyn_tree;           /* the dynamic tree */
-    int     max_code;            /* largest code with non zero frequency */
-    const static_tree_desc *stat_desc;  /* the corresponding static tree */
+    ct_data *dyn_tree;                 /* the dynamic tree */
+    int max_code;                      /* largest code with non zero frequency */
+    const static_tree_desc *stat_desc; /* the corresponding static tree */
 } FAR tree_desc;
 
 typedef ush Pos;
@@ -1020,23 +1044,23 @@ typedef unsigned IPos;
  */
 
 typedef struct internal_state {
-    z_streamp strm;      /* pointer back to this zlib stream */
-    int   status;        /* as the name implies */
-    Bytef *pending_buf;  /* output still pending */
-    ulg   pending_buf_size; /* size of pending_buf */
-    Bytef *pending_out;  /* next pending byte to output to the stream */
-    ulg   pending;       /* nb of bytes in the pending buffer */
-    int   wrap;          /* bit 0 true for zlib, bit 1 true for gzip */
-    gz_headerp  gzhead;  /* gzip header information to write */
-    ulg   gzindex;       /* where in extra, name, or comment */
-    Byte  method;        /* can only be DEFLATED */
-    int   last_flush;    /* value of flush param for previous deflate call */
+    z_streamp strm;       /* pointer back to this zlib stream */
+    int status;           /* as the name implies */
+    Bytef *pending_buf;   /* output still pending */
+    ulg pending_buf_size; /* size of pending_buf */
+    Bytef *pending_out;   /* next pending byte to output to the stream */
+    ulg pending;          /* nb of bytes in the pending buffer */
+    int wrap;             /* bit 0 true for zlib, bit 1 true for gzip */
+    gz_headerp gzhead;    /* gzip header information to write */
+    ulg gzindex;          /* where in extra, name, or comment */
+    Byte method;          /* can only be DEFLATED */
+    int last_flush;       /* value of flush param for previous deflate call */
 
-                /* used by deflate.c: */
+    /* used by deflate.c: */
 
-    uInt  w_size;        /* LZ77 window size (32K by default) */
-    uInt  w_bits;        /* log2(w_size)  (8..16) */
-    uInt  w_mask;        /* w_size - 1 */
+    uInt w_size; /* LZ77 window size (32K by default) */
+    uInt w_bits; /* log2(w_size)  (8..16) */
+    uInt w_mask; /* w_size - 1 */
 
     Bytef *window;
     /* Sliding window. Input bytes are read into the second half of the window,
@@ -1061,12 +1085,12 @@ typedef struct internal_state {
 
     Posf *head; /* Heads of the hash chains or NIL. */
 
-    uInt  ins_h;          /* hash index of string to be inserted */
-    uInt  hash_size;      /* number of elements in hash table */
-    uInt  hash_bits;      /* log2(hash_size) */
-    uInt  hash_mask;      /* hash_size-1 */
+    uInt ins_h;     /* hash index of string to be inserted */
+    uInt hash_size; /* number of elements in hash table */
+    uInt hash_bits; /* log2(hash_size) */
+    uInt hash_mask; /* hash_size-1 */
 
-    uInt  hash_shift;
+    uInt hash_shift;
     /* Number of bits by which ins_h must be shifted at each input
      * step. It must be such that after MIN_MATCH steps, the oldest
      * byte no longer takes part in the hash key, that is:
@@ -1078,12 +1102,12 @@ typedef struct internal_state {
      * negative when the window is moved backwards.
      */
 
-    uInt match_length;           /* length of best match */
-    IPos prev_match;             /* previous match */
-    int match_available;         /* set if previous match exists */
-    uInt strstart;               /* start of string to insert */
-    uInt match_start;            /* start of matching string */
-    uInt lookahead;              /* number of valid bytes ahead in window */
+    uInt match_length;   /* length of best match */
+    IPos prev_match;     /* previous match */
+    int match_available; /* set if previous match exists */
+    uInt strstart;       /* start of string to insert */
+    uInt match_start;    /* start of matching string */
+    uInt lookahead;      /* number of valid bytes ahead in window */
 
     uInt prev_length;
     /* Length of the best match at previous step. Matches not greater than this
@@ -1101,7 +1125,7 @@ typedef struct internal_state {
      * smaller than this value. This mechanism is used only for compression
      * levels >= 4.
      */
-#   define max_insert_length  max_lazy_match
+#define max_insert_length max_lazy_match
     /* Insert new strings in the hash table only if the match length is not
      * greater than this length. This saves time but degrades compression.
      * max_insert_length is used only for compression levels <= 3.
@@ -1115,33 +1139,33 @@ typedef struct internal_state {
 
     int nice_match; /* Stop searching when current match exceeds this */
 
-                /* used by trees.c: */
+    /* used by trees.c: */
     /* Didn't use ct_data typedef below to suppress compiler warning */
-    struct ct_data_s dyn_ltree[HEAP_SIZE];   /* literal and length tree */
-    struct ct_data_s dyn_dtree[2*D_CODES+1]; /* distance tree */
-    struct ct_data_s bl_tree[2*BL_CODES+1];  /* Huffman tree for bit lengths */
+    struct ct_data_s dyn_ltree[HEAP_SIZE];       /* literal and length tree */
+    struct ct_data_s dyn_dtree[2 * D_CODES + 1]; /* distance tree */
+    struct ct_data_s bl_tree[2 * BL_CODES + 1];  /* Huffman tree for bit lengths */
 
-    struct tree_desc_s l_desc;               /* desc. for literal tree */
-    struct tree_desc_s d_desc;               /* desc. for distance tree */
-    struct tree_desc_s bl_desc;              /* desc. for bit length tree */
+    struct tree_desc_s l_desc;  /* desc. for literal tree */
+    struct tree_desc_s d_desc;  /* desc. for distance tree */
+    struct tree_desc_s bl_desc; /* desc. for bit length tree */
 
-    ush bl_count[MAX_BITS+1];
+    ush bl_count[MAX_BITS + 1];
     /* number of codes at each bit length for an optimal tree */
 
-    int heap[2*L_CODES+1];      /* heap used to build the Huffman trees */
-    int heap_len;               /* number of elements in the heap */
-    int heap_max;               /* element of largest frequency */
+    int heap[2 * L_CODES + 1]; /* heap used to build the Huffman trees */
+    int heap_len;              /* number of elements in the heap */
+    int heap_max;              /* element of largest frequency */
     /* The sons of heap[n] are heap[2*n] and heap[2*n+1]. heap[0] is not used.
      * The same heap array is used to build all trees.
      */
 
-    uch depth[2*L_CODES+1];
+    uch depth[2 * L_CODES + 1];
     /* Depth of each subtree used as tie breaker for trees of equal frequency
      */
 
-    uchf *l_buf;          /* buffer for literals or lengths */
+    uchf *l_buf; /* buffer for literals or lengths */
 
-    uInt  lit_bufsize;
+    uInt lit_bufsize;
     /* Size of match buffer for literals/lengths.  There are 4 reasons for
      * limiting lit_bufsize to 64K:
      *   - frequencies can be kept in 16 bit counters
@@ -1161,7 +1185,7 @@ typedef struct internal_state {
      *   - I can't count above 4
      */
 
-    uInt last_lit;      /* running index in l_buf */
+    uInt last_lit; /* running index in l_buf */
 
     ushf *d_buf;
     /* Buffer for distances. To simplify the code, d_buf and l_buf have
@@ -1169,10 +1193,10 @@ typedef struct internal_state {
      * array would be necessary.
      */
 
-    ulg opt_len;        /* bit length of current block with optimal trees */
-    ulg static_len;     /* bit length of current block with static trees */
-    uInt matches;       /* number of string matches in current block */
-    uInt insert;        /* bytes at end of window left to insert */
+    ulg opt_len;    /* bit length of current block with optimal trees */
+    ulg static_len; /* bit length of current block with static trees */
+    uInt matches;   /* number of string matches in current block */
+    uInt insert;    /* bytes at end of window left to insert */
 
 #ifdef ZLIB_DEBUG
     ulg compressed_len; /* total bit length of compressed file mod 2^32 */
@@ -1200,15 +1224,17 @@ typedef struct internal_state {
 /* Output a byte on the stream.
  * IN assertion: there is enough room in pending_buf.
  */
-#define put_byte(s, c) {s->pending_buf[s->pending++] = (Bytef)(c);}
+#define put_byte(s, c)                             \
+    {                                              \
+        s->pending_buf[s->pending++] = (Bytef)(c); \
+    }
 
-
-#define MIN_LOOKAHEAD (MAX_MATCH+MIN_MATCH+1)
+#define MIN_LOOKAHEAD (MAX_MATCH + MIN_MATCH + 1)
 /* Minimum amount of lookahead, except at the end of the input file.
  * See deflate.c for comments about the MIN_MATCH+1.
  */
 
-#define MAX_DIST(s)  ((s)->w_size-MIN_LOOKAHEAD)
+#define MAX_DIST(s) ((s)->w_size - MIN_LOOKAHEAD)
 /* In order to simplify the code, particularly on 16 bit machines, match
  * distances are limited to MAX_DIST instead of WSIZE.
  */
@@ -1217,18 +1243,15 @@ typedef struct internal_state {
 /* Number of bytes after end of data in window to initialize in order to avoid
    memory checker errors from longest match routines */
 
-        /* in trees.c */
-void ZLIB_INTERNAL _tr_init OF((deflate_state *s));
-int ZLIB_INTERNAL _tr_tally OF((deflate_state *s, unsigned dist, unsigned lc));
-void ZLIB_INTERNAL _tr_flush_block OF((deflate_state *s, charf *buf,
-                        ulg stored_len, int last));
-void ZLIB_INTERNAL _tr_flush_bits OF((deflate_state *s));
-void ZLIB_INTERNAL _tr_align OF((deflate_state *s));
-void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
-                        ulg stored_len, int last));
+/* in trees.c */
+void ZLIB_INTERNAL _tr_init OF((deflate_state * s));
+int ZLIB_INTERNAL _tr_tally OF((deflate_state * s, unsigned dist, unsigned lc));
+void ZLIB_INTERNAL _tr_flush_block OF((deflate_state * s, charf *buf, ulg stored_len, int last));
+void ZLIB_INTERNAL _tr_flush_bits OF((deflate_state * s));
+void ZLIB_INTERNAL _tr_align OF((deflate_state * s));
+void ZLIB_INTERNAL _tr_stored_block OF((deflate_state * s, charf *buf, ulg stored_len, int last));
 
-#define d_code(dist) \
-   ((dist) < 256 ? _dist_code[dist] : _dist_code[256+((dist)>>7)])
+#define d_code(dist) ((dist) < 256 ? _dist_code[dist] : _dist_code[256 + ((dist) >> 7)])
 /* Mapping from a distance to a distance code. dist is the distance - 1 and
  * must not have side effects. _dist_code[256] and _dist_code[257] are never
  * used.
@@ -1238,39 +1261,40 @@ void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
 /* Inline versions of _tr_tally for speed: */
 
 #if defined(GEN_TREES_H) || !defined(STDC)
-  extern uch ZLIB_INTERNAL _length_code[];
-  extern uch ZLIB_INTERNAL _dist_code[];
+extern uch ZLIB_INTERNAL _length_code[];
+extern uch ZLIB_INTERNAL _dist_code[];
 #else
-  extern const uch ZLIB_INTERNAL _length_code[];
-  extern const uch ZLIB_INTERNAL _dist_code[];
+extern const uch ZLIB_INTERNAL _length_code[];
+extern const uch ZLIB_INTERNAL _dist_code[];
 #endif
 
-# define _tr_tally_lit(s, c, flush) \
-  { uch cc = (c); \
-    s->d_buf[s->last_lit] = 0; \
-    s->l_buf[s->last_lit++] = cc; \
-    s->dyn_ltree[cc].Freq++; \
-    flush = (s->last_lit == s->lit_bufsize-1); \
-   }
-# define _tr_tally_dist(s, distance, length, flush) \
-  { uch len = (uch)(length); \
-    ush dist = (ush)(distance); \
-    s->d_buf[s->last_lit] = dist; \
-    s->l_buf[s->last_lit++] = len; \
-    dist--; \
-    s->dyn_ltree[_length_code[len]+LITERALS+1].Freq++; \
-    s->dyn_dtree[d_code(dist)].Freq++; \
-    flush = (s->last_lit == s->lit_bufsize-1); \
-  }
+#define _tr_tally_lit(s, c, flush)                   \
+    {                                                \
+        uch cc = (c);                                \
+        s->d_buf[s->last_lit] = 0;                   \
+        s->l_buf[s->last_lit++] = cc;                \
+        s->dyn_ltree[cc].Freq++;                     \
+        flush = (s->last_lit == s->lit_bufsize - 1); \
+    }
+#define _tr_tally_dist(s, distance, length, flush)             \
+    {                                                          \
+        uch len = (uch)(length);                               \
+        ush dist = (ush)(distance);                            \
+        s->d_buf[s->last_lit] = dist;                          \
+        s->l_buf[s->last_lit++] = len;                         \
+        dist--;                                                \
+        s->dyn_ltree[_length_code[len] + LITERALS + 1].Freq++; \
+        s->dyn_dtree[d_code(dist)].Freq++;                     \
+        flush = (s->last_lit == s->lit_bufsize - 1);           \
+    }
 #else
-# define _tr_tally_lit(s, c, flush) flush = _tr_tally(s, 0, c)
-# define _tr_tally_dist(s, distance, length, flush) \
-              flush = _tr_tally(s, distance, length)
+#define _tr_tally_lit(s, c, flush) flush = _tr_tally(s, 0, c)
+#define _tr_tally_dist(s, distance, length, flush) flush = _tr_tally(s, distance, length)
 #endif
 
 #endif /* DEFLATE_H */
 #ifdef ZLIB_DEBUG
-#  include <ctype.h>
+#include <ctype.h>
 #endif
 
 /* ===========================================================================
@@ -1283,26 +1307,25 @@ void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
 #define END_BLOCK 256
 /* end of block literal code */
 
-#define REP_3_6      16
+#define REP_3_6 16
 /* repeat previous bit length 3-6 times (2 bits of repeat count) */
 
-#define REPZ_3_10    17
+#define REPZ_3_10 17
 /* repeat a zero length 3-10 times  (3 bits of repeat count) */
 
-#define REPZ_11_138  18
+#define REPZ_11_138 18
 /* repeat a zero length 11-138 times  (7 bits of repeat count) */
 
 local const int extra_lbits[LENGTH_CODES] /* extra bits for each length code */
-   = {0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0};
+    = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
 
 local const int extra_dbits[D_CODES] /* extra bits for each distance code */
-   = {0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13};
+    = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
 
-local const int extra_blbits[BL_CODES]/* extra bits for each bit length code */
-   = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,3,7};
+local const int extra_blbits[BL_CODES] /* extra bits for each bit length code */
+    = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 7};
 
-local const uch bl_order[BL_CODES]
-   = {16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15};
+local const uch bl_order[BL_CODES] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 /* The lengths of the bit length codes are sent in order of decreasing
  * probability, to avoid transmitting the lengths for unused bit length codes.
  */
@@ -1311,12 +1334,12 @@ local const uch bl_order[BL_CODES]
  * Local data. These are initialized only once.
  */
 
-#define DIST_CODE_LEN  512 /* see definition of array dist_code below */
+#define DIST_CODE_LEN 512 /* see definition of array dist_code below */
 
 #if defined(GEN_TREES_H) || !defined(STDC)
 /* non ANSI compilers may not accept trees.h */
 
-local ct_data static_ltree[L_CODES+2];
+local ct_data static_ltree[L_CODES + 2];
 /* The static literal tree. Since the bit lengths are imposed, there is no
  * need for the L_CODES extra codes used during heap construction. However
  * The codes 286 and 287 are needed to build a canonical tree (see _tr_init
@@ -1334,7 +1357,7 @@ uch _dist_code[DIST_CODE_LEN];
  * the 15 bit distances.
  */
 
-uch _length_code[MAX_MATCH-MIN_MATCH+1];
+uch _length_code[MAX_MATCH - MIN_MATCH + 1];
 /* length code for each normalized match length (0 == MIN_MATCH) */
 
 local int base_length[LENGTH_CODES];
@@ -1344,81 +1367,79 @@ local int base_dist[D_CODES];
 /* First normalized distance for each code (0 = distance of 1) */
 
 #else
-#  include "trees.h"
+#include "trees.h"
 #endif /* GEN_TREES_H */
 
 struct static_tree_desc_s {
-    const ct_data *static_tree;  /* static tree or NULL */
-    const intf *extra_bits;      /* extra bits for each code or NULL */
-    int     extra_base;          /* base index for extra_bits */
-    int     elems;               /* max number of elements in the tree */
-    int     max_length;          /* max bit length for the codes */
+    const ct_data *static_tree; /* static tree or NULL */
+    const intf *extra_bits;     /* extra bits for each code or NULL */
+    int extra_base;             /* base index for extra_bits */
+    int elems;                  /* max number of elements in the tree */
+    int max_length;             /* max bit length for the codes */
 };
 
-local const static_tree_desc  static_l_desc =
-{static_ltree, extra_lbits, LITERALS+1, L_CODES, MAX_BITS};
+local const static_tree_desc static_l_desc = {static_ltree, extra_lbits, LITERALS + 1, L_CODES, MAX_BITS};
 
-local const static_tree_desc  static_d_desc =
-{static_dtree, extra_dbits, 0,          D_CODES, MAX_BITS};
+local const static_tree_desc static_d_desc = {static_dtree, extra_dbits, 0, D_CODES, MAX_BITS};
 
-local const static_tree_desc  static_bl_desc =
-{(const ct_data *)0, extra_blbits, 0,   BL_CODES, MAX_BL_BITS};
+local const static_tree_desc static_bl_desc = {(const ct_data *)0, extra_blbits, 0, BL_CODES, MAX_BL_BITS};
 
 /* ===========================================================================
  * Local (static) routines in this file.
  */
 
 local void tr_static_init OF((void));
-local void init_block     OF((deflate_state *s));
-local void pqdownheap     OF((deflate_state *s, ct_data *tree, int k));
-local void gen_bitlen     OF((deflate_state *s, tree_desc *desc));
-local void gen_codes      OF((ct_data *tree, int max_code, ushf *bl_count));
-local void build_tree     OF((deflate_state *s, tree_desc *desc));
-local void scan_tree      OF((deflate_state *s, ct_data *tree, int max_code));
-local void send_tree      OF((deflate_state *s, ct_data *tree, int max_code));
-local int  build_bl_tree  OF((deflate_state *s));
-local void send_all_trees OF((deflate_state *s, int lcodes, int dcodes,
-                              int blcodes));
-local void compress_block OF((deflate_state *s, const ct_data *ltree,
-                              const ct_data *dtree));
-local int  detect_data_type OF((deflate_state *s));
+local void init_block OF((deflate_state * s));
+local void pqdownheap OF((deflate_state * s, ct_data *tree, int k));
+local void gen_bitlen OF((deflate_state * s, tree_desc *desc));
+local void gen_codes OF((ct_data * tree, int max_code, ushf *bl_count));
+local void build_tree OF((deflate_state * s, tree_desc *desc));
+local void scan_tree OF((deflate_state * s, ct_data *tree, int max_code));
+local void send_tree OF((deflate_state * s, ct_data *tree, int max_code));
+local int build_bl_tree OF((deflate_state * s));
+local void send_all_trees OF((deflate_state * s, int lcodes, int dcodes, int blcodes));
+local void compress_block OF((deflate_state * s, const ct_data *ltree, const ct_data *dtree));
+local int detect_data_type OF((deflate_state * s));
 local unsigned bi_reverse OF((unsigned value, int length));
-local void bi_windup      OF((deflate_state *s));
-local void bi_flush       OF((deflate_state *s));
+local void bi_windup OF((deflate_state * s));
+local void bi_flush OF((deflate_state * s));
 
 #ifdef GEN_TREES_H
 local void gen_trees_header OF((void));
 #endif
 
 #ifndef ZLIB_DEBUG
-#  define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
-   /* Send a code of the given tree. c and tree must not have side effects */
+#define send_code(s, c, tree) send_bits(s, tree[c].Code, tree[c].Len)
+/* Send a code of the given tree. c and tree must not have side effects */
 
 #else /* !ZLIB_DEBUG */
-#  define send_code(s, c, tree) \
-     { if (z_verbose>2) fprintf(stderr,"\ncd %3d ",(c)); \
-       send_bits(s, tree[c].Code, tree[c].Len); }
+#define send_code(s, c, tree)                                 \
+    {                                                         \
+        if (z_verbose > 2) fprintf(stderr, "\ncd %3d ", (c)); \
+        send_bits(s, tree[c].Code, tree[c].Len);              \
+    }
 #endif
 
 /* ===========================================================================
  * Output a short LSB first on the stream.
  * IN assertion: there is enough room in pendingBuf.
  */
-#define put_short(s, w) { \
-    put_byte(s, (uch)((w) & 0xff)); \
-    put_byte(s, (uch)((ush)(w) >> 8)); \
-}
+#define put_short(s, w)                    \
+    {                                      \
+        put_byte(s, (uch)((w) & 0xff));    \
+        put_byte(s, (uch)((ush)(w) >> 8)); \
+    }
 
 /* ===========================================================================
  * Send a value on a given number of bits.
  * IN assertion: length <= 16 and value fits in length bits.
  */
 #ifdef ZLIB_DEBUG
-local void send_bits      OF((deflate_state *s, int value, int length));
+local void send_bits OF((deflate_state * s, int value, int length));
 
-local void send_bits(deflate_state * s, int value, int length)
+local void send_bits(deflate_state *s, int value, int length)
 {
-    Tracevv((stderr," l %2d v %4x ", length, value));
+    Tracevv((stderr, " l %2d v %4x ", length, value));
     Assert(length > 0 && length <= 15, "invalid length");
     s->bits_sent += (ulg)length;
 
@@ -1438,21 +1459,21 @@ local void send_bits(deflate_state * s, int value, int length)
 }
 #else /* !ZLIB_DEBUG */
 
-#define send_bits(s, value, length) \
-{ int len = length;\
-  if (s->bi_valid > (int)Buf_size - len) {\
-    int val = (int)value;\
-    s->bi_buf |= (ush)val << s->bi_valid;\
-    put_short(s, s->bi_buf);\
-    s->bi_buf = (ush)val >> (Buf_size - s->bi_valid);\
-    s->bi_valid += len - Buf_size;\
-  } else {\
-    s->bi_buf |= (ush)(value) << s->bi_valid;\
-    s->bi_valid += len;\
-  }\
-}
+#define send_bits(s, value, length)                           \
+    {                                                         \
+        int len = length;                                     \
+        if (s->bi_valid > (int)Buf_size - len) {              \
+            int val = (int)value;                             \
+            s->bi_buf |= (ush)val << s->bi_valid;             \
+            put_short(s, s->bi_buf);                          \
+            s->bi_buf = (ush)val >> (Buf_size - s->bi_valid); \
+            s->bi_valid += len - Buf_size;                    \
+        } else {                                              \
+            s->bi_buf |= (ush)(value) << s->bi_valid;         \
+            s->bi_valid += len;                               \
+        }                                                     \
+    }
 #endif /* ZLIB_DEBUG */
-
 
 /* the arguments must not have side effects */
 
@@ -1463,12 +1484,12 @@ local void tr_static_init()
 {
 #if defined(GEN_TREES_H) || !defined(STDC)
     static int static_init_done = 0;
-    int n;        /* iterates over tree elements */
-    int bits;     /* bit counter */
-    int length;   /* length value */
-    int code;     /* code value */
-    int dist;     /* distance index */
-    ush bl_count[MAX_BITS+1];
+    int n;      /* iterates over tree elements */
+    int bits;   /* bit counter */
+    int length; /* length value */
+    int code;   /* code value */
+    int dist;   /* distance index */
+    ush bl_count[MAX_BITS + 1];
     /* number of codes at each bit length for an optimal tree */
 
     if (static_init_done) return;
@@ -1484,36 +1505,36 @@ local void tr_static_init()
 
     /* Initialize the mapping length (0..255) -> length code (0..28) */
     length = 0;
-    for (code = 0; code < LENGTH_CODES-1; code++) {
+    for (code = 0; code < LENGTH_CODES - 1; code++) {
         base_length[code] = length;
-        for (n = 0; n < (1<<extra_lbits[code]); n++) {
+        for (n = 0; n < (1 << extra_lbits[code]); n++) {
             _length_code[length++] = (uch)code;
         }
     }
-    Assert (length == 256, "tr_static_init: length != 256");
+    Assert(length == 256, "tr_static_init: length != 256");
     /* Note that the length 255 (match length 258) can be represented
      * in two different ways: code 284 + 5 bits or code 285, so we
      * overwrite length_code[255] to use the best encoding:
      */
-    _length_code[length-1] = (uch)code;
+    _length_code[length - 1] = (uch)code;
 
     /* Initialize the mapping dist (0..32K) -> dist code (0..29) */
     dist = 0;
-    for (code = 0 ; code < 16; code++) {
+    for (code = 0; code < 16; code++) {
         base_dist[code] = dist;
-        for (n = 0; n < (1<<extra_dbits[code]); n++) {
+        for (n = 0; n < (1 << extra_dbits[code]); n++) {
             _dist_code[dist++] = (uch)code;
         }
     }
-    Assert (dist == 256, "tr_static_init: dist != 256");
+    Assert(dist == 256, "tr_static_init: dist != 256");
     dist >>= 7; /* from now on, all distances are divided by 128 */
-    for ( ; code < D_CODES; code++) {
+    for (; code < D_CODES; code++) {
         base_dist[code] = dist << 7;
-        for (n = 0; n < (1<<(extra_dbits[code]-7)); n++) {
+        for (n = 0; n < (1 << (extra_dbits[code] - 7)); n++) {
             _dist_code[256 + dist++] = (uch)code;
         }
     }
-    Assert (dist == 256, "tr_static_init: 256+dist != 512");
+    Assert(dist == 256, "tr_static_init: 256+dist != 512");
 
     /* Construct the codes of the static literal tree */
     for (bits = 0; bits <= MAX_BITS; bits++) bl_count[bits] = 0;
@@ -1526,7 +1547,7 @@ local void tr_static_init()
      * tree construction to get a canonical Huffman tree (longest code
      * all ones)
      */
-    gen_codes((ct_data *)static_ltree, L_CODES+1, bl_count);
+    gen_codes((ct_data *)static_ltree, L_CODES + 1, bl_count);
 
     /* The static distance tree is trivial: */
     for (n = 0; n < D_CODES; n++) {
@@ -1535,9 +1556,9 @@ local void tr_static_init()
     }
     static_init_done = 1;
 
-#  ifdef GEN_TREES_H
+#ifdef GEN_TREES_H
     gen_trees_header();
-#  endif
+#endif
 #endif /* defined(GEN_TREES_H) || !defined(STDC) */
 }
 
@@ -1545,58 +1566,48 @@ local void tr_static_init()
  * Genererate the file trees.h describing the static trees.
  */
 #ifdef GEN_TREES_H
-#  ifndef ZLIB_DEBUG
-#    include <stdio.h>
-#  endif
+#ifndef ZLIB_DEBUG
+#include <stdio.h>
+#endif
 
-#  define SEPARATOR(i, last, width) \
-      ((i) == (last)? "\n};\n\n" :    \
-       ((i) % (width) == (width)-1 ? ",\n" : ", "))
+#define SEPARATOR(i, last, width) ((i) == (last) ? "\n};\n\n" : ((i) % (width) == (width) - 1 ? ",\n" : ", "))
 
 void gen_trees_header()
 {
     FILE *header = fopen("trees.h", "w");
     int i;
 
-    Assert (header != NULL, "Can't open trees.h");
-    fprintf(header,
-            "/* header created automatically with -DGEN_TREES_H */\n\n");
+    Assert(header != NULL, "Can't open trees.h");
+    fprintf(header, "/* header created automatically with -DGEN_TREES_H */\n\n");
 
     fprintf(header, "local const ct_data static_ltree[L_CODES+2] = {\n");
-    for (i = 0; i < L_CODES+2; i++) {
-        fprintf(header, "{{%3u},{%3u}}%s", static_ltree[i].Code,
-                static_ltree[i].Len, SEPARATOR(i, L_CODES+1, 5));
+    for (i = 0; i < L_CODES + 2; i++) {
+        fprintf(header, "{{%3u},{%3u}}%s", static_ltree[i].Code, static_ltree[i].Len, SEPARATOR(i, L_CODES + 1, 5));
     }
 
     fprintf(header, "local const ct_data static_dtree[D_CODES] = {\n");
     for (i = 0; i < D_CODES; i++) {
-        fprintf(header, "{{%2u},{%2u}}%s", static_dtree[i].Code,
-                static_dtree[i].Len, SEPARATOR(i, D_CODES-1, 5));
+        fprintf(header, "{{%2u},{%2u}}%s", static_dtree[i].Code, static_dtree[i].Len, SEPARATOR(i, D_CODES - 1, 5));
     }
 
     fprintf(header, "const uch ZLIB_INTERNAL _dist_code[DIST_CODE_LEN] = {\n");
     for (i = 0; i < DIST_CODE_LEN; i++) {
-        fprintf(header, "%2u%s", _dist_code[i],
-                SEPARATOR(i, DIST_CODE_LEN-1, 20));
+        fprintf(header, "%2u%s", _dist_code[i], SEPARATOR(i, DIST_CODE_LEN - 1, 20));
     }
 
-    fprintf(header,
-        "const uch ZLIB_INTERNAL _length_code[MAX_MATCH-MIN_MATCH+1]= {\n");
-    for (i = 0; i < MAX_MATCH-MIN_MATCH+1; i++) {
-        fprintf(header, "%2u%s", _length_code[i],
-                SEPARATOR(i, MAX_MATCH-MIN_MATCH, 20));
+    fprintf(header, "const uch ZLIB_INTERNAL _length_code[MAX_MATCH-MIN_MATCH+1]= {\n");
+    for (i = 0; i < MAX_MATCH - MIN_MATCH + 1; i++) {
+        fprintf(header, "%2u%s", _length_code[i], SEPARATOR(i, MAX_MATCH - MIN_MATCH, 20));
     }
 
     fprintf(header, "local const int base_length[LENGTH_CODES] = {\n");
     for (i = 0; i < LENGTH_CODES; i++) {
-        fprintf(header, "%1u%s", base_length[i],
-                SEPARATOR(i, LENGTH_CODES-1, 20));
+        fprintf(header, "%1u%s", base_length[i], SEPARATOR(i, LENGTH_CODES - 1, 20));
     }
 
     fprintf(header, "local const int base_dist[D_CODES] = {\n");
     for (i = 0; i < D_CODES; i++) {
-        fprintf(header, "%5u%s", base_dist[i],
-                SEPARATOR(i, D_CODES-1, 10));
+        fprintf(header, "%5u%s", base_dist[i], SEPARATOR(i, D_CODES - 1, 10));
     }
 
     fclose(header);
@@ -1606,7 +1617,7 @@ void gen_trees_header()
 /* ===========================================================================
  * Initialize the tree data structures for a new zlib stream.
  */
-void ZLIB_INTERNAL _tr_init(deflate_state * s)
+void ZLIB_INTERNAL _tr_init(deflate_state *s)
 {
     tr_static_init();
 
@@ -1633,13 +1644,13 @@ void ZLIB_INTERNAL _tr_init(deflate_state * s)
 /* ===========================================================================
  * Initialize a new block.
  */
-local void init_block(deflate_state * s)
+local void init_block(deflate_state *s)
 {
     int n; /* iterates over tree elements */
 
     /* Initialize the trees. */
-    for (n = 0; n < L_CODES;  n++) s->dyn_ltree[n].Freq = 0;
-    for (n = 0; n < D_CODES;  n++) s->dyn_dtree[n].Freq = 0;
+    for (n = 0; n < L_CODES; n++) s->dyn_ltree[n].Freq = 0;
+    for (n = 0; n < D_CODES; n++) s->dyn_dtree[n].Freq = 0;
     for (n = 0; n < BL_CODES; n++) s->bl_tree[n].Freq = 0;
 
     s->dyn_ltree[END_BLOCK].Freq = 1;
@@ -1650,25 +1661,22 @@ local void init_block(deflate_state * s)
 #define SMALLEST 1
 /* Index within the heap array of least frequent node in the Huffman tree */
 
-
 /* ===========================================================================
  * Remove the smallest element from the heap and recreate the heap with
  * one less element. Updates heap and heap_len.
  */
-#define pqremove(s, tree, top) \
-{\
-    top = s->heap[SMALLEST]; \
-    s->heap[SMALLEST] = s->heap[s->heap_len--]; \
-    pqdownheap(s, tree, SMALLEST); \
-}
+#define pqremove(s, tree, top)                      \
+    {                                               \
+        top = s->heap[SMALLEST];                    \
+        s->heap[SMALLEST] = s->heap[s->heap_len--]; \
+        pqdownheap(s, tree, SMALLEST);              \
+    }
 
 /* ===========================================================================
  * Compares to subtrees, using the tree depth as tie breaker when
  * the subtrees have equal frequency. This minimizes the worst case length.
  */
-#define smaller(tree, n, m, depth) \
-   (tree[n].Freq < tree[m].Freq || \
-   (tree[n].Freq == tree[m].Freq && depth[n] <= depth[m]))
+#define smaller(tree, n, m, depth) (tree[n].Freq < tree[m].Freq || (tree[n].Freq == tree[m].Freq && depth[n] <= depth[m]))
 
 /* ===========================================================================
  * Restore the heap property by moving down the tree starting at node k,
@@ -1676,21 +1684,21 @@ local void init_block(deflate_state * s)
  * when the heap property is re-established (each father smaller than its
  * two sons).
  */
-local void pqdownheap(deflate_state * s, ct_data * tree, int k)
+local void pqdownheap(deflate_state *s, ct_data *tree, int k)
 {
     int v = s->heap[k];
-    int j = k << 1;  /* left son of k */
+    int j = k << 1; /* left son of k */
     while (j <= s->heap_len) {
         /* Set j to the smallest of the two sons: */
-        if (j < s->heap_len &&
-            smaller(tree, s->heap[j+1], s->heap[j], s->depth)) {
+        if (j < s->heap_len && smaller(tree, s->heap[j + 1], s->heap[j], s->depth)) {
             j++;
         }
         /* Exit if v is smaller than both sons */
         if (smaller(tree, v, s->heap[j], s->depth)) break;
 
         /* Exchange v with the smallest son */
-        s->heap[k] = s->heap[j];  k = j;
+        s->heap[k] = s->heap[j];
+        k = j;
 
         /* And continue down the tree, setting j to the left son of k */
         j <<= 1;
@@ -1708,20 +1716,20 @@ local void pqdownheap(deflate_state * s, ct_data * tree, int k)
  *     The length opt_len is updated; static_len is also updated if stree is
  *     not null.
  */
-local void gen_bitlen(deflate_state * s, tree_desc * desc)
+local void gen_bitlen(deflate_state *s, tree_desc *desc)
 {
-    ct_data *tree        = desc->dyn_tree;
-    int max_code         = desc->max_code;
+    ct_data *tree = desc->dyn_tree;
+    int max_code = desc->max_code;
     const ct_data *stree = desc->stat_desc->static_tree;
-    const intf *extra    = desc->stat_desc->extra_bits;
-    int base             = desc->stat_desc->extra_base;
-    int max_length       = desc->stat_desc->max_length;
-    int h;              /* heap index */
-    int n, m;           /* iterate over the tree elements */
-    int bits;           /* bit length */
-    int xbits;          /* extra bits */
-    ush f;              /* frequency */
-    int overflow = 0;   /* number of elements with bit length too large */
+    const intf *extra = desc->stat_desc->extra_bits;
+    int base = desc->stat_desc->extra_base;
+    int max_length = desc->stat_desc->max_length;
+    int h;            /* heap index */
+    int n, m;         /* iterate over the tree elements */
+    int bits;         /* bit length */
+    int xbits;        /* extra bits */
+    ush f;            /* frequency */
+    int overflow = 0; /* number of elements with bit length too large */
 
     for (bits = 0; bits <= MAX_BITS; bits++) s->bl_count[bits] = 0;
 
@@ -1730,7 +1738,7 @@ local void gen_bitlen(deflate_state * s, tree_desc * desc)
      */
     tree[s->heap[s->heap_max]].Len = 0; /* root of the heap */
 
-    for (h = s->heap_max+1; h < HEAP_SIZE; h++) {
+    for (h = s->heap_max + 1; h < HEAP_SIZE; h++) {
         n = s->heap[h];
         bits = tree[tree[n].Dad].Len + 1;
         if (bits > max_length) bits = max_length, overflow++;
@@ -1741,22 +1749,22 @@ local void gen_bitlen(deflate_state * s, tree_desc * desc)
 
         s->bl_count[bits]++;
         xbits = 0;
-        if (n >= base) xbits = extra[n-base];
+        if (n >= base) xbits = extra[n - base];
         f = tree[n].Freq;
         s->opt_len += (ulg)f * (unsigned)(bits + xbits);
         if (stree) s->static_len += (ulg)f * (unsigned)(stree[n].Len + xbits);
     }
     if (overflow == 0) return;
 
-    Tracev((stderr,"\nbit length overflow\n"));
+    Tracev((stderr, "\nbit length overflow\n"));
     /* This happens for example on obj2 and pic of the Calgary corpus */
 
     /* Find the first bit length which could increase: */
     do {
-        bits = max_length-1;
+        bits = max_length - 1;
         while (s->bl_count[bits] == 0) bits--;
-        s->bl_count[bits]--;      /* move one leaf down the tree */
-        s->bl_count[bits+1] += 2; /* move one overflow item as its brother */
+        s->bl_count[bits]--;        /* move one leaf down the tree */
+        s->bl_count[bits + 1] += 2; /* move one overflow item as its brother */
         s->bl_count[max_length]--;
         /* The brother of the overflow item also moves one step up,
          * but this does not affect bl_count[max_length]
@@ -1774,8 +1782,8 @@ local void gen_bitlen(deflate_state * s, tree_desc * desc)
         while (n != 0) {
             m = s->heap[--h];
             if (m > max_code) continue;
-            if ((unsigned) tree[m].Len != (unsigned) bits) {
-                Tracev((stderr,"code %d bits %d->%d\n", m, tree[m].Len, bits));
+            if ((unsigned)tree[m].Len != (unsigned)bits) {
+                Tracev((stderr, "code %d bits %d->%d\n", m, tree[m].Len, bits));
                 s->opt_len += ((ulg)bits - tree[m].Len) * tree[m].Freq;
                 tree[m].Len = (ush)bits;
             }
@@ -1792,35 +1800,33 @@ local void gen_bitlen(deflate_state * s, tree_desc * desc)
  * OUT assertion: the field code is set for all tree elements of non
  *     zero code length.
  */
-local void gen_codes(ct_data * tree, int max_code, ushf * bl_count)
+local void gen_codes(ct_data *tree, int max_code, ushf *bl_count)
 {
-    ush next_code[MAX_BITS+1]; /* next code value for each bit length */
-    unsigned code = 0;         /* running code value */
-    int bits;                  /* bit index */
-    int n;                     /* code index */
+    ush next_code[MAX_BITS + 1]; /* next code value for each bit length */
+    unsigned code = 0;           /* running code value */
+    int bits;                    /* bit index */
+    int n;                       /* code index */
 
     /* The distribution counts are first used to generate the code values
      * without bit reversal.
      */
     for (bits = 1; bits <= MAX_BITS; bits++) {
-        code = (code + bl_count[bits-1]) << 1;
+        code = (code + bl_count[bits - 1]) << 1;
         next_code[bits] = (ush)code;
     }
     /* Check that the bit counts in bl_count are consistent. The last code
      * must be all ones.
      */
-    Assert (code + bl_count[MAX_BITS]-1 == (1<<MAX_BITS)-1,
-            "inconsistent bit counts");
-    Tracev((stderr,"\ngen_codes: max_code %d ", max_code));
+    Assert(code + bl_count[MAX_BITS] - 1 == (1 << MAX_BITS) - 1, "inconsistent bit counts");
+    Tracev((stderr, "\ngen_codes: max_code %d ", max_code));
 
-    for (n = 0;  n <= max_code; n++) {
+    for (n = 0; n <= max_code; n++) {
         int len = tree[n].Len;
         if (len == 0) continue;
         /* Now reverse the bits */
         tree[n].Code = (ush)bi_reverse(next_code[len]++, len);
 
-        Tracecv(tree != static_ltree, (stderr,"\nn %3d %c l %2d c %4x (%x) ",
-             n, (isgraph(n) ? n : ' '), len, tree[n].Code, next_code[len]-1));
+        Tracecv(tree != static_ltree, (stderr, "\nn %3d %c l %2d c %4x (%x) ", n, (isgraph(n) ? n : ' '), len, tree[n].Code, next_code[len] - 1));
     }
 }
 
@@ -1832,11 +1838,11 @@ local void gen_codes(ct_data * tree, int max_code, ushf * bl_count)
  *     and corresponding code. The length opt_len is updated; static_len is
  *     also updated if stree is not null. The field max_code is set.
  */
-local void build_tree(deflate_state * s, tree_desc * desc)
+local void build_tree(deflate_state *s, tree_desc *desc)
 {
-    ct_data *tree         = desc->dyn_tree;
-    const ct_data *stree  = desc->stat_desc->static_tree;
-    int elems             = desc->stat_desc->elems;
+    ct_data *tree = desc->dyn_tree;
+    const ct_data *stree = desc->stat_desc->static_tree;
+    int elems = desc->stat_desc->elems;
     int n, m;          /* iterate over heap elements */
     int max_code = -1; /* largest code with non zero frequency */
     int node;          /* new node being created */
@@ -1865,7 +1871,8 @@ local void build_tree(deflate_state * s, tree_desc * desc)
         node = s->heap[++(s->heap_len)] = (max_code < 2 ? ++max_code : 0);
         tree[node].Freq = 1;
         s->depth[node] = 0;
-        s->opt_len--; if (stree) s->static_len -= stree[node].Len;
+        s->opt_len--;
+        if (stree) s->static_len -= stree[node].Len;
         /* node is 0 or 1 so it does not have extra bits */
     }
     desc->max_code = max_code;
@@ -1873,12 +1880,12 @@ local void build_tree(deflate_state * s, tree_desc * desc)
     /* The elements heap[heap_len/2+1 .. heap_len] are leaves of the tree,
      * establish sub-heaps of increasing lengths:
      */
-    for (n = s->heap_len/2; n >= 1; n--) pqdownheap(s, tree, n);
+    for (n = s->heap_len / 2; n >= 1; n--) pqdownheap(s, tree, n);
 
     /* Construct the Huffman tree by repeatedly combining the least two
      * frequent nodes.
      */
-    node = elems;              /* next internal node of the tree */
+    node = elems; /* next internal node of the tree */
     do {
         pqremove(s, tree, n);  /* n = node of least frequency */
         m = s->heap[SMALLEST]; /* m = node of next least frequency */
@@ -1888,13 +1895,11 @@ local void build_tree(deflate_state * s, tree_desc * desc)
 
         /* Create a new node father of n and m */
         tree[node].Freq = tree[n].Freq + tree[m].Freq;
-        s->depth[node] = (uch)((s->depth[n] >= s->depth[m] ?
-                                s->depth[n] : s->depth[m]) + 1);
+        s->depth[node] = (uch)((s->depth[n] >= s->depth[m] ? s->depth[n] : s->depth[m]) + 1);
         tree[n].Dad = tree[m].Dad = (ush)node;
 #ifdef DUMP_BL_TREE
         if (tree == s->bl_tree) {
-            fprintf(stderr,"\nnode %d(%d), sons %d(%d) %d(%d)",
-                    node, tree[node].Freq, n, tree[n].Freq, m, tree[m].Freq);
+            fprintf(stderr, "\nnode %d(%d), sons %d(%d) %d(%d)", node, tree[node].Freq, n, tree[n].Freq, m, tree[m].Freq);
         }
 #endif
         /* and insert the new node in the heap */
@@ -1911,14 +1916,14 @@ local void build_tree(deflate_state * s, tree_desc * desc)
     gen_bitlen(s, (tree_desc *)desc);
 
     /* The field len is now set, we can generate the bit codes */
-    gen_codes ((ct_data *)tree, max_code, s->bl_count);
+    gen_codes((ct_data *)tree, max_code, s->bl_count);
 }
 
 /* ===========================================================================
  * Scan a literal or distance tree to determine the frequencies of the codes
  * in the bit length tree.
  */
-local void scan_tree(deflate_state * s, ct_data * tree, int max_code)
+local void scan_tree(deflate_state *s, ct_data *tree, int max_code)
 {
     int n;                     /* iterates over all tree elements */
     int prevlen = -1;          /* last emitted length */
@@ -1929,10 +1934,11 @@ local void scan_tree(deflate_state * s, ct_data * tree, int max_code)
     int min_count = 4;         /* min repeat count */
 
     if (nextlen == 0) max_count = 138, min_count = 3;
-    tree[max_code+1].Len = (ush)0xffff; /* guard */
+    tree[max_code + 1].Len = (ush)0xffff; /* guard */
 
     for (n = 0; n <= max_code; n++) {
-        curlen = nextlen; nextlen = tree[n+1].Len;
+        curlen = nextlen;
+        nextlen = tree[n + 1].Len;
         if (++count < max_count && curlen == nextlen) {
             continue;
         } else if (count < min_count) {
@@ -1945,7 +1951,8 @@ local void scan_tree(deflate_state * s, ct_data * tree, int max_code)
         } else {
             s->bl_tree[REPZ_11_138].Freq++;
         }
-        count = 0; prevlen = curlen;
+        count = 0;
+        prevlen = curlen;
         if (nextlen == 0) {
             max_count = 138, min_count = 3;
         } else if (curlen == nextlen) {
@@ -1960,7 +1967,7 @@ local void scan_tree(deflate_state * s, ct_data * tree, int max_code)
  * Send a literal or distance tree in compressed form, using the codes in
  * bl_tree.
  */
-local void send_tree(deflate_state * s, ct_data * tree, int max_code)
+local void send_tree(deflate_state *s, ct_data *tree, int max_code)
 {
     int n;                     /* iterates over all tree elements */
     int prevlen = -1;          /* last emitted length */
@@ -1970,30 +1977,38 @@ local void send_tree(deflate_state * s, ct_data * tree, int max_code)
     int max_count = 7;         /* max repeat count */
     int min_count = 4;         /* min repeat count */
 
-    /* tree[max_code+1].Len = -1; */  /* guard already set */
+    /* tree[max_code+1].Len = -1; */ /* guard already set */
     if (nextlen == 0) max_count = 138, min_count = 3;
 
     for (n = 0; n <= max_code; n++) {
-        curlen = nextlen; nextlen = tree[n+1].Len;
+        curlen = nextlen;
+        nextlen = tree[n + 1].Len;
         if (++count < max_count && curlen == nextlen) {
             continue;
         } else if (count < min_count) {
-            do { send_code(s, curlen, s->bl_tree); } while (--count != 0);
+            do {
+                send_code(s, curlen, s->bl_tree);
+            } while (--count != 0);
 
         } else if (curlen != 0) {
             if (curlen != prevlen) {
-                send_code(s, curlen, s->bl_tree); count--;
+                send_code(s, curlen, s->bl_tree);
+                count--;
             }
             Assert(count >= 3 && count <= 6, " 3_6?");
-            send_code(s, REP_3_6, s->bl_tree); send_bits(s, count-3, 2);
+            send_code(s, REP_3_6, s->bl_tree);
+            send_bits(s, count - 3, 2);
 
         } else if (count <= 10) {
-            send_code(s, REPZ_3_10, s->bl_tree); send_bits(s, count-3, 3);
+            send_code(s, REPZ_3_10, s->bl_tree);
+            send_bits(s, count - 3, 3);
 
         } else {
-            send_code(s, REPZ_11_138, s->bl_tree); send_bits(s, count-11, 7);
+            send_code(s, REPZ_11_138, s->bl_tree);
+            send_bits(s, count - 11, 7);
         }
-        count = 0; prevlen = curlen;
+        count = 0;
+        prevlen = curlen;
         if (nextlen == 0) {
             max_count = 138, min_count = 3;
         } else if (curlen == nextlen) {
@@ -2008,9 +2023,9 @@ local void send_tree(deflate_state * s, ct_data * tree, int max_code)
  * Construct the Huffman tree for the bit lengths and return the index in
  * bl_order of the last bit length code to send.
  */
-local int build_bl_tree(deflate_state * s)
+local int build_bl_tree(deflate_state *s)
 {
-    int max_blindex;  /* index of last bit length code of non zero freq */
+    int max_blindex; /* index of last bit length code of non zero freq */
 
     /* Determine the bit length frequencies for literal and distance trees */
     scan_tree(s, (ct_data *)s->dyn_ltree, s->l_desc.max_code);
@@ -2026,13 +2041,12 @@ local int build_bl_tree(deflate_state * s)
      * requires that at least 4 bit length codes be sent. (appnote.txt says
      * 3 but the actual value used is 4.)
      */
-    for (max_blindex = BL_CODES-1; max_blindex >= 3; max_blindex--) {
+    for (max_blindex = BL_CODES - 1; max_blindex >= 3; max_blindex--) {
         if (s->bl_tree[bl_order[max_blindex]].Len != 0) break;
     }
     /* Update opt_len to include the bit length tree and counts */
-    s->opt_len += 3*((ulg)max_blindex+1) + 5+5+4;
-    Tracev((stderr, "\ndyn trees: dyn %ld, stat %ld",
-            s->opt_len, s->static_len));
+    s->opt_len += 3 * ((ulg)max_blindex + 1) + 5 + 5 + 4;
+    Tracev((stderr, "\ndyn trees: dyn %ld, stat %ld", s->opt_len, s->static_len));
 
     return max_blindex;
 }
@@ -2042,37 +2056,36 @@ local int build_bl_tree(deflate_state * s)
  * lengths of the bit length codes, the literal tree and the distance tree.
  * IN assertion: lcodes >= 257, dcodes >= 1, blcodes >= 4.
  */
-local void send_all_trees(deflate_state * s, int lcodes, int dcodes, int blcodes)
+local void send_all_trees(deflate_state *s, int lcodes, int dcodes, int blcodes)
 {
-    int rank;                    /* index in bl_order */
+    int rank; /* index in bl_order */
 
-    Assert (lcodes >= 257 && dcodes >= 1 && blcodes >= 4, "not enough codes");
-    Assert (lcodes <= L_CODES && dcodes <= D_CODES && blcodes <= BL_CODES,
-            "too many codes");
+    Assert(lcodes >= 257 && dcodes >= 1 && blcodes >= 4, "not enough codes");
+    Assert(lcodes <= L_CODES && dcodes <= D_CODES && blcodes <= BL_CODES, "too many codes");
     Tracev((stderr, "\nbl counts: "));
-    send_bits(s, lcodes-257, 5); /* not +255 as stated in appnote.txt */
-    send_bits(s, dcodes-1,   5);
-    send_bits(s, blcodes-4,  4); /* not -3 as stated in appnote.txt */
+    send_bits(s, lcodes - 257, 5); /* not +255 as stated in appnote.txt */
+    send_bits(s, dcodes - 1, 5);
+    send_bits(s, blcodes - 4, 4); /* not -3 as stated in appnote.txt */
     for (rank = 0; rank < blcodes; rank++) {
         Tracev((stderr, "\nbl code %2d ", bl_order[rank]));
         send_bits(s, s->bl_tree[bl_order[rank]].Len, 3);
     }
     Tracev((stderr, "\nbl tree: sent %ld", s->bits_sent));
 
-    send_tree(s, (ct_data *)s->dyn_ltree, lcodes-1); /* literal tree */
+    send_tree(s, (ct_data *)s->dyn_ltree, lcodes - 1); /* literal tree */
     Tracev((stderr, "\nlit tree: sent %ld", s->bits_sent));
 
-    send_tree(s, (ct_data *)s->dyn_dtree, dcodes-1); /* distance tree */
+    send_tree(s, (ct_data *)s->dyn_dtree, dcodes - 1); /* distance tree */
     Tracev((stderr, "\ndist tree: sent %ld", s->bits_sent));
 }
 
 /* ===========================================================================
  * Send a stored block
  */
-void ZLIB_INTERNAL _tr_stored_block(deflate_state * s, charf * buf, ulg stored_len, int last)
+void ZLIB_INTERNAL _tr_stored_block(deflate_state *s, charf *buf, ulg stored_len, int last)
 {
-    send_bits(s, (STORED_BLOCK<<1)+last, 3);    /* send block type */
-    bi_windup(s);        /* align on byte boundary */
+    send_bits(s, (STORED_BLOCK << 1) + last, 3); /* send block type */
+    bi_windup(s);                                /* align on byte boundary */
     put_short(s, (ush)stored_len);
     put_short(s, (ush)~stored_len);
     zmemcpy(s->pending_buf + s->pending, (Bytef *)buf, stored_len);
@@ -2080,15 +2093,15 @@ void ZLIB_INTERNAL _tr_stored_block(deflate_state * s, charf * buf, ulg stored_l
 #ifdef ZLIB_DEBUG
     s->compressed_len = (s->compressed_len + 3 + 7) & (ulg)~7L;
     s->compressed_len += (stored_len + 4) << 3;
-    s->bits_sent += 2*16;
-    s->bits_sent += stored_len<<3;
+    s->bits_sent += 2 * 16;
+    s->bits_sent += stored_len << 3;
 #endif
 }
 
 /* ===========================================================================
  * Flush the bits in the bit buffer to pending output (leaves at most 7 bits)
  */
-void ZLIB_INTERNAL _tr_flush_bits(deflate_state * s)
+void ZLIB_INTERNAL _tr_flush_bits(deflate_state *s)
 {
     bi_flush(s);
 }
@@ -2097,9 +2110,9 @@ void ZLIB_INTERNAL _tr_flush_bits(deflate_state * s)
  * Send one empty static block to give enough lookahead for inflate.
  * This takes 10 bits, of which 7 may remain in the bit buffer.
  */
-void ZLIB_INTERNAL _tr_align(deflate_state * s)
+void ZLIB_INTERNAL _tr_align(deflate_state *s)
 {
-    send_bits(s, STATIC_TREES<<1, 3);
+    send_bits(s, STATIC_TREES << 1, 3);
     send_code(s, END_BLOCK, static_ltree);
 #ifdef ZLIB_DEBUG
     s->compressed_len += 10L; /* 3 for block type, 7 for EOB */
@@ -2111,26 +2124,22 @@ void ZLIB_INTERNAL _tr_align(deflate_state * s)
  * Determine the best encoding for the current block: dynamic trees, static
  * trees or store, and write out the encoded block.
  */
-void ZLIB_INTERNAL _tr_flush_block(deflate_state * s, charf * buf, ulg stored_len, int last)
+void ZLIB_INTERNAL _tr_flush_block(deflate_state *s, charf *buf, ulg stored_len, int last)
 {
     ulg opt_lenb, static_lenb; /* opt_len and static_len in bytes */
-    int max_blindex = 0;  /* index of last bit length code of non zero freq */
+    int max_blindex = 0;       /* index of last bit length code of non zero freq */
 
     /* Build the Huffman trees unless a stored block is forced */
     if (s->level > 0) {
-
         /* Check if the file is binary or text */
-        if (s->strm->data_type == Z_UNKNOWN)
-            s->strm->data_type = detect_data_type(s);
+        if (s->strm->data_type == Z_UNKNOWN) s->strm->data_type = detect_data_type(s);
 
         /* Construct the literal and distance trees */
         build_tree(s, (tree_desc *)(&(s->l_desc)));
-        Tracev((stderr, "\nlit data: dyn %ld, stat %ld", s->opt_len,
-                s->static_len));
+        Tracev((stderr, "\nlit data: dyn %ld, stat %ld", s->opt_len, s->static_len));
 
         build_tree(s, (tree_desc *)(&(s->d_desc)));
-        Tracev((stderr, "\ndist data: dyn %ld, stat %ld", s->opt_len,
-                s->static_len));
+        Tracev((stderr, "\ndist data: dyn %ld, stat %ld", s->opt_len, s->static_len));
         /* At this point, opt_len and static_len are the total bit lengths of
          * the compressed block data, excluding the tree representations.
          */
@@ -2141,25 +2150,23 @@ void ZLIB_INTERNAL _tr_flush_block(deflate_state * s, charf * buf, ulg stored_le
         max_blindex = build_bl_tree(s);
 
         /* Determine the best encoding. Compute the block lengths in bytes. */
-        opt_lenb = (s->opt_len+3+7)>>3;
-        static_lenb = (s->static_len+3+7)>>3;
+        opt_lenb = (s->opt_len + 3 + 7) >> 3;
+        static_lenb = (s->static_len + 3 + 7) >> 3;
 
-        Tracev((stderr, "\nopt %lu(%lu) stat %lu(%lu) stored %lu lit %u ",
-                opt_lenb, s->opt_len, static_lenb, s->static_len, stored_len,
-                s->last_lit));
+        Tracev((stderr, "\nopt %lu(%lu) stat %lu(%lu) stored %lu lit %u ", opt_lenb, s->opt_len, static_lenb, s->static_len, stored_len, s->last_lit));
 
         if (static_lenb <= opt_lenb) opt_lenb = static_lenb;
 
     } else {
-        Assert(buf != (char*)0, "lost buf");
+        Assert(buf != (char *)0, "lost buf");
         opt_lenb = static_lenb = stored_len + 5; /* force a stored block */
     }
 
 #ifdef FORCE_STORED
-    if (buf != (char*)0) { /* force stored block */
+    if (buf != (char *)0) { /* force stored block */
 #else
-    if (stored_len+4 <= opt_lenb && buf != (char*)0) {
-                       /* 4: two words for the lengths */
+    if (stored_len + 4 <= opt_lenb && buf != (char *)0) {
+        /* 4: two words for the lengths */
 #endif
         /* The test buf != NULL is only necessary if LIT_BUFSIZE > WSIZE.
          * Otherwise we can't have processed more than WSIZE input bytes since
@@ -2174,23 +2181,20 @@ void ZLIB_INTERNAL _tr_flush_block(deflate_state * s, charf * buf, ulg stored_le
 #else
     } else if (s->strategy == Z_FIXED || static_lenb == opt_lenb) {
 #endif
-        send_bits(s, (STATIC_TREES<<1)+last, 3);
-        compress_block(s, (const ct_data *)static_ltree,
-                       (const ct_data *)static_dtree);
+        send_bits(s, (STATIC_TREES << 1) + last, 3);
+        compress_block(s, (const ct_data *)static_ltree, (const ct_data *)static_dtree);
 #ifdef ZLIB_DEBUG
         s->compressed_len += 3 + s->static_len;
 #endif
     } else {
-        send_bits(s, (DYN_TREES<<1)+last, 3);
-        send_all_trees(s, s->l_desc.max_code+1, s->d_desc.max_code+1,
-                       max_blindex+1);
-        compress_block(s, (const ct_data *)s->dyn_ltree,
-                       (const ct_data *)s->dyn_dtree);
+        send_bits(s, (DYN_TREES << 1) + last, 3);
+        send_all_trees(s, s->l_desc.max_code + 1, s->d_desc.max_code + 1, max_blindex + 1);
+        compress_block(s, (const ct_data *)s->dyn_ltree, (const ct_data *)s->dyn_dtree);
 #ifdef ZLIB_DEBUG
         s->compressed_len += 3 + s->opt_len;
 #endif
     }
-    Assert (s->compressed_len == s->bits_sent, "bad compressed size");
+    Assert(s->compressed_len == s->bits_sent, "bad compressed size");
     /* The above check is made mod 2^32, for files larger than 512 MB
      * and uLong implemented on 32 bits.
      */
@@ -2199,18 +2203,17 @@ void ZLIB_INTERNAL _tr_flush_block(deflate_state * s, charf * buf, ulg stored_le
     if (last) {
         bi_windup(s);
 #ifdef ZLIB_DEBUG
-        s->compressed_len += 7;  /* align on byte boundary */
+        s->compressed_len += 7; /* align on byte boundary */
 #endif
     }
-    Tracev((stderr,"\ncomprlen %lu(%lu) ", s->compressed_len>>3,
-           s->compressed_len-7*last));
+    Tracev((stderr, "\ncomprlen %lu(%lu) ", s->compressed_len >> 3, s->compressed_len - 7 * last));
 }
 
 /* ===========================================================================
  * Save the match info and tally the frequency counts. Return true if
  * the current block must be flushed.
  */
-int ZLIB_INTERNAL _tr_tally(deflate_state * s, unsigned dist, unsigned lc)
+int ZLIB_INTERNAL _tr_tally(deflate_state *s, unsigned dist, unsigned lc)
 {
     s->d_buf[s->last_lit] = (ush)dist;
     s->l_buf[s->last_lit++] = (uch)lc;
@@ -2220,12 +2223,10 @@ int ZLIB_INTERNAL _tr_tally(deflate_state * s, unsigned dist, unsigned lc)
     } else {
         s->matches++;
         /* Here, lc is the match length - MIN_MATCH */
-        dist--;             /* dist = match distance - 1 */
-        Assert((ush)dist < (ush)MAX_DIST(s) &&
-               (ush)lc <= (ush)(MAX_MATCH-MIN_MATCH) &&
-               (ush)d_code(dist) < (ush)D_CODES,  "_tr_tally: bad match");
+        dist--; /* dist = match distance - 1 */
+        Assert((ush)dist < (ush)MAX_DIST(s) && (ush)lc <= (ush)(MAX_MATCH - MIN_MATCH) && (ush)d_code(dist) < (ush)D_CODES, "_tr_tally: bad match");
 
-        s->dyn_ltree[_length_code[lc]+LITERALS+1].Freq++;
+        s->dyn_ltree[_length_code[lc] + LITERALS + 1].Freq++;
         s->dyn_dtree[d_code(dist)].Freq++;
     }
 
@@ -2233,21 +2234,18 @@ int ZLIB_INTERNAL _tr_tally(deflate_state * s, unsigned dist, unsigned lc)
     /* Try to guess if it is profitable to stop the current block here */
     if ((s->last_lit & 0x1fff) == 0 && s->level > 2) {
         /* Compute an upper bound for the compressed length */
-        ulg out_length = (ulg)s->last_lit*8L;
+        ulg out_length = (ulg)s->last_lit * 8L;
         ulg in_length = (ulg)((long)s->strstart - s->block_start);
         int dcode;
         for (dcode = 0; dcode < D_CODES; dcode++) {
-            out_length += (ulg)s->dyn_dtree[dcode].Freq *
-                (5L+extra_dbits[dcode]);
+            out_length += (ulg)s->dyn_dtree[dcode].Freq * (5L + extra_dbits[dcode]);
         }
         out_length >>= 3;
-        Tracev((stderr,"\nlast_lit %u, in %ld, out ~%ld(%ld%%) ",
-               s->last_lit, in_length, out_length,
-               100L - out_length*100L/in_length));
-        if (s->matches < s->last_lit/2 && out_length < in_length/2) return 1;
+        Tracev((stderr, "\nlast_lit %u, in %ld, out ~%ld(%ld%%) ", s->last_lit, in_length, out_length, 100L - out_length * 100L / in_length));
+        if (s->matches < s->last_lit / 2 && out_length < in_length / 2) return 1;
     }
 #endif
-    return (s->last_lit == s->lit_bufsize-1);
+    return (s->last_lit == s->lit_bufsize - 1);
     /* We avoid equality with lit_bufsize because of wraparound at 64K
      * on 16 bit machines and because stored blocks are restricted to
      * 64K-1 bytes.
@@ -2257,46 +2255,45 @@ int ZLIB_INTERNAL _tr_tally(deflate_state * s, unsigned dist, unsigned lc)
 /* ===========================================================================
  * Send the block data compressed using the given Huffman trees
  */
-local void compress_block(deflate_state * s, const ct_data * ltree, const ct_data * dtree)
+local void compress_block(deflate_state *s, const ct_data *ltree, const ct_data *dtree)
 {
-    unsigned dist;      /* distance of matched string */
-    int lc;             /* match length or unmatched char (if dist == 0) */
-    unsigned lx = 0;    /* running index in l_buf */
-    unsigned code;      /* the code to send */
-    int extra;          /* number of extra bits to send */
+    unsigned dist;   /* distance of matched string */
+    int lc;          /* match length or unmatched char (if dist == 0) */
+    unsigned lx = 0; /* running index in l_buf */
+    unsigned code;   /* the code to send */
+    int extra;       /* number of extra bits to send */
 
     if (s->last_lit != 0) do {
-        dist = s->d_buf[lx];
-        lc = s->l_buf[lx++];
-        if (dist == 0) {
-            send_code(s, lc, ltree); /* send a literal byte */
-            Tracecv(isgraph(lc), (stderr," '%c' ", lc));
-        } else {
-            /* Here, lc is the match length - MIN_MATCH */
-            code = _length_code[lc];
-            send_code(s, code+LITERALS+1, ltree); /* send the length code */
-            extra = extra_lbits[code];
-            if (extra != 0) {
-                lc -= base_length[code];
-                send_bits(s, lc, extra);       /* send the extra length bits */
-            }
-            dist--; /* dist is now the match distance - 1 */
-            code = d_code(dist);
-            Assert (code < D_CODES, "bad d_code");
+            dist = s->d_buf[lx];
+            lc = s->l_buf[lx++];
+            if (dist == 0) {
+                send_code(s, lc, ltree); /* send a literal byte */
+                Tracecv(isgraph(lc), (stderr, " '%c' ", lc));
+            } else {
+                /* Here, lc is the match length - MIN_MATCH */
+                code = _length_code[lc];
+                send_code(s, code + LITERALS + 1, ltree); /* send the length code */
+                extra = extra_lbits[code];
+                if (extra != 0) {
+                    lc -= base_length[code];
+                    send_bits(s, lc, extra); /* send the extra length bits */
+                }
+                dist--; /* dist is now the match distance - 1 */
+                code = d_code(dist);
+                Assert(code < D_CODES, "bad d_code");
 
-            send_code(s, code, dtree);       /* send the distance code */
-            extra = extra_dbits[code];
-            if (extra != 0) {
-                dist -= (unsigned)base_dist[code];
-                send_bits(s, dist, extra);   /* send the extra distance bits */
-            }
-        } /* literal or match pair ? */
+                send_code(s, code, dtree); /* send the distance code */
+                extra = extra_dbits[code];
+                if (extra != 0) {
+                    dist -= (unsigned)base_dist[code];
+                    send_bits(s, dist, extra); /* send the extra distance bits */
+                }
+            } /* literal or match pair ? */
 
-        /* Check that the overlay between pending_buf and d_buf+l_buf is ok: */
-        Assert((uInt)(s->pending) < s->lit_bufsize + 2*lx,
-               "pendingBuf overflow");
+            /* Check that the overlay between pending_buf and d_buf+l_buf is ok: */
+            Assert((uInt)(s->pending) < s->lit_bufsize + 2 * lx, "pendingBuf overflow");
 
-    } while (lx < s->last_lit);
+        } while (lx < s->last_lit);
 
     send_code(s, END_BLOCK, ltree);
 }
@@ -2314,7 +2311,7 @@ local void compress_block(deflate_state * s, const ct_data * ltree, const ct_dat
  *   (7 {BEL}, 8 {BS}, 11 {VT}, 12 {FF}, 26 {SUB}, 27 {ESC}).
  * IN assertion: the fields Freq of dyn_ltree are set.
  */
-local int detect_data_type(deflate_state * s)
+local int detect_data_type(deflate_state *s)
 {
     /* black_mask is the bit mask of black-listed bytes
      * set bits 0..6, 14..25, and 28..31
@@ -2325,16 +2322,12 @@ local int detect_data_type(deflate_state * s)
 
     /* Check for non-textual ("black-listed") bytes. */
     for (n = 0; n <= 31; n++, black_mask >>= 1)
-        if ((black_mask & 1) && (s->dyn_ltree[n].Freq != 0))
-            return Z_BINARY;
+        if ((black_mask & 1) && (s->dyn_ltree[n].Freq != 0)) return Z_BINARY;
 
     /* Check for textual ("white-listed") bytes. */
-    if (s->dyn_ltree[9].Freq != 0 || s->dyn_ltree[10].Freq != 0
-            || s->dyn_ltree[13].Freq != 0)
-        return Z_TEXT;
+    if (s->dyn_ltree[9].Freq != 0 || s->dyn_ltree[10].Freq != 0 || s->dyn_ltree[13].Freq != 0) return Z_TEXT;
     for (n = 32; n < LITERALS; n++)
-        if (s->dyn_ltree[n].Freq != 0)
-            return Z_TEXT;
+        if (s->dyn_ltree[n].Freq != 0) return Z_TEXT;
 
     /* There are no "black-listed" or "white-listed" bytes:
      * this stream either is empty or has tolerated ("gray-listed") bytes only.
@@ -2360,7 +2353,7 @@ local unsigned bi_reverse(unsigned code, int len)
 /* ===========================================================================
  * Flush the bit buffer, keeping at most 7 bits in it.
  */
-local void bi_flush(deflate_state * s)
+local void bi_flush(deflate_state *s)
 {
     if (s->bi_valid == 16) {
         put_short(s, s->bi_buf);
@@ -2376,7 +2369,7 @@ local void bi_flush(deflate_state * s)
 /* ===========================================================================
  * Flush the bit buffer and align the output on a byte boundary
  */
-local void bi_windup(deflate_state * s)
+local void bi_windup(deflate_state *s)
 {
     if (s->bi_valid > 8) {
         put_short(s, s->bi_buf);
@@ -2386,7 +2379,7 @@ local void bi_windup(deflate_state * s)
     s->bi_buf = 0;
     s->bi_valid = 0;
 #ifdef ZLIB_DEBUG
-    s->bits_sent = (s->bits_sent+7) & ~7;
+    s->bits_sent = (s->bits_sent + 7) & ~7;
 #endif
 }
 /* ===== End embedded xzlib_trees.c ===== */
@@ -2414,256 +2407,271 @@ local void bi_windup(deflate_state * s)
 #define ZUTIL_H
 
 #ifdef HAVE_HIDDEN
-#  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+#define ZLIB_INTERNAL __attribute__((visibility("hidden")))
 #else
-#  define ZLIB_INTERNAL
+#define ZLIB_INTERNAL
 #endif
 #if defined(STDC) && !defined(Z_SOLO)
-#  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
-#    include <stddef.h>
-#  endif
-#  include <string.h>
-#  include <stdlib.h>
+#if !(defined(_WIN32_WCE) && defined(_MSC_VER))
+#include <stddef.h>
+#endif
+#include <string.h>
+#include <stdlib.h>
 #endif
 
 #ifdef Z_SOLO
-   typedef long ptrdiff_t;  /* guess -- will be caught if guess is wrong */
+typedef long ptrdiff_t; /* guess -- will be caught if guess is wrong */
 #endif
 
 #ifndef local
-#  define local static
+#define local static
 #endif
 /* since "static" is used to mean two completely different things in C, we
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-typedef unsigned char  uch;
+typedef unsigned char uch;
 typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
-typedef unsigned long  ulg;
+typedef unsigned long ulg;
 
-extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
+#define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
 
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = ERR_MSG(err), (err))
+#define ERR_RETURN(strm, err) return (strm->msg = ERR_MSG(err), (err))
 /* To be used only when the state is known to be valid */
 
-        /* common constants */
+/* common constants */
 
 #ifndef DEF_WBITS
-#  define DEF_WBITS MAX_WBITS
+#define DEF_WBITS MAX_WBITS
 #endif
 /* default windowBits for decompression. MAX_WBITS is for compression only */
 
 #if MAX_MEM_LEVEL >= 8
-#  define DEF_MEM_LEVEL 8
+#define DEF_MEM_LEVEL 8
 #else
-#  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
+#define DEF_MEM_LEVEL MAX_MEM_LEVEL
 #endif
 /* default memLevel */
 
 #define STORED_BLOCK 0
 #define STATIC_TREES 1
-#define DYN_TREES    2
+#define DYN_TREES 2
 /* The three kinds of block type */
 
-#define MIN_MATCH  3
-#define MAX_MATCH  258
+#define MIN_MATCH 3
+#define MAX_MATCH 258
 /* The minimum and maximum match lengths */
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
-        /* target dependencies */
+/* target dependencies */
 
 #if defined(MSDOS) || (defined(WINDOWS) && !defined(WIN32))
-#  define OS_CODE  0x00
-#  ifndef Z_SOLO
-#    if defined(__TURBOC__) || defined(__BORLANDC__)
-#      if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
-         /* Allow compilation with ANSI keywords only enabled */
-         void _Cdecl farfree( void *block );
-         void *_Cdecl farmalloc( unsigned long nbytes );
-#      else
-#        include <alloc.h>
-#      endif
-#    else /* MSC or DJGPP */
-#      include <malloc.h>
-#    endif
-#  endif
+#define OS_CODE 0x00
+#ifndef Z_SOLO
+#if defined(__TURBOC__) || defined(__BORLANDC__)
+#if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
+/* Allow compilation with ANSI keywords only enabled */
+void _Cdecl farfree(void *block);
+void *_Cdecl farmalloc(unsigned long nbytes);
+#else
+#include <alloc.h>
+#endif
+#else /* MSC or DJGPP */
+#include <malloc.h>
+#endif
+#endif
 #endif
 
 #ifdef AMIGA
-#  define OS_CODE  1
+#define OS_CODE 1
 #endif
 
 #if defined(VAXC) || defined(VMS)
-#  define OS_CODE  2
-#  define F_OPEN(name, mode) \
-     fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
+#define OS_CODE 2
+#define F_OPEN(name, mode) fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
 #endif
 
 #ifdef __370__
-#  if __TARGET_LIB__ < 0x20000000
-#    define OS_CODE 4
-#  elif __TARGET_LIB__ < 0x40000000
-#    define OS_CODE 11
-#  else
-#    define OS_CODE 8
-#  endif
+#if __TARGET_LIB__ < 0x20000000
+#define OS_CODE 4
+#elif __TARGET_LIB__ < 0x40000000
+#define OS_CODE 11
+#else
+#define OS_CODE 8
+#endif
 #endif
 
 #if defined(ATARI) || defined(atarist)
-#  define OS_CODE  5
+#define OS_CODE 5
 #endif
 
 #ifdef OS2
-#  define OS_CODE  6
-#  if defined(M_I86) && !defined(Z_SOLO)
-#    include <malloc.h>
-#  endif
+#define OS_CODE 6
+#if defined(M_I86) && !defined(Z_SOLO)
+#include <malloc.h>
+#endif
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
-#  ifndef Z_SOLO
-#    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
-#      include <unix.h> /* for fdopen */
-#    else
-#      ifndef fdopen
-#        define fdopen(fd,mode) NULL /* No fdopen() */
-#      endif
-#    endif
-#  endif
+#define OS_CODE 7
+#ifndef Z_SOLO
+#if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+#include <unix.h> /* for fdopen */
+#else
+#ifndef fdopen
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#endif
+#endif
+#endif
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#define OS_CODE 13
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#define OS_CODE 10
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#define OS_CODE 16
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#define OS_CODE 18
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#define OS_CODE 19
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)
-#  define fdopen(fd,mode) NULL /* No fdopen() */
+#define fdopen(fd, mode) NULL /* No fdopen() */
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER > 600)) && !defined __INTERIX
-#  if defined(_WIN32_WCE)
-#    define fdopen(fd,mode) NULL /* No fdopen() */
-#    ifndef _PTRDIFF_T_DEFINED
-       typedef int ptrdiff_t;
-#      define _PTRDIFF_T_DEFINED
-#    endif
-#  else
-#    define fdopen(fd,type)  _fdopen(fd,type)
-#  endif
+#if defined(_WIN32_WCE)
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
+#else
+#define fdopen(fd, type) _fdopen(fd, type)
+#endif
 #endif
 
 #if defined(__BORLANDC__) && !defined(MSDOS)
-  #pragma warn -8004
-  #pragma warn -8008
-  #pragma warn -8066
+#pragma warn - 8004
+#pragma warn - 8008
+#pragma warn - 8066
 #endif
 
 /* provide prototypes for these when building zlib without LFS */
-#if !defined(_WIN32) && \
-    (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE-0 == 0)
-    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
-    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
+#if !defined(_WIN32) && (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE - 0 == 0)
+ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
+ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
 #endif
 
-        /* common defaults */
+/* common defaults */
 
 #ifndef OS_CODE
-#  define OS_CODE  3     /* assume Unix */
+#define OS_CODE 3 /* assume Unix */
 #endif
 
 #ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
+#define F_OPEN(name, mode) fopen((name), (mode))
 #endif
 
-         /* functions */
+/* functions */
 
 #if defined(pyr) || defined(Z_SOLO)
-#  define NO_MEMCPY
+#define NO_MEMCPY
 #endif
 #if defined(SMALL_MEDIUM) && !defined(_MSC_VER) && !defined(__SC__)
- /* Use our own functions for small and medium model with MSC <= 5.0.
-  * You may have to use the same strategy for Borland C (untested).
-  * The __SC__ check is for Symantec.
-  */
-#  define NO_MEMCPY
+/* Use our own functions for small and medium model with MSC <= 5.0.
+ * You may have to use the same strategy for Borland C (untested).
+ * The __SC__ check is for Symantec.
+ */
+#define NO_MEMCPY
 #endif
 #if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
-#  define HAVE_MEMCPY
+#define HAVE_MEMCPY
 #endif
 #ifdef HAVE_MEMCPY
-#  ifdef SMALL_MEDIUM /* MSDOS small or medium model */
-#    define zmemcpy _fmemcpy
-#    define zmemcmp _fmemcmp
-#    define zmemzero(dest, len) _fmemset(dest, 0, len)
-#  else
-#    define zmemcpy memcpy
-#    define zmemcmp memcmp
-#    define zmemzero(dest, len) memset(dest, 0, len)
-#  endif
+#ifdef SMALL_MEDIUM /* MSDOS small or medium model */
+#define zmemcpy _fmemcpy
+#define zmemcmp _fmemcmp
+#define zmemzero(dest, len) _fmemset(dest, 0, len)
 #else
-   void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
-   int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
-   void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#define zmemcpy memcpy
+#define zmemcmp memcmp
+#define zmemzero(dest, len) memset(dest, 0, len)
+#endif
+#else
+void ZLIB_INTERNAL zmemcpy OF((Bytef * dest, const Bytef *source, uInt len));
+int ZLIB_INTERNAL zmemcmp OF((const Bytef *s1, const Bytef *s2, uInt len));
+void ZLIB_INTERNAL zmemzero OF((Bytef * dest, uInt len));
 #endif
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
+#include <stdio.h>
+extern int ZLIB_INTERNAL z_verbose;
+extern void ZLIB_INTERNAL z_error OF((char *m));
+#define Assert(cond, msg)          \
+    {                              \
+        if (!(cond)) z_error(msg); \
+    }
+#define Trace(x)                       \
+    {                                  \
+        if (z_verbose >= 0) fprintf x; \
+    }
+#define Tracev(x)                     \
+    {                                 \
+        if (z_verbose > 0) fprintf x; \
+    }
+#define Tracevv(x)                    \
+    {                                 \
+        if (z_verbose > 1) fprintf x; \
+    }
+#define Tracec(c, x)                         \
+    {                                        \
+        if (z_verbose > 0 && (c)) fprintf x; \
+    }
+#define Tracecv(c, x)                        \
+    {                                        \
+        if (z_verbose > 1 && (c)) fprintf x; \
+    }
 #else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
+#define Assert(cond, msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c, x)
+#define Tracecv(c, x)
 #endif
 
 #ifndef Z_SOLO
-   voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr));
+voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items, unsigned size));
+void ZLIB_INTERNAL zcfree OF((voidpf opaque, voidpf ptr));
 #endif
 
-#define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size))
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
+#define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
+#define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
+#define TRY_FREE(s, p)      \
+    {                       \
+        if (p) ZFREE(s, p); \
+    }
 
 /* Reverse the bytes in a 32-bit value */
-#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
-                    (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
 #endif /* ZUTIL_H */
 /* inftrees.c -- generate Huffman trees for efficient decoding
@@ -2696,9 +2704,9 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
    of a literal, the base length or distance, or the offset from
    the current table to the next table.  Each entry is four bytes. */
 typedef struct {
-    unsigned char op;           /* operation, extra bits, table bits */
-    unsigned char bits;         /* bits in this part of the code */
-    unsigned short val;         /* offset in table or code value */
+    unsigned char op;   /* operation, extra bits, table bits */
+    unsigned char bits; /* bits in this part of the code */
+    unsigned short val; /* offset in table or code value */
 } code;
 
 /* op values as set by inflate_table():
@@ -2722,7 +2730,7 @@ typedef struct {
    updated. */
 #define ENOUGH_LENS 852
 #define ENOUGH_DISTS 592
-#define ENOUGH (ENOUGH_LENS+ENOUGH_DISTS)
+#define ENOUGH (ENOUGH_LENS + ENOUGH_DISTS)
 
 /* Type of code to build for inflate_table() */
 typedef enum {
@@ -2731,13 +2739,10 @@ typedef enum {
     DISTS
 } codetype;
 
-int ZLIB_INTERNAL inflate_table OF((codetype type, unsigned short FAR *lens,
-                             unsigned codes, code FAR * FAR *table,
-                             unsigned FAR *bits, unsigned short FAR *work));
+int ZLIB_INTERNAL inflate_table OF((codetype type, unsigned short FAR *lens, unsigned codes, code FAR *FAR *table, unsigned FAR *bits, unsigned short FAR *work));
 #define MAXBITS 15
 
-const char inflate_copyright[] =
-   " inflate 1.2.11 Copyright 1995-2017 Mark Adler ";
+const char inflate_copyright[] = " inflate 1.2.11 Copyright 1995-2017 Mark Adler ";
 /*
   If you use the zlib library in a product, an acknowledgment is welcome
   in the documentation of your product. If for some reason you cannot
@@ -2757,42 +2762,38 @@ const char inflate_copyright[] =
    table index bits.  It will differ if the request is greater than the
    longest code or if it is less than the shortest code.
  */
-int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsigned codes, code FAR * FAR * table, unsigned FAR * bits, unsigned short FAR * work)
+int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR *lens, unsigned codes, code FAR *FAR *table, unsigned FAR *bits, unsigned short FAR *work)
 {
-    unsigned len;               /* a code's length in bits */
-    unsigned sym;               /* index of code symbols */
-    unsigned min, max;          /* minimum and maximum code lengths */
-    unsigned root;              /* number of index bits for root table */
-    unsigned curr;              /* number of index bits for current table */
-    unsigned drop;              /* code bits to drop for sub-table */
-    int left;                   /* number of prefix codes available */
-    unsigned used;              /* code entries in table used */
-    unsigned huff;              /* Huffman code */
-    unsigned incr;              /* for incrementing code, index */
-    unsigned fill;              /* index for replicating entries */
-    unsigned low;               /* low bits for current root entry */
-    unsigned mask;              /* mask for low root bits */
-    code here;                  /* table entry for duplication */
-    code FAR *next;             /* next available space in table */
-    const unsigned short FAR *base;     /* base value table to use */
-    const unsigned short FAR *extra;    /* extra bits table to use */
-    unsigned match;             /* use base and extra for symbol >= match */
-    unsigned short count[MAXBITS+1];    /* number of codes of each length */
-    unsigned short offs[MAXBITS+1];     /* offsets in table for each length */
-    static const unsigned short lbase[31] = { /* Length codes 257..285 base */
-        3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
-        35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0};
-    static const unsigned short lext[31] = { /* Length codes 257..285 extra */
-        16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 18, 18, 18, 18,
-        19, 19, 19, 19, 20, 20, 20, 20, 21, 21, 21, 21, 16, 77, 202};
-    static const unsigned short dbase[32] = { /* Distance codes 0..29 base */
-        1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
-        257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145,
-        8193, 12289, 16385, 24577, 0, 0};
-    static const unsigned short dext[32] = { /* Distance codes 0..29 extra */
-        16, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22,
-        23, 23, 24, 24, 25, 25, 26, 26, 27, 27,
-        28, 28, 29, 29, 64, 64};
+    unsigned len;                            /* a code's length in bits */
+    unsigned sym;                            /* index of code symbols */
+    unsigned min, max;                       /* minimum and maximum code lengths */
+    unsigned root;                           /* number of index bits for root table */
+    unsigned curr;                           /* number of index bits for current table */
+    unsigned drop;                           /* code bits to drop for sub-table */
+    int left;                                /* number of prefix codes available */
+    unsigned used;                           /* code entries in table used */
+    unsigned huff;                           /* Huffman code */
+    unsigned incr;                           /* for incrementing code, index */
+    unsigned fill;                           /* index for replicating entries */
+    unsigned low;                            /* low bits for current root entry */
+    unsigned mask;                           /* mask for low root bits */
+    code here;                               /* table entry for duplication */
+    code FAR *next;                          /* next available space in table */
+    const unsigned short FAR *base;          /* base value table to use */
+    const unsigned short FAR *extra;         /* extra bits table to use */
+    unsigned match;                          /* use base and extra for symbol >= match */
+    unsigned short count[MAXBITS + 1];       /* number of codes of each length */
+    unsigned short offs[MAXBITS + 1];        /* offsets in table for each length */
+    static const unsigned short lbase[31] = {/* Length codes 257..285 base */
+                                             3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0};
+    static const unsigned short lext[31] = {/* Length codes 257..285 extra */
+                                            16, 16, 16, 16, 16, 16, 16, 16, 17, 17, 17, 17, 18, 18, 18, 18, 19, 19, 19, 19, 20, 20, 20, 20, 21, 21, 21, 21, 16, 77, 202};
+    static const unsigned short dbase[32] = {
+        /* Distance codes 0..29 base */
+        1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577, 0, 0};
+    static const unsigned short dext[32] = {
+        /* Distance codes 0..29 extra */
+        16, 16, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24, 25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 64, 64};
 
     /*
        Process a set of code lengths to create a canonical Huffman code.  The
@@ -2826,24 +2827,22 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
      */
 
     /* accumulate lengths for codes (assumes lens[] all in 0..MAXBITS) */
-    for (len = 0; len <= MAXBITS; len++)
-        count[len] = 0;
-    for (sym = 0; sym < codes; sym++)
-        count[lens[sym]]++;
+    for (len = 0; len <= MAXBITS; len++) count[len] = 0;
+    for (sym = 0; sym < codes; sym++) count[lens[sym]]++;
 
     /* bound code lengths, force root to be within code lengths */
     root = *bits;
     for (max = MAXBITS; max >= 1; max--)
         if (count[max] != 0) break;
     if (root > max) root = max;
-    if (max == 0) {                     /* no symbols to code at all */
-        here.op = (unsigned char)64;    /* invalid code marker */
+    if (max == 0) {                  /* no symbols to code at all */
+        here.op = (unsigned char)64; /* invalid code marker */
         here.bits = (unsigned char)1;
         here.val = (unsigned short)0;
-        *(*table)++ = here;             /* make a table to force an error */
+        *(*table)++ = here; /* make a table to force an error */
         *(*table)++ = here;
         *bits = 1;
-        return 0;     /* no symbols, but wait for decoding to report error */
+        return 0; /* no symbols, but wait for decoding to report error */
     }
     for (min = 1; min < max; min++)
         if (count[min] != 0) break;
@@ -2854,15 +2853,13 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
     for (len = 1; len <= MAXBITS; len++) {
         left <<= 1;
         left -= count[len];
-        if (left < 0) return -1;        /* over-subscribed */
+        if (left < 0) return -1; /* over-subscribed */
     }
-    if (left > 0 && (type == CODES || max != 1))
-        return -1;                      /* incomplete set */
+    if (left > 0 && (type == CODES || max != 1)) return -1; /* incomplete set */
 
     /* generate offsets into symbol table for each length for sorting */
     offs[1] = 0;
-    for (len = 1; len < MAXBITS; len++)
-        offs[len + 1] = offs[len] + count[len];
+    for (len = 1; len < MAXBITS; len++) offs[len + 1] = offs[len] + count[len];
 
     /* sort symbols by length, by symbol order within each length */
     for (sym = 0; sym < codes; sym++)
@@ -2901,36 +2898,34 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
 
     /* set up for code type */
     switch (type) {
-    case CODES:
-        base = extra = work;    /* dummy value--not used */
-        match = 20;
-        break;
-    case LENS:
-        base = lbase;
-        extra = lext;
-        match = 257;
-        break;
-    default:    /* DISTS */
-        base = dbase;
-        extra = dext;
-        match = 0;
+        case CODES:
+            base = extra = work; /* dummy value--not used */
+            match = 20;
+            break;
+        case LENS:
+            base = lbase;
+            extra = lext;
+            match = 257;
+            break;
+        default: /* DISTS */
+            base = dbase;
+            extra = dext;
+            match = 0;
     }
 
     /* initialize state for loop */
-    huff = 0;                   /* starting code */
-    sym = 0;                    /* starting code symbol */
-    len = min;                  /* starting code length */
-    next = *table;              /* current table to fill in */
-    curr = root;                /* current table index bits */
-    drop = 0;                   /* current bits to drop from code for index */
-    low = (unsigned)(-1);       /* trigger new sub-table when len > root */
-    used = 1U << root;          /* use root table entries */
-    mask = used - 1;            /* mask for comparing low */
+    huff = 0;             /* starting code */
+    sym = 0;              /* starting code symbol */
+    len = min;            /* starting code length */
+    next = *table;        /* current table to fill in */
+    curr = root;          /* current table index bits */
+    drop = 0;             /* current bits to drop from code for index */
+    low = (unsigned)(-1); /* trigger new sub-table when len > root */
+    used = 1U << root;    /* use root table entries */
+    mask = used - 1;      /* mask for comparing low */
 
     /* check available table space */
-    if ((type == LENS && used > ENOUGH_LENS) ||
-        (type == DISTS && used > ENOUGH_DISTS))
-        return 1;
+    if ((type == LENS && used > ENOUGH_LENS) || (type == DISTS && used > ENOUGH_DISTS)) return 1;
 
     /* process all codes and make table entries */
     for (;;) {
@@ -2939,20 +2934,18 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
         if (work[sym] + 1U < match) {
             here.op = (unsigned char)0;
             here.val = work[sym];
-        }
-        else if (work[sym] >= match) {
+        } else if (work[sym] >= match) {
             here.op = (unsigned char)(extra[work[sym] - match]);
             here.val = base[work[sym] - match];
-        }
-        else {
-            here.op = (unsigned char)(32 + 64);         /* end of block */
+        } else {
+            here.op = (unsigned char)(32 + 64); /* end of block */
             here.val = 0;
         }
 
         /* replicate for those indices with low len bits equal to huff */
         incr = 1U << (len - drop);
         fill = 1U << curr;
-        min = fill;                 /* save offset to next table */
+        min = fill; /* save offset to next table */
         do {
             fill -= incr;
             next[(huff >> drop) + fill] = here;
@@ -2960,14 +2953,11 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
 
         /* backwards increment the len-bit code huff */
         incr = 1U << (len - 1);
-        while (huff & incr)
-            incr >>= 1;
+        while (huff & incr) incr >>= 1;
         if (incr != 0) {
             huff &= incr - 1;
             huff += incr;
-        }
-        else
-            huff = 0;
+        } else huff = 0;
 
         /* go to next symbol, update count, len */
         sym++;
@@ -2979,11 +2969,10 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
         /* create new sub-table if needed */
         if (len > root && (huff & mask) != low) {
             /* if first time, transition to sub-tables */
-            if (drop == 0)
-                drop = root;
+            if (drop == 0) drop = root;
 
             /* increment past last table */
-            next += min;            /* here min is 1 << curr */
+            next += min; /* here min is 1 << curr */
 
             /* determine length of next table */
             curr = len - drop;
@@ -2997,9 +2986,7 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
 
             /* check for enough space */
             used += 1U << curr;
-            if ((type == LENS && used > ENOUGH_LENS) ||
-                (type == DISTS && used > ENOUGH_DISTS))
-                return 1;
+            if ((type == LENS && used > ENOUGH_LENS) || (type == DISTS && used > ENOUGH_DISTS)) return 1;
 
             /* point entry in root table to sub-table */
             low = huff & mask;
@@ -3013,7 +3000,7 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
        at most one remaining entry, since if the code is incomplete, the
        maximum code length that was allowed to get this far is one bit) */
     if (huff != 0) {
-        here.op = (unsigned char)64;            /* invalid code marker */
+        here.op = (unsigned char)64; /* invalid code marker */
         here.bits = (unsigned char)(len - drop);
         here.val = (unsigned short)0;
         next[huff] = here;
@@ -3049,256 +3036,271 @@ int ZLIB_INTERNAL inflate_table(codetype type, unsigned short FAR * lens, unsign
 #define ZUTIL_H
 
 #ifdef HAVE_HIDDEN
-#  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+#define ZLIB_INTERNAL __attribute__((visibility("hidden")))
 #else
-#  define ZLIB_INTERNAL
+#define ZLIB_INTERNAL
 #endif
 #if defined(STDC) && !defined(Z_SOLO)
-#  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
-#    include <stddef.h>
-#  endif
-#  include <string.h>
-#  include <stdlib.h>
+#if !(defined(_WIN32_WCE) && defined(_MSC_VER))
+#include <stddef.h>
+#endif
+#include <string.h>
+#include <stdlib.h>
 #endif
 
 #ifdef Z_SOLO
-   typedef long ptrdiff_t;  /* guess -- will be caught if guess is wrong */
+typedef long ptrdiff_t; /* guess -- will be caught if guess is wrong */
 #endif
 
 #ifndef local
-#  define local static
+#define local static
 #endif
 /* since "static" is used to mean two completely different things in C, we
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-typedef unsigned char  uch;
+typedef unsigned char uch;
 typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
-typedef unsigned long  ulg;
+typedef unsigned long ulg;
 
-extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
+#define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
 
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = ERR_MSG(err), (err))
+#define ERR_RETURN(strm, err) return (strm->msg = ERR_MSG(err), (err))
 /* To be used only when the state is known to be valid */
 
-        /* common constants */
+/* common constants */
 
 #ifndef DEF_WBITS
-#  define DEF_WBITS MAX_WBITS
+#define DEF_WBITS MAX_WBITS
 #endif
 /* default windowBits for decompression. MAX_WBITS is for compression only */
 
 #if MAX_MEM_LEVEL >= 8
-#  define DEF_MEM_LEVEL 8
+#define DEF_MEM_LEVEL 8
 #else
-#  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
+#define DEF_MEM_LEVEL MAX_MEM_LEVEL
 #endif
 /* default memLevel */
 
 #define STORED_BLOCK 0
 #define STATIC_TREES 1
-#define DYN_TREES    2
+#define DYN_TREES 2
 /* The three kinds of block type */
 
-#define MIN_MATCH  3
-#define MAX_MATCH  258
+#define MIN_MATCH 3
+#define MAX_MATCH 258
 /* The minimum and maximum match lengths */
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
-        /* target dependencies */
+/* target dependencies */
 
 #if defined(MSDOS) || (defined(WINDOWS) && !defined(WIN32))
-#  define OS_CODE  0x00
-#  ifndef Z_SOLO
-#    if defined(__TURBOC__) || defined(__BORLANDC__)
-#      if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
-         /* Allow compilation with ANSI keywords only enabled */
-         void _Cdecl farfree( void *block );
-         void *_Cdecl farmalloc( unsigned long nbytes );
-#      else
-#        include <alloc.h>
-#      endif
-#    else /* MSC or DJGPP */
-#      include <malloc.h>
-#    endif
-#  endif
+#define OS_CODE 0x00
+#ifndef Z_SOLO
+#if defined(__TURBOC__) || defined(__BORLANDC__)
+#if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
+/* Allow compilation with ANSI keywords only enabled */
+void _Cdecl farfree(void *block);
+void *_Cdecl farmalloc(unsigned long nbytes);
+#else
+#include <alloc.h>
+#endif
+#else /* MSC or DJGPP */
+#include <malloc.h>
+#endif
+#endif
 #endif
 
 #ifdef AMIGA
-#  define OS_CODE  1
+#define OS_CODE 1
 #endif
 
 #if defined(VAXC) || defined(VMS)
-#  define OS_CODE  2
-#  define F_OPEN(name, mode) \
-     fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
+#define OS_CODE 2
+#define F_OPEN(name, mode) fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
 #endif
 
 #ifdef __370__
-#  if __TARGET_LIB__ < 0x20000000
-#    define OS_CODE 4
-#  elif __TARGET_LIB__ < 0x40000000
-#    define OS_CODE 11
-#  else
-#    define OS_CODE 8
-#  endif
+#if __TARGET_LIB__ < 0x20000000
+#define OS_CODE 4
+#elif __TARGET_LIB__ < 0x40000000
+#define OS_CODE 11
+#else
+#define OS_CODE 8
+#endif
 #endif
 
 #if defined(ATARI) || defined(atarist)
-#  define OS_CODE  5
+#define OS_CODE 5
 #endif
 
 #ifdef OS2
-#  define OS_CODE  6
-#  if defined(M_I86) && !defined(Z_SOLO)
-#    include <malloc.h>
-#  endif
+#define OS_CODE 6
+#if defined(M_I86) && !defined(Z_SOLO)
+#include <malloc.h>
+#endif
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
-#  ifndef Z_SOLO
-#    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
-#      include <unix.h> /* for fdopen */
-#    else
-#      ifndef fdopen
-#        define fdopen(fd,mode) NULL /* No fdopen() */
-#      endif
-#    endif
-#  endif
+#define OS_CODE 7
+#ifndef Z_SOLO
+#if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+#include <unix.h> /* for fdopen */
+#else
+#ifndef fdopen
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#endif
+#endif
+#endif
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#define OS_CODE 13
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#define OS_CODE 10
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#define OS_CODE 16
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#define OS_CODE 18
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#define OS_CODE 19
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)
-#  define fdopen(fd,mode) NULL /* No fdopen() */
+#define fdopen(fd, mode) NULL /* No fdopen() */
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER > 600)) && !defined __INTERIX
-#  if defined(_WIN32_WCE)
-#    define fdopen(fd,mode) NULL /* No fdopen() */
-#    ifndef _PTRDIFF_T_DEFINED
-       typedef int ptrdiff_t;
-#      define _PTRDIFF_T_DEFINED
-#    endif
-#  else
-#    define fdopen(fd,type)  _fdopen(fd,type)
-#  endif
+#if defined(_WIN32_WCE)
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
+#else
+#define fdopen(fd, type) _fdopen(fd, type)
+#endif
 #endif
 
 #if defined(__BORLANDC__) && !defined(MSDOS)
-  #pragma warn -8004
-  #pragma warn -8008
-  #pragma warn -8066
+#pragma warn - 8004
+#pragma warn - 8008
+#pragma warn - 8066
 #endif
 
 /* provide prototypes for these when building zlib without LFS */
-#if !defined(_WIN32) && \
-    (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE-0 == 0)
-    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
-    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
+#if !defined(_WIN32) && (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE - 0 == 0)
+ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
+ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
 #endif
 
-        /* common defaults */
+/* common defaults */
 
 #ifndef OS_CODE
-#  define OS_CODE  3     /* assume Unix */
+#define OS_CODE 3 /* assume Unix */
 #endif
 
 #ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
+#define F_OPEN(name, mode) fopen((name), (mode))
 #endif
 
-         /* functions */
+/* functions */
 
 #if defined(pyr) || defined(Z_SOLO)
-#  define NO_MEMCPY
+#define NO_MEMCPY
 #endif
 #if defined(SMALL_MEDIUM) && !defined(_MSC_VER) && !defined(__SC__)
- /* Use our own functions for small and medium model with MSC <= 5.0.
-  * You may have to use the same strategy for Borland C (untested).
-  * The __SC__ check is for Symantec.
-  */
-#  define NO_MEMCPY
+/* Use our own functions for small and medium model with MSC <= 5.0.
+ * You may have to use the same strategy for Borland C (untested).
+ * The __SC__ check is for Symantec.
+ */
+#define NO_MEMCPY
 #endif
 #if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
-#  define HAVE_MEMCPY
+#define HAVE_MEMCPY
 #endif
 #ifdef HAVE_MEMCPY
-#  ifdef SMALL_MEDIUM /* MSDOS small or medium model */
-#    define zmemcpy _fmemcpy
-#    define zmemcmp _fmemcmp
-#    define zmemzero(dest, len) _fmemset(dest, 0, len)
-#  else
-#    define zmemcpy memcpy
-#    define zmemcmp memcmp
-#    define zmemzero(dest, len) memset(dest, 0, len)
-#  endif
+#ifdef SMALL_MEDIUM /* MSDOS small or medium model */
+#define zmemcpy _fmemcpy
+#define zmemcmp _fmemcmp
+#define zmemzero(dest, len) _fmemset(dest, 0, len)
 #else
-   void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
-   int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
-   void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#define zmemcpy memcpy
+#define zmemcmp memcmp
+#define zmemzero(dest, len) memset(dest, 0, len)
+#endif
+#else
+void ZLIB_INTERNAL zmemcpy OF((Bytef * dest, const Bytef *source, uInt len));
+int ZLIB_INTERNAL zmemcmp OF((const Bytef *s1, const Bytef *s2, uInt len));
+void ZLIB_INTERNAL zmemzero OF((Bytef * dest, uInt len));
 #endif
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
+#include <stdio.h>
+extern int ZLIB_INTERNAL z_verbose;
+extern void ZLIB_INTERNAL z_error OF((char *m));
+#define Assert(cond, msg)          \
+    {                              \
+        if (!(cond)) z_error(msg); \
+    }
+#define Trace(x)                       \
+    {                                  \
+        if (z_verbose >= 0) fprintf x; \
+    }
+#define Tracev(x)                     \
+    {                                 \
+        if (z_verbose > 0) fprintf x; \
+    }
+#define Tracevv(x)                    \
+    {                                 \
+        if (z_verbose > 1) fprintf x; \
+    }
+#define Tracec(c, x)                         \
+    {                                        \
+        if (z_verbose > 0 && (c)) fprintf x; \
+    }
+#define Tracecv(c, x)                        \
+    {                                        \
+        if (z_verbose > 1 && (c)) fprintf x; \
+    }
 #else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
+#define Assert(cond, msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c, x)
+#define Tracecv(c, x)
 #endif
 
 #ifndef Z_SOLO
-   voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr));
+voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items, unsigned size));
+void ZLIB_INTERNAL zcfree OF((voidpf opaque, voidpf ptr));
 #endif
 
-#define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size))
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
+#define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
+#define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
+#define TRY_FREE(s, p)      \
+    {                       \
+        if (p) ZFREE(s, p); \
+    }
 
 /* Reverse the bytes in a 32-bit value */
-#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
-                    (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
 #endif /* ZUTIL_H */
 /* inflate.c -- zlib decompression
@@ -3399,7 +3401,7 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
    the crc code when it is not needed.  For shared libraries, gzip decoding
    should be left enabled. */
 #ifndef NO_GZIP
-#  define GUNZIP
+#define GUNZIP
 #endif
 
 /* Possible inflate modes between inflate() calls */
@@ -3407,38 +3409,38 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #undef COPY
 #endif
 typedef enum {
-    HEAD = 16180,   /* i: waiting for magic header */
-    FLAGS,      /* i: waiting for method and flags (gzip) */
-    TIME,       /* i: waiting for modification time (gzip) */
-    OS,         /* i: waiting for extra flags and operating system (gzip) */
-    EXLEN,      /* i: waiting for extra length (gzip) */
-    EXTRA,      /* i: waiting for extra bytes (gzip) */
-    NAME,       /* i: waiting for end of file name (gzip) */
-    COMMENT,    /* i: waiting for end of comment (gzip) */
-    HCRC,       /* i: waiting for header crc (gzip) */
-    DICTID,     /* i: waiting for dictionary check value */
-    DICT,       /* waiting for inflateSetDictionary() call */
-        TYPE,       /* i: waiting for type bits, including last-flag bit */
-        TYPEDO,     /* i: same, but skip check to exit inflate on new block */
-        STORED,     /* i: waiting for stored size (length and complement) */
-        COPY_,      /* i/o: same as COPY below, but only first time in */
-        COPY,       /* i/o: waiting for input or output to copy stored block */
-        TABLE,      /* i: waiting for dynamic block table lengths */
-        LENLENS,    /* i: waiting for code length code lengths */
-        CODELENS,   /* i: waiting for length/lit and distance code lengths */
-            LEN_,       /* i: same as LEN below, but only first time in */
-            LEN,        /* i: waiting for length/lit/eob code */
-            LENEXT,     /* i: waiting for length extra bits */
-            DIST,       /* i: waiting for distance code */
-            DISTEXT,    /* i: waiting for distance extra bits */
-            MATCH,      /* o: waiting for output space to copy string */
-            LIT,        /* o: waiting for output space to write literal */
-    CHECK,      /* i: waiting for 32-bit check value */
-    LENGTH,     /* i: waiting for 32-bit length (gzip) */
-    DONE,       /* finished check, done -- remain here until reset */
-    BAD,        /* got a data error -- remain here until reset */
-    MEM,        /* got an inflate() memory error -- remain here until reset */
-    SYNC        /* looking for synchronization bytes to restart inflate() */
+    HEAD = 16180, /* i: waiting for magic header */
+    FLAGS,        /* i: waiting for method and flags (gzip) */
+    TIME,         /* i: waiting for modification time (gzip) */
+    OS,           /* i: waiting for extra flags and operating system (gzip) */
+    EXLEN,        /* i: waiting for extra length (gzip) */
+    EXTRA,        /* i: waiting for extra bytes (gzip) */
+    NAME,         /* i: waiting for end of file name (gzip) */
+    COMMENT,      /* i: waiting for end of comment (gzip) */
+    HCRC,         /* i: waiting for header crc (gzip) */
+    DICTID,       /* i: waiting for dictionary check value */
+    DICT,         /* waiting for inflateSetDictionary() call */
+    TYPE,         /* i: waiting for type bits, including last-flag bit */
+    TYPEDO,       /* i: same, but skip check to exit inflate on new block */
+    STORED,       /* i: waiting for stored size (length and complement) */
+    COPY_,        /* i/o: same as COPY below, but only first time in */
+    COPY,         /* i/o: waiting for input or output to copy stored block */
+    TABLE,        /* i: waiting for dynamic block table lengths */
+    LENLENS,      /* i: waiting for code length code lengths */
+    CODELENS,     /* i: waiting for length/lit and distance code lengths */
+    LEN_,         /* i: same as LEN below, but only first time in */
+    LEN,          /* i: waiting for length/lit/eob code */
+    LENEXT,       /* i: waiting for length extra bits */
+    DIST,         /* i: waiting for distance code */
+    DISTEXT,      /* i: waiting for distance extra bits */
+    MATCH,        /* o: waiting for output space to copy string */
+    LIT,          /* o: waiting for output space to write literal */
+    CHECK,        /* i: waiting for 32-bit check value */
+    LENGTH,       /* i: waiting for 32-bit length (gzip) */
+    DONE,         /* finished check, done -- remain here until reset */
+    BAD,          /* got a data error -- remain here until reset */
+    MEM,          /* got an inflate() memory error -- remain here until reset */
+    SYNC          /* looking for synchronization bytes to restart inflate() */
 } inflate_mode;
 
 /*
@@ -3469,48 +3471,48 @@ typedef enum {
 /* State maintained between inflate() calls -- approximately 7K bytes, not
    including the allocated sliding window, which is up to 32K bytes. */
 struct inflate_state {
-    z_streamp strm;             /* pointer back to this zlib stream */
-    inflate_mode mode;          /* current inflate mode */
-    int last;                   /* true if processing last block */
-    int wrap;                   /* bit 0 true for zlib, bit 1 true for gzip,
-                                   bit 2 true to validate check value */
-    int havedict;               /* true if dictionary provided */
-    int flags;                  /* gzip header method and flags (0 if zlib) */
-    unsigned dmax;              /* zlib header max distance (INFLATE_STRICT) */
-    unsigned long check;        /* protected copy of check value */
-    unsigned long total;        /* protected copy of output count */
-    gz_headerp head;            /* where to save gzip header information */
-        /* sliding window */
-    unsigned wbits;             /* log base 2 of requested window size */
-    unsigned wsize;             /* window size or zero if not using window */
-    unsigned whave;             /* valid bytes in the window */
-    unsigned wnext;             /* window write index */
-    unsigned char FAR *window;  /* allocated sliding window, if needed */
-        /* bit accumulator */
-    unsigned long hold;         /* input bit accumulator */
-    unsigned bits;              /* number of bits in "in" */
-        /* for string and stored block copying */
-    unsigned length;            /* literal or length of data to copy */
-    unsigned offset;            /* distance back to copy string from */
-        /* for table and code decoding */
-    unsigned extra;             /* extra bits needed */
-        /* fixed and dynamic code tables */
-    code const FAR *lencode;    /* starting table for length/literal codes */
-    code const FAR *distcode;   /* starting table for distance codes */
-    unsigned lenbits;           /* index bits for lencode */
-    unsigned distbits;          /* index bits for distcode */
-        /* dynamic table building */
-    unsigned ncode;             /* number of code length code lengths */
-    unsigned nlen;              /* number of length code lengths */
-    unsigned ndist;             /* number of distance code lengths */
-    unsigned have;              /* number of code lengths in lens[] */
-    code FAR *next;             /* next available space in codes[] */
-    unsigned short lens[320];   /* temporary storage for code lengths */
-    unsigned short work[288];   /* work area for code table building */
-    code codes[ENOUGH];         /* space for code tables */
-    int sane;                   /* if false, allow invalid distance too far */
-    int back;                   /* bits back of last unprocessed length/lit */
-    unsigned was;               /* initial length of match */
+    z_streamp strm;      /* pointer back to this zlib stream */
+    inflate_mode mode;   /* current inflate mode */
+    int last;            /* true if processing last block */
+    int wrap;            /* bit 0 true for zlib, bit 1 true for gzip,
+                            bit 2 true to validate check value */
+    int havedict;        /* true if dictionary provided */
+    int flags;           /* gzip header method and flags (0 if zlib) */
+    unsigned dmax;       /* zlib header max distance (INFLATE_STRICT) */
+    unsigned long check; /* protected copy of check value */
+    unsigned long total; /* protected copy of output count */
+    gz_headerp head;     /* where to save gzip header information */
+    /* sliding window */
+    unsigned wbits;            /* log base 2 of requested window size */
+    unsigned wsize;            /* window size or zero if not using window */
+    unsigned whave;            /* valid bytes in the window */
+    unsigned wnext;            /* window write index */
+    unsigned char FAR *window; /* allocated sliding window, if needed */
+    /* bit accumulator */
+    unsigned long hold; /* input bit accumulator */
+    unsigned bits;      /* number of bits in "in" */
+    /* for string and stored block copying */
+    unsigned length; /* literal or length of data to copy */
+    unsigned offset; /* distance back to copy string from */
+    /* for table and code decoding */
+    unsigned extra; /* extra bits needed */
+    /* fixed and dynamic code tables */
+    code const FAR *lencode;  /* starting table for length/literal codes */
+    code const FAR *distcode; /* starting table for distance codes */
+    unsigned lenbits;         /* index bits for lencode */
+    unsigned distbits;        /* index bits for distcode */
+    /* dynamic table building */
+    unsigned ncode;           /* number of code length code lengths */
+    unsigned nlen;            /* number of length code lengths */
+    unsigned ndist;           /* number of distance code lengths */
+    unsigned have;            /* number of code lengths in lens[] */
+    code FAR *next;           /* next available space in codes[] */
+    unsigned short lens[320]; /* temporary storage for code lengths */
+    unsigned short work[288]; /* work area for code table building */
+    code codes[ENOUGH];       /* space for code tables */
+    int sane;                 /* if false, allow invalid distance too far */
+    int back;                 /* bits back of last unprocessed length/lit */
+    unsigned was;             /* initial length of match */
 };
 
 /* ===== zlib inffast.h ===== */
@@ -3526,32 +3528,26 @@ struct inflate_state {
 
 void ZLIB_INTERNAL inflate_fast OF((z_streamp strm, unsigned start));
 #ifdef MAKEFIXED
-#  ifndef BUILDFIXED
-#    define BUILDFIXED
-#  endif
+#ifndef BUILDFIXED
+#define BUILDFIXED
+#endif
 #endif
 
 /* function prototypes */
 local int inflateStateCheck OF((z_streamp strm));
-local void fixedtables OF((struct inflate_state FAR *state));
-local int updatewindow OF((z_streamp strm, const unsigned char FAR *end,
-                           unsigned copy));
+local void fixedtables OF((struct inflate_state FAR * state));
+local int updatewindow OF((z_streamp strm, const unsigned char FAR *end, unsigned copy));
 #ifdef BUILDFIXED
-   void makefixed OF((void));
+void makefixed OF((void));
 #endif
-local unsigned syncsearch OF((unsigned FAR *have, const unsigned char FAR *buf,
-                              unsigned len));
+local unsigned syncsearch OF((unsigned FAR *have, const unsigned char FAR *buf, unsigned len));
 
 local int inflateStateCheck(z_streamp strm)
 {
     struct inflate_state FAR *state;
-    if (strm == Z_NULL ||
-        strm->zalloc == (alloc_func)0 || strm->zfree == (free_func)0)
-        return 1;
+    if (strm == Z_NULL || strm->zalloc == (alloc_func)0 || strm->zfree == (free_func)0) return 1;
     state = (struct inflate_state FAR *)strm->state;
-    if (state == Z_NULL || state->strm != strm ||
-        state->mode < HEAD || state->mode > SYNC)
-        return 1;
+    if (state == Z_NULL || state->strm != strm || state->mode < HEAD || state->mode > SYNC) return 1;
     return 0;
 }
 
@@ -3563,7 +3559,7 @@ int ZEXPORT inflateResetKeep(z_streamp strm)
     state = (struct inflate_state FAR *)strm->state;
     strm->total_in = strm->total_out = state->total = 0;
     strm->msg = Z_NULL;
-    if (state->wrap)        /* to support ill-conceived Java test suite */
+    if (state->wrap) /* to support ill-conceived Java test suite */
         strm->adler = state->wrap & 1;
     state->mode = HEAD;
     state->last = 0;
@@ -3604,18 +3600,15 @@ int ZEXPORT inflateReset2(z_streamp strm, int windowBits)
     if (windowBits < 0) {
         wrap = 0;
         windowBits = -windowBits;
-    }
-    else {
+    } else {
         wrap = (windowBits >> 4) + 5;
 #ifdef GUNZIP
-        if (windowBits < 48)
-            windowBits &= 15;
+        if (windowBits < 48) windowBits &= 15;
 #endif
     }
 
     /* set number of window bits, free window if different */
-    if (windowBits && (windowBits < 8 || windowBits > 15))
-        return Z_STREAM_ERROR;
+    if (windowBits && (windowBits < 8 || windowBits > 15)) return Z_STREAM_ERROR;
     if (state->window != Z_NULL && state->wbits != (unsigned)windowBits) {
         ZFREE(strm, state->window);
         state->window = Z_NULL;
@@ -3627,16 +3620,14 @@ int ZEXPORT inflateReset2(z_streamp strm, int windowBits)
     return inflateReset(strm);
 }
 
-int ZEXPORT inflateInit2_(z_streamp strm, int windowBits, const char * version, int stream_size)
+int ZEXPORT inflateInit2_(z_streamp strm, int windowBits, const char *version, int stream_size)
 {
     int ret;
     struct inflate_state FAR *state;
 
-    if (version == Z_NULL || version[0] != ZLIB_VERSION[0] ||
-        stream_size != (int)(sizeof(z_stream)))
-        return Z_VERSION_ERROR;
+    if (version == Z_NULL || version[0] != ZLIB_VERSION[0] || stream_size != (int)(sizeof(z_stream))) return Z_VERSION_ERROR;
     if (strm == Z_NULL) return Z_STREAM_ERROR;
-    strm->msg = Z_NULL;                 /* in case we return an error */
+    strm->msg = Z_NULL; /* in case we return an error */
     if (strm->zalloc == (alloc_func)0) {
 #ifdef Z_SOLO
         return Z_STREAM_ERROR;
@@ -3651,14 +3642,13 @@ int ZEXPORT inflateInit2_(z_streamp strm, int windowBits, const char * version, 
 #else
         strm->zfree = zcfree;
 #endif
-    state = (struct inflate_state FAR *)
-            ZALLOC(strm, 1, sizeof(struct inflate_state));
+    state = (struct inflate_state FAR *)ZALLOC(strm, 1, sizeof(struct inflate_state));
     if (state == Z_NULL) return Z_MEM_ERROR;
     Tracev((stderr, "inflate: allocated\n"));
     strm->state = (struct internal_state FAR *)state;
     state->strm = strm;
     state->window = Z_NULL;
-    state->mode = HEAD;     /* to pass state test in inflateReset2() */
+    state->mode = HEAD; /* to pass state test in inflateReset2() */
     ret = inflateReset2(strm, windowBits);
     if (ret != Z_OK) {
         ZFREE(strm, state);
@@ -3667,7 +3657,7 @@ int ZEXPORT inflateInit2_(z_streamp strm, int windowBits, const char * version, 
     return ret;
 }
 
-int ZEXPORT inflateInit_(z_streamp strm, const char * version, int stream_size)
+int ZEXPORT inflateInit_(z_streamp strm, const char *version, int stream_size)
 {
     return inflateInit2_(strm, DEF_WBITS, version, stream_size);
 }
@@ -3700,7 +3690,7 @@ int ZEXPORT inflatePrime(z_streamp strm, int bits, int value)
    used for threaded applications, since the rewriting of the tables and virgin
    may not be thread-safe.
  */
-local void fixedtables(struct inflate_state FAR * state)
+local void fixedtables(struct inflate_state FAR *state)
 {
 #ifdef BUILDFIXED
     static int virgin = 1;
@@ -3734,7 +3724,7 @@ local void fixedtables(struct inflate_state FAR * state)
         virgin = 0;
     }
 #else /* !BUILDFIXED */
-#   include "inffixed.h"
+#include "inffixed.h"
 #endif /* BUILDFIXED */
     state->lencode = lenfix;
     state->lenbits = 9;
@@ -3783,8 +3773,7 @@ void makefixed()
     low = 0;
     for (;;) {
         if ((low % 7) == 0) printf("\n        ");
-        printf("{%u,%u,%d}", (low & 127) == 99 ? 64 : state.lencode[low].op,
-               state.lencode[low].bits, state.lencode[low].val);
+        printf("{%u,%u,%d}", (low & 127) == 99 ? 64 : state.lencode[low].op, state.lencode[low].bits, state.lencode[low].val);
         if (++low == size) break;
         putchar(',');
     }
@@ -3794,8 +3783,7 @@ void makefixed()
     low = 0;
     for (;;) {
         if ((low % 6) == 0) printf("\n        ");
-        printf("{%u,%u,%d}", state.distcode[low].op, state.distcode[low].bits,
-               state.distcode[low].val);
+        printf("{%u,%u,%d}", state.distcode[low].op, state.distcode[low].bits, state.distcode[low].val);
         if (++low == size) break;
         putchar(',');
     }
@@ -3817,7 +3805,7 @@ void makefixed()
    output will fall in the output data, making match copies simpler and faster.
    The advantage may be dependent on the size of the processor's data caches.
  */
-local int updatewindow(z_streamp strm, const Bytef * end, unsigned copy)
+local int updatewindow(z_streamp strm, const Bytef *end, unsigned copy)
 {
     struct inflate_state FAR *state;
     unsigned dist;
@@ -3826,9 +3814,7 @@ local int updatewindow(z_streamp strm, const Bytef * end, unsigned copy)
 
     /* if it hasn't been done already, allocate space for the window */
     if (state->window == Z_NULL) {
-        state->window = (unsigned char FAR *)
-                        ZALLOC(strm, 1U << state->wbits,
-                               sizeof(unsigned char));
+        state->window = (unsigned char FAR *)ZALLOC(strm, 1U << state->wbits, sizeof(unsigned char));
         if (state->window == Z_NULL) return 1;
     }
 
@@ -3844,8 +3830,7 @@ local int updatewindow(z_streamp strm, const Bytef * end, unsigned copy)
         zmemcpy(state->window, end - state->wsize, state->wsize);
         state->wnext = 0;
         state->whave = state->wsize;
-    }
-    else {
+    } else {
         dist = state->wsize - state->wnext;
         if (dist > copy) dist = copy;
         zmemcpy(state->window + state->wnext, end - copy, dist);
@@ -3854,8 +3839,7 @@ local int updatewindow(z_streamp strm, const Bytef * end, unsigned copy)
             zmemcpy(state->window, end - copy, copy);
             state->wnext = copy;
             state->whave = state->wsize;
-        }
-        else {
+        } else {
             state->wnext += dist;
             if (state->wnext == state->wsize) state->wnext = 0;
             if (state->whave < state->wsize) state->whave += dist;
@@ -3868,94 +3852,91 @@ local int updatewindow(z_streamp strm, const Bytef * end, unsigned copy)
 
 /* check function to use adler32() for zlib or crc32() for gzip */
 #ifdef GUNZIP
-#  define UPDATE(check, buf, len) \
-    (state->flags ? crc32(check, buf, len) : adler32(check, buf, len))
+#define UPDATE(check, buf, len) (state->flags ? crc32(check, buf, len) : adler32(check, buf, len))
 #else
-#  define UPDATE(check, buf, len) adler32(check, buf, len)
+#define UPDATE(check, buf, len) adler32(check, buf, len)
 #endif
 
 /* check macros for header crc */
 #ifdef GUNZIP
-#  define CRC2(check, word) \
-    do { \
-        hbuf[0] = (unsigned char)(word); \
+#define CRC2(check, word)                       \
+    do {                                        \
+        hbuf[0] = (unsigned char)(word);        \
         hbuf[1] = (unsigned char)((word) >> 8); \
-        check = crc32(check, hbuf, 2); \
+        check = crc32(check, hbuf, 2);          \
     } while (0)
 
-#  define CRC4(check, word) \
-    do { \
-        hbuf[0] = (unsigned char)(word); \
-        hbuf[1] = (unsigned char)((word) >> 8); \
+#define CRC4(check, word)                        \
+    do {                                         \
+        hbuf[0] = (unsigned char)(word);         \
+        hbuf[1] = (unsigned char)((word) >> 8);  \
         hbuf[2] = (unsigned char)((word) >> 16); \
         hbuf[3] = (unsigned char)((word) >> 24); \
-        check = crc32(check, hbuf, 4); \
+        check = crc32(check, hbuf, 4);           \
     } while (0)
 #endif
 
 /* Load registers with state in inflate() for speed */
-#define LOAD() \
-    do { \
-        put = strm->next_out; \
+#define LOAD()                  \
+    do {                        \
+        put = strm->next_out;   \
         left = strm->avail_out; \
-        next = strm->next_in; \
-        have = strm->avail_in; \
-        hold = state->hold; \
-        bits = state->bits; \
+        next = strm->next_in;   \
+        have = strm->avail_in;  \
+        hold = state->hold;     \
+        bits = state->bits;     \
     } while (0)
 
 /* Restore state from registers in inflate() */
-#define RESTORE() \
-    do { \
-        strm->next_out = put; \
+#define RESTORE()               \
+    do {                        \
+        strm->next_out = put;   \
         strm->avail_out = left; \
-        strm->next_in = next; \
-        strm->avail_in = have; \
-        state->hold = hold; \
-        state->bits = bits; \
+        strm->next_in = next;   \
+        strm->avail_in = have;  \
+        state->hold = hold;     \
+        state->bits = bits;     \
     } while (0)
 
 /* Clear the input bit accumulator */
 #define INITBITS() \
-    do { \
-        hold = 0; \
-        bits = 0; \
+    do {           \
+        hold = 0;  \
+        bits = 0;  \
     } while (0)
 
 /* Get a byte of input into the bit accumulator, or return from inflate()
    if there is no input available. */
-#define PULLBYTE() \
-    do { \
-        if (have == 0) goto inf_leave; \
-        have--; \
+#define PULLBYTE()                                \
+    do {                                          \
+        if (have == 0) goto inf_leave;            \
+        have--;                                   \
         hold += (unsigned long)(*next++) << bits; \
-        bits += 8; \
+        bits += 8;                                \
     } while (0)
 
 /* Assure that there are at least n bits in the bit accumulator.  If there is
    not enough available input to do that, then return from inflate(). */
-#define NEEDBITS(n) \
-    do { \
-        while (bits < (unsigned)(n)) \
-            PULLBYTE(); \
+#define NEEDBITS(n)                              \
+    do {                                         \
+        while (bits < (unsigned)(n)) PULLBYTE(); \
     } while (0)
 
 /* Return the low n bits of the bit accumulator (n < 16) */
-#define BITS(n) \
-    ((unsigned)hold & ((1U << (n)) - 1))
+#define BITS(n) ((unsigned)hold & ((1U << (n)) - 1))
 
 /* Remove n bits from the bit accumulator */
-#define DROPBITS(n) \
-    do { \
-        hold >>= (n); \
+#define DROPBITS(n)            \
+    do {                       \
+        hold >>= (n);          \
         bits -= (unsigned)(n); \
     } while (0)
 
 /* Remove zero to seven bits as needed to go to a byte boundary */
-#define BYTEBITS() \
-    do { \
+#define BYTEBITS()         \
+    do {                   \
         hold >>= bits & 7; \
-        bits -= bits & 7; \
+        bits -= bits & 7;  \
     } while (0)
 
 /*
@@ -4043,624 +4024,563 @@ local int updatewindow(z_streamp strm, const Bytef * end, unsigned copy)
 int ZEXPORT inflate(z_streamp strm, int flush)
 {
     struct inflate_state FAR *state;
-    z_const unsigned char FAR *next;    /* next input */
-    unsigned char FAR *put;     /* next output */
-    unsigned have, left;        /* available input and output */
-    unsigned long hold;         /* bit buffer */
-    unsigned bits;              /* bits in bit buffer */
-    unsigned in, out;           /* save starting available input and output */
-    unsigned copy;              /* number of stored or match bytes to copy */
-    unsigned char FAR *from;    /* where to copy match bytes from */
-    code here;                  /* current decoding table entry */
-    code last;                  /* parent table entry */
-    unsigned len;               /* length to copy for repeats, bits to drop */
-    int ret;                    /* return code */
+    z_const unsigned char FAR *next; /* next input */
+    unsigned char FAR *put;          /* next output */
+    unsigned have, left;             /* available input and output */
+    unsigned long hold;              /* bit buffer */
+    unsigned bits;                   /* bits in bit buffer */
+    unsigned in, out;                /* save starting available input and output */
+    unsigned copy;                   /* number of stored or match bytes to copy */
+    unsigned char FAR *from;         /* where to copy match bytes from */
+    code here;                       /* current decoding table entry */
+    code last;                       /* parent table entry */
+    unsigned len;                    /* length to copy for repeats, bits to drop */
+    int ret;                         /* return code */
 #ifdef GUNZIP
-    unsigned char hbuf[4];      /* buffer for gzip header crc calculation */
+    unsigned char hbuf[4]; /* buffer for gzip header crc calculation */
 #endif
     static const unsigned short order[19] = /* permutation of code lengths */
         {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
 
-    if (inflateStateCheck(strm) || strm->next_out == Z_NULL ||
-        (strm->next_in == Z_NULL && strm->avail_in != 0))
-        return Z_STREAM_ERROR;
+    if (inflateStateCheck(strm) || strm->next_out == Z_NULL || (strm->next_in == Z_NULL && strm->avail_in != 0)) return Z_STREAM_ERROR;
 
     state = (struct inflate_state FAR *)strm->state;
-    if (state->mode == TYPE) state->mode = TYPEDO;      /* skip check */
+    if (state->mode == TYPE) state->mode = TYPEDO; /* skip check */
     LOAD();
     in = have;
     out = left;
     ret = Z_OK;
-    for (;;)
-        switch (state->mode) {
-        case HEAD:
-            if (state->wrap == 0) {
-                state->mode = TYPEDO;
-                break;
-            }
-            NEEDBITS(16);
-#ifdef GUNZIP
-            if ((state->wrap & 2) && hold == 0x8b1f) {  /* gzip header */
-                if (state->wbits == 0)
-                    state->wbits = 15;
-                state->check = crc32(0L, Z_NULL, 0);
-                CRC2(state->check, hold);
-                INITBITS();
-                state->mode = FLAGS;
-                break;
-            }
-            state->flags = 0;           /* expect zlib header */
-            if (state->head != Z_NULL)
-                state->head->done = -1;
-            if (!(state->wrap & 1) ||   /* check if zlib header allowed */
-#else
-            if (
-#endif
-                ((BITS(8) << 8) + (hold >> 8)) % 31) {
-                strm->msg = (char *)"incorrect header check";
-                state->mode = BAD;
-                break;
-            }
-            if (BITS(4) != Z_DEFLATED) {
-                strm->msg = (char *)"unknown compression method";
-                state->mode = BAD;
-                break;
-            }
-            DROPBITS(4);
-            len = BITS(4) + 8;
-            if (state->wbits == 0)
-                state->wbits = len;
-            if (len > 15 || len > state->wbits) {
-                strm->msg = (char *)"invalid window size";
-                state->mode = BAD;
-                break;
-            }
-            state->dmax = 1U << len;
-            Tracev((stderr, "inflate:   zlib header ok\n"));
-            strm->adler = state->check = adler32(0L, Z_NULL, 0);
-            state->mode = hold & 0x200 ? DICTID : TYPE;
-            INITBITS();
-            break;
-#ifdef GUNZIP
-        case FLAGS:
-            NEEDBITS(16);
-            state->flags = (int)(hold);
-            if ((state->flags & 0xff) != Z_DEFLATED) {
-                strm->msg = (char *)"unknown compression method";
-                state->mode = BAD;
-                break;
-            }
-            if (state->flags & 0xe000) {
-                strm->msg = (char *)"unknown header flags set";
-                state->mode = BAD;
-                break;
-            }
-            if (state->head != Z_NULL)
-                state->head->text = (int)((hold >> 8) & 1);
-            if ((state->flags & 0x0200) && (state->wrap & 4))
-                CRC2(state->check, hold);
-            INITBITS();
-            state->mode = TIME;
-        case TIME:
-            NEEDBITS(32);
-            if (state->head != Z_NULL)
-                state->head->time = hold;
-            if ((state->flags & 0x0200) && (state->wrap & 4))
-                CRC4(state->check, hold);
-            INITBITS();
-            state->mode = OS;
-        case OS:
-            NEEDBITS(16);
-            if (state->head != Z_NULL) {
-                state->head->xflags = (int)(hold & 0xff);
-                state->head->os = (int)(hold >> 8);
-            }
-            if ((state->flags & 0x0200) && (state->wrap & 4))
-                CRC2(state->check, hold);
-            INITBITS();
-            state->mode = EXLEN;
-        case EXLEN:
-            if (state->flags & 0x0400) {
-                NEEDBITS(16);
-                state->length = (unsigned)(hold);
-                if (state->head != Z_NULL)
-                    state->head->extra_len = (unsigned)hold;
-                if ((state->flags & 0x0200) && (state->wrap & 4))
-                    CRC2(state->check, hold);
-                INITBITS();
-            }
-            else if (state->head != Z_NULL)
-                state->head->extra = Z_NULL;
-            state->mode = EXTRA;
-        case EXTRA:
-            if (state->flags & 0x0400) {
-                copy = state->length;
-                if (copy > have) copy = have;
-                if (copy) {
-                    if (state->head != Z_NULL &&
-                        state->head->extra != Z_NULL) {
-                        len = state->head->extra_len - state->length;
-                        zmemcpy(state->head->extra + len, next,
-                                len + copy > state->head->extra_max ?
-                                state->head->extra_max - len : copy);
-                    }
-                    if ((state->flags & 0x0200) && (state->wrap & 4))
-                        state->check = crc32(state->check, next, copy);
-                    have -= copy;
-                    next += copy;
-                    state->length -= copy;
+    for (;;) switch (state->mode) {
+            case HEAD:
+                if (state->wrap == 0) {
+                    state->mode = TYPEDO;
+                    break;
                 }
-                if (state->length) goto inf_leave;
-            }
-            state->length = 0;
-            state->mode = NAME;
-        case NAME:
-            if (state->flags & 0x0800) {
-                if (have == 0) goto inf_leave;
-                copy = 0;
-                do {
-                    len = (unsigned)(next[copy++]);
-                    if (state->head != Z_NULL &&
-                            state->head->name != Z_NULL &&
-                            state->length < state->head->name_max)
-                        state->head->name[state->length++] = (Bytef)len;
-                } while (len && copy < have);
-                if ((state->flags & 0x0200) && (state->wrap & 4))
-                    state->check = crc32(state->check, next, copy);
-                have -= copy;
-                next += copy;
-                if (len) goto inf_leave;
-            }
-            else if (state->head != Z_NULL)
-                state->head->name = Z_NULL;
-            state->length = 0;
-            state->mode = COMMENT;
-        case COMMENT:
-            if (state->flags & 0x1000) {
-                if (have == 0) goto inf_leave;
-                copy = 0;
-                do {
-                    len = (unsigned)(next[copy++]);
-                    if (state->head != Z_NULL &&
-                            state->head->comment != Z_NULL &&
-                            state->length < state->head->comm_max)
-                        state->head->comment[state->length++] = (Bytef)len;
-                } while (len && copy < have);
-                if ((state->flags & 0x0200) && (state->wrap & 4))
-                    state->check = crc32(state->check, next, copy);
-                have -= copy;
-                next += copy;
-                if (len) goto inf_leave;
-            }
-            else if (state->head != Z_NULL)
-                state->head->comment = Z_NULL;
-            state->mode = HCRC;
-        case HCRC:
-            if (state->flags & 0x0200) {
                 NEEDBITS(16);
-                if ((state->wrap & 4) && hold != (state->check & 0xffff)) {
-                    strm->msg = (char *)"header crc mismatch";
+#ifdef GUNZIP
+                if ((state->wrap & 2) && hold == 0x8b1f) { /* gzip header */
+                    if (state->wbits == 0) state->wbits = 15;
+                    state->check = crc32(0L, Z_NULL, 0);
+                    CRC2(state->check, hold);
+                    INITBITS();
+                    state->mode = FLAGS;
+                    break;
+                }
+                state->flags = 0; /* expect zlib header */
+                if (state->head != Z_NULL) state->head->done = -1;
+                if (!(state->wrap & 1) || /* check if zlib header allowed */
+#else
+                if (
+#endif
+                    ((BITS(8) << 8) + (hold >> 8)) % 31) {
+                    strm->msg = (char *)"incorrect header check";
                     state->mode = BAD;
                     break;
                 }
-                INITBITS();
-            }
-            if (state->head != Z_NULL) {
-                state->head->hcrc = (int)((state->flags >> 9) & 1);
-                state->head->done = 1;
-            }
-            strm->adler = state->check = crc32(0L, Z_NULL, 0);
-            state->mode = TYPE;
-            break;
-#endif
-        case DICTID:
-            NEEDBITS(32);
-            strm->adler = state->check = ZSWAP32(hold);
-            INITBITS();
-            state->mode = DICT;
-        case DICT:
-            if (state->havedict == 0) {
-                RESTORE();
-                return Z_NEED_DICT;
-            }
-            strm->adler = state->check = adler32(0L, Z_NULL, 0);
-            state->mode = TYPE;
-        case TYPE:
-            if (flush == Z_BLOCK || flush == Z_TREES) goto inf_leave;
-        case TYPEDO:
-            if (state->last) {
-                BYTEBITS();
-                state->mode = CHECK;
-                break;
-            }
-            NEEDBITS(3);
-            state->last = BITS(1);
-            DROPBITS(1);
-            switch (BITS(2)) {
-            case 0:                             /* stored block */
-                Tracev((stderr, "inflate:     stored block%s\n",
-                        state->last ? " (last)" : ""));
-                state->mode = STORED;
-                break;
-            case 1:                             /* fixed block */
-                fixedtables(state);
-                Tracev((stderr, "inflate:     fixed codes block%s\n",
-                        state->last ? " (last)" : ""));
-                state->mode = LEN_;             /* decode codes */
-                if (flush == Z_TREES) {
-                    DROPBITS(2);
-                    goto inf_leave;
+                if (BITS(4) != Z_DEFLATED) {
+                    strm->msg = (char *)"unknown compression method";
+                    state->mode = BAD;
+                    break;
                 }
+                DROPBITS(4);
+                len = BITS(4) + 8;
+                if (state->wbits == 0) state->wbits = len;
+                if (len > 15 || len > state->wbits) {
+                    strm->msg = (char *)"invalid window size";
+                    state->mode = BAD;
+                    break;
+                }
+                state->dmax = 1U << len;
+                Tracev((stderr, "inflate:   zlib header ok\n"));
+                strm->adler = state->check = adler32(0L, Z_NULL, 0);
+                state->mode = hold & 0x200 ? DICTID : TYPE;
+                INITBITS();
                 break;
-            case 2:                             /* dynamic block */
-                Tracev((stderr, "inflate:     dynamic codes block%s\n",
-                        state->last ? " (last)" : ""));
-                state->mode = TABLE;
+#ifdef GUNZIP
+            case FLAGS:
+                NEEDBITS(16);
+                state->flags = (int)(hold);
+                if ((state->flags & 0xff) != Z_DEFLATED) {
+                    strm->msg = (char *)"unknown compression method";
+                    state->mode = BAD;
+                    break;
+                }
+                if (state->flags & 0xe000) {
+                    strm->msg = (char *)"unknown header flags set";
+                    state->mode = BAD;
+                    break;
+                }
+                if (state->head != Z_NULL) state->head->text = (int)((hold >> 8) & 1);
+                if ((state->flags & 0x0200) && (state->wrap & 4)) CRC2(state->check, hold);
+                INITBITS();
+                state->mode = TIME;
+            case TIME:
+                NEEDBITS(32);
+                if (state->head != Z_NULL) state->head->time = hold;
+                if ((state->flags & 0x0200) && (state->wrap & 4)) CRC4(state->check, hold);
+                INITBITS();
+                state->mode = OS;
+            case OS:
+                NEEDBITS(16);
+                if (state->head != Z_NULL) {
+                    state->head->xflags = (int)(hold & 0xff);
+                    state->head->os = (int)(hold >> 8);
+                }
+                if ((state->flags & 0x0200) && (state->wrap & 4)) CRC2(state->check, hold);
+                INITBITS();
+                state->mode = EXLEN;
+            case EXLEN:
+                if (state->flags & 0x0400) {
+                    NEEDBITS(16);
+                    state->length = (unsigned)(hold);
+                    if (state->head != Z_NULL) state->head->extra_len = (unsigned)hold;
+                    if ((state->flags & 0x0200) && (state->wrap & 4)) CRC2(state->check, hold);
+                    INITBITS();
+                } else if (state->head != Z_NULL) state->head->extra = Z_NULL;
+                state->mode = EXTRA;
+            case EXTRA:
+                if (state->flags & 0x0400) {
+                    copy = state->length;
+                    if (copy > have) copy = have;
+                    if (copy) {
+                        if (state->head != Z_NULL && state->head->extra != Z_NULL) {
+                            len = state->head->extra_len - state->length;
+                            zmemcpy(state->head->extra + len, next, len + copy > state->head->extra_max ? state->head->extra_max - len : copy);
+                        }
+                        if ((state->flags & 0x0200) && (state->wrap & 4)) state->check = crc32(state->check, next, copy);
+                        have -= copy;
+                        next += copy;
+                        state->length -= copy;
+                    }
+                    if (state->length) goto inf_leave;
+                }
+                state->length = 0;
+                state->mode = NAME;
+            case NAME:
+                if (state->flags & 0x0800) {
+                    if (have == 0) goto inf_leave;
+                    copy = 0;
+                    do {
+                        len = (unsigned)(next[copy++]);
+                        if (state->head != Z_NULL && state->head->name != Z_NULL && state->length < state->head->name_max)
+                            state->head->name[state->length++] = (Bytef)len;
+                    } while (len && copy < have);
+                    if ((state->flags & 0x0200) && (state->wrap & 4)) state->check = crc32(state->check, next, copy);
+                    have -= copy;
+                    next += copy;
+                    if (len) goto inf_leave;
+                } else if (state->head != Z_NULL) state->head->name = Z_NULL;
+                state->length = 0;
+                state->mode = COMMENT;
+            case COMMENT:
+                if (state->flags & 0x1000) {
+                    if (have == 0) goto inf_leave;
+                    copy = 0;
+                    do {
+                        len = (unsigned)(next[copy++]);
+                        if (state->head != Z_NULL && state->head->comment != Z_NULL && state->length < state->head->comm_max)
+                            state->head->comment[state->length++] = (Bytef)len;
+                    } while (len && copy < have);
+                    if ((state->flags & 0x0200) && (state->wrap & 4)) state->check = crc32(state->check, next, copy);
+                    have -= copy;
+                    next += copy;
+                    if (len) goto inf_leave;
+                } else if (state->head != Z_NULL) state->head->comment = Z_NULL;
+                state->mode = HCRC;
+            case HCRC:
+                if (state->flags & 0x0200) {
+                    NEEDBITS(16);
+                    if ((state->wrap & 4) && hold != (state->check & 0xffff)) {
+                        strm->msg = (char *)"header crc mismatch";
+                        state->mode = BAD;
+                        break;
+                    }
+                    INITBITS();
+                }
+                if (state->head != Z_NULL) {
+                    state->head->hcrc = (int)((state->flags >> 9) & 1);
+                    state->head->done = 1;
+                }
+                strm->adler = state->check = crc32(0L, Z_NULL, 0);
+                state->mode = TYPE;
                 break;
-            case 3:
-                strm->msg = (char *)"invalid block type";
-                state->mode = BAD;
-            }
-            DROPBITS(2);
-            break;
-        case STORED:
-            BYTEBITS();                         /* go to byte boundary */
-            NEEDBITS(32);
-            if ((hold & 0xffff) != ((hold >> 16) ^ 0xffff)) {
-                strm->msg = (char *)"invalid stored block lengths";
-                state->mode = BAD;
-                break;
-            }
-            state->length = (unsigned)hold & 0xffff;
-            Tracev((stderr, "inflate:       stored length %u\n",
-                    state->length));
-            INITBITS();
-            state->mode = COPY_;
-            if (flush == Z_TREES) goto inf_leave;
-        case COPY_:
-            state->mode = COPY;
-        case COPY:
-            copy = state->length;
-            if (copy) {
-                if (copy > have) copy = have;
-                if (copy > left) copy = left;
-                if (copy == 0) goto inf_leave;
-                zmemcpy(put, next, copy);
-                have -= copy;
-                next += copy;
-                left -= copy;
-                put += copy;
-                state->length -= copy;
-                break;
-            }
-            Tracev((stderr, "inflate:       stored end\n"));
-            state->mode = TYPE;
-            break;
-        case TABLE:
-            NEEDBITS(14);
-            state->nlen = BITS(5) + 257;
-            DROPBITS(5);
-            state->ndist = BITS(5) + 1;
-            DROPBITS(5);
-            state->ncode = BITS(4) + 4;
-            DROPBITS(4);
-#ifndef PKZIP_BUG_WORKAROUND
-            if (state->nlen > 286 || state->ndist > 30) {
-                strm->msg = (char *)"too many length or distance symbols";
-                state->mode = BAD;
-                break;
-            }
 #endif
-            Tracev((stderr, "inflate:       table sizes ok\n"));
-            state->have = 0;
-            state->mode = LENLENS;
-        case LENLENS:
-            while (state->have < state->ncode) {
+            case DICTID:
+                NEEDBITS(32);
+                strm->adler = state->check = ZSWAP32(hold);
+                INITBITS();
+                state->mode = DICT;
+            case DICT:
+                if (state->havedict == 0) {
+                    RESTORE();
+                    return Z_NEED_DICT;
+                }
+                strm->adler = state->check = adler32(0L, Z_NULL, 0);
+                state->mode = TYPE;
+            case TYPE:
+                if (flush == Z_BLOCK || flush == Z_TREES) goto inf_leave;
+            case TYPEDO:
+                if (state->last) {
+                    BYTEBITS();
+                    state->mode = CHECK;
+                    break;
+                }
                 NEEDBITS(3);
-                state->lens[order[state->have++]] = (unsigned short)BITS(3);
-                DROPBITS(3);
-            }
-            while (state->have < 19)
-                state->lens[order[state->have++]] = 0;
-            state->next = state->codes;
-            state->lencode = (const code FAR *)(state->next);
-            state->lenbits = 7;
-            ret = inflate_table(CODES, state->lens, 19, &(state->next),
-                                &(state->lenbits), state->work);
-            if (ret) {
-                strm->msg = (char *)"invalid code lengths set";
-                state->mode = BAD;
+                state->last = BITS(1);
+                DROPBITS(1);
+                switch (BITS(2)) {
+                    case 0: /* stored block */
+                        Tracev((stderr, "inflate:     stored block%s\n", state->last ? " (last)" : ""));
+                        state->mode = STORED;
+                        break;
+                    case 1: /* fixed block */
+                        fixedtables(state);
+                        Tracev((stderr, "inflate:     fixed codes block%s\n", state->last ? " (last)" : ""));
+                        state->mode = LEN_; /* decode codes */
+                        if (flush == Z_TREES) {
+                            DROPBITS(2);
+                            goto inf_leave;
+                        }
+                        break;
+                    case 2: /* dynamic block */
+                        Tracev((stderr, "inflate:     dynamic codes block%s\n", state->last ? " (last)" : ""));
+                        state->mode = TABLE;
+                        break;
+                    case 3: strm->msg = (char *)"invalid block type"; state->mode = BAD;
+                }
+                DROPBITS(2);
                 break;
-            }
-            Tracev((stderr, "inflate:       code lengths ok\n"));
-            state->have = 0;
-            state->mode = CODELENS;
-        case CODELENS:
-            while (state->have < state->nlen + state->ndist) {
+            case STORED:
+                BYTEBITS(); /* go to byte boundary */
+                NEEDBITS(32);
+                if ((hold & 0xffff) != ((hold >> 16) ^ 0xffff)) {
+                    strm->msg = (char *)"invalid stored block lengths";
+                    state->mode = BAD;
+                    break;
+                }
+                state->length = (unsigned)hold & 0xffff;
+                Tracev((stderr, "inflate:       stored length %u\n", state->length));
+                INITBITS();
+                state->mode = COPY_;
+                if (flush == Z_TREES) goto inf_leave;
+            case COPY_: state->mode = COPY;
+            case COPY:
+                copy = state->length;
+                if (copy) {
+                    if (copy > have) copy = have;
+                    if (copy > left) copy = left;
+                    if (copy == 0) goto inf_leave;
+                    zmemcpy(put, next, copy);
+                    have -= copy;
+                    next += copy;
+                    left -= copy;
+                    put += copy;
+                    state->length -= copy;
+                    break;
+                }
+                Tracev((stderr, "inflate:       stored end\n"));
+                state->mode = TYPE;
+                break;
+            case TABLE:
+                NEEDBITS(14);
+                state->nlen = BITS(5) + 257;
+                DROPBITS(5);
+                state->ndist = BITS(5) + 1;
+                DROPBITS(5);
+                state->ncode = BITS(4) + 4;
+                DROPBITS(4);
+#ifndef PKZIP_BUG_WORKAROUND
+                if (state->nlen > 286 || state->ndist > 30) {
+                    strm->msg = (char *)"too many length or distance symbols";
+                    state->mode = BAD;
+                    break;
+                }
+#endif
+                Tracev((stderr, "inflate:       table sizes ok\n"));
+                state->have = 0;
+                state->mode = LENLENS;
+            case LENLENS:
+                while (state->have < state->ncode) {
+                    NEEDBITS(3);
+                    state->lens[order[state->have++]] = (unsigned short)BITS(3);
+                    DROPBITS(3);
+                }
+                while (state->have < 19) state->lens[order[state->have++]] = 0;
+                state->next = state->codes;
+                state->lencode = (const code FAR *)(state->next);
+                state->lenbits = 7;
+                ret = inflate_table(CODES, state->lens, 19, &(state->next), &(state->lenbits), state->work);
+                if (ret) {
+                    strm->msg = (char *)"invalid code lengths set";
+                    state->mode = BAD;
+                    break;
+                }
+                Tracev((stderr, "inflate:       code lengths ok\n"));
+                state->have = 0;
+                state->mode = CODELENS;
+            case CODELENS:
+                while (state->have < state->nlen + state->ndist) {
+                    for (;;) {
+                        here = state->lencode[BITS(state->lenbits)];
+                        if ((unsigned)(here.bits) <= bits) break;
+                        PULLBYTE();
+                    }
+                    if (here.val < 16) {
+                        DROPBITS(here.bits);
+                        state->lens[state->have++] = here.val;
+                    } else {
+                        if (here.val == 16) {
+                            NEEDBITS(here.bits + 2);
+                            DROPBITS(here.bits);
+                            if (state->have == 0) {
+                                strm->msg = (char *)"invalid bit length repeat";
+                                state->mode = BAD;
+                                break;
+                            }
+                            len = state->lens[state->have - 1];
+                            copy = 3 + BITS(2);
+                            DROPBITS(2);
+                        } else if (here.val == 17) {
+                            NEEDBITS(here.bits + 3);
+                            DROPBITS(here.bits);
+                            len = 0;
+                            copy = 3 + BITS(3);
+                            DROPBITS(3);
+                        } else {
+                            NEEDBITS(here.bits + 7);
+                            DROPBITS(here.bits);
+                            len = 0;
+                            copy = 11 + BITS(7);
+                            DROPBITS(7);
+                        }
+                        if (state->have + copy > state->nlen + state->ndist) {
+                            strm->msg = (char *)"invalid bit length repeat";
+                            state->mode = BAD;
+                            break;
+                        }
+                        while (copy--) state->lens[state->have++] = (unsigned short)len;
+                    }
+                }
+
+                /* handle error breaks in while */
+                if (state->mode == BAD) break;
+
+                /* check for end-of-block code (better have one) */
+                if (state->lens[256] == 0) {
+                    strm->msg = (char *)"invalid code -- missing end-of-block";
+                    state->mode = BAD;
+                    break;
+                }
+
+                /* build code tables -- note: do not change the lenbits or distbits
+                   values here (9 and 6) without reading the comments in inftrees.h
+                   concerning the ENOUGH constants, which depend on those values */
+                state->next = state->codes;
+                state->lencode = (const code FAR *)(state->next);
+                state->lenbits = 9;
+                ret = inflate_table(LENS, state->lens, state->nlen, &(state->next), &(state->lenbits), state->work);
+                if (ret) {
+                    strm->msg = (char *)"invalid literal/lengths set";
+                    state->mode = BAD;
+                    break;
+                }
+                state->distcode = (const code FAR *)(state->next);
+                state->distbits = 6;
+                ret = inflate_table(DISTS, state->lens + state->nlen, state->ndist, &(state->next), &(state->distbits), state->work);
+                if (ret) {
+                    strm->msg = (char *)"invalid distances set";
+                    state->mode = BAD;
+                    break;
+                }
+                Tracev((stderr, "inflate:       codes ok\n"));
+                state->mode = LEN_;
+                if (flush == Z_TREES) goto inf_leave;
+            case LEN_: state->mode = LEN;
+            case LEN:
+                if (have >= 6 && left >= 258) {
+                    RESTORE();
+                    inflate_fast(strm, out);
+                    LOAD();
+                    if (state->mode == TYPE) state->back = -1;
+                    break;
+                }
+                state->back = 0;
                 for (;;) {
                     here = state->lencode[BITS(state->lenbits)];
                     if ((unsigned)(here.bits) <= bits) break;
                     PULLBYTE();
                 }
-                if (here.val < 16) {
-                    DROPBITS(here.bits);
-                    state->lens[state->have++] = here.val;
+                if (here.op && (here.op & 0xf0) == 0) {
+                    last = here;
+                    for (;;) {
+                        here = state->lencode[last.val + (BITS(last.bits + last.op) >> last.bits)];
+                        if ((unsigned)(last.bits + here.bits) <= bits) break;
+                        PULLBYTE();
+                    }
+                    DROPBITS(last.bits);
+                    state->back += last.bits;
                 }
-                else {
-                    if (here.val == 16) {
-                        NEEDBITS(here.bits + 2);
-                        DROPBITS(here.bits);
-                        if (state->have == 0) {
-                            strm->msg = (char *)"invalid bit length repeat";
+                DROPBITS(here.bits);
+                state->back += here.bits;
+                state->length = (unsigned)here.val;
+                if ((int)(here.op) == 0) {
+                    Tracevv((stderr, here.val >= 0x20 && here.val < 0x7f ? "inflate:         literal '%c'\n" : "inflate:         literal 0x%02x\n", here.val));
+                    state->mode = LIT;
+                    break;
+                }
+                if (here.op & 32) {
+                    Tracevv((stderr, "inflate:         end of block\n"));
+                    state->back = -1;
+                    state->mode = TYPE;
+                    break;
+                }
+                if (here.op & 64) {
+                    strm->msg = (char *)"invalid literal/length code";
+                    state->mode = BAD;
+                    break;
+                }
+                state->extra = (unsigned)(here.op) & 15;
+                state->mode = LENEXT;
+            case LENEXT:
+                if (state->extra) {
+                    NEEDBITS(state->extra);
+                    state->length += BITS(state->extra);
+                    DROPBITS(state->extra);
+                    state->back += state->extra;
+                }
+                Tracevv((stderr, "inflate:         length %u\n", state->length));
+                state->was = state->length;
+                state->mode = DIST;
+            case DIST:
+                for (;;) {
+                    here = state->distcode[BITS(state->distbits)];
+                    if ((unsigned)(here.bits) <= bits) break;
+                    PULLBYTE();
+                }
+                if ((here.op & 0xf0) == 0) {
+                    last = here;
+                    for (;;) {
+                        here = state->distcode[last.val + (BITS(last.bits + last.op) >> last.bits)];
+                        if ((unsigned)(last.bits + here.bits) <= bits) break;
+                        PULLBYTE();
+                    }
+                    DROPBITS(last.bits);
+                    state->back += last.bits;
+                }
+                DROPBITS(here.bits);
+                state->back += here.bits;
+                if (here.op & 64) {
+                    strm->msg = (char *)"invalid distance code";
+                    state->mode = BAD;
+                    break;
+                }
+                state->offset = (unsigned)here.val;
+                state->extra = (unsigned)(here.op) & 15;
+                state->mode = DISTEXT;
+            case DISTEXT:
+                if (state->extra) {
+                    NEEDBITS(state->extra);
+                    state->offset += BITS(state->extra);
+                    DROPBITS(state->extra);
+                    state->back += state->extra;
+                }
+#ifdef INFLATE_STRICT
+                if (state->offset > state->dmax) {
+                    strm->msg = (char *)"invalid distance too far back";
+                    state->mode = BAD;
+                    break;
+                }
+#endif
+                Tracevv((stderr, "inflate:         distance %u\n", state->offset));
+                state->mode = MATCH;
+            case MATCH:
+                if (left == 0) goto inf_leave;
+                copy = out - left;
+                if (state->offset > copy) { /* copy from window */
+                    copy = state->offset - copy;
+                    if (copy > state->whave) {
+                        if (state->sane) {
+                            strm->msg = (char *)"invalid distance too far back";
                             state->mode = BAD;
                             break;
                         }
-                        len = state->lens[state->have - 1];
-                        copy = 3 + BITS(2);
-                        DROPBITS(2);
-                    }
-                    else if (here.val == 17) {
-                        NEEDBITS(here.bits + 3);
-                        DROPBITS(here.bits);
-                        len = 0;
-                        copy = 3 + BITS(3);
-                        DROPBITS(3);
-                    }
-                    else {
-                        NEEDBITS(here.bits + 7);
-                        DROPBITS(here.bits);
-                        len = 0;
-                        copy = 11 + BITS(7);
-                        DROPBITS(7);
-                    }
-                    if (state->have + copy > state->nlen + state->ndist) {
-                        strm->msg = (char *)"invalid bit length repeat";
-                        state->mode = BAD;
-                        break;
-                    }
-                    while (copy--)
-                        state->lens[state->have++] = (unsigned short)len;
-                }
-            }
-
-            /* handle error breaks in while */
-            if (state->mode == BAD) break;
-
-            /* check for end-of-block code (better have one) */
-            if (state->lens[256] == 0) {
-                strm->msg = (char *)"invalid code -- missing end-of-block";
-                state->mode = BAD;
-                break;
-            }
-
-            /* build code tables -- note: do not change the lenbits or distbits
-               values here (9 and 6) without reading the comments in inftrees.h
-               concerning the ENOUGH constants, which depend on those values */
-            state->next = state->codes;
-            state->lencode = (const code FAR *)(state->next);
-            state->lenbits = 9;
-            ret = inflate_table(LENS, state->lens, state->nlen, &(state->next),
-                                &(state->lenbits), state->work);
-            if (ret) {
-                strm->msg = (char *)"invalid literal/lengths set";
-                state->mode = BAD;
-                break;
-            }
-            state->distcode = (const code FAR *)(state->next);
-            state->distbits = 6;
-            ret = inflate_table(DISTS, state->lens + state->nlen, state->ndist,
-                            &(state->next), &(state->distbits), state->work);
-            if (ret) {
-                strm->msg = (char *)"invalid distances set";
-                state->mode = BAD;
-                break;
-            }
-            Tracev((stderr, "inflate:       codes ok\n"));
-            state->mode = LEN_;
-            if (flush == Z_TREES) goto inf_leave;
-        case LEN_:
-            state->mode = LEN;
-        case LEN:
-            if (have >= 6 && left >= 258) {
-                RESTORE();
-                inflate_fast(strm, out);
-                LOAD();
-                if (state->mode == TYPE)
-                    state->back = -1;
-                break;
-            }
-            state->back = 0;
-            for (;;) {
-                here = state->lencode[BITS(state->lenbits)];
-                if ((unsigned)(here.bits) <= bits) break;
-                PULLBYTE();
-            }
-            if (here.op && (here.op & 0xf0) == 0) {
-                last = here;
-                for (;;) {
-                    here = state->lencode[last.val +
-                            (BITS(last.bits + last.op) >> last.bits)];
-                    if ((unsigned)(last.bits + here.bits) <= bits) break;
-                    PULLBYTE();
-                }
-                DROPBITS(last.bits);
-                state->back += last.bits;
-            }
-            DROPBITS(here.bits);
-            state->back += here.bits;
-            state->length = (unsigned)here.val;
-            if ((int)(here.op) == 0) {
-                Tracevv((stderr, here.val >= 0x20 && here.val < 0x7f ?
-                        "inflate:         literal '%c'\n" :
-                        "inflate:         literal 0x%02x\n", here.val));
-                state->mode = LIT;
-                break;
-            }
-            if (here.op & 32) {
-                Tracevv((stderr, "inflate:         end of block\n"));
-                state->back = -1;
-                state->mode = TYPE;
-                break;
-            }
-            if (here.op & 64) {
-                strm->msg = (char *)"invalid literal/length code";
-                state->mode = BAD;
-                break;
-            }
-            state->extra = (unsigned)(here.op) & 15;
-            state->mode = LENEXT;
-        case LENEXT:
-            if (state->extra) {
-                NEEDBITS(state->extra);
-                state->length += BITS(state->extra);
-                DROPBITS(state->extra);
-                state->back += state->extra;
-            }
-            Tracevv((stderr, "inflate:         length %u\n", state->length));
-            state->was = state->length;
-            state->mode = DIST;
-        case DIST:
-            for (;;) {
-                here = state->distcode[BITS(state->distbits)];
-                if ((unsigned)(here.bits) <= bits) break;
-                PULLBYTE();
-            }
-            if ((here.op & 0xf0) == 0) {
-                last = here;
-                for (;;) {
-                    here = state->distcode[last.val +
-                            (BITS(last.bits + last.op) >> last.bits)];
-                    if ((unsigned)(last.bits + here.bits) <= bits) break;
-                    PULLBYTE();
-                }
-                DROPBITS(last.bits);
-                state->back += last.bits;
-            }
-            DROPBITS(here.bits);
-            state->back += here.bits;
-            if (here.op & 64) {
-                strm->msg = (char *)"invalid distance code";
-                state->mode = BAD;
-                break;
-            }
-            state->offset = (unsigned)here.val;
-            state->extra = (unsigned)(here.op) & 15;
-            state->mode = DISTEXT;
-        case DISTEXT:
-            if (state->extra) {
-                NEEDBITS(state->extra);
-                state->offset += BITS(state->extra);
-                DROPBITS(state->extra);
-                state->back += state->extra;
-            }
-#ifdef INFLATE_STRICT
-            if (state->offset > state->dmax) {
-                strm->msg = (char *)"invalid distance too far back";
-                state->mode = BAD;
-                break;
-            }
-#endif
-            Tracevv((stderr, "inflate:         distance %u\n", state->offset));
-            state->mode = MATCH;
-        case MATCH:
-            if (left == 0) goto inf_leave;
-            copy = out - left;
-            if (state->offset > copy) {         /* copy from window */
-                copy = state->offset - copy;
-                if (copy > state->whave) {
-                    if (state->sane) {
-                        strm->msg = (char *)"invalid distance too far back";
-                        state->mode = BAD;
-                        break;
-                    }
 #ifdef INFLATE_ALLOW_INVALID_DISTANCE_TOOFAR_ARRR
-                    Trace((stderr, "inflate.c too far\n"));
-                    copy -= state->whave;
+                        Trace((stderr, "inflate.c too far\n"));
+                        copy -= state->whave;
+                        if (copy > state->length) copy = state->length;
+                        if (copy > left) copy = left;
+                        left -= copy;
+                        state->length -= copy;
+                        do {
+                            *put++ = 0;
+                        } while (--copy);
+                        if (state->length == 0) state->mode = LEN;
+                        break;
+#endif
+                    }
+                    if (copy > state->wnext) {
+                        copy -= state->wnext;
+                        from = state->window + (state->wsize - copy);
+                    } else from = state->window + (state->wnext - copy);
                     if (copy > state->length) copy = state->length;
-                    if (copy > left) copy = left;
-                    left -= copy;
-                    state->length -= copy;
-                    do {
-                        *put++ = 0;
-                    } while (--copy);
-                    if (state->length == 0) state->mode = LEN;
-                    break;
-#endif
+                } else { /* copy from output */
+                    from = put - state->offset;
+                    copy = state->length;
                 }
-                if (copy > state->wnext) {
-                    copy -= state->wnext;
-                    from = state->window + (state->wsize - copy);
-                }
-                else
-                    from = state->window + (state->wnext - copy);
-                if (copy > state->length) copy = state->length;
-            }
-            else {                              /* copy from output */
-                from = put - state->offset;
-                copy = state->length;
-            }
-            if (copy > left) copy = left;
-            left -= copy;
-            state->length -= copy;
-            do {
-                *put++ = *from++;
-            } while (--copy);
-            if (state->length == 0) state->mode = LEN;
-            break;
-        case LIT:
-            if (left == 0) goto inf_leave;
-            *put++ = (unsigned char)(state->length);
-            left--;
-            state->mode = LEN;
-            break;
-        case CHECK:
-            if (state->wrap) {
-                NEEDBITS(32);
-                out -= left;
-                strm->total_out += out;
-                state->total += out;
-                if ((state->wrap & 4) && out)
-                    strm->adler = state->check =
-                        UPDATE(state->check, put - out, out);
-                out = left;
-                if ((state->wrap & 4) && (
+                if (copy > left) copy = left;
+                left -= copy;
+                state->length -= copy;
+                do {
+                    *put++ = *from++;
+                } while (--copy);
+                if (state->length == 0) state->mode = LEN;
+                break;
+            case LIT:
+                if (left == 0) goto inf_leave;
+                *put++ = (unsigned char)(state->length);
+                left--;
+                state->mode = LEN;
+                break;
+            case CHECK:
+                if (state->wrap) {
+                    NEEDBITS(32);
+                    out -= left;
+                    strm->total_out += out;
+                    state->total += out;
+                    if ((state->wrap & 4) && out) strm->adler = state->check = UPDATE(state->check, put - out, out);
+                    out = left;
+                    if ((state->wrap & 4) && (
 #ifdef GUNZIP
-                     state->flags ? hold :
+                                                 state->flags ? hold :
 #endif
-                     ZSWAP32(hold)) != state->check) {
-                    strm->msg = (char *)"incorrect data check";
-                    state->mode = BAD;
-                    break;
+                                                              ZSWAP32(hold)) != state->check) {
+                        strm->msg = (char *)"incorrect data check";
+                        state->mode = BAD;
+                        break;
+                    }
+                    INITBITS();
+                    Tracev((stderr, "inflate:   check matches trailer\n"));
                 }
-                INITBITS();
-                Tracev((stderr, "inflate:   check matches trailer\n"));
-            }
 #ifdef GUNZIP
-            state->mode = LENGTH;
-        case LENGTH:
-            if (state->wrap && state->flags) {
-                NEEDBITS(32);
-                if (hold != (state->total & 0xffffffffUL)) {
-                    strm->msg = (char *)"incorrect length check";
-                    state->mode = BAD;
-                    break;
+                state->mode = LENGTH;
+            case LENGTH:
+                if (state->wrap && state->flags) {
+                    NEEDBITS(32);
+                    if (hold != (state->total & 0xffffffffUL)) {
+                        strm->msg = (char *)"incorrect length check";
+                        state->mode = BAD;
+                        break;
+                    }
+                    INITBITS();
+                    Tracev((stderr, "inflate:   length matches trailer\n"));
                 }
-                INITBITS();
-                Tracev((stderr, "inflate:   length matches trailer\n"));
-            }
 #endif
-            state->mode = DONE;
-        case DONE:
-            ret = Z_STREAM_END;
-            goto inf_leave;
-        case BAD:
-            ret = Z_DATA_ERROR;
-            goto inf_leave;
-        case MEM:
-            return Z_MEM_ERROR;
-        case SYNC:
-        default:
-            return Z_STREAM_ERROR;
+                state->mode = DONE;
+            case DONE: ret = Z_STREAM_END; goto inf_leave;
+            case BAD: ret = Z_DATA_ERROR; goto inf_leave;
+            case MEM: return Z_MEM_ERROR;
+            case SYNC:
+            default: return Z_STREAM_ERROR;
         }
 
     /*
@@ -4669,10 +4589,9 @@ int ZEXPORT inflate(z_streamp strm, int flush)
        error.  Call updatewindow() to create and/or update the window state.
        Note: a memory error from inflate() is non-recoverable.
      */
-  inf_leave:
+inf_leave:
     RESTORE();
-    if (state->wsize || (out != strm->avail_out && state->mode < BAD &&
-            (state->mode < CHECK || flush != Z_FINISH)))
+    if (state->wsize || (out != strm->avail_out && state->mode < BAD && (state->mode < CHECK || flush != Z_FINISH)))
         if (updatewindow(strm, strm->next_out, out - strm->avail_out)) {
             state->mode = MEM;
             return Z_MEM_ERROR;
@@ -4682,22 +4601,16 @@ int ZEXPORT inflate(z_streamp strm, int flush)
     strm->total_in += in;
     strm->total_out += out;
     state->total += out;
-    if ((state->wrap & 4) && out)
-        strm->adler = state->check =
-            UPDATE(state->check, strm->next_out - out, out);
-    strm->data_type = (int)state->bits + (state->last ? 64 : 0) +
-                      (state->mode == TYPE ? 128 : 0) +
-                      (state->mode == LEN_ || state->mode == COPY_ ? 256 : 0);
-    if (((in == 0 && out == 0) || flush == Z_FINISH) && ret == Z_OK)
-        ret = Z_BUF_ERROR;
+    if ((state->wrap & 4) && out) strm->adler = state->check = UPDATE(state->check, strm->next_out - out, out);
+    strm->data_type = (int)state->bits + (state->last ? 64 : 0) + (state->mode == TYPE ? 128 : 0) + (state->mode == LEN_ || state->mode == COPY_ ? 256 : 0);
+    if (((in == 0 && out == 0) || flush == Z_FINISH) && ret == Z_OK) ret = Z_BUF_ERROR;
     return ret;
 }
 
 int ZEXPORT inflateEnd(z_streamp strm)
 {
     struct inflate_state FAR *state;
-    if (inflateStateCheck(strm))
-        return Z_STREAM_ERROR;
+    if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
     state = (struct inflate_state FAR *)strm->state;
     if (state->window != Z_NULL) ZFREE(strm, state->window);
     ZFREE(strm, strm->state);
@@ -4706,7 +4619,7 @@ int ZEXPORT inflateEnd(z_streamp strm)
     return Z_OK;
 }
 
-int ZEXPORT inflateGetDictionary(z_streamp strm, Bytef * dictionary, uInt * dictLength)
+int ZEXPORT inflateGetDictionary(z_streamp strm, Bytef *dictionary, uInt *dictLength)
 {
     struct inflate_state FAR *state;
 
@@ -4716,17 +4629,14 @@ int ZEXPORT inflateGetDictionary(z_streamp strm, Bytef * dictionary, uInt * dict
 
     /* copy dictionary */
     if (state->whave && dictionary != Z_NULL) {
-        zmemcpy(dictionary, state->window + state->wnext,
-                state->whave - state->wnext);
-        zmemcpy(dictionary + state->whave - state->wnext,
-                state->window, state->wnext);
+        zmemcpy(dictionary, state->window + state->wnext, state->whave - state->wnext);
+        zmemcpy(dictionary + state->whave - state->wnext, state->window, state->wnext);
     }
-    if (dictLength != Z_NULL)
-        *dictLength = state->whave;
+    if (dictLength != Z_NULL) *dictLength = state->whave;
     return Z_OK;
 }
 
-int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef * dictionary, uInt dictLength)
+int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef *dictionary, uInt dictLength)
 {
     struct inflate_state FAR *state;
     unsigned long dictid;
@@ -4735,15 +4645,13 @@ int ZEXPORT inflateSetDictionary(z_streamp strm, const Bytef * dictionary, uInt 
     /* check state */
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
     state = (struct inflate_state FAR *)strm->state;
-    if (state->wrap != 0 && state->mode != DICT)
-        return Z_STREAM_ERROR;
+    if (state->wrap != 0 && state->mode != DICT) return Z_STREAM_ERROR;
 
     /* check for correct dictionary identifier */
     if (state->mode == DICT) {
         dictid = adler32(0L, Z_NULL, 0);
         dictid = adler32(dictid, dictionary, dictLength);
-        if (dictid != state->check)
-            return Z_DATA_ERROR;
+        if (dictid != state->check) return Z_DATA_ERROR;
     }
 
     /* copy dictionary to window using updatewindow(), which will amend the
@@ -4784,7 +4692,7 @@ int ZEXPORT inflateGetHeader(z_streamp strm, gz_headerp head)
    called again with more data and the *have state.  *have is initialized to
    zero for the first call.
  */
-local unsigned syncsearch(unsigned FAR * have, const unsigned char FAR * buf, unsigned len)
+local unsigned syncsearch(unsigned FAR *have, const unsigned char FAR *buf, unsigned len)
 {
     unsigned got;
     unsigned next;
@@ -4792,12 +4700,9 @@ local unsigned syncsearch(unsigned FAR * have, const unsigned char FAR * buf, un
     got = *have;
     next = 0;
     while (next < len && got < 4) {
-        if ((int)(buf[next]) == (got < 2 ? 0 : 0xff))
-            got++;
-        else if (buf[next])
-            got = 0;
-        else
-            got = 4 - got;
+        if ((int)(buf[next]) == (got < 2 ? 0 : 0xff)) got++;
+        else if (buf[next]) got = 0;
+        else got = 4 - got;
         next++;
     }
     *have = got;
@@ -4806,9 +4711,9 @@ local unsigned syncsearch(unsigned FAR * have, const unsigned char FAR * buf, un
 
 int ZEXPORT inflateSync(z_streamp strm)
 {
-    unsigned len;               /* number of bytes to look at or looked at */
-    unsigned long in, out;      /* temporary to save total_in and total_out */
-    unsigned char buf[4];       /* to restore bit buffer to byte string */
+    unsigned len;          /* number of bytes to look at or looked at */
+    unsigned long in, out; /* temporary to save total_in and total_out */
+    unsigned char buf[4];  /* to restore bit buffer to byte string */
     struct inflate_state FAR *state;
 
     /* check parameters */
@@ -4839,9 +4744,11 @@ int ZEXPORT inflateSync(z_streamp strm)
 
     /* return no joy or set up to restart inflate() on a new block */
     if (state->have != 4) return Z_DATA_ERROR;
-    in = strm->total_in;  out = strm->total_out;
+    in = strm->total_in;
+    out = strm->total_out;
     inflateReset(strm);
-    strm->total_in = in;  strm->total_out = out;
+    strm->total_in = in;
+    strm->total_out = out;
     state->mode = TYPE;
     return Z_OK;
 }
@@ -4871,18 +4778,15 @@ int ZEXPORT inflateCopy(z_streamp dest, z_streamp source)
     unsigned wsize;
 
     /* check input */
-    if (inflateStateCheck(source) || dest == Z_NULL)
-        return Z_STREAM_ERROR;
+    if (inflateStateCheck(source) || dest == Z_NULL) return Z_STREAM_ERROR;
     state = (struct inflate_state FAR *)source->state;
 
     /* allocate space */
-    copy = (struct inflate_state FAR *)
-           ZALLOC(source, 1, sizeof(struct inflate_state));
+    copy = (struct inflate_state FAR *)ZALLOC(source, 1, sizeof(struct inflate_state));
     if (copy == Z_NULL) return Z_MEM_ERROR;
     window = Z_NULL;
     if (state->window != Z_NULL) {
-        window = (unsigned char FAR *)
-                 ZALLOC(source, 1U << state->wbits, sizeof(unsigned char));
+        window = (unsigned char FAR *)ZALLOC(source, 1U << state->wbits, sizeof(unsigned char));
         if (window == Z_NULL) {
             ZFREE(source, copy);
             return Z_MEM_ERROR;
@@ -4893,8 +4797,7 @@ int ZEXPORT inflateCopy(z_streamp dest, z_streamp source)
     zmemcpy((voidpf)dest, (voidpf)source, sizeof(z_stream));
     zmemcpy((voidpf)copy, (voidpf)state, sizeof(struct inflate_state));
     copy->strm = dest;
-    if (state->lencode >= state->codes &&
-        state->lencode <= state->codes + ENOUGH - 1) {
+    if (state->lencode >= state->codes && state->lencode <= state->codes + ENOUGH - 1) {
         copy->lencode = copy->codes + (state->lencode - state->codes);
         copy->distcode = copy->codes + (state->distcode - state->codes);
     }
@@ -4930,10 +4833,8 @@ int ZEXPORT inflateValidate(z_streamp strm, int check)
 
     if (inflateStateCheck(strm)) return Z_STREAM_ERROR;
     state = (struct inflate_state FAR *)strm->state;
-    if (check)
-        state->wrap |= 4;
-    else
-        state->wrap &= ~4;
+    if (check) state->wrap |= 4;
+    else state->wrap &= ~4;
     return Z_OK;
 }
 
@@ -4941,12 +4842,9 @@ long ZEXPORT inflateMark(z_streamp strm)
 {
     struct inflate_state FAR *state;
 
-    if (inflateStateCheck(strm))
-        return -(1L << 16);
+    if (inflateStateCheck(strm)) return -(1L << 16);
     state = (struct inflate_state FAR *)strm->state;
-    return (long)(((unsigned long)((long)state->back)) << 16) +
-        (state->mode == COPY ? state->length :
-            (state->mode == MATCH ? state->was - state->length : 0));
+    return (long)(((unsigned long)((long)state->back)) << 16) + (state->mode == COPY ? state->length : (state->mode == MATCH ? state->was - state->length : 0));
 }
 
 unsigned long ZEXPORT inflateCodesUsed(z_streamp strm)
@@ -4981,256 +4879,271 @@ unsigned long ZEXPORT inflateCodesUsed(z_streamp strm)
 #define ZUTIL_H
 
 #ifdef HAVE_HIDDEN
-#  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+#define ZLIB_INTERNAL __attribute__((visibility("hidden")))
 #else
-#  define ZLIB_INTERNAL
+#define ZLIB_INTERNAL
 #endif
 #if defined(STDC) && !defined(Z_SOLO)
-#  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
-#    include <stddef.h>
-#  endif
-#  include <string.h>
-#  include <stdlib.h>
+#if !(defined(_WIN32_WCE) && defined(_MSC_VER))
+#include <stddef.h>
+#endif
+#include <string.h>
+#include <stdlib.h>
 #endif
 
 #ifdef Z_SOLO
-   typedef long ptrdiff_t;  /* guess -- will be caught if guess is wrong */
+typedef long ptrdiff_t; /* guess -- will be caught if guess is wrong */
 #endif
 
 #ifndef local
-#  define local static
+#define local static
 #endif
 /* since "static" is used to mean two completely different things in C, we
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-typedef unsigned char  uch;
+typedef unsigned char uch;
 typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
-typedef unsigned long  ulg;
+typedef unsigned long ulg;
 
-extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
+#define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
 
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = ERR_MSG(err), (err))
+#define ERR_RETURN(strm, err) return (strm->msg = ERR_MSG(err), (err))
 /* To be used only when the state is known to be valid */
 
-        /* common constants */
+/* common constants */
 
 #ifndef DEF_WBITS
-#  define DEF_WBITS MAX_WBITS
+#define DEF_WBITS MAX_WBITS
 #endif
 /* default windowBits for decompression. MAX_WBITS is for compression only */
 
 #if MAX_MEM_LEVEL >= 8
-#  define DEF_MEM_LEVEL 8
+#define DEF_MEM_LEVEL 8
 #else
-#  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
+#define DEF_MEM_LEVEL MAX_MEM_LEVEL
 #endif
 /* default memLevel */
 
 #define STORED_BLOCK 0
 #define STATIC_TREES 1
-#define DYN_TREES    2
+#define DYN_TREES 2
 /* The three kinds of block type */
 
-#define MIN_MATCH  3
-#define MAX_MATCH  258
+#define MIN_MATCH 3
+#define MAX_MATCH 258
 /* The minimum and maximum match lengths */
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
-        /* target dependencies */
+/* target dependencies */
 
 #if defined(MSDOS) || (defined(WINDOWS) && !defined(WIN32))
-#  define OS_CODE  0x00
-#  ifndef Z_SOLO
-#    if defined(__TURBOC__) || defined(__BORLANDC__)
-#      if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
-         /* Allow compilation with ANSI keywords only enabled */
-         void _Cdecl farfree( void *block );
-         void *_Cdecl farmalloc( unsigned long nbytes );
-#      else
-#        include <alloc.h>
-#      endif
-#    else /* MSC or DJGPP */
-#      include <malloc.h>
-#    endif
-#  endif
+#define OS_CODE 0x00
+#ifndef Z_SOLO
+#if defined(__TURBOC__) || defined(__BORLANDC__)
+#if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
+/* Allow compilation with ANSI keywords only enabled */
+void _Cdecl farfree(void *block);
+void *_Cdecl farmalloc(unsigned long nbytes);
+#else
+#include <alloc.h>
+#endif
+#else /* MSC or DJGPP */
+#include <malloc.h>
+#endif
+#endif
 #endif
 
 #ifdef AMIGA
-#  define OS_CODE  1
+#define OS_CODE 1
 #endif
 
 #if defined(VAXC) || defined(VMS)
-#  define OS_CODE  2
-#  define F_OPEN(name, mode) \
-     fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
+#define OS_CODE 2
+#define F_OPEN(name, mode) fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
 #endif
 
 #ifdef __370__
-#  if __TARGET_LIB__ < 0x20000000
-#    define OS_CODE 4
-#  elif __TARGET_LIB__ < 0x40000000
-#    define OS_CODE 11
-#  else
-#    define OS_CODE 8
-#  endif
+#if __TARGET_LIB__ < 0x20000000
+#define OS_CODE 4
+#elif __TARGET_LIB__ < 0x40000000
+#define OS_CODE 11
+#else
+#define OS_CODE 8
+#endif
 #endif
 
 #if defined(ATARI) || defined(atarist)
-#  define OS_CODE  5
+#define OS_CODE 5
 #endif
 
 #ifdef OS2
-#  define OS_CODE  6
-#  if defined(M_I86) && !defined(Z_SOLO)
-#    include <malloc.h>
-#  endif
+#define OS_CODE 6
+#if defined(M_I86) && !defined(Z_SOLO)
+#include <malloc.h>
+#endif
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
-#  ifndef Z_SOLO
-#    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
-#      include <unix.h> /* for fdopen */
-#    else
-#      ifndef fdopen
-#        define fdopen(fd,mode) NULL /* No fdopen() */
-#      endif
-#    endif
-#  endif
+#define OS_CODE 7
+#ifndef Z_SOLO
+#if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+#include <unix.h> /* for fdopen */
+#else
+#ifndef fdopen
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#endif
+#endif
+#endif
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#define OS_CODE 13
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#define OS_CODE 10
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#define OS_CODE 16
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#define OS_CODE 18
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#define OS_CODE 19
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)
-#  define fdopen(fd,mode) NULL /* No fdopen() */
+#define fdopen(fd, mode) NULL /* No fdopen() */
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER > 600)) && !defined __INTERIX
-#  if defined(_WIN32_WCE)
-#    define fdopen(fd,mode) NULL /* No fdopen() */
-#    ifndef _PTRDIFF_T_DEFINED
-       typedef int ptrdiff_t;
-#      define _PTRDIFF_T_DEFINED
-#    endif
-#  else
-#    define fdopen(fd,type)  _fdopen(fd,type)
-#  endif
+#if defined(_WIN32_WCE)
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
+#else
+#define fdopen(fd, type) _fdopen(fd, type)
+#endif
 #endif
 
 #if defined(__BORLANDC__) && !defined(MSDOS)
-  #pragma warn -8004
-  #pragma warn -8008
-  #pragma warn -8066
+#pragma warn - 8004
+#pragma warn - 8008
+#pragma warn - 8066
 #endif
 
 /* provide prototypes for these when building zlib without LFS */
-#if !defined(_WIN32) && \
-    (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE-0 == 0)
-    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
-    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
+#if !defined(_WIN32) && (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE - 0 == 0)
+ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
+ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
 #endif
 
-        /* common defaults */
+/* common defaults */
 
 #ifndef OS_CODE
-#  define OS_CODE  3     /* assume Unix */
+#define OS_CODE 3 /* assume Unix */
 #endif
 
 #ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
+#define F_OPEN(name, mode) fopen((name), (mode))
 #endif
 
-         /* functions */
+/* functions */
 
 #if defined(pyr) || defined(Z_SOLO)
-#  define NO_MEMCPY
+#define NO_MEMCPY
 #endif
 #if defined(SMALL_MEDIUM) && !defined(_MSC_VER) && !defined(__SC__)
- /* Use our own functions for small and medium model with MSC <= 5.0.
-  * You may have to use the same strategy for Borland C (untested).
-  * The __SC__ check is for Symantec.
-  */
-#  define NO_MEMCPY
+/* Use our own functions for small and medium model with MSC <= 5.0.
+ * You may have to use the same strategy for Borland C (untested).
+ * The __SC__ check is for Symantec.
+ */
+#define NO_MEMCPY
 #endif
 #if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
-#  define HAVE_MEMCPY
+#define HAVE_MEMCPY
 #endif
 #ifdef HAVE_MEMCPY
-#  ifdef SMALL_MEDIUM /* MSDOS small or medium model */
-#    define zmemcpy _fmemcpy
-#    define zmemcmp _fmemcmp
-#    define zmemzero(dest, len) _fmemset(dest, 0, len)
-#  else
-#    define zmemcpy memcpy
-#    define zmemcmp memcmp
-#    define zmemzero(dest, len) memset(dest, 0, len)
-#  endif
+#ifdef SMALL_MEDIUM /* MSDOS small or medium model */
+#define zmemcpy _fmemcpy
+#define zmemcmp _fmemcmp
+#define zmemzero(dest, len) _fmemset(dest, 0, len)
 #else
-   void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
-   int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
-   void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#define zmemcpy memcpy
+#define zmemcmp memcmp
+#define zmemzero(dest, len) memset(dest, 0, len)
+#endif
+#else
+void ZLIB_INTERNAL zmemcpy OF((Bytef * dest, const Bytef *source, uInt len));
+int ZLIB_INTERNAL zmemcmp OF((const Bytef *s1, const Bytef *s2, uInt len));
+void ZLIB_INTERNAL zmemzero OF((Bytef * dest, uInt len));
 #endif
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
+#include <stdio.h>
+extern int ZLIB_INTERNAL z_verbose;
+extern void ZLIB_INTERNAL z_error OF((char *m));
+#define Assert(cond, msg)          \
+    {                              \
+        if (!(cond)) z_error(msg); \
+    }
+#define Trace(x)                       \
+    {                                  \
+        if (z_verbose >= 0) fprintf x; \
+    }
+#define Tracev(x)                     \
+    {                                 \
+        if (z_verbose > 0) fprintf x; \
+    }
+#define Tracevv(x)                    \
+    {                                 \
+        if (z_verbose > 1) fprintf x; \
+    }
+#define Tracec(c, x)                         \
+    {                                        \
+        if (z_verbose > 0 && (c)) fprintf x; \
+    }
+#define Tracecv(c, x)                        \
+    {                                        \
+        if (z_verbose > 1 && (c)) fprintf x; \
+    }
 #else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
+#define Assert(cond, msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c, x)
+#define Tracecv(c, x)
 #endif
 
 #ifndef Z_SOLO
-   voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr));
+voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items, unsigned size));
+void ZLIB_INTERNAL zcfree OF((voidpf opaque, voidpf ptr));
 #endif
 
-#define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size))
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
+#define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
+#define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
+#define TRY_FREE(s, p)      \
+    {                       \
+        if (p) ZFREE(s, p); \
+    }
 
 /* Reverse the bytes in a 32-bit value */
-#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
-                    (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
 #endif /* ZUTIL_H */
 /* inffast.c -- fast decoding
@@ -5239,7 +5152,7 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
  */
 
 #ifdef ASMINF
-#  pragma message("Assembler code may have bugs -- use at your own risk")
+#pragma message("Assembler code may have bugs -- use at your own risk")
 #else
 
 /*
@@ -5280,30 +5193,30 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
 {
     struct inflate_state FAR *state;
-    z_const unsigned char FAR *in;      /* local strm->next_in */
-    z_const unsigned char FAR *last;    /* have enough input while in < last */
-    unsigned char FAR *out;     /* local strm->next_out */
-    unsigned char FAR *beg;     /* inflate()'s initial strm->next_out */
-    unsigned char FAR *end;     /* while out < end, enough space available */
+    z_const unsigned char FAR *in;   /* local strm->next_in */
+    z_const unsigned char FAR *last; /* have enough input while in < last */
+    unsigned char FAR *out;          /* local strm->next_out */
+    unsigned char FAR *beg;          /* inflate()'s initial strm->next_out */
+    unsigned char FAR *end;          /* while out < end, enough space available */
 #ifdef INFLATE_STRICT
-    unsigned dmax;              /* maximum distance from zlib header */
+    unsigned dmax; /* maximum distance from zlib header */
 #endif
-    unsigned wsize;             /* window size or zero if not using window */
-    unsigned whave;             /* valid bytes in the window */
-    unsigned wnext;             /* window write index */
-    unsigned char FAR *window;  /* allocated sliding window, if wsize != 0 */
-    unsigned long hold;         /* local strm->hold */
-    unsigned bits;              /* local strm->bits */
-    code const FAR *lcode;      /* local strm->lencode */
-    code const FAR *dcode;      /* local strm->distcode */
-    unsigned lmask;             /* mask for first level of length codes */
-    unsigned dmask;             /* mask for first level of distance codes */
-    code here;                  /* retrieved table entry */
-    unsigned op;                /* code bits, operation, extra bits, or */
-                                /*  window position, window bytes to copy */
-    unsigned len;               /* match length, unused bytes */
-    unsigned dist;              /* match distance */
-    unsigned char FAR *from;    /* where to copy match from */
+    unsigned wsize;            /* window size or zero if not using window */
+    unsigned whave;            /* valid bytes in the window */
+    unsigned wnext;            /* window write index */
+    unsigned char FAR *window; /* allocated sliding window, if wsize != 0 */
+    unsigned long hold;        /* local strm->hold */
+    unsigned bits;             /* local strm->bits */
+    code const FAR *lcode;     /* local strm->lencode */
+    code const FAR *dcode;     /* local strm->distcode */
+    unsigned lmask;            /* mask for first level of length codes */
+    unsigned dmask;            /* mask for first level of distance codes */
+    code here;                 /* retrieved table entry */
+    unsigned op;               /* code bits, operation, extra bits, or */
+                               /*  window position, window bytes to copy */
+    unsigned len;              /* match length, unused bytes */
+    unsigned dist;             /* match distance */
+    unsigned char FAR *from;   /* where to copy match from */
 
     /* copy state to local variables */
     state = (struct inflate_state FAR *)strm->state;
@@ -5336,20 +5249,17 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
             bits += 8;
         }
         here = lcode[hold & lmask];
-      dolen:
+    dolen:
         op = (unsigned)(here.bits);
         hold >>= op;
         bits -= op;
         op = (unsigned)(here.op);
-        if (op == 0) {                          /* literal */
-            Tracevv((stderr, here.val >= 0x20 && here.val < 0x7f ?
-                    "inflate:         literal '%c'\n" :
-                    "inflate:         literal 0x%02x\n", here.val));
+        if (op == 0) { /* literal */
+            Tracevv((stderr, here.val >= 0x20 && here.val < 0x7f ? "inflate:         literal '%c'\n" : "inflate:         literal 0x%02x\n", here.val));
             *out++ = (unsigned char)(here.val);
-        }
-        else if (op & 16) {                     /* length base */
+        } else if (op & 16) { /* length base */
             len = (unsigned)(here.val);
-            op &= 15;                           /* number of extra bits */
+            op &= 15; /* number of extra bits */
             if (op) {
                 if (bits < op) {
                     hold += (unsigned long)(*in++) << bits;
@@ -5367,14 +5277,14 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
                 bits += 8;
             }
             here = dcode[hold & dmask];
-          dodist:
+        dodist:
             op = (unsigned)(here.bits);
             hold >>= op;
             bits -= op;
             op = (unsigned)(here.op);
-            if (op & 16) {                      /* distance base */
+            if (op & 16) { /* distance base */
                 dist = (unsigned)(here.val);
-                op &= 15;                       /* number of extra bits */
+                op &= 15; /* number of extra bits */
                 if (bits < op) {
                     hold += (unsigned long)(*in++) << bits;
                     bits += 8;
@@ -5394,13 +5304,12 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
                 hold >>= op;
                 bits -= op;
                 Tracevv((stderr, "inflate:         distance %u\n", dist));
-                op = (unsigned)(out - beg);     /* max distance in output */
-                if (dist > op) {                /* see if copy from window */
-                    op = dist - op;             /* distance back in window */
+                op = (unsigned)(out - beg); /* max distance in output */
+                if (dist > op) {            /* see if copy from window */
+                    op = dist - op;         /* distance back in window */
                     if (op > whave) {
                         if (state->sane) {
-                            strm->msg =
-                                (char *)"invalid distance too far back";
+                            strm->msg = (char *)"invalid distance too far back";
                             state->mode = BAD;
                             break;
                         }
@@ -5425,43 +5334,41 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
 #endif
                     }
                     from = window;
-                    if (wnext == 0) {           /* very common case */
+                    if (wnext == 0) { /* very common case */
                         from += wsize - op;
-                        if (op < len) {         /* some from window */
+                        if (op < len) { /* some from window */
                             len -= op;
                             do {
                                 *out++ = *from++;
                             } while (--op);
-                            from = out - dist;  /* rest from output */
+                            from = out - dist; /* rest from output */
                         }
-                    }
-                    else if (wnext < op) {      /* wrap around window */
+                    } else if (wnext < op) { /* wrap around window */
                         from += wsize + wnext - op;
                         op -= wnext;
-                        if (op < len) {         /* some from end of window */
+                        if (op < len) { /* some from end of window */
                             len -= op;
                             do {
                                 *out++ = *from++;
                             } while (--op);
                             from = window;
-                            if (wnext < len) {  /* some from start of window */
+                            if (wnext < len) { /* some from start of window */
                                 op = wnext;
                                 len -= op;
                                 do {
                                     *out++ = *from++;
                                 } while (--op);
-                                from = out - dist;      /* rest from output */
+                                from = out - dist; /* rest from output */
                             }
                         }
-                    }
-                    else {                      /* contiguous in window */
+                    } else { /* contiguous in window */
                         from += wnext - op;
-                        if (op < len) {         /* some from window */
+                        if (op < len) { /* some from window */
                             len -= op;
                             do {
                                 *out++ = *from++;
                             } while (--op);
-                            from = out - dist;  /* rest from output */
+                            from = out - dist; /* rest from output */
                         }
                     }
                     while (len > 2) {
@@ -5472,13 +5379,11 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
                     }
                     if (len) {
                         *out++ = *from++;
-                        if (len > 1)
-                            *out++ = *from++;
+                        if (len > 1) *out++ = *from++;
                     }
-                }
-                else {
-                    from = out - dist;          /* copy direct from output */
-                    do {                        /* minimum length is three */
+                } else {
+                    from = out - dist; /* copy direct from output */
+                    do {               /* minimum length is three */
                         *out++ = *from++;
                         *out++ = *from++;
                         *out++ = *from++;
@@ -5486,31 +5391,25 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
                     } while (len > 2);
                     if (len) {
                         *out++ = *from++;
-                        if (len > 1)
-                            *out++ = *from++;
+                        if (len > 1) *out++ = *from++;
                     }
                 }
-            }
-            else if ((op & 64) == 0) {          /* 2nd level distance code */
+            } else if ((op & 64) == 0) { /* 2nd level distance code */
                 here = dcode[here.val + (hold & ((1U << op) - 1))];
                 goto dodist;
-            }
-            else {
+            } else {
                 strm->msg = (char *)"invalid distance code";
                 state->mode = BAD;
                 break;
             }
-        }
-        else if ((op & 64) == 0) {              /* 2nd level length code */
+        } else if ((op & 64) == 0) { /* 2nd level length code */
             here = lcode[here.val + (hold & ((1U << op) - 1))];
             goto dolen;
-        }
-        else if (op & 32) {                     /* end-of-block */
+        } else if (op & 32) { /* end-of-block */
             Tracevv((stderr, "inflate:         end of block\n"));
             state->mode = TYPE;
             break;
-        }
-        else {
+        } else {
             strm->msg = (char *)"invalid literal/length code";
             state->mode = BAD;
             break;
@@ -5527,8 +5426,7 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
     strm->next_in = in;
     strm->next_out = out;
     strm->avail_in = (unsigned)(in < last ? 5 + (last - in) : 5 - (in - last));
-    strm->avail_out = (unsigned)(out < end ?
-                                 257 + (end - out) : 257 - (out - end));
+    strm->avail_out = (unsigned)(out < end ? 257 + (end - out) : 257 - (out - end));
     state->hold = hold;
     state->bits = bits;
     return;
@@ -5574,256 +5472,271 @@ void ZLIB_INTERNAL inflate_fast(z_streamp strm, unsigned start)
 #define ZUTIL_H
 
 #ifdef HAVE_HIDDEN
-#  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+#define ZLIB_INTERNAL __attribute__((visibility("hidden")))
 #else
-#  define ZLIB_INTERNAL
+#define ZLIB_INTERNAL
 #endif
 #if defined(STDC) && !defined(Z_SOLO)
-#  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
-#    include <stddef.h>
-#  endif
-#  include <string.h>
-#  include <stdlib.h>
+#if !(defined(_WIN32_WCE) && defined(_MSC_VER))
+#include <stddef.h>
+#endif
+#include <string.h>
+#include <stdlib.h>
 #endif
 
 #ifdef Z_SOLO
-   typedef long ptrdiff_t;  /* guess -- will be caught if guess is wrong */
+typedef long ptrdiff_t; /* guess -- will be caught if guess is wrong */
 #endif
 
 #ifndef local
-#  define local static
+#define local static
 #endif
 /* since "static" is used to mean two completely different things in C, we
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-typedef unsigned char  uch;
+typedef unsigned char uch;
 typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
-typedef unsigned long  ulg;
+typedef unsigned long ulg;
 
-extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
+#define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
 
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = ERR_MSG(err), (err))
+#define ERR_RETURN(strm, err) return (strm->msg = ERR_MSG(err), (err))
 /* To be used only when the state is known to be valid */
 
-        /* common constants */
+/* common constants */
 
 #ifndef DEF_WBITS
-#  define DEF_WBITS MAX_WBITS
+#define DEF_WBITS MAX_WBITS
 #endif
 /* default windowBits for decompression. MAX_WBITS is for compression only */
 
 #if MAX_MEM_LEVEL >= 8
-#  define DEF_MEM_LEVEL 8
+#define DEF_MEM_LEVEL 8
 #else
-#  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
+#define DEF_MEM_LEVEL MAX_MEM_LEVEL
 #endif
 /* default memLevel */
 
 #define STORED_BLOCK 0
 #define STATIC_TREES 1
-#define DYN_TREES    2
+#define DYN_TREES 2
 /* The three kinds of block type */
 
-#define MIN_MATCH  3
-#define MAX_MATCH  258
+#define MIN_MATCH 3
+#define MAX_MATCH 258
 /* The minimum and maximum match lengths */
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
-        /* target dependencies */
+/* target dependencies */
 
 #if defined(MSDOS) || (defined(WINDOWS) && !defined(WIN32))
-#  define OS_CODE  0x00
-#  ifndef Z_SOLO
-#    if defined(__TURBOC__) || defined(__BORLANDC__)
-#      if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
-         /* Allow compilation with ANSI keywords only enabled */
-         void _Cdecl farfree( void *block );
-         void *_Cdecl farmalloc( unsigned long nbytes );
-#      else
-#        include <alloc.h>
-#      endif
-#    else /* MSC or DJGPP */
-#      include <malloc.h>
-#    endif
-#  endif
+#define OS_CODE 0x00
+#ifndef Z_SOLO
+#if defined(__TURBOC__) || defined(__BORLANDC__)
+#if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
+/* Allow compilation with ANSI keywords only enabled */
+void _Cdecl farfree(void *block);
+void *_Cdecl farmalloc(unsigned long nbytes);
+#else
+#include <alloc.h>
+#endif
+#else /* MSC or DJGPP */
+#include <malloc.h>
+#endif
+#endif
 #endif
 
 #ifdef AMIGA
-#  define OS_CODE  1
+#define OS_CODE 1
 #endif
 
 #if defined(VAXC) || defined(VMS)
-#  define OS_CODE  2
-#  define F_OPEN(name, mode) \
-     fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
+#define OS_CODE 2
+#define F_OPEN(name, mode) fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
 #endif
 
 #ifdef __370__
-#  if __TARGET_LIB__ < 0x20000000
-#    define OS_CODE 4
-#  elif __TARGET_LIB__ < 0x40000000
-#    define OS_CODE 11
-#  else
-#    define OS_CODE 8
-#  endif
+#if __TARGET_LIB__ < 0x20000000
+#define OS_CODE 4
+#elif __TARGET_LIB__ < 0x40000000
+#define OS_CODE 11
+#else
+#define OS_CODE 8
+#endif
 #endif
 
 #if defined(ATARI) || defined(atarist)
-#  define OS_CODE  5
+#define OS_CODE 5
 #endif
 
 #ifdef OS2
-#  define OS_CODE  6
-#  if defined(M_I86) && !defined(Z_SOLO)
-#    include <malloc.h>
-#  endif
+#define OS_CODE 6
+#if defined(M_I86) && !defined(Z_SOLO)
+#include <malloc.h>
+#endif
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
-#  ifndef Z_SOLO
-#    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
-#      include <unix.h> /* for fdopen */
-#    else
-#      ifndef fdopen
-#        define fdopen(fd,mode) NULL /* No fdopen() */
-#      endif
-#    endif
-#  endif
+#define OS_CODE 7
+#ifndef Z_SOLO
+#if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+#include <unix.h> /* for fdopen */
+#else
+#ifndef fdopen
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#endif
+#endif
+#endif
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#define OS_CODE 13
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#define OS_CODE 10
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#define OS_CODE 16
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#define OS_CODE 18
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#define OS_CODE 19
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)
-#  define fdopen(fd,mode) NULL /* No fdopen() */
+#define fdopen(fd, mode) NULL /* No fdopen() */
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER > 600)) && !defined __INTERIX
-#  if defined(_WIN32_WCE)
-#    define fdopen(fd,mode) NULL /* No fdopen() */
-#    ifndef _PTRDIFF_T_DEFINED
-       typedef int ptrdiff_t;
-#      define _PTRDIFF_T_DEFINED
-#    endif
-#  else
-#    define fdopen(fd,type)  _fdopen(fd,type)
-#  endif
+#if defined(_WIN32_WCE)
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
+#else
+#define fdopen(fd, type) _fdopen(fd, type)
+#endif
 #endif
 
 #if defined(__BORLANDC__) && !defined(MSDOS)
-  #pragma warn -8004
-  #pragma warn -8008
-  #pragma warn -8066
+#pragma warn - 8004
+#pragma warn - 8008
+#pragma warn - 8066
 #endif
 
 /* provide prototypes for these when building zlib without LFS */
-#if !defined(_WIN32) && \
-    (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE-0 == 0)
-    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
-    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
+#if !defined(_WIN32) && (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE - 0 == 0)
+ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
+ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
 #endif
 
-        /* common defaults */
+/* common defaults */
 
 #ifndef OS_CODE
-#  define OS_CODE  3     /* assume Unix */
+#define OS_CODE 3 /* assume Unix */
 #endif
 
 #ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
+#define F_OPEN(name, mode) fopen((name), (mode))
 #endif
 
-         /* functions */
+/* functions */
 
 #if defined(pyr) || defined(Z_SOLO)
-#  define NO_MEMCPY
+#define NO_MEMCPY
 #endif
 #if defined(SMALL_MEDIUM) && !defined(_MSC_VER) && !defined(__SC__)
- /* Use our own functions for small and medium model with MSC <= 5.0.
-  * You may have to use the same strategy for Borland C (untested).
-  * The __SC__ check is for Symantec.
-  */
-#  define NO_MEMCPY
+/* Use our own functions for small and medium model with MSC <= 5.0.
+ * You may have to use the same strategy for Borland C (untested).
+ * The __SC__ check is for Symantec.
+ */
+#define NO_MEMCPY
 #endif
 #if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
-#  define HAVE_MEMCPY
+#define HAVE_MEMCPY
 #endif
 #ifdef HAVE_MEMCPY
-#  ifdef SMALL_MEDIUM /* MSDOS small or medium model */
-#    define zmemcpy _fmemcpy
-#    define zmemcmp _fmemcmp
-#    define zmemzero(dest, len) _fmemset(dest, 0, len)
-#  else
-#    define zmemcpy memcpy
-#    define zmemcmp memcmp
-#    define zmemzero(dest, len) memset(dest, 0, len)
-#  endif
+#ifdef SMALL_MEDIUM /* MSDOS small or medium model */
+#define zmemcpy _fmemcpy
+#define zmemcmp _fmemcmp
+#define zmemzero(dest, len) _fmemset(dest, 0, len)
 #else
-   void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
-   int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
-   void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#define zmemcpy memcpy
+#define zmemcmp memcmp
+#define zmemzero(dest, len) memset(dest, 0, len)
+#endif
+#else
+void ZLIB_INTERNAL zmemcpy OF((Bytef * dest, const Bytef *source, uInt len));
+int ZLIB_INTERNAL zmemcmp OF((const Bytef *s1, const Bytef *s2, uInt len));
+void ZLIB_INTERNAL zmemzero OF((Bytef * dest, uInt len));
 #endif
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
+#include <stdio.h>
+extern int ZLIB_INTERNAL z_verbose;
+extern void ZLIB_INTERNAL z_error OF((char *m));
+#define Assert(cond, msg)          \
+    {                              \
+        if (!(cond)) z_error(msg); \
+    }
+#define Trace(x)                       \
+    {                                  \
+        if (z_verbose >= 0) fprintf x; \
+    }
+#define Tracev(x)                     \
+    {                                 \
+        if (z_verbose > 0) fprintf x; \
+    }
+#define Tracevv(x)                    \
+    {                                 \
+        if (z_verbose > 1) fprintf x; \
+    }
+#define Tracec(c, x)                         \
+    {                                        \
+        if (z_verbose > 0 && (c)) fprintf x; \
+    }
+#define Tracecv(c, x)                        \
+    {                                        \
+        if (z_verbose > 1 && (c)) fprintf x; \
+    }
 #else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
+#define Assert(cond, msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c, x)
+#define Tracecv(c, x)
 #endif
 
 #ifndef Z_SOLO
-   voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr));
+voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items, unsigned size));
+void ZLIB_INTERNAL zcfree OF((voidpf opaque, voidpf ptr));
 #endif
 
-#define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size))
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
+#define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
+#define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
+#define TRY_FREE(s, p)      \
+    {                       \
+        if (p) ZFREE(s, p); \
+    }
 
 /* Reverse the bytes in a 32-bit value */
-#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
-                    (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
 #endif /* ZUTIL_H */
 /* deflate.c -- compress data using the deflation algorithm
@@ -5897,7 +5810,7 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
    the crc code when it is not needed.  For shared libraries, gzip encoding
    should be left enabled. */
 #ifndef NO_GZIP
-#  define GZIP
+#define GZIP
 #endif
 
 /* ===========================================================================
@@ -5907,19 +5820,19 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #define LENGTH_CODES 29
 /* number of length codes, not counting the special END_BLOCK code */
 
-#define LITERALS  256
+#define LITERALS 256
 /* number of literal bytes 0..255 */
 
-#define L_CODES (LITERALS+1+LENGTH_CODES)
+#define L_CODES (LITERALS + 1 + LENGTH_CODES)
 /* number of Literal or Length codes, including the END_BLOCK code */
 
-#define D_CODES   30
+#define D_CODES 30
 /* number of distance codes */
 
-#define BL_CODES  19
+#define BL_CODES 19
 /* number of codes used to transfer the bit lengths */
 
-#define HEAP_SIZE (2*L_CODES+1)
+#define HEAP_SIZE (2 * L_CODES + 1)
 /* maximum heap size */
 
 #define MAX_BITS 15
@@ -5928,42 +5841,41 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #define Buf_size 16
 /* size of bit buffer in bi_buf */
 
-#define INIT_STATE    42    /* zlib header -> BUSY_STATE */
+#define INIT_STATE 42 /* zlib header -> BUSY_STATE */
 #ifdef GZIP
-#  define GZIP_STATE  57    /* gzip header -> BUSY_STATE | EXTRA_STATE */
+#define GZIP_STATE 57 /* gzip header -> BUSY_STATE | EXTRA_STATE */
 #endif
-#define EXTRA_STATE   69    /* gzip extra block -> NAME_STATE */
-#define NAME_STATE    73    /* gzip file name -> COMMENT_STATE */
-#define COMMENT_STATE 91    /* gzip comment -> HCRC_STATE */
-#define HCRC_STATE   103    /* gzip header CRC -> BUSY_STATE */
-#define BUSY_STATE   113    /* deflate -> FINISH_STATE */
-#define FINISH_STATE 666    /* stream complete */
+#define EXTRA_STATE 69   /* gzip extra block -> NAME_STATE */
+#define NAME_STATE 73    /* gzip file name -> COMMENT_STATE */
+#define COMMENT_STATE 91 /* gzip comment -> HCRC_STATE */
+#define HCRC_STATE 103   /* gzip header CRC -> BUSY_STATE */
+#define BUSY_STATE 113   /* deflate -> FINISH_STATE */
+#define FINISH_STATE 666 /* stream complete */
 /* Stream status */
-
 
 /* Data structure describing a single value and its code string. */
 typedef struct ct_data_s {
     union {
-        ush  freq;       /* frequency count */
-        ush  code;       /* bit string */
+        ush freq; /* frequency count */
+        ush code; /* bit string */
     } fc;
     union {
-        ush  dad;        /* father node in Huffman tree */
-        ush  len;        /* length of bit string */
+        ush dad; /* father node in Huffman tree */
+        ush len; /* length of bit string */
     } dl;
 } FAR ct_data;
 
 #define Freq fc.freq
 #define Code fc.code
-#define Dad  dl.dad
-#define Len  dl.len
+#define Dad dl.dad
+#define Len dl.len
 
-typedef struct static_tree_desc_s  static_tree_desc;
+typedef struct static_tree_desc_s static_tree_desc;
 
 typedef struct tree_desc_s {
-    ct_data *dyn_tree;           /* the dynamic tree */
-    int     max_code;            /* largest code with non zero frequency */
-    const static_tree_desc *stat_desc;  /* the corresponding static tree */
+    ct_data *dyn_tree;                 /* the dynamic tree */
+    int max_code;                      /* largest code with non zero frequency */
+    const static_tree_desc *stat_desc; /* the corresponding static tree */
 } FAR tree_desc;
 
 typedef ush Pos;
@@ -5975,23 +5887,23 @@ typedef unsigned IPos;
  */
 
 typedef struct internal_state {
-    z_streamp strm;      /* pointer back to this zlib stream */
-    int   status;        /* as the name implies */
-    Bytef *pending_buf;  /* output still pending */
-    ulg   pending_buf_size; /* size of pending_buf */
-    Bytef *pending_out;  /* next pending byte to output to the stream */
-    ulg   pending;       /* nb of bytes in the pending buffer */
-    int   wrap;          /* bit 0 true for zlib, bit 1 true for gzip */
-    gz_headerp  gzhead;  /* gzip header information to write */
-    ulg   gzindex;       /* where in extra, name, or comment */
-    Byte  method;        /* can only be DEFLATED */
-    int   last_flush;    /* value of flush param for previous deflate call */
+    z_streamp strm;       /* pointer back to this zlib stream */
+    int status;           /* as the name implies */
+    Bytef *pending_buf;   /* output still pending */
+    ulg pending_buf_size; /* size of pending_buf */
+    Bytef *pending_out;   /* next pending byte to output to the stream */
+    ulg pending;          /* nb of bytes in the pending buffer */
+    int wrap;             /* bit 0 true for zlib, bit 1 true for gzip */
+    gz_headerp gzhead;    /* gzip header information to write */
+    ulg gzindex;          /* where in extra, name, or comment */
+    Byte method;          /* can only be DEFLATED */
+    int last_flush;       /* value of flush param for previous deflate call */
 
-                /* used by deflate.c: */
+    /* used by deflate.c: */
 
-    uInt  w_size;        /* LZ77 window size (32K by default) */
-    uInt  w_bits;        /* log2(w_size)  (8..16) */
-    uInt  w_mask;        /* w_size - 1 */
+    uInt w_size; /* LZ77 window size (32K by default) */
+    uInt w_bits; /* log2(w_size)  (8..16) */
+    uInt w_mask; /* w_size - 1 */
 
     Bytef *window;
     /* Sliding window. Input bytes are read into the second half of the window,
@@ -6016,12 +5928,12 @@ typedef struct internal_state {
 
     Posf *head; /* Heads of the hash chains or NIL. */
 
-    uInt  ins_h;          /* hash index of string to be inserted */
-    uInt  hash_size;      /* number of elements in hash table */
-    uInt  hash_bits;      /* log2(hash_size) */
-    uInt  hash_mask;      /* hash_size-1 */
+    uInt ins_h;     /* hash index of string to be inserted */
+    uInt hash_size; /* number of elements in hash table */
+    uInt hash_bits; /* log2(hash_size) */
+    uInt hash_mask; /* hash_size-1 */
 
-    uInt  hash_shift;
+    uInt hash_shift;
     /* Number of bits by which ins_h must be shifted at each input
      * step. It must be such that after MIN_MATCH steps, the oldest
      * byte no longer takes part in the hash key, that is:
@@ -6033,12 +5945,12 @@ typedef struct internal_state {
      * negative when the window is moved backwards.
      */
 
-    uInt match_length;           /* length of best match */
-    IPos prev_match;             /* previous match */
-    int match_available;         /* set if previous match exists */
-    uInt strstart;               /* start of string to insert */
-    uInt match_start;            /* start of matching string */
-    uInt lookahead;              /* number of valid bytes ahead in window */
+    uInt match_length;   /* length of best match */
+    IPos prev_match;     /* previous match */
+    int match_available; /* set if previous match exists */
+    uInt strstart;       /* start of string to insert */
+    uInt match_start;    /* start of matching string */
+    uInt lookahead;      /* number of valid bytes ahead in window */
 
     uInt prev_length;
     /* Length of the best match at previous step. Matches not greater than this
@@ -6056,7 +5968,7 @@ typedef struct internal_state {
      * smaller than this value. This mechanism is used only for compression
      * levels >= 4.
      */
-#   define max_insert_length  max_lazy_match
+#define max_insert_length max_lazy_match
     /* Insert new strings in the hash table only if the match length is not
      * greater than this length. This saves time but degrades compression.
      * max_insert_length is used only for compression levels <= 3.
@@ -6070,33 +5982,33 @@ typedef struct internal_state {
 
     int nice_match; /* Stop searching when current match exceeds this */
 
-                /* used by trees.c: */
+    /* used by trees.c: */
     /* Didn't use ct_data typedef below to suppress compiler warning */
-    struct ct_data_s dyn_ltree[HEAP_SIZE];   /* literal and length tree */
-    struct ct_data_s dyn_dtree[2*D_CODES+1]; /* distance tree */
-    struct ct_data_s bl_tree[2*BL_CODES+1];  /* Huffman tree for bit lengths */
+    struct ct_data_s dyn_ltree[HEAP_SIZE];       /* literal and length tree */
+    struct ct_data_s dyn_dtree[2 * D_CODES + 1]; /* distance tree */
+    struct ct_data_s bl_tree[2 * BL_CODES + 1];  /* Huffman tree for bit lengths */
 
-    struct tree_desc_s l_desc;               /* desc. for literal tree */
-    struct tree_desc_s d_desc;               /* desc. for distance tree */
-    struct tree_desc_s bl_desc;              /* desc. for bit length tree */
+    struct tree_desc_s l_desc;  /* desc. for literal tree */
+    struct tree_desc_s d_desc;  /* desc. for distance tree */
+    struct tree_desc_s bl_desc; /* desc. for bit length tree */
 
-    ush bl_count[MAX_BITS+1];
+    ush bl_count[MAX_BITS + 1];
     /* number of codes at each bit length for an optimal tree */
 
-    int heap[2*L_CODES+1];      /* heap used to build the Huffman trees */
-    int heap_len;               /* number of elements in the heap */
-    int heap_max;               /* element of largest frequency */
+    int heap[2 * L_CODES + 1]; /* heap used to build the Huffman trees */
+    int heap_len;              /* number of elements in the heap */
+    int heap_max;              /* element of largest frequency */
     /* The sons of heap[n] are heap[2*n] and heap[2*n+1]. heap[0] is not used.
      * The same heap array is used to build all trees.
      */
 
-    uch depth[2*L_CODES+1];
+    uch depth[2 * L_CODES + 1];
     /* Depth of each subtree used as tie breaker for trees of equal frequency
      */
 
-    uchf *l_buf;          /* buffer for literals or lengths */
+    uchf *l_buf; /* buffer for literals or lengths */
 
-    uInt  lit_bufsize;
+    uInt lit_bufsize;
     /* Size of match buffer for literals/lengths.  There are 4 reasons for
      * limiting lit_bufsize to 64K:
      *   - frequencies can be kept in 16 bit counters
@@ -6116,7 +6028,7 @@ typedef struct internal_state {
      *   - I can't count above 4
      */
 
-    uInt last_lit;      /* running index in l_buf */
+    uInt last_lit; /* running index in l_buf */
 
     ushf *d_buf;
     /* Buffer for distances. To simplify the code, d_buf and l_buf have
@@ -6124,10 +6036,10 @@ typedef struct internal_state {
      * array would be necessary.
      */
 
-    ulg opt_len;        /* bit length of current block with optimal trees */
-    ulg static_len;     /* bit length of current block with static trees */
-    uInt matches;       /* number of string matches in current block */
-    uInt insert;        /* bytes at end of window left to insert */
+    ulg opt_len;    /* bit length of current block with optimal trees */
+    ulg static_len; /* bit length of current block with static trees */
+    uInt matches;   /* number of string matches in current block */
+    uInt insert;    /* bytes at end of window left to insert */
 
 #ifdef ZLIB_DEBUG
     ulg compressed_len; /* total bit length of compressed file mod 2^32 */
@@ -6155,15 +6067,17 @@ typedef struct internal_state {
 /* Output a byte on the stream.
  * IN assertion: there is enough room in pending_buf.
  */
-#define put_byte(s, c) {s->pending_buf[s->pending++] = (Bytef)(c);}
+#define put_byte(s, c)                             \
+    {                                              \
+        s->pending_buf[s->pending++] = (Bytef)(c); \
+    }
 
-
-#define MIN_LOOKAHEAD (MAX_MATCH+MIN_MATCH+1)
+#define MIN_LOOKAHEAD (MAX_MATCH + MIN_MATCH + 1)
 /* Minimum amount of lookahead, except at the end of the input file.
  * See deflate.c for comments about the MIN_MATCH+1.
  */
 
-#define MAX_DIST(s)  ((s)->w_size-MIN_LOOKAHEAD)
+#define MAX_DIST(s) ((s)->w_size - MIN_LOOKAHEAD)
 /* In order to simplify the code, particularly on 16 bit machines, match
  * distances are limited to MAX_DIST instead of WSIZE.
  */
@@ -6172,18 +6086,15 @@ typedef struct internal_state {
 /* Number of bytes after end of data in window to initialize in order to avoid
    memory checker errors from longest match routines */
 
-        /* in trees.c */
-void ZLIB_INTERNAL _tr_init OF((deflate_state *s));
-int ZLIB_INTERNAL _tr_tally OF((deflate_state *s, unsigned dist, unsigned lc));
-void ZLIB_INTERNAL _tr_flush_block OF((deflate_state *s, charf *buf,
-                        ulg stored_len, int last));
-void ZLIB_INTERNAL _tr_flush_bits OF((deflate_state *s));
-void ZLIB_INTERNAL _tr_align OF((deflate_state *s));
-void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
-                        ulg stored_len, int last));
+/* in trees.c */
+void ZLIB_INTERNAL _tr_init OF((deflate_state * s));
+int ZLIB_INTERNAL _tr_tally OF((deflate_state * s, unsigned dist, unsigned lc));
+void ZLIB_INTERNAL _tr_flush_block OF((deflate_state * s, charf *buf, ulg stored_len, int last));
+void ZLIB_INTERNAL _tr_flush_bits OF((deflate_state * s));
+void ZLIB_INTERNAL _tr_align OF((deflate_state * s));
+void ZLIB_INTERNAL _tr_stored_block OF((deflate_state * s, charf *buf, ulg stored_len, int last));
 
-#define d_code(dist) \
-   ((dist) < 256 ? _dist_code[dist] : _dist_code[256+((dist)>>7)])
+#define d_code(dist) ((dist) < 256 ? _dist_code[dist] : _dist_code[256 + ((dist) >> 7)])
 /* Mapping from a distance to a distance code. dist is the distance - 1 and
  * must not have side effects. _dist_code[256] and _dist_code[257] are never
  * used.
@@ -6193,39 +6104,39 @@ void ZLIB_INTERNAL _tr_stored_block OF((deflate_state *s, charf *buf,
 /* Inline versions of _tr_tally for speed: */
 
 #if defined(GEN_TREES_H) || !defined(STDC)
-  extern uch ZLIB_INTERNAL _length_code[];
-  extern uch ZLIB_INTERNAL _dist_code[];
+extern uch ZLIB_INTERNAL _length_code[];
+extern uch ZLIB_INTERNAL _dist_code[];
 #else
-  extern const uch ZLIB_INTERNAL _length_code[];
-  extern const uch ZLIB_INTERNAL _dist_code[];
+extern const uch ZLIB_INTERNAL _length_code[];
+extern const uch ZLIB_INTERNAL _dist_code[];
 #endif
 
-# define _tr_tally_lit(s, c, flush) \
-  { uch cc = (c); \
-    s->d_buf[s->last_lit] = 0; \
-    s->l_buf[s->last_lit++] = cc; \
-    s->dyn_ltree[cc].Freq++; \
-    flush = (s->last_lit == s->lit_bufsize-1); \
-   }
-# define _tr_tally_dist(s, distance, length, flush) \
-  { uch len = (uch)(length); \
-    ush dist = (ush)(distance); \
-    s->d_buf[s->last_lit] = dist; \
-    s->l_buf[s->last_lit++] = len; \
-    dist--; \
-    s->dyn_ltree[_length_code[len]+LITERALS+1].Freq++; \
-    s->dyn_dtree[d_code(dist)].Freq++; \
-    flush = (s->last_lit == s->lit_bufsize-1); \
-  }
+#define _tr_tally_lit(s, c, flush)                   \
+    {                                                \
+        uch cc = (c);                                \
+        s->d_buf[s->last_lit] = 0;                   \
+        s->l_buf[s->last_lit++] = cc;                \
+        s->dyn_ltree[cc].Freq++;                     \
+        flush = (s->last_lit == s->lit_bufsize - 1); \
+    }
+#define _tr_tally_dist(s, distance, length, flush)             \
+    {                                                          \
+        uch len = (uch)(length);                               \
+        ush dist = (ush)(distance);                            \
+        s->d_buf[s->last_lit] = dist;                          \
+        s->l_buf[s->last_lit++] = len;                         \
+        dist--;                                                \
+        s->dyn_ltree[_length_code[len] + LITERALS + 1].Freq++; \
+        s->dyn_dtree[d_code(dist)].Freq++;                     \
+        flush = (s->last_lit == s->lit_bufsize - 1);           \
+    }
 #else
-# define _tr_tally_lit(s, c, flush) flush = _tr_tally(s, 0, c)
-# define _tr_tally_dist(s, distance, length, flush) \
-              flush = _tr_tally(s, distance, length)
+#define _tr_tally_lit(s, c, flush) flush = _tr_tally(s, 0, c)
+#define _tr_tally_dist(s, distance, length, flush) flush = _tr_tally(s, distance, length)
 #endif
 
 #endif /* DEFLATE_H */
-const char deflate_copyright[] =
-   " deflate 1.2.11 Copyright 1995-2017 Jean-loup Gailly and Mark Adler ";
+const char deflate_copyright[] = " deflate 1.2.11 Copyright 1995-2017 Jean-loup Gailly and Mark Adler ";
 /*
   If you use the zlib library in a product, an acknowledgment is welcome
   in the documentation of your product. If for some reason you cannot
@@ -6243,34 +6154,33 @@ typedef enum {
     finish_done     /* finish done, accept no more input or output */
 } block_state;
 
-typedef block_state (*compress_func) OF((deflate_state *s, int flush));
+typedef block_state(*compress_func) OF((deflate_state * s, int flush));
 /* Compression function. Returns the block state after the call. */
 
-local int deflateStateCheck      OF((z_streamp strm));
-local void slide_hash     OF((deflate_state *s));
-local void fill_window    OF((deflate_state *s));
-local block_state deflate_stored OF((deflate_state *s, int flush));
-local block_state deflate_fast   OF((deflate_state *s, int flush));
+local int deflateStateCheck OF((z_streamp strm));
+local void slide_hash OF((deflate_state * s));
+local void fill_window OF((deflate_state * s));
+local block_state deflate_stored OF((deflate_state * s, int flush));
+local block_state deflate_fast OF((deflate_state * s, int flush));
 #ifndef FASTEST
-local block_state deflate_slow   OF((deflate_state *s, int flush));
+local block_state deflate_slow OF((deflate_state * s, int flush));
 #endif
-local block_state deflate_rle    OF((deflate_state *s, int flush));
-local block_state deflate_huff   OF((deflate_state *s, int flush));
-local void lm_init        OF((deflate_state *s));
-local void putShortMSB    OF((deflate_state *s, uInt b));
-local void flush_pending  OF((z_streamp strm));
-local unsigned read_buf   OF((z_streamp strm, Bytef *buf, unsigned size));
+local block_state deflate_rle OF((deflate_state * s, int flush));
+local block_state deflate_huff OF((deflate_state * s, int flush));
+local void lm_init OF((deflate_state * s));
+local void putShortMSB OF((deflate_state * s, uInt b));
+local void flush_pending OF((z_streamp strm));
+local unsigned read_buf OF((z_streamp strm, Bytef *buf, unsigned size));
 #ifdef ASMV
-#  pragma message("Assembler code may have bugs -- use at your own risk")
-      void match_init OF((void)); /* asm code initialization */
-      uInt longest_match  OF((deflate_state *s, IPos cur_match));
+#pragma message("Assembler code may have bugs -- use at your own risk")
+void match_init OF((void)); /* asm code initialization */
+uInt longest_match OF((deflate_state * s, IPos cur_match));
 #else
-local uInt longest_match  OF((deflate_state *s, IPos cur_match));
+local uInt longest_match OF((deflate_state * s, IPos cur_match));
 #endif
 
 #ifdef ZLIB_DEBUG
-local  void check_match OF((deflate_state *s, IPos start, IPos match,
-                            int length));
+local void check_match OF((deflate_state * s, IPos start, IPos match, int length));
 #endif
 
 /* ===========================================================================
@@ -6281,7 +6191,7 @@ local  void check_match OF((deflate_state *s, IPos start, IPos match,
 /* Tail of hash chains */
 
 #ifndef TOO_FAR
-#  define TOO_FAR 4096
+#define TOO_FAR 4096
 #endif
 /* Matches of length 3 are discarded if their distance exceeds TOO_FAR */
 
@@ -6291,32 +6201,30 @@ local  void check_match OF((deflate_state *s, IPos start, IPos match,
  * found for specific files.
  */
 typedef struct config_s {
-   ush good_length; /* reduce lazy search above this match length */
-   ush max_lazy;    /* do not perform lazy search above this match length */
-   ush nice_length; /* quit search above this match length */
-   ush max_chain;
-   compress_func func;
+    ush good_length; /* reduce lazy search above this match length */
+    ush max_lazy;    /* do not perform lazy search above this match length */
+    ush nice_length; /* quit search above this match length */
+    ush max_chain;
+    compress_func func;
 } config;
 
 #ifdef FASTEST
-local const config configuration_table[2] = {
-/*      good lazy nice chain */
-/* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
-/* 1 */ {4,    4,  8,    4, deflate_fast}}; /* max speed, no lazy matches */
+local const config configuration_table[2] = {                                      /*      good lazy nice chain */
+                                             /* 0 */ {0, 0, 0, 0, deflate_stored}, /* store only */
+                                             /* 1 */ {4, 4, 8, 4, deflate_fast}};  /* max speed, no lazy matches */
 #else
-local const config configuration_table[10] = {
-/*      good lazy nice chain */
-/* 0 */ {0,    0,  0,    0, deflate_stored},  /* store only */
-/* 1 */ {4,    4,  8,    4, deflate_fast}, /* max speed, no lazy matches */
-/* 2 */ {4,    5, 16,    8, deflate_fast},
-/* 3 */ {4,    6, 32,   32, deflate_fast},
+local const config configuration_table[10] = {                                      /*      good lazy nice chain */
+                                              /* 0 */ {0, 0, 0, 0, deflate_stored}, /* store only */
+                                              /* 1 */ {4, 4, 8, 4, deflate_fast},   /* max speed, no lazy matches */
+                                              /* 2 */ {4, 5, 16, 8, deflate_fast},
+                                              /* 3 */ {4, 6, 32, 32, deflate_fast},
 
-/* 4 */ {4,    4, 16,   16, deflate_slow},  /* lazy matches */
-/* 5 */ {8,   16, 32,   32, deflate_slow},
-/* 6 */ {8,   16, 128, 128, deflate_slow},
-/* 7 */ {8,   32, 128, 256, deflate_slow},
-/* 8 */ {32, 128, 258, 1024, deflate_slow},
-/* 9 */ {32, 258, 258, 4096, deflate_slow}}; /* max compression */
+                                              /* 4 */ {4, 4, 16, 16, deflate_slow}, /* lazy matches */
+                                              /* 5 */ {8, 16, 32, 32, deflate_slow},
+                                              /* 6 */ {8, 16, 128, 128, deflate_slow},
+                                              /* 7 */ {8, 32, 128, 256, deflate_slow},
+                                              /* 8 */ {32, 128, 258, 1024, deflate_slow},
+                                              /* 9 */ {32, 258, 258, 4096, deflate_slow}}; /* max compression */
 #endif
 
 /* Note: the deflate() code requires max_lazy >= MIN_MATCH and max_chain >= 4
@@ -6333,8 +6241,7 @@ local const config configuration_table[10] = {
  *    characters, so that a running hash key can be computed from the previous
  *    key instead of complete recalculation each time.
  */
-#define UPDATE_HASH(s,h,c) (h = (((h)<<s->hash_shift) ^ (c)) & s->hash_mask)
-
+#define UPDATE_HASH(s, h, c) (h = (((h) << s->hash_shift) ^ (c)) & s->hash_mask)
 
 /* ===========================================================================
  * Insert string str in the dictionary and set match_head to the previous head
@@ -6347,31 +6254,26 @@ local const config configuration_table[10] = {
  *    the last MIN_MATCH-1 bytes of the input file).
  */
 #ifdef FASTEST
-#define INSERT_STRING(s, str, match_head) \
-   (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
-    match_head = s->head[s->ins_h], \
-    s->head[s->ins_h] = (Pos)(str))
+#define INSERT_STRING(s, str, match_head) (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH - 1)]), match_head = s->head[s->ins_h], s->head[s->ins_h] = (Pos)(str))
 #else
 #define INSERT_STRING(s, str, match_head) \
-   (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH-1)]), \
-    match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], \
-    s->head[s->ins_h] = (Pos)(str))
+    (UPDATE_HASH(s, s->ins_h, s->window[(str) + (MIN_MATCH - 1)]), match_head = s->prev[(str) & s->w_mask] = s->head[s->ins_h], s->head[s->ins_h] = (Pos)(str))
 #endif
 
 /* ===========================================================================
  * Initialize the hash table (avoiding 64K overflow for 16 bit systems).
  * prev[] will be initialized on the fly.
  */
-#define CLEAR_HASH(s) \
-    s->head[s->hash_size-1] = NIL; \
-    zmemzero((Bytef *)s->head, (unsigned)(s->hash_size-1)*sizeof(*s->head));
+#define CLEAR_HASH(s)                \
+    s->head[s->hash_size - 1] = NIL; \
+    zmemzero((Bytef *)s->head, (unsigned)(s->hash_size - 1) * sizeof(*s->head));
 
 /* ===========================================================================
  * Slide the hash table when sliding the window down (could be avoided with 32
  * bit values at the expense of memory usage). We slide even when level == 0 to
  * keep the hash table consistent if we switch back to level > 0 later.
  */
-local void slide_hash(deflate_state * s)
+local void slide_hash(deflate_state *s)
 {
     unsigned n, m;
     Posf *p;
@@ -6397,10 +6299,9 @@ local void slide_hash(deflate_state * s)
 }
 
 /* ========================================================================= */
-int ZEXPORT deflateInit_(z_streamp strm, int level, const char * version, int stream_size)
+int ZEXPORT deflateInit_(z_streamp strm, int level, const char *version, int stream_size)
 {
-    return deflateInit2_(strm, level, Z_DEFLATED, MAX_WBITS, DEF_MEM_LEVEL,
-                         Z_DEFAULT_STRATEGY, version, stream_size);
+    return deflateInit2_(strm, level, Z_DEFLATED, MAX_WBITS, DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY, version, stream_size);
     /* To do: ignore strm->next_in if we use it as window */
 }
 
@@ -6416,8 +6317,7 @@ int ZEXPORT deflateInit2_(z_streamp strm, int level, int method, int windowBits,
      * output size for (length,distance) codes is <= 24 bits.
      */
 
-    if (version == Z_NULL || version[0] != my_version[0] ||
-        stream_size != sizeof(z_stream)) {
+    if (version == Z_NULL || version[0] != my_version[0] || stream_size != sizeof(z_stream)) {
         return Z_VERSION_ERROR;
     }
     if (strm == Z_NULL) return Z_STREAM_ERROR;
@@ -6450,21 +6350,20 @@ int ZEXPORT deflateInit2_(z_streamp strm, int level, int method, int windowBits,
     }
 #ifdef GZIP
     else if (windowBits > 15) {
-        wrap = 2;       /* write gzip wrapper instead */
+        wrap = 2; /* write gzip wrapper instead */
         windowBits -= 16;
     }
 #endif
-    if (memLevel < 1 || memLevel > MAX_MEM_LEVEL || method != Z_DEFLATED ||
-        windowBits < 8 || windowBits > 15 || level < 0 || level > 9 ||
-        strategy < 0 || strategy > Z_FIXED || (windowBits == 8 && wrap != 1)) {
+    if (memLevel < 1 || memLevel > MAX_MEM_LEVEL || method != Z_DEFLATED || windowBits < 8 || windowBits > 15 || level < 0 || level > 9 || strategy < 0 ||
+        strategy > Z_FIXED || (windowBits == 8 && wrap != 1)) {
         return Z_STREAM_ERROR;
     }
-    if (windowBits == 8) windowBits = 9;  /* until 256-byte window bug fixed */
-    s = (deflate_state *) ZALLOC(strm, 1, sizeof(deflate_state));
+    if (windowBits == 8) windowBits = 9; /* until 256-byte window bug fixed */
+    s = (deflate_state *)ZALLOC(strm, 1, sizeof(deflate_state));
     if (s == Z_NULL) return Z_MEM_ERROR;
     strm->state = (struct internal_state FAR *)s;
     s->strm = strm;
-    s->status = INIT_STATE;     /* to pass state test in deflateReset() */
+    s->status = INIT_STATE; /* to pass state test in deflateReset() */
 
     s->wrap = wrap;
     s->gzhead = Z_NULL;
@@ -6475,29 +6374,28 @@ int ZEXPORT deflateInit2_(z_streamp strm, int level, int method, int windowBits,
     s->hash_bits = (uInt)memLevel + 7;
     s->hash_size = 1 << s->hash_bits;
     s->hash_mask = s->hash_size - 1;
-    s->hash_shift =  ((s->hash_bits+MIN_MATCH-1)/MIN_MATCH);
+    s->hash_shift = ((s->hash_bits + MIN_MATCH - 1) / MIN_MATCH);
 
-    s->window = (Bytef *) ZALLOC(strm, s->w_size, 2*sizeof(Byte));
-    s->prev   = (Posf *)  ZALLOC(strm, s->w_size, sizeof(Pos));
-    s->head   = (Posf *)  ZALLOC(strm, s->hash_size, sizeof(Pos));
+    s->window = (Bytef *)ZALLOC(strm, s->w_size, 2 * sizeof(Byte));
+    s->prev = (Posf *)ZALLOC(strm, s->w_size, sizeof(Pos));
+    s->head = (Posf *)ZALLOC(strm, s->hash_size, sizeof(Pos));
 
-    s->high_water = 0;      /* nothing written to s->window yet */
+    s->high_water = 0; /* nothing written to s->window yet */
 
     s->lit_bufsize = 1 << (memLevel + 6); /* 16K elements by default */
 
-    overlay = (ushf *) ZALLOC(strm, s->lit_bufsize, sizeof(ush)+2);
-    s->pending_buf = (uchf *) overlay;
-    s->pending_buf_size = (ulg)s->lit_bufsize * (sizeof(ush)+2L);
+    overlay = (ushf *)ZALLOC(strm, s->lit_bufsize, sizeof(ush) + 2);
+    s->pending_buf = (uchf *)overlay;
+    s->pending_buf_size = (ulg)s->lit_bufsize * (sizeof(ush) + 2L);
 
-    if (s->window == Z_NULL || s->prev == Z_NULL || s->head == Z_NULL ||
-        s->pending_buf == Z_NULL) {
+    if (s->window == Z_NULL || s->prev == Z_NULL || s->head == Z_NULL || s->pending_buf == Z_NULL) {
         s->status = FINISH_STATE;
         strm->msg = ERR_MSG(Z_MEM_ERROR);
-        deflateEnd (strm);
+        deflateEnd(strm);
         return Z_MEM_ERROR;
     }
-    s->d_buf = overlay + s->lit_bufsize/sizeof(ush);
-    s->l_buf = s->pending_buf + (1+sizeof(ush))*s->lit_bufsize;
+    s->d_buf = overlay + s->lit_bufsize / sizeof(ush);
+    s->l_buf = s->pending_buf + (1 + sizeof(ush)) * s->lit_bufsize;
 
     s->level = level;
     s->strategy = strategy;
@@ -6512,26 +6410,21 @@ int ZEXPORT deflateInit2_(z_streamp strm, int level, int method, int windowBits,
 local int deflateStateCheck(z_streamp strm)
 {
     deflate_state *s;
-    if (strm == Z_NULL ||
-        strm->zalloc == (alloc_func)0 || strm->zfree == (free_func)0)
-        return 1;
+    if (strm == Z_NULL || strm->zalloc == (alloc_func)0 || strm->zfree == (free_func)0) return 1;
     s = strm->state;
-    if (s == Z_NULL || s->strm != strm || (s->status != INIT_STATE &&
+    if (s == Z_NULL || s->strm != strm ||
+        (s->status != INIT_STATE &&
 #ifdef GZIP
-                                           s->status != GZIP_STATE &&
+         s->status != GZIP_STATE &&
 #endif
-                                           s->status != EXTRA_STATE &&
-                                           s->status != NAME_STATE &&
-                                           s->status != COMMENT_STATE &&
-                                           s->status != HCRC_STATE &&
-                                           s->status != BUSY_STATE &&
-                                           s->status != FINISH_STATE))
+         s->status != EXTRA_STATE && s->status != NAME_STATE && s->status != COMMENT_STATE && s->status != HCRC_STATE && s->status != BUSY_STATE &&
+         s->status != FINISH_STATE))
         return 1;
     return 0;
 }
 
 /* ========================================================================= */
-int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef * dictionary, uInt dictLength)
+int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef *dictionary, uInt dictLength)
 {
     deflate_state *s;
     uInt str, n;
@@ -6539,27 +6432,24 @@ int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef * dictionary, uInt 
     unsigned avail;
     z_const unsigned char *next;
 
-    if (deflateStateCheck(strm) || dictionary == Z_NULL)
-        return Z_STREAM_ERROR;
+    if (deflateStateCheck(strm) || dictionary == Z_NULL) return Z_STREAM_ERROR;
     s = strm->state;
     wrap = s->wrap;
-    if (wrap == 2 || (wrap == 1 && s->status != INIT_STATE) || s->lookahead)
-        return Z_STREAM_ERROR;
+    if (wrap == 2 || (wrap == 1 && s->status != INIT_STATE) || s->lookahead) return Z_STREAM_ERROR;
 
     /* when using zlib wrappers, compute Adler-32 for provided dictionary */
-    if (wrap == 1)
-        strm->adler = adler32(strm->adler, dictionary, dictLength);
-    s->wrap = 0;                    /* avoid computing Adler-32 in read_buf */
+    if (wrap == 1) strm->adler = adler32(strm->adler, dictionary, dictLength);
+    s->wrap = 0; /* avoid computing Adler-32 in read_buf */
 
     /* if dictionary would fill window, just replace the history */
     if (dictLength >= s->w_size) {
-        if (wrap == 0) {            /* already empty otherwise */
+        if (wrap == 0) { /* already empty otherwise */
             CLEAR_HASH(s);
             s->strstart = 0;
             s->block_start = 0L;
             s->insert = 0;
         }
-        dictionary += dictLength - s->w_size;  /* use the tail */
+        dictionary += dictLength - s->w_size; /* use the tail */
         dictLength = s->w_size;
     }
 
@@ -6571,9 +6461,9 @@ int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef * dictionary, uInt 
     fill_window(s);
     while (s->lookahead >= MIN_MATCH) {
         str = s->strstart;
-        n = s->lookahead - (MIN_MATCH-1);
+        n = s->lookahead - (MIN_MATCH - 1);
         do {
-            UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
+            UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH - 1]);
 #ifndef FASTEST
             s->prev[str & s->w_mask] = s->head[s->ins_h];
 #endif
@@ -6581,14 +6471,14 @@ int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef * dictionary, uInt 
             str++;
         } while (--n);
         s->strstart = str;
-        s->lookahead = MIN_MATCH-1;
+        s->lookahead = MIN_MATCH - 1;
         fill_window(s);
     }
     s->strstart += s->lookahead;
     s->block_start = (long)s->strstart;
     s->insert = s->lookahead;
     s->lookahead = 0;
-    s->match_length = s->prev_length = MIN_MATCH-1;
+    s->match_length = s->prev_length = MIN_MATCH - 1;
     s->match_available = 0;
     strm->next_in = next;
     strm->avail_in = avail;
@@ -6597,21 +6487,17 @@ int ZEXPORT deflateSetDictionary(z_streamp strm, const Bytef * dictionary, uInt 
 }
 
 /* ========================================================================= */
-int ZEXPORT deflateGetDictionary(z_streamp strm, Bytef * dictionary, uInt  * dictLength)
+int ZEXPORT deflateGetDictionary(z_streamp strm, Bytef *dictionary, uInt *dictLength)
 {
     deflate_state *s;
     uInt len;
 
-    if (deflateStateCheck(strm))
-        return Z_STREAM_ERROR;
+    if (deflateStateCheck(strm)) return Z_STREAM_ERROR;
     s = strm->state;
     len = s->strstart + s->lookahead;
-    if (len > s->w_size)
-        len = s->w_size;
-    if (dictionary != Z_NULL && len)
-        zmemcpy(dictionary, s->window + s->strstart + s->lookahead - len, len);
-    if (dictLength != Z_NULL)
-        *dictLength = len;
+    if (len > s->w_size) len = s->w_size;
+    if (dictionary != Z_NULL && len) zmemcpy(dictionary, s->window + s->strstart + s->lookahead - len, len);
+    if (dictLength != Z_NULL) *dictLength = len;
     return Z_OK;
 }
 
@@ -6639,12 +6525,13 @@ int ZEXPORT deflateResetKeep(z_streamp strm)
 #ifdef GZIP
         s->wrap == 2 ? GZIP_STATE :
 #endif
-        s->wrap ? INIT_STATE : BUSY_STATE;
+        s->wrap ? INIT_STATE
+                : BUSY_STATE;
     strm->adler =
 #ifdef GZIP
         s->wrap == 2 ? crc32(0L, Z_NULL, 0) :
 #endif
-        adler32(0L, Z_NULL, 0);
+                     adler32(0L, Z_NULL, 0);
     s->last_flush = Z_NO_FLUSH;
 
     _tr_init(s);
@@ -6658,28 +6545,24 @@ int ZEXPORT deflateReset(z_streamp strm)
     int ret;
 
     ret = deflateResetKeep(strm);
-    if (ret == Z_OK)
-        lm_init(strm->state);
+    if (ret == Z_OK) lm_init(strm->state);
     return ret;
 }
 
 /* ========================================================================= */
 int ZEXPORT deflateSetHeader(z_streamp strm, gz_headerp head)
 {
-    if (deflateStateCheck(strm) || strm->state->wrap != 2)
-        return Z_STREAM_ERROR;
+    if (deflateStateCheck(strm) || strm->state->wrap != 2) return Z_STREAM_ERROR;
     strm->state->gzhead = head;
     return Z_OK;
 }
 
 /* ========================================================================= */
-int ZEXPORT deflatePending(z_streamp strm, unsigned * pending, int * bits)
+int ZEXPORT deflatePending(z_streamp strm, unsigned *pending, int *bits)
 {
     if (deflateStateCheck(strm)) return Z_STREAM_ERROR;
-    if (pending != Z_NULL)
-        *pending = strm->state->pending;
-    if (bits != Z_NULL)
-        *bits = strm->state->bi_valid;
+    if (pending != Z_NULL) *pending = strm->state->pending;
+    if (bits != Z_NULL) *bits = strm->state->bi_valid;
     return Z_OK;
 }
 
@@ -6691,12 +6574,10 @@ int ZEXPORT deflatePrime(z_streamp strm, int bits, int value)
 
     if (deflateStateCheck(strm)) return Z_STREAM_ERROR;
     s = strm->state;
-    if ((Bytef *)(s->d_buf) < s->pending_out + ((Buf_size + 7) >> 3))
-        return Z_BUF_ERROR;
+    if ((Bytef *)(s->d_buf) < s->pending_out + ((Buf_size + 7) >> 3)) return Z_BUF_ERROR;
     do {
         put = Buf_size - s->bi_valid;
-        if (put > bits)
-            put = bits;
+        if (put > bits) put = bits;
         s->bi_buf |= (ush)((value & ((1 << put) - 1)) << s->bi_valid);
         s->bi_valid += put;
         _tr_flush_bits(s);
@@ -6725,27 +6606,22 @@ int ZEXPORT deflateParams(z_streamp strm, int level, int strategy)
     }
     func = configuration_table[s->level].func;
 
-    if ((strategy != s->strategy || func != configuration_table[level].func) &&
-        s->high_water) {
+    if ((strategy != s->strategy || func != configuration_table[level].func) && s->high_water) {
         /* Flush the last buffer: */
         int err = deflate(strm, Z_BLOCK);
-        if (err == Z_STREAM_ERROR)
-            return err;
-        if (strm->avail_out == 0)
-            return Z_BUF_ERROR;
+        if (err == Z_STREAM_ERROR) return err;
+        if (strm->avail_out == 0) return Z_BUF_ERROR;
     }
     if (s->level != level) {
         if (s->level == 0 && s->matches != 0) {
-            if (s->matches == 1)
-                slide_hash(s);
-            else
-                CLEAR_HASH(s);
+            if (s->matches == 1) slide_hash(s);
+            else CLEAR_HASH(s);
             s->matches = 0;
         }
         s->level = level;
-        s->max_lazy_match   = configuration_table[level].max_lazy;
-        s->good_match       = configuration_table[level].good_length;
-        s->nice_match       = configuration_table[level].nice_length;
+        s->max_lazy_match = configuration_table[level].max_lazy;
+        s->good_match = configuration_table[level].good_length;
+        s->nice_match = configuration_table[level].nice_length;
         s->max_chain_length = configuration_table[level].max_chain;
     }
     s->strategy = strategy;
@@ -6789,55 +6665,42 @@ uLong ZEXPORT deflateBound(z_streamp strm, uLong sourceLen)
     uLong complen, wraplen;
 
     /* conservative upper bound for compressed data */
-    complen = sourceLen +
-              ((sourceLen + 7) >> 3) + ((sourceLen + 63) >> 6) + 5;
+    complen = sourceLen + ((sourceLen + 7) >> 3) + ((sourceLen + 63) >> 6) + 5;
 
     /* if can't get parameters, return conservative bound plus zlib wrapper */
-    if (deflateStateCheck(strm))
-        return complen + 6;
+    if (deflateStateCheck(strm)) return complen + 6;
 
     /* compute wrapper length */
     s = strm->state;
     switch (s->wrap) {
-    case 0:                                 /* raw deflate */
-        wraplen = 0;
-        break;
-    case 1:                                 /* zlib wrapper */
-        wraplen = 6 + (s->strstart ? 4 : 0);
-        break;
+        case 0: /* raw deflate */ wraplen = 0; break;
+        case 1: /* zlib wrapper */ wraplen = 6 + (s->strstart ? 4 : 0); break;
 #ifdef GZIP
-    case 2:                                 /* gzip wrapper */
-        wraplen = 18;
-        if (s->gzhead != Z_NULL) {          /* user-supplied gzip header */
-            Bytef *str;
-            if (s->gzhead->extra != Z_NULL)
-                wraplen += 2 + s->gzhead->extra_len;
-            str = s->gzhead->name;
-            if (str != Z_NULL)
-                do {
-                    wraplen++;
-                } while (*str++);
-            str = s->gzhead->comment;
-            if (str != Z_NULL)
-                do {
-                    wraplen++;
-                } while (*str++);
-            if (s->gzhead->hcrc)
-                wraplen += 2;
-        }
-        break;
+        case 2: /* gzip wrapper */
+            wraplen = 18;
+            if (s->gzhead != Z_NULL) { /* user-supplied gzip header */
+                Bytef *str;
+                if (s->gzhead->extra != Z_NULL) wraplen += 2 + s->gzhead->extra_len;
+                str = s->gzhead->name;
+                if (str != Z_NULL) do {
+                        wraplen++;
+                    } while (*str++);
+                str = s->gzhead->comment;
+                if (str != Z_NULL) do {
+                        wraplen++;
+                    } while (*str++);
+                if (s->gzhead->hcrc) wraplen += 2;
+            }
+            break;
 #endif
-    default:                                /* for compiler happiness */
-        wraplen = 6;
+        default: /* for compiler happiness */ wraplen = 6;
     }
 
     /* if not default parameters, return conservative bound */
-    if (s->w_bits != 15 || s->hash_bits != 8 + 7)
-        return complen + wraplen;
+    if (s->w_bits != 15 || s->hash_bits != 8 + 7) return complen + wraplen;
 
     /* default settings: return tight bound for that case */
-    return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) +
-           (sourceLen >> 25) + 13 - 6 + wraplen;
+    return sourceLen + (sourceLen >> 12) + (sourceLen >> 14) + (sourceLen >> 25) + 13 - 6 + wraplen;
 }
 
 /* =========================================================================
@@ -6845,7 +6708,7 @@ uLong ZEXPORT deflateBound(z_streamp strm, uLong sourceLen)
  * IN assertion: the stream state is correct and there is enough room in
  * pending_buf.
  */
-local void putShortMSB(deflate_state * s, uInt b)
+local void putShortMSB(deflate_state *s, uInt b)
 {
     put_byte(s, (Byte)(b >> 8));
     put_byte(s, (Byte)(b & 0xff));
@@ -6868,11 +6731,11 @@ local void flush_pending(z_streamp strm)
     if (len == 0) return;
 
     zmemcpy(strm->next_out, s->pending_out, len);
-    strm->next_out  += len;
-    s->pending_out  += len;
+    strm->next_out += len;
+    s->pending_out += len;
     strm->total_out += len;
     strm->avail_out -= len;
-    s->pending      -= len;
+    s->pending -= len;
     if (s->pending == 0) {
         s->pending_out = s->pending_buf;
     }
@@ -6881,11 +6744,9 @@ local void flush_pending(z_streamp strm)
 /* ===========================================================================
  * Update the header CRC with the bytes s->pending_buf[beg..s->pending - 1].
  */
-#define HCRC_UPDATE(beg) \
-    do { \
-        if (s->gzhead->hcrc && s->pending > (beg)) \
-            strm->adler = crc32(strm->adler, s->pending_buf + (beg), \
-                                s->pending - (beg)); \
+#define HCRC_UPDATE(beg)                                                                                                         \
+    do {                                                                                                                         \
+        if (s->gzhead->hcrc && s->pending > (beg)) strm->adler = crc32(strm->adler, s->pending_buf + (beg), s->pending - (beg)); \
     } while (0)
 
 /* ========================================================================= */
@@ -6899,9 +6760,7 @@ int ZEXPORT deflate(z_streamp strm, int flush)
     }
     s = strm->state;
 
-    if (strm->next_out == Z_NULL ||
-        (strm->avail_in != 0 && strm->next_in == Z_NULL) ||
-        (s->status == FINISH_STATE && flush != Z_FINISH)) {
+    if (strm->next_out == Z_NULL || (strm->avail_in != 0 && strm->next_in == Z_NULL) || (s->status == FINISH_STATE && flush != Z_FINISH)) {
         ERR_RETURN(strm, Z_STREAM_ERROR);
     }
     if (strm->avail_out == 0) ERR_RETURN(strm, Z_BUF_ERROR);
@@ -6923,12 +6782,11 @@ int ZEXPORT deflate(z_streamp strm, int flush)
             return Z_OK;
         }
 
-    /* Make sure there is something to do and avoid duplicate consecutive
-     * flushes. For repeated and useless calls with Z_FINISH, we keep
-     * returning Z_STREAM_END instead of Z_BUF_ERROR.
-     */
-    } else if (strm->avail_in == 0 && RANK(flush) <= RANK(old_flush) &&
-               flush != Z_FINISH) {
+        /* Make sure there is something to do and avoid duplicate consecutive
+         * flushes. For repeated and useless calls with Z_FINISH, we keep
+         * returning Z_STREAM_END instead of Z_BUF_ERROR.
+         */
+    } else if (strm->avail_in == 0 && RANK(flush) <= RANK(old_flush) && flush != Z_FINISH) {
         ERR_RETURN(strm, Z_BUF_ERROR);
     }
 
@@ -6940,17 +6798,13 @@ int ZEXPORT deflate(z_streamp strm, int flush)
     /* Write the header */
     if (s->status == INIT_STATE) {
         /* zlib header */
-        uInt header = (Z_DEFLATED + ((s->w_bits-8)<<4)) << 8;
+        uInt header = (Z_DEFLATED + ((s->w_bits - 8) << 4)) << 8;
         uInt level_flags;
 
-        if (s->strategy >= Z_HUFFMAN_ONLY || s->level < 2)
-            level_flags = 0;
-        else if (s->level < 6)
-            level_flags = 1;
-        else if (s->level == 6)
-            level_flags = 2;
-        else
-            level_flags = 3;
+        if (s->strategy >= Z_HUFFMAN_ONLY || s->level < 2) level_flags = 0;
+        else if (s->level < 6) level_flags = 1;
+        else if (s->level == 6) level_flags = 2;
+        else level_flags = 3;
         header |= (level_flags << 6);
         if (s->strstart != 0) header |= PRESET_DICT;
         header += 31 - (header % 31);
@@ -6985,9 +6839,7 @@ int ZEXPORT deflate(z_streamp strm, int flush)
             put_byte(s, 0);
             put_byte(s, 0);
             put_byte(s, 0);
-            put_byte(s, s->level == 9 ? 2 :
-                     (s->strategy >= Z_HUFFMAN_ONLY || s->level < 2 ?
-                      4 : 0));
+            put_byte(s, s->level == 9 ? 2 : (s->strategy >= Z_HUFFMAN_ONLY || s->level < 2 ? 4 : 0));
             put_byte(s, OS_CODE);
             s->status = BUSY_STATE;
 
@@ -6997,41 +6849,31 @@ int ZEXPORT deflate(z_streamp strm, int flush)
                 s->last_flush = -1;
                 return Z_OK;
             }
-        }
-        else {
-            put_byte(s, (s->gzhead->text ? 1 : 0) +
-                     (s->gzhead->hcrc ? 2 : 0) +
-                     (s->gzhead->extra == Z_NULL ? 0 : 4) +
-                     (s->gzhead->name == Z_NULL ? 0 : 8) +
-                     (s->gzhead->comment == Z_NULL ? 0 : 16)
-                     );
+        } else {
+            put_byte(s, (s->gzhead->text ? 1 : 0) + (s->gzhead->hcrc ? 2 : 0) + (s->gzhead->extra == Z_NULL ? 0 : 4) + (s->gzhead->name == Z_NULL ? 0 : 8) +
+                            (s->gzhead->comment == Z_NULL ? 0 : 16));
             put_byte(s, (Byte)(s->gzhead->time & 0xff));
             put_byte(s, (Byte)((s->gzhead->time >> 8) & 0xff));
             put_byte(s, (Byte)((s->gzhead->time >> 16) & 0xff));
             put_byte(s, (Byte)((s->gzhead->time >> 24) & 0xff));
-            put_byte(s, s->level == 9 ? 2 :
-                     (s->strategy >= Z_HUFFMAN_ONLY || s->level < 2 ?
-                      4 : 0));
+            put_byte(s, s->level == 9 ? 2 : (s->strategy >= Z_HUFFMAN_ONLY || s->level < 2 ? 4 : 0));
             put_byte(s, s->gzhead->os & 0xff);
             if (s->gzhead->extra != Z_NULL) {
                 put_byte(s, s->gzhead->extra_len & 0xff);
                 put_byte(s, (s->gzhead->extra_len >> 8) & 0xff);
             }
-            if (s->gzhead->hcrc)
-                strm->adler = crc32(strm->adler, s->pending_buf,
-                                    s->pending);
+            if (s->gzhead->hcrc) strm->adler = crc32(strm->adler, s->pending_buf, s->pending);
             s->gzindex = 0;
             s->status = EXTRA_STATE;
         }
     }
     if (s->status == EXTRA_STATE) {
         if (s->gzhead->extra != Z_NULL) {
-            ulg beg = s->pending;   /* start of bytes to update crc */
+            ulg beg = s->pending; /* start of bytes to update crc */
             uInt left = (s->gzhead->extra_len & 0xffff) - s->gzindex;
             while (s->pending + left > s->pending_buf_size) {
                 uInt copy = s->pending_buf_size - s->pending;
-                zmemcpy(s->pending_buf + s->pending,
-                        s->gzhead->extra + s->gzindex, copy);
+                zmemcpy(s->pending_buf + s->pending, s->gzhead->extra + s->gzindex, copy);
                 s->pending = s->pending_buf_size;
                 HCRC_UPDATE(beg);
                 s->gzindex += copy;
@@ -7043,8 +6885,7 @@ int ZEXPORT deflate(z_streamp strm, int flush)
                 beg = 0;
                 left -= copy;
             }
-            zmemcpy(s->pending_buf + s->pending,
-                    s->gzhead->extra + s->gzindex, left);
+            zmemcpy(s->pending_buf + s->pending, s->gzhead->extra + s->gzindex, left);
             s->pending += left;
             HCRC_UPDATE(beg);
             s->gzindex = 0;
@@ -7053,7 +6894,7 @@ int ZEXPORT deflate(z_streamp strm, int flush)
     }
     if (s->status == NAME_STATE) {
         if (s->gzhead->name != Z_NULL) {
-            ulg beg = s->pending;   /* start of bytes to update crc */
+            ulg beg = s->pending; /* start of bytes to update crc */
             int val;
             do {
                 if (s->pending == s->pending_buf_size) {
@@ -7075,7 +6916,7 @@ int ZEXPORT deflate(z_streamp strm, int flush)
     }
     if (s->status == COMMENT_STATE) {
         if (s->gzhead->comment != Z_NULL) {
-            ulg beg = s->pending;   /* start of bytes to update crc */
+            ulg beg = s->pending; /* start of bytes to update crc */
             int val;
             do {
                 if (s->pending == s->pending_buf_size) {
@@ -7120,14 +6961,13 @@ int ZEXPORT deflate(z_streamp strm, int flush)
 
     /* Start a new block or continue the current one.
      */
-    if (strm->avail_in != 0 || s->lookahead != 0 ||
-        (flush != Z_NO_FLUSH && s->status != FINISH_STATE)) {
+    if (strm->avail_in != 0 || s->lookahead != 0 || (flush != Z_NO_FLUSH && s->status != FINISH_STATE)) {
         block_state bstate;
 
-        bstate = s->level == 0 ? deflate_stored(s, flush) :
-                 s->strategy == Z_HUFFMAN_ONLY ? deflate_huff(s, flush) :
-                 s->strategy == Z_RLE ? deflate_rle(s, flush) :
-                 (*(configuration_table[s->level].func))(s, flush);
+        bstate = s->level == 0                   ? deflate_stored(s, flush)
+                 : s->strategy == Z_HUFFMAN_ONLY ? deflate_huff(s, flush)
+                 : s->strategy == Z_RLE          ? deflate_rle(s, flush)
+                                                 : (*(configuration_table[s->level].func))(s, flush);
 
         if (bstate == finish_started || bstate == finish_done) {
             s->status = FINISH_STATE;
@@ -7149,12 +6989,12 @@ int ZEXPORT deflate(z_streamp strm, int flush)
             if (flush == Z_PARTIAL_FLUSH) {
                 _tr_align(s);
             } else if (flush != Z_BLOCK) { /* FULL_FLUSH or SYNC_FLUSH */
-                _tr_stored_block(s, (char*)0, 0L, 0);
+                _tr_stored_block(s, (char *)0, 0L, 0);
                 /* For a full flush, this empty block will be recognized
                  * as a special marker by inflate_sync().
                  */
                 if (flush == Z_FULL_FLUSH) {
-                    CLEAR_HASH(s);             /* forget history */
+                    CLEAR_HASH(s); /* forget history */
                     if (s->lookahead == 0) {
                         s->strstart = 0;
                         s->block_start = 0L;
@@ -7164,8 +7004,8 @@ int ZEXPORT deflate(z_streamp strm, int flush)
             }
             flush_pending(strm);
             if (strm->avail_out == 0) {
-              s->last_flush = -1; /* avoid BUF_ERROR at next call, see above */
-              return Z_OK;
+                s->last_flush = -1; /* avoid BUF_ERROR at next call, see above */
+                return Z_OK;
             }
         }
     }
@@ -7184,8 +7024,7 @@ int ZEXPORT deflate(z_streamp strm, int flush)
         put_byte(s, (Byte)((strm->total_in >> 8) & 0xff));
         put_byte(s, (Byte)((strm->total_in >> 16) & 0xff));
         put_byte(s, (Byte)((strm->total_in >> 24) & 0xff));
-    }
-    else
+    } else
 #endif
     {
         putShortMSB(s, (uInt)(strm->adler >> 16));
@@ -7234,7 +7073,6 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source)
     deflate_state *ss;
     ushf *overlay;
 
-
     if (deflateStateCheck(source) || dest == Z_NULL) {
         return Z_STREAM_ERROR;
     }
@@ -7243,21 +7081,20 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source)
 
     zmemcpy((voidpf)dest, (voidpf)source, sizeof(z_stream));
 
-    ds = (deflate_state *) ZALLOC(dest, 1, sizeof(deflate_state));
+    ds = (deflate_state *)ZALLOC(dest, 1, sizeof(deflate_state));
     if (ds == Z_NULL) return Z_MEM_ERROR;
-    dest->state = (struct internal_state FAR *) ds;
+    dest->state = (struct internal_state FAR *)ds;
     zmemcpy((voidpf)ds, (voidpf)ss, sizeof(deflate_state));
     ds->strm = dest;
 
-    ds->window = (Bytef *) ZALLOC(dest, ds->w_size, 2*sizeof(Byte));
-    ds->prev   = (Posf *)  ZALLOC(dest, ds->w_size, sizeof(Pos));
-    ds->head   = (Posf *)  ZALLOC(dest, ds->hash_size, sizeof(Pos));
-    overlay = (ushf *) ZALLOC(dest, ds->lit_bufsize, sizeof(ush)+2);
-    ds->pending_buf = (uchf *) overlay;
+    ds->window = (Bytef *)ZALLOC(dest, ds->w_size, 2 * sizeof(Byte));
+    ds->prev = (Posf *)ZALLOC(dest, ds->w_size, sizeof(Pos));
+    ds->head = (Posf *)ZALLOC(dest, ds->hash_size, sizeof(Pos));
+    overlay = (ushf *)ZALLOC(dest, ds->lit_bufsize, sizeof(ush) + 2);
+    ds->pending_buf = (uchf *)overlay;
 
-    if (ds->window == Z_NULL || ds->prev == Z_NULL || ds->head == Z_NULL ||
-        ds->pending_buf == Z_NULL) {
-        deflateEnd (dest);
+    if (ds->window == Z_NULL || ds->prev == Z_NULL || ds->head == Z_NULL || ds->pending_buf == Z_NULL) {
+        deflateEnd(dest);
         return Z_MEM_ERROR;
     }
     /* following zmemcpy do not work for 16-bit MSDOS */
@@ -7267,8 +7104,8 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source)
     zmemcpy(ds->pending_buf, ss->pending_buf, (uInt)ds->pending_buf_size);
 
     ds->pending_out = ds->pending_buf + (ss->pending_out - ss->pending_buf);
-    ds->d_buf = overlay + ds->lit_bufsize/sizeof(ush);
-    ds->l_buf = ds->pending_buf + (1+sizeof(ush))*ds->lit_bufsize;
+    ds->d_buf = overlay + ds->lit_bufsize / sizeof(ush);
+    ds->l_buf = ds->pending_buf + (1 + sizeof(ush)) * ds->lit_bufsize;
 
     ds->l_desc.dyn_tree = ds->dyn_ltree;
     ds->d_desc.dyn_tree = ds->dyn_dtree;
@@ -7285,14 +7122,14 @@ int ZEXPORT deflateCopy(z_streamp dest, z_streamp source)
  * allocating a large strm->next_in buffer and copying from it.
  * (See also flush_pending()).
  */
-local unsigned read_buf(z_streamp strm, Bytef * buf, unsigned size)
+local unsigned read_buf(z_streamp strm, Bytef *buf, unsigned size)
 {
     unsigned len = strm->avail_in;
 
     if (len > size) len = size;
     if (len == 0) return 0;
 
-    strm->avail_in  -= len;
+    strm->avail_in -= len;
 
     zmemcpy(buf, strm->next_in, len);
     if (strm->state->wrap == 1) {
@@ -7303,7 +7140,7 @@ local unsigned read_buf(z_streamp strm, Bytef * buf, unsigned size)
         strm->adler = crc32(strm->adler, buf, len);
     }
 #endif
-    strm->next_in  += len;
+    strm->next_in += len;
     strm->total_in += len;
 
     return len;
@@ -7312,24 +7149,24 @@ local unsigned read_buf(z_streamp strm, Bytef * buf, unsigned size)
 /* ===========================================================================
  * Initialize the "longest match" routines for a new zlib stream
  */
-local void lm_init(deflate_state * s)
+local void lm_init(deflate_state *s)
 {
-    s->window_size = (ulg)2L*s->w_size;
+    s->window_size = (ulg)2L * s->w_size;
 
     CLEAR_HASH(s);
 
     /* Set the default configuration parameters:
      */
-    s->max_lazy_match   = configuration_table[s->level].max_lazy;
-    s->good_match       = configuration_table[s->level].good_length;
-    s->nice_match       = configuration_table[s->level].nice_length;
+    s->max_lazy_match = configuration_table[s->level].max_lazy;
+    s->good_match = configuration_table[s->level].good_length;
+    s->nice_match = configuration_table[s->level].nice_length;
     s->max_chain_length = configuration_table[s->level].max_chain;
 
     s->strstart = 0;
     s->block_start = 0L;
     s->lookahead = 0;
     s->insert = 0;
-    s->match_length = s->prev_length = MIN_MATCH-1;
+    s->match_length = s->prev_length = MIN_MATCH - 1;
     s->match_available = 0;
     s->ins_h = 0;
 #ifndef FASTEST
@@ -7353,16 +7190,15 @@ local void lm_init(deflate_state * s)
 /* For 80x86 and 680x0, an optimized version will be provided in match.asm or
  * match.S. The code will be functionally equivalent.
  */
-local uInt longest_match(deflate_state * s, IPos cur_match)
+local uInt longest_match(deflate_state *s, IPos cur_match)
 {
-    unsigned chain_length = s->max_chain_length;/* max hash chain length */
+    unsigned chain_length = s->max_chain_length;    /* max hash chain length */
     register Bytef *scan = s->window + s->strstart; /* current string */
-    register Bytef *match;                      /* matched string */
-    register int len;                           /* length of current match */
-    int best_len = (int)s->prev_length;         /* best match length so far */
-    int nice_match = s->nice_match;             /* stop if match long enough */
-    IPos limit = s->strstart > (IPos)MAX_DIST(s) ?
-        s->strstart - (IPos)MAX_DIST(s) : NIL;
+    register Bytef *match;                          /* matched string */
+    register int len;                               /* length of current match */
+    int best_len = (int)s->prev_length;             /* best match length so far */
+    int nice_match = s->nice_match;                 /* stop if match long enough */
+    IPos limit = s->strstart > (IPos)MAX_DIST(s) ? s->strstart - (IPos)MAX_DIST(s) : NIL;
     /* Stop when cur_match becomes <= limit. To simplify the code,
      * we prevent matches with the string of window index 0.
      */
@@ -7374,12 +7210,12 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
      * Try with and without -DUNALIGNED_OK to check.
      */
     register Bytef *strend = s->window + s->strstart + MAX_MATCH - 1;
-    register ush scan_start = *(ushf*)scan;
-    register ush scan_end   = *(ushf*)(scan+best_len-1);
+    register ush scan_start = *(ushf *)scan;
+    register ush scan_end = *(ushf *)(scan + best_len - 1);
 #else
     register Bytef *strend = s->window + s->strstart + MAX_MATCH;
-    register Byte scan_end1  = scan[best_len-1];
-    register Byte scan_end   = scan[best_len];
+    register Byte scan_end1 = scan[best_len - 1];
+    register Byte scan_end = scan[best_len];
 #endif
 
     /* The code is optimized for HASH_BITS >= 8 and MAX_MATCH-2 multiple of 16.
@@ -7396,7 +7232,7 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
      */
     if ((uInt)nice_match > s->lookahead) nice_match = (int)s->lookahead;
 
-    Assert((ulg)s->strstart <= s->window_size-MIN_LOOKAHEAD, "need lookahead");
+    Assert((ulg)s->strstart <= s->window_size - MIN_LOOKAHEAD, "need lookahead");
 
     do {
         Assert(cur_match < s->strstart, "no future");
@@ -7414,8 +7250,7 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
         /* This code assumes sizeof(unsigned short) == 2. Do not use
          * UNALIGNED_OK if your compiler uses a different size.
          */
-        if (*(ushf*)(match+best_len-1) != scan_end ||
-            *(ushf*)match != scan_start) continue;
+        if (*(ushf *)(match + best_len - 1) != scan_end || *(ushf *)match != scan_start) continue;
 
         /* It is not necessary to compare scan[2] and match[2] since they are
          * always equal when the other bytes match, given that the hash keys
@@ -7429,26 +7264,20 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
         Assert(scan[2] == match[2], "scan[2]?");
         scan++, match++;
         do {
-        } while (*(ushf*)(scan+=2) == *(ushf*)(match+=2) &&
-                 *(ushf*)(scan+=2) == *(ushf*)(match+=2) &&
-                 *(ushf*)(scan+=2) == *(ushf*)(match+=2) &&
-                 *(ushf*)(scan+=2) == *(ushf*)(match+=2) &&
-                 scan < strend);
+        } while (*(ushf *)(scan += 2) == *(ushf *)(match += 2) && *(ushf *)(scan += 2) == *(ushf *)(match += 2) && *(ushf *)(scan += 2) == *(ushf *)(match += 2) &&
+                 *(ushf *)(scan += 2) == *(ushf *)(match += 2) && scan < strend);
         /* The funny "do {}" generates better code on most compilers */
 
         /* Here, scan <= window+strstart+257 */
-        Assert(scan <= s->window+(unsigned)(s->window_size-1), "wild scan");
+        Assert(scan <= s->window + (unsigned)(s->window_size - 1), "wild scan");
         if (*scan == *match) scan++;
 
-        len = (MAX_MATCH - 1) - (int)(strend-scan);
-        scan = strend - (MAX_MATCH-1);
+        len = (MAX_MATCH - 1) - (int)(strend - scan);
+        scan = strend - (MAX_MATCH - 1);
 
 #else /* UNALIGNED_OK */
 
-        if (match[best_len]   != scan_end  ||
-            match[best_len-1] != scan_end1 ||
-            *match            != *scan     ||
-            *++match          != scan[1])      continue;
+        if (match[best_len] != scan_end || match[best_len - 1] != scan_end1 || *match != *scan || *++match != scan[1]) continue;
 
         /* The check at best_len-1 can be removed because it will be made
          * again later. (This heuristic is not always a win.)
@@ -7463,13 +7292,10 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
          * the 256th check will be made at strstart+258.
          */
         do {
-        } while (*++scan == *++match && *++scan == *++match &&
-                 *++scan == *++match && *++scan == *++match &&
-                 *++scan == *++match && *++scan == *++match &&
-                 *++scan == *++match && *++scan == *++match &&
-                 scan < strend);
+        } while (*++scan == *++match && *++scan == *++match && *++scan == *++match && *++scan == *++match && *++scan == *++match && *++scan == *++match &&
+                 *++scan == *++match && *++scan == *++match && scan < strend);
 
-        Assert(scan <= s->window+(unsigned)(s->window_size-1), "wild scan");
+        Assert(scan <= s->window + (unsigned)(s->window_size - 1), "wild scan");
 
         len = MAX_MATCH - (int)(strend - scan);
         scan = strend - MAX_MATCH;
@@ -7481,14 +7307,13 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
             best_len = len;
             if (len >= nice_match) break;
 #ifdef UNALIGNED_OK
-            scan_end = *(ushf*)(scan+best_len-1);
+            scan_end = *(ushf *)(scan + best_len - 1);
 #else
-            scan_end1  = scan[best_len-1];
-            scan_end   = scan[best_len];
+            scan_end1 = scan[best_len - 1];
+            scan_end = scan[best_len];
 #endif
         }
-    } while ((cur_match = prev[cur_match & wmask]) > limit
-             && --chain_length != 0);
+    } while ((cur_match = prev[cur_match & wmask]) > limit && --chain_length != 0);
 
     if ((uInt)best_len <= s->lookahead) return (uInt)best_len;
     return s->lookahead;
@@ -7500,11 +7325,11 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
 /* ---------------------------------------------------------------------------
  * Optimized version for FASTEST only
  */
-local uInt longest_match(deflate_state * s, IPos cur_match)
+local uInt longest_match(deflate_state *s, IPos cur_match)
 {
     register Bytef *scan = s->window + s->strstart; /* current string */
-    register Bytef *match;                       /* matched string */
-    register int len;                           /* length of current match */
+    register Bytef *match;                          /* matched string */
+    register int len;                               /* length of current match */
     register Bytef *strend = s->window + s->strstart + MAX_MATCH;
 
     /* The code is optimized for HASH_BITS >= 8 and MAX_MATCH-2 multiple of 16.
@@ -7512,7 +7337,7 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
      */
     Assert(s->hash_bits >= 8 && MAX_MATCH == 258, "Code too clever");
 
-    Assert((ulg)s->strstart <= s->window_size-MIN_LOOKAHEAD, "need lookahead");
+    Assert((ulg)s->strstart <= s->window_size - MIN_LOOKAHEAD, "need lookahead");
 
     Assert(cur_match < s->strstart, "no future");
 
@@ -7520,7 +7345,7 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
 
     /* Return failure if the match length is less than 2:
      */
-    if (match[0] != scan[0] || match[1] != scan[1]) return MIN_MATCH-1;
+    if (match[0] != scan[0] || match[1] != scan[1]) return MIN_MATCH - 1;
 
     /* The check at best_len-1 can be removed because it will be made
      * again later. (This heuristic is not always a win.)
@@ -7535,13 +7360,10 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
      * the 256th check will be made at strstart+258.
      */
     do {
-    } while (*++scan == *++match && *++scan == *++match &&
-             *++scan == *++match && *++scan == *++match &&
-             *++scan == *++match && *++scan == *++match &&
-             *++scan == *++match && *++scan == *++match &&
-             scan < strend);
+    } while (*++scan == *++match && *++scan == *++match && *++scan == *++match && *++scan == *++match && *++scan == *++match && *++scan == *++match &&
+             *++scan == *++match && *++scan == *++match && scan < strend);
 
-    Assert(scan <= s->window+(unsigned)(s->window_size-1), "wild scan");
+    Assert(scan <= s->window + (unsigned)(s->window_size - 1), "wild scan");
 
     len = MAX_MATCH - (int)(strend - scan);
 
@@ -7561,25 +7383,25 @@ local uInt longest_match(deflate_state * s, IPos cur_match)
 /* ===========================================================================
  * Check that the match at match_start is indeed a match.
  */
-local void check_match(deflate_state * s, IPos start, IPos match, int length)
+local void check_match(deflate_state *s, IPos start, IPos match, int length)
 {
     /* check that the match is indeed a match */
-    if (zmemcmp(s->window + match,
-                s->window + start, length) != EQUAL) {
-        fprintf(stderr, " start %u, match %u, length %d\n",
-                start, match, length);
+    if (zmemcmp(s->window + match, s->window + start, length) != EQUAL) {
+        fprintf(stderr, " start %u, match %u, length %d\n", start, match, length);
         do {
             fprintf(stderr, "%c%c", s->window[match++], s->window[start++]);
         } while (--length != 0);
         z_error("invalid match");
     }
     if (z_verbose > 1) {
-        fprintf(stderr,"\\[%d,%d]", start-match, length);
-        do { putc(s->window[start++], stderr); } while (--length != 0);
+        fprintf(stderr, "\\[%d,%d]", start - match, length);
+        do {
+            putc(s->window[start++], stderr);
+        } while (--length != 0);
     }
 }
 #else
-#  define check_match(s, start, match, length)
+#define check_match(s, start, match, length)
 #endif /* ZLIB_DEBUG */
 
 /* ===========================================================================
@@ -7592,16 +7414,16 @@ local void check_match(deflate_state * s, IPos start, IPos match, int length)
  *    performed for at least two bytes (required for the zip translate_eol
  *    option -- not supported here).
  */
-local void fill_window(deflate_state * s)
+local void fill_window(deflate_state *s)
 {
     unsigned n;
-    unsigned more;    /* Amount of free space at the end of the window. */
+    unsigned more; /* Amount of free space at the end of the window. */
     uInt wsize = s->w_size;
 
     Assert(s->lookahead < MIN_LOOKAHEAD, "already enough lookahead");
 
     do {
-        more = (unsigned)(s->window_size -(ulg)s->lookahead -(ulg)s->strstart);
+        more = (unsigned)(s->window_size - (ulg)s->lookahead - (ulg)s->strstart);
 
         /* Deal with !@#$% 64K limit: */
         if (sizeof(int) <= 2) {
@@ -7619,12 +7441,11 @@ local void fill_window(deflate_state * s)
         /* If the window is almost full and there is insufficient lookahead,
          * move the upper half to the lower one to make room in the upper half.
          */
-        if (s->strstart >= wsize+MAX_DIST(s)) {
-
-            zmemcpy(s->window, s->window+wsize, (unsigned)wsize - more);
+        if (s->strstart >= wsize + MAX_DIST(s)) {
+            zmemcpy(s->window, s->window + wsize, (unsigned)wsize - more);
             s->match_start -= wsize;
-            s->strstart    -= wsize; /* we now have strstart >= MAX_DIST */
-            s->block_start -= (long) wsize;
+            s->strstart -= wsize; /* we now have strstart >= MAX_DIST */
+            s->block_start -= (long)wsize;
             slide_hash(s);
             more += wsize;
         }
@@ -7652,18 +7473,18 @@ local void fill_window(deflate_state * s)
             s->ins_h = s->window[str];
             UPDATE_HASH(s, s->ins_h, s->window[str + 1]);
 #if MIN_MATCH != 3
-            Call UPDATE_HASH() MIN_MATCH-3 more times
+            Call UPDATE_HASH() MIN_MATCH - 3 more times
 #endif
-            while (s->insert) {
-                UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH-1]);
+                while (s -> insert)
+            {
+                UPDATE_HASH(s, s->ins_h, s->window[str + MIN_MATCH - 1]);
 #ifndef FASTEST
                 s->prev[str & s->w_mask] = s->head[s->ins_h];
 #endif
                 s->head[s->ins_h] = (Pos)str;
                 str++;
                 s->insert--;
-                if (s->lookahead + s->insert < MIN_MATCH)
-                    break;
+                if (s->lookahead + s->insert < MIN_MATCH) break;
             }
         }
         /* If the whole input has less than MIN_MATCH bytes, ins_h is garbage,
@@ -7688,48 +7509,42 @@ local void fill_window(deflate_state * s)
              * bytes or up to end of window, whichever is less.
              */
             init = s->window_size - curr;
-            if (init > WIN_INIT)
-                init = WIN_INIT;
+            if (init > WIN_INIT) init = WIN_INIT;
             zmemzero(s->window + curr, (unsigned)init);
             s->high_water = curr + init;
-        }
-        else if (s->high_water < (ulg)curr + WIN_INIT) {
+        } else if (s->high_water < (ulg)curr + WIN_INIT) {
             /* High water mark at or above current data, but below current data
              * plus WIN_INIT -- zero out to current data plus WIN_INIT, or up
              * to end of window, whichever is less.
              */
             init = (ulg)curr + WIN_INIT - s->high_water;
-            if (init > s->window_size - s->high_water)
-                init = s->window_size - s->high_water;
+            if (init > s->window_size - s->high_water) init = s->window_size - s->high_water;
             zmemzero(s->window + s->high_water, (unsigned)init);
             s->high_water += init;
         }
     }
 
-    Assert((ulg)s->strstart <= s->window_size - MIN_LOOKAHEAD,
-           "not enough room for search");
+    Assert((ulg)s->strstart <= s->window_size - MIN_LOOKAHEAD, "not enough room for search");
 }
 
 /* ===========================================================================
  * Flush the current block, with given end-of-file flag.
  * IN assertion: strstart is set to the end of the current match.
  */
-#define FLUSH_BLOCK_ONLY(s, last) { \
-   _tr_flush_block(s, (s->block_start >= 0L ? \
-                   (charf *)&s->window[(unsigned)s->block_start] : \
-                   (charf *)Z_NULL), \
-                (ulg)((long)s->strstart - s->block_start), \
-                (last)); \
-   s->block_start = s->strstart; \
-   flush_pending(s->strm); \
-   Tracev((stderr,"[FLUSH]")); \
-}
+#define FLUSH_BLOCK_ONLY(s, last)                                                                                                                                        \
+    {                                                                                                                                                                    \
+        _tr_flush_block(s, (s->block_start >= 0L ? (charf *)&s->window[(unsigned)s->block_start] : (charf *)Z_NULL), (ulg)((long)s->strstart - s->block_start), (last)); \
+        s->block_start = s->strstart;                                                                                                                                    \
+        flush_pending(s->strm);                                                                                                                                          \
+        Tracev((stderr, "[FLUSH]"));                                                                                                                                     \
+    }
 
 /* Same but force premature exit if necessary. */
-#define FLUSH_BLOCK(s, last) { \
-   FLUSH_BLOCK_ONLY(s, last); \
-   if (s->strm->avail_out == 0) return (last) ? finish_started : need_more; \
-}
+#define FLUSH_BLOCK(s, last)                                                     \
+    {                                                                            \
+        FLUSH_BLOCK_ONLY(s, last);                                               \
+        if (s->strm->avail_out == 0) return (last) ? finish_started : need_more; \
+    }
 
 /* Maximum stored block length in deflate format (not including header). */
 #define MAX_STORED 65535
@@ -7752,7 +7567,7 @@ local void fill_window(deflate_state * s)
  * copied. It is most efficient with large input and output buffers, which
  * maximizes the opportunites to have a single copy from next_in to next_out.
  */
-local block_state deflate_stored(deflate_state * s, int flush)
+local block_state deflate_stored(deflate_state *s, int flush)
 {
     /* Smallest worthy block size when not flushing or finishing. By default
      * this is 32K. This can be as small as 507 bytes for memLevel == 1. For
@@ -7771,27 +7586,22 @@ local block_state deflate_stored(deflate_state * s, int flush)
          * available input data and output space. Set left to how much of that
          * would be copied from what's left in the window.
          */
-        len = MAX_STORED;       /* maximum deflate stored block length */
-        have = (s->bi_valid + 42) >> 3;         /* number of header bytes */
-        if (s->strm->avail_out < have)          /* need room for header */
+        len = MAX_STORED;               /* maximum deflate stored block length */
+        have = (s->bi_valid + 42) >> 3; /* number of header bytes */
+        if (s->strm->avail_out < have)  /* need room for header */
             break;
-            /* maximum stored block length that will fit in avail_out: */
+        /* maximum stored block length that will fit in avail_out: */
         have = s->strm->avail_out - have;
-        left = s->strstart - s->block_start;    /* bytes left in window */
-        if (len > (ulg)left + s->strm->avail_in)
-            len = left + s->strm->avail_in;     /* limit len to the input */
-        if (len > have)
-            len = have;                         /* limit len to the output */
+        left = s->strstart - s->block_start;                                     /* bytes left in window */
+        if (len > (ulg)left + s->strm->avail_in) len = left + s->strm->avail_in; /* limit len to the input */
+        if (len > have) len = have;                                              /* limit len to the output */
 
         /* If the stored block would be less than min_block in length, or if
          * unable to copy all of the available input when flushing, then try
          * copying to the window and the pending buffer instead. Also don't
          * write an empty block when flushing -- deflate() does that.
          */
-        if (len < min_block && ((len == 0 && flush != Z_FINISH) ||
-                                flush == Z_NO_FLUSH ||
-                                len != left + s->strm->avail_in))
-            break;
+        if (len < min_block && ((len == 0 && flush != Z_FINISH) || flush == Z_NO_FLUSH || len != left + s->strm->avail_in)) break;
 
         /* Make a dummy stored block in pending to get the header bytes,
          * including any pending bits. This also updates the debugging counts.
@@ -7816,8 +7626,7 @@ local block_state deflate_stored(deflate_state * s, int flush)
 
         /* Copy uncompressed bytes from the window to next_out. */
         if (left) {
-            if (left > len)
-                left = len;
+            if (left > len) left = len;
             zmemcpy(s->strm->next_out, s->window + s->block_start, left);
             s->strm->next_out += left;
             s->strm->avail_out -= left;
@@ -7843,23 +7652,21 @@ local block_state deflate_stored(deflate_state * s, int flush)
      * insert in the hash tables, in the event that deflateParams() switches to
      * a non-zero compression level.
      */
-    used -= s->strm->avail_in;      /* number of input bytes directly copied */
+    used -= s->strm->avail_in; /* number of input bytes directly copied */
     if (used) {
         /* If any input was used, then no unused input remains in the window,
          * therefore s->block_start == s->strstart.
          */
-        if (used >= s->w_size) {    /* supplant the previous history */
-            s->matches = 2;         /* clear hash */
+        if (used >= s->w_size) { /* supplant the previous history */
+            s->matches = 2;      /* clear hash */
             zmemcpy(s->window, s->strm->next_in - s->w_size, s->w_size);
             s->strstart = s->w_size;
-        }
-        else {
+        } else {
             if (s->window_size - s->strstart <= used) {
                 /* Slide the window down. */
                 s->strstart -= s->w_size;
                 zmemcpy(s->window, s->window + s->w_size, s->strstart);
-                if (s->matches < 2)
-                    s->matches++;   /* add a pending slide_hash() */
+                if (s->matches < 2) s->matches++; /* add a pending slide_hash() */
             }
             zmemcpy(s->window + s->strstart, s->strm->next_in - used, used);
             s->strstart += used;
@@ -7867,17 +7674,13 @@ local block_state deflate_stored(deflate_state * s, int flush)
         s->block_start = s->strstart;
         s->insert += MIN(used, s->w_size - s->insert);
     }
-    if (s->high_water < s->strstart)
-        s->high_water = s->strstart;
+    if (s->high_water < s->strstart) s->high_water = s->strstart;
 
     /* If the last block was written to next_out, then done. */
-    if (last)
-        return finish_done;
+    if (last) return finish_done;
 
     /* If flushing and all input has been consumed, then done. */
-    if (flush != Z_NO_FLUSH && flush != Z_FINISH &&
-        s->strm->avail_in == 0 && (long)s->strstart == s->block_start)
-        return block_done;
+    if (flush != Z_NO_FLUSH && flush != Z_FINISH && s->strm->avail_in == 0 && (long)s->strstart == s->block_start) return block_done;
 
     /* Fill the window with any remaining input. */
     have = s->window_size - s->strstart - 1;
@@ -7886,35 +7689,29 @@ local block_state deflate_stored(deflate_state * s, int flush)
         s->block_start -= s->w_size;
         s->strstart -= s->w_size;
         zmemcpy(s->window, s->window + s->w_size, s->strstart);
-        if (s->matches < 2)
-            s->matches++;           /* add a pending slide_hash() */
-        have += s->w_size;          /* more space now */
+        if (s->matches < 2) s->matches++; /* add a pending slide_hash() */
+        have += s->w_size;                /* more space now */
     }
-    if (have > s->strm->avail_in)
-        have = s->strm->avail_in;
+    if (have > s->strm->avail_in) have = s->strm->avail_in;
     if (have) {
         read_buf(s->strm, s->window + s->strstart, have);
         s->strstart += have;
     }
-    if (s->high_water < s->strstart)
-        s->high_water = s->strstart;
+    if (s->high_water < s->strstart) s->high_water = s->strstart;
 
     /* There was not enough avail_out to write a complete worthy or flushed
      * stored block to next_out. Write a stored block to pending instead, if we
      * have enough input for a worthy block, or if flushing and there is enough
      * room for the remaining input as a stored block in the pending buffer.
      */
-    have = (s->bi_valid + 42) >> 3;         /* number of header bytes */
-        /* maximum stored block length that will fit in pending: */
+    have = (s->bi_valid + 42) >> 3; /* number of header bytes */
+    /* maximum stored block length that will fit in pending: */
     have = MIN(s->pending_buf_size - have, MAX_STORED);
     min_block = MIN(have, s->w_size);
     left = s->strstart - s->block_start;
-    if (left >= min_block ||
-        ((left || flush == Z_FINISH) && flush != Z_NO_FLUSH &&
-         s->strm->avail_in == 0 && left <= have)) {
+    if (left >= min_block || ((left || flush == Z_FINISH) && flush != Z_NO_FLUSH && s->strm->avail_in == 0 && left <= have)) {
         len = MIN(left, have);
-        last = flush == Z_FINISH && s->strm->avail_in == 0 &&
-               len == left ? 1 : 0;
+        last = flush == Z_FINISH && s->strm->avail_in == 0 && len == left ? 1 : 0;
         _tr_stored_block(s, (charf *)s->window + s->block_start, len, last);
         s->block_start += len;
         flush_pending(s->strm);
@@ -7931,10 +7728,10 @@ local block_state deflate_stored(deflate_state * s, int flush)
  * new strings in the dictionary only for unmatched strings or for short
  * matches. It is used only for the fast compression options.
  */
-local block_state deflate_fast(deflate_state * s, int flush)
+local block_state deflate_fast(deflate_state *s, int flush)
 {
-    IPos hash_head;       /* head of the hash chain */
-    int bflush;           /* set if current block must be flushed */
+    IPos hash_head; /* head of the hash chain */
+    int bflush;     /* set if current block must be flushed */
 
     for (;;) {
         /* Make sure that we always have enough lookahead, except
@@ -7966,14 +7763,13 @@ local block_state deflate_fast(deflate_state * s, int flush)
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
-            s->match_length = longest_match (s, hash_head);
+            s->match_length = longest_match(s, hash_head);
             /* longest_match() sets match_start */
         }
         if (s->match_length >= MIN_MATCH) {
             check_match(s, s->strstart, s->match_start, s->match_length);
 
-            _tr_tally_dist(s, s->strstart - s->match_start,
-                           s->match_length - MIN_MATCH, bflush);
+            _tr_tally_dist(s, s->strstart - s->match_start, s->match_length - MIN_MATCH, bflush);
 
             s->lookahead -= s->match_length;
 
@@ -7981,8 +7777,7 @@ local block_state deflate_fast(deflate_state * s, int flush)
              * is not too large. This saves time but degrades compression.
              */
 #ifndef FASTEST
-            if (s->match_length <= s->max_insert_length &&
-                s->lookahead >= MIN_MATCH) {
+            if (s->match_length <= s->max_insert_length && s->lookahead >= MIN_MATCH) {
                 s->match_length--; /* string at strstart already in table */
                 do {
                     s->strstart++;
@@ -7998,9 +7793,9 @@ local block_state deflate_fast(deflate_state * s, int flush)
                 s->strstart += s->match_length;
                 s->match_length = 0;
                 s->ins_h = s->window[s->strstart];
-                UPDATE_HASH(s, s->ins_h, s->window[s->strstart+1]);
+                UPDATE_HASH(s, s->ins_h, s->window[s->strstart + 1]);
 #if MIN_MATCH != 3
-                Call UPDATE_HASH() MIN_MATCH-3 more times
+                Call UPDATE_HASH() MIN_MATCH - 3 more times
 #endif
                 /* If lookahead < MIN_MATCH, ins_h is garbage, but it does not
                  * matter since it will be recomputed at next deflate call.
@@ -8008,20 +7803,19 @@ local block_state deflate_fast(deflate_state * s, int flush)
             }
         } else {
             /* No match, output a literal byte */
-            Tracevv((stderr,"%c", s->window[s->strstart]));
-            _tr_tally_lit (s, s->window[s->strstart], bflush);
+            Tracevv((stderr, "%c", s->window[s->strstart]));
+            _tr_tally_lit(s, s->window[s->strstart], bflush);
             s->lookahead--;
             s->strstart++;
         }
         if (bflush) FLUSH_BLOCK(s, 0);
     }
-    s->insert = s->strstart < MIN_MATCH-1 ? s->strstart : MIN_MATCH-1;
+    s->insert = s->strstart < MIN_MATCH - 1 ? s->strstart : MIN_MATCH - 1;
     if (flush == Z_FINISH) {
         FLUSH_BLOCK(s, 1);
         return finish_done;
     }
-    if (s->last_lit)
-        FLUSH_BLOCK(s, 0);
+    if (s->last_lit) FLUSH_BLOCK(s, 0);
     return block_done;
 }
 
@@ -8031,10 +7825,10 @@ local block_state deflate_fast(deflate_state * s, int flush)
  * evaluation for matches: a match is finally adopted only if there is
  * no better match at the next window position.
  */
-local block_state deflate_slow(deflate_state * s, int flush)
+local block_state deflate_slow(deflate_state *s, int flush)
 {
-    IPos hash_head;          /* head of hash chain */
-    int bflush;              /* set if current block must be flushed */
+    IPos hash_head; /* head of hash chain */
+    int bflush;     /* set if current block must be flushed */
 
     /* Process the input block. */
     for (;;) {
@@ -8062,28 +7856,26 @@ local block_state deflate_slow(deflate_state * s, int flush)
         /* Find the longest match, discarding those <= prev_length.
          */
         s->prev_length = s->match_length, s->prev_match = s->match_start;
-        s->match_length = MIN_MATCH-1;
+        s->match_length = MIN_MATCH - 1;
 
-        if (hash_head != NIL && s->prev_length < s->max_lazy_match &&
-            s->strstart - hash_head <= MAX_DIST(s)) {
+        if (hash_head != NIL && s->prev_length < s->max_lazy_match && s->strstart - hash_head <= MAX_DIST(s)) {
             /* To simplify the code, we prevent matches with the string
              * of window index 0 (in particular we have to avoid a match
              * of the string with itself at the start of the input file).
              */
-            s->match_length = longest_match (s, hash_head);
+            s->match_length = longest_match(s, hash_head);
             /* longest_match() sets match_start */
 
             if (s->match_length <= 5 && (s->strategy == Z_FILTERED
 #if TOO_FAR <= 32767
-                || (s->match_length == MIN_MATCH &&
-                    s->strstart - s->match_start > TOO_FAR)
+                                         || (s->match_length == MIN_MATCH && s->strstart - s->match_start > TOO_FAR)
 #endif
-                )) {
+                                             )) {
 
                 /* If prev_match is also MIN_MATCH, match_start is garbage
                  * but we will ignore the current match anyway.
                  */
-                s->match_length = MIN_MATCH-1;
+                s->match_length = MIN_MATCH - 1;
             }
         }
         /* If there was a match at the previous step and the current
@@ -8093,17 +7885,16 @@ local block_state deflate_slow(deflate_state * s, int flush)
             uInt max_insert = s->strstart + s->lookahead - MIN_MATCH;
             /* Do not insert strings in hash table beyond this. */
 
-            check_match(s, s->strstart-1, s->prev_match, s->prev_length);
+            check_match(s, s->strstart - 1, s->prev_match, s->prev_length);
 
-            _tr_tally_dist(s, s->strstart -1 - s->prev_match,
-                           s->prev_length - MIN_MATCH, bflush);
+            _tr_tally_dist(s, s->strstart - 1 - s->prev_match, s->prev_length - MIN_MATCH, bflush);
 
             /* Insert in hash table all strings up to the end of the match.
              * strstart-1 and strstart are already inserted. If there is not
              * enough lookahead, the last two strings are not inserted in
              * the hash table.
              */
-            s->lookahead -= s->prev_length-1;
+            s->lookahead -= s->prev_length - 1;
             s->prev_length -= 2;
             do {
                 if (++s->strstart <= max_insert) {
@@ -8111,7 +7902,7 @@ local block_state deflate_slow(deflate_state * s, int flush)
                 }
             } while (--s->prev_length != 0);
             s->match_available = 0;
-            s->match_length = MIN_MATCH-1;
+            s->match_length = MIN_MATCH - 1;
             s->strstart++;
 
             if (bflush) FLUSH_BLOCK(s, 0);
@@ -8121,8 +7912,8 @@ local block_state deflate_slow(deflate_state * s, int flush)
              * single literal. If there was a match but the current match
              * is longer, truncate the previous match to a single literal.
              */
-            Tracevv((stderr,"%c", s->window[s->strstart-1]));
-            _tr_tally_lit(s, s->window[s->strstart-1], bflush);
+            Tracevv((stderr, "%c", s->window[s->strstart - 1]));
+            _tr_tally_lit(s, s->window[s->strstart - 1], bflush);
             if (bflush) {
                 FLUSH_BLOCK_ONLY(s, 0);
             }
@@ -8138,19 +7929,18 @@ local block_state deflate_slow(deflate_state * s, int flush)
             s->lookahead--;
         }
     }
-    Assert (flush != Z_NO_FLUSH, "no flush?");
+    Assert(flush != Z_NO_FLUSH, "no flush?");
     if (s->match_available) {
-        Tracevv((stderr,"%c", s->window[s->strstart-1]));
-        _tr_tally_lit(s, s->window[s->strstart-1], bflush);
+        Tracevv((stderr, "%c", s->window[s->strstart - 1]));
+        _tr_tally_lit(s, s->window[s->strstart - 1], bflush);
         s->match_available = 0;
     }
-    s->insert = s->strstart < MIN_MATCH-1 ? s->strstart : MIN_MATCH-1;
+    s->insert = s->strstart < MIN_MATCH - 1 ? s->strstart : MIN_MATCH - 1;
     if (flush == Z_FINISH) {
         FLUSH_BLOCK(s, 1);
         return finish_done;
     }
-    if (s->last_lit)
-        FLUSH_BLOCK(s, 0);
+    if (s->last_lit) FLUSH_BLOCK(s, 0);
     return block_done;
 }
 #endif /* FASTEST */
@@ -8160,11 +7950,11 @@ local block_state deflate_slow(deflate_state * s, int flush)
  * one.  Do not maintain a hash table.  (It will be regenerated if this run of
  * deflate switches away from Z_RLE.)
  */
-local block_state deflate_rle(deflate_state * s, int flush)
+local block_state deflate_rle(deflate_state *s, int flush)
 {
-    int bflush;             /* set if current block must be flushed */
-    uInt prev;              /* byte at distance one to match */
-    Bytef *scan, *strend;   /* scan goes up to strend for length of run */
+    int bflush;           /* set if current block must be flushed */
+    uInt prev;            /* byte at distance one to match */
+    Bytef *scan, *strend; /* scan goes up to strend for length of run */
 
     for (;;) {
         /* Make sure that we always have enough lookahead, except
@@ -8187,16 +7977,12 @@ local block_state deflate_rle(deflate_state * s, int flush)
             if (prev == *++scan && prev == *++scan && prev == *++scan) {
                 strend = s->window + s->strstart + MAX_MATCH;
                 do {
-                } while (prev == *++scan && prev == *++scan &&
-                         prev == *++scan && prev == *++scan &&
-                         prev == *++scan && prev == *++scan &&
-                         prev == *++scan && prev == *++scan &&
-                         scan < strend);
+                } while (prev == *++scan && prev == *++scan && prev == *++scan && prev == *++scan && prev == *++scan && prev == *++scan && prev == *++scan &&
+                         prev == *++scan && scan < strend);
                 s->match_length = MAX_MATCH - (uInt)(strend - scan);
-                if (s->match_length > s->lookahead)
-                    s->match_length = s->lookahead;
+                if (s->match_length > s->lookahead) s->match_length = s->lookahead;
             }
-            Assert(scan <= s->window+(uInt)(s->window_size-1), "wild scan");
+            Assert(scan <= s->window + (uInt)(s->window_size - 1), "wild scan");
         }
 
         /* Emit match if have run of MIN_MATCH or longer, else emit literal */
@@ -8210,8 +7996,8 @@ local block_state deflate_rle(deflate_state * s, int flush)
             s->match_length = 0;
         } else {
             /* No match, output a literal byte */
-            Tracevv((stderr,"%c", s->window[s->strstart]));
-            _tr_tally_lit (s, s->window[s->strstart], bflush);
+            Tracevv((stderr, "%c", s->window[s->strstart]));
+            _tr_tally_lit(s, s->window[s->strstart], bflush);
             s->lookahead--;
             s->strstart++;
         }
@@ -8222,8 +8008,7 @@ local block_state deflate_rle(deflate_state * s, int flush)
         FLUSH_BLOCK(s, 1);
         return finish_done;
     }
-    if (s->last_lit)
-        FLUSH_BLOCK(s, 0);
+    if (s->last_lit) FLUSH_BLOCK(s, 0);
     return block_done;
 }
 
@@ -8231,25 +8016,24 @@ local block_state deflate_rle(deflate_state * s, int flush)
  * For Z_HUFFMAN_ONLY, do not look for matches.  Do not maintain a hash table.
  * (It will be regenerated if this run of deflate switches away from Huffman.)
  */
-local block_state deflate_huff(deflate_state * s, int flush)
+local block_state deflate_huff(deflate_state *s, int flush)
 {
-    int bflush;             /* set if current block must be flushed */
+    int bflush; /* set if current block must be flushed */
 
     for (;;) {
         /* Make sure that we have a literal to write. */
         if (s->lookahead == 0) {
             fill_window(s);
             if (s->lookahead == 0) {
-                if (flush == Z_NO_FLUSH)
-                    return need_more;
-                break;      /* flush the current block */
+                if (flush == Z_NO_FLUSH) return need_more;
+                break; /* flush the current block */
             }
         }
 
         /* Output a literal byte */
         s->match_length = 0;
-        Tracevv((stderr,"%c", s->window[s->strstart]));
-        _tr_tally_lit (s, s->window[s->strstart], bflush);
+        Tracevv((stderr, "%c", s->window[s->strstart]));
+        _tr_tally_lit(s, s->window[s->strstart], bflush);
         s->lookahead--;
         s->strstart++;
         if (bflush) FLUSH_BLOCK(s, 0);
@@ -8259,8 +8043,7 @@ local block_state deflate_huff(deflate_state * s, int flush)
         FLUSH_BLOCK(s, 1);
         return finish_done;
     }
-    if (s->last_lit)
-        FLUSH_BLOCK(s, 0);
+    if (s->last_lit) FLUSH_BLOCK(s, 0);
     return block_done;
 }
 /* ===== End embedded xzlib_deflate.c ===== */
@@ -8288,256 +8071,271 @@ local block_state deflate_huff(deflate_state * s, int flush)
 #define ZUTIL_H
 
 #ifdef HAVE_HIDDEN
-#  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+#define ZLIB_INTERNAL __attribute__((visibility("hidden")))
 #else
-#  define ZLIB_INTERNAL
+#define ZLIB_INTERNAL
 #endif
 #if defined(STDC) && !defined(Z_SOLO)
-#  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
-#    include <stddef.h>
-#  endif
-#  include <string.h>
-#  include <stdlib.h>
+#if !(defined(_WIN32_WCE) && defined(_MSC_VER))
+#include <stddef.h>
+#endif
+#include <string.h>
+#include <stdlib.h>
 #endif
 
 #ifdef Z_SOLO
-   typedef long ptrdiff_t;  /* guess -- will be caught if guess is wrong */
+typedef long ptrdiff_t; /* guess -- will be caught if guess is wrong */
 #endif
 
 #ifndef local
-#  define local static
+#define local static
 #endif
 /* since "static" is used to mean two completely different things in C, we
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-typedef unsigned char  uch;
+typedef unsigned char uch;
 typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
-typedef unsigned long  ulg;
+typedef unsigned long ulg;
 
-extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
+#define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
 
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = ERR_MSG(err), (err))
+#define ERR_RETURN(strm, err) return (strm->msg = ERR_MSG(err), (err))
 /* To be used only when the state is known to be valid */
 
-        /* common constants */
+/* common constants */
 
 #ifndef DEF_WBITS
-#  define DEF_WBITS MAX_WBITS
+#define DEF_WBITS MAX_WBITS
 #endif
 /* default windowBits for decompression. MAX_WBITS is for compression only */
 
 #if MAX_MEM_LEVEL >= 8
-#  define DEF_MEM_LEVEL 8
+#define DEF_MEM_LEVEL 8
 #else
-#  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
+#define DEF_MEM_LEVEL MAX_MEM_LEVEL
 #endif
 /* default memLevel */
 
 #define STORED_BLOCK 0
 #define STATIC_TREES 1
-#define DYN_TREES    2
+#define DYN_TREES 2
 /* The three kinds of block type */
 
-#define MIN_MATCH  3
-#define MAX_MATCH  258
+#define MIN_MATCH 3
+#define MAX_MATCH 258
 /* The minimum and maximum match lengths */
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
-        /* target dependencies */
+/* target dependencies */
 
 #if defined(MSDOS) || (defined(WINDOWS) && !defined(WIN32))
-#  define OS_CODE  0x00
-#  ifndef Z_SOLO
-#    if defined(__TURBOC__) || defined(__BORLANDC__)
-#      if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
-         /* Allow compilation with ANSI keywords only enabled */
-         void _Cdecl farfree( void *block );
-         void *_Cdecl farmalloc( unsigned long nbytes );
-#      else
-#        include <alloc.h>
-#      endif
-#    else /* MSC or DJGPP */
-#      include <malloc.h>
-#    endif
-#  endif
+#define OS_CODE 0x00
+#ifndef Z_SOLO
+#if defined(__TURBOC__) || defined(__BORLANDC__)
+#if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
+/* Allow compilation with ANSI keywords only enabled */
+void _Cdecl farfree(void *block);
+void *_Cdecl farmalloc(unsigned long nbytes);
+#else
+#include <alloc.h>
+#endif
+#else /* MSC or DJGPP */
+#include <malloc.h>
+#endif
+#endif
 #endif
 
 #ifdef AMIGA
-#  define OS_CODE  1
+#define OS_CODE 1
 #endif
 
 #if defined(VAXC) || defined(VMS)
-#  define OS_CODE  2
-#  define F_OPEN(name, mode) \
-     fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
+#define OS_CODE 2
+#define F_OPEN(name, mode) fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
 #endif
 
 #ifdef __370__
-#  if __TARGET_LIB__ < 0x20000000
-#    define OS_CODE 4
-#  elif __TARGET_LIB__ < 0x40000000
-#    define OS_CODE 11
-#  else
-#    define OS_CODE 8
-#  endif
+#if __TARGET_LIB__ < 0x20000000
+#define OS_CODE 4
+#elif __TARGET_LIB__ < 0x40000000
+#define OS_CODE 11
+#else
+#define OS_CODE 8
+#endif
 #endif
 
 #if defined(ATARI) || defined(atarist)
-#  define OS_CODE  5
+#define OS_CODE 5
 #endif
 
 #ifdef OS2
-#  define OS_CODE  6
-#  if defined(M_I86) && !defined(Z_SOLO)
-#    include <malloc.h>
-#  endif
+#define OS_CODE 6
+#if defined(M_I86) && !defined(Z_SOLO)
+#include <malloc.h>
+#endif
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
-#  ifndef Z_SOLO
-#    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
-#      include <unix.h> /* for fdopen */
-#    else
-#      ifndef fdopen
-#        define fdopen(fd,mode) NULL /* No fdopen() */
-#      endif
-#    endif
-#  endif
+#define OS_CODE 7
+#ifndef Z_SOLO
+#if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+#include <unix.h> /* for fdopen */
+#else
+#ifndef fdopen
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#endif
+#endif
+#endif
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#define OS_CODE 13
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#define OS_CODE 10
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#define OS_CODE 16
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#define OS_CODE 18
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#define OS_CODE 19
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)
-#  define fdopen(fd,mode) NULL /* No fdopen() */
+#define fdopen(fd, mode) NULL /* No fdopen() */
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER > 600)) && !defined __INTERIX
-#  if defined(_WIN32_WCE)
-#    define fdopen(fd,mode) NULL /* No fdopen() */
-#    ifndef _PTRDIFF_T_DEFINED
-       typedef int ptrdiff_t;
-#      define _PTRDIFF_T_DEFINED
-#    endif
-#  else
-#    define fdopen(fd,type)  _fdopen(fd,type)
-#  endif
+#if defined(_WIN32_WCE)
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
+#else
+#define fdopen(fd, type) _fdopen(fd, type)
+#endif
 #endif
 
 #if defined(__BORLANDC__) && !defined(MSDOS)
-  #pragma warn -8004
-  #pragma warn -8008
-  #pragma warn -8066
+#pragma warn - 8004
+#pragma warn - 8008
+#pragma warn - 8066
 #endif
 
 /* provide prototypes for these when building zlib without LFS */
-#if !defined(_WIN32) && \
-    (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE-0 == 0)
-    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
-    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
+#if !defined(_WIN32) && (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE - 0 == 0)
+ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
+ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
 #endif
 
-        /* common defaults */
+/* common defaults */
 
 #ifndef OS_CODE
-#  define OS_CODE  3     /* assume Unix */
+#define OS_CODE 3 /* assume Unix */
 #endif
 
 #ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
+#define F_OPEN(name, mode) fopen((name), (mode))
 #endif
 
-         /* functions */
+/* functions */
 
 #if defined(pyr) || defined(Z_SOLO)
-#  define NO_MEMCPY
+#define NO_MEMCPY
 #endif
 #if defined(SMALL_MEDIUM) && !defined(_MSC_VER) && !defined(__SC__)
- /* Use our own functions for small and medium model with MSC <= 5.0.
-  * You may have to use the same strategy for Borland C (untested).
-  * The __SC__ check is for Symantec.
-  */
-#  define NO_MEMCPY
+/* Use our own functions for small and medium model with MSC <= 5.0.
+ * You may have to use the same strategy for Borland C (untested).
+ * The __SC__ check is for Symantec.
+ */
+#define NO_MEMCPY
 #endif
 #if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
-#  define HAVE_MEMCPY
+#define HAVE_MEMCPY
 #endif
 #ifdef HAVE_MEMCPY
-#  ifdef SMALL_MEDIUM /* MSDOS small or medium model */
-#    define zmemcpy _fmemcpy
-#    define zmemcmp _fmemcmp
-#    define zmemzero(dest, len) _fmemset(dest, 0, len)
-#  else
-#    define zmemcpy memcpy
-#    define zmemcmp memcmp
-#    define zmemzero(dest, len) memset(dest, 0, len)
-#  endif
+#ifdef SMALL_MEDIUM /* MSDOS small or medium model */
+#define zmemcpy _fmemcpy
+#define zmemcmp _fmemcmp
+#define zmemzero(dest, len) _fmemset(dest, 0, len)
 #else
-   void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
-   int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
-   void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#define zmemcpy memcpy
+#define zmemcmp memcmp
+#define zmemzero(dest, len) memset(dest, 0, len)
+#endif
+#else
+void ZLIB_INTERNAL zmemcpy OF((Bytef * dest, const Bytef *source, uInt len));
+int ZLIB_INTERNAL zmemcmp OF((const Bytef *s1, const Bytef *s2, uInt len));
+void ZLIB_INTERNAL zmemzero OF((Bytef * dest, uInt len));
 #endif
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
+#include <stdio.h>
+extern int ZLIB_INTERNAL z_verbose;
+extern void ZLIB_INTERNAL z_error OF((char *m));
+#define Assert(cond, msg)          \
+    {                              \
+        if (!(cond)) z_error(msg); \
+    }
+#define Trace(x)                       \
+    {                                  \
+        if (z_verbose >= 0) fprintf x; \
+    }
+#define Tracev(x)                     \
+    {                                 \
+        if (z_verbose > 0) fprintf x; \
+    }
+#define Tracevv(x)                    \
+    {                                 \
+        if (z_verbose > 1) fprintf x; \
+    }
+#define Tracec(c, x)                         \
+    {                                        \
+        if (z_verbose > 0 && (c)) fprintf x; \
+    }
+#define Tracecv(c, x)                        \
+    {                                        \
+        if (z_verbose > 1 && (c)) fprintf x; \
+    }
 #else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
+#define Assert(cond, msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c, x)
+#define Tracecv(c, x)
 #endif
 
 #ifndef Z_SOLO
-   voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr));
+voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items, unsigned size));
+void ZLIB_INTERNAL zcfree OF((voidpf opaque, voidpf ptr));
 #endif
 
-#define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size))
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
+#define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
+#define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
+#define TRY_FREE(s, p)      \
+    {                       \
+        if (p) ZFREE(s, p); \
+    }
 
 /* Reverse the bytes in a 32-bit value */
-#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
-                    (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
 #endif /* ZUTIL_H */
 /* crc32.c -- compute the CRC-32 of a data stream
@@ -8564,32 +8362,28 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
  */
 
 #ifdef MAKECRCH
-#  include <stdio.h>
-#  ifndef DYNAMIC_CRC_TABLE
-#    define DYNAMIC_CRC_TABLE
-#  endif /* !DYNAMIC_CRC_TABLE */
+#include <stdio.h>
+#ifndef DYNAMIC_CRC_TABLE
+#define DYNAMIC_CRC_TABLE
+#endif /* !DYNAMIC_CRC_TABLE */
 #endif /* MAKECRCH */
 
 /* Definitions for doing the crc four data bytes at a time. */
 #if !defined(NOBYFOUR) && defined(Z_U4)
-#  define BYFOUR
+#define BYFOUR
 #endif
 #ifdef BYFOUR
-   local unsigned long crc32_little OF((unsigned long,
-                        const unsigned char FAR *, z_size_t));
-   local unsigned long crc32_big OF((unsigned long,
-                        const unsigned char FAR *, z_size_t));
-#  define TBLS 8
+local unsigned long crc32_little OF((unsigned long, const unsigned char FAR *, z_size_t));
+local unsigned long crc32_big OF((unsigned long, const unsigned char FAR *, z_size_t));
+#define TBLS 8
 #else
-#  define TBLS 1
+#define TBLS 1
 #endif /* BYFOUR */
 
 /* Local functions for crc concatenation */
-local unsigned long gf2_matrix_times OF((unsigned long *mat,
-                                         unsigned long vec));
+local unsigned long gf2_matrix_times OF((unsigned long *mat, unsigned long vec));
 local void gf2_matrix_square OF((unsigned long *square, unsigned long *mat));
 local uLong crc32_combine_ OF((uLong crc1, uLong crc2, z_off64_t len2));
-
 
 #ifdef DYNAMIC_CRC_TABLE
 
@@ -8597,7 +8391,7 @@ local volatile int crc_table_empty = 1;
 local z_crc_t FAR crc_table[TBLS][256];
 local void make_crc_table OF((void));
 #ifdef MAKECRCH
-   local void write_table OF((FILE *, const z_crc_t FAR *));
+local void write_table OF((FILE *, const z_crc_t FAR *));
 #endif /* MAKECRCH */
 /*
   Generate tables for a byte-wise 32-bit CRC calculation on the polynomial:
@@ -8629,10 +8423,10 @@ local void make_crc_table()
 {
     z_crc_t c;
     int n, k;
-    z_crc_t poly;                       /* polynomial exclusive-or pattern */
+    z_crc_t poly; /* polynomial exclusive-or pattern */
     /* terms of polynomial defining this crc (except x^32): */
-    static volatile int first = 1;      /* flag to limit concurrent making */
-    static const unsigned char p[] = {0,1,2,4,5,7,8,10,11,12,16,22,23,26};
+    static volatile int first = 1; /* flag to limit concurrent making */
+    static const unsigned char p[] = {0, 1, 2, 4, 5, 7, 8, 10, 11, 12, 16, 22, 23, 26};
 
     /* See if another task is already doing this (not thread-safe, but better
        than nothing -- significantly reduces duration of vulnerability in
@@ -8642,14 +8436,12 @@ local void make_crc_table()
 
         /* make exclusive-or pattern from polynomial (0xedb88320UL) */
         poly = 0;
-        for (n = 0; n < (int)(sizeof(p)/sizeof(unsigned char)); n++)
-            poly |= (z_crc_t)1 << (31 - p[n]);
+        for (n = 0; n < (int)(sizeof(p) / sizeof(unsigned char)); n++) poly |= (z_crc_t)1 << (31 - p[n]);
 
         /* generate a crc for every 8-bit value */
         for (n = 0; n < 256; n++) {
             c = (z_crc_t)n;
-            for (k = 0; k < 8; k++)
-                c = c & 1 ? poly ^ (c >> 1) : c >> 1;
+            for (k = 0; k < 8; k++) c = c & 1 ? poly ^ (c >> 1) : c >> 1;
             crc_table[0][n] = c;
         }
 
@@ -8668,11 +8460,9 @@ local void make_crc_table()
 #endif /* BYFOUR */
 
         crc_table_empty = 0;
-    }
-    else {      /* not first */
+    } else { /* not first */
         /* wait for the other guy to finish (not efficient, but rare) */
-        while (crc_table_empty)
-            ;
+        while (crc_table_empty);
     }
 
 #ifdef MAKECRCH
@@ -8687,14 +8477,14 @@ local void make_crc_table()
         fprintf(out, "local const z_crc_t FAR ");
         fprintf(out, "crc_table[TBLS][256] =\n{\n  {\n");
         write_table(out, crc_table[0]);
-#  ifdef BYFOUR
+#ifdef BYFOUR
         fprintf(out, "#ifdef BYFOUR\n");
         for (k = 1; k < 8; k++) {
             fprintf(out, "  },\n  {\n");
             write_table(out, crc_table[k]);
         }
         fprintf(out, "#endif\n");
-#  endif /* BYFOUR */
+#endif /* BYFOUR */
         fprintf(out, "  }\n};\n");
         fclose(out);
     }
@@ -8702,14 +8492,11 @@ local void make_crc_table()
 }
 
 #ifdef MAKECRCH
-local void write_table(FILE * out, const z_crc_t FAR * table)
+local void write_table(FILE *out, const z_crc_t FAR *table)
 {
     int n;
 
-    for (n = 0; n < 256; n++)
-        fprintf(out, "%s0x%08lxUL%s", n % 5 ? "" : "    ",
-                (unsigned long)(table[n]),
-                n == 255 ? "\n" : (n % 5 == 4 ? ",\n" : ", "));
+    for (n = 0; n < 256; n++) fprintf(out, "%s0x%08lxUL%s", n % 5 ? "" : "    ", (unsigned long)(table[n]), n == 255 ? "\n" : (n % 5 == 4 ? ",\n" : ", "));
 }
 #endif /* MAKECRCH */
 
@@ -8723,469 +8510,235 @@ local void write_table(FILE * out, const z_crc_t FAR * table)
  * Generated automatically by crc32.c
  */
 
-local const z_crc_t FAR crc_table[TBLS][256] =
-{
-  {
-    0x00000000UL, 0x77073096UL, 0xee0e612cUL, 0x990951baUL, 0x076dc419UL,
-    0x706af48fUL, 0xe963a535UL, 0x9e6495a3UL, 0x0edb8832UL, 0x79dcb8a4UL,
-    0xe0d5e91eUL, 0x97d2d988UL, 0x09b64c2bUL, 0x7eb17cbdUL, 0xe7b82d07UL,
-    0x90bf1d91UL, 0x1db71064UL, 0x6ab020f2UL, 0xf3b97148UL, 0x84be41deUL,
-    0x1adad47dUL, 0x6ddde4ebUL, 0xf4d4b551UL, 0x83d385c7UL, 0x136c9856UL,
-    0x646ba8c0UL, 0xfd62f97aUL, 0x8a65c9ecUL, 0x14015c4fUL, 0x63066cd9UL,
-    0xfa0f3d63UL, 0x8d080df5UL, 0x3b6e20c8UL, 0x4c69105eUL, 0xd56041e4UL,
-    0xa2677172UL, 0x3c03e4d1UL, 0x4b04d447UL, 0xd20d85fdUL, 0xa50ab56bUL,
-    0x35b5a8faUL, 0x42b2986cUL, 0xdbbbc9d6UL, 0xacbcf940UL, 0x32d86ce3UL,
-    0x45df5c75UL, 0xdcd60dcfUL, 0xabd13d59UL, 0x26d930acUL, 0x51de003aUL,
-    0xc8d75180UL, 0xbfd06116UL, 0x21b4f4b5UL, 0x56b3c423UL, 0xcfba9599UL,
-    0xb8bda50fUL, 0x2802b89eUL, 0x5f058808UL, 0xc60cd9b2UL, 0xb10be924UL,
-    0x2f6f7c87UL, 0x58684c11UL, 0xc1611dabUL, 0xb6662d3dUL, 0x76dc4190UL,
-    0x01db7106UL, 0x98d220bcUL, 0xefd5102aUL, 0x71b18589UL, 0x06b6b51fUL,
-    0x9fbfe4a5UL, 0xe8b8d433UL, 0x7807c9a2UL, 0x0f00f934UL, 0x9609a88eUL,
-    0xe10e9818UL, 0x7f6a0dbbUL, 0x086d3d2dUL, 0x91646c97UL, 0xe6635c01UL,
-    0x6b6b51f4UL, 0x1c6c6162UL, 0x856530d8UL, 0xf262004eUL, 0x6c0695edUL,
-    0x1b01a57bUL, 0x8208f4c1UL, 0xf50fc457UL, 0x65b0d9c6UL, 0x12b7e950UL,
-    0x8bbeb8eaUL, 0xfcb9887cUL, 0x62dd1ddfUL, 0x15da2d49UL, 0x8cd37cf3UL,
-    0xfbd44c65UL, 0x4db26158UL, 0x3ab551ceUL, 0xa3bc0074UL, 0xd4bb30e2UL,
-    0x4adfa541UL, 0x3dd895d7UL, 0xa4d1c46dUL, 0xd3d6f4fbUL, 0x4369e96aUL,
-    0x346ed9fcUL, 0xad678846UL, 0xda60b8d0UL, 0x44042d73UL, 0x33031de5UL,
-    0xaa0a4c5fUL, 0xdd0d7cc9UL, 0x5005713cUL, 0x270241aaUL, 0xbe0b1010UL,
-    0xc90c2086UL, 0x5768b525UL, 0x206f85b3UL, 0xb966d409UL, 0xce61e49fUL,
-    0x5edef90eUL, 0x29d9c998UL, 0xb0d09822UL, 0xc7d7a8b4UL, 0x59b33d17UL,
-    0x2eb40d81UL, 0xb7bd5c3bUL, 0xc0ba6cadUL, 0xedb88320UL, 0x9abfb3b6UL,
-    0x03b6e20cUL, 0x74b1d29aUL, 0xead54739UL, 0x9dd277afUL, 0x04db2615UL,
-    0x73dc1683UL, 0xe3630b12UL, 0x94643b84UL, 0x0d6d6a3eUL, 0x7a6a5aa8UL,
-    0xe40ecf0bUL, 0x9309ff9dUL, 0x0a00ae27UL, 0x7d079eb1UL, 0xf00f9344UL,
-    0x8708a3d2UL, 0x1e01f268UL, 0x6906c2feUL, 0xf762575dUL, 0x806567cbUL,
-    0x196c3671UL, 0x6e6b06e7UL, 0xfed41b76UL, 0x89d32be0UL, 0x10da7a5aUL,
-    0x67dd4accUL, 0xf9b9df6fUL, 0x8ebeeff9UL, 0x17b7be43UL, 0x60b08ed5UL,
-    0xd6d6a3e8UL, 0xa1d1937eUL, 0x38d8c2c4UL, 0x4fdff252UL, 0xd1bb67f1UL,
-    0xa6bc5767UL, 0x3fb506ddUL, 0x48b2364bUL, 0xd80d2bdaUL, 0xaf0a1b4cUL,
-    0x36034af6UL, 0x41047a60UL, 0xdf60efc3UL, 0xa867df55UL, 0x316e8eefUL,
-    0x4669be79UL, 0xcb61b38cUL, 0xbc66831aUL, 0x256fd2a0UL, 0x5268e236UL,
-    0xcc0c7795UL, 0xbb0b4703UL, 0x220216b9UL, 0x5505262fUL, 0xc5ba3bbeUL,
-    0xb2bd0b28UL, 0x2bb45a92UL, 0x5cb36a04UL, 0xc2d7ffa7UL, 0xb5d0cf31UL,
-    0x2cd99e8bUL, 0x5bdeae1dUL, 0x9b64c2b0UL, 0xec63f226UL, 0x756aa39cUL,
-    0x026d930aUL, 0x9c0906a9UL, 0xeb0e363fUL, 0x72076785UL, 0x05005713UL,
-    0x95bf4a82UL, 0xe2b87a14UL, 0x7bb12baeUL, 0x0cb61b38UL, 0x92d28e9bUL,
-    0xe5d5be0dUL, 0x7cdcefb7UL, 0x0bdbdf21UL, 0x86d3d2d4UL, 0xf1d4e242UL,
-    0x68ddb3f8UL, 0x1fda836eUL, 0x81be16cdUL, 0xf6b9265bUL, 0x6fb077e1UL,
-    0x18b74777UL, 0x88085ae6UL, 0xff0f6a70UL, 0x66063bcaUL, 0x11010b5cUL,
-    0x8f659effUL, 0xf862ae69UL, 0x616bffd3UL, 0x166ccf45UL, 0xa00ae278UL,
-    0xd70dd2eeUL, 0x4e048354UL, 0x3903b3c2UL, 0xa7672661UL, 0xd06016f7UL,
-    0x4969474dUL, 0x3e6e77dbUL, 0xaed16a4aUL, 0xd9d65adcUL, 0x40df0b66UL,
-    0x37d83bf0UL, 0xa9bcae53UL, 0xdebb9ec5UL, 0x47b2cf7fUL, 0x30b5ffe9UL,
-    0xbdbdf21cUL, 0xcabac28aUL, 0x53b39330UL, 0x24b4a3a6UL, 0xbad03605UL,
-    0xcdd70693UL, 0x54de5729UL, 0x23d967bfUL, 0xb3667a2eUL, 0xc4614ab8UL,
-    0x5d681b02UL, 0x2a6f2b94UL, 0xb40bbe37UL, 0xc30c8ea1UL, 0x5a05df1bUL,
-    0x2d02ef8dUL
+local const z_crc_t FAR crc_table[TBLS][256] = {
+    {0x00000000UL, 0x77073096UL, 0xee0e612cUL, 0x990951baUL, 0x076dc419UL, 0x706af48fUL, 0xe963a535UL, 0x9e6495a3UL, 0x0edb8832UL, 0x79dcb8a4UL, 0xe0d5e91eUL,
+     0x97d2d988UL, 0x09b64c2bUL, 0x7eb17cbdUL, 0xe7b82d07UL, 0x90bf1d91UL, 0x1db71064UL, 0x6ab020f2UL, 0xf3b97148UL, 0x84be41deUL, 0x1adad47dUL, 0x6ddde4ebUL,
+     0xf4d4b551UL, 0x83d385c7UL, 0x136c9856UL, 0x646ba8c0UL, 0xfd62f97aUL, 0x8a65c9ecUL, 0x14015c4fUL, 0x63066cd9UL, 0xfa0f3d63UL, 0x8d080df5UL, 0x3b6e20c8UL,
+     0x4c69105eUL, 0xd56041e4UL, 0xa2677172UL, 0x3c03e4d1UL, 0x4b04d447UL, 0xd20d85fdUL, 0xa50ab56bUL, 0x35b5a8faUL, 0x42b2986cUL, 0xdbbbc9d6UL, 0xacbcf940UL,
+     0x32d86ce3UL, 0x45df5c75UL, 0xdcd60dcfUL, 0xabd13d59UL, 0x26d930acUL, 0x51de003aUL, 0xc8d75180UL, 0xbfd06116UL, 0x21b4f4b5UL, 0x56b3c423UL, 0xcfba9599UL,
+     0xb8bda50fUL, 0x2802b89eUL, 0x5f058808UL, 0xc60cd9b2UL, 0xb10be924UL, 0x2f6f7c87UL, 0x58684c11UL, 0xc1611dabUL, 0xb6662d3dUL, 0x76dc4190UL, 0x01db7106UL,
+     0x98d220bcUL, 0xefd5102aUL, 0x71b18589UL, 0x06b6b51fUL, 0x9fbfe4a5UL, 0xe8b8d433UL, 0x7807c9a2UL, 0x0f00f934UL, 0x9609a88eUL, 0xe10e9818UL, 0x7f6a0dbbUL,
+     0x086d3d2dUL, 0x91646c97UL, 0xe6635c01UL, 0x6b6b51f4UL, 0x1c6c6162UL, 0x856530d8UL, 0xf262004eUL, 0x6c0695edUL, 0x1b01a57bUL, 0x8208f4c1UL, 0xf50fc457UL,
+     0x65b0d9c6UL, 0x12b7e950UL, 0x8bbeb8eaUL, 0xfcb9887cUL, 0x62dd1ddfUL, 0x15da2d49UL, 0x8cd37cf3UL, 0xfbd44c65UL, 0x4db26158UL, 0x3ab551ceUL, 0xa3bc0074UL,
+     0xd4bb30e2UL, 0x4adfa541UL, 0x3dd895d7UL, 0xa4d1c46dUL, 0xd3d6f4fbUL, 0x4369e96aUL, 0x346ed9fcUL, 0xad678846UL, 0xda60b8d0UL, 0x44042d73UL, 0x33031de5UL,
+     0xaa0a4c5fUL, 0xdd0d7cc9UL, 0x5005713cUL, 0x270241aaUL, 0xbe0b1010UL, 0xc90c2086UL, 0x5768b525UL, 0x206f85b3UL, 0xb966d409UL, 0xce61e49fUL, 0x5edef90eUL,
+     0x29d9c998UL, 0xb0d09822UL, 0xc7d7a8b4UL, 0x59b33d17UL, 0x2eb40d81UL, 0xb7bd5c3bUL, 0xc0ba6cadUL, 0xedb88320UL, 0x9abfb3b6UL, 0x03b6e20cUL, 0x74b1d29aUL,
+     0xead54739UL, 0x9dd277afUL, 0x04db2615UL, 0x73dc1683UL, 0xe3630b12UL, 0x94643b84UL, 0x0d6d6a3eUL, 0x7a6a5aa8UL, 0xe40ecf0bUL, 0x9309ff9dUL, 0x0a00ae27UL,
+     0x7d079eb1UL, 0xf00f9344UL, 0x8708a3d2UL, 0x1e01f268UL, 0x6906c2feUL, 0xf762575dUL, 0x806567cbUL, 0x196c3671UL, 0x6e6b06e7UL, 0xfed41b76UL, 0x89d32be0UL,
+     0x10da7a5aUL, 0x67dd4accUL, 0xf9b9df6fUL, 0x8ebeeff9UL, 0x17b7be43UL, 0x60b08ed5UL, 0xd6d6a3e8UL, 0xa1d1937eUL, 0x38d8c2c4UL, 0x4fdff252UL, 0xd1bb67f1UL,
+     0xa6bc5767UL, 0x3fb506ddUL, 0x48b2364bUL, 0xd80d2bdaUL, 0xaf0a1b4cUL, 0x36034af6UL, 0x41047a60UL, 0xdf60efc3UL, 0xa867df55UL, 0x316e8eefUL, 0x4669be79UL,
+     0xcb61b38cUL, 0xbc66831aUL, 0x256fd2a0UL, 0x5268e236UL, 0xcc0c7795UL, 0xbb0b4703UL, 0x220216b9UL, 0x5505262fUL, 0xc5ba3bbeUL, 0xb2bd0b28UL, 0x2bb45a92UL,
+     0x5cb36a04UL, 0xc2d7ffa7UL, 0xb5d0cf31UL, 0x2cd99e8bUL, 0x5bdeae1dUL, 0x9b64c2b0UL, 0xec63f226UL, 0x756aa39cUL, 0x026d930aUL, 0x9c0906a9UL, 0xeb0e363fUL,
+     0x72076785UL, 0x05005713UL, 0x95bf4a82UL, 0xe2b87a14UL, 0x7bb12baeUL, 0x0cb61b38UL, 0x92d28e9bUL, 0xe5d5be0dUL, 0x7cdcefb7UL, 0x0bdbdf21UL, 0x86d3d2d4UL,
+     0xf1d4e242UL, 0x68ddb3f8UL, 0x1fda836eUL, 0x81be16cdUL, 0xf6b9265bUL, 0x6fb077e1UL, 0x18b74777UL, 0x88085ae6UL, 0xff0f6a70UL, 0x66063bcaUL, 0x11010b5cUL,
+     0x8f659effUL, 0xf862ae69UL, 0x616bffd3UL, 0x166ccf45UL, 0xa00ae278UL, 0xd70dd2eeUL, 0x4e048354UL, 0x3903b3c2UL, 0xa7672661UL, 0xd06016f7UL, 0x4969474dUL,
+     0x3e6e77dbUL, 0xaed16a4aUL, 0xd9d65adcUL, 0x40df0b66UL, 0x37d83bf0UL, 0xa9bcae53UL, 0xdebb9ec5UL, 0x47b2cf7fUL, 0x30b5ffe9UL, 0xbdbdf21cUL, 0xcabac28aUL,
+     0x53b39330UL, 0x24b4a3a6UL, 0xbad03605UL, 0xcdd70693UL, 0x54de5729UL, 0x23d967bfUL, 0xb3667a2eUL, 0xc4614ab8UL, 0x5d681b02UL, 0x2a6f2b94UL, 0xb40bbe37UL,
+     0xc30c8ea1UL, 0x5a05df1bUL, 0x2d02ef8dUL
 #ifdef BYFOUR
-  },
-  {
-    0x00000000UL, 0x191b3141UL, 0x32366282UL, 0x2b2d53c3UL, 0x646cc504UL,
-    0x7d77f445UL, 0x565aa786UL, 0x4f4196c7UL, 0xc8d98a08UL, 0xd1c2bb49UL,
-    0xfaefe88aUL, 0xe3f4d9cbUL, 0xacb54f0cUL, 0xb5ae7e4dUL, 0x9e832d8eUL,
-    0x87981ccfUL, 0x4ac21251UL, 0x53d92310UL, 0x78f470d3UL, 0x61ef4192UL,
-    0x2eaed755UL, 0x37b5e614UL, 0x1c98b5d7UL, 0x05838496UL, 0x821b9859UL,
-    0x9b00a918UL, 0xb02dfadbUL, 0xa936cb9aUL, 0xe6775d5dUL, 0xff6c6c1cUL,
-    0xd4413fdfUL, 0xcd5a0e9eUL, 0x958424a2UL, 0x8c9f15e3UL, 0xa7b24620UL,
-    0xbea97761UL, 0xf1e8e1a6UL, 0xe8f3d0e7UL, 0xc3de8324UL, 0xdac5b265UL,
-    0x5d5daeaaUL, 0x44469febUL, 0x6f6bcc28UL, 0x7670fd69UL, 0x39316baeUL,
-    0x202a5aefUL, 0x0b07092cUL, 0x121c386dUL, 0xdf4636f3UL, 0xc65d07b2UL,
-    0xed705471UL, 0xf46b6530UL, 0xbb2af3f7UL, 0xa231c2b6UL, 0x891c9175UL,
-    0x9007a034UL, 0x179fbcfbUL, 0x0e848dbaUL, 0x25a9de79UL, 0x3cb2ef38UL,
-    0x73f379ffUL, 0x6ae848beUL, 0x41c51b7dUL, 0x58de2a3cUL, 0xf0794f05UL,
-    0xe9627e44UL, 0xc24f2d87UL, 0xdb541cc6UL, 0x94158a01UL, 0x8d0ebb40UL,
-    0xa623e883UL, 0xbf38d9c2UL, 0x38a0c50dUL, 0x21bbf44cUL, 0x0a96a78fUL,
-    0x138d96ceUL, 0x5ccc0009UL, 0x45d73148UL, 0x6efa628bUL, 0x77e153caUL,
-    0xbabb5d54UL, 0xa3a06c15UL, 0x888d3fd6UL, 0x91960e97UL, 0xded79850UL,
-    0xc7cca911UL, 0xece1fad2UL, 0xf5facb93UL, 0x7262d75cUL, 0x6b79e61dUL,
-    0x4054b5deUL, 0x594f849fUL, 0x160e1258UL, 0x0f152319UL, 0x243870daUL,
-    0x3d23419bUL, 0x65fd6ba7UL, 0x7ce65ae6UL, 0x57cb0925UL, 0x4ed03864UL,
-    0x0191aea3UL, 0x188a9fe2UL, 0x33a7cc21UL, 0x2abcfd60UL, 0xad24e1afUL,
-    0xb43fd0eeUL, 0x9f12832dUL, 0x8609b26cUL, 0xc94824abUL, 0xd05315eaUL,
-    0xfb7e4629UL, 0xe2657768UL, 0x2f3f79f6UL, 0x362448b7UL, 0x1d091b74UL,
-    0x04122a35UL, 0x4b53bcf2UL, 0x52488db3UL, 0x7965de70UL, 0x607eef31UL,
-    0xe7e6f3feUL, 0xfefdc2bfUL, 0xd5d0917cUL, 0xcccba03dUL, 0x838a36faUL,
-    0x9a9107bbUL, 0xb1bc5478UL, 0xa8a76539UL, 0x3b83984bUL, 0x2298a90aUL,
-    0x09b5fac9UL, 0x10aecb88UL, 0x5fef5d4fUL, 0x46f46c0eUL, 0x6dd93fcdUL,
-    0x74c20e8cUL, 0xf35a1243UL, 0xea412302UL, 0xc16c70c1UL, 0xd8774180UL,
-    0x9736d747UL, 0x8e2de606UL, 0xa500b5c5UL, 0xbc1b8484UL, 0x71418a1aUL,
-    0x685abb5bUL, 0x4377e898UL, 0x5a6cd9d9UL, 0x152d4f1eUL, 0x0c367e5fUL,
-    0x271b2d9cUL, 0x3e001cddUL, 0xb9980012UL, 0xa0833153UL, 0x8bae6290UL,
-    0x92b553d1UL, 0xddf4c516UL, 0xc4eff457UL, 0xefc2a794UL, 0xf6d996d5UL,
-    0xae07bce9UL, 0xb71c8da8UL, 0x9c31de6bUL, 0x852aef2aUL, 0xca6b79edUL,
-    0xd37048acUL, 0xf85d1b6fUL, 0xe1462a2eUL, 0x66de36e1UL, 0x7fc507a0UL,
-    0x54e85463UL, 0x4df36522UL, 0x02b2f3e5UL, 0x1ba9c2a4UL, 0x30849167UL,
-    0x299fa026UL, 0xe4c5aeb8UL, 0xfdde9ff9UL, 0xd6f3cc3aUL, 0xcfe8fd7bUL,
-    0x80a96bbcUL, 0x99b25afdUL, 0xb29f093eUL, 0xab84387fUL, 0x2c1c24b0UL,
-    0x350715f1UL, 0x1e2a4632UL, 0x07317773UL, 0x4870e1b4UL, 0x516bd0f5UL,
-    0x7a468336UL, 0x635db277UL, 0xcbfad74eUL, 0xd2e1e60fUL, 0xf9ccb5ccUL,
-    0xe0d7848dUL, 0xaf96124aUL, 0xb68d230bUL, 0x9da070c8UL, 0x84bb4189UL,
-    0x03235d46UL, 0x1a386c07UL, 0x31153fc4UL, 0x280e0e85UL, 0x674f9842UL,
-    0x7e54a903UL, 0x5579fac0UL, 0x4c62cb81UL, 0x8138c51fUL, 0x9823f45eUL,
-    0xb30ea79dUL, 0xaa1596dcUL, 0xe554001bUL, 0xfc4f315aUL, 0xd7626299UL,
-    0xce7953d8UL, 0x49e14f17UL, 0x50fa7e56UL, 0x7bd72d95UL, 0x62cc1cd4UL,
-    0x2d8d8a13UL, 0x3496bb52UL, 0x1fbbe891UL, 0x06a0d9d0UL, 0x5e7ef3ecUL,
-    0x4765c2adUL, 0x6c48916eUL, 0x7553a02fUL, 0x3a1236e8UL, 0x230907a9UL,
-    0x0824546aUL, 0x113f652bUL, 0x96a779e4UL, 0x8fbc48a5UL, 0xa4911b66UL,
-    0xbd8a2a27UL, 0xf2cbbce0UL, 0xebd08da1UL, 0xc0fdde62UL, 0xd9e6ef23UL,
-    0x14bce1bdUL, 0x0da7d0fcUL, 0x268a833fUL, 0x3f91b27eUL, 0x70d024b9UL,
-    0x69cb15f8UL, 0x42e6463bUL, 0x5bfd777aUL, 0xdc656bb5UL, 0xc57e5af4UL,
-    0xee530937UL, 0xf7483876UL, 0xb809aeb1UL, 0xa1129ff0UL, 0x8a3fcc33UL,
-    0x9324fd72UL
-  },
-  {
-    0x00000000UL, 0x01c26a37UL, 0x0384d46eUL, 0x0246be59UL, 0x0709a8dcUL,
-    0x06cbc2ebUL, 0x048d7cb2UL, 0x054f1685UL, 0x0e1351b8UL, 0x0fd13b8fUL,
-    0x0d9785d6UL, 0x0c55efe1UL, 0x091af964UL, 0x08d89353UL, 0x0a9e2d0aUL,
-    0x0b5c473dUL, 0x1c26a370UL, 0x1de4c947UL, 0x1fa2771eUL, 0x1e601d29UL,
-    0x1b2f0bacUL, 0x1aed619bUL, 0x18abdfc2UL, 0x1969b5f5UL, 0x1235f2c8UL,
-    0x13f798ffUL, 0x11b126a6UL, 0x10734c91UL, 0x153c5a14UL, 0x14fe3023UL,
-    0x16b88e7aUL, 0x177ae44dUL, 0x384d46e0UL, 0x398f2cd7UL, 0x3bc9928eUL,
-    0x3a0bf8b9UL, 0x3f44ee3cUL, 0x3e86840bUL, 0x3cc03a52UL, 0x3d025065UL,
-    0x365e1758UL, 0x379c7d6fUL, 0x35dac336UL, 0x3418a901UL, 0x3157bf84UL,
-    0x3095d5b3UL, 0x32d36beaUL, 0x331101ddUL, 0x246be590UL, 0x25a98fa7UL,
-    0x27ef31feUL, 0x262d5bc9UL, 0x23624d4cUL, 0x22a0277bUL, 0x20e69922UL,
-    0x2124f315UL, 0x2a78b428UL, 0x2bbade1fUL, 0x29fc6046UL, 0x283e0a71UL,
-    0x2d711cf4UL, 0x2cb376c3UL, 0x2ef5c89aUL, 0x2f37a2adUL, 0x709a8dc0UL,
-    0x7158e7f7UL, 0x731e59aeUL, 0x72dc3399UL, 0x7793251cUL, 0x76514f2bUL,
-    0x7417f172UL, 0x75d59b45UL, 0x7e89dc78UL, 0x7f4bb64fUL, 0x7d0d0816UL,
-    0x7ccf6221UL, 0x798074a4UL, 0x78421e93UL, 0x7a04a0caUL, 0x7bc6cafdUL,
-    0x6cbc2eb0UL, 0x6d7e4487UL, 0x6f38fadeUL, 0x6efa90e9UL, 0x6bb5866cUL,
-    0x6a77ec5bUL, 0x68315202UL, 0x69f33835UL, 0x62af7f08UL, 0x636d153fUL,
-    0x612bab66UL, 0x60e9c151UL, 0x65a6d7d4UL, 0x6464bde3UL, 0x662203baUL,
-    0x67e0698dUL, 0x48d7cb20UL, 0x4915a117UL, 0x4b531f4eUL, 0x4a917579UL,
-    0x4fde63fcUL, 0x4e1c09cbUL, 0x4c5ab792UL, 0x4d98dda5UL, 0x46c49a98UL,
-    0x4706f0afUL, 0x45404ef6UL, 0x448224c1UL, 0x41cd3244UL, 0x400f5873UL,
-    0x4249e62aUL, 0x438b8c1dUL, 0x54f16850UL, 0x55330267UL, 0x5775bc3eUL,
-    0x56b7d609UL, 0x53f8c08cUL, 0x523aaabbUL, 0x507c14e2UL, 0x51be7ed5UL,
-    0x5ae239e8UL, 0x5b2053dfUL, 0x5966ed86UL, 0x58a487b1UL, 0x5deb9134UL,
-    0x5c29fb03UL, 0x5e6f455aUL, 0x5fad2f6dUL, 0xe1351b80UL, 0xe0f771b7UL,
-    0xe2b1cfeeUL, 0xe373a5d9UL, 0xe63cb35cUL, 0xe7fed96bUL, 0xe5b86732UL,
-    0xe47a0d05UL, 0xef264a38UL, 0xeee4200fUL, 0xeca29e56UL, 0xed60f461UL,
-    0xe82fe2e4UL, 0xe9ed88d3UL, 0xebab368aUL, 0xea695cbdUL, 0xfd13b8f0UL,
-    0xfcd1d2c7UL, 0xfe976c9eUL, 0xff5506a9UL, 0xfa1a102cUL, 0xfbd87a1bUL,
-    0xf99ec442UL, 0xf85cae75UL, 0xf300e948UL, 0xf2c2837fUL, 0xf0843d26UL,
-    0xf1465711UL, 0xf4094194UL, 0xf5cb2ba3UL, 0xf78d95faUL, 0xf64fffcdUL,
-    0xd9785d60UL, 0xd8ba3757UL, 0xdafc890eUL, 0xdb3ee339UL, 0xde71f5bcUL,
-    0xdfb39f8bUL, 0xddf521d2UL, 0xdc374be5UL, 0xd76b0cd8UL, 0xd6a966efUL,
-    0xd4efd8b6UL, 0xd52db281UL, 0xd062a404UL, 0xd1a0ce33UL, 0xd3e6706aUL,
-    0xd2241a5dUL, 0xc55efe10UL, 0xc49c9427UL, 0xc6da2a7eUL, 0xc7184049UL,
-    0xc25756ccUL, 0xc3953cfbUL, 0xc1d382a2UL, 0xc011e895UL, 0xcb4dafa8UL,
-    0xca8fc59fUL, 0xc8c97bc6UL, 0xc90b11f1UL, 0xcc440774UL, 0xcd866d43UL,
-    0xcfc0d31aUL, 0xce02b92dUL, 0x91af9640UL, 0x906dfc77UL, 0x922b422eUL,
-    0x93e92819UL, 0x96a63e9cUL, 0x976454abUL, 0x9522eaf2UL, 0x94e080c5UL,
-    0x9fbcc7f8UL, 0x9e7eadcfUL, 0x9c381396UL, 0x9dfa79a1UL, 0x98b56f24UL,
-    0x99770513UL, 0x9b31bb4aUL, 0x9af3d17dUL, 0x8d893530UL, 0x8c4b5f07UL,
-    0x8e0de15eUL, 0x8fcf8b69UL, 0x8a809decUL, 0x8b42f7dbUL, 0x89044982UL,
-    0x88c623b5UL, 0x839a6488UL, 0x82580ebfUL, 0x801eb0e6UL, 0x81dcdad1UL,
-    0x8493cc54UL, 0x8551a663UL, 0x8717183aUL, 0x86d5720dUL, 0xa9e2d0a0UL,
-    0xa820ba97UL, 0xaa6604ceUL, 0xaba46ef9UL, 0xaeeb787cUL, 0xaf29124bUL,
-    0xad6fac12UL, 0xacadc625UL, 0xa7f18118UL, 0xa633eb2fUL, 0xa4755576UL,
-    0xa5b73f41UL, 0xa0f829c4UL, 0xa13a43f3UL, 0xa37cfdaaUL, 0xa2be979dUL,
-    0xb5c473d0UL, 0xb40619e7UL, 0xb640a7beUL, 0xb782cd89UL, 0xb2cddb0cUL,
-    0xb30fb13bUL, 0xb1490f62UL, 0xb08b6555UL, 0xbbd72268UL, 0xba15485fUL,
-    0xb853f606UL, 0xb9919c31UL, 0xbcde8ab4UL, 0xbd1ce083UL, 0xbf5a5edaUL,
-    0xbe9834edUL
-  },
-  {
-    0x00000000UL, 0xb8bc6765UL, 0xaa09c88bUL, 0x12b5afeeUL, 0x8f629757UL,
-    0x37def032UL, 0x256b5fdcUL, 0x9dd738b9UL, 0xc5b428efUL, 0x7d084f8aUL,
-    0x6fbde064UL, 0xd7018701UL, 0x4ad6bfb8UL, 0xf26ad8ddUL, 0xe0df7733UL,
-    0x58631056UL, 0x5019579fUL, 0xe8a530faUL, 0xfa109f14UL, 0x42acf871UL,
-    0xdf7bc0c8UL, 0x67c7a7adUL, 0x75720843UL, 0xcdce6f26UL, 0x95ad7f70UL,
-    0x2d111815UL, 0x3fa4b7fbUL, 0x8718d09eUL, 0x1acfe827UL, 0xa2738f42UL,
-    0xb0c620acUL, 0x087a47c9UL, 0xa032af3eUL, 0x188ec85bUL, 0x0a3b67b5UL,
-    0xb28700d0UL, 0x2f503869UL, 0x97ec5f0cUL, 0x8559f0e2UL, 0x3de59787UL,
-    0x658687d1UL, 0xdd3ae0b4UL, 0xcf8f4f5aUL, 0x7733283fUL, 0xeae41086UL,
-    0x525877e3UL, 0x40edd80dUL, 0xf851bf68UL, 0xf02bf8a1UL, 0x48979fc4UL,
-    0x5a22302aUL, 0xe29e574fUL, 0x7f496ff6UL, 0xc7f50893UL, 0xd540a77dUL,
-    0x6dfcc018UL, 0x359fd04eUL, 0x8d23b72bUL, 0x9f9618c5UL, 0x272a7fa0UL,
-    0xbafd4719UL, 0x0241207cUL, 0x10f48f92UL, 0xa848e8f7UL, 0x9b14583dUL,
-    0x23a83f58UL, 0x311d90b6UL, 0x89a1f7d3UL, 0x1476cf6aUL, 0xaccaa80fUL,
-    0xbe7f07e1UL, 0x06c36084UL, 0x5ea070d2UL, 0xe61c17b7UL, 0xf4a9b859UL,
-    0x4c15df3cUL, 0xd1c2e785UL, 0x697e80e0UL, 0x7bcb2f0eUL, 0xc377486bUL,
-    0xcb0d0fa2UL, 0x73b168c7UL, 0x6104c729UL, 0xd9b8a04cUL, 0x446f98f5UL,
-    0xfcd3ff90UL, 0xee66507eUL, 0x56da371bUL, 0x0eb9274dUL, 0xb6054028UL,
-    0xa4b0efc6UL, 0x1c0c88a3UL, 0x81dbb01aUL, 0x3967d77fUL, 0x2bd27891UL,
-    0x936e1ff4UL, 0x3b26f703UL, 0x839a9066UL, 0x912f3f88UL, 0x299358edUL,
-    0xb4446054UL, 0x0cf80731UL, 0x1e4da8dfUL, 0xa6f1cfbaUL, 0xfe92dfecUL,
-    0x462eb889UL, 0x549b1767UL, 0xec277002UL, 0x71f048bbUL, 0xc94c2fdeUL,
-    0xdbf98030UL, 0x6345e755UL, 0x6b3fa09cUL, 0xd383c7f9UL, 0xc1366817UL,
-    0x798a0f72UL, 0xe45d37cbUL, 0x5ce150aeUL, 0x4e54ff40UL, 0xf6e89825UL,
-    0xae8b8873UL, 0x1637ef16UL, 0x048240f8UL, 0xbc3e279dUL, 0x21e91f24UL,
-    0x99557841UL, 0x8be0d7afUL, 0x335cb0caUL, 0xed59b63bUL, 0x55e5d15eUL,
-    0x47507eb0UL, 0xffec19d5UL, 0x623b216cUL, 0xda874609UL, 0xc832e9e7UL,
-    0x708e8e82UL, 0x28ed9ed4UL, 0x9051f9b1UL, 0x82e4565fUL, 0x3a58313aUL,
-    0xa78f0983UL, 0x1f336ee6UL, 0x0d86c108UL, 0xb53aa66dUL, 0xbd40e1a4UL,
-    0x05fc86c1UL, 0x1749292fUL, 0xaff54e4aUL, 0x322276f3UL, 0x8a9e1196UL,
-    0x982bbe78UL, 0x2097d91dUL, 0x78f4c94bUL, 0xc048ae2eUL, 0xd2fd01c0UL,
-    0x6a4166a5UL, 0xf7965e1cUL, 0x4f2a3979UL, 0x5d9f9697UL, 0xe523f1f2UL,
-    0x4d6b1905UL, 0xf5d77e60UL, 0xe762d18eUL, 0x5fdeb6ebUL, 0xc2098e52UL,
-    0x7ab5e937UL, 0x680046d9UL, 0xd0bc21bcUL, 0x88df31eaUL, 0x3063568fUL,
-    0x22d6f961UL, 0x9a6a9e04UL, 0x07bda6bdUL, 0xbf01c1d8UL, 0xadb46e36UL,
-    0x15080953UL, 0x1d724e9aUL, 0xa5ce29ffUL, 0xb77b8611UL, 0x0fc7e174UL,
-    0x9210d9cdUL, 0x2aacbea8UL, 0x38191146UL, 0x80a57623UL, 0xd8c66675UL,
-    0x607a0110UL, 0x72cfaefeUL, 0xca73c99bUL, 0x57a4f122UL, 0xef189647UL,
-    0xfdad39a9UL, 0x45115eccUL, 0x764dee06UL, 0xcef18963UL, 0xdc44268dUL,
-    0x64f841e8UL, 0xf92f7951UL, 0x41931e34UL, 0x5326b1daUL, 0xeb9ad6bfUL,
-    0xb3f9c6e9UL, 0x0b45a18cUL, 0x19f00e62UL, 0xa14c6907UL, 0x3c9b51beUL,
-    0x842736dbUL, 0x96929935UL, 0x2e2efe50UL, 0x2654b999UL, 0x9ee8defcUL,
-    0x8c5d7112UL, 0x34e11677UL, 0xa9362eceUL, 0x118a49abUL, 0x033fe645UL,
-    0xbb838120UL, 0xe3e09176UL, 0x5b5cf613UL, 0x49e959fdUL, 0xf1553e98UL,
-    0x6c820621UL, 0xd43e6144UL, 0xc68bceaaUL, 0x7e37a9cfUL, 0xd67f4138UL,
-    0x6ec3265dUL, 0x7c7689b3UL, 0xc4caeed6UL, 0x591dd66fUL, 0xe1a1b10aUL,
-    0xf3141ee4UL, 0x4ba87981UL, 0x13cb69d7UL, 0xab770eb2UL, 0xb9c2a15cUL,
-    0x017ec639UL, 0x9ca9fe80UL, 0x241599e5UL, 0x36a0360bUL, 0x8e1c516eUL,
-    0x866616a7UL, 0x3eda71c2UL, 0x2c6fde2cUL, 0x94d3b949UL, 0x090481f0UL,
-    0xb1b8e695UL, 0xa30d497bUL, 0x1bb12e1eUL, 0x43d23e48UL, 0xfb6e592dUL,
-    0xe9dbf6c3UL, 0x516791a6UL, 0xccb0a91fUL, 0x740cce7aUL, 0x66b96194UL,
-    0xde0506f1UL
-  },
-  {
-    0x00000000UL, 0x96300777UL, 0x2c610eeeUL, 0xba510999UL, 0x19c46d07UL,
-    0x8ff46a70UL, 0x35a563e9UL, 0xa395649eUL, 0x3288db0eUL, 0xa4b8dc79UL,
-    0x1ee9d5e0UL, 0x88d9d297UL, 0x2b4cb609UL, 0xbd7cb17eUL, 0x072db8e7UL,
-    0x911dbf90UL, 0x6410b71dUL, 0xf220b06aUL, 0x4871b9f3UL, 0xde41be84UL,
-    0x7dd4da1aUL, 0xebe4dd6dUL, 0x51b5d4f4UL, 0xc785d383UL, 0x56986c13UL,
-    0xc0a86b64UL, 0x7af962fdUL, 0xecc9658aUL, 0x4f5c0114UL, 0xd96c0663UL,
-    0x633d0ffaUL, 0xf50d088dUL, 0xc8206e3bUL, 0x5e10694cUL, 0xe44160d5UL,
-    0x727167a2UL, 0xd1e4033cUL, 0x47d4044bUL, 0xfd850dd2UL, 0x6bb50aa5UL,
-    0xfaa8b535UL, 0x6c98b242UL, 0xd6c9bbdbUL, 0x40f9bcacUL, 0xe36cd832UL,
-    0x755cdf45UL, 0xcf0dd6dcUL, 0x593dd1abUL, 0xac30d926UL, 0x3a00de51UL,
-    0x8051d7c8UL, 0x1661d0bfUL, 0xb5f4b421UL, 0x23c4b356UL, 0x9995bacfUL,
-    0x0fa5bdb8UL, 0x9eb80228UL, 0x0888055fUL, 0xb2d90cc6UL, 0x24e90bb1UL,
-    0x877c6f2fUL, 0x114c6858UL, 0xab1d61c1UL, 0x3d2d66b6UL, 0x9041dc76UL,
-    0x0671db01UL, 0xbc20d298UL, 0x2a10d5efUL, 0x8985b171UL, 0x1fb5b606UL,
-    0xa5e4bf9fUL, 0x33d4b8e8UL, 0xa2c90778UL, 0x34f9000fUL, 0x8ea80996UL,
-    0x18980ee1UL, 0xbb0d6a7fUL, 0x2d3d6d08UL, 0x976c6491UL, 0x015c63e6UL,
-    0xf4516b6bUL, 0x62616c1cUL, 0xd8306585UL, 0x4e0062f2UL, 0xed95066cUL,
-    0x7ba5011bUL, 0xc1f40882UL, 0x57c40ff5UL, 0xc6d9b065UL, 0x50e9b712UL,
-    0xeab8be8bUL, 0x7c88b9fcUL, 0xdf1ddd62UL, 0x492dda15UL, 0xf37cd38cUL,
-    0x654cd4fbUL, 0x5861b24dUL, 0xce51b53aUL, 0x7400bca3UL, 0xe230bbd4UL,
-    0x41a5df4aUL, 0xd795d83dUL, 0x6dc4d1a4UL, 0xfbf4d6d3UL, 0x6ae96943UL,
-    0xfcd96e34UL, 0x468867adUL, 0xd0b860daUL, 0x732d0444UL, 0xe51d0333UL,
-    0x5f4c0aaaUL, 0xc97c0dddUL, 0x3c710550UL, 0xaa410227UL, 0x10100bbeUL,
-    0x86200cc9UL, 0x25b56857UL, 0xb3856f20UL, 0x09d466b9UL, 0x9fe461ceUL,
-    0x0ef9de5eUL, 0x98c9d929UL, 0x2298d0b0UL, 0xb4a8d7c7UL, 0x173db359UL,
-    0x810db42eUL, 0x3b5cbdb7UL, 0xad6cbac0UL, 0x2083b8edUL, 0xb6b3bf9aUL,
-    0x0ce2b603UL, 0x9ad2b174UL, 0x3947d5eaUL, 0xaf77d29dUL, 0x1526db04UL,
-    0x8316dc73UL, 0x120b63e3UL, 0x843b6494UL, 0x3e6a6d0dUL, 0xa85a6a7aUL,
-    0x0bcf0ee4UL, 0x9dff0993UL, 0x27ae000aUL, 0xb19e077dUL, 0x44930ff0UL,
-    0xd2a30887UL, 0x68f2011eUL, 0xfec20669UL, 0x5d5762f7UL, 0xcb676580UL,
-    0x71366c19UL, 0xe7066b6eUL, 0x761bd4feUL, 0xe02bd389UL, 0x5a7ada10UL,
-    0xcc4add67UL, 0x6fdfb9f9UL, 0xf9efbe8eUL, 0x43beb717UL, 0xd58eb060UL,
-    0xe8a3d6d6UL, 0x7e93d1a1UL, 0xc4c2d838UL, 0x52f2df4fUL, 0xf167bbd1UL,
-    0x6757bca6UL, 0xdd06b53fUL, 0x4b36b248UL, 0xda2b0dd8UL, 0x4c1b0aafUL,
-    0xf64a0336UL, 0x607a0441UL, 0xc3ef60dfUL, 0x55df67a8UL, 0xef8e6e31UL,
-    0x79be6946UL, 0x8cb361cbUL, 0x1a8366bcUL, 0xa0d26f25UL, 0x36e26852UL,
-    0x95770cccUL, 0x03470bbbUL, 0xb9160222UL, 0x2f260555UL, 0xbe3bbac5UL,
-    0x280bbdb2UL, 0x925ab42bUL, 0x046ab35cUL, 0xa7ffd7c2UL, 0x31cfd0b5UL,
-    0x8b9ed92cUL, 0x1daede5bUL, 0xb0c2649bUL, 0x26f263ecUL, 0x9ca36a75UL,
-    0x0a936d02UL, 0xa906099cUL, 0x3f360eebUL, 0x85670772UL, 0x13570005UL,
-    0x824abf95UL, 0x147ab8e2UL, 0xae2bb17bUL, 0x381bb60cUL, 0x9b8ed292UL,
-    0x0dbed5e5UL, 0xb7efdc7cUL, 0x21dfdb0bUL, 0xd4d2d386UL, 0x42e2d4f1UL,
-    0xf8b3dd68UL, 0x6e83da1fUL, 0xcd16be81UL, 0x5b26b9f6UL, 0xe177b06fUL,
-    0x7747b718UL, 0xe65a0888UL, 0x706a0fffUL, 0xca3b0666UL, 0x5c0b0111UL,
-    0xff9e658fUL, 0x69ae62f8UL, 0xd3ff6b61UL, 0x45cf6c16UL, 0x78e20aa0UL,
-    0xeed20dd7UL, 0x5483044eUL, 0xc2b30339UL, 0x612667a7UL, 0xf71660d0UL,
-    0x4d476949UL, 0xdb776e3eUL, 0x4a6ad1aeUL, 0xdc5ad6d9UL, 0x660bdf40UL,
-    0xf03bd837UL, 0x53aebca9UL, 0xc59ebbdeUL, 0x7fcfb247UL, 0xe9ffb530UL,
-    0x1cf2bdbdUL, 0x8ac2bacaUL, 0x3093b353UL, 0xa6a3b424UL, 0x0536d0baUL,
-    0x9306d7cdUL, 0x2957de54UL, 0xbf67d923UL, 0x2e7a66b3UL, 0xb84a61c4UL,
-    0x021b685dUL, 0x942b6f2aUL, 0x37be0bb4UL, 0xa18e0cc3UL, 0x1bdf055aUL,
-    0x8def022dUL
-  },
-  {
-    0x00000000UL, 0x41311b19UL, 0x82623632UL, 0xc3532d2bUL, 0x04c56c64UL,
-    0x45f4777dUL, 0x86a75a56UL, 0xc796414fUL, 0x088ad9c8UL, 0x49bbc2d1UL,
-    0x8ae8effaUL, 0xcbd9f4e3UL, 0x0c4fb5acUL, 0x4d7eaeb5UL, 0x8e2d839eUL,
-    0xcf1c9887UL, 0x5112c24aUL, 0x1023d953UL, 0xd370f478UL, 0x9241ef61UL,
-    0x55d7ae2eUL, 0x14e6b537UL, 0xd7b5981cUL, 0x96848305UL, 0x59981b82UL,
-    0x18a9009bUL, 0xdbfa2db0UL, 0x9acb36a9UL, 0x5d5d77e6UL, 0x1c6c6cffUL,
-    0xdf3f41d4UL, 0x9e0e5acdUL, 0xa2248495UL, 0xe3159f8cUL, 0x2046b2a7UL,
-    0x6177a9beUL, 0xa6e1e8f1UL, 0xe7d0f3e8UL, 0x2483dec3UL, 0x65b2c5daUL,
-    0xaaae5d5dUL, 0xeb9f4644UL, 0x28cc6b6fUL, 0x69fd7076UL, 0xae6b3139UL,
-    0xef5a2a20UL, 0x2c09070bUL, 0x6d381c12UL, 0xf33646dfUL, 0xb2075dc6UL,
-    0x715470edUL, 0x30656bf4UL, 0xf7f32abbUL, 0xb6c231a2UL, 0x75911c89UL,
-    0x34a00790UL, 0xfbbc9f17UL, 0xba8d840eUL, 0x79dea925UL, 0x38efb23cUL,
-    0xff79f373UL, 0xbe48e86aUL, 0x7d1bc541UL, 0x3c2ade58UL, 0x054f79f0UL,
-    0x447e62e9UL, 0x872d4fc2UL, 0xc61c54dbUL, 0x018a1594UL, 0x40bb0e8dUL,
-    0x83e823a6UL, 0xc2d938bfUL, 0x0dc5a038UL, 0x4cf4bb21UL, 0x8fa7960aUL,
-    0xce968d13UL, 0x0900cc5cUL, 0x4831d745UL, 0x8b62fa6eUL, 0xca53e177UL,
-    0x545dbbbaUL, 0x156ca0a3UL, 0xd63f8d88UL, 0x970e9691UL, 0x5098d7deUL,
-    0x11a9ccc7UL, 0xd2fae1ecUL, 0x93cbfaf5UL, 0x5cd76272UL, 0x1de6796bUL,
-    0xdeb55440UL, 0x9f844f59UL, 0x58120e16UL, 0x1923150fUL, 0xda703824UL,
-    0x9b41233dUL, 0xa76bfd65UL, 0xe65ae67cUL, 0x2509cb57UL, 0x6438d04eUL,
-    0xa3ae9101UL, 0xe29f8a18UL, 0x21cca733UL, 0x60fdbc2aUL, 0xafe124adUL,
-    0xeed03fb4UL, 0x2d83129fUL, 0x6cb20986UL, 0xab2448c9UL, 0xea1553d0UL,
-    0x29467efbUL, 0x687765e2UL, 0xf6793f2fUL, 0xb7482436UL, 0x741b091dUL,
-    0x352a1204UL, 0xf2bc534bUL, 0xb38d4852UL, 0x70de6579UL, 0x31ef7e60UL,
-    0xfef3e6e7UL, 0xbfc2fdfeUL, 0x7c91d0d5UL, 0x3da0cbccUL, 0xfa368a83UL,
-    0xbb07919aUL, 0x7854bcb1UL, 0x3965a7a8UL, 0x4b98833bUL, 0x0aa99822UL,
-    0xc9fab509UL, 0x88cbae10UL, 0x4f5def5fUL, 0x0e6cf446UL, 0xcd3fd96dUL,
-    0x8c0ec274UL, 0x43125af3UL, 0x022341eaUL, 0xc1706cc1UL, 0x804177d8UL,
-    0x47d73697UL, 0x06e62d8eUL, 0xc5b500a5UL, 0x84841bbcUL, 0x1a8a4171UL,
-    0x5bbb5a68UL, 0x98e87743UL, 0xd9d96c5aUL, 0x1e4f2d15UL, 0x5f7e360cUL,
-    0x9c2d1b27UL, 0xdd1c003eUL, 0x120098b9UL, 0x533183a0UL, 0x9062ae8bUL,
-    0xd153b592UL, 0x16c5f4ddUL, 0x57f4efc4UL, 0x94a7c2efUL, 0xd596d9f6UL,
-    0xe9bc07aeUL, 0xa88d1cb7UL, 0x6bde319cUL, 0x2aef2a85UL, 0xed796bcaUL,
-    0xac4870d3UL, 0x6f1b5df8UL, 0x2e2a46e1UL, 0xe136de66UL, 0xa007c57fUL,
-    0x6354e854UL, 0x2265f34dUL, 0xe5f3b202UL, 0xa4c2a91bUL, 0x67918430UL,
-    0x26a09f29UL, 0xb8aec5e4UL, 0xf99fdefdUL, 0x3accf3d6UL, 0x7bfde8cfUL,
-    0xbc6ba980UL, 0xfd5ab299UL, 0x3e099fb2UL, 0x7f3884abUL, 0xb0241c2cUL,
-    0xf1150735UL, 0x32462a1eUL, 0x73773107UL, 0xb4e17048UL, 0xf5d06b51UL,
-    0x3683467aUL, 0x77b25d63UL, 0x4ed7facbUL, 0x0fe6e1d2UL, 0xccb5ccf9UL,
-    0x8d84d7e0UL, 0x4a1296afUL, 0x0b238db6UL, 0xc870a09dUL, 0x8941bb84UL,
-    0x465d2303UL, 0x076c381aUL, 0xc43f1531UL, 0x850e0e28UL, 0x42984f67UL,
-    0x03a9547eUL, 0xc0fa7955UL, 0x81cb624cUL, 0x1fc53881UL, 0x5ef42398UL,
-    0x9da70eb3UL, 0xdc9615aaUL, 0x1b0054e5UL, 0x5a314ffcUL, 0x996262d7UL,
-    0xd85379ceUL, 0x174fe149UL, 0x567efa50UL, 0x952dd77bUL, 0xd41ccc62UL,
-    0x138a8d2dUL, 0x52bb9634UL, 0x91e8bb1fUL, 0xd0d9a006UL, 0xecf37e5eUL,
-    0xadc26547UL, 0x6e91486cUL, 0x2fa05375UL, 0xe836123aUL, 0xa9070923UL,
-    0x6a542408UL, 0x2b653f11UL, 0xe479a796UL, 0xa548bc8fUL, 0x661b91a4UL,
-    0x272a8abdUL, 0xe0bccbf2UL, 0xa18dd0ebUL, 0x62defdc0UL, 0x23efe6d9UL,
-    0xbde1bc14UL, 0xfcd0a70dUL, 0x3f838a26UL, 0x7eb2913fUL, 0xb924d070UL,
-    0xf815cb69UL, 0x3b46e642UL, 0x7a77fd5bUL, 0xb56b65dcUL, 0xf45a7ec5UL,
-    0x370953eeUL, 0x763848f7UL, 0xb1ae09b8UL, 0xf09f12a1UL, 0x33cc3f8aUL,
-    0x72fd2493UL
-  },
-  {
-    0x00000000UL, 0x376ac201UL, 0x6ed48403UL, 0x59be4602UL, 0xdca80907UL,
-    0xebc2cb06UL, 0xb27c8d04UL, 0x85164f05UL, 0xb851130eUL, 0x8f3bd10fUL,
-    0xd685970dUL, 0xe1ef550cUL, 0x64f91a09UL, 0x5393d808UL, 0x0a2d9e0aUL,
-    0x3d475c0bUL, 0x70a3261cUL, 0x47c9e41dUL, 0x1e77a21fUL, 0x291d601eUL,
-    0xac0b2f1bUL, 0x9b61ed1aUL, 0xc2dfab18UL, 0xf5b56919UL, 0xc8f23512UL,
-    0xff98f713UL, 0xa626b111UL, 0x914c7310UL, 0x145a3c15UL, 0x2330fe14UL,
-    0x7a8eb816UL, 0x4de47a17UL, 0xe0464d38UL, 0xd72c8f39UL, 0x8e92c93bUL,
-    0xb9f80b3aUL, 0x3cee443fUL, 0x0b84863eUL, 0x523ac03cUL, 0x6550023dUL,
-    0x58175e36UL, 0x6f7d9c37UL, 0x36c3da35UL, 0x01a91834UL, 0x84bf5731UL,
-    0xb3d59530UL, 0xea6bd332UL, 0xdd011133UL, 0x90e56b24UL, 0xa78fa925UL,
-    0xfe31ef27UL, 0xc95b2d26UL, 0x4c4d6223UL, 0x7b27a022UL, 0x2299e620UL,
-    0x15f32421UL, 0x28b4782aUL, 0x1fdeba2bUL, 0x4660fc29UL, 0x710a3e28UL,
-    0xf41c712dUL, 0xc376b32cUL, 0x9ac8f52eUL, 0xada2372fUL, 0xc08d9a70UL,
-    0xf7e75871UL, 0xae591e73UL, 0x9933dc72UL, 0x1c259377UL, 0x2b4f5176UL,
-    0x72f11774UL, 0x459bd575UL, 0x78dc897eUL, 0x4fb64b7fUL, 0x16080d7dUL,
-    0x2162cf7cUL, 0xa4748079UL, 0x931e4278UL, 0xcaa0047aUL, 0xfdcac67bUL,
-    0xb02ebc6cUL, 0x87447e6dUL, 0xdefa386fUL, 0xe990fa6eUL, 0x6c86b56bUL,
-    0x5bec776aUL, 0x02523168UL, 0x3538f369UL, 0x087faf62UL, 0x3f156d63UL,
-    0x66ab2b61UL, 0x51c1e960UL, 0xd4d7a665UL, 0xe3bd6464UL, 0xba032266UL,
-    0x8d69e067UL, 0x20cbd748UL, 0x17a11549UL, 0x4e1f534bUL, 0x7975914aUL,
-    0xfc63de4fUL, 0xcb091c4eUL, 0x92b75a4cUL, 0xa5dd984dUL, 0x989ac446UL,
-    0xaff00647UL, 0xf64e4045UL, 0xc1248244UL, 0x4432cd41UL, 0x73580f40UL,
-    0x2ae64942UL, 0x1d8c8b43UL, 0x5068f154UL, 0x67023355UL, 0x3ebc7557UL,
-    0x09d6b756UL, 0x8cc0f853UL, 0xbbaa3a52UL, 0xe2147c50UL, 0xd57ebe51UL,
-    0xe839e25aUL, 0xdf53205bUL, 0x86ed6659UL, 0xb187a458UL, 0x3491eb5dUL,
-    0x03fb295cUL, 0x5a456f5eUL, 0x6d2fad5fUL, 0x801b35e1UL, 0xb771f7e0UL,
-    0xeecfb1e2UL, 0xd9a573e3UL, 0x5cb33ce6UL, 0x6bd9fee7UL, 0x3267b8e5UL,
-    0x050d7ae4UL, 0x384a26efUL, 0x0f20e4eeUL, 0x569ea2ecUL, 0x61f460edUL,
-    0xe4e22fe8UL, 0xd388ede9UL, 0x8a36abebUL, 0xbd5c69eaUL, 0xf0b813fdUL,
-    0xc7d2d1fcUL, 0x9e6c97feUL, 0xa90655ffUL, 0x2c101afaUL, 0x1b7ad8fbUL,
-    0x42c49ef9UL, 0x75ae5cf8UL, 0x48e900f3UL, 0x7f83c2f2UL, 0x263d84f0UL,
-    0x115746f1UL, 0x944109f4UL, 0xa32bcbf5UL, 0xfa958df7UL, 0xcdff4ff6UL,
-    0x605d78d9UL, 0x5737bad8UL, 0x0e89fcdaUL, 0x39e33edbUL, 0xbcf571deUL,
-    0x8b9fb3dfUL, 0xd221f5ddUL, 0xe54b37dcUL, 0xd80c6bd7UL, 0xef66a9d6UL,
-    0xb6d8efd4UL, 0x81b22dd5UL, 0x04a462d0UL, 0x33cea0d1UL, 0x6a70e6d3UL,
-    0x5d1a24d2UL, 0x10fe5ec5UL, 0x27949cc4UL, 0x7e2adac6UL, 0x494018c7UL,
-    0xcc5657c2UL, 0xfb3c95c3UL, 0xa282d3c1UL, 0x95e811c0UL, 0xa8af4dcbUL,
-    0x9fc58fcaUL, 0xc67bc9c8UL, 0xf1110bc9UL, 0x740744ccUL, 0x436d86cdUL,
-    0x1ad3c0cfUL, 0x2db902ceUL, 0x4096af91UL, 0x77fc6d90UL, 0x2e422b92UL,
-    0x1928e993UL, 0x9c3ea696UL, 0xab546497UL, 0xf2ea2295UL, 0xc580e094UL,
-    0xf8c7bc9fUL, 0xcfad7e9eUL, 0x9613389cUL, 0xa179fa9dUL, 0x246fb598UL,
-    0x13057799UL, 0x4abb319bUL, 0x7dd1f39aUL, 0x3035898dUL, 0x075f4b8cUL,
-    0x5ee10d8eUL, 0x698bcf8fUL, 0xec9d808aUL, 0xdbf7428bUL, 0x82490489UL,
-    0xb523c688UL, 0x88649a83UL, 0xbf0e5882UL, 0xe6b01e80UL, 0xd1dadc81UL,
-    0x54cc9384UL, 0x63a65185UL, 0x3a181787UL, 0x0d72d586UL, 0xa0d0e2a9UL,
-    0x97ba20a8UL, 0xce0466aaUL, 0xf96ea4abUL, 0x7c78ebaeUL, 0x4b1229afUL,
-    0x12ac6fadUL, 0x25c6adacUL, 0x1881f1a7UL, 0x2feb33a6UL, 0x765575a4UL,
-    0x413fb7a5UL, 0xc429f8a0UL, 0xf3433aa1UL, 0xaafd7ca3UL, 0x9d97bea2UL,
-    0xd073c4b5UL, 0xe71906b4UL, 0xbea740b6UL, 0x89cd82b7UL, 0x0cdbcdb2UL,
-    0x3bb10fb3UL, 0x620f49b1UL, 0x55658bb0UL, 0x6822d7bbUL, 0x5f4815baUL,
-    0x06f653b8UL, 0x319c91b9UL, 0xb48adebcUL, 0x83e01cbdUL, 0xda5e5abfUL,
-    0xed3498beUL
-  },
-  {
-    0x00000000UL, 0x6567bcb8UL, 0x8bc809aaUL, 0xeeafb512UL, 0x5797628fUL,
-    0x32f0de37UL, 0xdc5f6b25UL, 0xb938d79dUL, 0xef28b4c5UL, 0x8a4f087dUL,
-    0x64e0bd6fUL, 0x018701d7UL, 0xb8bfd64aUL, 0xddd86af2UL, 0x3377dfe0UL,
-    0x56106358UL, 0x9f571950UL, 0xfa30a5e8UL, 0x149f10faUL, 0x71f8ac42UL,
-    0xc8c07bdfUL, 0xada7c767UL, 0x43087275UL, 0x266fcecdUL, 0x707fad95UL,
-    0x1518112dUL, 0xfbb7a43fUL, 0x9ed01887UL, 0x27e8cf1aUL, 0x428f73a2UL,
-    0xac20c6b0UL, 0xc9477a08UL, 0x3eaf32a0UL, 0x5bc88e18UL, 0xb5673b0aUL,
-    0xd00087b2UL, 0x6938502fUL, 0x0c5fec97UL, 0xe2f05985UL, 0x8797e53dUL,
-    0xd1878665UL, 0xb4e03addUL, 0x5a4f8fcfUL, 0x3f283377UL, 0x8610e4eaUL,
-    0xe3775852UL, 0x0dd8ed40UL, 0x68bf51f8UL, 0xa1f82bf0UL, 0xc49f9748UL,
-    0x2a30225aUL, 0x4f579ee2UL, 0xf66f497fUL, 0x9308f5c7UL, 0x7da740d5UL,
-    0x18c0fc6dUL, 0x4ed09f35UL, 0x2bb7238dUL, 0xc518969fUL, 0xa07f2a27UL,
-    0x1947fdbaUL, 0x7c204102UL, 0x928ff410UL, 0xf7e848a8UL, 0x3d58149bUL,
-    0x583fa823UL, 0xb6901d31UL, 0xd3f7a189UL, 0x6acf7614UL, 0x0fa8caacUL,
-    0xe1077fbeUL, 0x8460c306UL, 0xd270a05eUL, 0xb7171ce6UL, 0x59b8a9f4UL,
-    0x3cdf154cUL, 0x85e7c2d1UL, 0xe0807e69UL, 0x0e2fcb7bUL, 0x6b4877c3UL,
-    0xa20f0dcbUL, 0xc768b173UL, 0x29c70461UL, 0x4ca0b8d9UL, 0xf5986f44UL,
-    0x90ffd3fcUL, 0x7e5066eeUL, 0x1b37da56UL, 0x4d27b90eUL, 0x284005b6UL,
-    0xc6efb0a4UL, 0xa3880c1cUL, 0x1ab0db81UL, 0x7fd76739UL, 0x9178d22bUL,
-    0xf41f6e93UL, 0x03f7263bUL, 0x66909a83UL, 0x883f2f91UL, 0xed589329UL,
-    0x546044b4UL, 0x3107f80cUL, 0xdfa84d1eUL, 0xbacff1a6UL, 0xecdf92feUL,
-    0x89b82e46UL, 0x67179b54UL, 0x027027ecUL, 0xbb48f071UL, 0xde2f4cc9UL,
-    0x3080f9dbUL, 0x55e74563UL, 0x9ca03f6bUL, 0xf9c783d3UL, 0x176836c1UL,
-    0x720f8a79UL, 0xcb375de4UL, 0xae50e15cUL, 0x40ff544eUL, 0x2598e8f6UL,
-    0x73888baeUL, 0x16ef3716UL, 0xf8408204UL, 0x9d273ebcUL, 0x241fe921UL,
-    0x41785599UL, 0xafd7e08bUL, 0xcab05c33UL, 0x3bb659edUL, 0x5ed1e555UL,
-    0xb07e5047UL, 0xd519ecffUL, 0x6c213b62UL, 0x094687daUL, 0xe7e932c8UL,
-    0x828e8e70UL, 0xd49eed28UL, 0xb1f95190UL, 0x5f56e482UL, 0x3a31583aUL,
-    0x83098fa7UL, 0xe66e331fUL, 0x08c1860dUL, 0x6da63ab5UL, 0xa4e140bdUL,
-    0xc186fc05UL, 0x2f294917UL, 0x4a4ef5afUL, 0xf3762232UL, 0x96119e8aUL,
-    0x78be2b98UL, 0x1dd99720UL, 0x4bc9f478UL, 0x2eae48c0UL, 0xc001fdd2UL,
-    0xa566416aUL, 0x1c5e96f7UL, 0x79392a4fUL, 0x97969f5dUL, 0xf2f123e5UL,
-    0x05196b4dUL, 0x607ed7f5UL, 0x8ed162e7UL, 0xebb6de5fUL, 0x528e09c2UL,
-    0x37e9b57aUL, 0xd9460068UL, 0xbc21bcd0UL, 0xea31df88UL, 0x8f566330UL,
-    0x61f9d622UL, 0x049e6a9aUL, 0xbda6bd07UL, 0xd8c101bfUL, 0x366eb4adUL,
-    0x53090815UL, 0x9a4e721dUL, 0xff29cea5UL, 0x11867bb7UL, 0x74e1c70fUL,
-    0xcdd91092UL, 0xa8beac2aUL, 0x46111938UL, 0x2376a580UL, 0x7566c6d8UL,
-    0x10017a60UL, 0xfeaecf72UL, 0x9bc973caUL, 0x22f1a457UL, 0x479618efUL,
-    0xa939adfdUL, 0xcc5e1145UL, 0x06ee4d76UL, 0x6389f1ceUL, 0x8d2644dcUL,
-    0xe841f864UL, 0x51792ff9UL, 0x341e9341UL, 0xdab12653UL, 0xbfd69aebUL,
-    0xe9c6f9b3UL, 0x8ca1450bUL, 0x620ef019UL, 0x07694ca1UL, 0xbe519b3cUL,
-    0xdb362784UL, 0x35999296UL, 0x50fe2e2eUL, 0x99b95426UL, 0xfcdee89eUL,
-    0x12715d8cUL, 0x7716e134UL, 0xce2e36a9UL, 0xab498a11UL, 0x45e63f03UL,
-    0x208183bbUL, 0x7691e0e3UL, 0x13f65c5bUL, 0xfd59e949UL, 0x983e55f1UL,
-    0x2106826cUL, 0x44613ed4UL, 0xaace8bc6UL, 0xcfa9377eUL, 0x38417fd6UL,
-    0x5d26c36eUL, 0xb389767cUL, 0xd6eecac4UL, 0x6fd61d59UL, 0x0ab1a1e1UL,
-    0xe41e14f3UL, 0x8179a84bUL, 0xd769cb13UL, 0xb20e77abUL, 0x5ca1c2b9UL,
-    0x39c67e01UL, 0x80fea99cUL, 0xe5991524UL, 0x0b36a036UL, 0x6e511c8eUL,
-    0xa7166686UL, 0xc271da3eUL, 0x2cde6f2cUL, 0x49b9d394UL, 0xf0810409UL,
-    0x95e6b8b1UL, 0x7b490da3UL, 0x1e2eb11bUL, 0x483ed243UL, 0x2d596efbUL,
-    0xc3f6dbe9UL, 0xa6916751UL, 0x1fa9b0ccUL, 0x7ace0c74UL, 0x9461b966UL,
-    0xf10605deUL
+    },
+    {0x00000000UL, 0x191b3141UL, 0x32366282UL, 0x2b2d53c3UL, 0x646cc504UL, 0x7d77f445UL, 0x565aa786UL, 0x4f4196c7UL, 0xc8d98a08UL, 0xd1c2bb49UL, 0xfaefe88aUL,
+     0xe3f4d9cbUL, 0xacb54f0cUL, 0xb5ae7e4dUL, 0x9e832d8eUL, 0x87981ccfUL, 0x4ac21251UL, 0x53d92310UL, 0x78f470d3UL, 0x61ef4192UL, 0x2eaed755UL, 0x37b5e614UL,
+     0x1c98b5d7UL, 0x05838496UL, 0x821b9859UL, 0x9b00a918UL, 0xb02dfadbUL, 0xa936cb9aUL, 0xe6775d5dUL, 0xff6c6c1cUL, 0xd4413fdfUL, 0xcd5a0e9eUL, 0x958424a2UL,
+     0x8c9f15e3UL, 0xa7b24620UL, 0xbea97761UL, 0xf1e8e1a6UL, 0xe8f3d0e7UL, 0xc3de8324UL, 0xdac5b265UL, 0x5d5daeaaUL, 0x44469febUL, 0x6f6bcc28UL, 0x7670fd69UL,
+     0x39316baeUL, 0x202a5aefUL, 0x0b07092cUL, 0x121c386dUL, 0xdf4636f3UL, 0xc65d07b2UL, 0xed705471UL, 0xf46b6530UL, 0xbb2af3f7UL, 0xa231c2b6UL, 0x891c9175UL,
+     0x9007a034UL, 0x179fbcfbUL, 0x0e848dbaUL, 0x25a9de79UL, 0x3cb2ef38UL, 0x73f379ffUL, 0x6ae848beUL, 0x41c51b7dUL, 0x58de2a3cUL, 0xf0794f05UL, 0xe9627e44UL,
+     0xc24f2d87UL, 0xdb541cc6UL, 0x94158a01UL, 0x8d0ebb40UL, 0xa623e883UL, 0xbf38d9c2UL, 0x38a0c50dUL, 0x21bbf44cUL, 0x0a96a78fUL, 0x138d96ceUL, 0x5ccc0009UL,
+     0x45d73148UL, 0x6efa628bUL, 0x77e153caUL, 0xbabb5d54UL, 0xa3a06c15UL, 0x888d3fd6UL, 0x91960e97UL, 0xded79850UL, 0xc7cca911UL, 0xece1fad2UL, 0xf5facb93UL,
+     0x7262d75cUL, 0x6b79e61dUL, 0x4054b5deUL, 0x594f849fUL, 0x160e1258UL, 0x0f152319UL, 0x243870daUL, 0x3d23419bUL, 0x65fd6ba7UL, 0x7ce65ae6UL, 0x57cb0925UL,
+     0x4ed03864UL, 0x0191aea3UL, 0x188a9fe2UL, 0x33a7cc21UL, 0x2abcfd60UL, 0xad24e1afUL, 0xb43fd0eeUL, 0x9f12832dUL, 0x8609b26cUL, 0xc94824abUL, 0xd05315eaUL,
+     0xfb7e4629UL, 0xe2657768UL, 0x2f3f79f6UL, 0x362448b7UL, 0x1d091b74UL, 0x04122a35UL, 0x4b53bcf2UL, 0x52488db3UL, 0x7965de70UL, 0x607eef31UL, 0xe7e6f3feUL,
+     0xfefdc2bfUL, 0xd5d0917cUL, 0xcccba03dUL, 0x838a36faUL, 0x9a9107bbUL, 0xb1bc5478UL, 0xa8a76539UL, 0x3b83984bUL, 0x2298a90aUL, 0x09b5fac9UL, 0x10aecb88UL,
+     0x5fef5d4fUL, 0x46f46c0eUL, 0x6dd93fcdUL, 0x74c20e8cUL, 0xf35a1243UL, 0xea412302UL, 0xc16c70c1UL, 0xd8774180UL, 0x9736d747UL, 0x8e2de606UL, 0xa500b5c5UL,
+     0xbc1b8484UL, 0x71418a1aUL, 0x685abb5bUL, 0x4377e898UL, 0x5a6cd9d9UL, 0x152d4f1eUL, 0x0c367e5fUL, 0x271b2d9cUL, 0x3e001cddUL, 0xb9980012UL, 0xa0833153UL,
+     0x8bae6290UL, 0x92b553d1UL, 0xddf4c516UL, 0xc4eff457UL, 0xefc2a794UL, 0xf6d996d5UL, 0xae07bce9UL, 0xb71c8da8UL, 0x9c31de6bUL, 0x852aef2aUL, 0xca6b79edUL,
+     0xd37048acUL, 0xf85d1b6fUL, 0xe1462a2eUL, 0x66de36e1UL, 0x7fc507a0UL, 0x54e85463UL, 0x4df36522UL, 0x02b2f3e5UL, 0x1ba9c2a4UL, 0x30849167UL, 0x299fa026UL,
+     0xe4c5aeb8UL, 0xfdde9ff9UL, 0xd6f3cc3aUL, 0xcfe8fd7bUL, 0x80a96bbcUL, 0x99b25afdUL, 0xb29f093eUL, 0xab84387fUL, 0x2c1c24b0UL, 0x350715f1UL, 0x1e2a4632UL,
+     0x07317773UL, 0x4870e1b4UL, 0x516bd0f5UL, 0x7a468336UL, 0x635db277UL, 0xcbfad74eUL, 0xd2e1e60fUL, 0xf9ccb5ccUL, 0xe0d7848dUL, 0xaf96124aUL, 0xb68d230bUL,
+     0x9da070c8UL, 0x84bb4189UL, 0x03235d46UL, 0x1a386c07UL, 0x31153fc4UL, 0x280e0e85UL, 0x674f9842UL, 0x7e54a903UL, 0x5579fac0UL, 0x4c62cb81UL, 0x8138c51fUL,
+     0x9823f45eUL, 0xb30ea79dUL, 0xaa1596dcUL, 0xe554001bUL, 0xfc4f315aUL, 0xd7626299UL, 0xce7953d8UL, 0x49e14f17UL, 0x50fa7e56UL, 0x7bd72d95UL, 0x62cc1cd4UL,
+     0x2d8d8a13UL, 0x3496bb52UL, 0x1fbbe891UL, 0x06a0d9d0UL, 0x5e7ef3ecUL, 0x4765c2adUL, 0x6c48916eUL, 0x7553a02fUL, 0x3a1236e8UL, 0x230907a9UL, 0x0824546aUL,
+     0x113f652bUL, 0x96a779e4UL, 0x8fbc48a5UL, 0xa4911b66UL, 0xbd8a2a27UL, 0xf2cbbce0UL, 0xebd08da1UL, 0xc0fdde62UL, 0xd9e6ef23UL, 0x14bce1bdUL, 0x0da7d0fcUL,
+     0x268a833fUL, 0x3f91b27eUL, 0x70d024b9UL, 0x69cb15f8UL, 0x42e6463bUL, 0x5bfd777aUL, 0xdc656bb5UL, 0xc57e5af4UL, 0xee530937UL, 0xf7483876UL, 0xb809aeb1UL,
+     0xa1129ff0UL, 0x8a3fcc33UL, 0x9324fd72UL},
+    {0x00000000UL, 0x01c26a37UL, 0x0384d46eUL, 0x0246be59UL, 0x0709a8dcUL, 0x06cbc2ebUL, 0x048d7cb2UL, 0x054f1685UL, 0x0e1351b8UL, 0x0fd13b8fUL, 0x0d9785d6UL,
+     0x0c55efe1UL, 0x091af964UL, 0x08d89353UL, 0x0a9e2d0aUL, 0x0b5c473dUL, 0x1c26a370UL, 0x1de4c947UL, 0x1fa2771eUL, 0x1e601d29UL, 0x1b2f0bacUL, 0x1aed619bUL,
+     0x18abdfc2UL, 0x1969b5f5UL, 0x1235f2c8UL, 0x13f798ffUL, 0x11b126a6UL, 0x10734c91UL, 0x153c5a14UL, 0x14fe3023UL, 0x16b88e7aUL, 0x177ae44dUL, 0x384d46e0UL,
+     0x398f2cd7UL, 0x3bc9928eUL, 0x3a0bf8b9UL, 0x3f44ee3cUL, 0x3e86840bUL, 0x3cc03a52UL, 0x3d025065UL, 0x365e1758UL, 0x379c7d6fUL, 0x35dac336UL, 0x3418a901UL,
+     0x3157bf84UL, 0x3095d5b3UL, 0x32d36beaUL, 0x331101ddUL, 0x246be590UL, 0x25a98fa7UL, 0x27ef31feUL, 0x262d5bc9UL, 0x23624d4cUL, 0x22a0277bUL, 0x20e69922UL,
+     0x2124f315UL, 0x2a78b428UL, 0x2bbade1fUL, 0x29fc6046UL, 0x283e0a71UL, 0x2d711cf4UL, 0x2cb376c3UL, 0x2ef5c89aUL, 0x2f37a2adUL, 0x709a8dc0UL, 0x7158e7f7UL,
+     0x731e59aeUL, 0x72dc3399UL, 0x7793251cUL, 0x76514f2bUL, 0x7417f172UL, 0x75d59b45UL, 0x7e89dc78UL, 0x7f4bb64fUL, 0x7d0d0816UL, 0x7ccf6221UL, 0x798074a4UL,
+     0x78421e93UL, 0x7a04a0caUL, 0x7bc6cafdUL, 0x6cbc2eb0UL, 0x6d7e4487UL, 0x6f38fadeUL, 0x6efa90e9UL, 0x6bb5866cUL, 0x6a77ec5bUL, 0x68315202UL, 0x69f33835UL,
+     0x62af7f08UL, 0x636d153fUL, 0x612bab66UL, 0x60e9c151UL, 0x65a6d7d4UL, 0x6464bde3UL, 0x662203baUL, 0x67e0698dUL, 0x48d7cb20UL, 0x4915a117UL, 0x4b531f4eUL,
+     0x4a917579UL, 0x4fde63fcUL, 0x4e1c09cbUL, 0x4c5ab792UL, 0x4d98dda5UL, 0x46c49a98UL, 0x4706f0afUL, 0x45404ef6UL, 0x448224c1UL, 0x41cd3244UL, 0x400f5873UL,
+     0x4249e62aUL, 0x438b8c1dUL, 0x54f16850UL, 0x55330267UL, 0x5775bc3eUL, 0x56b7d609UL, 0x53f8c08cUL, 0x523aaabbUL, 0x507c14e2UL, 0x51be7ed5UL, 0x5ae239e8UL,
+     0x5b2053dfUL, 0x5966ed86UL, 0x58a487b1UL, 0x5deb9134UL, 0x5c29fb03UL, 0x5e6f455aUL, 0x5fad2f6dUL, 0xe1351b80UL, 0xe0f771b7UL, 0xe2b1cfeeUL, 0xe373a5d9UL,
+     0xe63cb35cUL, 0xe7fed96bUL, 0xe5b86732UL, 0xe47a0d05UL, 0xef264a38UL, 0xeee4200fUL, 0xeca29e56UL, 0xed60f461UL, 0xe82fe2e4UL, 0xe9ed88d3UL, 0xebab368aUL,
+     0xea695cbdUL, 0xfd13b8f0UL, 0xfcd1d2c7UL, 0xfe976c9eUL, 0xff5506a9UL, 0xfa1a102cUL, 0xfbd87a1bUL, 0xf99ec442UL, 0xf85cae75UL, 0xf300e948UL, 0xf2c2837fUL,
+     0xf0843d26UL, 0xf1465711UL, 0xf4094194UL, 0xf5cb2ba3UL, 0xf78d95faUL, 0xf64fffcdUL, 0xd9785d60UL, 0xd8ba3757UL, 0xdafc890eUL, 0xdb3ee339UL, 0xde71f5bcUL,
+     0xdfb39f8bUL, 0xddf521d2UL, 0xdc374be5UL, 0xd76b0cd8UL, 0xd6a966efUL, 0xd4efd8b6UL, 0xd52db281UL, 0xd062a404UL, 0xd1a0ce33UL, 0xd3e6706aUL, 0xd2241a5dUL,
+     0xc55efe10UL, 0xc49c9427UL, 0xc6da2a7eUL, 0xc7184049UL, 0xc25756ccUL, 0xc3953cfbUL, 0xc1d382a2UL, 0xc011e895UL, 0xcb4dafa8UL, 0xca8fc59fUL, 0xc8c97bc6UL,
+     0xc90b11f1UL, 0xcc440774UL, 0xcd866d43UL, 0xcfc0d31aUL, 0xce02b92dUL, 0x91af9640UL, 0x906dfc77UL, 0x922b422eUL, 0x93e92819UL, 0x96a63e9cUL, 0x976454abUL,
+     0x9522eaf2UL, 0x94e080c5UL, 0x9fbcc7f8UL, 0x9e7eadcfUL, 0x9c381396UL, 0x9dfa79a1UL, 0x98b56f24UL, 0x99770513UL, 0x9b31bb4aUL, 0x9af3d17dUL, 0x8d893530UL,
+     0x8c4b5f07UL, 0x8e0de15eUL, 0x8fcf8b69UL, 0x8a809decUL, 0x8b42f7dbUL, 0x89044982UL, 0x88c623b5UL, 0x839a6488UL, 0x82580ebfUL, 0x801eb0e6UL, 0x81dcdad1UL,
+     0x8493cc54UL, 0x8551a663UL, 0x8717183aUL, 0x86d5720dUL, 0xa9e2d0a0UL, 0xa820ba97UL, 0xaa6604ceUL, 0xaba46ef9UL, 0xaeeb787cUL, 0xaf29124bUL, 0xad6fac12UL,
+     0xacadc625UL, 0xa7f18118UL, 0xa633eb2fUL, 0xa4755576UL, 0xa5b73f41UL, 0xa0f829c4UL, 0xa13a43f3UL, 0xa37cfdaaUL, 0xa2be979dUL, 0xb5c473d0UL, 0xb40619e7UL,
+     0xb640a7beUL, 0xb782cd89UL, 0xb2cddb0cUL, 0xb30fb13bUL, 0xb1490f62UL, 0xb08b6555UL, 0xbbd72268UL, 0xba15485fUL, 0xb853f606UL, 0xb9919c31UL, 0xbcde8ab4UL,
+     0xbd1ce083UL, 0xbf5a5edaUL, 0xbe9834edUL},
+    {0x00000000UL, 0xb8bc6765UL, 0xaa09c88bUL, 0x12b5afeeUL, 0x8f629757UL, 0x37def032UL, 0x256b5fdcUL, 0x9dd738b9UL, 0xc5b428efUL, 0x7d084f8aUL, 0x6fbde064UL,
+     0xd7018701UL, 0x4ad6bfb8UL, 0xf26ad8ddUL, 0xe0df7733UL, 0x58631056UL, 0x5019579fUL, 0xe8a530faUL, 0xfa109f14UL, 0x42acf871UL, 0xdf7bc0c8UL, 0x67c7a7adUL,
+     0x75720843UL, 0xcdce6f26UL, 0x95ad7f70UL, 0x2d111815UL, 0x3fa4b7fbUL, 0x8718d09eUL, 0x1acfe827UL, 0xa2738f42UL, 0xb0c620acUL, 0x087a47c9UL, 0xa032af3eUL,
+     0x188ec85bUL, 0x0a3b67b5UL, 0xb28700d0UL, 0x2f503869UL, 0x97ec5f0cUL, 0x8559f0e2UL, 0x3de59787UL, 0x658687d1UL, 0xdd3ae0b4UL, 0xcf8f4f5aUL, 0x7733283fUL,
+     0xeae41086UL, 0x525877e3UL, 0x40edd80dUL, 0xf851bf68UL, 0xf02bf8a1UL, 0x48979fc4UL, 0x5a22302aUL, 0xe29e574fUL, 0x7f496ff6UL, 0xc7f50893UL, 0xd540a77dUL,
+     0x6dfcc018UL, 0x359fd04eUL, 0x8d23b72bUL, 0x9f9618c5UL, 0x272a7fa0UL, 0xbafd4719UL, 0x0241207cUL, 0x10f48f92UL, 0xa848e8f7UL, 0x9b14583dUL, 0x23a83f58UL,
+     0x311d90b6UL, 0x89a1f7d3UL, 0x1476cf6aUL, 0xaccaa80fUL, 0xbe7f07e1UL, 0x06c36084UL, 0x5ea070d2UL, 0xe61c17b7UL, 0xf4a9b859UL, 0x4c15df3cUL, 0xd1c2e785UL,
+     0x697e80e0UL, 0x7bcb2f0eUL, 0xc377486bUL, 0xcb0d0fa2UL, 0x73b168c7UL, 0x6104c729UL, 0xd9b8a04cUL, 0x446f98f5UL, 0xfcd3ff90UL, 0xee66507eUL, 0x56da371bUL,
+     0x0eb9274dUL, 0xb6054028UL, 0xa4b0efc6UL, 0x1c0c88a3UL, 0x81dbb01aUL, 0x3967d77fUL, 0x2bd27891UL, 0x936e1ff4UL, 0x3b26f703UL, 0x839a9066UL, 0x912f3f88UL,
+     0x299358edUL, 0xb4446054UL, 0x0cf80731UL, 0x1e4da8dfUL, 0xa6f1cfbaUL, 0xfe92dfecUL, 0x462eb889UL, 0x549b1767UL, 0xec277002UL, 0x71f048bbUL, 0xc94c2fdeUL,
+     0xdbf98030UL, 0x6345e755UL, 0x6b3fa09cUL, 0xd383c7f9UL, 0xc1366817UL, 0x798a0f72UL, 0xe45d37cbUL, 0x5ce150aeUL, 0x4e54ff40UL, 0xf6e89825UL, 0xae8b8873UL,
+     0x1637ef16UL, 0x048240f8UL, 0xbc3e279dUL, 0x21e91f24UL, 0x99557841UL, 0x8be0d7afUL, 0x335cb0caUL, 0xed59b63bUL, 0x55e5d15eUL, 0x47507eb0UL, 0xffec19d5UL,
+     0x623b216cUL, 0xda874609UL, 0xc832e9e7UL, 0x708e8e82UL, 0x28ed9ed4UL, 0x9051f9b1UL, 0x82e4565fUL, 0x3a58313aUL, 0xa78f0983UL, 0x1f336ee6UL, 0x0d86c108UL,
+     0xb53aa66dUL, 0xbd40e1a4UL, 0x05fc86c1UL, 0x1749292fUL, 0xaff54e4aUL, 0x322276f3UL, 0x8a9e1196UL, 0x982bbe78UL, 0x2097d91dUL, 0x78f4c94bUL, 0xc048ae2eUL,
+     0xd2fd01c0UL, 0x6a4166a5UL, 0xf7965e1cUL, 0x4f2a3979UL, 0x5d9f9697UL, 0xe523f1f2UL, 0x4d6b1905UL, 0xf5d77e60UL, 0xe762d18eUL, 0x5fdeb6ebUL, 0xc2098e52UL,
+     0x7ab5e937UL, 0x680046d9UL, 0xd0bc21bcUL, 0x88df31eaUL, 0x3063568fUL, 0x22d6f961UL, 0x9a6a9e04UL, 0x07bda6bdUL, 0xbf01c1d8UL, 0xadb46e36UL, 0x15080953UL,
+     0x1d724e9aUL, 0xa5ce29ffUL, 0xb77b8611UL, 0x0fc7e174UL, 0x9210d9cdUL, 0x2aacbea8UL, 0x38191146UL, 0x80a57623UL, 0xd8c66675UL, 0x607a0110UL, 0x72cfaefeUL,
+     0xca73c99bUL, 0x57a4f122UL, 0xef189647UL, 0xfdad39a9UL, 0x45115eccUL, 0x764dee06UL, 0xcef18963UL, 0xdc44268dUL, 0x64f841e8UL, 0xf92f7951UL, 0x41931e34UL,
+     0x5326b1daUL, 0xeb9ad6bfUL, 0xb3f9c6e9UL, 0x0b45a18cUL, 0x19f00e62UL, 0xa14c6907UL, 0x3c9b51beUL, 0x842736dbUL, 0x96929935UL, 0x2e2efe50UL, 0x2654b999UL,
+     0x9ee8defcUL, 0x8c5d7112UL, 0x34e11677UL, 0xa9362eceUL, 0x118a49abUL, 0x033fe645UL, 0xbb838120UL, 0xe3e09176UL, 0x5b5cf613UL, 0x49e959fdUL, 0xf1553e98UL,
+     0x6c820621UL, 0xd43e6144UL, 0xc68bceaaUL, 0x7e37a9cfUL, 0xd67f4138UL, 0x6ec3265dUL, 0x7c7689b3UL, 0xc4caeed6UL, 0x591dd66fUL, 0xe1a1b10aUL, 0xf3141ee4UL,
+     0x4ba87981UL, 0x13cb69d7UL, 0xab770eb2UL, 0xb9c2a15cUL, 0x017ec639UL, 0x9ca9fe80UL, 0x241599e5UL, 0x36a0360bUL, 0x8e1c516eUL, 0x866616a7UL, 0x3eda71c2UL,
+     0x2c6fde2cUL, 0x94d3b949UL, 0x090481f0UL, 0xb1b8e695UL, 0xa30d497bUL, 0x1bb12e1eUL, 0x43d23e48UL, 0xfb6e592dUL, 0xe9dbf6c3UL, 0x516791a6UL, 0xccb0a91fUL,
+     0x740cce7aUL, 0x66b96194UL, 0xde0506f1UL},
+    {0x00000000UL, 0x96300777UL, 0x2c610eeeUL, 0xba510999UL, 0x19c46d07UL, 0x8ff46a70UL, 0x35a563e9UL, 0xa395649eUL, 0x3288db0eUL, 0xa4b8dc79UL, 0x1ee9d5e0UL,
+     0x88d9d297UL, 0x2b4cb609UL, 0xbd7cb17eUL, 0x072db8e7UL, 0x911dbf90UL, 0x6410b71dUL, 0xf220b06aUL, 0x4871b9f3UL, 0xde41be84UL, 0x7dd4da1aUL, 0xebe4dd6dUL,
+     0x51b5d4f4UL, 0xc785d383UL, 0x56986c13UL, 0xc0a86b64UL, 0x7af962fdUL, 0xecc9658aUL, 0x4f5c0114UL, 0xd96c0663UL, 0x633d0ffaUL, 0xf50d088dUL, 0xc8206e3bUL,
+     0x5e10694cUL, 0xe44160d5UL, 0x727167a2UL, 0xd1e4033cUL, 0x47d4044bUL, 0xfd850dd2UL, 0x6bb50aa5UL, 0xfaa8b535UL, 0x6c98b242UL, 0xd6c9bbdbUL, 0x40f9bcacUL,
+     0xe36cd832UL, 0x755cdf45UL, 0xcf0dd6dcUL, 0x593dd1abUL, 0xac30d926UL, 0x3a00de51UL, 0x8051d7c8UL, 0x1661d0bfUL, 0xb5f4b421UL, 0x23c4b356UL, 0x9995bacfUL,
+     0x0fa5bdb8UL, 0x9eb80228UL, 0x0888055fUL, 0xb2d90cc6UL, 0x24e90bb1UL, 0x877c6f2fUL, 0x114c6858UL, 0xab1d61c1UL, 0x3d2d66b6UL, 0x9041dc76UL, 0x0671db01UL,
+     0xbc20d298UL, 0x2a10d5efUL, 0x8985b171UL, 0x1fb5b606UL, 0xa5e4bf9fUL, 0x33d4b8e8UL, 0xa2c90778UL, 0x34f9000fUL, 0x8ea80996UL, 0x18980ee1UL, 0xbb0d6a7fUL,
+     0x2d3d6d08UL, 0x976c6491UL, 0x015c63e6UL, 0xf4516b6bUL, 0x62616c1cUL, 0xd8306585UL, 0x4e0062f2UL, 0xed95066cUL, 0x7ba5011bUL, 0xc1f40882UL, 0x57c40ff5UL,
+     0xc6d9b065UL, 0x50e9b712UL, 0xeab8be8bUL, 0x7c88b9fcUL, 0xdf1ddd62UL, 0x492dda15UL, 0xf37cd38cUL, 0x654cd4fbUL, 0x5861b24dUL, 0xce51b53aUL, 0x7400bca3UL,
+     0xe230bbd4UL, 0x41a5df4aUL, 0xd795d83dUL, 0x6dc4d1a4UL, 0xfbf4d6d3UL, 0x6ae96943UL, 0xfcd96e34UL, 0x468867adUL, 0xd0b860daUL, 0x732d0444UL, 0xe51d0333UL,
+     0x5f4c0aaaUL, 0xc97c0dddUL, 0x3c710550UL, 0xaa410227UL, 0x10100bbeUL, 0x86200cc9UL, 0x25b56857UL, 0xb3856f20UL, 0x09d466b9UL, 0x9fe461ceUL, 0x0ef9de5eUL,
+     0x98c9d929UL, 0x2298d0b0UL, 0xb4a8d7c7UL, 0x173db359UL, 0x810db42eUL, 0x3b5cbdb7UL, 0xad6cbac0UL, 0x2083b8edUL, 0xb6b3bf9aUL, 0x0ce2b603UL, 0x9ad2b174UL,
+     0x3947d5eaUL, 0xaf77d29dUL, 0x1526db04UL, 0x8316dc73UL, 0x120b63e3UL, 0x843b6494UL, 0x3e6a6d0dUL, 0xa85a6a7aUL, 0x0bcf0ee4UL, 0x9dff0993UL, 0x27ae000aUL,
+     0xb19e077dUL, 0x44930ff0UL, 0xd2a30887UL, 0x68f2011eUL, 0xfec20669UL, 0x5d5762f7UL, 0xcb676580UL, 0x71366c19UL, 0xe7066b6eUL, 0x761bd4feUL, 0xe02bd389UL,
+     0x5a7ada10UL, 0xcc4add67UL, 0x6fdfb9f9UL, 0xf9efbe8eUL, 0x43beb717UL, 0xd58eb060UL, 0xe8a3d6d6UL, 0x7e93d1a1UL, 0xc4c2d838UL, 0x52f2df4fUL, 0xf167bbd1UL,
+     0x6757bca6UL, 0xdd06b53fUL, 0x4b36b248UL, 0xda2b0dd8UL, 0x4c1b0aafUL, 0xf64a0336UL, 0x607a0441UL, 0xc3ef60dfUL, 0x55df67a8UL, 0xef8e6e31UL, 0x79be6946UL,
+     0x8cb361cbUL, 0x1a8366bcUL, 0xa0d26f25UL, 0x36e26852UL, 0x95770cccUL, 0x03470bbbUL, 0xb9160222UL, 0x2f260555UL, 0xbe3bbac5UL, 0x280bbdb2UL, 0x925ab42bUL,
+     0x046ab35cUL, 0xa7ffd7c2UL, 0x31cfd0b5UL, 0x8b9ed92cUL, 0x1daede5bUL, 0xb0c2649bUL, 0x26f263ecUL, 0x9ca36a75UL, 0x0a936d02UL, 0xa906099cUL, 0x3f360eebUL,
+     0x85670772UL, 0x13570005UL, 0x824abf95UL, 0x147ab8e2UL, 0xae2bb17bUL, 0x381bb60cUL, 0x9b8ed292UL, 0x0dbed5e5UL, 0xb7efdc7cUL, 0x21dfdb0bUL, 0xd4d2d386UL,
+     0x42e2d4f1UL, 0xf8b3dd68UL, 0x6e83da1fUL, 0xcd16be81UL, 0x5b26b9f6UL, 0xe177b06fUL, 0x7747b718UL, 0xe65a0888UL, 0x706a0fffUL, 0xca3b0666UL, 0x5c0b0111UL,
+     0xff9e658fUL, 0x69ae62f8UL, 0xd3ff6b61UL, 0x45cf6c16UL, 0x78e20aa0UL, 0xeed20dd7UL, 0x5483044eUL, 0xc2b30339UL, 0x612667a7UL, 0xf71660d0UL, 0x4d476949UL,
+     0xdb776e3eUL, 0x4a6ad1aeUL, 0xdc5ad6d9UL, 0x660bdf40UL, 0xf03bd837UL, 0x53aebca9UL, 0xc59ebbdeUL, 0x7fcfb247UL, 0xe9ffb530UL, 0x1cf2bdbdUL, 0x8ac2bacaUL,
+     0x3093b353UL, 0xa6a3b424UL, 0x0536d0baUL, 0x9306d7cdUL, 0x2957de54UL, 0xbf67d923UL, 0x2e7a66b3UL, 0xb84a61c4UL, 0x021b685dUL, 0x942b6f2aUL, 0x37be0bb4UL,
+     0xa18e0cc3UL, 0x1bdf055aUL, 0x8def022dUL},
+    {0x00000000UL, 0x41311b19UL, 0x82623632UL, 0xc3532d2bUL, 0x04c56c64UL, 0x45f4777dUL, 0x86a75a56UL, 0xc796414fUL, 0x088ad9c8UL, 0x49bbc2d1UL, 0x8ae8effaUL,
+     0xcbd9f4e3UL, 0x0c4fb5acUL, 0x4d7eaeb5UL, 0x8e2d839eUL, 0xcf1c9887UL, 0x5112c24aUL, 0x1023d953UL, 0xd370f478UL, 0x9241ef61UL, 0x55d7ae2eUL, 0x14e6b537UL,
+     0xd7b5981cUL, 0x96848305UL, 0x59981b82UL, 0x18a9009bUL, 0xdbfa2db0UL, 0x9acb36a9UL, 0x5d5d77e6UL, 0x1c6c6cffUL, 0xdf3f41d4UL, 0x9e0e5acdUL, 0xa2248495UL,
+     0xe3159f8cUL, 0x2046b2a7UL, 0x6177a9beUL, 0xa6e1e8f1UL, 0xe7d0f3e8UL, 0x2483dec3UL, 0x65b2c5daUL, 0xaaae5d5dUL, 0xeb9f4644UL, 0x28cc6b6fUL, 0x69fd7076UL,
+     0xae6b3139UL, 0xef5a2a20UL, 0x2c09070bUL, 0x6d381c12UL, 0xf33646dfUL, 0xb2075dc6UL, 0x715470edUL, 0x30656bf4UL, 0xf7f32abbUL, 0xb6c231a2UL, 0x75911c89UL,
+     0x34a00790UL, 0xfbbc9f17UL, 0xba8d840eUL, 0x79dea925UL, 0x38efb23cUL, 0xff79f373UL, 0xbe48e86aUL, 0x7d1bc541UL, 0x3c2ade58UL, 0x054f79f0UL, 0x447e62e9UL,
+     0x872d4fc2UL, 0xc61c54dbUL, 0x018a1594UL, 0x40bb0e8dUL, 0x83e823a6UL, 0xc2d938bfUL, 0x0dc5a038UL, 0x4cf4bb21UL, 0x8fa7960aUL, 0xce968d13UL, 0x0900cc5cUL,
+     0x4831d745UL, 0x8b62fa6eUL, 0xca53e177UL, 0x545dbbbaUL, 0x156ca0a3UL, 0xd63f8d88UL, 0x970e9691UL, 0x5098d7deUL, 0x11a9ccc7UL, 0xd2fae1ecUL, 0x93cbfaf5UL,
+     0x5cd76272UL, 0x1de6796bUL, 0xdeb55440UL, 0x9f844f59UL, 0x58120e16UL, 0x1923150fUL, 0xda703824UL, 0x9b41233dUL, 0xa76bfd65UL, 0xe65ae67cUL, 0x2509cb57UL,
+     0x6438d04eUL, 0xa3ae9101UL, 0xe29f8a18UL, 0x21cca733UL, 0x60fdbc2aUL, 0xafe124adUL, 0xeed03fb4UL, 0x2d83129fUL, 0x6cb20986UL, 0xab2448c9UL, 0xea1553d0UL,
+     0x29467efbUL, 0x687765e2UL, 0xf6793f2fUL, 0xb7482436UL, 0x741b091dUL, 0x352a1204UL, 0xf2bc534bUL, 0xb38d4852UL, 0x70de6579UL, 0x31ef7e60UL, 0xfef3e6e7UL,
+     0xbfc2fdfeUL, 0x7c91d0d5UL, 0x3da0cbccUL, 0xfa368a83UL, 0xbb07919aUL, 0x7854bcb1UL, 0x3965a7a8UL, 0x4b98833bUL, 0x0aa99822UL, 0xc9fab509UL, 0x88cbae10UL,
+     0x4f5def5fUL, 0x0e6cf446UL, 0xcd3fd96dUL, 0x8c0ec274UL, 0x43125af3UL, 0x022341eaUL, 0xc1706cc1UL, 0x804177d8UL, 0x47d73697UL, 0x06e62d8eUL, 0xc5b500a5UL,
+     0x84841bbcUL, 0x1a8a4171UL, 0x5bbb5a68UL, 0x98e87743UL, 0xd9d96c5aUL, 0x1e4f2d15UL, 0x5f7e360cUL, 0x9c2d1b27UL, 0xdd1c003eUL, 0x120098b9UL, 0x533183a0UL,
+     0x9062ae8bUL, 0xd153b592UL, 0x16c5f4ddUL, 0x57f4efc4UL, 0x94a7c2efUL, 0xd596d9f6UL, 0xe9bc07aeUL, 0xa88d1cb7UL, 0x6bde319cUL, 0x2aef2a85UL, 0xed796bcaUL,
+     0xac4870d3UL, 0x6f1b5df8UL, 0x2e2a46e1UL, 0xe136de66UL, 0xa007c57fUL, 0x6354e854UL, 0x2265f34dUL, 0xe5f3b202UL, 0xa4c2a91bUL, 0x67918430UL, 0x26a09f29UL,
+     0xb8aec5e4UL, 0xf99fdefdUL, 0x3accf3d6UL, 0x7bfde8cfUL, 0xbc6ba980UL, 0xfd5ab299UL, 0x3e099fb2UL, 0x7f3884abUL, 0xb0241c2cUL, 0xf1150735UL, 0x32462a1eUL,
+     0x73773107UL, 0xb4e17048UL, 0xf5d06b51UL, 0x3683467aUL, 0x77b25d63UL, 0x4ed7facbUL, 0x0fe6e1d2UL, 0xccb5ccf9UL, 0x8d84d7e0UL, 0x4a1296afUL, 0x0b238db6UL,
+     0xc870a09dUL, 0x8941bb84UL, 0x465d2303UL, 0x076c381aUL, 0xc43f1531UL, 0x850e0e28UL, 0x42984f67UL, 0x03a9547eUL, 0xc0fa7955UL, 0x81cb624cUL, 0x1fc53881UL,
+     0x5ef42398UL, 0x9da70eb3UL, 0xdc9615aaUL, 0x1b0054e5UL, 0x5a314ffcUL, 0x996262d7UL, 0xd85379ceUL, 0x174fe149UL, 0x567efa50UL, 0x952dd77bUL, 0xd41ccc62UL,
+     0x138a8d2dUL, 0x52bb9634UL, 0x91e8bb1fUL, 0xd0d9a006UL, 0xecf37e5eUL, 0xadc26547UL, 0x6e91486cUL, 0x2fa05375UL, 0xe836123aUL, 0xa9070923UL, 0x6a542408UL,
+     0x2b653f11UL, 0xe479a796UL, 0xa548bc8fUL, 0x661b91a4UL, 0x272a8abdUL, 0xe0bccbf2UL, 0xa18dd0ebUL, 0x62defdc0UL, 0x23efe6d9UL, 0xbde1bc14UL, 0xfcd0a70dUL,
+     0x3f838a26UL, 0x7eb2913fUL, 0xb924d070UL, 0xf815cb69UL, 0x3b46e642UL, 0x7a77fd5bUL, 0xb56b65dcUL, 0xf45a7ec5UL, 0x370953eeUL, 0x763848f7UL, 0xb1ae09b8UL,
+     0xf09f12a1UL, 0x33cc3f8aUL, 0x72fd2493UL},
+    {0x00000000UL, 0x376ac201UL, 0x6ed48403UL, 0x59be4602UL, 0xdca80907UL, 0xebc2cb06UL, 0xb27c8d04UL, 0x85164f05UL, 0xb851130eUL, 0x8f3bd10fUL, 0xd685970dUL,
+     0xe1ef550cUL, 0x64f91a09UL, 0x5393d808UL, 0x0a2d9e0aUL, 0x3d475c0bUL, 0x70a3261cUL, 0x47c9e41dUL, 0x1e77a21fUL, 0x291d601eUL, 0xac0b2f1bUL, 0x9b61ed1aUL,
+     0xc2dfab18UL, 0xf5b56919UL, 0xc8f23512UL, 0xff98f713UL, 0xa626b111UL, 0x914c7310UL, 0x145a3c15UL, 0x2330fe14UL, 0x7a8eb816UL, 0x4de47a17UL, 0xe0464d38UL,
+     0xd72c8f39UL, 0x8e92c93bUL, 0xb9f80b3aUL, 0x3cee443fUL, 0x0b84863eUL, 0x523ac03cUL, 0x6550023dUL, 0x58175e36UL, 0x6f7d9c37UL, 0x36c3da35UL, 0x01a91834UL,
+     0x84bf5731UL, 0xb3d59530UL, 0xea6bd332UL, 0xdd011133UL, 0x90e56b24UL, 0xa78fa925UL, 0xfe31ef27UL, 0xc95b2d26UL, 0x4c4d6223UL, 0x7b27a022UL, 0x2299e620UL,
+     0x15f32421UL, 0x28b4782aUL, 0x1fdeba2bUL, 0x4660fc29UL, 0x710a3e28UL, 0xf41c712dUL, 0xc376b32cUL, 0x9ac8f52eUL, 0xada2372fUL, 0xc08d9a70UL, 0xf7e75871UL,
+     0xae591e73UL, 0x9933dc72UL, 0x1c259377UL, 0x2b4f5176UL, 0x72f11774UL, 0x459bd575UL, 0x78dc897eUL, 0x4fb64b7fUL, 0x16080d7dUL, 0x2162cf7cUL, 0xa4748079UL,
+     0x931e4278UL, 0xcaa0047aUL, 0xfdcac67bUL, 0xb02ebc6cUL, 0x87447e6dUL, 0xdefa386fUL, 0xe990fa6eUL, 0x6c86b56bUL, 0x5bec776aUL, 0x02523168UL, 0x3538f369UL,
+     0x087faf62UL, 0x3f156d63UL, 0x66ab2b61UL, 0x51c1e960UL, 0xd4d7a665UL, 0xe3bd6464UL, 0xba032266UL, 0x8d69e067UL, 0x20cbd748UL, 0x17a11549UL, 0x4e1f534bUL,
+     0x7975914aUL, 0xfc63de4fUL, 0xcb091c4eUL, 0x92b75a4cUL, 0xa5dd984dUL, 0x989ac446UL, 0xaff00647UL, 0xf64e4045UL, 0xc1248244UL, 0x4432cd41UL, 0x73580f40UL,
+     0x2ae64942UL, 0x1d8c8b43UL, 0x5068f154UL, 0x67023355UL, 0x3ebc7557UL, 0x09d6b756UL, 0x8cc0f853UL, 0xbbaa3a52UL, 0xe2147c50UL, 0xd57ebe51UL, 0xe839e25aUL,
+     0xdf53205bUL, 0x86ed6659UL, 0xb187a458UL, 0x3491eb5dUL, 0x03fb295cUL, 0x5a456f5eUL, 0x6d2fad5fUL, 0x801b35e1UL, 0xb771f7e0UL, 0xeecfb1e2UL, 0xd9a573e3UL,
+     0x5cb33ce6UL, 0x6bd9fee7UL, 0x3267b8e5UL, 0x050d7ae4UL, 0x384a26efUL, 0x0f20e4eeUL, 0x569ea2ecUL, 0x61f460edUL, 0xe4e22fe8UL, 0xd388ede9UL, 0x8a36abebUL,
+     0xbd5c69eaUL, 0xf0b813fdUL, 0xc7d2d1fcUL, 0x9e6c97feUL, 0xa90655ffUL, 0x2c101afaUL, 0x1b7ad8fbUL, 0x42c49ef9UL, 0x75ae5cf8UL, 0x48e900f3UL, 0x7f83c2f2UL,
+     0x263d84f0UL, 0x115746f1UL, 0x944109f4UL, 0xa32bcbf5UL, 0xfa958df7UL, 0xcdff4ff6UL, 0x605d78d9UL, 0x5737bad8UL, 0x0e89fcdaUL, 0x39e33edbUL, 0xbcf571deUL,
+     0x8b9fb3dfUL, 0xd221f5ddUL, 0xe54b37dcUL, 0xd80c6bd7UL, 0xef66a9d6UL, 0xb6d8efd4UL, 0x81b22dd5UL, 0x04a462d0UL, 0x33cea0d1UL, 0x6a70e6d3UL, 0x5d1a24d2UL,
+     0x10fe5ec5UL, 0x27949cc4UL, 0x7e2adac6UL, 0x494018c7UL, 0xcc5657c2UL, 0xfb3c95c3UL, 0xa282d3c1UL, 0x95e811c0UL, 0xa8af4dcbUL, 0x9fc58fcaUL, 0xc67bc9c8UL,
+     0xf1110bc9UL, 0x740744ccUL, 0x436d86cdUL, 0x1ad3c0cfUL, 0x2db902ceUL, 0x4096af91UL, 0x77fc6d90UL, 0x2e422b92UL, 0x1928e993UL, 0x9c3ea696UL, 0xab546497UL,
+     0xf2ea2295UL, 0xc580e094UL, 0xf8c7bc9fUL, 0xcfad7e9eUL, 0x9613389cUL, 0xa179fa9dUL, 0x246fb598UL, 0x13057799UL, 0x4abb319bUL, 0x7dd1f39aUL, 0x3035898dUL,
+     0x075f4b8cUL, 0x5ee10d8eUL, 0x698bcf8fUL, 0xec9d808aUL, 0xdbf7428bUL, 0x82490489UL, 0xb523c688UL, 0x88649a83UL, 0xbf0e5882UL, 0xe6b01e80UL, 0xd1dadc81UL,
+     0x54cc9384UL, 0x63a65185UL, 0x3a181787UL, 0x0d72d586UL, 0xa0d0e2a9UL, 0x97ba20a8UL, 0xce0466aaUL, 0xf96ea4abUL, 0x7c78ebaeUL, 0x4b1229afUL, 0x12ac6fadUL,
+     0x25c6adacUL, 0x1881f1a7UL, 0x2feb33a6UL, 0x765575a4UL, 0x413fb7a5UL, 0xc429f8a0UL, 0xf3433aa1UL, 0xaafd7ca3UL, 0x9d97bea2UL, 0xd073c4b5UL, 0xe71906b4UL,
+     0xbea740b6UL, 0x89cd82b7UL, 0x0cdbcdb2UL, 0x3bb10fb3UL, 0x620f49b1UL, 0x55658bb0UL, 0x6822d7bbUL, 0x5f4815baUL, 0x06f653b8UL, 0x319c91b9UL, 0xb48adebcUL,
+     0x83e01cbdUL, 0xda5e5abfUL, 0xed3498beUL},
+    {0x00000000UL, 0x6567bcb8UL, 0x8bc809aaUL, 0xeeafb512UL, 0x5797628fUL, 0x32f0de37UL, 0xdc5f6b25UL, 0xb938d79dUL, 0xef28b4c5UL, 0x8a4f087dUL, 0x64e0bd6fUL,
+     0x018701d7UL, 0xb8bfd64aUL, 0xddd86af2UL, 0x3377dfe0UL, 0x56106358UL, 0x9f571950UL, 0xfa30a5e8UL, 0x149f10faUL, 0x71f8ac42UL, 0xc8c07bdfUL, 0xada7c767UL,
+     0x43087275UL, 0x266fcecdUL, 0x707fad95UL, 0x1518112dUL, 0xfbb7a43fUL, 0x9ed01887UL, 0x27e8cf1aUL, 0x428f73a2UL, 0xac20c6b0UL, 0xc9477a08UL, 0x3eaf32a0UL,
+     0x5bc88e18UL, 0xb5673b0aUL, 0xd00087b2UL, 0x6938502fUL, 0x0c5fec97UL, 0xe2f05985UL, 0x8797e53dUL, 0xd1878665UL, 0xb4e03addUL, 0x5a4f8fcfUL, 0x3f283377UL,
+     0x8610e4eaUL, 0xe3775852UL, 0x0dd8ed40UL, 0x68bf51f8UL, 0xa1f82bf0UL, 0xc49f9748UL, 0x2a30225aUL, 0x4f579ee2UL, 0xf66f497fUL, 0x9308f5c7UL, 0x7da740d5UL,
+     0x18c0fc6dUL, 0x4ed09f35UL, 0x2bb7238dUL, 0xc518969fUL, 0xa07f2a27UL, 0x1947fdbaUL, 0x7c204102UL, 0x928ff410UL, 0xf7e848a8UL, 0x3d58149bUL, 0x583fa823UL,
+     0xb6901d31UL, 0xd3f7a189UL, 0x6acf7614UL, 0x0fa8caacUL, 0xe1077fbeUL, 0x8460c306UL, 0xd270a05eUL, 0xb7171ce6UL, 0x59b8a9f4UL, 0x3cdf154cUL, 0x85e7c2d1UL,
+     0xe0807e69UL, 0x0e2fcb7bUL, 0x6b4877c3UL, 0xa20f0dcbUL, 0xc768b173UL, 0x29c70461UL, 0x4ca0b8d9UL, 0xf5986f44UL, 0x90ffd3fcUL, 0x7e5066eeUL, 0x1b37da56UL,
+     0x4d27b90eUL, 0x284005b6UL, 0xc6efb0a4UL, 0xa3880c1cUL, 0x1ab0db81UL, 0x7fd76739UL, 0x9178d22bUL, 0xf41f6e93UL, 0x03f7263bUL, 0x66909a83UL, 0x883f2f91UL,
+     0xed589329UL, 0x546044b4UL, 0x3107f80cUL, 0xdfa84d1eUL, 0xbacff1a6UL, 0xecdf92feUL, 0x89b82e46UL, 0x67179b54UL, 0x027027ecUL, 0xbb48f071UL, 0xde2f4cc9UL,
+     0x3080f9dbUL, 0x55e74563UL, 0x9ca03f6bUL, 0xf9c783d3UL, 0x176836c1UL, 0x720f8a79UL, 0xcb375de4UL, 0xae50e15cUL, 0x40ff544eUL, 0x2598e8f6UL, 0x73888baeUL,
+     0x16ef3716UL, 0xf8408204UL, 0x9d273ebcUL, 0x241fe921UL, 0x41785599UL, 0xafd7e08bUL, 0xcab05c33UL, 0x3bb659edUL, 0x5ed1e555UL, 0xb07e5047UL, 0xd519ecffUL,
+     0x6c213b62UL, 0x094687daUL, 0xe7e932c8UL, 0x828e8e70UL, 0xd49eed28UL, 0xb1f95190UL, 0x5f56e482UL, 0x3a31583aUL, 0x83098fa7UL, 0xe66e331fUL, 0x08c1860dUL,
+     0x6da63ab5UL, 0xa4e140bdUL, 0xc186fc05UL, 0x2f294917UL, 0x4a4ef5afUL, 0xf3762232UL, 0x96119e8aUL, 0x78be2b98UL, 0x1dd99720UL, 0x4bc9f478UL, 0x2eae48c0UL,
+     0xc001fdd2UL, 0xa566416aUL, 0x1c5e96f7UL, 0x79392a4fUL, 0x97969f5dUL, 0xf2f123e5UL, 0x05196b4dUL, 0x607ed7f5UL, 0x8ed162e7UL, 0xebb6de5fUL, 0x528e09c2UL,
+     0x37e9b57aUL, 0xd9460068UL, 0xbc21bcd0UL, 0xea31df88UL, 0x8f566330UL, 0x61f9d622UL, 0x049e6a9aUL, 0xbda6bd07UL, 0xd8c101bfUL, 0x366eb4adUL, 0x53090815UL,
+     0x9a4e721dUL, 0xff29cea5UL, 0x11867bb7UL, 0x74e1c70fUL, 0xcdd91092UL, 0xa8beac2aUL, 0x46111938UL, 0x2376a580UL, 0x7566c6d8UL, 0x10017a60UL, 0xfeaecf72UL,
+     0x9bc973caUL, 0x22f1a457UL, 0x479618efUL, 0xa939adfdUL, 0xcc5e1145UL, 0x06ee4d76UL, 0x6389f1ceUL, 0x8d2644dcUL, 0xe841f864UL, 0x51792ff9UL, 0x341e9341UL,
+     0xdab12653UL, 0xbfd69aebUL, 0xe9c6f9b3UL, 0x8ca1450bUL, 0x620ef019UL, 0x07694ca1UL, 0xbe519b3cUL, 0xdb362784UL, 0x35999296UL, 0x50fe2e2eUL, 0x99b95426UL,
+     0xfcdee89eUL, 0x12715d8cUL, 0x7716e134UL, 0xce2e36a9UL, 0xab498a11UL, 0x45e63f03UL, 0x208183bbUL, 0x7691e0e3UL, 0x13f65c5bUL, 0xfd59e949UL, 0x983e55f1UL,
+     0x2106826cUL, 0x44613ed4UL, 0xaace8bc6UL, 0xcfa9377eUL, 0x38417fd6UL, 0x5d26c36eUL, 0xb389767cUL, 0xd6eecac4UL, 0x6fd61d59UL, 0x0ab1a1e1UL, 0xe41e14f3UL,
+     0x8179a84bUL, 0xd769cb13UL, 0xb20e77abUL, 0x5ca1c2b9UL, 0x39c67e01UL, 0x80fea99cUL, 0xe5991524UL, 0x0b36a036UL, 0x6e511c8eUL, 0xa7166686UL, 0xc271da3eUL,
+     0x2cde6f2cUL, 0x49b9d394UL, 0xf0810409UL, 0x95e6b8b1UL, 0x7b490da3UL, 0x1e2eb11bUL, 0x483ed243UL, 0x2d596efbUL, 0xc3f6dbe9UL, 0xa6916751UL, 0x1fa9b0ccUL,
+     0x7ace0c74UL, 0x9461b966UL, 0xf10605deUL
 #endif
-  }
-};
+    }};
 #endif /* DYNAMIC_CRC_TABLE */
 
 /* =========================================================================
  * This function can be used by asm versions of crc32()
  */
-const z_crc_t FAR * ZEXPORT get_crc_table()
+const z_crc_t FAR *ZEXPORT get_crc_table()
 {
 #ifdef DYNAMIC_CRC_TABLE
-    if (crc_table_empty)
-        make_crc_table();
+    if (crc_table_empty) make_crc_table();
 #endif /* DYNAMIC_CRC_TABLE */
     return (const z_crc_t FAR *)crc_table;
 }
 
 /* ========================================================================= */
 #define DO1 crc = crc_table[0][((int)crc ^ (*buf++)) & 0xff] ^ (crc >> 8)
-#define DO8 DO1; DO1; DO1; DO1; DO1; DO1; DO1; DO1
+#define DO8 \
+    DO1;    \
+    DO1;    \
+    DO1;    \
+    DO1;    \
+    DO1;    \
+    DO1;    \
+    DO1;    \
+    DO1
 
 /* ========================================================================= */
-unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR * buf, z_size_t len)
+unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
 {
     if (buf == Z_NULL) return 0UL;
 
 #ifdef DYNAMIC_CRC_TABLE
-    if (crc_table_empty)
-        make_crc_table();
+    if (crc_table_empty) make_crc_table();
 #endif /* DYNAMIC_CRC_TABLE */
 
 #ifdef BYFOUR
@@ -9193,10 +8746,8 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR * buf, 
         z_crc_t endian;
 
         endian = 1;
-        if (*((unsigned char *)(&endian)))
-            return crc32_little(crc, buf, len);
-        else
-            return crc32_big(crc, buf, len);
+        if (*((unsigned char *)(&endian))) return crc32_little(crc, buf, len);
+        else return crc32_big(crc, buf, len);
     }
 #endif /* BYFOUR */
     crc = crc ^ 0xffffffffUL;
@@ -9205,13 +8756,13 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR * buf, 
         len -= 8;
     }
     if (len) do {
-        DO1;
-    } while (--len);
+            DO1;
+        } while (--len);
     return crc ^ 0xffffffffUL;
 }
 
 /* ========================================================================= */
-unsigned long ZEXPORT crc32(unsigned long crc, const unsigned char FAR * buf, uInt len)
+unsigned long ZEXPORT crc32(unsigned long crc, const unsigned char FAR *buf, uInt len)
 {
     return crc32_z(crc, buf, len);
 }
@@ -9231,13 +8782,21 @@ unsigned long ZEXPORT crc32(unsigned long crc, const unsigned char FAR * buf, uI
  */
 
 /* ========================================================================= */
-#define DOLIT4 c ^= *buf4++; \
-        c = crc_table[3][c & 0xff] ^ crc_table[2][(c >> 8) & 0xff] ^ \
-            crc_table[1][(c >> 16) & 0xff] ^ crc_table[0][c >> 24]
-#define DOLIT32 DOLIT4; DOLIT4; DOLIT4; DOLIT4; DOLIT4; DOLIT4; DOLIT4; DOLIT4
+#define DOLIT4    \
+    c ^= *buf4++; \
+    c = crc_table[3][c & 0xff] ^ crc_table[2][(c >> 8) & 0xff] ^ crc_table[1][(c >> 16) & 0xff] ^ crc_table[0][c >> 24]
+#define DOLIT32 \
+    DOLIT4;     \
+    DOLIT4;     \
+    DOLIT4;     \
+    DOLIT4;     \
+    DOLIT4;     \
+    DOLIT4;     \
+    DOLIT4;     \
+    DOLIT4
 
 /* ========================================================================= */
-local unsigned long crc32_little(unsigned long crc, const unsigned char FAR * buf, z_size_t len)
+local unsigned long crc32_little(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
 {
     register z_crc_t c;
     register const z_crc_t FAR *buf4;
@@ -9261,20 +8820,28 @@ local unsigned long crc32_little(unsigned long crc, const unsigned char FAR * bu
     buf = (const unsigned char FAR *)buf4;
 
     if (len) do {
-        c = crc_table[0][(c ^ *buf++) & 0xff] ^ (c >> 8);
-    } while (--len);
+            c = crc_table[0][(c ^ *buf++) & 0xff] ^ (c >> 8);
+        } while (--len);
     c = ~c;
     return (unsigned long)c;
 }
 
 /* ========================================================================= */
-#define DOBIG4 c ^= *buf4++; \
-        c = crc_table[4][c & 0xff] ^ crc_table[5][(c >> 8) & 0xff] ^ \
-            crc_table[6][(c >> 16) & 0xff] ^ crc_table[7][c >> 24]
-#define DOBIG32 DOBIG4; DOBIG4; DOBIG4; DOBIG4; DOBIG4; DOBIG4; DOBIG4; DOBIG4
+#define DOBIG4    \
+    c ^= *buf4++; \
+    c = crc_table[4][c & 0xff] ^ crc_table[5][(c >> 8) & 0xff] ^ crc_table[6][(c >> 16) & 0xff] ^ crc_table[7][c >> 24]
+#define DOBIG32 \
+    DOBIG4;     \
+    DOBIG4;     \
+    DOBIG4;     \
+    DOBIG4;     \
+    DOBIG4;     \
+    DOBIG4;     \
+    DOBIG4;     \
+    DOBIG4
 
 /* ========================================================================= */
-local unsigned long crc32_big(unsigned long crc, const unsigned char FAR * buf, z_size_t len)
+local unsigned long crc32_big(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
 {
     register z_crc_t c;
     register const z_crc_t FAR *buf4;
@@ -9298,25 +8865,24 @@ local unsigned long crc32_big(unsigned long crc, const unsigned char FAR * buf, 
     buf = (const unsigned char FAR *)buf4;
 
     if (len) do {
-        c = crc_table[4][(c >> 24) ^ *buf++] ^ (c << 8);
-    } while (--len);
+            c = crc_table[4][(c >> 24) ^ *buf++] ^ (c << 8);
+        } while (--len);
     c = ~c;
     return (unsigned long)(ZSWAP32(c));
 }
 
 #endif /* BYFOUR */
 
-#define GF2_DIM 32      /* dimension of GF(2) vectors (length of CRC) */
+#define GF2_DIM 32 /* dimension of GF(2) vectors (length of CRC) */
 
 /* ========================================================================= */
-local unsigned long gf2_matrix_times(unsigned long * mat, unsigned long vec)
+local unsigned long gf2_matrix_times(unsigned long *mat, unsigned long vec)
 {
     unsigned long sum;
 
     sum = 0;
     while (vec) {
-        if (vec & 1)
-            sum ^= *mat;
+        if (vec & 1) sum ^= *mat;
         vec >>= 1;
         mat++;
     }
@@ -9324,12 +8890,11 @@ local unsigned long gf2_matrix_times(unsigned long * mat, unsigned long vec)
 }
 
 /* ========================================================================= */
-local void gf2_matrix_square(unsigned long * square, unsigned long * mat)
+local void gf2_matrix_square(unsigned long *square, unsigned long *mat)
 {
     int n;
 
-    for (n = 0; n < GF2_DIM; n++)
-        square[n] = gf2_matrix_times(mat, mat[n]);
+    for (n = 0; n < GF2_DIM; n++) square[n] = gf2_matrix_times(mat, mat[n]);
 }
 
 /* ========================================================================= */
@@ -9337,15 +8902,14 @@ local uLong crc32_combine_(uLong crc1, uLong crc2, z_off64_t len2)
 {
     int n;
     unsigned long row;
-    unsigned long even[GF2_DIM];    /* even-power-of-two zeros operator */
-    unsigned long odd[GF2_DIM];     /* odd-power-of-two zeros operator */
+    unsigned long even[GF2_DIM]; /* even-power-of-two zeros operator */
+    unsigned long odd[GF2_DIM];  /* odd-power-of-two zeros operator */
 
     /* degenerate case (also disallow negative lengths) */
-    if (len2 <= 0)
-        return crc1;
+    if (len2 <= 0) return crc1;
 
     /* put operator for one zero bit in odd */
-    odd[0] = 0xedb88320UL;          /* CRC-32 polynomial */
+    odd[0] = 0xedb88320UL; /* CRC-32 polynomial */
     row = 1;
     for (n = 1; n < GF2_DIM; n++) {
         odd[n] = row;
@@ -9363,18 +8927,15 @@ local uLong crc32_combine_(uLong crc1, uLong crc2, z_off64_t len2)
     do {
         /* apply zeros operator for this bit of len2 */
         gf2_matrix_square(even, odd);
-        if (len2 & 1)
-            crc1 = gf2_matrix_times(even, crc1);
+        if (len2 & 1) crc1 = gf2_matrix_times(even, crc1);
         len2 >>= 1;
 
         /* if no more bits set, then done */
-        if (len2 == 0)
-            break;
+        if (len2 == 0) break;
 
         /* another iteration of the loop with odd and even swapped */
         gf2_matrix_square(odd, even);
-        if (len2 & 1)
-            crc1 = gf2_matrix_times(odd, crc1);
+        if (len2 & 1) crc1 = gf2_matrix_times(odd, crc1);
         len2 >>= 1;
 
         /* if no more bits set, then done */
@@ -9426,256 +8987,271 @@ uLong ZEXPORT crc32_combine64(uLong crc1, uLong crc2, z_off64_t len2)
 #define ZUTIL_H
 
 #ifdef HAVE_HIDDEN
-#  define ZLIB_INTERNAL __attribute__((visibility ("hidden")))
+#define ZLIB_INTERNAL __attribute__((visibility("hidden")))
 #else
-#  define ZLIB_INTERNAL
+#define ZLIB_INTERNAL
 #endif
 #if defined(STDC) && !defined(Z_SOLO)
-#  if !(defined(_WIN32_WCE) && defined(_MSC_VER))
-#    include <stddef.h>
-#  endif
-#  include <string.h>
-#  include <stdlib.h>
+#if !(defined(_WIN32_WCE) && defined(_MSC_VER))
+#include <stddef.h>
+#endif
+#include <string.h>
+#include <stdlib.h>
 #endif
 
 #ifdef Z_SOLO
-   typedef long ptrdiff_t;  /* guess -- will be caught if guess is wrong */
+typedef long ptrdiff_t; /* guess -- will be caught if guess is wrong */
 #endif
 
 #ifndef local
-#  define local static
+#define local static
 #endif
 /* since "static" is used to mean two completely different things in C, we
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-typedef unsigned char  uch;
+typedef unsigned char uch;
 typedef uch FAR uchf;
 typedef unsigned short ush;
 typedef ush FAR ushf;
-typedef unsigned long  ulg;
+typedef unsigned long ulg;
 
-extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
+extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
-#define ERR_MSG(err) z_errmsg[Z_NEED_DICT-(err)]
+#define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
 
-#define ERR_RETURN(strm,err) \
-  return (strm->msg = ERR_MSG(err), (err))
+#define ERR_RETURN(strm, err) return (strm->msg = ERR_MSG(err), (err))
 /* To be used only when the state is known to be valid */
 
-        /* common constants */
+/* common constants */
 
 #ifndef DEF_WBITS
-#  define DEF_WBITS MAX_WBITS
+#define DEF_WBITS MAX_WBITS
 #endif
 /* default windowBits for decompression. MAX_WBITS is for compression only */
 
 #if MAX_MEM_LEVEL >= 8
-#  define DEF_MEM_LEVEL 8
+#define DEF_MEM_LEVEL 8
 #else
-#  define DEF_MEM_LEVEL  MAX_MEM_LEVEL
+#define DEF_MEM_LEVEL MAX_MEM_LEVEL
 #endif
 /* default memLevel */
 
 #define STORED_BLOCK 0
 #define STATIC_TREES 1
-#define DYN_TREES    2
+#define DYN_TREES 2
 /* The three kinds of block type */
 
-#define MIN_MATCH  3
-#define MAX_MATCH  258
+#define MIN_MATCH 3
+#define MAX_MATCH 258
 /* The minimum and maximum match lengths */
 
 #define PRESET_DICT 0x20 /* preset dictionary flag in zlib header */
 
-        /* target dependencies */
+/* target dependencies */
 
 #if defined(MSDOS) || (defined(WINDOWS) && !defined(WIN32))
-#  define OS_CODE  0x00
-#  ifndef Z_SOLO
-#    if defined(__TURBOC__) || defined(__BORLANDC__)
-#      if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
-         /* Allow compilation with ANSI keywords only enabled */
-         void _Cdecl farfree( void *block );
-         void *_Cdecl farmalloc( unsigned long nbytes );
-#      else
-#        include <alloc.h>
-#      endif
-#    else /* MSC or DJGPP */
-#      include <malloc.h>
-#    endif
-#  endif
+#define OS_CODE 0x00
+#ifndef Z_SOLO
+#if defined(__TURBOC__) || defined(__BORLANDC__)
+#if (__STDC__ == 1) && (defined(__LARGE__) || defined(__COMPACT__))
+/* Allow compilation with ANSI keywords only enabled */
+void _Cdecl farfree(void *block);
+void *_Cdecl farmalloc(unsigned long nbytes);
+#else
+#include <alloc.h>
+#endif
+#else /* MSC or DJGPP */
+#include <malloc.h>
+#endif
+#endif
 #endif
 
 #ifdef AMIGA
-#  define OS_CODE  1
+#define OS_CODE 1
 #endif
 
 #if defined(VAXC) || defined(VMS)
-#  define OS_CODE  2
-#  define F_OPEN(name, mode) \
-     fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
+#define OS_CODE 2
+#define F_OPEN(name, mode) fopen((name), (mode), "mbc=60", "ctx=stm", "rfm=fix", "mrs=512")
 #endif
 
 #ifdef __370__
-#  if __TARGET_LIB__ < 0x20000000
-#    define OS_CODE 4
-#  elif __TARGET_LIB__ < 0x40000000
-#    define OS_CODE 11
-#  else
-#    define OS_CODE 8
-#  endif
+#if __TARGET_LIB__ < 0x20000000
+#define OS_CODE 4
+#elif __TARGET_LIB__ < 0x40000000
+#define OS_CODE 11
+#else
+#define OS_CODE 8
+#endif
 #endif
 
 #if defined(ATARI) || defined(atarist)
-#  define OS_CODE  5
+#define OS_CODE 5
 #endif
 
 #ifdef OS2
-#  define OS_CODE  6
-#  if defined(M_I86) && !defined(Z_SOLO)
-#    include <malloc.h>
-#  endif
+#define OS_CODE 6
+#if defined(M_I86) && !defined(Z_SOLO)
+#include <malloc.h>
+#endif
 #endif
 
 #if defined(MACOS) || defined(TARGET_OS_MAC)
-#  define OS_CODE  7
-#  ifndef Z_SOLO
-#    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
-#      include <unix.h> /* for fdopen */
-#    else
-#      ifndef fdopen
-#        define fdopen(fd,mode) NULL /* No fdopen() */
-#      endif
-#    endif
-#  endif
+#define OS_CODE 7
+#ifndef Z_SOLO
+#if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+#include <unix.h> /* for fdopen */
+#else
+#ifndef fdopen
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#endif
+#endif
+#endif
 #endif
 
 #ifdef __acorn
-#  define OS_CODE 13
+#define OS_CODE 13
 #endif
 
 #if defined(WIN32) && !defined(__CYGWIN__)
-#  define OS_CODE  10
+#define OS_CODE 10
 #endif
 
 #ifdef _BEOS_
-#  define OS_CODE  16
+#define OS_CODE 16
 #endif
 
 #ifdef __TOS_OS400__
-#  define OS_CODE 18
+#define OS_CODE 18
 #endif
 
 #ifdef __APPLE__
-#  define OS_CODE 19
+#define OS_CODE 19
 #endif
 
 #if defined(_BEOS_) || defined(RISCOS)
-#  define fdopen(fd,mode) NULL /* No fdopen() */
+#define fdopen(fd, mode) NULL /* No fdopen() */
 #endif
 
 #if (defined(_MSC_VER) && (_MSC_VER > 600)) && !defined __INTERIX
-#  if defined(_WIN32_WCE)
-#    define fdopen(fd,mode) NULL /* No fdopen() */
-#    ifndef _PTRDIFF_T_DEFINED
-       typedef int ptrdiff_t;
-#      define _PTRDIFF_T_DEFINED
-#    endif
-#  else
-#    define fdopen(fd,type)  _fdopen(fd,type)
-#  endif
+#if defined(_WIN32_WCE)
+#define fdopen(fd, mode) NULL /* No fdopen() */
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#define _PTRDIFF_T_DEFINED
+#endif
+#else
+#define fdopen(fd, type) _fdopen(fd, type)
+#endif
 #endif
 
 #if defined(__BORLANDC__) && !defined(MSDOS)
-  #pragma warn -8004
-  #pragma warn -8008
-  #pragma warn -8066
+#pragma warn - 8004
+#pragma warn - 8008
+#pragma warn - 8066
 #endif
 
 /* provide prototypes for these when building zlib without LFS */
-#if !defined(_WIN32) && \
-    (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE-0 == 0)
-    ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
-    ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
+#if !defined(_WIN32) && (!defined(_LARGEFILE64_SOURCE) || _LFS64_LARGEFILE - 0 == 0)
+ZEXTERN uLong ZEXPORT adler32_combine64 OF((uLong, uLong, z_off_t));
+ZEXTERN uLong ZEXPORT crc32_combine64 OF((uLong, uLong, z_off_t));
 #endif
 
-        /* common defaults */
+/* common defaults */
 
 #ifndef OS_CODE
-#  define OS_CODE  3     /* assume Unix */
+#define OS_CODE 3 /* assume Unix */
 #endif
 
 #ifndef F_OPEN
-#  define F_OPEN(name, mode) fopen((name), (mode))
+#define F_OPEN(name, mode) fopen((name), (mode))
 #endif
 
-         /* functions */
+/* functions */
 
 #if defined(pyr) || defined(Z_SOLO)
-#  define NO_MEMCPY
+#define NO_MEMCPY
 #endif
 #if defined(SMALL_MEDIUM) && !defined(_MSC_VER) && !defined(__SC__)
- /* Use our own functions for small and medium model with MSC <= 5.0.
-  * You may have to use the same strategy for Borland C (untested).
-  * The __SC__ check is for Symantec.
-  */
-#  define NO_MEMCPY
+/* Use our own functions for small and medium model with MSC <= 5.0.
+ * You may have to use the same strategy for Borland C (untested).
+ * The __SC__ check is for Symantec.
+ */
+#define NO_MEMCPY
 #endif
 #if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
-#  define HAVE_MEMCPY
+#define HAVE_MEMCPY
 #endif
 #ifdef HAVE_MEMCPY
-#  ifdef SMALL_MEDIUM /* MSDOS small or medium model */
-#    define zmemcpy _fmemcpy
-#    define zmemcmp _fmemcmp
-#    define zmemzero(dest, len) _fmemset(dest, 0, len)
-#  else
-#    define zmemcpy memcpy
-#    define zmemcmp memcmp
-#    define zmemzero(dest, len) memset(dest, 0, len)
-#  endif
+#ifdef SMALL_MEDIUM /* MSDOS small or medium model */
+#define zmemcpy _fmemcpy
+#define zmemcmp _fmemcmp
+#define zmemzero(dest, len) _fmemset(dest, 0, len)
 #else
-   void ZLIB_INTERNAL zmemcpy OF((Bytef* dest, const Bytef* source, uInt len));
-   int ZLIB_INTERNAL zmemcmp OF((const Bytef* s1, const Bytef* s2, uInt len));
-   void ZLIB_INTERNAL zmemzero OF((Bytef* dest, uInt len));
+#define zmemcpy memcpy
+#define zmemcmp memcmp
+#define zmemzero(dest, len) memset(dest, 0, len)
+#endif
+#else
+void ZLIB_INTERNAL zmemcpy OF((Bytef * dest, const Bytef *source, uInt len));
+int ZLIB_INTERNAL zmemcmp OF((const Bytef *s1, const Bytef *s2, uInt len));
+void ZLIB_INTERNAL zmemzero OF((Bytef * dest, uInt len));
 #endif
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#  include <stdio.h>
-   extern int ZLIB_INTERNAL z_verbose;
-   extern void ZLIB_INTERNAL z_error OF((char *m));
-#  define Assert(cond,msg) {if(!(cond)) z_error(msg);}
-#  define Trace(x) {if (z_verbose>=0) fprintf x ;}
-#  define Tracev(x) {if (z_verbose>0) fprintf x ;}
-#  define Tracevv(x) {if (z_verbose>1) fprintf x ;}
-#  define Tracec(c,x) {if (z_verbose>0 && (c)) fprintf x ;}
-#  define Tracecv(c,x) {if (z_verbose>1 && (c)) fprintf x ;}
+#include <stdio.h>
+extern int ZLIB_INTERNAL z_verbose;
+extern void ZLIB_INTERNAL z_error OF((char *m));
+#define Assert(cond, msg)          \
+    {                              \
+        if (!(cond)) z_error(msg); \
+    }
+#define Trace(x)                       \
+    {                                  \
+        if (z_verbose >= 0) fprintf x; \
+    }
+#define Tracev(x)                     \
+    {                                 \
+        if (z_verbose > 0) fprintf x; \
+    }
+#define Tracevv(x)                    \
+    {                                 \
+        if (z_verbose > 1) fprintf x; \
+    }
+#define Tracec(c, x)                         \
+    {                                        \
+        if (z_verbose > 0 && (c)) fprintf x; \
+    }
+#define Tracecv(c, x)                        \
+    {                                        \
+        if (z_verbose > 1 && (c)) fprintf x; \
+    }
 #else
-#  define Assert(cond,msg)
-#  define Trace(x)
-#  define Tracev(x)
-#  define Tracevv(x)
-#  define Tracec(c,x)
-#  define Tracecv(c,x)
+#define Assert(cond, msg)
+#define Trace(x)
+#define Tracev(x)
+#define Tracevv(x)
+#define Tracec(c, x)
+#define Tracecv(c, x)
 #endif
 
 #ifndef Z_SOLO
-   voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items,
-                                    unsigned size));
-   void ZLIB_INTERNAL zcfree  OF((voidpf opaque, voidpf ptr));
+voidpf ZLIB_INTERNAL zcalloc OF((voidpf opaque, unsigned items, unsigned size));
+void ZLIB_INTERNAL zcfree OF((voidpf opaque, voidpf ptr));
 #endif
 
-#define ZALLOC(strm, items, size) \
-           (*((strm)->zalloc))((strm)->opaque, (items), (size))
-#define ZFREE(strm, addr)  (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
-#define TRY_FREE(s, p) {if (p) ZFREE(s, p);}
+#define ZALLOC(strm, items, size) (*((strm)->zalloc))((strm)->opaque, (items), (size))
+#define ZFREE(strm, addr) (*((strm)->zfree))((strm)->opaque, (voidpf)(addr))
+#define TRY_FREE(s, p)      \
+    {                       \
+        if (p) ZFREE(s, p); \
+    }
 
 /* Reverse the bytes in a 32-bit value */
-#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + \
-                    (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
+#define ZSWAP32(q) ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q) & 0xff00) << 8) + (((q) & 0xff) << 24))
 
 #endif /* ZUTIL_H */
 /* adler32.c -- compute the Adler-32 checksum of a data stream
@@ -9687,58 +9263,70 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 
 local uLong adler32_combine_ OF((uLong adler1, uLong adler2, z_off64_t len2));
 
-#define BASE 65521U     /* largest prime smaller than 65536 */
+#define BASE 65521U /* largest prime smaller than 65536 */
 #define NMAX 5552
 /* NMAX is the largest n such that 255n(n+1)/2 + (n+1)(BASE-1) <= 2^32-1 */
 
-#define DO1(buf,i)  {adler += (buf)[i]; sum2 += adler;}
-#define DO2(buf,i)  DO1(buf,i); DO1(buf,i+1);
-#define DO4(buf,i)  DO2(buf,i); DO2(buf,i+2);
-#define DO8(buf,i)  DO4(buf,i); DO4(buf,i+4);
-#define DO16(buf)   DO8(buf,0); DO8(buf,8);
+#define DO1(buf, i)        \
+    {                      \
+        adler += (buf)[i]; \
+        sum2 += adler;     \
+    }
+#define DO2(buf, i) \
+    DO1(buf, i);    \
+    DO1(buf, i + 1);
+#define DO4(buf, i) \
+    DO2(buf, i);    \
+    DO2(buf, i + 2);
+#define DO8(buf, i) \
+    DO4(buf, i);    \
+    DO4(buf, i + 4);
+#define DO16(buf) \
+    DO8(buf, 0);  \
+    DO8(buf, 8);
 
 /* use NO_DIVIDE if your processor does not do division in hardware --
    try it both ways to see which is faster */
 #ifdef NO_DIVIDE
 /* note that this assumes BASE is 65521, where 65536 % 65521 == 15
    (thank you to John Reiser for pointing this out) */
-#  define CHOP(a) \
-    do { \
+#define CHOP(a)                      \
+    do {                             \
         unsigned long tmp = a >> 16; \
-        a &= 0xffffUL; \
-        a += (tmp << 4) - tmp; \
+        a &= 0xffffUL;               \
+        a += (tmp << 4) - tmp;       \
     } while (0)
-#  define MOD28(a) \
-    do { \
-        CHOP(a); \
+#define MOD28(a)                  \
+    do {                          \
+        CHOP(a);                  \
         if (a >= BASE) a -= BASE; \
     } while (0)
-#  define MOD(a) \
-    do { \
-        CHOP(a); \
+#define MOD(a)    \
+    do {          \
+        CHOP(a);  \
         MOD28(a); \
     } while (0)
-#  define MOD63(a) \
+#define MOD63(a)                              \
     do { /* this assumes a is not negative */ \
-        z_off64_t tmp = a >> 32; \
-        a &= 0xffffffffL; \
-        a += (tmp << 8) - (tmp << 5) + tmp; \
-        tmp = a >> 16; \
-        a &= 0xffffL; \
-        a += (tmp << 4) - tmp; \
-        tmp = a >> 16; \
-        a &= 0xffffL; \
-        a += (tmp << 4) - tmp; \
-        if (a >= BASE) a -= BASE; \
+        z_off64_t tmp = a >> 32;              \
+        a &= 0xffffffffL;                     \
+        a += (tmp << 8) - (tmp << 5) + tmp;   \
+        tmp = a >> 16;                        \
+        a &= 0xffffL;                         \
+        a += (tmp << 4) - tmp;                \
+        tmp = a >> 16;                        \
+        a &= 0xffffL;                         \
+        a += (tmp << 4) - tmp;                \
+        if (a >= BASE) a -= BASE;             \
     } while (0)
 #else
-#  define MOD(a) a %= BASE
-#  define MOD28(a) a %= BASE
-#  define MOD63(a) a %= BASE
+#define MOD(a) a %= BASE
+#define MOD28(a) a %= BASE
+#define MOD63(a) a %= BASE
 #endif
 
 /* ========================================================================= */
-uLong ZEXPORT adler32_z(uLong adler, const Bytef * buf, z_size_t len)
+uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len)
 {
     unsigned long sum2;
     unsigned n;
@@ -9750,17 +9338,14 @@ uLong ZEXPORT adler32_z(uLong adler, const Bytef * buf, z_size_t len)
     /* in case user likes doing a byte at a time, keep it fast */
     if (len == 1) {
         adler += buf[0];
-        if (adler >= BASE)
-            adler -= BASE;
+        if (adler >= BASE) adler -= BASE;
         sum2 += adler;
-        if (sum2 >= BASE)
-            sum2 -= BASE;
+        if (sum2 >= BASE) sum2 -= BASE;
         return adler | (sum2 << 16);
     }
 
     /* initial Adler-32 value (deferred check for len == 1 speed) */
-    if (buf == Z_NULL)
-        return 1L;
+    if (buf == Z_NULL) return 1L;
 
     /* in case short lengths are provided, keep it somewhat fast */
     if (len < 16) {
@@ -9768,18 +9353,17 @@ uLong ZEXPORT adler32_z(uLong adler, const Bytef * buf, z_size_t len)
             adler += *buf++;
             sum2 += adler;
         }
-        if (adler >= BASE)
-            adler -= BASE;
-        MOD28(sum2);            /* only added so many BASE's */
+        if (adler >= BASE) adler -= BASE;
+        MOD28(sum2); /* only added so many BASE's */
         return adler | (sum2 << 16);
     }
 
     /* do length NMAX blocks -- requires just one modulo operation */
     while (len >= NMAX) {
         len -= NMAX;
-        n = NMAX / 16;          /* NMAX is divisible by 16 */
+        n = NMAX / 16; /* NMAX is divisible by 16 */
         do {
-            DO16(buf);          /* 16 sums unrolled */
+            DO16(buf); /* 16 sums unrolled */
             buf += 16;
         } while (--n);
         MOD(adler);
@@ -9787,7 +9371,7 @@ uLong ZEXPORT adler32_z(uLong adler, const Bytef * buf, z_size_t len)
     }
 
     /* do remaining bytes (less than NMAX, still just one modulo) */
-    if (len) {                  /* avoid modulos if none remaining */
+    if (len) { /* avoid modulos if none remaining */
         while (len >= 16) {
             len -= 16;
             DO16(buf);
@@ -9806,7 +9390,7 @@ uLong ZEXPORT adler32_z(uLong adler, const Bytef * buf, z_size_t len)
 }
 
 /* ========================================================================= */
-uLong ZEXPORT adler32(uLong adler, const Bytef * buf, uInt len)
+uLong ZEXPORT adler32(uLong adler, const Bytef *buf, uInt len)
 {
     return adler32_z(adler, buf, len);
 }
@@ -9819,11 +9403,10 @@ local uLong adler32_combine_(uLong adler1, uLong adler2, z_off64_t len2)
     unsigned rem;
 
     /* for negative len, return invalid adler32 as a clue for debugging */
-    if (len2 < 0)
-        return 0xffffffffUL;
+    if (len2 < 0) return 0xffffffffUL;
 
     /* the derivation of this formula is left as an exercise for the reader */
-    MOD63(len2);                /* assumes len2 >= 0 */
+    MOD63(len2); /* assumes len2 >= 0 */
     rem = (unsigned)len2;
     sum1 = adler1 & 0xffff;
     sum2 = rem * sum1;
