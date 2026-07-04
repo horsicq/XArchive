@@ -28,7 +28,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
 {
     QList<XArchive::RECORD> listResult;
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
     if (pArchives) {
         listResult = pArchives->getRecords(nLimit, pPdStruct);
@@ -70,7 +70,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
 
     XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
     if (pArchives) {
         baResult = pArchives->decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
@@ -127,7 +127,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 
     XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
     if (pArchives) {
         bResult = pArchives->decompressToFile(pRecord, sResultFileName, pPdStruct);
@@ -144,7 +144,7 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
 
     XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
     if (pArchives) {
         bResult = pArchives->decompressToDevice(pRecord, pDestDevice, pPdStruct);
@@ -250,7 +250,7 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
 
     XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::getClass(fileType, pDevice));
+    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
     if (pArchives) {
         bResult = pArchives->isArchiveRecordPresent(sRecordFileName, pPdStruct);

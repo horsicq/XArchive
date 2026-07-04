@@ -27,6 +27,11 @@ static XBinary::XCONVERT _TABLE_XMACHOFAT_STRUCTID[] = {
     {XMACHOFat::STRUCTID_ARCHITECTURE, "ARCHITECTURE", QObject::tr("Architecture")},
 };
 
+static XBinary::XIDSTRING _TABLE_XMACHOFAT_HeaderMagics[] = {
+    {XMACH_DEF::S_FAT_MAGIC, "FAT_MAGIC"},
+    {XMACH_DEF::S_FAT_CIGAM, "FAT_CIGAM"},
+};
+
 XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -462,6 +467,106 @@ bool XMACHOFat::isArchitectureValid(qint32 nIndex)
     }
 
     return bResult;
+}
+
+QList<XBinary::XFHEADER> XMACHOFat::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    QList<XBinary::XFHEADER> listResult;
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+        if ((nHeaderOffset != -1) && isOffsetAndSizeValid(xfStruct.pMemoryMap, nHeaderOffset, sizeof(XMACH_DEF::fat_header))) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_HEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(XMACH_DEF::fat_header);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_HEADER, headerLoc);
+            xfHeader.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XMACHOFAT_HeaderMagics,
+                                        (qint32)(sizeof(_TABLE_XMACHOFAT_HeaderMagics) / sizeof(XBinary::XIDSTRING))});
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_HEADER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+
+        if (xfStruct.bIsParent) {
+            XFSTRUCT _xfStructArch = xfStruct;
+            _xfStructArch.nStructID = STRUCTID_ARCHITECTURE;
+            _xfStructArch.xLoc = offsetToLoc(sizeof(XMACH_DEF::fat_header));
+            _xfStructArch.nCount = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
+            listResult.append(getXFHeaders(_xfStructArch, pPdStruct));
+        }
+    } else if (nStructID == STRUCTID_ARCHITECTURE) {
+        qint32 nCount = xfStruct.nCount;
+
+        if (nCount == 0) {
+            nCount = read_uint32((locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc) - sizeof(XMACH_DEF::fat_header)) + offsetof(XMACH_DEF::fat_header, nfat_arch), isBigEndian());
+        }
+
+        if (nCount > 0) {
+            XLOC firstLoc = offsetToLoc(sizeof(XMACH_DEF::fat_header));
+
+            qint32 nCpuTypesSize = 0;
+            XBinary::XIDSTRING *pCpuTypes = XMACH::getHeaderCpuTypesTablePtr(&nCpuTypesSize);
+
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_ARCHITECTURE);
+            xfHeader.xLoc = firstLoc;
+            xfHeader.nSize = sizeof(XMACH_DEF::fat_arch);
+            xfHeader.xfType = XFTYPE_TABLE;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_ARCHITECTURE, firstLoc);
+            xfHeader.listDataSt.append({0, 0, XFDATASTYPE_LIST, pCpuTypes, nCpuTypesSize});
+            // xfHeader.listDataSt.append({1, 0, XFDATASTYPE_LIST, pCpuTypes, nCpuTypesSize});
+
+            for (qint32 i = 0; (i < nCount) && isPdStructNotCanceled(pPdStruct); i++) {
+                qint64 nArchOffset = sizeof(XMACH_DEF::fat_header) + (qint64)i * sizeof(XMACH_DEF::fat_arch);
+                xfHeader.listRowLocations.append((XADDR)nArchOffset);
+                // xfHeader.listRowNames.append(getArchitectureString(i));
+            }
+
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_ARCHITECTURE), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XMACHOFat::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_HEADER) {
+        listResult.append({"magic", (qint32)offsetof(XMACH_DEF::fat_header, magic), 4, XFRECORD_FLAG_BE, VT_UINT32});
+        listResult.append({"nfat_arch", (qint32)offsetof(XMACH_DEF::fat_header, nfat_arch), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+    } else if (nStructID == STRUCTID_ARCHITECTURE) {
+        listResult.append({"cputype", (qint32)offsetof(XMACH_DEF::fat_arch, cputype), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"cpusubtype", (qint32)offsetof(XMACH_DEF::fat_arch, cpusubtype), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"offset", (qint32)offsetof(XMACH_DEF::fat_arch, offset), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"size", (qint32)offsetof(XMACH_DEF::fat_arch, size), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"align", (qint32)offsetof(XMACH_DEF::fat_arch, align), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+    }
+
+    return listResult;
 }
 
 bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
