@@ -2880,8 +2880,10 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
     // Stored as 2 bytes little-endian
     quint16 nVal = nParamByte1 | (nParamByte2 << 8);
     quint8 nOrder = (nVal & 0x0F) + 1;             // Bits 0-3: Order - 1
-    quint8 nMemSizeMB = ((nVal >> 4) & 0xFF) + 1;  // Bits 4-11: MemSizeMB - 1
-    quint8 nRestor = (nVal >> 12);                 // Bits 12-15: Restor method
+    // *PR: FIXED INVALID POINTER BUG
+    // CHANGE: Upgraded from quint8 -> quint32 to prevent integer truncation
+    quint32 nMemSizeMB = ((nVal >> 4) & 0xFF) + 1;  // Bits 4-11: MemSizeMB - 1
+    quint32 nRestor = (nVal >> 12);                 // Bits 12-15: Restor method
 
     quint32 nMemSize = ((quint32)nMemSizeMB) << 20;  // Memory in bytes
 
