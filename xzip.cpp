@@ -1112,7 +1112,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                 nOffset += (sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength + lfh.nCompressedSize);
 #ifdef QT_DEBUG
-                qDebug("Offset: %X", nOffset);
+                qDebug("Offset: %llX", nOffset);
 #endif
             }
         }
