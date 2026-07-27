@@ -121,6 +121,139 @@ quint32 XCFBF::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_CFBF_STRUCTID, sizeof(_TABLE_CFBF_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QList<XBinary::XFHEADER> XCFBF::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_StructuredStorageHeader;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_StructuredStorageHeader) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_StructuredStorageHeader);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.nSize = sizeof(StructuredStorageHeader);
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_StructuredStorageHeader, headerLoc);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_StructuredStorageHeader), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+
+        if (xfStruct.bIsParent) {
+            XFSTRUCT _xfStruct = xfStruct;
+            _xfStruct.sParent = xfHeader.sTag;
+            _xfStruct.nStructID = STRUCTID_CFBF_DIRECTORY_ENTRY;
+            _xfStruct.xLoc = offsetToLoc(-1);
+            _xfStruct.nCount = 0;
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+        }
+    } else if (nStructID == STRUCTID_CFBF_DIRECTORY_ENTRY) {
+        StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
+
+        if (ssh._sectDirStart != 0xFFFFFFFF) {
+            qint64 nSectorSize = (qint64)1 << ssh._uSectorShift;
+            qint64 nFileSize = getSize();
+            QList<quint32> listFAT = _readFAT(ssh, pPdStruct);
+
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFBF_DIRECTORY_ENTRY);
+            xfHeader.xfType = XFTYPE_TABLE;
+
+            quint32 nSector = ssh._sectDirStart;
+            qint32 nMaxChain = listFAT.size();
+            qint32 nChainCount = 0;
+
+            while ((nSector < (quint32)nMaxChain) && (nSector != 0xFFFFFFFE) && (nChainCount < nMaxChain) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+                qint64 nSectorOffset = nSectorSize + (qint64)nSector * nSectorSize;
+
+                for (qint64 nEntryOffset = 0; (nEntryOffset + 128) <= nSectorSize; nEntryOffset += 128) {
+                    qint64 nRowOffset = nSectorOffset + nEntryOffset;
+
+                    if ((nRowOffset + 128) > nFileSize) {
+                        break;
+                    }
+
+                    quint8 nObjectType = read_uint8(nRowOffset + 66);
+
+                    if (nObjectType != 0) {  // Skip unallocated entries
+                        xfHeader.listRowLocations.append(nRowOffset);
+                    }
+                }
+
+                nSector = listFAT.at(nSector);
+                nChainCount++;
+            }
+
+            if (!xfHeader.listRowLocations.isEmpty()) {
+                xfHeader.xLoc = offsetToLoc(xfHeader.listRowLocations.first());
+                xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFBF_DIRECTORY_ENTRY, xfHeader.xLoc);
+                xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_CFBF_DIRECTORY_ENTRY), xfHeader.sParentTag);
+                listResult.append(xfHeader);
+            }
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XCFBF::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_StructuredStorageHeader) {
+        listResult.append({"_abSig", (qint32)offsetof(StructuredStorageHeader, _abSig), 8, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"_clsid", (qint32)offsetof(StructuredStorageHeader, _clsid), 16, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"_uMinorVersion", (qint32)offsetof(StructuredStorageHeader, _uMinorVersion), 2, XFRECORD_FLAG_VERSION_MINOR, VT_UINT16});
+        listResult.append({"_uDllVersion", (qint32)offsetof(StructuredStorageHeader, _uDllVersion), 2, XFRECORD_FLAG_VERSION_MAJOR, VT_UINT16});
+        listResult.append({"_uByteOrder", (qint32)offsetof(StructuredStorageHeader, _uByteOrder), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"_uSectorShift", (qint32)offsetof(StructuredStorageHeader, _uSectorShift), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"_uMiniSectorShift", (qint32)offsetof(StructuredStorageHeader, _uMiniSectorShift), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"_usReserved", (qint32)offsetof(StructuredStorageHeader, _usReserved), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"_ulReserved1", (qint32)offsetof(StructuredStorageHeader, _ulReserved1), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"_csectDir", (qint32)offsetof(StructuredStorageHeader, _csectDir), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"_csectFat", (qint32)offsetof(StructuredStorageHeader, _csectFat), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"_sectDirStart", (qint32)offsetof(StructuredStorageHeader, _sectDirStart), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"_signature", (qint32)offsetof(StructuredStorageHeader, _signature), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"_ulMiniSectorCutoff", (qint32)offsetof(StructuredStorageHeader, _ulMiniSectorCutoff), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"_sectMiniFatStart", (qint32)offsetof(StructuredStorageHeader, _sectMiniFatStart), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"_csectMiniFat", (qint32)offsetof(StructuredStorageHeader, _csectMiniFat), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"_sectDifStart", (qint32)offsetof(StructuredStorageHeader, _sectDifStart), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"_csectDif", (qint32)offsetof(StructuredStorageHeader, _csectDif), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+    } else if (nStructID == STRUCTID_CFBF_DIRECTORY_ENTRY) {
+        // On-disk layout (128 bytes); literal offsets: the in-memory struct has alignment padding
+        listResult.append({"name", 0, 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nameLength", 64, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"objectType", 66, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"colorFlag", 67, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"leftSiblingID", 68, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"rightSiblingID", 72, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"childID", 76, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"clsid", 80, 16, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"stateBits", 96, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"creationTime", 100, 8, XFRECORD_FLAG_FILETIME, VT_UINT64});
+        listResult.append({"modifiedTime", 108, 8, XFRECORD_FLAG_FILETIME, VT_UINT64});
+        listResult.append({"startSectorLocation", 116, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"streamSize", 120, 8, XFRECORD_FLAG_SIZE, VT_UINT64});
+    }
+
+    return listResult;
+}
+
 // QList<XBinary::DATA_HEADER> XCFBF::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 // {
 //     QList<XBinary::DATA_HEADER> listResult;

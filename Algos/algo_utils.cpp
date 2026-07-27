@@ -31,6 +31,38 @@ ISzAlloc g_lzmaAlloc = {Algo_utils::szAlloc, Algo_utils::szFree};
 ISzAlloc g_ppmdAlloc = {Algo_utils::szAlloc, Algo_utils::szFree};
 }  // namespace
 
+void Algo_utils::seekToStart(XBinary::DATAPROCESS_STATE *pState)
+{
+    if (pState->pDeviceInput) {
+        pState->pDeviceInput->seek(pState->nInputOffset);
+    }
+
+    if (pState->pDeviceOutput) {
+        pState->pDeviceOutput->seek(0);
+    }
+}
+
+void Algo_utils::prepareState(XBinary::DATAPROCESS_STATE *pState)
+{
+    pState->bReadError = false;
+    pState->bWriteError = false;
+    pState->nCountInput = 0;
+    pState->nCountOutput = 0;
+
+    seekToStart(pState);
+}
+
+qint32 Algo_utils::getReadChunkSize(const XBinary::DATAPROCESS_STATE *pState, qint32 nBufferSize)
+{
+    qint32 nResult = nBufferSize;
+
+    if (pState->nInputLimit != -1) {
+        nResult = (qint32)(std::min)(pState->nInputLimit - pState->nCountInput, (qint64)nBufferSize);
+    }
+
+    return nResult;
+}
+
 int Algo_utils::ascii85ReadByte(XBinary::DATAPROCESS_STATE *pState)
 {
     char c = 0;
@@ -89,13 +121,9 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
     qint32 nLoopCount = 0;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nBufferSize = _nBufferSize;
-        if (pDecompressState->nInputLimit != -1) {
-            qint64 nRemainingInput = pDecompressState->nInputLimit - pDecompressState->nCountInput;
-            if (nRemainingInput <= 0) {
-                break;
-            }
-            nBufferSize = (qint32)(std::min)(nRemainingInput, (qint64)_nBufferSize);
+        qint32 nBufferSize = getReadChunkSize(pDecompressState, _nBufferSize);
+        if (nBufferSize <= 0) {
+            break;
         }
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
         if (nSize < 0) {
@@ -194,13 +222,9 @@ bool Algo_utils::decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *
     ELzmaStatus lastStatus = LZMA_STATUS_NOT_FINISHED;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nBufferSize = _nBufferSize;
-        if (pDecompressState->nInputLimit != -1) {
-            qint64 nRemainingInput = pDecompressState->nInputLimit - pDecompressState->nCountInput;
-            if (nRemainingInput <= 0) {
-                break;
-            }
-            nBufferSize = (qint32)(std::min)(nRemainingInput, (qint64)_nBufferSize);
+        qint32 nBufferSize = getReadChunkSize(pDecompressState, _nBufferSize);
+        if (nBufferSize <= 0) {
+            break;
         }
         qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
         if (nSize < 0) {
@@ -282,35 +306,78 @@ bool Algo_utils::xzReadVarInt(const QByteArray &baData, qint32 &nPos, quint64 &n
     return false;
 }
 
-void Algo_utils::applyBCJX86Decode(QByteArray &baData)
+void Algo_utils::applyBCJX86Decode(QByteArray &baData, quint32 nIp)
 {
-    qint32 nSize = baData.size();
+    // 7-Zip x86 BCJ inverse filter. Byte-exact port of the reference x86_Convert
+    // (LZMA SDK Bra86.c) with encoding=0, processing the whole buffer in a single
+    // pass starting from instruction pointer nIp (0 for the standard 7z/xz filter).
+    //
+    // The previous implementation was a naive E8/E9 scan that ignored the "mask"
+    // state machine the reference uses for call/jump opcodes closer than 5 bytes
+    // apart, and wrote the raw high operand byte instead of its sign-extension.
+    // That diverged from 7-Zip on real x86 executables (e.g. large PE files).
+    const qint64 nSize = baData.size();
 
     if (nSize < 5) {
         return;
     }
 
-    for (qint32 i = 0; i <= nSize - 5;) {
-        quint8 nOpcode = (quint8)baData.at(i);
-        if ((nOpcode != 0xE8) && (nOpcode != 0xE9)) {
-            i++;
-            continue;
+    auto Test86MSByte = [](quint8 b) -> bool { return (((quint32)b + 1) & 0xFE) == 0; };  // b == 0x00 || b == 0xFF
+
+    unsigned char *data = reinterpret_cast<unsigned char *>(baData.data());
+    const qint64 nLimit = nSize - 4;
+    const quint32 ip = nIp + 5;
+    qint64 pos = 0;
+    quint32 mask = 0;  // state
+
+    for (;;) {
+        unsigned char *p = data + pos;
+        const unsigned char *end = data + nLimit;
+        for (; p < end; p++) {
+            if ((*p & 0xFE) == 0xE8) {  // E8 (CALL) or E9 (JMP)
+                break;
+            }
         }
 
-        quint8 nMSB = (quint8)baData.at(i + 4);
-        if ((nMSB != 0x00) && (nMSB != 0xFF)) {
-            i++;
-            continue;
+        {
+            const qint64 d = (qint64)(p - data) - pos;
+            pos = (qint64)(p - data);
+            if (p >= end) {
+                return;
+            }
+            if (d > 2) {
+                mask = 0;
+            } else {
+                mask >>= (unsigned)d;
+                if (mask != 0 && (mask > 4 || mask == 3 || Test86MSByte(p[(mask >> 1) + 1]))) {
+                    mask = (mask >> 1) | 4;
+                    pos++;
+                    continue;
+                }
+            }
         }
 
-        quint32 nStored =
-            (quint32)(quint8)baData[i + 1] | ((quint32)(quint8)baData[i + 2] << 8) | ((quint32)(quint8)baData[i + 3] << 16) | ((quint32)(quint8)baData[i + 4] << 24);
-        quint32 nRelAddr = nStored - (quint32)(i + 5);
-        baData[i + 1] = (char)(nRelAddr & 0xFF);
-        baData[i + 2] = (char)((nRelAddr >> 8) & 0xFF);
-        baData[i + 3] = (char)((nRelAddr >> 16) & 0xFF);
-        baData[i + 4] = (char)((nRelAddr >> 24) & 0xFF);
-        i += 5;
+        if (Test86MSByte(p[4])) {
+            quint32 v = (quint32)p[1] | ((quint32)p[2] << 8) | ((quint32)p[3] << 16) | ((quint32)p[4] << 24);
+            const quint32 cur = ip + (quint32)pos;
+            pos += 5;
+            v -= cur;  // decode: absolute -> relative
+            if (mask != 0) {
+                const unsigned sh = (mask & 6) << 2;
+                if (Test86MSByte((quint8)(v >> sh))) {
+                    v ^= (((quint32)0x100 << sh) - 1);
+                    v -= cur;
+                }
+                mask = 0;
+            }
+            p[1] = (unsigned char)v;
+            p[2] = (unsigned char)(v >> 8);
+            p[3] = (unsigned char)(v >> 16);
+            p[4] = (unsigned char)(0 - ((v >> 24) & 1));  // sign-extend into the MS byte
+        } else {
+            mask = (mask >> 1) | 4;
+            pos++;
+        }
     }
 }
 
@@ -343,13 +410,7 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
     bool bResult = false;
 
     if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput) {
-        pCompressState->bReadError = false;
-        pCompressState->bWriteError = false;
-        pCompressState->nCountInput = 0;
-        pCompressState->nCountOutput = 0;
-
-        pCompressState->pDeviceInput->seek(pCompressState->nInputOffset);
-        pCompressState->pDeviceOutput->seek(0);
+        prepareState(pCompressState);
 
         z_stream stream;
         stream.zalloc = Z_NULL;
@@ -368,10 +429,7 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
         int ret = Z_OK;
 
         do {
-            qint32 nToRead = N_ALGO_UTILS_BUFFER_SIZE;
-            if (pCompressState->nInputLimit != -1) {
-                nToRead = (qint32)(std::min)(pCompressState->nInputLimit - nTotalProcessed, (qint64)N_ALGO_UTILS_BUFFER_SIZE);
-            }
+            qint32 nToRead = getReadChunkSize(pCompressState, N_ALGO_UTILS_BUFFER_SIZE);
             if (nToRead == 0) {
                 flush = Z_FINISH;
                 stream.avail_in = 0;
@@ -553,7 +611,7 @@ QByteArray Algo_utils::hmacSha1(const QByteArray &baKey, const QByteArray &baMes
 
 Byte Algo_utils::readFromQIODeviceStream(const IByteIn *pStream)
 {
-    auto *pStreamEx = Z7_CONTAINER_FROM_VTBL(pStream, QIODeviceByteInStream, vt);
+    QIODeviceByteInStream *pStreamEx = Z7_CONTAINER_FROM_VTBL(pStream, QIODeviceByteInStream, vt);
 
     if (pStreamEx->bError || !pStreamEx->pDevice) {
         pStreamEx->bError = true;

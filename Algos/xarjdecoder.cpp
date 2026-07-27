@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xarjdecoder.h"
+#include "algo_utils.h"
 
 #include <cstring>
 
@@ -601,8 +602,7 @@ bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
 
     memset(state.pText, 0, DDICSIZ);
 
-    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     state.nCompLeft = static_cast<quint32>(pDecompressState->nInputLimit);
     state.pInput = pDecompressState->pDeviceInput;
@@ -737,8 +737,7 @@ bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState
 
     memset(state.pText, 0, DDICSIZ);
 
-    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     state.nCompLeft = static_cast<quint32>(pDecompressState->nInputLimit);
     state.pInput = pDecompressState->pDeviceInput;

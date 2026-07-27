@@ -191,6 +191,202 @@ quint32 XCab::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XCAB_STRUCTID, sizeof(_TABLE_XCAB_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QList<XBinary::XFHEADER> XCab::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_CFHEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_CFHEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFHEADER);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.nSize = sizeof(CFHEADER);
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFHEADER, headerLoc);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_CFHEADER), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+
+        if (xfStruct.bIsParent) {
+            CFHEADER cfHeader = readCFHeader(0);
+
+            XFSTRUCT _xfStruct = xfStruct;
+            _xfStruct.sParent = xfHeader.sTag;
+
+            _xfStruct.nStructID = STRUCTID_CFFOLDER;
+            _xfStruct.xLoc = offsetToLoc(sizeof(CFHEADER));
+            _xfStruct.nCount = cfHeader.cFolders;
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+
+            _xfStruct.nStructID = STRUCTID_CFFILE;
+            _xfStruct.xLoc = offsetToLoc(cfHeader.coffFiles);
+            _xfStruct.nCount = cfHeader.cFiles;
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+        }
+    } else if (nStructID == STRUCTID_CFFOLDER) {
+        qint64 nOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+        qint32 nCount = xfStruct.nCount;
+        qint64 nFileSize = getSize();
+
+        if (nOffset == -1) {
+            nOffset = sizeof(CFHEADER);
+        }
+        if (nCount == 0) {
+            nCount = readCFHeader(0).cFolders;
+        }
+
+        if (nCount > 0) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFFOLDER);
+            xfHeader.xLoc = offsetToLoc(nOffset);
+            xfHeader.xfType = XFTYPE_TABLE;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFFOLDER, xfHeader.xLoc);
+
+            qint64 nCurrentOffset = nOffset;
+            for (qint32 i = 0; i < nCount; i++) {
+                if ((nCurrentOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
+                    break;
+                }
+                xfHeader.listRowLocations.append(nCurrentOffset);
+                nCurrentOffset += sizeof(CFFOLDER);
+            }
+
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_CFFOLDER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+
+            if (xfStruct.bIsParent) {
+                XFHEADER xfHeaderData = {};
+                xfHeaderData.sParentTag = xfHeader.sTag;
+                xfHeaderData.fileType = xfStruct.fileType;
+                xfHeaderData.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFDATA);
+                xfHeaderData.xfType = XFTYPE_TABLE;
+
+                nCurrentOffset = nOffset;
+                for (qint32 i = 0; i < nCount; i++) {
+                    if ((nCurrentOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
+                        break;
+                    }
+                    CFFOLDER cfFolder = readCFFolder(nCurrentOffset);
+                    qint64 nDataOffset = cfFolder.coffCabStart;
+                    for (quint32 j = 0; j < cfFolder.cCFData; j++) {
+                        if ((nDataOffset + (qint64)sizeof(CFDATA)) > nFileSize) {
+                            break;
+                        }
+                        xfHeaderData.listRowLocations.append(nDataOffset);
+                        CFDATA cfData = readCFData(nDataOffset);
+                        nDataOffset += (qint64)sizeof(CFDATA) + cfData.cbData;
+                    }
+                    nCurrentOffset += sizeof(CFFOLDER);
+                }
+
+                if (!xfHeaderData.listRowLocations.isEmpty()) {
+                    xfHeaderData.xLoc = offsetToLoc(xfHeaderData.listRowLocations.first());
+                    xfHeaderData.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFDATA, xfHeaderData.xLoc);
+                    xfHeaderData.sTag = xfHeaderToTag(xfHeaderData, structIDToString(STRUCTID_CFDATA), xfHeaderData.sParentTag);
+                    listResult.append(xfHeaderData);
+                }
+            }
+        }
+    } else if (nStructID == STRUCTID_CFFILE) {
+        qint64 nOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+        qint32 nCount = xfStruct.nCount;
+        qint64 nFileSize = getSize();
+
+        CFHEADER cfHeader = readCFHeader(0);
+
+        if (nOffset == -1) {
+            nOffset = cfHeader.coffFiles;
+        }
+        if (nCount == 0) {
+            nCount = cfHeader.cFiles;
+        }
+
+        if ((nOffset > 0) && (nCount > 0)) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFFILE);
+            xfHeader.xLoc = offsetToLoc(nOffset);
+            xfHeader.xfType = XFTYPE_TABLE;
+
+            qint64 nCurrentOffset = nOffset;
+            for (qint32 i = 0; i < nCount; i++) {
+                if ((nCurrentOffset + (qint64)sizeof(CFFILE)) > nFileSize) {
+                    break;
+                }
+                xfHeader.listRowLocations.append(nCurrentOffset);
+                QString sFileName = read_ansiString(nCurrentOffset + sizeof(CFFILE));
+                nCurrentOffset += (qint64)sizeof(CFFILE) + sFileName.size() + 1;
+            }
+
+            if (!xfHeader.listRowLocations.isEmpty()) {
+                xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFFILE, offsetToLoc(xfHeader.listRowLocations.first()));
+                xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_CFFILE), xfHeader.sParentTag);
+                listResult.append(xfHeader);
+            }
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XCab::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_CFHEADER) {
+        listResult.append({"signature", (qint32)offsetof(CFHEADER, signature), 4, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"reserved1", (qint32)offsetof(CFHEADER, reserved1), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"cbCabinet", (qint32)offsetof(CFHEADER, cbCabinet), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"reserved2", (qint32)offsetof(CFHEADER, reserved2), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"coffFiles", (qint32)offsetof(CFHEADER, coffFiles), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"reserved3", (qint32)offsetof(CFHEADER, reserved3), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"versionMinor", (qint32)offsetof(CFHEADER, versionMinor), 1, XFRECORD_FLAG_VERSION_MINOR, VT_UINT8});
+        listResult.append({"versionMajor", (qint32)offsetof(CFHEADER, versionMajor), 1, XFRECORD_FLAG_VERSION_MAJOR, VT_UINT8});
+        listResult.append({"cFolders", (qint32)offsetof(CFHEADER, cFolders), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"cFiles", (qint32)offsetof(CFHEADER, cFiles), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"flags", (qint32)offsetof(CFHEADER, flags), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"setID", (qint32)offsetof(CFHEADER, setID), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"iCabinet", (qint32)offsetof(CFHEADER, iCabinet), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+    } else if (nStructID == STRUCTID_CFFOLDER) {
+        listResult.append({"coffCabStart", (qint32)offsetof(CFFOLDER, coffCabStart), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"cCFData", (qint32)offsetof(CFFOLDER, cCFData), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"typeCompress", (qint32)offsetof(CFFOLDER, typeCompress), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+    } else if (nStructID == STRUCTID_CFFILE) {
+        listResult.append({"cbFile", (qint32)offsetof(CFFILE, cbFile), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"uoffFolderStart", (qint32)offsetof(CFFILE, uoffFolderStart), 4, XFRECORD_FLAG_RELATIVE_OFFSET, VT_UINT32});
+        listResult.append({"iFolder", (qint32)offsetof(CFFILE, iFolder), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"date", (qint32)offsetof(CFFILE, date), 2, XFRECORD_FLAG_DOSDATE, VT_UINT16});
+        listResult.append({"time", (qint32)offsetof(CFFILE, time), 2, XFRECORD_FLAG_DOSTIME, VT_UINT16});
+        listResult.append({"attribs", (qint32)offsetof(CFFILE, attribs), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        // Variable-length fields
+        QString sFileName = read_ansiString(xLoc.nLocation + sizeof(CFFILE));
+        listResult.append({"szName", (qint32)sizeof(CFFILE), (qint32)(sFileName.size() + 1), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+    } else if (nStructID == STRUCTID_CFDATA) {
+        listResult.append({"csum", (qint32)offsetof(CFDATA, csum), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"cbData", (qint32)offsetof(CFDATA, cbData), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        listResult.append({"cbUncomp", (qint32)offsetof(CFDATA, cbUncomp), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+    }
+
+    return listResult;
+}
+
 // qint32 XCab::readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<QVariant> *pListValues, void *pUserData,
 //                           PDSTRUCT *pPdStruct)
 // {
@@ -695,6 +891,8 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_MSZIP_CAB);
         } else if (nCompressType == 0x0003) {
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZX_CAB);
+            // LZX window size is stored in the upper bits of typeCompress: (typeCompress >> 8) & 0x1F
+            result.mapProperties.insert(FPART_PROP_WINDOWSIZE, (qint64)((cfFolder.typeCompress >> 8) & 0x1F));
         } else {
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN);
         }

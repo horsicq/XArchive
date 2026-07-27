@@ -212,6 +212,95 @@ quint32 XFREEARC::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XFREEARC_STRUCTID, sizeof(_TABLE_XFREEARC_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+static XBinary::XIDSTRING _TABLE_XFREEARC_BlockTypes[] = {{XFREEARC::BLOCKTYPE_HEADER, "HEADER"},
+                                                          {XFREEARC::BLOCKTYPE_DATA, "DATA"},
+                                                          {XFREEARC::BLOCKTYPE_DIR, "DIR"},
+                                                          {XFREEARC::BLOCKTYPE_FOOTER, "FOOTER"}};
+
+QList<XBinary::XFHEADER> XFREEARC::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_ARCHIVE_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_ARCHIVE_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_ARCHIVE_HEADER);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.nSize = FREEARC_HEADER_SIZE;
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_ARCHIVE_HEADER, headerLoc);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_ARCHIVE_HEADER), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+
+        if (xfStruct.bIsParent) {
+            XFSTRUCT _xfStruct = xfStruct;
+            _xfStruct.sParent = xfHeader.sTag;
+            _xfStruct.nStructID = STRUCTID_BLOCK;
+            _xfStruct.xLoc = offsetToLoc(FREEARC_HEADER_SIZE);
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+        }
+    } else if (nStructID == STRUCTID_BLOCK) {
+        QList<BLOCK> listBlocks = getBlocks(pPdStruct);
+
+        if (!listBlocks.isEmpty()) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_BLOCK);
+            xfHeader.xLoc = offsetToLoc(listBlocks.first().nOffset);
+            xfHeader.xfType = XFTYPE_TABLE;
+            // Field 1 = BlockType
+            xfHeader.listDataSt.append({1, 0, XFDATASTYPE_LIST, _TABLE_XFREEARC_BlockTypes, sizeof(_TABLE_XFREEARC_BlockTypes) / sizeof(XBinary::XIDSTRING)});
+
+            qint32 nNumberOfBlocks = listBlocks.count();
+
+            for (qint32 i = 0; i < nNumberOfBlocks; i++) {
+                xfHeader.listRowLocations.append(listBlocks.at(i).nOffset);
+            }
+
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_BLOCK, xfHeader.xLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_BLOCK), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XFREEARC::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_ARCHIVE_HEADER) {
+        listResult.append({"Signature", 0, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"HeaderFlags", 4, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Version", 6, 2, XFRECORD_FLAG_VERSION, VT_UINT16});
+    } else if (nStructID == STRUCTID_BLOCK) {
+        listResult.append({"Signature", 0, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"BlockType", 4, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        // Variable-length fields
+        QString sCompressor = read_ansiString(xLoc.nLocation + 5);
+        listResult.append({"Compressor", 5, (qint32)(sCompressor.size() + 1), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+    }
+
+    return listResult;
+}
+
 // QList<XBinary::DATA_HEADER> XFREEARC::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 // {
 //     QList<DATA_HEADER> listResult;

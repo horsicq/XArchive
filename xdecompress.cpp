@@ -21,12 +21,20 @@
 #include "xdecompress.h"
 #include "subdevice.h"
 #include "xpng.h"
+#include "Algos/algo_utils.h"
 #include <limits>
 
 XDecompress::XDecompress(QObject *parent) : QObject(parent)
 {
     m_pRarUnpacker = nullptr;
     m_nRarSolidIndex = 0;
+}
+
+// A decompressed size is usable as a QByteArray length only if it is non-negative
+// and fits in the qint32 that QByteArray::resize takes.
+static bool decIsValidBufferSize(qint64 nSize)
+{
+    return (nSize >= 0) && (nSize <= (std::numeric_limits<qint32>::max)());
 }
 
 XDecompress::~XDecompress()
@@ -521,160 +529,48 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             bResult = XLZMADecoder::decompressLZMA2(pState, pPdStruct);
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_BCJ) {
-        // x86 BCJ inverse filter (7-Zip compatible, matching 7-zip Bra86.c reference)
-        // Implements the stateful BCJ decode including the prevMask double-transform path.
+        // x86 BCJ inverse filter — delegate to the single byte-exact reference port.
         if (pState->pDeviceInput && pState->pDeviceOutput) {
             QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
             pState->nCountInput = baData.size();
 
-            qint32 nSize = baData.size();
-            unsigned char *pData = reinterpret_cast<unsigned char *>(baData.data());
-
-            if (nSize >= 5) {
-                qint32 nPos = 0;
-                quint32 nMask = 0;  // prevMask state
-                // pc is the "return address" of the current call/jmp: pc = nPos + 5
-                // (offset of byte AFTER the 5-byte instruction). Tracked implicitly as nPos+5.
-
-                while (nPos <= nSize - 5) {
-                    unsigned char b = pData[nPos];
-                    if ((b & 0xFE) != 0xE8) {
-                        // Not E8/E9 — advance; if in outer-scan mode, shift mask
-                        if (nMask != 0) {
-                            nMask >>= 1;
-                        }
-                        nPos++;
-                    } else {
-                        // E8 or E9 found at nPos. Read 4-byte operand.
-                        quint32 v = (quint32)pData[nPos + 1] | ((quint32)pData[nPos + 2] << 8) | ((quint32)pData[nPos + 3] << 16) | ((quint32)pData[nPos + 4] << 24);
-
-                        if (nMask == 0) {
-                            // main_loop / a3 path: plain decode
-                            quint32 vt = v + 0x01000000u;
-                            if (!(vt & 0xFE000000u)) {
-                                quint32 nPc = (quint32)(nPos + 5);
-                                v = vt - nPc;
-                                v &= 0x01FFFFFFu;
-                                v -= 0x01000000u;
-                                pData[nPos + 1] = (unsigned char)(v);
-                                pData[nPos + 2] = (unsigned char)(v >> 8);
-                                pData[nPos + 3] = (unsigned char)(v >> 16);
-                                pData[nPos + 4] = (unsigned char)(v >> 24);
-                                nPos += 5;
-                                // nMask stays 0 (main_loop resumes)
-                            } else {
-                                // Skip: mask |= 4 for next outer scan
-                                nMask = 4u;
-                                nPos++;
-                            }
-                        } else {
-                            // Outer-scan / m-path: prevMask is active
-                            // At this point nMask reflects the mask BEFORE the >>= 1 in m-path
-                            if (nMask > 4u || nMask == 3u) {
-                                // Skip: still inside protected zone
-                                nMask = (nMask >> 1u) | 4u;
-                                nPos++;
-                            } else {
-                                // Shift mask (as done in m1/m2): mask >>= 1
-                                nMask >>= 1u;
-                                // Check the byte at operand[nMask] — this is p[mask] in the reference
-                                unsigned char bCheckByte = pData[nPos + 1 + (qint32)(nMask)];
-                                if (((bCheckByte + 1u) & 0xFEu) == 0u) {
-                                    // BR86_NEED_CONV_FOR_MS_BYTE: byte is 0x00 or 0xFF → skip
-                                    nMask = (nMask >> 1u) | 4u;
-                                    nPos++;
-                                } else {
-                                    // Double-transform decode
-                                    quint32 vt = v + 0x01000000u;
-                                    if (!(vt & 0xFE000000u)) {
-                                        quint32 nPc = (quint32)(nPos + 5);
-                                        // First decode: v -= pc (via vt)
-                                        v = vt - nPc;
-                                        // Check byte at mask*8 bit position (mask <<= 3)
-                                        quint32 nMaskBits = nMask << 3u;  // bytes → bits
-                                        unsigned char bMsb = (unsigned char)((v >> nMaskBits) & 0xFFu);
-                                        if (((bMsb + 1u) & 0xFEu) == 0u) {
-                                            // BR86_NEED_CONV_FOR_MS_BYTE: XOR and second decode
-                                            v ^= (((quint32)0x100u << nMaskBits) - 1u);
-                                            v -= nPc;
-                                        }
-                                        v &= 0x01FFFFFFu;
-                                        v -= 0x01000000u;
-                                        pData[nPos + 1] = (unsigned char)(v);
-                                        pData[nPos + 2] = (unsigned char)(v >> 8);
-                                        pData[nPos + 3] = (unsigned char)(v >> 16);
-                                        pData[nPos + 4] = (unsigned char)(v >> 24);
-                                        nPos += 5;
-                                        nMask = 0u;
-                                    } else {
-                                        // Initial check failed: skip
-                                        nMask = (nMask >> 1u) | 4u;
-                                        nPos++;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            // Optional 4-byte LE start-offset property (ip); absent/0 for standard 7z.
+            quint32 nIp = 0;
+            if (baProperty.size() >= 4) {
+                nIp = (quint32)(quint8)baProperty.at(0) | ((quint32)(quint8)baProperty.at(1) << 8) | ((quint32)(quint8)baProperty.at(2) << 16) |
+                      ((quint32)(quint8)baProperty.at(3) << 24);
             }
+
+            Algo_utils::applyBCJX86Decode(baData, nIp);
 
             qint64 nWritten = pState->pDeviceOutput->write(baData);
             pState->nCountOutput = nWritten;
             bResult = (nWritten == (qint64)baData.size());
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARM64_BCJ) {
-        // ARM64 BCJ inverse filter (7-Zip compatible, from Bra.c BranchConv_ARM64).
-        // Handles two instruction types:
-        //   1. BL (opcode 0x94??????): converts absolute imm26 back to PC-relative
-        //   2. ADRP (opcode 0x90??????): converts absolute page-number back to PC-relative
+        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARM64, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARM_BCJ) {
+        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARM, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARMT_BCJ) {
+        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARMT, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_PPC_BCJ) {
+        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_PPC, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_SPARC_BCJ) {
+        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_SPARC, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IA64_BCJ) {
+        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_IA64, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_DELTA) {
+        // Property byte holds distance - 1 (7z and XZ delta filter convention)
+        qint32 nDistance = baProperty.isEmpty() ? 1 : ((qint32)(quint8)baProperty.at(0) + 1);
+        bResult = XBranchDecoder::decompressDelta(pState, nDistance, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_XOR) {
+        // KWAJ compression method 1: every byte XOR 0xFF
         if (pState->pDeviceInput && pState->pDeviceOutput) {
             QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
             pState->nCountInput = baData.size();
 
-            qint32 nSize = baData.size() & ~3;  // must be 4-byte aligned
-            unsigned char *pData = reinterpret_cast<unsigned char *>(baData.data());
-
-            const quint32 kFlag = (quint32)1 << 20;                   // 0x00100000
-            const quint32 kMask = ((quint32)1 << 24) - (kFlag << 1);  // 0x00E00000
-
-            qint32 nPos = 0;
-            while (nPos < nSize) {
-                // Read 4-byte LE word
-                quint32 v = (quint32)pData[nPos] | ((quint32)pData[nPos + 1] << 8) | ((quint32)pData[nPos + 2] << 16) | ((quint32)pData[nPos + 3] << 24);
-
-                if (((v - 0x94000000) & 0xfc000000) == 0) {
-                    // BL instruction: decode absolute → relative
-                    // Decode: rel = stored_abs - pos/4
-                    quint32 c = (quint32)(nPos) >> 2;
-                    v -= c;
-                    v &= 0x03ffffff;
-                    v |= 0x94000000;
-                } else {
-                    quint32 vt = v - 0x90000000;
-                    if ((vt & 0x9f000000) == 0) {
-                        // ADRP instruction: decode absolute → relative
-                        vt += kFlag;
-                        if (!(vt & kMask)) {
-                            // z = imm_hi/imm_lo/Rd fields packed from modified vt
-                            quint32 z = (vt & 0xffffffe0) | (vt >> 26);
-                            // c = PC page number
-                            quint32 c = ((quint32)nPos >> 9) & ~(quint32)7;
-                            // Decode: z -= c
-                            z -= c;
-                            // Reconstruct ADRP
-                            v &= 0x0000001f;  // keep Rd (bits 4:0)
-                            v |= 0x90000000;  // ADRP base
-                            v |= z << 26;     // immhi/immlo packed in high bits of z
-                            v |= 0x00ffffe0 & ((z & ((kFlag << 1) - 1)) - kFlag);
-                        }
-                    }
-                }
-
-                pData[nPos] = (unsigned char)(v);
-                pData[nPos + 1] = (unsigned char)(v >> 8);
-                pData[nPos + 2] = (unsigned char)(v >> 16);
-                pData[nPos + 3] = (unsigned char)(v >> 24);
-                nPos += 4;
+            for (qint32 i = 0; i < baData.size(); i++) {
+                baData[i] = (char)((quint8)baData.at(i) ^ 0xFF);
             }
 
             qint64 nWritten = pState->pDeviceOutput->write(baData);
@@ -724,6 +620,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         // bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ASCII85) {
         bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZH1) {
+        bResult = XLZHDecoder::decompress(pState, 1, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH5) {
         bResult = XLZHDecoder::decompress(pState, 5, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH6) {
@@ -857,12 +755,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 }
             }
 
-            auto isValidBufferSize = [](qint64 nSize) { return (nSize >= 0) && (nSize <= (std::numeric_limits<qint32>::max)()); };
-
             // nCallUnpack / nJmpUnpack may be 0 when the data contains no CALL/JMP instructions
             // (e.g. pure image or text files). Only require nMainUnpack > 0 and nOutputSize > 0.
-            if (nMainUnpack > 0 && nOutputSize > 0 && bAESDecryptOk && isValidBufferSize(nMainUnpack) && isValidBufferSize(nCallUnpack) &&
-                isValidBufferSize(nJmpUnpack)) {
+            if (nMainUnpack > 0 && nOutputSize > 0 && bAESDecryptOk && decIsValidBufferSize(nMainUnpack) && decIsValidBufferSize(nCallUnpack) &&
+                decIsValidBufferSize(nJmpUnpack)) {
                 QByteArray baMain, baCall, baJmp;
                 baMain.resize((qint32)nMainUnpack);
                 baCall.resize((qint32)nCallUnpack);
@@ -1353,6 +1249,67 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 bResult = (nWritten == nUncompressedSize);
             } else {
                 bResult = false;
+            }
+        }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZX_CAB) {
+        // CAB LZX: gather every CFDATA payload into one folder stream, then LZX-decode the whole folder.
+        // The window bits are carried in FPART_PROP_WINDOWSIZE (extracted from CFFOLDER.typeCompress).
+        qint64 nSubstreamOffset = pState->mapProperties.value(XBinary::FPART_PROP_SUBSTREAMOFFSET, 0).toLongLong();
+        qint64 nDataReservedSize = pState->mapProperties.value(XBinary::FPART_PROP_OPTHEADER_SIZE, 0).toLongLong();
+        qint32 nWindowBits = (qint32)pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toInt();
+        qint64 nStreamSize = pState->nInputLimit;
+        const qint64 nCFDataHeaderSize = 8;
+
+        if ((nWindowBits < 15) || (nWindowBits > 21)) {
+            nWindowBits = 21;  // Reasonable default; most CAB LZX folders use the largest window
+        }
+
+        QByteArray baCompressedFolder;
+        qint64 nFolderUncompressed = nSubstreamOffset + nUncompressedSize;
+        qint64 nOffset = 0;
+        bResult = true;
+
+        while ((nOffset + nCFDataHeaderSize + nDataReservedSize <= nStreamSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            pState->pDeviceInput->seek(pState->nInputOffset + nOffset);
+
+            char header[8];
+            if (pState->pDeviceInput->read(header, 8) != 8) {
+                bResult = false;
+                break;
+            }
+
+            quint16 nCbData = (quint8)header[4] | ((quint16)(quint8)header[5] << 8);
+
+            qint64 nPayloadOffset = nOffset + nCFDataHeaderSize + nDataReservedSize;
+
+            if ((nPayloadOffset + nCbData > nStreamSize) || (nCbData == 0)) {
+                break;
+            }
+
+            pState->pDeviceInput->seek(pState->nInputOffset + nPayloadOffset);
+            QByteArray baPayload = pState->pDeviceInput->read(nCbData);
+
+            if (baPayload.size() != nCbData) {
+                bResult = false;
+                break;
+            }
+
+            baCompressedFolder.append(baPayload);
+            nOffset = nPayloadOffset + nCbData;
+        }
+
+        if (bResult) {
+            QByteArray baFolderData;
+            bResult = XLZXDecoder::decompressCABFolder(baCompressedFolder, &baFolderData, nFolderUncompressed, nWindowBits, pPdStruct);
+
+            if (bResult && pState->pDeviceOutput) {
+                if (nSubstreamOffset + nUncompressedSize <= baFolderData.size()) {
+                    qint64 nWritten = pState->pDeviceOutput->write(baFolderData.constData() + nSubstreamOffset, nUncompressedSize);
+                    pState->nCountOutput = nWritten;
+                    bResult = (nWritten == nUncompressedSize);
+                } else {
+                    bResult = false;
+                }
             }
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_ZSTD) {

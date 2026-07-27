@@ -20,6 +20,7 @@
  */
 #include "xlzmadecoder.h"
 #include "algo_utils.h"
+#include "xbranchdecoder.h"
 #include "xalgo_local.h"
 #include <QBuffer>
 
@@ -39,8 +40,7 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
         return false;
     }
 
-    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     qint32 nPropSize = 0;
     char header1[4] = {};
@@ -88,8 +88,7 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, cons
         return false;
     }
 
-    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     CLzmaDec state = {};
     SRes ret = X_LzmaProps_Decode(&state.prop, (Byte *)baProperty.constData(), baProperty.size());
@@ -124,8 +123,7 @@ bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState,
         return false;
     }
 
-    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     // Read LZMA2 properties (1 byte)
     char propByte = 0;
@@ -160,8 +158,7 @@ bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState,
         return false;
     }
 
-    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     // LZMA2 state
     CLzma2Dec state = {};
@@ -244,8 +241,8 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
         }
     }
 
-    // Parse filter chain: find LZMA2 props byte and optional BCJ x86 filter
-    bool bHasBCJX86 = false;
+    // Parse filter chain: find LZMA2 props byte and collect pre-filters (delta/branch)
+    QList<QPair<quint64, QByteArray>> listFilters;
     quint8 nLZMA2PropsByte = 0;
 
     for (qint32 nFilter = 0; nFilter < nNumFilters && nFilter < 4; nFilter++) {
@@ -261,8 +258,8 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
             if (nPropSize == 1 && nBHPos < baBH.size()) {
                 nLZMA2PropsByte = (quint8)baBH.at(nBHPos);
             }
-        } else if (nFilterID == 0x04) {  // BCJ x86
-            bHasBCJX86 = true;
+        } else if ((nFilterID >= 0x03) && (nFilterID <= 0x0A)) {  // Delta / branch filters
+            listFilters.append(qMakePair(nFilterID, baBH.mid(nBHPos, (qint32)nPropSize)));
         }
         nBHPos += (qint32)nPropSize;
     }
@@ -296,8 +293,8 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
     bool bDecompressResult = false;
 
-    if (bHasBCJX86) {
-        // Decompress LZMA2 to intermediate buffer, then apply BCJ x86 reverse
+    if (!listFilters.isEmpty()) {
+        // Decompress LZMA2 to intermediate buffer, then apply the pre-filters in reverse order
         QByteArray baIntermediate;
         QBuffer intermediateBuffer(&baIntermediate);
         if (!intermediateBuffer.open(QIODevice::WriteOnly)) {
@@ -316,7 +313,38 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
         intermediateBuffer.close();
 
         if (bDecompressResult) {
-            Algo_utils::applyBCJX86Decode(baIntermediate);
+            for (qint32 i = listFilters.count() - 1; i >= 0; i--) {
+                quint64 nFilterID = listFilters.at(i).first;
+                const QByteArray &baProps = listFilters.at(i).second;
+
+                if (nFilterID == 0x03) {  // Delta: 1-byte prop = distance - 1
+                    qint32 nDistance = baProps.isEmpty() ? 1 : ((qint32)(quint8)baProps.at(0) + 1);
+                    XBranchDecoder::applyDeltaDecode(baIntermediate, nDistance);
+                } else {
+                    // Branch filters: optional 4-byte LE start offset property
+                    quint32 nIp = 0;
+                    if (baProps.size() >= 4) {
+                        nIp = (quint32)(quint8)baProps.at(0) | ((quint32)(quint8)baProps.at(1) << 8) | ((quint32)(quint8)baProps.at(2) << 16) |
+                              ((quint32)(quint8)baProps.at(3) << 24);
+                    }
+
+                    if (nFilterID == 0x04) {
+                        Algo_utils::applyBCJX86Decode(baIntermediate, nIp);
+                    } else if (nFilterID == 0x05) {
+                        XBranchDecoder::applyBranchDecode(baIntermediate, XBranchDecoder::BTYPE_PPC, nIp);
+                    } else if (nFilterID == 0x06) {
+                        XBranchDecoder::applyBranchDecode(baIntermediate, XBranchDecoder::BTYPE_IA64, nIp);
+                    } else if (nFilterID == 0x07) {
+                        XBranchDecoder::applyBranchDecode(baIntermediate, XBranchDecoder::BTYPE_ARM, nIp);
+                    } else if (nFilterID == 0x08) {
+                        XBranchDecoder::applyBranchDecode(baIntermediate, XBranchDecoder::BTYPE_ARMT, nIp);
+                    } else if (nFilterID == 0x09) {
+                        XBranchDecoder::applyBranchDecode(baIntermediate, XBranchDecoder::BTYPE_SPARC, nIp);
+                    } else if (nFilterID == 0x0A) {
+                        XBranchDecoder::applyBranchDecode(baIntermediate, XBranchDecoder::BTYPE_ARM64, nIp);
+                    }
+                }
+            }
 
             qint64 nWriteFrom = pDecompressState->nProcessedOffset;
             qint64 nWriteLimit = pDecompressState->nProcessedLimit;

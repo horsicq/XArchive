@@ -36,6 +36,10 @@ public:
         bool bError;
     };
 
+    static void seekToStart(XBinary::DATAPROCESS_STATE *pState);
+    static void prepareState(XBinary::DATAPROCESS_STATE *pState);
+    static qint32 getReadChunkSize(const XBinary::DATAPROCESS_STATE *pState, qint32 nBufferSize);
+
     static int ascii85ReadByte(XBinary::DATAPROCESS_STATE *pState);
     static void ascii85WriteBytes(XBinary::DATAPROCESS_STATE *pState, const unsigned char *pBuffer, int nSize);
 
@@ -46,7 +50,7 @@ public:
     static bool decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct);
 
     static bool xzReadVarInt(const QByteArray &baData, qint32 &nPos, quint64 &nValue);
-    static void applyBCJX86Decode(QByteArray &baData);
+    static void applyBCJX86Decode(QByteArray &baData, quint32 nIp = 0);
 
     static unsigned deflate64ReadFunc(void *pInDesc, unsigned char **ppBuffer);
     static int deflate64WriteFunc(void *pOutDesc, unsigned char *pBuffer, unsigned nSize);

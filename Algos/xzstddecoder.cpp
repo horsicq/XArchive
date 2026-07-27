@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xzstddecoder.h"
+#include "algo_utils.h"
 
 XZstdDecoder::XZstdDecoder(QObject *parent) : QObject(parent)
 {
@@ -34,13 +35,7 @@ bool XZstdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
         char *bufferIn = new char[_nBufferSize];
         char *bufferOut = new char[_nBufferSize];
 
-        if (pDecompressState->pDeviceInput) {
-            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        }
-
-        if (pDecompressState->pDeviceOutput) {
-            pDecompressState->pDeviceOutput->seek(0);
-        }
+        Algo_utils::seekToStart(pDecompressState);
 
         ZSTD_DStream *pDStream = ZSTD_createDStream();
 
@@ -56,7 +51,7 @@ bool XZstdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
 
                 do {
                     if (bReadMore && input.pos >= input.size) {
-                        qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+                        qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
 
                         if (nBufferSize > 0) {
                             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);

@@ -94,12 +94,15 @@ public:
     virtual QString structIDToString(quint32 nID) override;
     virtual QString structIDToFtString(quint32 nID) override;
     virtual quint32 ftStringToStructID(const QString &sFtString) override;
+    virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
+    virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
     // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     virtual QList<PM_INFO> unpackImplemented() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
@@ -130,6 +133,13 @@ private:
         QByteArray baHash;
     };
 
+    enum WIM_COMPRESSION {
+        WIM_COMPRESSION_NONE = 0,
+        WIM_COMPRESSION_XPRESS,
+        WIM_COMPRESSION_LZX,
+        WIM_COMPRESSION_LZMS
+    };
+
     struct WIM_RECORD {
         QString sFileName;
         bool bIsFolder;
@@ -138,16 +148,23 @@ private:
         qint64 nUncompressedSize;
         HANDLE_METHOD handleMethod;
         QDateTime mtDateTime;
+        RESOURCE_INFO resourceInfo;
     };
 
     struct WIM_UNPACK_CONTEXT {
         QList<WIM_RECORD> listRecords;
+        quint32 nHeaderFlags;
+        quint32 nChunkSize;
     };
 
     bool _isSupportedVersion(quint32 nVersion, quint32 nHeaderSize) const;
     void _appendResourcePart(QList<FPART> *pListResult, quint32 nFileParts, const RESOURCE_INFO &resourceInfo, const QString &sName, qint32 nLimit);
     bool _isResourceStored(const RESOURCE_INFO &resourceInfo) const;
     QByteArray _readStoredResource(const RESOURCE_INFO &resourceInfo, PDSTRUCT *pPdStruct);
+    WIM_COMPRESSION _getCompressionType(quint32 nHeaderFlags) const;
+    qint32 _getChunkSize(quint32 nChunkSize) const;
+    QByteArray _readResource(const RESOURCE_INFO &resourceInfo, quint32 nHeaderFlags, quint32 nChunkSize, PDSTRUCT *pPdStruct);
+    QByteArray _decompressChunkedResource(const RESOURCE_INFO &resourceInfo, WIM_COMPRESSION compression, qint32 nChunkSize, PDSTRUCT *pPdStruct);
     QList<STREAM_INFO> _readStreamInfoList(const WIM_HEADER &header, PDSTRUCT *pPdStruct);
     bool _parseMetadata(const QByteArray &baMetadata, const QList<STREAM_INFO> &listStreams, QList<WIM_RECORD> *pListRecords);
     bool _parseMetadataDir(const QByteArray &baMetadata, qint64 nOffset, const QString &sParent, const QMap<QByteArray, STREAM_INFO> &mapStreams,

@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xbzip2decoder.h"
+#include "algo_utils.h"
 
 extern "C" {
 
@@ -1874,13 +1875,7 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
         char *bufferIn = new char[_nBufferSize];
         char *bufferOut = new char[_nBufferSize];
 
-        if (pDecompressState->pDeviceInput) {
-            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        }
-
-        if (pDecompressState->pDeviceOutput) {
-            pDecompressState->pDeviceOutput->seek(0);
-        }
+        Algo_utils::seekToStart(pDecompressState);
 
         bz_stream strm = {};
         qint32 ret = BZ_MEM_ERROR;
@@ -1892,7 +1887,7 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
             do {
                 // Read more data only if we consumed all input
                 if (bReadMore && strm.avail_in == 0) {
-                    qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+                    qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
 
                     if (nBufferSize > 0) {
                         strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);

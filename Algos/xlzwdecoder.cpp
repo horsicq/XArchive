@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xlzwdecoder.h"
+#include "algo_utils.h"
 #include <assert.h>
 #include <string.h>
 
@@ -325,15 +326,7 @@ bool XLZWDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, X
     Q_UNUSED(pPdStruct)
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) return false;
 
-    // Set input device position
-    if (pDecompressState->pDeviceInput) {
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    }
-
-    // Set output device position
-    if (pDecompressState->pDeviceOutput) {
-        pDecompressState->pDeviceOutput->seek(0);
-    }
+    Algo_utils::seekToStart(pDecompressState);
 
     lzwDecodeDevice(pDecompressState->pDeviceInput, pDecompressState->pDeviceOutput);
 

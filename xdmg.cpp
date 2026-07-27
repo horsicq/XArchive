@@ -135,6 +135,96 @@ quint32 XDMG::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XDMG_STRUCTID, sizeof(_TABLE_XDMG_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QList<XBinary::XFHEADER> XDMG::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        qint64 nKolyOffset = getSize() - 512;
+
+        if (nKolyOffset >= 0) {
+            XFSTRUCT _xfStruct = xfStruct;
+            _xfStruct.nStructID = STRUCTID_KOLY_BLOCK;
+            _xfStruct.xLoc = offsetToLoc(nKolyOffset);
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+        }
+    } else if (nStructID == STRUCTID_KOLY_BLOCK) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            qint64 nKolyOffset = getSize() - 512;
+
+            if (nKolyOffset < 0) {
+                return listResult;
+            }
+
+            headerLoc = offsetToLoc(nKolyOffset);
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_KOLY_BLOCK);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.nSize = 512;
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_KOLY_BLOCK, headerLoc);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_KOLY_BLOCK), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XDMG::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    // DMG structures are big-endian; offsets match readKolyBlock/readMishBlock
+    if (nStructID == STRUCTID_KOLY_BLOCK) {
+        listResult.append({"nMagic", 0, 4, XFRECORD_FLAG_BE, VT_UINT32});
+        listResult.append({"nVersion", 4, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_VERSION, VT_UINT32});
+        listResult.append({"nHeaderLength", 8, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nFlags", 12, 4, XFRECORD_FLAG_BE, VT_UINT32});
+        listResult.append({"nRunningOffset", 16, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nDataForkOffset", 24, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nDataForkLength", 32, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_SIZE, VT_UINT64});
+        listResult.append({"nResourceForkOffset", 40, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nResourceForkLength", 48, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_SIZE, VT_UINT64});
+        listResult.append({"nSegment", 56, 4, XFRECORD_FLAG_BE, VT_UINT32});
+        listResult.append({"nSegmentCount", 60, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"segmentID", 64, 16, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"dataChecksum", 80, 136, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nXmlOffset", 216, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nXmlLength", 224, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_SIZE, VT_UINT64});
+        listResult.append({"masterChecksum", 352, 136, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nImageVariant", 488, 4, XFRECORD_FLAG_BE, VT_UINT32});
+        listResult.append({"nSectorCount", 492, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_COUNT, VT_UINT64});
+    } else if (nStructID == STRUCTID_MISH_BLOCK) {
+        listResult.append({"nMagic", 0, 4, XFRECORD_FLAG_BE, VT_UINT32});
+        listResult.append({"nVersion", 4, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_VERSION, VT_UINT32});
+        listResult.append({"nStartSector", 8, 8, XFRECORD_FLAG_BE, VT_UINT64});
+        listResult.append({"nSectorCount", 16, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_COUNT, VT_UINT64});
+        listResult.append({"nDataOffset", 24, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nBufferCount", 32, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"nDescriptorBlocks", 36, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"nBlockDataCount", 200, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_COUNT, VT_UINT32});
+    } else if (nStructID == STRUCTID_STRIPE) {
+        listResult.append({"nType", 0, 4, XFRECORD_FLAG_BE, VT_UINT32});
+        listResult.append({"nReserved", 4, 4, XFRECORD_FLAG_BE, VT_UINT32});
+        listResult.append({"nStartSector", 8, 8, XFRECORD_FLAG_BE, VT_UINT64});
+        listResult.append({"nSectorCount", 16, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_COUNT, VT_UINT64});
+        listResult.append({"nDataOffset", 24, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nDataLength", 32, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_SIZE, VT_UINT64});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::MAPMODE> XDMG::getMapModesList()
 {
     QList<MAPMODE> listResult;

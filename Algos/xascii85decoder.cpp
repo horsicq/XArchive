@@ -33,8 +33,7 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) return false;
 
-    if (pDecompressState->nInputOffset > 0) pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    if (pDecompressState->pDeviceOutput) pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     // Detect optional opening marker <~ (Adobe style) but it's not required in PDF.
     // Peek first two bytes if at beginning of provided range.

@@ -155,6 +155,106 @@ quint32 XLzo::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XLzo_STRUCTID, sizeof(_TABLE_XLzo_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QList<XBinary::XFHEADER> XLzo::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_LZO_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_LZO_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_LZO_HEADER);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_LZO_HEADER, headerLoc);
+
+        if (!xfHeader.listFields.isEmpty()) {
+            const XFRECORD &lastField = xfHeader.listFields.last();
+            xfHeader.nSize = lastField.nOffset + lastField.nSize;
+        }
+
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_LZO_HEADER), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XLzo::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_LZO_HEADER) {
+        // lzop file header (big-endian)
+        listResult.append({"Magic", 0, 9, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+
+        quint16 nVersion = read_uint16(xLoc.nLocation + 9, true);
+
+        listResult.append({"Version", 9, 2, XFRECORD_FLAG_BE | XFRECORD_FLAG_VERSION, VT_UINT16});
+        listResult.append({"LibVersion", 11, 2, XFRECORD_FLAG_BE | XFRECORD_FLAG_VERSION, VT_UINT16});
+
+        if (nVersion >= 0x0940) {
+            listResult.append({"VersionNeeded", 13, 2, XFRECORD_FLAG_BE | XFRECORD_FLAG_VERSION, VT_UINT16});
+            listResult.append({"Method", 15, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+            listResult.append({"Level", 16, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+
+            quint32 nFlags = read_uint32(xLoc.nLocation + 17, true);
+            listResult.append({"Flags", 17, 4, XFRECORD_FLAG_BE, VT_UINT32});
+
+            qint32 nCurrentOffset = 21;
+
+            if (nFlags & 0x00000800) {  // F_H_FILTER
+                listResult.append({"Filter", nCurrentOffset, 4, XFRECORD_FLAG_BE, VT_UINT32});
+                nCurrentOffset += 4;
+            }
+
+            listResult.append({"Mode", nCurrentOffset, 4, XFRECORD_FLAG_BE, VT_UINT32});
+            nCurrentOffset += 4;
+            listResult.append({"MTimeLow", nCurrentOffset, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_UNIXTIME, VT_UINT32});
+            nCurrentOffset += 4;
+            listResult.append({"MTimeHigh", nCurrentOffset, 4, XFRECORD_FLAG_BE, VT_UINT32});
+            nCurrentOffset += 4;
+
+            quint8 nNameLength = read_uint8(xLoc.nLocation + nCurrentOffset);
+            listResult.append({"NameLength", nCurrentOffset, 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+            nCurrentOffset += 1;
+
+            if (nNameLength > 0) {
+                listResult.append({"Name", nCurrentOffset, (qint32)nNameLength, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+            }
+        } else {
+            // Old layout: no VersionNeeded/Level/MTimeHigh
+            listResult.append({"Method", 13, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+            listResult.append({"Flags", 14, 4, XFRECORD_FLAG_BE, VT_UINT32});
+            listResult.append({"Mode", 18, 4, XFRECORD_FLAG_BE, VT_UINT32});
+            listResult.append({"MTimeLow", 22, 4, XFRECORD_FLAG_BE | XFRECORD_FLAG_UNIXTIME, VT_UINT32});
+
+            quint8 nNameLength = read_uint8(xLoc.nLocation + 26);
+            listResult.append({"NameLength", 26, 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+
+            if (nNameLength > 0) {
+                listResult.append({"Name", 27, (qint32)nNameLength, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+            }
+        }
+    }
+
+    return listResult;
+}
+
 // QList<XBinary::DATA_HEADER> XLzo::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 // {
 //     QList<XBinary::DATA_HEADER> listResult;

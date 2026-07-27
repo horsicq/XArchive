@@ -247,6 +247,8 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         if ((sMethod == "-lh0-") || (sMethod == "-lz4-") || (sMethod == "-lhd-")) {
             compressMethod = HANDLE_METHOD_STORE;
+        } else if (sMethod == "-lh1-") {
+            compressMethod = HANDLE_METHOD_LZH1;  // LArc-compatible: adaptive Huffman + 4 KiB LZSS (LZHUF)
         } else if (sMethod == "-lh5-") {
             compressMethod = HANDLE_METHOD_LZH5;
         } else if (sMethod == "-lh6-") {
@@ -304,6 +306,142 @@ QString XLHA::structIDToFtString(quint32 nID)
 quint32 XLHA::ftStringToStructID(const QString &sFtString)
 {
     return XCONVERT_ftStringToId(sFtString, _TABLE_XLHA_STRUCTID, sizeof(_TABLE_XLHA_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+QList<XBinary::XFHEADER> XLHA::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if (nHeaderOffset != -1) {
+            quint8 nLevel = read_uint8(nHeaderOffset + 20);
+            qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nHeaderOffset) : (qint64)(read_uint8(nHeaderOffset) + 2);
+
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_HEADER);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = nHeaderSize;
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_HEADER, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_HEADER), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+
+            if (xfStruct.bIsParent) {
+                XFSTRUCT _xfStruct = xfStruct;
+                _xfStruct.sParent = xfHeader.sTag;
+                _xfStruct.nStructID = STRUCTID_RECORD;
+                _xfStruct.xLoc = offsetToLoc(0);
+                listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+            }
+        }
+    } else if (nStructID == STRUCTID_RECORD) {
+        qint64 nStartOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+
+        if (nStartOffset == -1) {
+            nStartOffset = 0;
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_RECORD);
+        xfHeader.xLoc = offsetToLoc(nStartOffset);
+        xfHeader.xfType = XFTYPE_TABLE;
+
+        qint64 nFileSize = getSize();
+        qint64 nCurrentOffset = nStartOffset;
+
+        while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+            if (!(compareSignature(xfStruct.pMemoryMap, "....'-lh'..2d", nCurrentOffset) || compareSignature(xfStruct.pMemoryMap, "....'-lz'..2d", nCurrentOffset) ||
+                  compareSignature(xfStruct.pMemoryMap, "....'-pm'..2d", nCurrentOffset))) {
+                break;
+            }
+
+            quint8 nLevel = read_uint8(nCurrentOffset + 20);
+            qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nCurrentOffset) : (qint64)(read_uint8(nCurrentOffset) + 2);
+            qint64 nSkipSize = (qint64)(quint32)read_uint32(nCurrentOffset + 7);
+
+            if (nHeaderSize < 21) {
+                break;
+            }
+
+            xfHeader.listRowLocations.append(nCurrentOffset);
+
+            nCurrentOffset += (nHeaderSize + nSkipSize);
+
+            if (nCurrentOffset >= nFileSize) {
+                break;
+            }
+        }
+
+        if (!xfHeader.listRowLocations.isEmpty()) {
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_RECORD, offsetToLoc(xfHeader.listRowLocations.first()));
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_RECORD), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XLHA::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if ((nStructID == STRUCTID_HEADER) || (nStructID == STRUCTID_RECORD)) {
+        quint8 nLevel = read_uint8(xLoc.nLocation + 20);
+
+        if (nLevel == 2) {
+            listResult.append({"HeaderSize", 0, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+        } else {
+            listResult.append({"HeaderSize", 0, 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+            listResult.append({"HeaderChecksum", 1, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        }
+
+        listResult.append({"Method", 2, 5, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"CompressedSize", 7, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"UncompressedSize", 11, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+
+        if (nLevel == 2) {
+            listResult.append({"LastModTime", 15, 4, XFRECORD_FLAG_UNIXTIME, VT_UINT32});
+        } else {
+            listResult.append({"LastModTime", 15, 2, XFRECORD_FLAG_DOSTIME, VT_UINT16});
+            listResult.append({"LastModDate", 17, 2, XFRECORD_FLAG_DOSDATE, VT_UINT16});
+        }
+
+        listResult.append({"Attribute", 19, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"Level", 20, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+
+        if (nLevel != 2) {
+            quint8 nNameLength = read_uint8(xLoc.nLocation + 21);
+            listResult.append({"NameLength", 21, 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+            listResult.append({"FileName", 22, (qint32)nNameLength, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+            listResult.append({"CRC16", 22 + (qint32)nNameLength, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        } else {
+            listResult.append({"CRC16", 21, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+            listResult.append({"OSID", 23, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        }
+    }
+
+    return listResult;
 }
 
 // QList<XBinary::DATA_HEADER> XLHA::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)

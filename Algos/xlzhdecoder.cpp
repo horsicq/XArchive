@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xlzhdecoder.h"
+#include "algo_utils.h"
 #include "xbinary.h"
 
 static const quint16 cache_masks[] = {0x0000, 0x0001, 0x0003, 0x0007, 0x000F, 0x001F, 0x003F, 0x007F, 0x00FF, 0x01FF,
@@ -841,6 +842,10 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
         return false;
     }
 
+    if (nMethod == 1) {  // -lh1- has its own algorithm (LZHUF), not the lh5/6/7 state machine
+        return decompressLh1(pDecompressState, pPdStruct);
+    }
+
     const qint32 N_BUFFER_SIZE = 0x10000;  // 64KB buffer
 
     quint8 *pBufferIn = new quint8[N_BUFFER_SIZE];
@@ -852,8 +857,7 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
         return false;
     }
 
-    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     lzh_stream strm = {};
     qint32 nResult = LZH_ARCHIVE_OK;
@@ -957,4 +961,252 @@ bool XLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
     delete[] pBufferOut;
 
     return !pDecompressState->bReadError && !pDecompressState->bWriteError && nResult != LZH_ARCHIVE_FAILED;
+}
+
+namespace {
+// LZHUF decoder for LHA -lh1- (LArc-compatible): a 4 KiB sliding dictionary (LZSS) whose
+// literal/length symbols are coded with an adaptive (self-adjusting) Huffman tree, and whose
+// match positions are coded with a fixed table. This is the classic Okumura/Yoshizaki scheme
+// that the block-based lh5/6/7 decoders later replaced. All state is local to this struct.
+struct Lzhuf {
+    static const int N = 4096;                        // ring buffer size
+    static const int LZF = 60;                        // upper limit for match length
+    static const int THRESHOLD = 2;                   // encode matches only when longer than this
+    static const int N_CHAR = 256 - THRESHOLD + LZF;  // 314 kinds of {literal, length} symbols
+    static const int T = N_CHAR * 2 - 1;              // 627 nodes in the Huffman tree
+    static const int R = T - 1;                       // 626 root position
+    static const int MAX_FREQ = 0x8000;               // tree is rebuilt when the root freq reaches this
+
+    const quint8 *in;
+    qint64 inSize;
+    qint64 inPos;
+    quint16 getbuf;
+    qint32 getlen;
+
+    int freq[T + 1];
+    int prnt[T + N_CHAR];
+    int son[T];
+    quint8 dLen[256];
+    quint8 dCode[256];
+    quint8 textBuf[N];
+
+    Lzhuf(const quint8 *pIn, qint64 nInSize) : in(pIn), inSize(nInSize), inPos(0), getbuf(0), getlen(0)
+    {
+        // Fixed position-code tables: dLen[i] = number of leading bits of the 8-bit prefix i that
+        // form the position's high-6-bit symbol dCode[i]. Canonical LZHUF layout: 1 symbol of
+        // length 3, 3 of length 4, 8 of 5, 12 of 6, 24 of 7, 16 of 8 (64 symbols, 256 prefixes).
+        const int nSyms[6] = {1, 3, 8, 12, 24, 16};
+        int nIdx = 0, nSym = 0;
+        for (int nLen = 3; nLen <= 8; nLen++) {
+            int nSpan = 1 << (8 - nLen);
+            for (int s = 0; s < nSyms[nLen - 3]; s++) {
+                for (int k = 0; k < nSpan; k++) {
+                    dLen[nIdx] = (quint8)nLen;
+                    dCode[nIdx] = (quint8)nSym;
+                    nIdx++;
+                }
+                nSym++;
+            }
+        }
+        _startHuff();
+    }
+
+    int _getBit()
+    {
+        while (getlen <= 8) {
+            quint8 c = (inPos < inSize) ? in[inPos] : 0;
+            inPos++;
+            getbuf = (quint16)(getbuf | (c << (8 - getlen)));
+            getlen += 8;
+        }
+        int x = (getbuf >> 15) & 1;
+        getbuf = (quint16)(getbuf << 1);
+        getlen -= 1;
+        return x;
+    }
+
+    int _getByte()
+    {
+        while (getlen <= 8) {
+            quint8 c = (inPos < inSize) ? in[inPos] : 0;
+            inPos++;
+            getbuf = (quint16)(getbuf | (c << (8 - getlen)));
+            getlen += 8;
+        }
+        int x = (getbuf >> 8) & 0xFF;
+        getbuf = (quint16)(getbuf << 8);
+        getlen -= 8;
+        return x;
+    }
+
+    void _startHuff()
+    {
+        for (int i = 0; i < N_CHAR; i++) {
+            freq[i] = 1;
+            son[i] = i + T;
+            prnt[i + T] = i;
+        }
+        int i = 0, j = N_CHAR;
+        while (j <= R) {
+            freq[j] = freq[i] + freq[i + 1];
+            son[j] = i;
+            prnt[i] = prnt[i + 1] = j;
+            i += 2;
+            j++;
+        }
+        freq[T] = 0xFFFF;
+        prnt[R] = 0;
+    }
+
+    void _reconst()
+    {
+        // Collect leaf nodes, halving their frequencies, then rebuild the tree bottom-up.
+        int j = 0;
+        for (int i = 0; i < T; i++) {
+            if (son[i] >= T) {
+                freq[j] = (freq[i] + 1) / 2;
+                son[j] = son[i];
+                j++;
+            }
+        }
+        for (int i = 0, k = N_CHAR; k < T; i += 2, k++) {
+            int f = freq[k] = freq[i] + freq[i + 1];
+            int l = k - 1;
+            while (f < freq[l]) l--;
+            l++;
+            for (int m = k; m > l; m--) {
+                freq[m] = freq[m - 1];
+                son[m] = son[m - 1];
+            }
+            freq[l] = f;
+            son[l] = i;
+        }
+        for (int i = 0; i < T; i++) {
+            int k = son[i];
+            if (k >= T) {
+                prnt[k] = i;
+            } else {
+                prnt[k] = prnt[k + 1] = i;
+            }
+        }
+    }
+
+    void _update(int c)
+    {
+        if (freq[R] == MAX_FREQ) {
+            _reconst();
+        }
+        c = prnt[c + T];
+        do {
+            int k = ++freq[c];
+            int l = c + 1;
+            // Keep the frequency list ordered: if node c now outweighs its successor, swap.
+            if (k > freq[l]) {
+                while (k > freq[l + 1]) l++;
+                freq[c] = freq[l];
+                freq[l] = k;
+                int i = son[c];
+                prnt[i] = l;
+                if (i < T) prnt[i + 1] = l;
+                int j = son[l];
+                son[l] = i;
+                prnt[j] = c;
+                if (j < T) prnt[j + 1] = c;
+                son[c] = j;
+                c = l;
+            }
+            c = prnt[c];
+        } while (c != 0);
+    }
+
+    int _decodeChar()
+    {
+        int c = son[R];
+        // Walk the tree from the root, one bit per step, until a leaf (>= T) is reached.
+        while (c < T) {
+            c += _getBit();
+            c = son[c];
+        }
+        c -= T;
+        _update(c);
+        return c;
+    }
+
+    int _decodePosition()
+    {
+        int i = _getByte();
+        int c = (int)dCode[i] << 6;
+        int j = dLen[i] - 2;
+        while (j-- > 0) {
+            i = ((i << 1) + _getBit());
+        }
+        return c | (i & 0x3F);
+    }
+
+    void decode(QByteArray *pOut, qint64 nTextSize)
+    {
+        for (int i = 0; i < N - LZF; i++) textBuf[i] = ' ';
+        int r = N - LZF;
+        qint64 count = 0;
+        pOut->reserve((int)nTextSize);
+        while (count < nTextSize) {
+            int c = _decodeChar();
+            if (c < 256) {
+                pOut->append((char)c);
+                textBuf[r++] = (quint8)c;
+                r &= (N - 1);
+                count++;
+            } else {
+                int pos = _decodePosition();
+                int i = (r - pos - 1) & (N - 1);
+                int j = c - 255 + THRESHOLD;
+                for (int k = 0; k < j && count < nTextSize; k++) {
+                    quint8 cc = textBuf[(i + k) & (N - 1)];
+                    pOut->append((char)cc);
+                    textBuf[r++] = cc;
+                    r &= (N - 1);
+                    count++;
+                }
+            }
+        }
+    }
+};
+}  // namespace
+
+bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
+        return false;
+    }
+
+    Algo_utils::seekToStart(pDecompressState);
+
+    qint64 nTextSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
+    if (nTextSize <= 0) {
+        return false;
+    }
+
+    // -lh1- files are small (4 KiB window); read the whole compressed stream and decode it.
+    QByteArray baIn = pDecompressState->pDeviceInput->read(pDecompressState->nInputLimit);
+    pDecompressState->nCountInput = baIn.size();
+
+    QByteArray baOut;
+    Lzhuf decoder(reinterpret_cast<const quint8 *>(baIn.constData()), baIn.size());
+    decoder.decode(&baOut, nTextSize);
+
+    qint64 nWriteSize = baOut.size();
+    if ((pDecompressState->nProcessedLimit != -1) && (nWriteSize > pDecompressState->nProcessedLimit)) {
+        nWriteSize = pDecompressState->nProcessedLimit;
+    }
+
+    qint64 nWritten = pDecompressState->pDeviceOutput->write(baOut.constData(), nWriteSize);
+    pDecompressState->nCountOutput = nWritten;
+    if (nWritten != nWriteSize) {
+        pDecompressState->bWriteError = true;
+        return false;
+    }
+
+    return true;
 }

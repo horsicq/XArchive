@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xbrotlidecoder.h"
+#include "algo_utils.h"
 
 #include "brotlideclib.cpp"
 
@@ -55,13 +56,7 @@ bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
         char *bufferIn = new char[_nBufferSize];
         char *bufferOut = new char[_nBufferSize];
 
-        if (pDecompressState->pDeviceInput) {
-            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        }
-
-        if (pDecompressState->pDeviceOutput) {
-            pDecompressState->pDeviceOutput->seek(0);
-        }
+        Algo_utils::seekToStart(pDecompressState);
 
         BrotliDecoderState *pState = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
 
@@ -73,7 +68,7 @@ bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
             do {
                 if (bReadMore && nAvailIn == 0) {
-                    qint32 nBufferSize = qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+                    qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
 
                     if (nBufferSize > 0) {
                         nAvailIn = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);

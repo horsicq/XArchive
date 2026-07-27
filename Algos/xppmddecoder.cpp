@@ -2843,6 +2843,7 @@ int Ppmd8_DecodeSymbol(CPpmd8 *p)
 #undef ShrinkUnits
 /* ===== End embedded xppmd8_local.c ===== */
 #include "xppmddecoder.h"
+#include "algo_utils.h"
 #include "xppmdrangedecoder.h"
 #include "xppmdmodel.h"
 #include "xppmd7model.h"
@@ -3013,8 +3014,7 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
         return false;
     }
 
-    pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    pDecompressState->pDeviceOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     // Set input stream to compressed data
     model.setInputStream(pDecompressState->pDeviceInput);

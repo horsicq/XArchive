@@ -1910,6 +1910,7 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         qint64 nFileCommentLength = 0;
 
         if (bIsECD) {
+            pState->nCurrentOffset = _resyncCDFHOffset(pState->nCurrentOffset, pPdStruct);
             CENTRALDIRECTORYFILEHEADER cdfh = read_CENTRALDIRECTORYFILEHEADER(pState->nCurrentOffset, pPdStruct);
             nVersion = cdfh.nVersion;
             nOS = cdfh.nOS;
@@ -1923,6 +1924,16 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             nCompressedSize = cdfh.nCompressedSize;
             nUncompressedSize = cdfh.nUncompressedSize;
             sFileName = read_ansiString(pState->nCurrentOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdfh.nFileNameLength);
+
+            // A corrupt over-long nFileNameLength makes the name swallow the next
+            // record's header. Real ZIP names never contain a PK signature, so cut
+            // the name at the first embedded one to avoid emitting garbage.
+            for (const char *pSig : {"PK\x01\x02", "PK\x03\x04", "PK\x05\x06"}) {
+                qint32 nSigPos = sFileName.indexOf(QLatin1String(pSig, 4));
+                if (nSigPos >= 0) {
+                    sFileName = sFileName.left(nSigPos);
+                }
+            }
 
             nLocalHeaderOffset = cdfh.nOffsetToLocalFileHeader;
             nExternalFileAttributes = cdfh.nExternalFileAttributes;
@@ -1956,6 +1967,17 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         }
 
         bool bIsFolder = sFileName.endsWith(QLatin1Char('/'));
+
+        // Some archivers store directory entries without a trailing '/', flagging
+        // them only via the external file attributes (as 7-Zip/Info-ZIP do). The
+        // attributes are only trustworthy when read from the central directory.
+        if (!bIsFolder && bIsECD && (nUncompressedSize == 0) && (nCompressedSize == 0)) {
+            bool bDosDirBit = (nExternalFileAttributes & 0x10) != 0;                    // FAT/NTFS FILE_ATTRIBUTE_DIRECTORY
+            bool bUnixDir = (((nExternalFileAttributes >> 16) & 0xF000) == 0x4000);     // Unix S_IFDIR
+            if (bDosDirBit || bUnixDir) {
+                bIsFolder = true;
+            }
+        }
 
         result.mapProperties.insert(XBinary::FPART_PROP_ISFOLDER, bIsFolder);
 
@@ -2099,6 +2121,27 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     return result;
 }
 
+qint64 XZip::_resyncCDFHOffset(qint64 nOffset, PDSTRUCT *pPdStruct)
+{
+    // The central directory is walked by sequential arithmetic. A single malformed
+    // entry (wrong name/extra/comment length) desynchronizes the walk, leaving the
+    // cursor between records. Rather than reading garbage as a "file", scan forward
+    // to the next central-directory header (PK\x01\x02) and resume there. For a
+    // well-formed archive the cursor always already points at a CFD signature, so
+    // this is a no-op and cannot affect valid ZIPs.
+    if ((nOffset < 0) || ((nOffset + (qint64)sizeof(quint32)) > getSize())) {
+        return nOffset;
+    }
+
+    if (read_uint32(nOffset) == SIGNATURE_CFD) {
+        return nOffset;
+    }
+
+    qint64 nNext = find_uint32(nOffset, getSize() - nOffset, SIGNATURE_CFD, false, pPdStruct);
+
+    return (nNext != -1) ? nNext : nOffset;
+}
+
 bool XZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -2109,6 +2152,10 @@ bool XZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         bool bIsECD = ((ZIP_UNPACK_CONTEXT *)pState->pContext)->bIsECD;
 
         if (bIsECD) {
+            // Resync onto a valid CFD signature first: a preceding malformed entry
+            // may have left the cursor mid-record (see _resyncCDFHOffset). Recovery
+            // of a corrupt over/under-advance happens here on the following step.
+            pState->nCurrentOffset = _resyncCDFHOffset(pState->nCurrentOffset, pPdStruct);
             CENTRALDIRECTORYFILEHEADER cdfh = read_CENTRALDIRECTORYFILEHEADER(pState->nCurrentOffset, pPdStruct);
             pState->nCurrentOffset += sizeof(CENTRALDIRECTORYFILEHEADER) + cdfh.nFileNameLength + cdfh.nExtraFieldLength + cdfh.nFileCommentLength;
         } else {

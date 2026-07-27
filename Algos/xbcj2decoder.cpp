@@ -26,6 +26,20 @@ static const quint32 BCJ2_RC_RANGE_MIN = 0x01000000U;
 static const quint32 BCJ2_PROB_INIT = 0x400U;  // 50% = 1024 out of 2048
 static const qint32 BCJ2_NUM_PROBS = 258;      // 0: JCC (0x0F 0x8x, unused); 1: E9 (JMP); 2..257: E8 keyed by prevByte
 
+// Append bytes to the output device, advancing *pnOutputPos. Returns false on short write.
+static bool bcj2WriteOutput(QIODevice *pOutput, const char *pData, qint64 nSize, qint64 *pnOutputPos)
+{
+    if (nSize <= 0) {
+        return true;
+    }
+    qint64 nWritten = pOutput->write(pData, nSize);
+    if (nWritten != nSize) {
+        return false;
+    }
+    *pnOutputPos += nWritten;
+    return true;
+}
+
 XBCJ2Decoder::XBCJ2Decoder(QObject *parent) : QObject(parent)
 {
 }
@@ -115,21 +129,6 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
         return false;
     }
 
-    auto writeOutput = [pOutput, &nOutputPos](const char *pData, qint64 nSize) {
-        if (nSize <= 0) {
-            return true;
-        }
-
-        qint64 nWritten = pOutput->write(pData, nSize);
-        if (nWritten != nSize) {
-            return false;
-        }
-
-        nOutputPos += nWritten;
-
-        return true;
-    };
-
     while ((nOutputPos < nOutputSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         char bMain;
         if (pMainStream->read(&bMain, 1) != 1) {
@@ -138,7 +137,7 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
         }
 
         quint8 nByte = (quint8)bMain;
-        if (!writeOutput(&bMain, 1)) {
+        if (!bcj2WriteOutput(pOutput, &bMain, 1, &nOutputPos)) {
             return false;
         }
 
@@ -176,7 +175,7 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
                     return false;
                 }
 
-                if (!writeOutput(relAddr, 4)) {
+                if (!bcj2WriteOutput(pOutput, relAddr, 4, &nOutputPos)) {
                     return false;
                 }
 
@@ -212,7 +211,7 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
                     return false;
                 }
 
-                if (!writeOutput(relAddr, 4)) {
+                if (!bcj2WriteOutput(pOutput, relAddr, 4, &nOutputPos)) {
                     return false;
                 }
 

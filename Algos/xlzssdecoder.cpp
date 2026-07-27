@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xlzssdecoder.h"
+#include "algo_utils.h"
 
 XLZSSDecoder::XLZSSDecoder(QObject *parent) : QObject(parent)
 {
@@ -29,21 +30,7 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
     bool bResult = false;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-        // Initialize error states
-        pDecompressState->bReadError = false;
-        pDecompressState->bWriteError = false;
-        pDecompressState->nCountInput = 0;
-        pDecompressState->nCountOutput = 0;
-
-        // Set input device position
-        if (pDecompressState->pDeviceInput) {
-            pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        }
-
-        // Set output device position
-        if (pDecompressState->pDeviceOutput) {
-            pDecompressState->pDeviceOutput->seek(0);
-        }
+        Algo_utils::prepareState(pDecompressState);
 
         // LZSS parameters for SZDD format
         const qint32 N_WINDOW_SIZE = 4096;     // Size of sliding window

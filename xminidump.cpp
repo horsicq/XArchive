@@ -186,6 +186,226 @@ quint32 XMiniDump::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XMINIDUMP_STRUCTID, sizeof(_TABLE_XMINIDUMP_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+static XBinary::XIDSTRING _TABLE_XMiniDump_StreamTypes[] = {{XMiniDump::UnusedStream, "UnusedStream"},
+                                                            {XMiniDump::ThreadListStream, "ThreadListStream"},
+                                                            {XMiniDump::ModuleListStream, "ModuleListStream"},
+                                                            {XMiniDump::MemoryListStream, "MemoryListStream"},
+                                                            {XMiniDump::ExceptionStream, "ExceptionStream"},
+                                                            {XMiniDump::SystemInfoStream, "SystemInfoStream"},
+                                                            {XMiniDump::ThreadExListStream, "ThreadExListStream"},
+                                                            {XMiniDump::Memory64ListStream, "Memory64ListStream"},
+                                                            {XMiniDump::CommentStreamA, "CommentStreamA"},
+                                                            {XMiniDump::CommentStreamW, "CommentStreamW"},
+                                                            {XMiniDump::HandleDataStream, "HandleDataStream"},
+                                                            {XMiniDump::FunctionTableStream, "FunctionTableStream"},
+                                                            {XMiniDump::UnloadedModuleListStream, "UnloadedModuleListStream"},
+                                                            {XMiniDump::MiscInfoStream, "MiscInfoStream"},
+                                                            {XMiniDump::MemoryInfoListStream, "MemoryInfoListStream"},
+                                                            {XMiniDump::ThreadInfoListStream, "ThreadInfoListStream"},
+                                                            {XMiniDump::HandleOperationListStream, "HandleOperationListStream"},
+                                                            {XMiniDump::TokenStream, "TokenStream"},
+                                                            {XMiniDump::JavaScriptDataStream, "JavaScriptDataStream"},
+                                                            {XMiniDump::SystemMemoryInfoStream, "SystemMemoryInfoStream"},
+                                                            {XMiniDump::ProcessVmCountersStream, "ProcessVmCountersStream"},
+                                                            {XMiniDump::IptTraceStream, "IptTraceStream"},
+                                                            {XMiniDump::ThreadNamesStream, "ThreadNamesStream"}};
+
+QList<XBinary::XFHEADER> XMiniDump::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_HEADER);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.nSize = sizeof(MINIDUMP_HEADER);
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_HEADER, headerLoc);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_HEADER), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+
+        if (xfStruct.bIsParent) {
+            MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
+
+            XFSTRUCT _xfStruct = xfStruct;
+            _xfStruct.sParent = xfHeader.sTag;
+
+            _xfStruct.nStructID = STRUCTID_DIRECTORY;
+            _xfStruct.xLoc = offsetToLoc(header.StreamDirectoryRva);
+            _xfStruct.nCount = header.NumberOfStreams;
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+
+            _xfStruct.nStructID = STRUCTID_MODULE_LIST;
+            _xfStruct.xLoc = offsetToLoc(-1);
+            _xfStruct.nCount = 0;
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+        }
+    } else if (nStructID == STRUCTID_DIRECTORY) {
+        qint64 nOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+        qint32 nCount = xfStruct.nCount;
+        qint64 nFileSize = getSize();
+
+        if ((nOffset == -1) || (nCount == 0)) {
+            MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
+            nOffset = header.StreamDirectoryRva;
+            nCount = header.NumberOfStreams;
+        }
+
+        if ((nOffset > 0) && (nCount > 0)) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_DIRECTORY);
+            xfHeader.xLoc = offsetToLoc(nOffset);
+            xfHeader.xfType = XFTYPE_TABLE;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_DIRECTORY, xfHeader.xLoc);
+            // Field 0 = StreamType
+            xfHeader.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XMiniDump_StreamTypes, sizeof(_TABLE_XMiniDump_StreamTypes) / sizeof(XBinary::XIDSTRING)});
+
+            qint64 nCurrentOffset = nOffset;
+            for (qint32 i = 0; i < nCount; i++) {
+                if ((nCurrentOffset + (qint64)sizeof(MINIDUMP_DIRECTORY)) > nFileSize) {
+                    break;
+                }
+                xfHeader.listRowLocations.append(nCurrentOffset);
+                nCurrentOffset += sizeof(MINIDUMP_DIRECTORY);
+            }
+
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_DIRECTORY), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    } else if (nStructID == STRUCTID_MODULE_LIST) {
+        MINIDUMP_DIRECTORY directory = findStream(ModuleListStream, pPdStruct);
+
+        if ((directory.LocationRva > 0) && (directory.DataSize >= sizeof(MINIDUMP_MODULE_LIST))) {
+            XLOC listLoc = offsetToLoc(directory.LocationRva);
+
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_MODULE_LIST);
+            xfHeader.xLoc = listLoc;
+            xfHeader.nSize = sizeof(MINIDUMP_MODULE_LIST);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_MODULE_LIST, listLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_MODULE_LIST), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+
+            if (xfStruct.bIsParent) {
+                MINIDUMP_MODULE_LIST moduleList = read_MINIDUMP_MODULE_LIST(directory.LocationRva);
+
+                XFSTRUCT _xfStruct = xfStruct;
+                _xfStruct.sParent = xfHeader.sTag;
+                _xfStruct.nStructID = STRUCTID_MODULE;
+                _xfStruct.xLoc = offsetToLoc(directory.LocationRva + sizeof(MINIDUMP_MODULE_LIST));
+                _xfStruct.nCount = moduleList.NumberOfModules;
+                listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+            }
+        }
+    } else if (nStructID == STRUCTID_MODULE) {
+        qint64 nOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+        qint32 nCount = xfStruct.nCount;
+        qint64 nFileSize = getSize();
+
+        if ((nOffset == -1) || (nCount == 0)) {
+            MINIDUMP_DIRECTORY directory = findStream(ModuleListStream, pPdStruct);
+
+            if (directory.LocationRva > 0) {
+                nOffset = directory.LocationRva + sizeof(MINIDUMP_MODULE_LIST);
+                nCount = read_MINIDUMP_MODULE_LIST(directory.LocationRva).NumberOfModules;
+            }
+        }
+
+        if ((nOffset > 0) && (nCount > 0)) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_MODULE);
+            xfHeader.xLoc = offsetToLoc(nOffset);
+            xfHeader.xfType = XFTYPE_TABLE;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_MODULE, xfHeader.xLoc);
+
+            qint64 nCurrentOffset = nOffset;
+            for (qint32 i = 0; i < nCount; i++) {
+                if ((nCurrentOffset + (qint64)sizeof(MINIDUMP_MODULE)) > nFileSize) {
+                    break;
+                }
+                xfHeader.listRowLocations.append(nCurrentOffset);
+                nCurrentOffset += sizeof(MINIDUMP_MODULE);
+            }
+
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_MODULE), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XMiniDump::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_HEADER) {
+        listResult.append({"Signature", (qint32)offsetof(MINIDUMP_HEADER, Signature), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"Version", (qint32)offsetof(MINIDUMP_HEADER, Version), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"NumberOfStreams", (qint32)offsetof(MINIDUMP_HEADER, NumberOfStreams), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"StreamDirectoryRva", (qint32)offsetof(MINIDUMP_HEADER, StreamDirectoryRva), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"CheckSum", (qint32)offsetof(MINIDUMP_HEADER, CheckSum), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"TimeDateStamp", (qint32)offsetof(MINIDUMP_HEADER, TimeDateStamp), 4, XFRECORD_FLAG_UNIXTIME, VT_UINT32});
+        listResult.append({"Flags", (qint32)offsetof(MINIDUMP_HEADER, Flags), 8, XFRECORD_FLAG_NONE, VT_UINT64});
+    } else if (nStructID == STRUCTID_DIRECTORY) {
+        listResult.append({"StreamType", (qint32)offsetof(MINIDUMP_DIRECTORY, StreamType), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"DataSize", (qint32)offsetof(MINIDUMP_DIRECTORY, DataSize), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"LocationRva", (qint32)offsetof(MINIDUMP_DIRECTORY, LocationRva), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+    } else if (nStructID == STRUCTID_MODULE_LIST) {
+        listResult.append({"NumberOfModules", (qint32)offsetof(MINIDUMP_MODULE_LIST, NumberOfModules), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+    } else if (nStructID == STRUCTID_MODULE) {
+        listResult.append({"BaseOfImage", (qint32)offsetof(MINIDUMP_MODULE, BaseOfImage), 8, XFRECORD_FLAG_ADDRESS, VT_UINT64});
+        listResult.append({"SizeOfImage", (qint32)offsetof(MINIDUMP_MODULE, SizeOfImage), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"CheckSum", (qint32)offsetof(MINIDUMP_MODULE, CheckSum), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"TimeDateStamp", (qint32)offsetof(MINIDUMP_MODULE, TimeDateStamp), 4, XFRECORD_FLAG_UNIXTIME, VT_UINT32});
+        listResult.append({"ModuleNameRva", (qint32)offsetof(MINIDUMP_MODULE, ModuleNameRva), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"VersionInfo.dwSignature", (qint32)(offsetof(MINIDUMP_MODULE, VersionInfo) + offsetof(VS_FIXEDFILEINFO, dwSignature)), 4, XFRECORD_FLAG_NONE,
+                           VT_UINT32});
+        listResult.append({"VersionInfo.dwFileVersionMS", (qint32)(offsetof(MINIDUMP_MODULE, VersionInfo) + offsetof(VS_FIXEDFILEINFO, dwFileVersionMS)), 4,
+                           XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"VersionInfo.dwFileVersionLS", (qint32)(offsetof(MINIDUMP_MODULE, VersionInfo) + offsetof(VS_FIXEDFILEINFO, dwFileVersionLS)), 4,
+                           XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"VersionInfo.dwProductVersionMS", (qint32)(offsetof(MINIDUMP_MODULE, VersionInfo) + offsetof(VS_FIXEDFILEINFO, dwProductVersionMS)), 4,
+                           XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"VersionInfo.dwProductVersionLS", (qint32)(offsetof(MINIDUMP_MODULE, VersionInfo) + offsetof(VS_FIXEDFILEINFO, dwProductVersionLS)), 4,
+                           XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append(
+            {"CvRecord.DataSize", (qint32)(offsetof(MINIDUMP_MODULE, CvRecord) + offsetof(MINIDUMP_LOCATION_DESCRIPTOR, DataSize)), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append(
+            {"CvRecord.Rva", (qint32)(offsetof(MINIDUMP_MODULE, CvRecord) + offsetof(MINIDUMP_LOCATION_DESCRIPTOR, Rva)), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+        listResult.append({"MiscRecord.DataSize", (qint32)(offsetof(MINIDUMP_MODULE, MiscRecord) + offsetof(MINIDUMP_LOCATION_DESCRIPTOR, DataSize)), 4,
+                           XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append(
+            {"MiscRecord.Rva", (qint32)(offsetof(MINIDUMP_MODULE, MiscRecord) + offsetof(MINIDUMP_LOCATION_DESCRIPTOR, Rva)), 4, XFRECORD_FLAG_OFFSET, VT_UINT32});
+    }
+
+    return listResult;
+}
+
 QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)

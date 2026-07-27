@@ -59,6 +59,16 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xudf.h
     ${CMAKE_CURRENT_LIST_DIR}/xwim.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xwim.h
+    ${CMAKE_CURRENT_LIST_DIR}/xrpm.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xrpm.h
+    ${CMAKE_CURRENT_LIST_DIR}/xkwaj.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xkwaj.h
+    ${CMAKE_CURRENT_LIST_DIR}/xasar.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xasar.h
+    ${CMAKE_CURRENT_LIST_DIR}/xxar.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xxar.h
+    ${CMAKE_CURRENT_LIST_DIR}/xzoo.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xzoo.h
     ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xjar.h
     ${CMAKE_CURRENT_LIST_DIR}/xlha.cpp
@@ -175,6 +185,12 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xaesdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbcj2decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbcj2decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xbranchdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xbranchdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzxdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzxdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xxpressdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xxpressdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xblake2sp.cpp

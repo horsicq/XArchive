@@ -884,13 +884,7 @@ XImplodeDecoder::XImplodeDecoder(QObject *parent) : QObject(parent)
 
 bool XImplodeDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, bool b8kdict, bool b3trees, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->pDeviceInput) {
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    }
-
-    if (pDecompressState->pDeviceOutput) {
-        pDecompressState->pDeviceOutput->seek(0);
-    }
+    Algo_utils::seekToStart(pDecompressState);
 
     bool bResult = true;
 

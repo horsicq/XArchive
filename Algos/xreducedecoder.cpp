@@ -379,13 +379,7 @@ bool XReduceDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qi
 {
     Q_UNUSED(pPdStruct)
 
-    if (pDecompressState->pDeviceInput) {
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    }
-
-    if (pDecompressState->pDeviceOutput) {
-        pDecompressState->pDeviceOutput->seek(0);
-    }
+    Algo_utils::seekToStart(pDecompressState);
 
     bool bResult = true;
 

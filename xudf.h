@@ -150,6 +150,8 @@ public:
     virtual QString structIDToString(quint32 nID) override;
     virtual QString structIDToFtString(quint32 nID) override;
     virtual quint32 ftStringToStructID(const QString &sFtString) override;
+    virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
+    virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
     // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
@@ -178,6 +180,9 @@ private:
         QList<ARCHIVERECORD> listRecords;
         qint32 nCurrentRecordIndex;
     };
+
+    // Append the seven fields of a UDF descriptor tag (at nBaseOffset) as XFRECORDs.
+    static void _addTagRecords(QList<XFRECORD> *pList, qint32 nBaseOffset);
 
     qint32 _getBlockSize();
     qint64 _getAnchorVolumeDescriptorOffset();

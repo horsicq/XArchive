@@ -44,6 +44,8 @@
 #include "xstoredecoder.h"
 #include "xppmddecoder.h"
 #include "Algos/xbcj2decoder.h"
+#include "Algos/xbranchdecoder.h"
+#include "Algos/xlzxdecoder.h"
 
 class XDecompress : public QObject {
     Q_OBJECT

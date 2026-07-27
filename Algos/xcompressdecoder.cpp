@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xcompressdecoder.h"
+#include "algo_utils.h"
 #include <string.h>
 
 // Unix compress (.Z) LZW decompression
@@ -40,6 +41,58 @@ XCompressDecoder::XCompressDecoder(QObject *parent) : QObject(parent)
 {
 }
 
+// Streaming LSB-first bit reader for the Unix compress (LZW) code stream.
+struct COMPRESS_BITREADER {
+    QIODevice *pInput;
+    qint64 nInputLimit;   // 0 = unbounded
+    quint8 readBuf[4096];
+    qint32 nReadPos;
+    qint32 nReadLen;
+    quint64 nBitBuf;
+    qint32 nBitsInBuf;
+    qint64 nBitsRead;     // code-aligned bits consumed (for boundary tracking)
+    qint64 nTotalInput;
+};
+
+// Read one nCodeBits-wide code from the stream, or -1 at end of input.
+static qint32 compressReadCode(COMPRESS_BITREADER *br, qint32 nCodeBits)
+{
+    while (br->nBitsInBuf < nCodeBits) {
+        if (br->nReadPos >= br->nReadLen) {
+            qint64 nToRead = (qint64)sizeof(br->readBuf);
+            if (br->nInputLimit > 0) {
+                qint64 nRemaining = br->nInputLimit - br->nTotalInput;
+                if (nRemaining <= 0) return -1;
+                if (nToRead > nRemaining) nToRead = nRemaining;
+            }
+            br->nReadLen = (qint32)br->pInput->read((char *)br->readBuf, nToRead);
+            if (br->nReadLen <= 0) return -1;
+            br->nTotalInput += br->nReadLen;
+            br->nReadPos = 0;
+        }
+        br->nBitBuf |= ((quint64)br->readBuf[br->nReadPos++]) << br->nBitsInBuf;
+        br->nBitsInBuf += 8;
+    }
+
+    qint32 nCode = (qint32)(br->nBitBuf & ((1 << nCodeBits) - 1));
+    br->nBitBuf >>= nCodeBits;
+    br->nBitsInBuf -= nCodeBits;
+    br->nBitsRead += nCodeBits;
+
+    return nCode;
+}
+
+// Flush the output buffer to the device, resetting *pnOutPos. Returns false on short write.
+static bool compressFlushOutput(QIODevice *pOutput, quint8 *outBuf, qint32 *pnOutPos)
+{
+    if (*pnOutPos > 0) {
+        qint64 nWritten = pOutput->write((char *)outBuf, *pnOutPos);
+        if (nWritten != *pnOutPos) return false;
+        *pnOutPos = 0;
+    }
+    return true;
+}
+
 bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
@@ -49,8 +102,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
     QIODevice *pInput = pDecompressState->pDeviceInput;
     QIODevice *pOutput = pDecompressState->pDeviceOutput;
 
-    pInput->seek(pDecompressState->nInputOffset);
-    pOutput->seek(0);
+    Algo_utils::seekToStart(pDecompressState);
 
     // Read 3-byte header: magic(2) + flags(1)
     quint8 header[3];
@@ -87,69 +139,27 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
     qint32 nCodeBits = COMPRESS_MINBITS;
     qint32 nMaxVal = (1 << nCodeBits);
 
-    // Bit buffer for reading variable-width codes (LSB-first)
-    quint64 nBitBuf = 0;
-    qint32 nBitsInBuf = 0;
-
-    // Read buffer
-    const qint32 READBUF_SIZE = 4096;
-    quint8 readBuf[4096];
-    qint32 nReadPos = 0;
-    qint32 nReadLen = 0;
+    // Streaming bit-read state for the variable-width LZW codes (LSB-first).
+    COMPRESS_BITREADER br;
+    br.pInput = pInput;
+    br.nInputLimit = pDecompressState->nInputLimit;
+    br.nReadPos = 0;
+    br.nReadLen = 0;
+    br.nBitBuf = 0;
+    br.nBitsInBuf = 0;
+    br.nBitsRead = 0;
+    br.nTotalInput = 3;  // header already read
 
     // Output buffer
     const qint32 OUTBUF_SIZE = 4096;
     quint8 outBuf[4096];
     qint32 nOutPos = 0;
 
-    // Lambda to read one code
-    qint64 nTotalInput = 3;  // header already read
-
-    // nBitsRead tracks how many code-aligned bits have been consumed.
-    // Unix compress pads to code-size boundaries, so after a CLEAR we must
-    // skip to the next nCodeBits-aligned boundary.
-    qint64 nBitsRead = 0;
-
-    auto readCode = [&]() -> qint32 {
-        while (nBitsInBuf < nCodeBits) {
-            if (nReadPos >= nReadLen) {
-                qint64 nToRead = READBUF_SIZE;
-                if (pDecompressState->nInputLimit > 0) {
-                    qint64 nRemaining = pDecompressState->nInputLimit - nTotalInput;
-                    if (nRemaining <= 0) return -1;
-                    if (nToRead > nRemaining) nToRead = nRemaining;
-                }
-                nReadLen = (qint32)pInput->read((char *)readBuf, nToRead);
-                if (nReadLen <= 0) return -1;
-                nTotalInput += nReadLen;
-                nReadPos = 0;
-            }
-            nBitBuf |= ((quint64)readBuf[nReadPos++]) << nBitsInBuf;
-            nBitsInBuf += 8;
-        }
-
-        qint32 nCode = (qint32)(nBitBuf & ((1 << nCodeBits) - 1));
-        nBitBuf >>= nCodeBits;
-        nBitsInBuf -= nCodeBits;
-        nBitsRead += nCodeBits;
-
-        return nCode;
-    };
-
-    auto flushOutput = [&]() -> bool {
-        if (nOutPos > 0) {
-            qint64 nWritten = pOutput->write((char *)outBuf, nOutPos);
-            if (nWritten != nOutPos) return false;
-            nOutPos = 0;
-        }
-        return true;
-    };
-
     qint64 nTotalOutput = 0;
     bool bResult = true;
 
     // Read first code (must be a literal 0..255)
-    qint32 nOldCode = readCode();
+    qint32 nOldCode = compressReadCode(&br, nCodeBits);
     if (nOldCode < 0 || nOldCode >= 256) {
         delete[] pPrefix;
         delete[] pSuffix;
@@ -168,7 +178,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
             break;
         }
 
-        qint32 nCode = readCode();
+        qint32 nCode = compressReadCode(&br, nCodeBits);
         if (nCode < 0) {
             break;  // End of input
         }
@@ -183,10 +193,10 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
             // After CLEAR, discard remaining bits up to next nCodeBits boundary
             // Unix compress aligns bit reads to code-size groups.
             // Flush the bit buffer - remaining bits in current byte group are discarded.
-            nBitBuf = 0;
-            nBitsInBuf = 0;
+            br.nBitBuf = 0;
+            br.nBitsInBuf = 0;
 
-            nCode = readCode();
+            nCode = compressReadCode(&br, nCodeBits);
             if (nCode < 0) {
                 break;
             }
@@ -196,7 +206,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
             outBuf[nOutPos++] = nFinChar;
             nTotalOutput++;
             if (nOutPos >= OUTBUF_SIZE) {
-                if (!flushOutput()) {
+                if (!compressFlushOutput(pOutput, outBuf, &nOutPos)) {
                     bResult = false;
                     break;
                 }
@@ -238,7 +248,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
             outBuf[nOutPos++] = pStack[i];
             nTotalOutput++;
             if (nOutPos >= OUTBUF_SIZE) {
-                if (!flushOutput()) {
+                if (!compressFlushOutput(pOutput, outBuf, &nOutPos)) {
                     bResult = false;
                     break;
                 }
@@ -263,10 +273,10 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
     }
 
     if (bResult) {
-        bResult = flushOutput();
+        bResult = compressFlushOutput(pOutput, outBuf, &nOutPos);
     }
 
-    pDecompressState->nCountInput = nTotalInput;
+    pDecompressState->nCountInput = br.nTotalInput;
     pDecompressState->nCountOutput = nTotalOutput;
 
     delete[] pPrefix;

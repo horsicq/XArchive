@@ -115,7 +115,6 @@ public:
     SIGNATUREHEADER _read_SIGNATUREHEADER(qint64 nOffset);
     static QString idToSring(EIdEnum id);
     static HANDLE_METHOD coderToCompressMethod(const QByteArray &baCodec);
-    static void _applyBCJFilter(QByteArray &baData, qint32 nOffset);
 
     static const QString PREFIX_k7zId;
 

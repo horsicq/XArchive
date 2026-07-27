@@ -25,6 +25,21 @@ XLZODecoder::XLZODecoder(QObject *parent) : QObject(parent)
 {
 }
 
+// Big-endian header-field readers for the LZOP container.
+static quint16 lzoReadBE16(QIODevice *pInput)
+{
+    quint8 buf[2];
+    if (pInput->read((char *)buf, 2) != 2) return 0;
+    return ((quint16)buf[0] << 8) | buf[1];
+}
+
+static quint32 lzoReadBE32(QIODevice *pInput)
+{
+    quint8 buf[4];
+    if (pInput->read((char *)buf, 4) != 4) return 0;
+    return ((quint32)buf[0] << 24) | ((quint32)buf[1] << 16) | ((quint32)buf[2] << 8) | buf[3];
+}
+
 // LZO1X decompressor - compatible with lzop/minilzo output
 // Based on the public LZO1X decompression algorithm
 #define LZO_M2_MAX_OFFSET 0x0800
@@ -213,24 +228,12 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     if (memcmp(baMagic.constData(), nExpectedMagic, 9) != 0) return false;
 
     // Read header fields (big-endian)
-    auto readBE16 = [&pInput]() -> quint16 {
-        quint8 buf[2];
-        if (pInput->read((char *)buf, 2) != 2) return 0;
-        return ((quint16)buf[0] << 8) | buf[1];
-    };
-
-    auto readBE32 = [&pInput]() -> quint32 {
-        quint8 buf[4];
-        if (pInput->read((char *)buf, 4) != 4) return 0;
-        return ((quint32)buf[0] << 24) | ((quint32)buf[1] << 16) | ((quint32)buf[2] << 8) | buf[3];
-    };
-
-    quint16 nVersion = readBE16();     // lzop version
-    quint16 nLibVersion = readBE16();  // lzo lib version
+    quint16 nVersion = lzoReadBE16(pInput);     // lzop version
+    quint16 nLibVersion = lzoReadBE16(pInput);  // lzo lib version
     quint16 nExtractVersion = 0;
 
     if (nVersion >= 0x0940) {
-        nExtractVersion = readBE16();  // version needed to extract
+        nExtractVersion = lzoReadBE16(pInput);  // version needed to extract
     }
 
     quint8 nMethod = 0;
@@ -241,17 +244,17 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
         pInput->read((char *)&nLevel, 1);  // compression level
     }
 
-    quint32 nFlags = readBE32();  // flags
+    quint32 nFlags = lzoReadBE32(pInput);  // flags
 
     // Filter (for version >= 0x0940 with filter flag 0x00000800)
     if (nVersion >= 0x0940 && (nFlags & 0x00000800)) {
-        readBE32();  // filter
+        lzoReadBE32(pInput);  // filter
     }
 
-    quint32 nMode = readBE32();  // file mode
-    readBE32();                  // mtime_low
+    quint32 nMode = lzoReadBE32(pInput);  // file mode
+    lzoReadBE32(pInput);                  // mtime_low
     if (nVersion >= 0x0940) {
-        readBE32();  // mtime_high
+        lzoReadBE32(pInput);  // mtime_high
     }
 
     // Original file name
@@ -262,7 +265,7 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     }
 
     // Header checksum
-    readBE32();
+    lzoReadBE32(pInput);
 
     Q_UNUSED(nVersion)
     Q_UNUSED(nLibVersion)
@@ -285,7 +288,7 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
             return false;
         }
 
-        quint32 nUncompressedBlockSize = readBE32();
+        quint32 nUncompressedBlockSize = lzoReadBE32(pInput);
 
         if (nUncompressedBlockSize == 0) {
             // End of stream
@@ -296,18 +299,18 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
             return false;  // Sanity check
         }
 
-        quint32 nCompressedBlockSize = readBE32();
+        quint32 nCompressedBlockSize = lzoReadBE32(pInput);
 
         if (nCompressedBlockSize > nUncompressedBlockSize) {
             return false;
         }
 
         // Skip checksums
-        if (bHasAdler32Uncompressed) readBE32();
-        if (bHasCrc32Uncompressed) readBE32();
+        if (bHasAdler32Uncompressed) lzoReadBE32(pInput);
+        if (bHasCrc32Uncompressed) lzoReadBE32(pInput);
         if (nCompressedBlockSize < nUncompressedBlockSize) {
-            if (bHasAdler32Compressed) readBE32();
-            if (bHasCrc32Compressed) readBE32();
+            if (bHasAdler32Compressed) lzoReadBE32(pInput);
+            if (bHasCrc32Compressed) lzoReadBE32(pInput);
         }
 
         QByteArray baCompressed = pInput->read(nCompressedBlockSize);

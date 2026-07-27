@@ -355,6 +355,11 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_SQUASHFS);
     result.insert(XBinary::FT_ISO9660);
     result.insert(XBinary::FT_MINIDUMP);
+    result.insert(XBinary::FT_RPM);
+    result.insert(XBinary::FT_KWAJ);
+    result.insert(XBinary::FT_ASAR);
+    result.insert(XBinary::FT_XAR);
+    result.insert(XBinary::FT_ZOO);
     result.insert(XBinary::FT_DOS4G);
     result.insert(XBinary::FT_DOS16M);
 

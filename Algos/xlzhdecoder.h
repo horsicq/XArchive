@@ -215,6 +215,11 @@ public:
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct lzh_huffman *hf);
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
+
+    // LHA -lh1- (LArc-compatible): 4 KiB LZSS + adaptive Huffman (LZHUF). This method predates
+    // the block-based static-Huffman lh4/5/6/7 the state machine above handles, so it has its
+    // own self-contained decoder. The uncompressed size is taken from FPART_PROP_UNCOMPRESSEDSIZE.
+    static bool decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XLZHDECODER_H

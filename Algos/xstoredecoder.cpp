@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xstoredecoder.h"
+#include "algo_utils.h"
 
 XStoreDecoder::XStoreDecoder(QObject *parent) : QObject(parent)
 {
@@ -33,18 +34,11 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 
         char *bufferIn = new char[_nBufferSize];
 
-        // Initialize error states
-        pDecompressState->bReadError = false;
-        pDecompressState->bWriteError = false;
-        pDecompressState->nCountInput = 0;
-        pDecompressState->nCountOutput = 0;
-
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        pDecompressState->pDeviceOutput->seek(0);
+        Algo_utils::prepareState(pDecompressState);
 
         // Copy data from input to output
         for (qint64 nOffset = 0; (nOffset < pDecompressState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
-            qint32 nBufferSize = qMin(static_cast<qint32>(pDecompressState->nInputLimit - nOffset), _nBufferSize);
+            qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
 
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 

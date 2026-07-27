@@ -2342,7 +2342,7 @@ local int detect_data_type(deflate_state *s)
  */
 local unsigned bi_reverse(unsigned code, int len)
 {
-    register unsigned res = 0;
+    unsigned res = 0;
     do {
         res |= code & 1;
         code >>= 1, res <<= 1;
@@ -7193,9 +7193,9 @@ local void lm_init(deflate_state *s)
 local uInt longest_match(deflate_state *s, IPos cur_match)
 {
     unsigned chain_length = s->max_chain_length;    /* max hash chain length */
-    register Bytef *scan = s->window + s->strstart; /* current string */
-    register Bytef *match;                          /* matched string */
-    register int len;                               /* length of current match */
+    Bytef *scan = s->window + s->strstart; /* current string */
+    Bytef *match;                          /* matched string */
+    int len;                               /* length of current match */
     int best_len = (int)s->prev_length;             /* best match length so far */
     int nice_match = s->nice_match;                 /* stop if match long enough */
     IPos limit = s->strstart > (IPos)MAX_DIST(s) ? s->strstart - (IPos)MAX_DIST(s) : NIL;
@@ -7209,13 +7209,13 @@ local uInt longest_match(deflate_state *s, IPos cur_match)
     /* Compare two bytes at a time. Note: this is not always beneficial.
      * Try with and without -DUNALIGNED_OK to check.
      */
-    register Bytef *strend = s->window + s->strstart + MAX_MATCH - 1;
-    register ush scan_start = *(ushf *)scan;
-    register ush scan_end = *(ushf *)(scan + best_len - 1);
+    Bytef *strend = s->window + s->strstart + MAX_MATCH - 1;
+    ush scan_start = *(ushf *)scan;
+    ush scan_end = *(ushf *)(scan + best_len - 1);
 #else
-    register Bytef *strend = s->window + s->strstart + MAX_MATCH;
-    register Byte scan_end1 = scan[best_len - 1];
-    register Byte scan_end = scan[best_len];
+    Bytef *strend = s->window + s->strstart + MAX_MATCH;
+    Byte scan_end1 = scan[best_len - 1];
+    Byte scan_end = scan[best_len];
 #endif
 
     /* The code is optimized for HASH_BITS >= 8 and MAX_MATCH-2 multiple of 16.
@@ -7327,10 +7327,10 @@ local uInt longest_match(deflate_state *s, IPos cur_match)
  */
 local uInt longest_match(deflate_state *s, IPos cur_match)
 {
-    register Bytef *scan = s->window + s->strstart; /* current string */
-    register Bytef *match;                          /* matched string */
-    register int len;                               /* length of current match */
-    register Bytef *strend = s->window + s->strstart + MAX_MATCH;
+    Bytef *scan = s->window + s->strstart; /* current string */
+    Bytef *match;                          /* matched string */
+    int len;                               /* length of current match */
+    Bytef *strend = s->window + s->strstart + MAX_MATCH;
 
     /* The code is optimized for HASH_BITS >= 8 and MAX_MATCH-2 multiple of 16.
      * It is easy to get rid of this optimization if necessary.
@@ -8798,8 +8798,8 @@ unsigned long ZEXPORT crc32(unsigned long crc, const unsigned char FAR *buf, uIn
 /* ========================================================================= */
 local unsigned long crc32_little(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
 {
-    register z_crc_t c;
-    register const z_crc_t FAR *buf4;
+    z_crc_t c;
+    const z_crc_t FAR *buf4;
 
     c = (z_crc_t)crc;
     c = ~c;
@@ -8843,8 +8843,8 @@ local unsigned long crc32_little(unsigned long crc, const unsigned char FAR *buf
 /* ========================================================================= */
 local unsigned long crc32_big(unsigned long crc, const unsigned char FAR *buf, z_size_t len)
 {
-    register z_crc_t c;
-    register const z_crc_t FAR *buf4;
+    z_crc_t c;
+    const z_crc_t FAR *buf4;
 
     c = ZSWAP32((z_crc_t)crc);
     c = ~c;
@@ -10411,13 +10411,7 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
     bool bResult = false;
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-        pDecompressState->bReadError = false;
-        pDecompressState->bWriteError = false;
-        pDecompressState->nCountInput = 0;
-        pDecompressState->nCountOutput = 0;
-
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        pDecompressState->pDeviceOutput->seek(0);
+        Algo_utils::prepareState(pDecompressState);
 
         qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
 
@@ -10435,8 +10429,7 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
         if (X_inflateInit2(&strm, -MAX_WBITS) == Z_OK) {
             do {
-                qint32 nBufferSize =
-                    (pDecompressState->nInputLimit == -1) ? _nBufferSize : qMin((qint32)(pDecompressState->nInputLimit - pDecompressState->nCountInput), _nBufferSize);
+                qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
                 strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
                 if (strm.avail_in == 0) {
@@ -10488,13 +10481,7 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
 bool XDeflateDecoder::decompress64(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->pDeviceInput) {
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    }
-
-    if (pDecompressState->pDeviceOutput) {
-        pDecompressState->pDeviceOutput->seek(0);
-    }
+    Algo_utils::seekToStart(pDecompressState);
 
     bool bResult = false;
 
@@ -10527,13 +10514,7 @@ bool XDeflateDecoder::decompress64(XBinary::DATAPROCESS_STATE *pDecompressState,
 
 bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->pDeviceInput) {
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    }
-
-    if (pDecompressState->pDeviceOutput) {
-        pDecompressState->pDeviceOutput->seek(0);
-    }
+    Algo_utils::seekToStart(pDecompressState);
 
     XBinary::DATAPROCESS_STATE decompressState = *pDecompressState;
     decompressState.nInputLimit = pDecompressState->nInputLimit - 6;    // Skip zlib header and footer

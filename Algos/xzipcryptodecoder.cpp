@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xzipcryptodecoder.h"
+#include "algo_utils.h"
 
 const qint32 N_ENCRYPTION_HEADER_SIZE = 12;
 
@@ -39,13 +40,7 @@ bool XZipCryptoDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, co
         qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
         char *bufferIn = new char[_nBufferSize];
 
-        pDecompressState->bReadError = false;
-        pDecompressState->bWriteError = false;
-        pDecompressState->nCountInput = 0;
-        pDecompressState->nCountOutput = 0;
-
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-        pDecompressState->pDeviceOutput->seek(0);
+        Algo_utils::prepareState(pDecompressState);
 
         quint32 nKeys[3];
         initKeys(nKeys, baPassword);
@@ -63,7 +58,7 @@ bool XZipCryptoDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, co
             qint64 nDataSize = pDecompressState->nInputLimit - N_ENCRYPTION_HEADER_SIZE;
 
             for (qint64 nOffset = 0; (nOffset < nDataSize) && XBinary::isPdStructNotCanceled(pPdStruct);) {
-                qint32 nBufferSize = qMin((qint32)(nDataSize - nOffset), _nBufferSize);
+                qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
                 qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
                 if (nRead > 0) {
@@ -154,13 +149,7 @@ bool XZipCryptoDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, cons
         qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
         char *bufferIn = new char[_nBufferSize];
 
-        pCompressState->bReadError = false;
-        pCompressState->bWriteError = false;
-        pCompressState->nCountInput = 0;
-        pCompressState->nCountOutput = 0;
-
-        pCompressState->pDeviceInput->seek(pCompressState->nInputOffset);
-        pCompressState->pDeviceOutput->seek(0);
+        Algo_utils::prepareState(pCompressState);
 
         quint32 nKeys[3];
         initKeys(nKeys, baPassword);
@@ -184,7 +173,7 @@ bool XZipCryptoDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, cons
         qint64 nDataSize = pCompressState->nInputLimit;
 
         for (qint64 nOffset = 0; (nOffset < nDataSize) && XBinary::isPdStructNotCanceled(pPdStruct);) {
-            qint32 nBufferSize = qMin((qint32)(nDataSize - nOffset), _nBufferSize);
+            qint32 nBufferSize = Algo_utils::getReadChunkSize(pCompressState, _nBufferSize);
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pCompressState);
 
             if (nRead > 0) {

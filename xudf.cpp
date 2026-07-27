@@ -151,6 +151,197 @@ quint32 XUDF::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XUDF_STRUCTID, sizeof(_TABLE_XUDF_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QList<XBinary::XFHEADER> XUDF::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+
+        if (nAnchorOffset != -1) {
+            XFSTRUCT _xfStruct = xfStruct;
+            _xfStruct.nStructID = STRUCTID_ANCHOR_VOLUME_DESCRIPTOR;
+            _xfStruct.xLoc = offsetToLoc(nAnchorOffset);
+            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+        }
+    } else if (nStructID == STRUCTID_ANCHOR_VOLUME_DESCRIPTOR) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(_getAnchorVolumeDescriptorOffset());
+        }
+
+        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
+
+        if (nHeaderOffset != -1) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_ANCHOR_VOLUME_DESCRIPTOR);
+            xfHeader.xLoc = headerLoc;
+            xfHeader.nSize = sizeof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_ANCHOR_VOLUME_DESCRIPTOR, headerLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_ANCHOR_VOLUME_DESCRIPTOR), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+
+            if (xfStruct.bIsParent) {
+                XFSTRUCT _xfStruct = xfStruct;
+                _xfStruct.sParent = xfHeader.sTag;
+                _xfStruct.nStructID = STRUCTID_PRIMARY_VOLUME_DESCRIPTOR;
+                _xfStruct.xLoc = offsetToLoc(-1);
+                listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+            }
+        }
+    } else if (nStructID == STRUCTID_PRIMARY_VOLUME_DESCRIPTOR) {
+        qint64 nPvdOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
+
+        if (nPvdOffset == -1) {
+            // Scan the main Volume Descriptor Sequence for the PVD
+            qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+
+            if (nAnchorOffset != -1) {
+                UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER avdp = _readAnchorVolumeDescriptor(nAnchorOffset);
+
+                qint32 nBlockSize = _getBlockSize();
+                qint64 nVdsOffset = (qint64)avdp.mainVolumeDescriptorSequenceExtent.nLocation * nBlockSize;
+                qint32 nNumberOfBlocks = (qint32)(avdp.mainVolumeDescriptorSequenceExtent.nLength / nBlockSize);
+
+                for (qint32 i = 0; (i < nNumberOfBlocks) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+                    qint64 nCurrentOffset = nVdsOffset + (qint64)i * nBlockSize;
+
+                    if (!_isValidTag(nCurrentOffset, pPdStruct)) {
+                        break;
+                    }
+
+                    UDF_TAG tag = _readTag(nCurrentOffset);
+
+                    if (tag.nTagIdentifier == TAG_PRIMARY_VOLUME_DESCRIPTOR) {
+                        nPvdOffset = nCurrentOffset;
+                        break;
+                    } else if (tag.nTagIdentifier == TAG_TERMINATING_DESCRIPTOR) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (nPvdOffset != -1) {
+            XLOC pvdLoc = offsetToLoc(nPvdOffset);
+
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag = xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_PRIMARY_VOLUME_DESCRIPTOR);
+            xfHeader.xLoc = pvdLoc;
+            xfHeader.nSize = sizeof(UDF_PRIMARY_VOLUME_DESCRIPTOR);
+            xfHeader.xfType = XFTYPE_HEADER;
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_PRIMARY_VOLUME_DESCRIPTOR, pvdLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_PRIMARY_VOLUME_DESCRIPTOR), xfHeader.sParentTag);
+            listResult.append(xfHeader);
+        }
+    }
+
+    return listResult;
+}
+
+void XUDF::_addTagRecords(QList<XFRECORD> *pList, qint32 nBaseOffset)
+{
+    pList->append({"tag.nTagIdentifier", nBaseOffset + (qint32)offsetof(UDF_TAG, nTagIdentifier), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+    pList->append({"tag.nDescriptorVersion", nBaseOffset + (qint32)offsetof(UDF_TAG, nDescriptorVersion), 2, XFRECORD_FLAG_VERSION, VT_UINT16});
+    pList->append({"tag.nChecksum", nBaseOffset + (qint32)offsetof(UDF_TAG, nChecksum), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+    pList->append({"tag.nTagSerialNumber", nBaseOffset + (qint32)offsetof(UDF_TAG, nTagSerialNumber), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+    pList->append({"tag.nDescriptorCRC", nBaseOffset + (qint32)offsetof(UDF_TAG, nDescriptorCRC), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+    pList->append({"tag.nDescriptorCRCLength", nBaseOffset + (qint32)offsetof(UDF_TAG, nDescriptorCRCLength), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
+    pList->append({"tag.nTagLocation", nBaseOffset + (qint32)offsetof(UDF_TAG, nTagLocation), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+}
+
+QList<XBinary::XFRECORD> XUDF::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_TAG) {
+        _addTagRecords(&listResult, 0);
+    } else if (nStructID == STRUCTID_ANCHOR_VOLUME_DESCRIPTOR) {
+        _addTagRecords(&listResult, (qint32)offsetof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER, tag));
+        listResult.append({"mainVolumeDescriptorSequenceExtent.nLength",
+                           (qint32)(offsetof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER, mainVolumeDescriptorSequenceExtent) + offsetof(UDF_EXTENT_AD, nLength)), 4,
+                           XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"mainVolumeDescriptorSequenceExtent.nLocation",
+                           (qint32)(offsetof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER, mainVolumeDescriptorSequenceExtent) + offsetof(UDF_EXTENT_AD, nLocation)), 4,
+                           XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"reserveVolumeDescriptorSequenceExtent.nLength",
+                           (qint32)(offsetof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER, reserveVolumeDescriptorSequenceExtent) + offsetof(UDF_EXTENT_AD, nLength)), 4,
+                           XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"reserveVolumeDescriptorSequenceExtent.nLocation",
+                           (qint32)(offsetof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER, reserveVolumeDescriptorSequenceExtent) + offsetof(UDF_EXTENT_AD, nLocation)), 4,
+                           XFRECORD_FLAG_NONE, VT_UINT32});
+    } else if (nStructID == STRUCTID_PRIMARY_VOLUME_DESCRIPTOR) {
+        _addTagRecords(&listResult, (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, tag));
+        listResult.append({"nVolumeDescriptorSequenceNumber", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nVolumeDescriptorSequenceNumber), 4, XFRECORD_FLAG_COUNT,
+                           VT_UINT32});
+        listResult.append(
+            {"nPrimaryVolumeDescriptorNumber", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nPrimaryVolumeDescriptorNumber), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"szVolumeIdentifier", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, szVolumeIdentifier), 32, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append({"nVolumeSequenceNumber", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nVolumeSequenceNumber), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append(
+            {"nMaximumVolumeSequenceNumber", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nMaximumVolumeSequenceNumber), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"nInterchangeLevel", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nInterchangeLevel), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"nMaximumInterchangeLevel", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nMaximumInterchangeLevel), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"nCharacterSetList", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nCharacterSetList), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nMaximumCharacterSetList", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nMaximumCharacterSetList), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"szVolumeSetIdentifier", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, szVolumeSetIdentifier), 128, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        listResult.append(
+            {"nDescriptorCharacterSet", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nDescriptorCharacterSet), 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append(
+            {"nExplanatoryCharacterSet", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nExplanatoryCharacterSet), 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"volumeAbstract.nLength", (qint32)(offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, volumeAbstract) + offsetof(UDF_EXTENT_AD, nLength)), 4,
+                           XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"volumeAbstract.nLocation", (qint32)(offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, volumeAbstract) + offsetof(UDF_EXTENT_AD, nLocation)), 4,
+                           XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"volumeCopyrightNotice.nLength", (qint32)(offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, volumeCopyrightNotice) + offsetof(UDF_EXTENT_AD, nLength)),
+                           4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"volumeCopyrightNotice.nLocation",
+                           (qint32)(offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, volumeCopyrightNotice) + offsetof(UDF_EXTENT_AD, nLocation)), 4, XFRECORD_FLAG_NONE,
+                           VT_UINT32});
+        listResult.append({"nApplicationIdentifier", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nApplicationIdentifier), 32, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nRecordingDateAndTime", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nRecordingDateAndTime), 12, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append(
+            {"nImplementationIdentifier", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nImplementationIdentifier), 32, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nImplementationUse", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nImplementationUse), 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nPredecessorVolumeDescriptorSequenceLocation",
+                           (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nPredecessorVolumeDescriptorSequenceLocation), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nFlags", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nFlags), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+    } else if (nStructID == STRUCTID_FILE_ENTRY) {
+        _addTagRecords(&listResult, (qint32)offsetof(UDF_FILE_ENTRY, tag));
+        listResult.append({"nICBTag", (qint32)offsetof(UDF_FILE_ENTRY, nICBTag), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nUid", (qint32)offsetof(UDF_FILE_ENTRY, nUid), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nGid", (qint32)offsetof(UDF_FILE_ENTRY, nGid), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nPermissions", (qint32)offsetof(UDF_FILE_ENTRY, nPermissions), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nFileLinkCount", (qint32)offsetof(UDF_FILE_ENTRY, nFileLinkCount), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"nRecordFormat", (qint32)offsetof(UDF_FILE_ENTRY, nRecordFormat), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nRecordDisplayAttributes", (qint32)offsetof(UDF_FILE_ENTRY, nRecordDisplayAttributes), 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"nRecordLength", (qint32)offsetof(UDF_FILE_ENTRY, nRecordLength), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nInformationLength", (qint32)offsetof(UDF_FILE_ENTRY, nInformationLength), 8, XFRECORD_FLAG_SIZE, VT_UINT64});
+        listResult.append({"nLogicalBlocksRecorded", (qint32)offsetof(UDF_FILE_ENTRY, nLogicalBlocksRecorded), 8, XFRECORD_FLAG_COUNT, VT_UINT64});
+        listResult.append({"nAccessTime", (qint32)offsetof(UDF_FILE_ENTRY, nAccessTime), 12, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nModificationTime", (qint32)offsetof(UDF_FILE_ENTRY, nModificationTime), 12, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nAttributeTime", (qint32)offsetof(UDF_FILE_ENTRY, nAttributeTime), 12, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nCheckpoint", (qint32)offsetof(UDF_FILE_ENTRY, nCheckpoint), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nExtendedAttributeICB", (qint32)offsetof(UDF_FILE_ENTRY, nExtendedAttributeICB), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nImplementationIdentifier", (qint32)offsetof(UDF_FILE_ENTRY, nImplementationIdentifier), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nUniqueID", (qint32)offsetof(UDF_FILE_ENTRY, nUniqueID), 8, XFRECORD_FLAG_NONE, VT_UINT64});
+        listResult.append({"nLengthOfExtendedAttributes", (qint32)offsetof(UDF_FILE_ENTRY, nLengthOfExtendedAttributes), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nLengthOfAllocationDescriptors", (qint32)offsetof(UDF_FILE_ENTRY, nLengthOfAllocationDescriptors), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+    }
+
+    return listResult;
+}
+
 // QList<XBinary::DATA_HEADER> XUDF::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 // {
 //     QList<DATA_HEADER> listResult;

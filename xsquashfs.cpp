@@ -142,6 +142,70 @@ quint32 XSquashfs::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XSQUASHFS_STRUCTID, sizeof(_TABLE_XSQUASHFS_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
+QList<XBinary::XFHEADER> XSquashfs::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_SUPERBLOCK;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if ((nStructID == STRUCTID_HEADER) || (nStructID == STRUCTID_SUPERBLOCK)) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(nStructID);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.nSize = sizeof(SQUASHFS_HEADER);
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, nStructID, headerLoc);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(nStructID), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XSquashfs::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if ((nStructID == STRUCTID_HEADER) || (nStructID == STRUCTID_SUPERBLOCK)) {
+        listResult.append({"nMagic", (qint32)offsetof(SQUASHFS_HEADER, nMagic), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nInodesCount", (qint32)offsetof(SQUASHFS_HEADER, nInodesCount), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"nCreationTime", (qint32)offsetof(SQUASHFS_HEADER, nCreationTime), 4, XFRECORD_FLAG_UNIXTIME, VT_UINT32});
+        listResult.append({"nBlockSize", (qint32)offsetof(SQUASHFS_HEADER, nBlockSize), 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"nFragmentsCount", (qint32)offsetof(SQUASHFS_HEADER, nFragmentsCount), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
+        listResult.append({"nCompressionType", (qint32)offsetof(SQUASHFS_HEADER, nCompressionType), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"nBlockLog", (qint32)offsetof(SQUASHFS_HEADER, nBlockLog), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"nFlags", (qint32)offsetof(SQUASHFS_HEADER, nFlags), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"nNoIds", (qint32)offsetof(SQUASHFS_HEADER, nNoIds), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
+        listResult.append({"nVersionMajor", (qint32)offsetof(SQUASHFS_HEADER, nVersionMajor), 4, XFRECORD_FLAG_VERSION_MAJOR, VT_UINT32});
+        listResult.append({"nVersionMinor", (qint32)offsetof(SQUASHFS_HEADER, nVersionMinor), 4, XFRECORD_FLAG_VERSION_MINOR, VT_UINT32});
+        listResult.append({"nRootInodeRef", (qint32)offsetof(SQUASHFS_HEADER, nRootInodeRef), 8, XFRECORD_FLAG_NONE, VT_UINT64});
+        listResult.append({"nBytesUsed", (qint32)offsetof(SQUASHFS_HEADER, nBytesUsed), 8, XFRECORD_FLAG_SIZE, VT_UINT64});
+        listResult.append({"nIdTableStart", (qint32)offsetof(SQUASHFS_HEADER, nIdTableStart), 8, XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nXattrTableStart", (qint32)offsetof(SQUASHFS_HEADER, nXattrTableStart), 8, XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nInodeTableStart", (qint32)offsetof(SQUASHFS_HEADER, nInodeTableStart), 8, XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nDirectoryTableStart", (qint32)offsetof(SQUASHFS_HEADER, nDirectoryTableStart), 8, XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nFragmentTableStart", (qint32)offsetof(SQUASHFS_HEADER, nFragmentTableStart), 8, XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nExportTableStart", (qint32)offsetof(SQUASHFS_HEADER, nExportTableStart), 8, XFRECORD_FLAG_OFFSET, VT_UINT64});
+    }
+
+    return listResult;
+}
+
 // QList<XBinary::DATA_HEADER> XSquashfs::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
 // {
 //     Q_UNUSED(dataHeadersOptions)

@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xit214decoder.h"
+#include "algo_utils.h"
 
 XIT214Decoder::XIT214Decoder(QObject *parent) : QObject(parent)
 {
@@ -26,13 +27,7 @@ XIT214Decoder::XIT214Decoder(QObject *parent) : QObject(parent)
 
 bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (pDecompressState->pDeviceInput) {
-        pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset);
-    }
-
-    if (pDecompressState->pDeviceOutput) {
-        pDecompressState->pDeviceOutput->seek(0);
-    }
+    Algo_utils::seekToStart(pDecompressState);
 
     quint16 blklen; /* length of compressed data block in samples */
     quint16 blkpos; /* position in block */

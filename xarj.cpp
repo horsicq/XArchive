@@ -257,13 +257,28 @@ qint64 entryEndOffset(const ARJ_ENTRY_INFO &info)
 
 qint64 firstFileRecordOffset(XARJ *pArj)
 {
-    ARJ_ENTRY_INFO info = {};
-
-    if (readEntryInfo(pArj, 0, &info) && !info.bEndOfArchive) {
-        return info.nHeaderSize;
+    // The archive (main) header at offset 0 is measured by its header size only.
+    // Do NOT route it through readEntryInfo(): the main header's basic fields at
+    // the "compressed/original size" positions actually hold archive datetimes,
+    // so the file-record stream-size validation would spuriously reject it and
+    // this function would fall back to 0 (breaking record enumeration).
+    if (!hasArjMarker(pArj, 0)) {
+        return 0;
     }
 
-    return 0;
+    quint16 nBasicHeaderSize = readBasicHeaderSize(pArj, 0);
+
+    if (isEndOfArchiveHeader(nBasicHeaderSize)) {
+        return 0;
+    }
+
+    qint64 nHeaderSize = readEntryHeaderSize(pArj, 0);
+
+    if (nHeaderSize <= 0) {
+        return 0;
+    }
+
+    return nHeaderSize;
 }
 
 qint32 countFileRecords(XARJ *pArj, qint64 nStartOffset, XBinary::PDSTRUCT *pPdStruct, qint64 *pEndOffset)

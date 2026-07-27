@@ -116,6 +116,30 @@ static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE
     return result;
 }
 
+// Resolve a folder in-stream index to its global pack-stream index. Tries a direct
+// lookup first; if that fails, follows one coder bond to handle AES-encrypted
+// sub-streams (the encrypted BCJ2 layout). When resolved via a bond, *pAESCoderIdx
+// receives that producer coder's local index.
+static qint32 sevenzipResolveInStream(const QMap<qint32, qint32> &mapInStreamToGlobal, const QMap<qint32, qint32> &mapBondInToCoderOut,
+                                      const QList<qint32> &listInStreamOffsets, qint32 nNumCoders, qint32 nInStream, qint32 *pAESCoderIdx)
+{
+    if (pAESCoderIdx) *pAESCoderIdx = -1;
+    if (mapInStreamToGlobal.contains(nInStream)) {
+        return mapInStreamToGlobal.value(nInStream);
+    }
+    if (mapBondInToCoderOut.contains(nInStream)) {
+        qint32 nProducerCoder = mapBondInToCoderOut.value(nInStream);
+        if (nProducerCoder >= 0 && nProducerCoder < nNumCoders) {
+            qint32 nProducerInStream = listInStreamOffsets.at(nProducerCoder);
+            if (mapInStreamToGlobal.contains(nProducerInStream)) {
+                if (pAESCoderIdx) *pAESCoderIdx = nProducerCoder;
+                return mapInStreamToGlobal.value(nProducerInStream);
+            }
+        }
+    }
+    return -1;
+}
+
 QMap<quint64, QString> XSevenZip::get_k7zId()
 {
     return XBinary::XIDSTRING_createMapPrefix(_TABLE_XSevenZip_EIdEnum, sizeof(_TABLE_XSevenZip_EIdEnum) / sizeof(XBinary::XIDSTRING), PREFIX_k7zId);
@@ -139,8 +163,8 @@ QList<XBinary::PM_INFO> XSevenZip::unpackImplemented()
     };
 
     static const HANDLE_METHOD g_7zFilters[] = {
-        HANDLE_METHOD_BCJ,
-        HANDLE_METHOD_ARM64_BCJ,
+        HANDLE_METHOD_BCJ, HANDLE_METHOD_ARM64_BCJ, HANDLE_METHOD_ARM_BCJ,  HANDLE_METHOD_ARMT_BCJ,
+        HANDLE_METHOD_PPC_BCJ, HANDLE_METHOD_SPARC_BCJ, HANDLE_METHOD_IA64_BCJ, HANDLE_METHOD_DELTA,
     };
 
     const qint32 nNumberOfMethods = sizeof(g_7zUnpackMethods) / sizeof(g_7zUnpackMethods[0]);
@@ -396,6 +420,20 @@ XBinary::HANDLE_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCode
             result = HANDLE_METHOD_STORE;  // Copy (uncompressed)
         } else if (baCodec[0] == '\x21') {
             result = HANDLE_METHOD_LZMA2;  // LZMA2
+        } else if (baCodec[0] == '\x03') {
+            result = HANDLE_METHOD_DELTA;  // Delta filter (1-byte codec ID)
+        } else if (baCodec[0] == '\x04') {
+            result = HANDLE_METHOD_BCJ;  // x86 branch filter (1-byte codec ID)
+        } else if (baCodec[0] == '\x05') {
+            result = HANDLE_METHOD_PPC_BCJ;  // PPC branch filter (1-byte codec ID)
+        } else if (baCodec[0] == '\x06') {
+            result = HANDLE_METHOD_IA64_BCJ;  // IA64 branch filter (1-byte codec ID)
+        } else if (baCodec[0] == '\x07') {
+            result = HANDLE_METHOD_ARM_BCJ;  // ARM branch filter (1-byte codec ID)
+        } else if (baCodec[0] == '\x08') {
+            result = HANDLE_METHOD_ARMT_BCJ;  // ARM Thumb branch filter (1-byte codec ID)
+        } else if (baCodec[0] == '\x09') {
+            result = HANDLE_METHOD_SPARC_BCJ;  // SPARC branch filter (1-byte codec ID)
         } else if (baCodec[0] == '\x0A') {
             result = HANDLE_METHOD_ARM64_BCJ;  // ARM64 branch filter (1-byte codec ID)
         }
@@ -423,7 +461,15 @@ XBinary::HANDLE_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCode
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x01", 4))) {
             result = HANDLE_METHOD_PPMD7;  // PPMd (alternative codec)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x02\x05", 4))) {
-            result = HANDLE_METHOD_UNKNOWN;  // SPARC BCJ filter (not BCJ2) - fix for issue 2
+            result = HANDLE_METHOD_PPC_BCJ;  // PPC (big-endian) branch filter (legacy 4-byte codec ID)
+        } else if (baCodec.startsWith(QByteArray("\x03\x03\x04\x01", 4))) {
+            result = HANDLE_METHOD_IA64_BCJ;  // IA64 branch filter (legacy 4-byte codec ID)
+        } else if (baCodec.startsWith(QByteArray("\x03\x03\x05\x01", 4))) {
+            result = HANDLE_METHOD_ARM_BCJ;  // ARM (little-endian) branch filter (legacy 4-byte codec ID)
+        } else if (baCodec.startsWith(QByteArray("\x03\x03\x07\x01", 4))) {
+            result = HANDLE_METHOD_ARMT_BCJ;  // ARM Thumb (little-endian) branch filter (legacy 4-byte codec ID)
+        } else if (baCodec.startsWith(QByteArray("\x03\x03\x08\x05", 4))) {
+            result = HANDLE_METHOD_SPARC_BCJ;  // SPARC branch filter (legacy 4-byte codec ID)
         } else if (baCodec.startsWith(QByteArray("\x06\xF1\x07\x01", 4))) {
             result = HANDLE_METHOD_7Z_AES;  // AES encryption
         } else {
@@ -434,46 +480,6 @@ XBinary::HANDLE_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCode
     }
 
     return result;
-}
-
-void XSevenZip::_applyBCJFilter(QByteArray &baData, qint32 nOffset)
-{
-    // BCJ (Branch/Call/Jump) x86 filter
-    // Converts relative addresses to absolute for better compression
-    // Must be reversed after decompression
-
-    if (baData.isEmpty()) {
-        return;
-    }
-
-    const qint32 nSize = baData.size();
-    unsigned char *pData = reinterpret_cast<unsigned char *>(baData.data());
-    qint32 nPos = 0;
-
-    // Process the data looking for x86 call/jump instructions
-    while (nPos + 5 <= nSize) {
-        unsigned char b = pData[nPos];
-
-        // Check for CALL (0xE8) or JMP (0xE9) instructions
-        if (b == 0xE8 || b == 0xE9) {
-            // Read the 32-bit relative offset (little-endian)
-            quint32 nSrcValue = (quint32)pData[nPos + 1] | ((quint32)pData[nPos + 2] << 8) | ((quint32)pData[nPos + 3] << 16) | ((quint32)pData[nPos + 4] << 24);
-            qint32 nSrc = static_cast<qint32>(nSrcValue);
-
-            // Convert absolute address back to relative
-            qint32 nDest = nSrc - (nOffset + nPos + 5);
-
-            // Write back the relative offset (little-endian)
-            pData[nPos + 1] = static_cast<unsigned char>(nDest);
-            pData[nPos + 2] = static_cast<unsigned char>(nDest >> 8);
-            pData[nPos + 3] = static_cast<unsigned char>(nDest >> 16);
-            pData[nPos + 4] = static_cast<unsigned char>(nDest >> 24);
-
-            nPos += 5;
-        } else {
-            nPos++;
-        }
-    }
 }
 
 QString XSevenZip::structIDToString(quint32 nID)
@@ -1848,31 +1854,9 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                     mapBondInToCoderOut[folder.listBonds.at(bi).nInputIndex] = folder.listBonds.at(bi).nOutputIndex;
                                                 }
 
-                                                // Resolve an in-stream to its global pack-stream index.
-                                                // Tries direct lookup first; if not found, follows one bond to handle
-                                                // AES-encrypted sub-streams (encrypted BCJ2 layout).
-                                                // If resolved via a bond, *pAESCoderIdx is set to that coder's local index.
-                                                auto resolveInStream = [&](qint32 nInStream, qint32 *pAESCoderIdx) -> qint32 {
-                                                    if (pAESCoderIdx) *pAESCoderIdx = -1;
-                                                    if (mapInStreamToGlobal.contains(nInStream)) {
-                                                        return mapInStreamToGlobal.value(nInStream);
-                                                    }
-                                                    if (mapBondInToCoderOut.contains(nInStream)) {
-                                                        qint32 nProducerCoder = mapBondInToCoderOut.value(nInStream);
-                                                        if (nProducerCoder >= 0 && nProducerCoder < nNumCoders) {
-                                                            qint32 nProducerInStream = listInStreamOffsets.at(nProducerCoder);
-                                                            if (mapInStreamToGlobal.contains(nProducerInStream)) {
-                                                                if (pAESCoderIdx) *pAESCoderIdx = nProducerCoder;
-                                                                return mapInStreamToGlobal.value(nProducerInStream);
-                                                            }
-                                                        }
-                                                    }
-                                                    return -1;
-                                                };
-
                                                 // Resolve range stream (BCJ2.in[3])
                                                 qint32 nRangeAESCoderIdx = -1;
-                                                qint32 nRangeGlobal = resolveInStream(nBCJ2InStreamBase + 3, &nRangeAESCoderIdx);
+                                                qint32 nRangeGlobal = sevenzipResolveInStream(mapInStreamToGlobal, mapBondInToCoderOut, listInStreamOffsets, nNumCoders, nBCJ2InStreamBase + 3, &nRangeAESCoderIdx);
 
                                                 if (nRangeGlobal >= 0 && nRangeGlobal < state.listInStreams.count()) {
                                                     nBCJ2RangeOffset = state.nStreamsBegin + state.listInStreams.at(nRangeGlobal).nOffset;
@@ -1903,7 +1887,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
                                                     if (nMainLZMALocal >= 0) {
                                                         qint32 nMainAESCoderIdx = -1;
-                                                        qint32 nMainGlobal = resolveInStream(listInStreamOffsets.at(nMainLZMALocal), &nMainAESCoderIdx);
+                                                        qint32 nMainGlobal = sevenzipResolveInStream(mapInStreamToGlobal, mapBondInToCoderOut, listInStreamOffsets, nNumCoders, listInStreamOffsets.at(nMainLZMALocal), &nMainAESCoderIdx);
                                                         if (nMainGlobal >= 0 && nMainGlobal < state.listInStreams.count()) {
                                                             nBCJ2MainOffset = state.nStreamsBegin + state.listInStreams.at(nMainGlobal).nOffset;
                                                             nBCJ2MainSize = state.listInStreams.at(nMainGlobal).nSize;
@@ -1926,7 +1910,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                             bool bCallOk = false;
                                                             if (nCallLZMALocal >= 0) {
                                                                 qint32 nCallAESCoderIdx = -1;
-                                                                qint32 nCallGlobal = resolveInStream(listInStreamOffsets.at(nCallLZMALocal), &nCallAESCoderIdx);
+                                                                qint32 nCallGlobal = sevenzipResolveInStream(mapInStreamToGlobal, mapBondInToCoderOut, listInStreamOffsets, nNumCoders, listInStreamOffsets.at(nCallLZMALocal), &nCallAESCoderIdx);
                                                                 if (nCallGlobal >= 0 && nCallGlobal < state.listInStreams.count()) {
                                                                     nBCJ2CallOffset = state.nStreamsBegin + state.listInStreams.at(nCallGlobal).nOffset;
                                                                     nBCJ2CallSize = state.listInStreams.at(nCallGlobal).nSize;
@@ -1946,7 +1930,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                             } else {
                                                                 // Compact layout: BCJ2.in[1] (calls) is a raw/encrypted direct stream
                                                                 qint32 nCallAESCoderIdx = -1;
-                                                                qint32 nCallGlobal = resolveInStream(nBCJ2InStreamBase + 1, &nCallAESCoderIdx);
+                                                                qint32 nCallGlobal = sevenzipResolveInStream(mapInStreamToGlobal, mapBondInToCoderOut, listInStreamOffsets, nNumCoders, nBCJ2InStreamBase + 1, &nCallAESCoderIdx);
                                                                 if (nCallGlobal >= 0 && nCallGlobal < state.listInStreams.count()) {
                                                                     nBCJ2CallOffset = state.nStreamsBegin + state.listInStreams.at(nCallGlobal).nOffset;
                                                                     nBCJ2CallSize = state.listInStreams.at(nCallGlobal).nSize;
@@ -1966,7 +1950,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                             bool bJmpOk = false;
                                                             if (nJmpLZMALocal >= 0) {
                                                                 qint32 nJmpAESCoderIdx = -1;
-                                                                qint32 nJmpGlobal = resolveInStream(listInStreamOffsets.at(nJmpLZMALocal), &nJmpAESCoderIdx);
+                                                                qint32 nJmpGlobal = sevenzipResolveInStream(mapInStreamToGlobal, mapBondInToCoderOut, listInStreamOffsets, nNumCoders, listInStreamOffsets.at(nJmpLZMALocal), &nJmpAESCoderIdx);
                                                                 if (nJmpGlobal >= 0 && nJmpGlobal < state.listInStreams.count()) {
                                                                     nBCJ2JmpOffset = state.nStreamsBegin + state.listInStreams.at(nJmpGlobal).nOffset;
                                                                     nBCJ2JmpSize = state.listInStreams.at(nJmpGlobal).nSize;
@@ -1986,7 +1970,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                                             } else {
                                                                 // Compact layout: BCJ2.in[2] (jumps) is a raw/encrypted direct stream
                                                                 qint32 nJmpAESCoderIdx = -1;
-                                                                qint32 nJmpGlobal = resolveInStream(nBCJ2InStreamBase + 2, &nJmpAESCoderIdx);
+                                                                qint32 nJmpGlobal = sevenzipResolveInStream(mapInStreamToGlobal, mapBondInToCoderOut, listInStreamOffsets, nNumCoders, nBCJ2InStreamBase + 2, &nJmpAESCoderIdx);
                                                                 if (nJmpGlobal >= 0 && nJmpGlobal < state.listInStreams.count()) {
                                                                     nBCJ2JmpOffset = state.nStreamsBegin + state.listInStreams.at(nJmpGlobal).nOffset;
                                                                     nBCJ2JmpSize = state.listInStreams.at(nJmpGlobal).nSize;

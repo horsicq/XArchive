@@ -273,6 +273,7 @@ protected:
     HANDLE_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
     bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith);
     qint32 _getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *pnRealSize, PDSTRUCT *pPdStruct);
+    qint64 _resyncCDFHOffset(qint64 nOffset, PDSTRUCT *pPdStruct);
 };
 
 #endif  // XZIP_H

@@ -31,6 +31,9 @@ HEADERS += \
     $$PWD/Algos/xppmd7model.h \
     $$PWD/Algos/xaesdecoder.h \
     $$PWD/Algos/xbcj2decoder.h \
+    $$PWD/Algos/xbranchdecoder.h \
+    $$PWD/Algos/xlzxdecoder.h \
+    $$PWD/Algos/xxpressdecoder.h \
     $$PWD/Algos/xsha256decoder.h \
     $$PWD/Algos/xblake2sp.h \
     $$PWD/Algos/xzstddecoder.h \
@@ -59,6 +62,11 @@ HEADERS += \
     $$PWD/xiso9660.h \
     $$PWD/xudf.h \
     $$PWD/xwim.h \
+    $$PWD/xrpm.h \
+    $$PWD/xkwaj.h \
+    $$PWD/xasar.h \
+    $$PWD/xxar.h \
+    $$PWD/xzoo.h \
     $$PWD/xjar.h \
     $$PWD/xlha.h \
     $$PWD/xmachofat.h \
@@ -116,11 +124,13 @@ SOURCES += \
     $$PWD/Algos/xppmd7model.cpp \
     $$PWD/Algos/xaesdecoder.cpp \
     $$PWD/Algos/xbcj2decoder.cpp \
+    $$PWD/Algos/xbranchdecoder.cpp \
+    $$PWD/Algos/xlzxdecoder.cpp \
+    $$PWD/Algos/xxpressdecoder.cpp \
     $$PWD/Algos/xsha256decoder.cpp \
     $$PWD/Algos/xblake2sp.cpp \
     $$PWD/Algos/xzstddecoder.cpp \
     $$PWD/Algos/xucldecoder.cpp \
-    $$PWD/Algos/zstddeclib.cpp \
     $$PWD/Algos/xlzodecoder.cpp \
     $$PWD/Algos/xcompressdecoder.cpp \
     $$PWD/x_ar.cpp \
@@ -144,6 +154,11 @@ SOURCES += \
     $$PWD/xiso9660.cpp \
     $$PWD/xudf.cpp \
     $$PWD/xwim.cpp \
+    $$PWD/xrpm.cpp \
+    $$PWD/xkwaj.cpp \
+    $$PWD/xasar.cpp \
+    $$PWD/xxar.cpp \
+    $$PWD/xzoo.cpp \
     $$PWD/xjar.cpp \
     $$PWD/xlha.cpp \
     $$PWD/xmachofat.cpp \
@@ -194,6 +209,12 @@ SOURCES += \
 !contains(XCONFIG, zlib) {
     XCONFIG += zlib
     include($$PWD/3rdparty/zlib/zlib.pri)
+}
+
+# Guarded: other modules(XDWARF, XUpdate) pull the same single-file zstd decoder
+!contains(XCONFIG, zstddeclib) {
+    XCONFIG += zstddeclib
+    SOURCES += $$PWD/Algos/zstddeclib.cpp
 }
 
 !contains(XCONFIG, bzip2) {
