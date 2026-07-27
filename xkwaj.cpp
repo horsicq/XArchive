@@ -1,0 +1,398 @@
+/* Copyright (c) 2026 hors<horsicq@gmail.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+#include "xkwaj.h"
+
+static XBinary::XCONVERT _TABLE_XKWAJ_STRUCTID[] = {{XKWAJ::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
+                                                    {XKWAJ::STRUCTID_KWAJ_HEADER, "KWAJ_HEADER", QString("KWAJ_HEADER")}};
+
+XKWAJ::XKWAJ(QIODevice *pDevice) : XArchive(pDevice)
+{
+}
+
+bool XKWAJ::isValid(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    bool bResult = false;
+
+    if (getSize() >= (qint64)sizeof(KWAJ_HEADER)) {
+        // 4B 57 41 4A 88 F0 27 D1
+        if ((read_uint8(0) == 0x4B) && (read_uint8(1) == 0x57) && (read_uint8(2) == 0x41) && (read_uint8(3) == 0x4A) && (read_uint8(4) == 0x88) &&
+            (read_uint8(5) == 0xF0) && (read_uint8(6) == 0x27) && (read_uint8(7) == 0xD1)) {
+            bResult = true;
+        }
+    }
+
+    return bResult;
+}
+
+bool XKWAJ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    XKWAJ xkwaj(pDevice);
+
+    return xkwaj.isValid(pPdStruct);
+}
+
+XBinary::HANDLE_METHOD XKWAJ::_compTypeToMethod(quint16 nCompType)
+{
+    switch (nCompType) {
+        case COMP_TYPE_STORE: return HANDLE_METHOD_STORE;
+        case COMP_TYPE_XOR: return HANDLE_METHOD_KWAJ_XOR;
+        case COMP_TYPE_SZDD: return HANDLE_METHOD_LZSS_SZDD;
+        case COMP_TYPE_LZH: return HANDLE_METHOD_KWAJ_LZH;
+        case COMP_TYPE_MSZIP: return HANDLE_METHOD_DEFLATE;
+        default: return HANDLE_METHOD_UNKNOWN;
+    }
+}
+
+XBinary::FT XKWAJ::getFileType()
+{
+    return FT_KWAJ;
+}
+
+XBinary::MODE XKWAJ::getMode()
+{
+    return MODE_DATA;
+}
+
+QString XKWAJ::getMIMEString()
+{
+    return "application/x-ms-compress-kwaj";
+}
+
+qint32 XKWAJ::getType()
+{
+    return TYPE_ARCHIVE;
+}
+
+XBinary::ENDIAN XKWAJ::getEndian()
+{
+    return ENDIAN_LITTLE;
+}
+
+QString XKWAJ::getArch()
+{
+    return QString();
+}
+
+QString XKWAJ::getFileFormatExt()
+{
+    return "kwaj";
+}
+
+QString XKWAJ::getFileFormatExtsString()
+{
+    return "KWAJ (*.kwaj)";
+}
+
+qint64 XKWAJ::getFileFormatSize(PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+    return getSize();
+}
+
+XBinary::OSNAME XKWAJ::getOsName()
+{
+    return OSNAME_MSDOS;
+}
+
+QString XKWAJ::getVersion()
+{
+    return QString();
+}
+
+QList<XBinary::MAPMODE> XKWAJ::getMapModesList()
+{
+    return {MAPMODE_REGIONS};
+}
+
+XBinary::_MEMORY_MAP XKWAJ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(mapMode)
+    Q_UNUSED(pPdStruct)
+
+    _MEMORY_MAP result = {};
+    result.fileType = getFileType();
+    result.mode = getMode();
+    result.endian = getEndian();
+    result.sType = typeIdToString(getType());
+    result.sArch = getArch();
+    result.nBinarySize = getSize();
+
+    qint32 nIndex = 0;
+    qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
+
+    _MEMORY_RECORD recHeader = {};
+    recHeader.nAddress = -1;
+    recHeader.nOffset = 0;
+    recHeader.nSize = (nDataOffset > 0 && nDataOffset <= getSize()) ? nDataOffset : (qint64)sizeof(KWAJ_HEADER);
+    recHeader.nIndex = nIndex++;
+    recHeader.filePart = FILEPART_HEADER;
+    recHeader.sName = QString("KWAJ ") + tr("Header");
+    result.listRecords.append(recHeader);
+
+    if ((nDataOffset > 0) && (nDataOffset < getSize())) {
+        _MEMORY_RECORD recData = {};
+        recData.nAddress = -1;
+        recData.nOffset = nDataOffset;
+        recData.nSize = getSize() - nDataOffset;
+        recData.nIndex = nIndex++;
+        recData.filePart = FILEPART_REGION;
+        recData.sName = tr("Compressed Data");
+        result.listRecords.append(recData);
+    }
+
+    _handleOverlay(&result);
+
+    return result;
+}
+
+QString XKWAJ::structIDToString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XKWAJ_STRUCTID, sizeof(_TABLE_XKWAJ_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+QString XKWAJ::structIDToFtString(quint32 nID)
+{
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XKWAJ_STRUCTID, sizeof(_TABLE_XKWAJ_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+quint32 XKWAJ::ftStringToStructID(const QString &sFtString)
+{
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XKWAJ_STRUCTID, sizeof(_TABLE_XKWAJ_STRUCTID) / sizeof(XBinary::XCONVERT));
+}
+
+QList<XBinary::XFHEADER> XKWAJ::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
+{
+    QList<XBinary::XFHEADER> listResult;
+
+    quint32 nStructID = xfStruct.nStructID;
+
+    if (nStructID == STRUCTID_UNKNOWN) {
+        XFSTRUCT _xfStruct = xfStruct;
+        _xfStruct.nStructID = STRUCTID_KWAJ_HEADER;
+        _xfStruct.xLoc = offsetToLoc(0);
+        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    } else if (nStructID == STRUCTID_KWAJ_HEADER) {
+        XLOC headerLoc = xfStruct.xLoc;
+        if (headerLoc.locType == LT_UNKNOWN) {
+            headerLoc = offsetToLoc(0);
+        }
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_KWAJ_HEADER);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.nSize = sizeof(KWAJ_HEADER);
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_KWAJ_HEADER, headerLoc);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_KWAJ_HEADER), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+    }
+
+    return listResult;
+}
+
+QList<XBinary::XFRECORD> XKWAJ::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+{
+    Q_UNUSED(fileType)
+    Q_UNUSED(xLoc)
+
+    QList<XBinary::XFRECORD> listResult;
+
+    if (nStructID == STRUCTID_KWAJ_HEADER) {
+        listResult.append({"signature", (qint32)offsetof(KWAJ_HEADER, signature), 8, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"comp_type", (qint32)offsetof(KWAJ_HEADER, comp_type), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"data_offset", (qint32)offsetof(KWAJ_HEADER, data_offset), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"header_flags", (qint32)offsetof(KWAJ_HEADER, header_flags), 2, XFRECORD_FLAG_NONE, VT_UINT16});
+    }
+
+    return listResult;
+}
+
+QList<XBinary::FPART> XKWAJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(nLimit)
+    Q_UNUSED(pPdStruct)
+
+    QList<FPART> listResult;
+
+    qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
+    if ((nDataOffset <= 0) || (nDataOffset > getSize())) {
+        nDataOffset = sizeof(KWAJ_HEADER);
+    }
+
+    if (nFileParts & FILEPART_HEADER) {
+        FPART record = {};
+        record.filePart = FILEPART_HEADER;
+        record.nFileOffset = 0;
+        record.nFileSize = nDataOffset;
+        record.nVirtualAddress = -1;
+        record.sName = tr("Header");
+        listResult.append(record);
+    }
+
+    if ((nFileParts & FILEPART_REGION) && (nDataOffset < getSize())) {
+        FPART record = {};
+        record.filePart = FILEPART_REGION;
+        record.nFileOffset = nDataOffset;
+        record.nFileSize = getSize() - nDataOffset;
+        record.nVirtualAddress = -1;
+        record.sName = tr("Compressed Data");
+        listResult.append(record);
+    }
+
+    return listResult;
+}
+
+QList<QString> XKWAJ::getSearchSignatures()
+{
+    return {"'KWAJ'88F027D1"};
+}
+
+XBinary *XKWAJ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+{
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+
+    return new XKWAJ(pDevice);
+}
+
+bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(mapProperties)
+
+    if (!pState || !isValid(pPdStruct)) {
+        return false;
+    }
+
+    quint16 nCompType = read_uint16(offsetof(KWAJ_HEADER, comp_type));
+    qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
+    quint16 nHeaderFlags = read_uint16(offsetof(KWAJ_HEADER, header_flags));
+
+    if ((nDataOffset <= 0) || (nDataOffset > getSize())) {
+        return false;
+    }
+
+    KWAJ_UNPACK_CONTEXT *pContext = new KWAJ_UNPACK_CONTEXT;
+    pContext->nDataOffset = nDataOffset;
+    pContext->nDataSize = getSize() - nDataOffset;
+    pContext->compressMethod = _compTypeToMethod(nCompType);
+    pContext->nUncompressedSize = 0;
+
+    // Parse the optional header extension for the uncompressed length and filename.
+    qint64 nExtOffset = sizeof(KWAJ_HEADER);
+
+    if (nHeaderFlags & HDR_FLAG_HASLENGTH) {
+        pContext->nUncompressedSize = read_uint32(nExtOffset);
+        nExtOffset += 4;
+    }
+    if (nHeaderFlags & HDR_FLAG_HASUNKNOWN1) {
+        nExtOffset += 2;
+    }
+    if (nHeaderFlags & HDR_FLAG_HASUNKNOWN2) {
+        quint16 nLen = read_uint16(nExtOffset);
+        nExtOffset += 2 + nLen;
+    }
+
+    QString sName;
+    if (nHeaderFlags & HDR_FLAG_HASFILENAME) {
+        sName = read_ansiString(nExtOffset, 256);
+        nExtOffset += sName.length() + 1;
+    }
+    if (nHeaderFlags & HDR_FLAG_HASFILEEXT) {
+        QString sExt = read_ansiString(nExtOffset, 256);
+        if (!sExt.isEmpty()) {
+            sName += QString(".") + sExt;
+        }
+    }
+
+    if (sName.isEmpty()) {
+        sName = XBinary::getDeviceFileBaseName(getDevice());
+        if (sName.isEmpty()) {
+            sName = "kwaj_data";
+        }
+    }
+    pContext->sFileName = sName;
+
+    pState->pContext = pContext;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 1;
+    pState->nCurrentOffset = nDataOffset;
+    pState->nTotalSize = getSize();
+
+    return true;
+}
+
+XBinary::ARCHIVERECORD XKWAJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    ARCHIVERECORD result = {};
+
+    if (!pState || !pState->pContext || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+        return result;
+    }
+
+    KWAJ_UNPACK_CONTEXT *pContext = (KWAJ_UNPACK_CONTEXT *)pState->pContext;
+
+    result.nStreamOffset = pContext->nDataOffset;
+    result.nStreamSize = pContext->nDataSize;
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nDataSize);
+    if (pContext->nUncompressedSize > 0) {
+        result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+    }
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, pContext->compressMethod);
+
+    return result;
+}
+
+bool XKWAJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState || !pState->pContext) {
+        return false;
+    }
+
+    pState->nCurrentIndex++;
+
+    return false;
+}
+
+bool XKWAJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    if (pState->pContext) {
+        KWAJ_UNPACK_CONTEXT *pContext = (KWAJ_UNPACK_CONTEXT *)pState->pContext;
+        delete pContext;
+        pState->pContext = nullptr;
+    }
+
+    return true;
+}
