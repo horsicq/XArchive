@@ -28,13 +28,28 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
 {
     QList<XArchive::RECORD> listResult;
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
+    XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+    
+    XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
         listResult = pArchives->getRecords(nLimit, pPdStruct);
+    } else {
+        if (pBinary) {
+            delete pBinary; 
+        }
+
+        pBinary = XFormats::createClass(XBinary::FT_ZIP, pDevice);
+        pArchives = dynamic_cast<XArchive *>(pBinary);
+        
+        if (pArchives) {
+            listResult = pArchives->getRecords(nLimit, pPdStruct);
+        }
     }
 
-    delete pArchives;
+    if (pBinary) {
+        delete pBinary;
+    }
 
     return listResult;
 }
