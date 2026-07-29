@@ -813,7 +813,7 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
                 break;
             }
 
-            QString sSize = QString(header.fileSize);
+            QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
             sSize.resize(sizeof(header.fileSize));
             qint64 nFileSize = sSize.trimmed().toLongLong();
 
@@ -842,7 +842,7 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         FRECORD header = readFRECORD(pState->nCurrentOffset);
 
-        QString sSize = QString(header.fileSize);
+        QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
         sSize.resize(sizeof(header.fileSize));
         qint64 nFileSize = sSize.trimmed().toLongLong();
 
@@ -878,21 +878,21 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE);
 
         // Parse file mode (octal)
-        QString sMode = QString(header.fileMode);
+        QString sMode = QString::fromLatin1(header.fileMode, sizeof(header.fileMode)).trimmed();
         sMode.resize(sizeof(header.fileMode));
         sMode = sMode.trimmed();
         quint32 nMode = sMode.toUInt(nullptr, 8);
         result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, nMode);
 
         // Parse UID (decimal)
-        QString sUid = QString(header.ownerId);
+        QString sUid = QString::fromLatin1(header.ownerId, sizeof(header.ownerId)).trimmed();
         sUid.resize(sizeof(header.ownerId));
         sUid = sUid.trimmed();
         quint32 nUid = sUid.toUInt();
         result.mapProperties.insert(XBinary::FPART_PROP_UID, nUid);
 
         // Parse GID (decimal)
-        QString sGid = QString(header.groupId);
+        QString sGid = QString::fromLatin1(header.groupId, sizeof(header.groupId)).trimmed();
         sGid.resize(sizeof(header.groupId));
         sGid = sGid.trimmed();
         quint32 nGid = sGid.toUInt();
@@ -903,7 +903,7 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, result.nStreamSize);
 
         // Parse mtime (decimal)
-        QString sMTime = QString(header.fileMod);
+        QString sMTime = QString::fromLatin1(header.fileMod, sizeof(header.fileMod)).trimmed();
         sMTime.resize(sizeof(header.fileMod));
         sMTime = sMTime.trimmed();
         qint64 nMTime = sMTime.toLongLong();
@@ -923,7 +923,7 @@ bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         FRECORD header = readFRECORD(pState->nCurrentOffset);
 
-        QString sSize = QString(header.fileSize);
+        QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
         sSize.resize(sizeof(header.fileSize));
         qint64 nFileSize = sSize.trimmed().toLongLong();
 
