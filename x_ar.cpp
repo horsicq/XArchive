@@ -426,7 +426,7 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         FRECORD frecord = readFRECORD(nOffset);
 
-        QString sSize = QString(frecord.fileSize);
+        QString sSize = QString::fromLatin1(frecord.fileSize, sizeof(frecord.fileSize)).trimmed();
         sSize.resize(sizeof(frecord.fileSize));
         qint64 nRecordSize = sSize.trimmed().toLongLong();
         if (nRecordSize <= 0) break;
