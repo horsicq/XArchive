@@ -408,10 +408,15 @@ QList<XArchive::RECORD> XXZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     return list;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XXZ::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XXZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -420,6 +425,8 @@ bool XXZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
     }
 
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
+
         // Validate XZ file
         if (!isValid(pPdStruct)) {
             return false;
@@ -497,11 +504,6 @@ XBinary::ARCHIVERECORD XXZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruc
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZMA2);
-
-    if (pContext->nCRC32 != 0) {
-        result.mapProperties.insert(FPART_PROP_RESULTCRC, pContext->nCRC32);
-        result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_EDB88320);
-    }
 
     return result;
 }
@@ -596,4 +598,35 @@ XBinary *XXZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAdd
     Q_UNUSED(nModuleAddress)
 
     return new XXZ(pDevice);
+}
+
+bool XXZ::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XXZ::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XXZ::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

@@ -102,6 +102,12 @@ class XUDF : public XArchive {
 #pragma pack(pop)
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
@@ -155,6 +161,7 @@ public:
     // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
@@ -192,6 +199,8 @@ private:
 
     QString m_sVolumeIdentifier;
     QString m_sVolumeSetIdentifier;
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XUDF_H

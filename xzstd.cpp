@@ -336,10 +336,15 @@ XZstd::ZSTD_HEADER XZstd::_read_ZSTD_HEADER(qint64 nOffset)
     return result;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XZstd::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XZstd::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -348,6 +353,8 @@ bool XZstd::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
 
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
+
         if (!isValid(pPdStruct)) {
             return false;
         }
@@ -523,4 +530,35 @@ XBinary *XZstd::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
     Q_UNUSED(nModuleAddress)
 
     return new XZstd(pDevice);
+}
+
+bool XZstd::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XZstd::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XZstd::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

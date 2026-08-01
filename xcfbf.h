@@ -27,6 +27,12 @@ class XCFBF : public XArchive {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     struct StructuredStorageHeader {  // [offset from start (bytes), length (bytes)]
@@ -118,8 +124,10 @@ public:
     // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct);
 
     // Streaming unpacking API
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
@@ -129,10 +137,13 @@ private:
         qint64 nSectorSize;               // Sector size (512 or 4096)
         qint64 nMiniSectorSize;           // Mini-sector size (typically 64)
         quint64 nMiniCutoff;              // Mini-stream cutoff size (typically 4096)
+        quint16 nDllVersion;              // CFB major version (3 uses 32-bit stream sizes)
         qint64 nDirBaseOffset;            // Base offset of directory entries
         quint32 nRootStartSector;         // Root storage start sector ID
         quint64 nRootStreamSize;          // Root storage stream size
         QList<quint32> listFAT;           // Full FAT table (sector chain)
+        QList<quint32> listMiniFAT;       // Mini-sector chain table
+        QByteArray baRootMiniStream;      // Root mini-stream addressed by mini-sector ID
         QList<qint64> listRecordOffsets;  // Offsets to stream directory entries
     };
 
@@ -140,6 +151,8 @@ private:
     QByteArray _readStreamBySectorChain(const QList<quint32> &listFAT, quint32 nStartSector, qint64 nSectorSize, qint64 nStreamSize, PDSTRUCT *pPdStruct);
 
     static void _addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset, qint64 size, const QString &name);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XCFBF_H

@@ -325,10 +325,15 @@ XBZIP2::BZIP2_HEADER XBZIP2::_read_BZIP2_HEADER(qint64 nOffset)
     return result;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XBZIP2::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -337,6 +342,8 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     }
 
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
+
         if (!isValid(pPdStruct)) {
             return false;
         }
@@ -463,4 +470,35 @@ XBinary *XBZIP2::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModule
     Q_UNUSED(nModuleAddress)
 
     return new XBZIP2(pDevice);
+}
+
+bool XBZIP2::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XBZIP2::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XBZIP2::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

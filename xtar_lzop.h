@@ -27,6 +27,12 @@ class XTAR_LZOP : public XTARCOMPRESSED {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XTARCOMPRESSED::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     explicit XTAR_LZOP(QIODevice *pDevice = nullptr);
@@ -42,6 +48,8 @@ public:
 
 private:
     virtual QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XTAR_LZOP_H

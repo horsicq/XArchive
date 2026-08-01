@@ -30,6 +30,12 @@ class XAPK : public XJAR {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XJAR::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     enum TYPE {
         TYPE_UNKNOWN = 0,
         TYPE_PACKAGE,
@@ -65,6 +71,8 @@ public:
 
 private:
     qint64 findAPKSignBlockOffset(PDSTRUCT *pPdStruct = nullptr);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XAPK_H

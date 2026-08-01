@@ -319,10 +319,15 @@ QList<XBinary::FPART> XBrotli::getFileParts(quint32 nFileParts, qint32 nLimit, P
     return listResult;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XBrotli::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XBrotli::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -331,6 +336,8 @@ bool XBrotli::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     }
 
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
+
         if (!isValid(pPdStruct)) {
             return false;
         }
@@ -469,4 +476,35 @@ XBinary *XBrotli::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModul
     Q_UNUSED(nModuleAddress)
 
     return new XBrotli(pDevice);
+}
+
+bool XBrotli::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XBrotli::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XBrotli::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

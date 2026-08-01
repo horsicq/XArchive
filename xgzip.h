@@ -26,6 +26,12 @@
 class XGzip : public XArchive {
     Q_OBJECT
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum GZIP_TYPE {
@@ -78,6 +84,7 @@ public:
 
     // Streaming unpacking API
     virtual QList<PM_INFO> unpackImplemented() override;
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -93,8 +100,16 @@ private:
         qint64 nHeaderSize;        // Size of GZIP header (variable)
         qint64 nCompressedSize;    // Size of compressed data
         qint64 nUncompressedSize;  // Size of uncompressed data
+        quint32 nCRC32;            // CRC32 of uncompressed data from the footer
+        bool bFooterValid;         // True when the mandatory 8-byte footer is present
         QString sFileName;         // Original file name (if available)
     };
+
+    bool _getHeaderInfo(qint64 *pHeaderSize, QString *pFileName = nullptr);
+    bool _getFirstMemberInfo(GZIP_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct = nullptr);
+
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XGZIP_H

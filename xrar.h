@@ -31,6 +31,9 @@ class XRar : public XArchive {
     const quint16 RAR4_FILE_SALT = 0x0400;
     const quint16 RAR4_FILE_EXT_TIME = 0x1000;
     const quint16 RAR4_FILE_COMMENT = 0x0008;
+    const quint16 RAR4_FILE_PASSWORD = 0x0004;
+    const quint16 RAR4_ARCHIVE_PASSWORD = 0x0080;
+    const quint16 RAR4_LONG_BLOCK = 0x8000;
 
     const quint8 RAR_OS_MSDOS = 0;  // MS-DOS
     const quint8 RAR_OS_OS2 = 1;    // OS/2
@@ -115,7 +118,7 @@ class XRar : public XArchive {
         quint8 nFlags;       // Archive flags (bit 0x08 = solid)
         quint32 nPackSize;   // Packed file size (LE)
         quint32 nUnpSize;    // Unpacked file size (LE)
-        quint16 nFileCRC16;  // CRC16 of unpacked file data
+        quint16 nFileCRC16;  // RAR 1.4 rotate/add checksum of unpacked file data
         quint32 nFileTime;   // DOS date/time
         quint16 nFileAttr;   // File attributes
         quint8 nNameLen;     // Filename length
@@ -128,6 +131,7 @@ class XRar : public XArchive {
         qint32 nVersion;                      // RAR version (1, 4, or 5)
         bool bArchiveIsSolid;                 // Archive-level solid flag
         bool bHeadersEncrypted;               // True if archive has encrypted headers (RAR5)
+        qint64 nArchiveEnd;                   // Exact logical end when it can be determined
         QList<qint64> listFileOffsets;        // Offsets of file headers
         QList<FILEBLOCK14> listFileBlocks14;  // Cache of RAR 1.4 file blocks
         QList<FILEBLOCK4> listFileBlocks4;    // Cache of RAR 4.x file blocks
@@ -158,6 +162,12 @@ class XRar : public XArchive {
     };
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
@@ -175,6 +185,7 @@ public:
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getVersion() override;
+    virtual bool isEncrypted() override;
     virtual bool isCommentPresent() override;
     virtual QString getComment() override;
 
@@ -206,14 +217,21 @@ public:
 
     // Streaming Unpacking API
     virtual QList<PM_INFO> unpackImplemented() override;
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual XBinary::ARCHIVERECORD infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
     virtual bool unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutputDevice, PDSTRUCT *pPdStruct) override;
     virtual bool moveToNext(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
+    virtual bool finishUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
 private:
     qint32 getInternVersion(PDSTRUCT *pPdStruct);
+    bool readVIntBounded(qint64 *pOffset, qint64 nEndOffset, qint32 nMaxBytes, quint64 *pValue);
+    bool isRangeValid(qint64 nOffset, quint64 nSize);
+    bool isHeaderCRCValid4(qint64 nOffset, qint64 nHeaderSize, quint16 nExpectedCRC);
+    bool isHeaderCRCValid5(qint64 nOffset, qint64 nHeaderSize, quint32 nExpectedCRC);
+    bool isMainOrEndHeader5Valid(qint64 nOffset, const GENERICHEADER5 &genericHeader);
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
     GENERICBLOCK4 readGenericBlock4(qint64 nOffset);
     FILEBLOCK14 readFileBlock14(qint64 nOffset);
@@ -232,6 +250,8 @@ private:
     // Helper functions for packing
     QByteArray createFileBlock4(const QString &sFileName, qint64 nFileSize, quint32 nFileCRC, quint32 nFileTime, quint32 nAttributes);
     quint16 calculateCRC16(const QByteArray &data);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XRAR_H

@@ -150,10 +150,15 @@ XBinary::MODE XACE::getMode()
     return MODE_DATA;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XACE::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -163,6 +168,7 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
         pState->nCurrentOffset = 0;
         pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
@@ -282,7 +288,7 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nCompSize);
         result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nCRC32 ^ 0xFFFFFFFF);
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : XBinary::CRC_TYPE_UNKNOWN);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nCompType);
 
         // Encrypted flag
@@ -903,4 +909,35 @@ XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
     Q_UNUSED(nModuleAddress)
 
     return new XACE(pDevice);
+}
+
+bool XACE::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XACE::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XACE::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

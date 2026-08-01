@@ -21,6 +21,32 @@
 #include "xgzip.h"
 #include "Algos/xdeflatedecoder.h"
 
+namespace {
+class GzipDiscardDevice : public QIODevice {
+public:
+    bool isSequential() const override
+    {
+        return true;
+    }
+
+protected:
+    qint64 readData(char *pData, qint64 nMaxSize) override
+    {
+        Q_UNUSED(pData)
+        Q_UNUSED(nMaxSize)
+
+        return -1;
+    }
+
+    qint64 writeData(const char *pData, qint64 nMaxSize) override
+    {
+        Q_UNUSED(pData)
+
+        return nMaxSize;
+    }
+};
+}  // namespace
+
 XBinary::XCONVERT _TABLE_XGZIP_STRUCTID[] = {{XGzip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                              {XGzip::STRUCTID_GZIP_HEADER, "GZIP_HEADER", QString("GZIP header")},
                                              {XGzip::STRUCTID_STREAM, "STREAM", QString("Stream")}};
@@ -48,16 +74,10 @@ XGzip::~XGzip()
 
 bool XGzip::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    Q_UNUSED(pPdStruct)
 
-    qint64 nTotalSize = getSize();
-
-    if (nTotalSize > (qint64)sizeof(GZIP_HEADER)) {
-        _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
-        if (compareSignature(&memoryMap, "1F8B08", 0, pPdStruct)) {
-            bResult = true;
-        }
-    }
+    qint64 nHeaderSize = 0;
+    bool bResult = _getHeaderInfo(&nHeaderSize);
 
     return bResult;
 }
@@ -66,7 +86,7 @@ bool XGzip::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XGzip xgzip(pDevice);
 
-    return xgzip.isValid();
+    return xgzip.isValid(pPdStruct);
 }
 
 qint64 XGzip::getFileFormatSize(PDSTRUCT *pPdStruct)
@@ -100,18 +120,9 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     _MEMORY_RECORD memoryRecord = {};
     _MEMORY_RECORD memoryRecordFooter = {};
 
-    qint64 nOffset = getHeaderSize();
-
-    GZIP_HEADER gzipHeader = {};
-
-    read_array(0, (char *)&gzipHeader, sizeof(GZIP_HEADER));
-
-    HANDLE_METHOD cm = HANDLE_METHOD_DEFLATE;
-
-    if (gzipHeader.nCompressionMethod == 8)  // TODO consts
-    {
-        cm = HANDLE_METHOD_DEFLATE;  // TODO more
-    }
+    GZIP_UNPACK_CONTEXT context = {};
+    const bool bMemberInfo = _getFirstMemberInfo(&context, pPdStruct);
+    const qint64 nOffset = bMemberInfo ? context.nHeaderSize : getHeaderSize();
 
     memoryRecordHeader.nOffset = 0;
     memoryRecordHeader.nAddress = -1;
@@ -121,41 +132,23 @@ XBinary::_MEMORY_MAP XGzip::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     result.listRecords.append(memoryRecordHeader);
 
-    SubDevice sd(getDevice(), nOffset, getSize() - nOffset);
-
-    if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, cm);
-        state.pDeviceInput = &sd;
-        state.pDeviceOutput = nullptr;
-        state.nInputOffset = 0;
-        state.nInputLimit = getSize() - nOffset;
-        state.nProcessedOffset = 0;
-        state.nProcessedLimit = -1;
-
-        bool bResult = XDeflateDecoder::decompress(&state, pPdStruct);
-
-        Q_UNUSED(bResult)
-
-        memoryRecord.nOffset = nOffset;
-        memoryRecord.nAddress = -1;
-        memoryRecord.nSize = state.nCountInput;
-        memoryRecord.filePart = FILEPART_REGION;
-
-        sd.close();
-    }
-
-    // TODO
+    memoryRecord.nOffset = nOffset;
+    memoryRecord.nAddress = -1;
+    memoryRecord.nSize = bMemberInfo ? context.nCompressedSize : 0;
+    memoryRecord.sName = tr("Stream");
+    memoryRecord.filePart = FILEPART_REGION;
 
     result.listRecords.append(memoryRecord);
 
-    memoryRecordFooter.nOffset = memoryRecord.nOffset + memoryRecord.nSize;
-    memoryRecordFooter.nAddress = -1;
-    memoryRecordFooter.nSize = 8;
-    memoryRecordFooter.sName = tr("Footer");
-    memoryRecordFooter.filePart = FILEPART_FOOTER;
+    if (bMemberInfo && context.bFooterValid) {
+        memoryRecordFooter.nOffset = memoryRecord.nOffset + memoryRecord.nSize;
+        memoryRecordFooter.nAddress = -1;
+        memoryRecordFooter.nSize = 8;
+        memoryRecordFooter.sName = tr("Footer");
+        memoryRecordFooter.filePart = FILEPART_FOOTER;
 
-    result.listRecords.append(memoryRecordFooter);
+        result.listRecords.append(memoryRecordFooter);
+    }
 
     _handleOverlay(&result);
 
@@ -191,15 +184,12 @@ QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     const qint64 fileSize = getSize();
     if (fileSize <= 0) return listResult;
 
-    qint64 nOffset = 0;
-    GZIP_HEADER gzipHeader = {};
-    if (isOffsetValid(0 + (qint64)sizeof(GZIP_HEADER) - 1)) {
-        read_array(nOffset, (char *)&gzipHeader, sizeof(GZIP_HEADER));
-    }
+    GZIP_UNPACK_CONTEXT context = {};
+    const bool bMemberInfo = _getFirstMemberInfo(&context, pPdStruct);
+    const qint64 headerSize = bMemberInfo ? context.nHeaderSize : getHeaderSize();
 
     // Header
     if (nFileParts & FILEPART_HEADER) {
-        qint64 headerSize = getHeaderSize();
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
@@ -211,10 +201,8 @@ QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 
     // Region: compressed stream payload (best-effort)
     if (nFileParts & FILEPART_REGION) {
-        qint64 payloadOffset = getHeaderSize();
-        qint64 payloadSize = qMax<qint64>(0, fileSize - payloadOffset);
-        // Exclude the standard 8-byte footer (CRC32 + ISIZE) if present
-        if (payloadSize >= 8) payloadSize -= 8;
+        const qint64 payloadOffset = headerSize;
+        const qint64 payloadSize = bMemberInfo ? context.nCompressedSize : 0;
 
         FPART region = {};
         region.filePart = FILEPART_REGION;
@@ -227,10 +215,10 @@ QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 
     // Footer
     if (nFileParts & FILEPART_FOOTER) {
-        if (fileSize >= 8) {
+        if (bMemberInfo && context.bFooterValid) {
             FPART footer = {};
             footer.filePart = FILEPART_FOOTER;
-            footer.nFileOffset = fileSize - 8;
+            footer.nFileOffset = context.nHeaderSize + context.nCompressedSize;
             footer.nFileSize = 8;
             footer.nVirtualAddress = -1;
             footer.sName = tr("Footer");
@@ -249,7 +237,6 @@ QList<XBinary::FPART> XGzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         listResult.append(data);
     }
 
-    Q_UNUSED(pPdStruct)
     return listResult;
 }
 
@@ -410,17 +397,204 @@ XGzip::GZIP_HEADER XGzip::_read_GZIP_HEADER(qint64 nOffset)
 
 qint64 XGzip::getHeaderSize()
 {
-    qint64 nOffset = 0;
-    GZIP_HEADER gzipHeader = _read_GZIP_HEADER(nOffset);
-    nOffset += sizeof(GZIP_HEADER);
+    qint64 nResult = 0;
 
-    // Check for optional filename
-    if (gzipHeader.nFileFlags & 8) {
-        QString sFileName = read_ansiString(nOffset);
-        nOffset += sFileName.size() + 1;
+    _getHeaderInfo(&nResult);
+
+    return nResult;
+}
+
+bool XGzip::_getHeaderInfo(qint64 *pHeaderSize, QString *pFileName)
+{
+    const qint64 nFixedHeaderSize = (qint64)sizeof(GZIP_HEADER);
+    const qint64 nFooterSize = 8;
+    const qint64 nFileSize = getSize();
+
+    if (pHeaderSize) {
+        *pHeaderSize = 0;
     }
 
-    return nOffset;
+    if (pFileName) {
+        pFileName->clear();
+    }
+
+    if (nFileSize < (nFixedHeaderSize + nFooterSize)) {
+        return false;
+    }
+
+    QByteArray baHeader = read_array(0, nFixedHeaderSize);
+
+    if (baHeader.size() != nFixedHeaderSize) {
+        return false;
+    }
+
+    const quint8 nID1 = (quint8)baHeader.at(0);
+    const quint8 nID2 = (quint8)baHeader.at(1);
+    const quint8 nCompressionMethod = (quint8)baHeader.at(2);
+    const quint8 nFlags = (quint8)baHeader.at(3);
+
+    // Bits 5..7 are reserved by RFC 1952 and must be zero.
+    if ((nID1 != 0x1f) || (nID2 != 0x8b) || (nCompressionMethod != 8) || (nFlags & 0xe0)) {
+        return false;
+    }
+
+    qint64 nOffset = nFixedHeaderSize;
+    const qint64 nHeaderLimit = nFileSize - nFooterSize;
+
+    auto hasHeaderBytes = [&nOffset, nHeaderLimit](qint64 nSize) -> bool {
+        return (nSize >= 0) && (nOffset >= 0) && (nOffset <= nHeaderLimit) && (nSize <= (nHeaderLimit - nOffset));
+    };
+
+    auto readZeroTerminatedField = [this, &nOffset, nHeaderLimit](QString *pValue) -> bool {
+        QByteArray baValue;
+        const qint32 nMaxStoredStringSize = 0x10000;
+
+        while (nOffset < nHeaderLimit) {
+            const qint64 nChunkSize = qMin<qint64>(0x1000, nHeaderLimit - nOffset);
+            QByteArray baChunk = read_array(nOffset, nChunkSize);
+
+            if (baChunk.size() != nChunkSize) {
+                return false;
+            }
+
+            const qint32 nTerminatorIndex = baChunk.indexOf('\0');
+            const qint32 nValueSize = (nTerminatorIndex == -1) ? baChunk.size() : nTerminatorIndex;
+
+            if (pValue && (baValue.size() < nMaxStoredStringSize)) {
+                const qint32 nCopySize = qMin(nValueSize, nMaxStoredStringSize - baValue.size());
+
+                if (nCopySize > 0) {
+                    baValue.append(baChunk.constData(), nCopySize);
+                }
+            }
+
+            nOffset += nValueSize;
+
+            if (nTerminatorIndex != -1) {
+                nOffset++;  // Include the terminating zero byte.
+
+                if (pValue) {
+                    *pValue = QString::fromLatin1(baValue);
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    // FEXTRA: two-byte little-endian XLEN followed by XLEN bytes.
+    if (nFlags & 0x04) {
+        if (!hasHeaderBytes(2)) {
+            return false;
+        }
+
+        QByteArray baLength = read_array(nOffset, 2);
+
+        if (baLength.size() != 2) {
+            return false;
+        }
+
+        const quint16 nExtraLength = (quint16)(quint8)baLength.at(0) | ((quint16)(quint8)baLength.at(1) << 8);
+        nOffset += 2;
+
+        if (!hasHeaderBytes(nExtraLength)) {
+            return false;
+        }
+
+        nOffset += nExtraLength;
+    }
+
+    // FNAME and FCOMMENT are zero-terminated ISO-8859-1 byte strings.
+    if ((nFlags & 0x08) && !readZeroTerminatedField(pFileName)) {
+        return false;
+    }
+
+    if ((nFlags & 0x10) && !readZeroTerminatedField(nullptr)) {
+        return false;
+    }
+
+    // FHCRC is the low 16 bits of the CRC32 of all preceding header bytes.
+    if (nFlags & 0x02) {
+        if (!hasHeaderBytes(2)) {
+            return false;
+        }
+
+        nOffset += 2;
+    }
+
+    if (pHeaderSize) {
+        *pHeaderSize = nOffset;
+    }
+
+    return true;
+}
+
+bool XGzip::_getFirstMemberInfo(GZIP_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct)
+{
+    if (!pContext) {
+        return false;
+    }
+
+    *pContext = GZIP_UNPACK_CONTEXT();
+
+    if (!_getHeaderInfo(&pContext->nHeaderSize, &pContext->sFileName)) {
+        return false;
+    }
+
+    if (pContext->sFileName.isEmpty()) {
+        pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+    }
+
+    const qint64 nFileSize = getSize();
+    const qint64 nRemainingSize = nFileSize - pContext->nHeaderSize;
+
+    if (nRemainingSize <= 0) {
+        return false;
+    }
+
+    SubDevice sd(getDevice(), pContext->nHeaderSize, nRemainingSize);
+    GzipDiscardDevice discardDevice;
+
+    if (!sd.open(QIODevice::ReadOnly) || !discardDevice.open(QIODevice::WriteOnly)) {
+        return false;
+    }
+
+    XBinary::DATAPROCESS_STATE state = {};
+    state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
+    state.pDeviceInput = &sd;
+    state.pDeviceOutput = &discardDevice;
+    state.nInputOffset = 0;
+    state.nInputLimit = nRemainingSize;
+    state.nProcessedOffset = 0;
+    state.nProcessedLimit = -1;
+
+    const bool bDecoded = XDeflateDecoder::decompress(&state, pPdStruct);
+
+    discardDevice.close();
+    sd.close();
+
+    if (!bDecoded || (state.nCountInput <= 0) || (state.nCountInput > nRemainingSize) || (state.nCountOutput < 0)) {
+        return false;
+    }
+
+    pContext->nCompressedSize = state.nCountInput;
+    pContext->nUncompressedSize = state.nCountOutput;
+
+    const qint64 nFooterOffset = pContext->nHeaderSize + pContext->nCompressedSize;
+
+    if ((nFooterOffset >= pContext->nHeaderSize) && (nFooterOffset <= (nFileSize - 8))) {
+        QByteArray baFooter = read_array(nFooterOffset, 8);
+
+        if (baFooter.size() == 8) {
+            pContext->nCRC32 = (quint32)(quint8)baFooter.at(0) | ((quint32)(quint8)baFooter.at(1) << 8) | ((quint32)(quint8)baFooter.at(2) << 16) |
+                               ((quint32)(quint8)baFooter.at(3) << 24);
+            pContext->bFooterValid = true;
+        }
+    }
+
+    return true;
 }
 
 QList<XBinary::PM_INFO> XGzip::unpackImplemented()
@@ -432,10 +606,15 @@ QList<XBinary::PM_INFO> XGzip::unpackImplemented()
     return listResult;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XGzip::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -449,57 +628,11 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             return false;
         }
 
-        // Create and initialize context
         GZIP_UNPACK_CONTEXT *pContext = new GZIP_UNPACK_CONTEXT();
 
-        // Get header size
-        pContext->nHeaderSize = getHeaderSize();
-
-        // Read header to get metadata
-        GZIP_HEADER gzipHeader = _read_GZIP_HEADER(0);
-
-        // Check for optional filename
-        if (gzipHeader.nFileFlags & 8) {
-            pContext->sFileName = read_ansiString(sizeof(GZIP_HEADER));
-        } else {
-            pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
-        }
-
-        // Decompress to get sizes; XDeflateDecoder::decompress requires non-null pDeviceOutput,
-        // so we use a temporary QBuffer as a counting sink.
-        qint64 nFileSize = getSize();
-        SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
-
-        if (sd.open(QIODevice::ReadOnly)) {
-            QBuffer countBuf;
-
-            if (countBuf.open(QIODevice::WriteOnly)) {
-                XBinary::DATAPROCESS_STATE state = {};
-                state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
-                state.pDeviceInput = &sd;
-                state.pDeviceOutput = &countBuf;
-                state.nInputOffset = 0;
-                state.nInputLimit = -1;
-                state.nProcessedOffset = 0;
-                state.nProcessedLimit = -1;
-
-                bool bDecompressOk = XDeflateDecoder::decompress(&state, pPdStruct);
-
-                if (bDecompressOk) {
-                    pContext->nCompressedSize = state.nCountInput;
-                    pContext->nUncompressedSize = countBuf.size();
-                } else {
-                    pContext->nCompressedSize = nFileSize - (pContext->nHeaderSize);
-                    pContext->nUncompressedSize = 0;
-                }
-
-                countBuf.close();
-            } else {
-                pContext->nCompressedSize = nFileSize - (pContext->nHeaderSize);
-                pContext->nUncompressedSize = 0;
-            }
-
-            sd.close();
+        if (!_getFirstMemberInfo(pContext, pPdStruct)) {
+            delete pContext;
+            return false;
         }
 
         // Initialize state
@@ -507,6 +640,7 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = 1;  // GZIP contains single compressed stream
+        pState->mapUnpackProperties = mapProperties;
         pState->pContext = pContext;
 
         bResult = true;
@@ -542,6 +676,11 @@ XBinary::ARCHIVERECORD XGzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
+
+    if (pContext->bFooterValid) {
+        result.mapProperties.insert(FPART_PROP_RESULTCRC, pContext->nCRC32);
+        result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
+    }
 
     return result;
 }
@@ -619,4 +758,35 @@ XBinary *XGzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
     Q_UNUSED(nModuleAddress)
 
     return new XGzip(pDevice);
+}
+
+bool XGzip::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XGzip::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XGzip::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

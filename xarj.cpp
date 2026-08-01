@@ -470,6 +470,45 @@ XBinary::MODE XARJ::getMode()
     return MODE_DATA;
 }
 
+bool XARJ::isEncrypted()
+{
+    qint64 nCurrentOffset = firstFileRecordOffset(this);
+    qint64 nFileSize = getSize();
+
+    while (nCurrentOffset < nFileSize) {
+        ARJ_ENTRY_INFO info = {};
+
+        if (!readEntryInfo(this, nCurrentOffset, &info) || info.bEndOfArchive) {
+            break;
+        }
+
+        if (info.nFlags & ARJ_FLAG_GARBLE) {
+            return true;
+        }
+
+        qint64 nNextOffset = entryEndOffset(info);
+
+        if (nNextOffset <= nCurrentOffset) {
+            break;
+        }
+
+        nCurrentOffset = nNextOffset;
+    }
+
+    return false;
+}
+
+QMap<XBinary::UNPACK_PROP, QVariant> XARJ::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    if (isEncrypted()) {
+        result.insert(XBinary::UNPACK_PROP_PASSWORD, QString());
+    }
+
+    return result;
+}
+
 bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
@@ -522,7 +561,7 @@ XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)info.nOriginalSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)info.nCompressedSize);
         result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, info.nCRC32);
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, info.nCRC32 != 0 ? XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF : XBinary::CRC_TYPE_UNKNOWN);
+        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)info.nMethod);
 
         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, handleMethodForArjMethod(info.nMethod));
@@ -790,4 +829,35 @@ XBinary *XARJ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
     Q_UNUSED(nModuleAddress)
 
     return new XARJ(pDevice);
+}
+
+bool XARJ::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XARJ::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XARJ::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

@@ -20,6 +20,8 @@
  */
 #include "xrardecoder.h"
 
+#include <limits>
+
 #define STARTL1 2
 static uint DecL1[] = {0x8000, 0xa000, 0xc000, 0xd000, 0xe000, 0xea00, 0xee00, 0xf000, 0xf200, 0xf200, 0xffff};
 static uint PosL1[] = {0, 0, 0, 2, 3, 5, 7, 11, 16, 20, 24, 32, 32};
@@ -54,7 +56,9 @@ static uint PosHf4[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0};
 static const int MAX_O = 64; /* maximum allowed model order */
 const uint TOP = 1 << 24, BOT = 1 << 15;
 
-static const uint UNIT_SIZE = qMax(sizeof(RARPPM_CONTEXT), sizeof(RARPPM_MEM_BLK));
+static_assert(sizeof(RARPPM_CONTEXT) <= std::numeric_limits<uint>::max(), "RAR PPM context size does not fit in uint");
+static_assert(sizeof(RARPPM_MEM_BLK) <= std::numeric_limits<uint>::max(), "RAR PPM memory block size does not fit in uint");
+static const uint UNIT_SIZE = static_cast<uint>(qMax(sizeof(RARPPM_CONTEXT), sizeof(RARPPM_MEM_BLK)));
 static const uint FIXED_UNIT_SIZE = 12;
 
 static uint crc_tables[16][256];  // Tables for Slicing-by-16.

@@ -165,10 +165,15 @@ XBinary::MODE XLHA::getMode()
     return MODE_DATA;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XLHA::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -178,6 +183,7 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
         pState->nCurrentOffset = 0;
         pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
@@ -260,6 +266,16 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nCompressedSize);
+
+        // Level 0/1 place the data CRC after the filename; level 2 keeps it
+        // in the fixed header. Expose LHA's stored CRC-16 independently from
+        // the SEA ARC-specific option, although both use the same polynomial.
+        qint64 nCRCOffset = pState->nCurrentOffset + ((nLevel == 2) ? 21 : (22 + read_uint8(pState->nCurrentOffset + 21)));
+
+        if ((nCRCOffset + 2) <= (pState->nCurrentOffset + nHeaderSize)) {
+            result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, (quint32)read_uint16(nCRCOffset, false));
+            result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_CRC16);
+        }
     }
 
     return result;
@@ -680,4 +696,35 @@ XBinary *XLHA::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
     Q_UNUSED(nModuleAddress)
 
     return new XLHA(pDevice);
+}
+
+bool XLHA::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XLHA::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XLHA::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

@@ -447,13 +447,20 @@ XBinary *XXAR::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
     return new XXAR(pDevice);
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XXAR::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XXAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     if (!pState || !isValid(pPdStruct)) {
         return false;
     }
+
+    pState->mapUnpackProperties = mapProperties;
 
     QByteArray baTOC = _readTOC(pPdStruct);
     if (baTOC.isEmpty()) {
@@ -536,4 +543,35 @@ bool XXAR::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return true;
+}
+
+bool XXAR::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XXAR::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XXAR::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

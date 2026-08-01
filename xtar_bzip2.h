@@ -27,6 +27,12 @@ class XTAR_BZIP2 : public XTARCOMPRESSED {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XTARCOMPRESSED::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     QList<QString> getSearchSignatures() override;
     XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     explicit XTAR_BZIP2(QIODevice *pDevice = nullptr);
@@ -41,6 +47,8 @@ public:
 
 private:
     QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XTAR_BZIP2_H

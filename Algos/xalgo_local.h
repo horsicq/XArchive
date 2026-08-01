@@ -4914,6 +4914,9 @@ void X_Ppmd8_Free(CPpmd8 *p, ISzAllocPtr alloc);
 void X_Ppmd8_Init(CPpmd8 *p, unsigned maxOrder, unsigned restoreMethod);
 BoolInt X_Ppmd8_Init_RangeDec(CPpmd8 *p);
 int X_Ppmd8_DecodeSymbol(CPpmd8 *p);
+void X_Ppmd8g_Init(CPpmd8 *p, unsigned maxOrder, unsigned restoreMethod);
+void X_Ppmd8g_LightweightReset(CPpmd8 *p);
+int X_Ppmd8g_DecodeSymbol(CPpmd8 *p);
 
 int z_deflateInit2_(z_streamp strm, int level, int method, int windowBits, int memLevel, int strategy, const char *version, int stream_size);
 int z_deflate(z_streamp strm, int flush);

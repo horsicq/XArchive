@@ -27,6 +27,12 @@ class XLZ4 : public XArchive {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     enum LZ4_TYPE {
         TYPE_UNKNOWN = 0,
         TYPE_LZ4
@@ -73,6 +79,8 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XLZ4_H

@@ -145,15 +145,22 @@ XBinary::MODE XFREEARC::getMode()
     return MODE_DATA;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XFREEARC::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XFREEARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
     Q_UNUSED(pPdStruct)
 
     // TODO: FreeARC unpacking requires parsing the directory block,
     // which is itself compressed (typically with LZMA).
     // For now, return false to indicate unpacking is not yet supported.
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
         pState->nCurrentOffset = 0;
         pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
@@ -565,4 +572,35 @@ XBinary *XFREEARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
     Q_UNUSED(nModuleAddress)
 
     return new XFREEARC(pDevice);
+}
+
+bool XFREEARC::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XFREEARC::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XFREEARC::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

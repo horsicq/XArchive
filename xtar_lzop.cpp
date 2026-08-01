@@ -103,3 +103,34 @@ XBinary *XTAR_LZOP::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
     return new XTAR_LZOP(pDevice);
 }
+
+bool XTAR_LZOP::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XTARCOMPRESSED::handleInternalInfo(pPdStruct);
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(XTARCOMPRESSED::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XTAR_LZOP::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XTAR_LZOP::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XTARCOMPRESSED::setInternalInfo(static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XTARCOMPRESSED::setInternalInfo(nullptr);
+    }
+}

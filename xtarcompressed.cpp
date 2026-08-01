@@ -142,8 +142,19 @@ XArchive *XTARCOMPRESSED::getCompressionClassInstance(COMPRESSION_TYPE compressi
     return pResult;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XTARCOMPRESSED::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XTAR::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    if (pState) {
+        pState->mapUnpackProperties = mapProperties;
+    }
+
     if (m_compressionType == COMPRESSION_UNKNOWN) {
         m_compressionType = detectCompressionType(getDevice());
     }
@@ -299,4 +310,35 @@ QIODevice *XTARCOMPRESSED::createMemoryBuffer(const QByteArray &baData)
     }
 
     return pBuffer;
+}
+
+bool XTARCOMPRESSED::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XTAR::handleInternalInfo(pPdStruct);
+        static_cast<XTAR::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XTAR::INTERNAL_INFO *>(XTAR::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XTARCOMPRESSED::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XTARCOMPRESSED::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XTAR::setInternalInfo(static_cast<XTAR::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XTAR::setInternalInfo(nullptr);
+    }
 }

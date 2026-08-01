@@ -27,6 +27,12 @@ class XMiniDump : public XArchive {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     QList<QString> getSearchSignatures() override;
     XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     /*!
@@ -267,6 +273,7 @@ public:
     QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Streaming unpacking API
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
@@ -295,6 +302,8 @@ private:
         QList<qint64> listStreamOffsets;            // Pre-computed offsets for each stream
         QList<MINIDUMP_DIRECTORY> listDirectories;  // Cached directory entries
     };
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XMINIDUMP_H

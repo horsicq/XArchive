@@ -91,3 +91,34 @@ XBinary::FT XAPKS::getFileType()
 {
     return FT_APKS;
 }
+
+bool XAPKS::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XAPK::handleInternalInfo(pPdStruct);
+        static_cast<XAPK::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XAPK::INTERNAL_INFO *>(XAPK::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XAPKS::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XAPKS::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XAPK::setInternalInfo(static_cast<XAPK::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XAPK::setInternalInfo(nullptr);
+    }
+}

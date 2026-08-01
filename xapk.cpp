@@ -286,3 +286,34 @@ qint64 XAPK::findAPKSignBlockOffset(PDSTRUCT *pPdStruct)
 
     return nResult;
 }
+
+bool XAPK::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XJAR::handleInternalInfo(pPdStruct);
+        static_cast<XJAR::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XJAR::INTERNAL_INFO *>(XJAR::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XAPK::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XAPK::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XJAR::setInternalInfo(static_cast<XJAR::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XJAR::setInternalInfo(nullptr);
+    }
+}

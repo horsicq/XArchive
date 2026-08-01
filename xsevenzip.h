@@ -39,6 +39,12 @@ class XSevenZip : public XArchive {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
@@ -97,6 +103,7 @@ public:
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getVersion();
+    virtual bool isEncrypted() override;
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct);
     virtual QString getFileFormatExt();
     virtual QString getFileFormatExtsString();
@@ -130,6 +137,7 @@ public:
 
     // Streaming unpacking API
     virtual QList<PM_INFO> unpackImplemented() override;
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -215,6 +223,7 @@ private:
         qint64 nOffset;
         qint64 nSize;
         quint32 nCRC;
+        bool bCRCDefined;
         // QList<qint64> listSubSreamSizes;
         // QList<quint32> listSubSreamCRC;
     };
@@ -222,6 +231,7 @@ private:
     struct SZOUTSTREAM {
         qint64 nSize;
         quint32 nCRC;
+        bool bCRCDefined;
     };
 
     struct SZFOLDER {
@@ -235,8 +245,10 @@ private:
         qint64 nCurrentOffset;
         qint64 nSize;
         bool bIsError;
+        bool bIsEncrypted;
         QString sErrorString;
         qint64 nStreamsBegin;
+        qint64 nMaximumPackStreamEnd;
         quint64 nNumberOfFolders;  // Track folder count for SubStreamsInfo
         quint64 nNumberOfFiles;    // Track file count from FilesInfo (including extended count)
         quint64 nNumberOfCoders;
@@ -257,6 +269,7 @@ private:
         QList<quint64> listNumUnpackedStreams;  // per-folder file count (from SubStreamsInfo)
         QList<qint64> listFileSizes;            // per-file unpacked sizes (from SubStreamsInfo)
         QList<quint32> listFileCRC;             // per-file CRC32 values (from SubStreamsInfo)
+        QList<bool> listFileCRCDefined;         // true when the corresponding per-file digest is present
     };
 
     void _printRecords(QList<SZRECORD> *pListRecords);
@@ -267,12 +280,17 @@ private:
     quint32 _handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
     QByteArray _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
 
+    bool _loadValidatedNextHeader(QByteArray *pData, qint64 *pNextHeaderOffset, PDSTRUCT *pPdStruct);
+    bool _validateEncodedHeader(SZSTATE *pState, qint64 nPackDataLimit);
+    bool _validateParsedHeader(SZSTATE *pState, qint64 nPackDataLimit, PDSTRUCT *pPdStruct);
     bool decompressHeader(const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, QIODevice *pDeviceOut, SZSTATE *pState, PDSTRUCT *pPdStruct);
 
     // Decode per-file time (8-byte FILETIME) or attrib (4-byte UINT32) from a 7-zip packed array.
     // Format: AllAreDefined[1] + optional bitmap[ceil(n/8)] + values.
     static bool _decode7zTimeValue(const QByteArray &baData, qint32 nNumFiles, qint32 nFileIndex, quint64 *pResult);
     static bool _decode7zAttribValue(const QByteArray &baData, qint32 nNumFiles, qint32 nFileIndex, quint32 *pResult);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XSEVENZIP_H

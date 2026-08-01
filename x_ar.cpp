@@ -335,18 +335,15 @@ quint64 X_Ar::_getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct)
             break;
         }
 
-        QString sSize = QString(frecord.fileSize);
-        sSize.resize(sizeof(frecord.fileSize));
-        qint64 nRecordSize = sSize.trimmed().toLongLong();
+        QString sSize = QString::fromLatin1(frecord.fileSize, sizeof(frecord.fileSize)).trimmed();
+        qint64 nRecordSize = sSize.toLongLong();
 
         if (nRecordSize <= 0) {
             break;
         }
 
         // BSD style name: "#1/<len>" has embedded filename immediately after header
-        QString sName = QString(frecord.fileId);
-        sName.resize(sizeof(frecord.fileId));
-        sName = sName.trimmed();
+        QString sName = QString::fromLatin1(frecord.fileId, sizeof(frecord.fileId)).trimmed();
         if (sName.section('/', 0, 0) == "#1") {
             qint32 nFileNameLength = sName.section('/', 1, 1).toInt();
             if (nRecordSize < nFileNameLength) {
@@ -427,13 +424,10 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         FRECORD frecord = readFRECORD(nOffset);
 
         QString sSize = QString::fromLatin1(frecord.fileSize, sizeof(frecord.fileSize)).trimmed();
-        sSize.resize(sizeof(frecord.fileSize));
-        qint64 nRecordSize = sSize.trimmed().toLongLong();
+        qint64 nRecordSize = sSize.toLongLong();
         if (nRecordSize <= 0) break;
 
-        QString sOriginalName = QString(frecord.fileId);
-        sOriginalName.resize(sizeof(frecord.fileId));
-        sOriginalName = sOriginalName.trimmed();
+        QString sOriginalName = QString::fromLatin1(frecord.fileId, sizeof(frecord.fileId)).trimmed();
 
         qint64 dataOffset = nOffset + (qint64)sizeof(FRECORD);
         qint64 dataSize = nRecordSize;
@@ -478,9 +472,7 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, dataSize);
             part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, dataSize);
             // Optional: modification time (ASCII epoch seconds in header)
-            QString sMod = QString(frecord.fileMod);
-            sMod.resize(sizeof(frecord.fileMod));
-            sMod = sMod.trimmed();
+            QString sMod = QString::fromLatin1(frecord.fileMod, sizeof(frecord.fileMod)).trimmed();
             bool bOk = false;
             quint64 nModSecs = sMod.toULongLong(&bOk, 10);
             if (bOk) {
@@ -782,10 +774,15 @@ X_Ar::FRECORD X_Ar::createHeader(const QString &sFileName, qint64 nFileSize, qui
     return header;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> X_Ar::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -795,6 +792,7 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
         pState->nCurrentOffset = 8;  // Start after the "!<arch>\n" signature
         pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
@@ -814,8 +812,7 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             }
 
             QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
-            sSize.resize(sizeof(header.fileSize));
-            qint64 nFileSize = sSize.trimmed().toLongLong();
+            qint64 nFileSize = sSize.toLongLong();
 
             if (nFileSize < 0) {
                 break;
@@ -843,8 +840,7 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         FRECORD header = readFRECORD(pState->nCurrentOffset);
 
         QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
-        sSize.resize(sizeof(header.fileSize));
-        qint64 nFileSize = sSize.trimmed().toLongLong();
+        qint64 nFileSize = sSize.toLongLong();
 
         // Extract file name
         QString sFileName = QString::fromUtf8(header.fileId, (qint32)sizeof(header.fileId));
@@ -879,22 +875,16 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // Parse file mode (octal)
         QString sMode = QString::fromLatin1(header.fileMode, sizeof(header.fileMode)).trimmed();
-        sMode.resize(sizeof(header.fileMode));
-        sMode = sMode.trimmed();
         quint32 nMode = sMode.toUInt(nullptr, 8);
         result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, nMode);
 
         // Parse UID (decimal)
         QString sUid = QString::fromLatin1(header.ownerId, sizeof(header.ownerId)).trimmed();
-        sUid.resize(sizeof(header.ownerId));
-        sUid = sUid.trimmed();
         quint32 nUid = sUid.toUInt();
         result.mapProperties.insert(XBinary::FPART_PROP_UID, nUid);
 
         // Parse GID (decimal)
         QString sGid = QString::fromLatin1(header.groupId, sizeof(header.groupId)).trimmed();
-        sGid.resize(sizeof(header.groupId));
-        sGid = sGid.trimmed();
         quint32 nGid = sGid.toUInt();
         result.mapProperties.insert(XBinary::FPART_PROP_GID, nGid);
 
@@ -904,8 +894,6 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // Parse mtime (decimal)
         QString sMTime = QString::fromLatin1(header.fileMod, sizeof(header.fileMod)).trimmed();
-        sMTime.resize(sizeof(header.fileMod));
-        sMTime = sMTime.trimmed();
         qint64 nMTime = sMTime.toLongLong();
         QDateTime dateTime = XBinary::valueToTime((qint64)nMTime, XBinary::DT_TYPE_UNIXTIME);
         result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, dateTime);
@@ -924,8 +912,7 @@ bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         FRECORD header = readFRECORD(pState->nCurrentOffset);
 
         QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
-        sSize.resize(sizeof(header.fileSize));
-        qint64 nFileSize = sSize.trimmed().toLongLong();
+        qint64 nFileSize = sSize.toLongLong();
 
         qint64 nRecordSize = sizeof(FRECORD) + S_ALIGN_UP(nFileSize, 2);
 
@@ -953,4 +940,35 @@ XBinary *X_Ar::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
     Q_UNUSED(nModuleAddress)
 
     return new X_Ar(pDevice);
+}
+
+bool X_Ar::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *X_Ar::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void X_Ar::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

@@ -27,6 +27,12 @@ class XAPKS : public XAPK {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XAPK::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     explicit XAPKS(QIODevice *pDevice = nullptr);
     ~XAPKS();
 
@@ -37,6 +43,8 @@ public:
     virtual FT getFileType() override;
     virtual QString getFileFormatExt() override;
     virtual QString getMIMEString() override;
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XAPKS_H

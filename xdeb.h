@@ -27,6 +27,12 @@ class XDEB : public X_Ar {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : X_Ar::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
     };
@@ -43,6 +49,8 @@ public:
     virtual QString getFileFormatExt() override;
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
     virtual QString getMIMEString() override;
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XDEB_H

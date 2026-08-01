@@ -358,13 +358,20 @@ XBinary *XASAR::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
     return new XASAR(pDevice);
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XASAR::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XASAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     if (!pState || !isValid(pPdStruct)) {
         return false;
     }
+
+    pState->mapUnpackProperties = mapProperties;
 
     qint64 nJsonOffset = 0;
     qint64 nJsonSize = 0;
@@ -458,4 +465,35 @@ bool XASAR::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return true;
+}
+
+bool XASAR::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XASAR::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XASAR::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

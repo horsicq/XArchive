@@ -147,13 +147,18 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
             if (nExpectedOutput >= 0) {
                 qint64 nRemainingOutput = nExpectedOutput - nTotalOutput;
 
-                if (nRemainingOutput <= 0) {
-                    lastStatus = LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK;
-                    bContinueReading = false;
-                    break;
+                if (nRemainingOutput < 0) {
+                    delete[] bufferIn;
+                    delete[] bufferOut;
+                    return false;
                 }
 
-                if (outProcessed > (SizeT)nRemainingOutput) {
+                // Even when the declared output size is zero, call the decoder
+                // with a zero-sized destination and FINISH_END.  The LZMA
+                // decoder can then consume/validate the range-coder
+                // initialization and optional end marker instead of us
+                // manufacturing a successful terminal status.
+                if (outProcessed >= (SizeT)nRemainingOutput) {
                     outProcessed = (SizeT)nRemainingOutput;
                     finishMode = LZMA_FINISH_END;
                 }
@@ -193,6 +198,13 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
 
         if ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) ||
             ((lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK) && (nExpectedOutput >= 0) && (nTotalOutput == nExpectedOutput))) {
+            // _readDevice() counts the whole chunk, while the LZMA decoder can
+            // stop before bytes belonging to a container footer.  Keep the
+            // public counter at the exact compressed-stream boundary.
+            qint64 nUnusedInput = nSize - nPos;
+            if ((nUnusedInput > 0) && (pDecompressState->nCountInput >= nUnusedInput)) {
+                pDecompressState->nCountInput -= nUnusedInput;
+            }
             break;
         }
 
@@ -209,7 +221,7 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
                ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
     }
 
-    return !pDecompressState->bReadError && !pDecompressState->bWriteError;
+    return !pDecompressState->bReadError && !pDecompressState->bWriteError && (lastStatus == LZMA_STATUS_FINISHED_WITH_MARK);
 }
 
 bool Algo_utils::decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
@@ -613,7 +625,7 @@ Byte Algo_utils::readFromQIODeviceStream(const IByteIn *pStream)
 {
     QIODeviceByteInStream *pStreamEx = Z7_CONTAINER_FROM_VTBL(pStream, QIODeviceByteInStream, vt);
 
-    if (pStreamEx->bError || !pStreamEx->pDevice) {
+    if (pStreamEx->bError || !pStreamEx->pDevice || ((pStreamEx->nLimit >= 0) && (pStreamEx->nBytesRead >= pStreamEx->nLimit))) {
         pStreamEx->bError = true;
         return 0;
     }
@@ -626,6 +638,7 @@ Byte Algo_utils::readFromQIODeviceStream(const IByteIn *pStream)
         return 0;
     }
 
+    pStreamEx->nBytesRead++;
     return (Byte)c;
 }
 

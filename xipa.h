@@ -27,12 +27,20 @@ class XIPA : public XJAR {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XJAR::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     explicit XIPA(QIODevice *pDevice = nullptr);
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     // virtual QString getMIMEString();
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XIPA_H

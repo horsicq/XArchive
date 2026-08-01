@@ -28,6 +28,12 @@ class XDMG : public XArchive {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     // DMG stripe types (from Apple Disk Image format)
     enum DMG_STRIPE_TYPE : quint32 {
         DMG_STRIPE_EMPTY = 0x00000000,
@@ -142,6 +148,7 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
 
     // Streaming unpack API
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapOptions, PDSTRUCT *pPdStruct) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct) override;
@@ -156,6 +163,8 @@ private:
     QList<DMG_PARTITION_INFO> _parseBlkxPartitions(const QByteArray &baXml, PDSTRUCT *pPdStruct);
     bool _decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, QIODevice *pDevice, PDSTRUCT *pPdStruct);
     bool _writeZeroes(QIODevice *pDevice, qint64 nSize);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XDMG_H

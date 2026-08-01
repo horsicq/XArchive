@@ -36,6 +36,12 @@ class XArchive : public XBinary {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XBinary::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum TYPE {
@@ -133,6 +139,7 @@ public:
     static void showRecords(QList<RECORD> *pListArchive);
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
     virtual MODE getMode();
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     //    virtual _MEMORY_MAP getMemoryMap(); // TODO
     virtual qint32 getType();
@@ -141,6 +148,9 @@ public:
 
 private:
     static bool _writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUCT *pDecompressStruct);
+    static QString _normalizeOutputPath(const QString &sPath);
+    static bool _isSafeChildPath(const QString &sPath, const QString &sCanonicalRoot);
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XARCHIVE_H

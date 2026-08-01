@@ -836,10 +836,15 @@ QList<XMiniDump::MINIDUMP_MODULE> XMiniDump::read_MINIDUMP_MODULE_list(qint64 nO
     return listResult;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XMiniDump::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     XBinary::PDSTRUCT pdStructEmpty = {};
@@ -852,6 +857,8 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     if (!pState) {
         return false;
     }
+
+    pState->mapUnpackProperties = mapProperties;
 
     qint64 nFileSize = getSize();
 
@@ -1038,4 +1045,35 @@ XBinary *XMiniDump::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
     Q_UNUSED(nModuleAddress)
 
     return new XMiniDump(pDevice);
+}
+
+bool XMiniDump::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XMiniDump::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XMiniDump::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

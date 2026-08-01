@@ -26,6 +26,12 @@
 class XSZDD : public XArchive {
     Q_OBJECT
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     QList<QString> getSearchSignatures() override;
     XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
@@ -73,6 +79,7 @@ public:
 
     SZDD_HEADER _read_SZDD_HEADER(qint64 nOffset);
 
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
@@ -86,6 +93,8 @@ private:
         qint64 nUncompressedSize;
         QString sFileName;
     };
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XSZDD_H

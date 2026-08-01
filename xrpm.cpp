@@ -413,13 +413,20 @@ XBinary *XRPM::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
     return new XRPM(pDevice);
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XRPM::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     if (!pState || !isValid(pPdStruct)) {
         return false;
     }
+
+    pState->mapUnpackProperties = mapProperties;
 
     qint64 nPayloadOffset = getPayloadOffset(pPdStruct);
     if ((nPayloadOffset <= 0) || (nPayloadOffset >= getSize())) {
@@ -522,4 +529,35 @@ bool XRPM::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return true;
+}
+
+bool XRPM::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XRPM::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XRPM::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

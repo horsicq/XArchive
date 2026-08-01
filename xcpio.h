@@ -86,6 +86,12 @@ class XCPIO : public XArchive {
     };
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_NEWC_HEADER,
@@ -119,6 +125,7 @@ public:
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
 
     // Streaming unpacking API
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -158,6 +165,8 @@ private:
     CPIO_ODC_HEADER _readOdcHeader(qint64 nOffset);
     bool _parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo);
     bool _isTrailerRecord(const QString &sFileName);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XCPIO_H

@@ -9939,7 +9939,7 @@ int inflate_table9(codetype type, unsigned short FAR *lens, unsigned codes, code
             if (drop == 0) drop = root;
 
             /* increment past last table */
-            next += 1U << curr;
+            next += static_cast<size_t>(1) << curr;
 
             /* determine length of next table */
             curr = len - drop;
@@ -10466,6 +10466,14 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
                     break;
                 }
             } while (ret != Z_STREAM_END);
+
+            // _readDevice() accounts for the complete input chunk.  zlib can
+            // finish a raw stream with bytes from the following container
+            // footer still buffered in avail_in, so expose the exact number of
+            // compressed bytes consumed to container parsers.
+            if ((ret == Z_STREAM_END) && (strm.avail_in > 0) && (pDecompressState->nCountInput >= (qint64)strm.avail_in)) {
+                pDecompressState->nCountInput -= strm.avail_in;
+            }
 
             X_inflateEnd(&strm);
 

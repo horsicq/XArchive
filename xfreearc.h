@@ -26,6 +26,12 @@
 class XFREEARC : public XArchive {
     Q_OBJECT
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
@@ -65,6 +71,7 @@ public:
     virtual MODE getMode() override;
     virtual ENDIAN getEndian() override;
 
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -87,6 +94,8 @@ private:
 
     qint64 _findNextBlock(qint64 nOffset, qint64 nFileSize);
     QString _readCompressorString(qint64 nOffset, qint64 nMaxSize);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XFREEARC_H

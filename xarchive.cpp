@@ -684,7 +684,12 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
 
     XBinary::createDirectory(fi.absolutePath());
 
-    QString sCanonicalRoot = QDir::cleanPath(QDir(sResultPathName).absolutePath());
+    const QString sCanonicalRoot = _normalizeOutputPath(QDir(sResultPathName).absolutePath());
+    QString sCanonicalRootForCheck = QFileInfo(sCanonicalRoot).canonicalFilePath();
+
+    if (sCanonicalRootForCheck.isEmpty()) {
+        sCanonicalRootForCheck = sCanonicalRoot;
+    }
 
     qint32 nNumberOfArchives = pListArchive->count();
     bool bExtractAll = sRecordFileName.isEmpty() || (sRecordFileName == "/");
@@ -701,9 +706,9 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
                 sFileName = sFileName.mid(sRecordFileName.size(), -1);
             }
 
-            QString sResultFileName = QDir::cleanPath(sResultPathName + QDir::separator() + sFileName);
+            const QString sResultFileName = _normalizeOutputPath(QDir(sCanonicalRoot).absoluteFilePath(sFileName));
 
-            if (!sResultFileName.startsWith(sCanonicalRoot + "/")) {
+            if (!XArchive::_isSafeChildPath(sResultFileName, sCanonicalRootForCheck)) {
                 bResult = false;
                 continue;
             }
@@ -929,6 +934,34 @@ bool XArchive::_writeToDevice(char *pBuffer, qint32 nBufferSize, DECOMPRESSSTRUC
     return bResult;
 }
 
+QString XArchive::_normalizeOutputPath(const QString &sPath)
+{
+    return QDir::fromNativeSeparators(QDir::cleanPath(QFileInfo(sPath).absoluteFilePath()));
+}
+
+bool XArchive::_isSafeChildPath(const QString &sPath, const QString &sCanonicalRoot)
+{
+#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
+    const Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseInsensitive;
+#else
+    const Qt::CaseSensitivity pathCaseSensitivity = Qt::CaseSensitive;
+#endif
+
+    const QString sNormalizedPath = _normalizeOutputPath(sPath);
+    const QString sNormalizedRoot = _normalizeOutputPath(sCanonicalRoot);
+
+    if (sNormalizedPath.compare(sNormalizedRoot, pathCaseSensitivity) == 0) {
+        return false;
+    }
+
+    QString sExpectedRoot = sNormalizedRoot;
+    if (!sExpectedRoot.endsWith(QLatin1Char('/'))) {
+        sExpectedRoot.append(QLatin1Char('/'));
+    }
+
+    return sNormalizedPath.startsWith(sExpectedRoot, pathCaseSensitivity);
+}
+
 // XBinary::_MEMORY_MAP XArchive::getMemoryMap()
 //{
 //     _MEMORY_MAP result={};
@@ -977,6 +1010,13 @@ XBinary *XArchive::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
     return XBinary::createInstance(pDevice, bIsImage, nModuleAddress);
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XArchive::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XBinary::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
@@ -987,16 +1027,142 @@ bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
         if (archiveRecord.mapProperties.value(XBinary::FPART_PROP_ISFOLDER).toBool()) {
             return true;  // Directory
         }
-        if (archiveRecord.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() == 0) {
-            return true;  // Empty file
+
+        XBinary::CRC_TYPE crcType =
+            (XBinary::CRC_TYPE)archiveRecord.mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+        bool bCheckCRC = XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType) && (crcType != XBinary::CRC_TYPE_UNKNOWN) &&
+                         archiveRecord.mapProperties.contains(XBinary::FPART_PROP_RESULTCRC);
+        QIODevice *pWorkDevice = pDevice;
+        QIODevice *pCRCBuffer = nullptr;
+
+        if (bCheckCRC && !pDevice->isReadable()) {
+            qint64 nExpectedSize = archiveRecord.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong();
+            pCRCBuffer = XBinary::createFileBuffer(qMax((qint64)0, nExpectedSize), pPdStruct);
+            pWorkDevice = pCRCBuffer;
+
+            if (!pWorkDevice) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Cannot create CRC verification buffer"));
+                return false;
+            }
         }
 
+        // Decoder writes start at offset zero, so make the destination an
+        // exact new result rather than leaving a stale tail from earlier
+        // contents.  For an unsupported random-access QIODevice, fail instead
+        // of silently returning a mixture of old and new bytes.
+        if (!pWorkDevice->isSequential()) {
+            bool bOutputReset = pWorkDevice->seek(0);
+
+            if (bOutputReset && (pWorkDevice->size() != 0)) {
+                bOutputReset = XBinary::resize(pWorkDevice, 0);
+            }
+
+            if (!bOutputReset) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Cannot clear unpacked output"));
+                XBinary::freeFileBuffer(&pCRCBuffer);
+                return false;
+            }
+        }
+
+        // A zero output size is not proof that the compressed stream is valid.
+        // Run it through the normal pipeline so decoders can consume stream
+        // terminators and encryption layers can authenticate empty payloads.
         XDecompress xDecompress;
         connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
         connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
 
-        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
+        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pWorkDevice, pState->mapUnpackProperties, pPdStruct);
+
+        if (bResult && pCRCBuffer) {
+            bResult = pCRCBuffer->seek(0);
+
+            if (bResult && !pDevice->isSequential()) {
+                bResult = pDevice->seek(0);
+
+                // The verified buffer is the complete result.  Remove any
+                // previous caller data before copying it, including the
+                // zero-byte case where the copy loop performs no writes.
+                if (bResult && (pDevice->size() != 0)) {
+                    bResult = XBinary::resize(pDevice, 0);
+                }
+            } else if (bResult && pDevice->isSequential() && (pCRCBuffer->size() == 0)) {
+                bResult = (pDevice->pos() == 0);
+            }
+
+            QByteArray baBuffer(XBinary::getBufferSize(pPdStruct), 0);
+            qint64 nRemaining = pCRCBuffer->size();
+
+            while (bResult && (nRemaining > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+                qint64 nChunkSize = qMin(nRemaining, (qint64)baBuffer.size());
+                qint64 nRead = pCRCBuffer->read(baBuffer.data(), nChunkSize);
+
+                if (nRead != nChunkSize) {
+                    bResult = false;
+                    break;
+                }
+
+                qint64 nWritten = 0;
+                while ((nWritten < nRead) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+                    qint64 nResult = pDevice->write(baBuffer.constData() + nWritten, nRead - nWritten);
+
+                    if ((nResult <= 0) || (nResult > (nRead - nWritten))) {
+                        bResult = false;
+                        break;
+                    }
+
+                    nWritten += nResult;
+                }
+
+                if (!bResult || (nWritten != nRead)) {
+                    bResult = false;
+                    break;
+                }
+
+                nRemaining -= nRead;
+            }
+
+            if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+                bResult = false;
+            }
+
+            if (!bResult) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Cannot write unpacked output"));
+            }
+        }
+
+        XBinary::freeFileBuffer(&pCRCBuffer);
     }
 
     return bResult;
+}
+
+bool XArchive::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XBinary::handleInternalInfo(pPdStruct);
+        static_cast<XBinary::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XBinary::INTERNAL_INFO *>(XBinary::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XArchive::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XArchive::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XBinary::setInternalInfo(static_cast<XBinary::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XBinary::setInternalInfo(nullptr);
+    }
 }

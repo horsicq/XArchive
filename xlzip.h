@@ -27,6 +27,12 @@ class XLzip : public XArchive {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     QList<QString> getSearchSignatures() override;
     XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum LZIP_TYPE {
@@ -85,6 +91,7 @@ public:
     QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Streaming unpacking API
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
@@ -100,9 +107,13 @@ private:
         qint64 nHeaderSize;        // Size of LZIP header (6 bytes min)
         qint64 nCompressedSize;    // Size of compressed data
         qint64 nUncompressedSize;  // Size of uncompressed data
+        qint64 nMemberSize;        // Total size of the first member
         quint32 nCRC32;            // CRC32 of uncompressed data
         quint8 nDictSizeCode;      // Dictionary size code from header
+        bool bFooterValid;         // Footer belongs to the represented member
     };
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XLZIP_H

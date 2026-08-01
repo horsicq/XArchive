@@ -128,3 +128,34 @@ quint32 XNPM::ftStringToStructID(const QString &sFtString)
 {
     return XCONVERT_ftStringToId(sFtString, _TABLE_XNPM_STRUCTID, sizeof(_TABLE_XNPM_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
+
+bool XNPM::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XTAR_GZ::handleInternalInfo(pPdStruct);
+        static_cast<XTAR_GZ::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XTAR_GZ::INTERNAL_INFO *>(XTAR_GZ::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XNPM::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XNPM::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XTAR_GZ::setInternalInfo(static_cast<XTAR_GZ::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XTAR_GZ::setInternalInfo(nullptr);
+    }
+}

@@ -27,6 +27,12 @@ class XNPM : public XTAR_GZ {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XTAR_GZ::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     enum STRUCTID : qint32 {
         STRUCTID_UNKNOWN = 0,
     };
@@ -55,6 +61,8 @@ public:
     virtual QString structIDToString(quint32 nID);
     virtual QString structIDToFtString(quint32 nID);
     virtual quint32 ftStringToStructID(const QString &sFtString);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XNPM_H

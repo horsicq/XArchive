@@ -93,7 +93,11 @@ bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
                         break;
                     }
 
-                    qint32 nTemp = _nBufferSize - nAvailOut;
+                    if (nAvailOut > static_cast<size_t>(_nBufferSize)) {
+                        break;
+                    }
+
+                    qint32 nTemp = _nBufferSize - static_cast<qint32>(nAvailOut);
 
                     if (nTemp > 0) {
                         if (!XBinary::_writeDevice((char *)bufferOut, nTemp, pDecompressState)) {

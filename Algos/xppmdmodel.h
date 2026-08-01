@@ -52,14 +52,25 @@ public:
     XPPMdModel();
     ~XPPMdModel();
 
+    XPPMdModel(const XPPMdModel &) = delete;
+    XPPMdModel &operator=(const XPPMdModel &) = delete;
+    XPPMdModel(XPPMdModel &&) = delete;
+    XPPMdModel &operator=(XPPMdModel &&) = delete;
+
     // Allocate memory for the model
     bool allocate(quint32 nMemorySize);
 
     // Initialize the model with parameters
     void init(quint8 nOrder, quint8 nRestoreMethod);
 
+    // Initialize the Gentee/CreateInstall PPMd-I dialect.
+    void initGentee(quint8 nOrder);
+
+    // Preserve the Gentee model while returning to its stream boundary state.
+    bool lightweightResetGentee();
+
     // Set input device for stream reading
-    void setInputStream(QIODevice *pDevice);
+    void setInputStream(QIODevice *pDevice, qint64 nLimit = -1);
 
     // Decode a single symbol
     // Returns: >= 0 for decoded byte, -1 for end of stream, -2 for error
@@ -70,6 +81,10 @@ public:
 
     // Check if memory was allocated
     bool wasAllocated() const;
+
+    // True when the range decoder attempted to read beyond its bounded input.
+    bool hasInputError() const;
+    qint64 inputBytesRead() const;
 
 private:
     XPPMdModelPrivate *m_pPrivate;

@@ -28,6 +28,12 @@ class XJAR : public XZip {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XZip::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
     };
@@ -55,6 +61,8 @@ public:
     QString structIDToString(quint32 nID) override;
     QString structIDToFtString(quint32 nID) override;
     quint32 ftStringToStructID(const QString &sFtString) override;
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XJAR_H

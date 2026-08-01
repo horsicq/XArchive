@@ -32,8 +32,9 @@ struct XPPMdModelPrivate {
     CPpmd8 sPpmd;
     XPPMdInputStream sInputStream;
     bool bAllocated;
+    bool bGentee;
 
-    XPPMdModelPrivate() : bAllocated(false)
+    XPPMdModelPrivate() : bAllocated(false), bGentee(false)
     {
         memset(&sPpmd, 0, sizeof(sPpmd));
         memset(&sInputStream, 0, sizeof(sInputStream));
@@ -69,15 +70,39 @@ bool XPPMdModel::allocate(quint32 nMemorySize)
 void XPPMdModel::init(quint8 nOrder, quint8 nRestoreMethod)
 {
     // Initialize the PPMd model with the specified parameters
+    m_pPrivate->bGentee = false;
     X_Ppmd8_Init(&m_pPrivate->sPpmd, nOrder, nRestoreMethod);
 }
 
-void XPPMdModel::setInputStream(QIODevice *pDevice)
+void XPPMdModel::initGentee(quint8 nOrder)
 {
+    m_pPrivate->bGentee = true;
+    X_Ppmd8g_Init(&m_pPrivate->sPpmd, nOrder, PPMD8_RESTORE_METHOD_RESTART);
+}
+
+bool XPPMdModel::lightweightResetGentee()
+{
+    if (!m_pPrivate->bAllocated || !m_pPrivate->bGentee || !m_pPrivate->sPpmd.MaxContext) return false;
+
+    m_pPrivate->bGentee = true;
+    X_Ppmd8g_LightweightReset(&m_pPrivate->sPpmd);
+    return true;
+}
+
+void XPPMdModel::setInputStream(QIODevice *pDevice, qint64 nLimit)
+{
+    if (!pDevice) {
+        m_pPrivate->sInputStream.pDevice = nullptr;
+        m_pPrivate->sInputStream.bError = true;
+        return;
+    }
+
     // Set up input stream for 7-Zip's internal range decoder
     m_pPrivate->sInputStream.vt.Read = Algo_utils::readFromQIODeviceStream;
     m_pPrivate->sInputStream.pDevice = pDevice;
     m_pPrivate->sInputStream.bError = false;
+    m_pPrivate->sInputStream.nBytesRead = 0;
+    m_pPrivate->sInputStream.nLimit = nLimit;
 
     // Connect the stream to the PPMd decoder
     m_pPrivate->sPpmd.Stream.In = &m_pPrivate->sInputStream.vt;
@@ -91,14 +116,15 @@ void XPPMdModel::setInputStream(QIODevice *pDevice)
 
 qint32 XPPMdModel::decodeSymbol()
 {
-    if (!m_pPrivate->bAllocated) {
+    if (!m_pPrivate->bAllocated || m_pPrivate->sInputStream.bError) {
         return -2;  // Error: model not allocated
     }
 
     // Use 7-Zip's proven decoder
-    int nSymbol = X_Ppmd8_DecodeSymbol(&m_pPrivate->sPpmd);
+    int nSymbol =
+        m_pPrivate->bGentee ? X_Ppmd8g_DecodeSymbol(&m_pPrivate->sPpmd) : X_Ppmd8_DecodeSymbol(&m_pPrivate->sPpmd);
 
-    return nSymbol;
+    return m_pPrivate->sInputStream.bError ? -2 : nSymbol;
 }
 
 void XPPMdModel::free()
@@ -106,10 +132,21 @@ void XPPMdModel::free()
     if (m_pPrivate->bAllocated) {
         X_Ppmd8_Free(&m_pPrivate->sPpmd, Algo_utils::ppmdAlloc());
         m_pPrivate->bAllocated = false;
+        m_pPrivate->bGentee = false;
     }
 }
 
 bool XPPMdModel::wasAllocated() const
 {
     return m_pPrivate->bAllocated;
+}
+
+bool XPPMdModel::hasInputError() const
+{
+    return m_pPrivate->sInputStream.bError;
+}
+
+qint64 XPPMdModel::inputBytesRead() const
+{
+    return m_pPrivate->sInputStream.nBytesRead;
 }

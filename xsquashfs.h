@@ -62,6 +62,12 @@ class XSquashfs : public XArchive {
     };
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
@@ -94,6 +100,8 @@ public:
 private:
     SQUASHFS_COMPRESSION _getCompressionMethod(quint16 nType);
     QString _getCompressionMethodString(SQUASHFS_COMPRESSION comp);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XSQUASHFS_H

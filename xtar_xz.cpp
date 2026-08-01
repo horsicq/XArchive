@@ -104,3 +104,34 @@ XBinary *XTAR_XZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModul
 
     return new XTAR_XZ(pDevice);
 }
+
+bool XTAR_XZ::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XTARCOMPRESSED::handleInternalInfo(pPdStruct);
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(XTARCOMPRESSED::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XTAR_XZ::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XTAR_XZ::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XTARCOMPRESSED::setInternalInfo(static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XTARCOMPRESSED::setInternalInfo(nullptr);
+    }
+}

@@ -83,3 +83,34 @@ QIODevice *XTAR_COMPRESS::decompressData(PDSTRUCT *pPdStruct)
 {
     return decompressByMethod(HANDLE_METHOD_COMPRESS, 0, -1, pPdStruct);
 }
+
+bool XTAR_COMPRESS::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XTARCOMPRESSED::handleInternalInfo(pPdStruct);
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(XTARCOMPRESSED::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XTAR_COMPRESS::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XTAR_COMPRESS::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XTARCOMPRESSED::setInternalInfo(static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XTARCOMPRESSED::setInternalInfo(nullptr);
+    }
+}

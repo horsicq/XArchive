@@ -120,3 +120,34 @@ quint32 XDEB::ftStringToStructID(const QString &sFtString)
 {
     return XCONVERT_ftStringToId(sFtString, _TABLE_XDEB_STRUCTID, sizeof(_TABLE_XDEB_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
+
+bool XDEB::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = X_Ar::handleInternalInfo(pPdStruct);
+        static_cast<X_Ar::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<X_Ar::INTERNAL_INFO *>(X_Ar::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XDEB::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XDEB::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        X_Ar::setInternalInfo(static_cast<X_Ar::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        X_Ar::setInternalInfo(nullptr);
+    }
+}

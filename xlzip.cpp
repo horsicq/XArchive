@@ -21,6 +21,80 @@
 #include "xlzip.h"
 #include "xlzmadecoder.h"
 
+#include <cstring>
+#include <limits>
+
+namespace {
+class LzipDiscardDevice : public QIODevice {
+public:
+    bool isSequential() const override
+    {
+        return true;
+    }
+
+protected:
+    qint64 readData(char *pData, qint64 nMaxSize) override
+    {
+        Q_UNUSED(pData)
+        Q_UNUSED(nMaxSize)
+
+        return -1;
+    }
+
+    qint64 writeData(const char *pData, qint64 nMaxSize) override
+    {
+        Q_UNUSED(pData)
+
+        return nMaxSize;
+    }
+};
+
+class LzipCRC32OutputDevice : public QIODevice {
+public:
+    explicit LzipCRC32OutputDevice(QIODevice *pOutputDevice) : m_pOutputDevice(pOutputDevice), m_nCRC32(0xFFFFFFFF)
+    {
+    }
+
+    bool isSequential() const override
+    {
+        return true;
+    }
+
+    quint32 getCRC32() const
+    {
+        return m_nCRC32 ^ 0xFFFFFFFF;
+    }
+
+protected:
+    qint64 readData(char *pData, qint64 nMaxSize) override
+    {
+        Q_UNUSED(pData)
+        Q_UNUSED(nMaxSize)
+
+        return -1;
+    }
+
+    qint64 writeData(const char *pData, qint64 nMaxSize) override
+    {
+        if (!m_pOutputDevice) {
+            return -1;
+        }
+
+        qint64 nWritten = m_pOutputDevice->write(pData, nMaxSize);
+
+        if (nWritten > 0) {
+            m_nCRC32 = XBinary::_getCRC32(pData, (qint32)nWritten, m_nCRC32, XBinary::_getCRC32Table_EDB88320());
+        }
+
+        return nWritten;
+    }
+
+private:
+    QIODevice *m_pOutputDevice;
+    quint32 m_nCRC32;
+};
+}  // namespace
+
 XBinary::XCONVERT _TABLE_XLZIP_STRUCTID[] = {{XLzip::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                              {XLzip::STRUCTID_LZIP_HEADER, "LZIP_HEADER", QString("LZIP header")},
                                              {XLzip::STRUCTID_MEMBER_HEADER, "MEMBER_HEADER", QString("Member header")},
@@ -33,28 +107,46 @@ XLzip::XLzip(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XLzip::isValid(PDSTRUCT *pPdStruct)
 {
-    if (getSize() >= 6) {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
-        return compareSignature(&memoryMap, "'LZIP'", 0, pPdStruct);
+    Q_UNUSED(pPdStruct)
+
+    const qint64 nFileSize = getSize();
+    // The shortest valid member is a 6-byte header, the 10-byte empty LZMA
+    // stream (including its end marker), and the 20-byte trailer.
+    if (nFileSize < 36) {
+        return false;
     }
 
-    return false;
+    LZIP_HEADER firstHeader = _read_LZIP_HEADER(0);
+    if ((std::memcmp(firstHeader.magic, "LZIP", 4) != 0) || (firstHeader.nVersion != 1) || (_getDictionarySize(firstHeader.nDictSizeCode) == 0)) {
+        return false;
+    }
+
+    // A valid footer must describe the member immediately preceding it. For a
+    // concatenated stream this is the last member, not the whole file.
+    quint64 nLastMemberSize = read_uint64(nFileSize - 8);
+    if ((nLastMemberSize < 36) || (nLastMemberSize > (quint64)nFileSize)) {
+        return false;
+    }
+
+    qint64 nLastMemberOffset = nFileSize - (qint64)nLastMemberSize;
+    if ((nLastMemberOffset != 0) && (nLastMemberOffset < 36)) {
+        return false;
+    }
+
+    LZIP_HEADER lastHeader = _read_LZIP_HEADER(nLastMemberOffset);
+
+    return (std::memcmp(lastHeader.magic, "LZIP", 4) == 0) && (lastHeader.nVersion == 1) && (_getDictionarySize(lastHeader.nDictSizeCode) != 0);
 }
 
 bool XLzip::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    if (pDevice && pDevice->seek(0)) {
-        char magic[4];
-        if (pDevice->read(magic, 4) == 4) {
-            if ((magic[0] == 'L') && (magic[1] == 'Z') && (magic[2] == 'I') && (magic[3] == 'P')) {
-                bResult = true;
-            }
-        }
+    if (!pDevice) {
+        return false;
     }
 
-    return bResult;
+    XLzip lzip(pDevice);
+
+    return lzip.isValid(pPdStruct);
 }
 
 XBinary::MODE XLzip::getMode()
@@ -245,12 +337,11 @@ QList<XBinary::XFRECORD> XLzip::getXFRecords(FT fileType, quint32 nStructID, con
 QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
-    Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
 
     const qint64 nFileSize = getSize();
-    if (nFileSize <= 0) return listResult;
+    if (!isValid(pPdStruct)) return listResult;
 
     if (nFileParts & FILEPART_HEADER) {
         FPART header = {};
@@ -260,6 +351,23 @@ QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         header.nVirtualAddress = -1;
         header.sName = tr("Header");
         listResult.append(header);
+    }
+
+    // Without decoding the first LZMA stream, the final footer cannot delimit
+    // the first member of a concatenated file. Do not publish a knowingly wrong
+    // stream range through the generic file-parts API.
+    if (read_uint64(nFileSize - 8) != (quint64)nFileSize) {
+        if (nFileParts & FILEPART_DATA) {
+            FPART data = {};
+            data.filePart = FILEPART_DATA;
+            data.nFileOffset = 6;
+            data.nFileSize = nFileSize - 6;
+            data.nVirtualAddress = -1;
+            data.sName = tr("Concatenated members");
+            listResult.append(data);
+        }
+
+        return listResult;
     }
 
     qint64 nDataStart = 6;
@@ -314,20 +422,34 @@ XLzip::LZIP_HEADER XLzip::_read_LZIP_HEADER(qint64 nOffset)
 
 quint32 XLzip::_getDictionarySize(quint8 nDictSizeCode)
 {
-    // LZIP format: dict_size = 1 << (nDictSizeCode & 0x1F)
-    quint8 nExponent = nDictSizeCode & 0x1F;
+    // Lzip stores a power-of-two base in the low five bits and an optional
+    // reduction in sixteenths in the high three bits.
+    const quint8 nExponent = nDictSizeCode & 0x1F;
+    const quint8 nFraction = nDictSizeCode >> 5;
 
     if (nExponent < 12 || nExponent > 29) {
         return 0;  // Invalid
     }
 
-    return 1U << nExponent;
+    const quint32 nBaseSize = 1U << nExponent;
+    const quint32 nDictionarySize = nBaseSize - ((nBaseSize / 16) * nFraction);
+
+    if ((nDictionarySize < (1U << 12)) || (nDictionarySize > (1U << 29))) {
+        return 0;
+    }
+
+    return nDictionarySize;
+}
+
+QMap<XBinary::UNPACK_PROP, QVariant> XLzip::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
 }
 
 bool XLzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -340,24 +462,89 @@ bool XLzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             return false;
         }
 
-        LZIP_UNPACK_CONTEXT *pContext = new LZIP_UNPACK_CONTEXT;
+        const qint64 nFileSize = getSize();
+        LZIP_HEADER header = _read_LZIP_HEADER(0);
+        LZIP_UNPACK_CONTEXT *pContext = new LZIP_UNPACK_CONTEXT{};
         pContext->nHeaderSize = 6;
-        pContext->nCompressedSize = getSize() - 26;  // header(6) + footer(20)
-        pContext->nUncompressedSize = 0;
-        pContext->nCRC32 = 0;
-        pContext->nDictSizeCode = read_uint8(5);
+        pContext->nDictSizeCode = header.nDictSizeCode;
 
-        // LZIP footer: CRC32(4) + data_size(8) + member_size(8) = 20 bytes
-        qint64 nDataSizePos = getSize() - 16;
-        if (nDataSizePos > 6) {
-            pContext->nUncompressedSize = read_uint64(nDataSizePos);
-            pContext->nCRC32 = read_uint32(getSize() - 20);
+        qint64 nFooterOffset = -1;
+        quint64 nLastMemberSize = read_uint64(nFileSize - 8);
+
+        if (nLastMemberSize == (quint64)nFileSize) {
+            // The final footer belongs to the first and only member.
+            nFooterOffset = nFileSize - 20;
+        } else {
+            // A concatenated lzip file has one footer per member. Decode the
+            // first raw LZMA stream into a sink to find its end marker; pairing
+            // the first header with the file's final footer would publish the
+            // CRC and sizes of a different member.
+            quint32 nDictSize = _getDictionarySize(pContext->nDictSizeCode);
+            QByteArray baProperty(5, 0);
+            baProperty[0] = static_cast<char>(0x5D);
+            baProperty[1] = static_cast<char>(nDictSize & 0xFF);
+            baProperty[2] = static_cast<char>((nDictSize >> 8) & 0xFF);
+            baProperty[3] = static_cast<char>((nDictSize >> 16) & 0xFF);
+            baProperty[4] = static_cast<char>((nDictSize >> 24) & 0xFF);
+
+            SubDevice inputDevice(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
+            LzipDiscardDevice outputDevice;
+
+            if (inputDevice.open(QIODevice::ReadOnly) && outputDevice.open(QIODevice::WriteOnly)) {
+                XBinary::DATAPROCESS_STATE probeState = {};
+                probeState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZMA);
+                probeState.pDeviceInput = &inputDevice;
+                probeState.pDeviceOutput = &outputDevice;
+                probeState.nInputOffset = 0;
+                probeState.nInputLimit = nFileSize - pContext->nHeaderSize;
+                probeState.nProcessedOffset = 0;
+                probeState.nProcessedLimit = -1;
+
+                if (XLZMADecoder::decompress(&probeState, baProperty, pPdStruct) && (probeState.nCountInput > 0) &&
+                    (probeState.nCountInput <= (nFileSize - pContext->nHeaderSize))) {
+                    qint64 nCandidateFooterOffset = pContext->nHeaderSize + probeState.nCountInput;
+
+                    if (nCandidateFooterOffset <= (nFileSize - 20)) {
+                        quint64 nDataSize = read_uint64(nCandidateFooterOffset + 4);
+                        quint64 nMemberSize = read_uint64(nCandidateFooterOffset + 12);
+                        quint64 nExpectedMemberSize = (quint64)nCandidateFooterOffset + 20;
+
+                        if ((nMemberSize == nExpectedMemberSize) && (nDataSize == (quint64)probeState.nCountOutput)) {
+                            nFooterOffset = nCandidateFooterOffset;
+                        }
+                    }
+                }
+            }
+
+            if (inputDevice.isOpen()) inputDevice.close();
+            if (outputDevice.isOpen()) outputDevice.close();
         }
 
+        if (nFooterOffset < pContext->nHeaderSize) {
+            delete pContext;
+            return false;
+        }
+
+        quint64 nUncompressedSize = read_uint64(nFooterOffset + 4);
+        quint64 nMemberSize = read_uint64(nFooterOffset + 12);
+
+        if ((nUncompressedSize > (quint64)(std::numeric_limits<qint64>::max)()) || (nMemberSize > (quint64)(std::numeric_limits<qint64>::max)()) ||
+            (nMemberSize != (quint64)(nFooterOffset + 20))) {
+            delete pContext;
+            return false;
+        }
+
+        pContext->nCompressedSize = nFooterOffset - pContext->nHeaderSize;
+        pContext->nUncompressedSize = (qint64)nUncompressedSize;
+        pContext->nMemberSize = (qint64)nMemberSize;
+        pContext->nCRC32 = read_uint32(nFooterOffset);
+        pContext->bFooterValid = true;
+
         pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
+        pState->nTotalSize = pContext->nMemberSize;
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = 1;
+        pState->mapUnpackProperties = mapProperties;
         pState->pContext = pContext;
 
         bResult = true;
@@ -383,7 +570,11 @@ XBinary::ARCHIVERECORD XLzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         result.mapProperties[XBinary::FPART_PROP_ORIGINALNAME] = XBinary::getDeviceFileBaseName(getDevice());
         result.mapProperties[XBinary::FPART_PROP_COMPRESSEDSIZE] = pContext->nCompressedSize;
         result.mapProperties[XBinary::FPART_PROP_UNCOMPRESSEDSIZE] = pContext->nUncompressedSize;
-        result.mapProperties[XBinary::FPART_PROP_RESULTCRC] = pContext->nCRC32;
+
+        if (pContext->bFooterValid) {
+            result.mapProperties[XBinary::FPART_PROP_RESULTCRC] = pContext->nCRC32;
+            result.mapProperties[XBinary::FPART_PROP_CRC_TYPE] = XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF;
+        }
     }
 
     return result;
@@ -402,6 +593,23 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     LZIP_UNPACK_CONTEXT *pContext = static_cast<LZIP_UNPACK_CONTEXT *>(pState->pContext);
+    const bool bCheckCRC = pContext->bFooterValid &&
+                           XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
+    LzipCRC32OutputDevice crcOutputDevice(pDevice);
+    QIODevice *pDecompressOutput = pDevice;
+
+    if (bCheckCRC) {
+        // The decoder normally seeks its destination to zero. Do that before
+        // placing a sequential checksum wrapper in front of it.
+        pDevice->seek(0);
+
+        if (!crcOutputDevice.open(QIODevice::WriteOnly)) {
+            XBinary::setPdStructErrorString(pPdStruct, tr("Cannot initialize CRC check"));
+            return false;
+        }
+
+        pDecompressOutput = &crcOutputDevice;
+    }
 
     // Build LZMA properties for LZIP: lc=3, lp=0, pb=2 (always fixed in lzip)
     // Property byte = pb * 45 + lp * 9 + lc = 2*45 + 0*9 + 3 = 93 = 0x5D
@@ -418,17 +626,27 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZMA);
-        state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+        state.mapUnpackProperties = pState->mapUnpackProperties;
         state.pDeviceInput = &sd;
-        state.pDeviceOutput = pDevice;
+        state.pDeviceOutput = pDecompressOutput;
         state.nInputOffset = 0;
-        state.nInputLimit = -1;
+        state.nInputLimit = pContext->nCompressedSize;
         state.nProcessedOffset = 0;
         state.nProcessedLimit = -1;
 
         bResult = XLZMADecoder::decompress(&state, baProperty, pPdStruct);
+        bResult = bResult && (state.nCountInput == pContext->nCompressedSize) && (state.nCountOutput == pContext->nUncompressedSize);
 
         sd.close();
+    }
+
+    if (bCheckCRC) {
+        crcOutputDevice.close();
+
+        if (bResult && (crcOutputDevice.getCRC32() != pContext->nCRC32)) {
+            XBinary::setPdStructErrorString(pPdStruct, tr("CRC check failed"));
+            bResult = false;
+        }
     }
 
     return bResult;
@@ -471,4 +689,35 @@ XBinary *XLzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
     Q_UNUSED(nModuleAddress)
 
     return new XLzip(pDevice);
+}
+
+bool XLzip::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XLzip::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XLzip::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

@@ -21,6 +21,8 @@
 #include "xshrinkdecoder.h"
 #include "algo_utils.h"
 
+#include <limits>
+
 #define OZUS_VERSION 20200213
 
 #ifndef OZUS_UINT8
@@ -210,12 +212,17 @@ static void ozus_write_unbuffered(ozus_ctx *ozus, const OZUS_UINT8 *buf, size_t 
 
     if (ozus->error_code) return;
     if (n < 1) return;
+    if ((n > static_cast<size_t>(std::numeric_limits<OZUS_OFF_T>::max())) ||
+        (ozus->uncmpr_nbytes_written > std::numeric_limits<OZUS_OFF_T>::max() - static_cast<OZUS_OFF_T>(n))) {
+        ozus_set_error(ozus, OZUS_ERRCODE_WRITE_FAILED);
+        return;
+    }
     ret = ozus->cb_write(ozus, buf, n);
     if (ret != n) {
         ozus_set_error(ozus, OZUS_ERRCODE_WRITE_FAILED);
         return;
     }
-    ozus->uncmpr_nbytes_written += n;
+    ozus->uncmpr_nbytes_written += static_cast<OZUS_OFF_T>(n);
 }
 
 static void ozus_flush(ozus_ctx *ozus)

@@ -28,6 +28,12 @@ class XZip : public XArchive {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum SIGNATURE {
@@ -200,6 +206,8 @@ public:
     // Format-specific context structures
     struct ZIP_UNPACK_CONTEXT {
         bool bIsECD;
+        qint64 nCentralDirectoryOffset;
+        qint64 nCentralDirectoryEnd;
     };
 
     explicit XZip(QIODevice *pDevice = nullptr);
@@ -253,6 +261,7 @@ public:
     virtual QList<PM_INFO> unpackImplemented() override;
     virtual QList<PM_INFO> packImplemented() override;
 
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -273,7 +282,9 @@ protected:
     HANDLE_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
     bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith);
     qint32 _getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *pnRealSize, PDSTRUCT *pPdStruct);
-    qint64 _resyncCDFHOffset(qint64 nOffset, PDSTRUCT *pPdStruct);
+    bool _isECDSignaturePresent(qint64 nOffset, PDSTRUCT *pPdStruct);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XZIP_H

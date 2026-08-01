@@ -50,10 +50,12 @@ public:
 
     bool allocate(quint32 nMemorySize);
     void init(quint8 nOrder);
-    void setInputStream(QIODevice *pDevice);
+    void setInputStream(QIODevice *pDevice, qint64 nLimit = -1);
     qint32 decodeSymbol();
     void free();
     bool wasAllocated() const;
+    bool hasInputError() const;
+    qint64 inputBytesRead() const;
 
 private:
     XPPMd7ModelPrivate *m_pPrivate;

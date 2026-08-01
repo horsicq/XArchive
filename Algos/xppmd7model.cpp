@@ -66,7 +66,7 @@ void XPPMd7Model::init(quint8 nOrder)
     X_Ppmd7_Init(&m_pPrivate->sPpmd, nOrder);
 }
 
-void XPPMd7Model::setInputStream(QIODevice *pDevice)
+void XPPMd7Model::setInputStream(QIODevice *pDevice, qint64 nLimit)
 {
     if (!pDevice) {
         m_pPrivate->sInputStream.pDevice = nullptr;
@@ -77,6 +77,8 @@ void XPPMd7Model::setInputStream(QIODevice *pDevice)
     m_pPrivate->sInputStream.vt.Read = Algo_utils::readFromQIODeviceStream;
     m_pPrivate->sInputStream.pDevice = pDevice;
     m_pPrivate->sInputStream.bError = false;
+    m_pPrivate->sInputStream.nBytesRead = 0;
+    m_pPrivate->sInputStream.nLimit = nLimit;
 
     m_pPrivate->sPpmd.rc.dec.Stream = &m_pPrivate->sInputStream.vt;
 
@@ -87,11 +89,12 @@ void XPPMd7Model::setInputStream(QIODevice *pDevice)
 
 qint32 XPPMd7Model::decodeSymbol()
 {
-    if (!m_pPrivate->bAllocated) {
+    if (!m_pPrivate->bAllocated || m_pPrivate->sInputStream.bError) {
         return -2;
     }
 
-    return X_Ppmd7z_DecodeSymbol(&m_pPrivate->sPpmd);
+    qint32 nSymbol = X_Ppmd7z_DecodeSymbol(&m_pPrivate->sPpmd);
+    return m_pPrivate->sInputStream.bError ? -2 : nSymbol;
 }
 
 void XPPMd7Model::free()
@@ -105,4 +108,14 @@ void XPPMd7Model::free()
 bool XPPMd7Model::wasAllocated() const
 {
     return m_pPrivate->bAllocated;
+}
+
+bool XPPMd7Model::hasInputError() const
+{
+    return m_pPrivate->sInputStream.bError;
+}
+
+qint64 XPPMd7Model::inputBytesRead() const
+{
+    return m_pPrivate->sInputStream.nBytesRead;
 }

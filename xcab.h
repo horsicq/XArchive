@@ -27,6 +27,12 @@ class XCab : public XArchive {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
     enum STRUCTID {
@@ -92,8 +98,12 @@ public:
     // Format-specific context structures
     struct CAB_UNPACK_CONTEXT {
         QList<qint64> listFileOffsets;             // Offsets of CFFILE entries
+        QList<QString> listFileNames;               // Validated/decoded CFFILE names
         QList<CFFOLDER> listFolders;               // Folder information
         QMap<quint16, QByteArray> mapFolderCache;  // Decompressed folder data cache (folder index -> data)
+        QMap<quint16, qint64> mapFolderUncompressedSizes;  // Complete logical size of each solid folder
+        QMap<quint16, qint64> mapFolderStreamSizes;        // Exact bounded CFDATA stream size
+        QMap<quint16, qint64> mapFolderDataSizes;          // Sum of CFDATA.cbUncomp values
         qint32 nCurrentFileIndex;                  // Current file being processed
         quint16 nCbCFHeader;                       // Size of per-cabinet reserved area (if flags & 0x0004)
         quint8 nCbCFFolder;                        // Size of per-folder reserved area
@@ -147,13 +157,16 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Streaming unpacking API
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
-    qint64 _getStreamSize(qint64 nOffset, qint32 nCount);
+    qint64 _getStreamSize(qint64 nOffset, qint32 nCount, qint32 nReservedSize, qint64 nCabinetSize, qint64 *pUncompressedSize = nullptr);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XCAB_H

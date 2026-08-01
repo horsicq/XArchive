@@ -34,6 +34,8 @@ public:
         IByteIn vt;
         QIODevice *pDevice;
         bool bError;
+        qint64 nBytesRead;
+        qint64 nLimit;
     };
 
     static void seekToStart(XBinary::DATAPROCESS_STATE *pState);

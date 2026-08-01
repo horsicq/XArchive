@@ -1308,6 +1308,31 @@ Byte *Ppmd7z_DecodeSymbols(CPpmd7 *p, Byte *buf, const Byte *lim)
 
 #include "xalgo_local.h"
 
+// CreateInstall's GEA codec uses a modified PPMd-I model. Keep the mode
+// scoped to a single model call so ordinary PPMd-I users remain bit-exact.
+static thread_local const CPpmd8 *g_pXPPMd8GenteeModel = nullptr;
+
+static bool X_Ppmd8_IsGentee(const CPpmd8 *p)
+{
+    return g_pXPPMd8GenteeModel == p;
+}
+
+class XPpmd8GenteeScope {
+public:
+    explicit XPpmd8GenteeScope(const CPpmd8 *p) : m_pPrevious(g_pXPPMd8GenteeModel)
+    {
+        g_pXPPMd8GenteeModel = p;
+    }
+
+    ~XPpmd8GenteeScope()
+    {
+        g_pXPPMd8GenteeModel = m_pPrevious;
+    }
+
+private:
+    const CPpmd8 *m_pPrevious;
+};
+
 #define Ppmd8_Construct X_Ppmd8_Construct
 #define Ppmd8_Alloc X_Ppmd8_Alloc
 #define Ppmd8_Free X_Ppmd8_Free
@@ -1688,13 +1713,41 @@ Z7_NO_INLINE static void Ppmd8_RestartModel(CPpmd8 *p)
         }
     }
 
-    for (i = m = 0; m < 25; m++) {
-        while (p->NS2Indx[i] == m) i++;
-        for (k = 0; k < 8; k++) {
-            unsigned r;
-            UInt16 *dest = p->BinSumm[m] + k;
-            const UInt16 val = (UInt16)(PPMD_BIN_SCALE - PPMD8_kInitBinEsc[k] / (i + 1));
-            for (r = 0; r < 64; r += 8) dest[r] = val;
+    if (X_Ppmd8_IsGentee(p)) {
+        Byte qTable[197];
+        unsigned groupSize = 1;
+        unsigned groupValue = 5;
+        unsigned countdown = 1;
+
+        for (i = 0; i < 5; i++) qTable[i] = (Byte)i;
+        for (i = 5; i < 196; i++) {
+            qTable[i] = (Byte)groupValue;
+            if (--countdown == 0) {
+                groupSize++;
+                groupValue++;
+                countdown = groupSize;
+            }
+        }
+        qTable[196] = (Byte)(groupValue + 1);
+
+        for (i = m = 0; m < 25; m++) {
+            while (qTable[i] == m) i++;
+            for (k = 0; k < 8; k++) {
+                unsigned r;
+                UInt16 *dest = p->BinSumm[m] + k;
+                const UInt16 val = (UInt16)(PPMD_BIN_SCALE - PPMD8_kInitBinEsc[k] / (i + 1));
+                for (r = 0; r < 64; r += 8) dest[r] = val;
+            }
+        }
+    } else {
+        for (i = m = 0; m < 25; m++) {
+            while (p->NS2Indx[i] == m) i++;
+            for (k = 0; k < 8; k++) {
+                unsigned r;
+                UInt16 *dest = p->BinSumm[m] + k;
+                const UInt16 val = (UInt16)(PPMD_BIN_SCALE - PPMD8_kInitBinEsc[k] / (i + 1));
+                for (r = 0; r < 64; r += 8) dest[r] = val;
+            }
         }
     }
 
@@ -2025,13 +2078,13 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
         } else if (c->NumStats != 0) {
             Byte sym = p->FoundState->Symbol;
             for (s = STATS(c); s->Symbol != sym; s++);
-            if (s->Freq < MAX_FREQ - 9) {
+            if (!X_Ppmd8_IsGentee(p) && s->Freq < MAX_FREQ - 9) {
                 s->Freq++;
                 c->Union2.SummFreq++;
             }
         } else {
             s = ONE_STATE(c);
-            s->Freq = (Byte)(s->Freq + (!SUFFIX(c)->NumStats & (s->Freq < 24)));
+            if (!X_Ppmd8_IsGentee(p)) s->Freq = (Byte)(s->Freq + (!SUFFIX(c)->NumStats & (s->Freq < 24)));
         }
         successor = SUCCESSOR(s);
         if (successor != upBranch) {
@@ -2043,6 +2096,8 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
         }
         ps[numPs++] = s;
     }
+
+    if (X_Ppmd8_IsGentee(p) && numPs == 0) return c;
 
     newSym = *(const Byte *)Ppmd8_GetPtr(p, upBranch);
     upBranch++;
@@ -2217,11 +2272,15 @@ void Ppmd8_UpdateModel(CPpmd8 *p)
         }
 
         c = p->MaxContext;
-        if (p->OrderFall == 0 && minSuccessor) {
+        if (p->OrderFall == 0 && (minSuccessor || X_Ppmd8_IsGentee(p))) {
             PPMD8_CTX_PTR cs = Ppmd8_CreateSuccessors(p, SZ_True, s, p->MinContext);
             if (!cs) {
-                Ppmd8State_SetSuccessor(p->FoundState, 0);
-                RESTORE_MODEL(c, CTX(minSuccessor));
+                if (X_Ppmd8_IsGentee(p)) {
+                    Ppmd8_RestartModel(p);
+                } else {
+                    Ppmd8State_SetSuccessor(p->FoundState, 0);
+                    RESTORE_MODEL(c, CTX(minSuccessor));
+                }
                 return;
             }
             Ppmd8State_SetSuccessor(p->FoundState, REF(cs));
@@ -2234,39 +2293,59 @@ void Ppmd8_UpdateModel(CPpmd8 *p)
             *text++ = p->FoundState->Symbol;
             p->Text = text;
             if (text >= p->UnitsStart) {
-                RESTORE_MODEL(c, CTX(minSuccessor)); /* check it */
+                if (X_Ppmd8_IsGentee(p))
+                    Ppmd8_RestartModel(p);
+                else
+                    RESTORE_MODEL(c, CTX(minSuccessor)); /* check it */
                 return;
             }
             maxSuccessor = REF(text);
         }
 
         if (!minSuccessor) {
-            PPMD8_CTX_PTR cs = ReduceOrder(p, s, p->MinContext);
-            if (!cs) {
-                RESTORE_MODEL(c, NULL);
-                return;
+            if (X_Ppmd8_IsGentee(p)) {
+                Ppmd8State_SetSuccessor(p->FoundState, maxSuccessor);
+                minSuccessor = REF(p->MinContext);
+            } else {
+                PPMD8_CTX_PTR cs = ReduceOrder(p, s, p->MinContext);
+                if (!cs) {
+                    RESTORE_MODEL(c, NULL);
+                    return;
+                }
+                minSuccessor = REF(cs);
             }
-            minSuccessor = REF(cs);
-        } else if ((Byte *)Ppmd8_GetPtr(p, minSuccessor) < p->UnitsStart) {
-            PPMD8_CTX_PTR cs = Ppmd8_CreateSuccessors(p, SZ_False, s, p->MinContext);
-            if (!cs) {
-                RESTORE_MODEL(c, NULL);
-                return;
+        } else {
+            if ((Byte *)Ppmd8_GetPtr(p, minSuccessor) < p->UnitsStart) {
+                PPMD8_CTX_PTR cs = Ppmd8_CreateSuccessors(p, SZ_False, s, p->MinContext);
+                if (!cs) {
+                    if (X_Ppmd8_IsGentee(p))
+                        Ppmd8_RestartModel(p);
+                    else
+                        RESTORE_MODEL(c, NULL);
+                    return;
+                }
+                minSuccessor = REF(cs);
             }
-            minSuccessor = REF(cs);
+
+            if (X_Ppmd8_IsGentee(p) && --p->OrderFall == 0) {
+                maxSuccessor = minSuccessor;
+                p->Text -= (p->MaxContext != p->MinContext);
+            }
         }
 
-        if (--p->OrderFall == 0) {
-            maxSuccessor = minSuccessor;
-            p->Text -= (p->MaxContext != p->MinContext);
-        }
+        if (!X_Ppmd8_IsGentee(p)) {
+            if (--p->OrderFall == 0) {
+                maxSuccessor = minSuccessor;
+                p->Text -= (p->MaxContext != p->MinContext);
+            }
 #ifdef PPMD8_FREEZE_SUPPORT
-        else if (p->RestoreMethod > PPMD8_RESTORE_METHOD_FREEZE) {
-            maxSuccessor = minSuccessor;
-            RESET_TEXT(0)
-            p->OrderFall = 0;
-        }
+            else if (p->RestoreMethod > PPMD8_RESTORE_METHOD_FREEZE) {
+                maxSuccessor = minSuccessor;
+                RESET_TEXT(0)
+                p->OrderFall = 0;
+            }
 #endif
+        }
     }
 
     flag = (Byte)(PPMD8_HiBitsFlag_3(fSymbol));
@@ -2285,7 +2364,10 @@ void Ppmd8_UpdateModel(CPpmd8 *p)
                     void *ptr = Ppmd8_AllocUnits(p, i + 1);
                     void *oldPtr;
                     if (!ptr) {
-                        RESTORE_MODEL(c, CTX(minSuccessor));
+                        if (X_Ppmd8_IsGentee(p))
+                            Ppmd8_RestartModel(p);
+                        else
+                            RESTORE_MODEL(c, CTX(minSuccessor));
                         return;
                     }
                     oldPtr = STATS(c);
@@ -2304,7 +2386,10 @@ void Ppmd8_UpdateModel(CPpmd8 *p)
         } else {
             CPpmd_State *s = (CPpmd_State *)Ppmd8_AllocUnits(p, 0);
             if (!s) {
-                RESTORE_MODEL(c, CTX(minSuccessor));
+                if (X_Ppmd8_IsGentee(p))
+                    Ppmd8_RestartModel(p);
+                else
+                    RESTORE_MODEL(c, CTX(minSuccessor));
                 return;
             }
             {
@@ -2452,7 +2537,8 @@ CPpmd_See *Ppmd8_MakeEscFreq(CPpmd8 *p, unsigned numMasked1, UInt32 *escFreq)
     unsigned numStats = mc->NumStats;
     if (numStats != 0xFF) {
         // (3 <= numStats + 2 <= 256)   (3 <= NS2Indx[3] and NS2Indx[256] === 26)
-        see = p->See[(size_t)(unsigned)p->NS2Indx[(size_t)numStats + 2] - 3] + (mc->Union2.SummFreq > 11 * (numStats + 1)) +
+        see = p->See[(size_t)(unsigned)p->NS2Indx[(size_t)numStats + 2] - 3] +
+              (X_Ppmd8_IsGentee(p) ? (mc->Union2.SummFreq <= 11 * (numStats + 1)) : (mc->Union2.SummFreq > 11 * (numStats + 1))) +
               2 * (unsigned)(2 * numStats < ((unsigned)SUFFIX(mc)->NumStats + numMasked1)) + mc->Flags;
 
         {
@@ -2497,7 +2583,7 @@ void Ppmd8_Update1_0(CPpmd8 *p)
     CPpmd8_Context *mc = p->MinContext;
     unsigned freq = s->Freq;
     const unsigned summFreq = mc->Union2.SummFreq;
-    p->PrevSuccess = (2 * freq >= summFreq);  // Ppmd8 (>=)
+    p->PrevSuccess = X_Ppmd8_IsGentee(p) ? (2 * freq > summFreq) : (2 * freq >= summFreq);  // Ppmd8 (>=)
     p->RunLength += (Int32)p->PrevSuccess;
     mc->Union2.SummFreq = (UInt16)(summFreq + 4);
     freq += 4;
@@ -2813,6 +2899,30 @@ int Ppmd8_DecodeSymbol(CPpmd8 *p)
     }
 }
 
+void X_Ppmd8g_Init(CPpmd8 *p, unsigned maxOrder, unsigned restoreMethod)
+{
+    XPpmd8GenteeScope scope(p);
+    Ppmd8_Init(p, maxOrder, restoreMethod);
+}
+
+void X_Ppmd8g_LightweightReset(CPpmd8 *p)
+{
+    CPpmd8_Context *c = p->MaxContext;
+    p->OrderFall = p->MaxOrder;
+    while (c->Suffix != 0) {
+        c = Ppmd8_GetContext(p, c->Suffix);
+        p->OrderFall--;
+    }
+    p->FoundState = Ppmd8_GetStats(p, c);
+    p->MinContext = p->MaxContext;
+}
+
+int X_Ppmd8g_DecodeSymbol(CPpmd8 *p)
+{
+    XPpmd8GenteeScope scope(p);
+    return Ppmd8_DecodeSymbol(p);
+}
+
 #undef kTop
 #undef kBot
 #undef READ_BYTE
@@ -2859,17 +2969,23 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
     }
 
     QIODevice *pSourceDevice = pDecompressState->pDeviceInput;
-    QIODevice *pDestDevice = pDecompressState->pDeviceOutput;
+
+    if ((pDecompressState->nInputLimit >= 0) && (pDecompressState->nInputLimit < 2)) {
+        pDecompressState->bReadError = true;
+        return false;
+    }
 
     // Read PPMd parameters (2 bytes for ZIP method 98)
     quint8 nParamByte1 = 0;
     quint8 nParamByte2 = 0;
 
     if (pSourceDevice->read((char *)&nParamByte1, 1) != 1) {
+        pDecompressState->bReadError = true;
         return false;
     }
 
     if (pSourceDevice->read((char *)&nParamByte2, 1) != 1) {
+        pDecompressState->bReadError = true;
         return false;
     }
 
@@ -2905,29 +3021,30 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
     }
 
     // Initialize 7-Zip's internal range decoder (hybrid solution)
-    model.setInputStream(pSourceDevice);  // Set input stream for 7-Zip's internal decoder
+    qint64 nModelInputLimit = (pDecompressState->nInputLimit >= 0) ? (pDecompressState->nInputLimit - 2) : -1;
+    model.setInputStream(pSourceDevice, nModelInputLimit);  // Set input stream for 7-Zip's internal decoder
     model.init(nOrder, nRestor);
 
     // Decompress
     const qint32 N_BUFFER_SIZE = 0x4000;
     char sBufferOut[N_BUFFER_SIZE];
 
+    const bool bSizeKnown = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
     qint64 nUncompressedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, -1).toLongLong();
+    if (bSizeKnown && (nUncompressedSize < 0)) return false;
 
     qint64 nDecompressed = 0;
     bool bSuccess = true;
     bool bEndOfStream = false;
-    qint32 nIterations = 0;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct) && !bEndOfStream) {
+        if (bSizeKnown && (nDecompressed >= nUncompressedSize)) break;
+
         qint32 nToDecompress = N_BUFFER_SIZE;
 
         // Limit to remaining size if known
-        if (nUncompressedSize > 0) {
+        if (bSizeKnown) {
             qint64 nRemaining = nUncompressedSize - nDecompressed;
-            if (nRemaining <= 0) {
-                break;
-            }
             nToDecompress = qMin((qint64)nToDecompress, nRemaining);
         }
 
@@ -2938,7 +3055,7 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
 
             if (nSymbol < 0) {
                 // End of stream or error
-                if (nUncompressedSize > 0 && nDecompressed < nUncompressedSize) {
+                if (bSizeKnown && (nDecompressed < nUncompressedSize)) {
                     bSuccess = false;
                 }
                 bEndOfStream = true;
@@ -2957,8 +3074,6 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
             nDecompressed += nActual;
         }
 
-        nIterations++;
-
         // Only break if we got fewer bytes than requested AND we hit the end of stream
         // Don't break just because we filled the buffer
         if (nActual < nToDecompress && bEndOfStream) {
@@ -2966,20 +3081,25 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
         }
     }
 
+    const bool bInputError = model.hasInputError();
+    pDecompressState->nCountInput = 2 + model.inputBytesRead();
+    pDecompressState->bReadError = bInputError;
+
     // Cleanup
     model.free();
 
     // Check if we got the expected amount of data
-    if (nUncompressedSize > 0) {
-        if (nDecompressed != nUncompressedSize) {
+    if (bSizeKnown) {
+        if ((nDecompressed != nUncompressedSize) || bInputError || !bSuccess || pDecompressState->bWriteError ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
-        // If we got the exact expected size, it's a success
         return true;
     }
 
     // If size is unknown, check if we successfully decoded something and there was no write error
-    return bSuccess && (nDecompressed > 0) && !pDecompressState->bWriteError;
+    return bSuccess && bEndOfStream && !bInputError && !pDecompressState->bWriteError &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
@@ -3017,23 +3137,28 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
     Algo_utils::seekToStart(pDecompressState);
 
     // Set input stream to compressed data
-    model.setInputStream(pDecompressState->pDeviceInput);
+    model.setInputStream(pDecompressState->pDeviceInput, pDecompressState->nInputLimit);
     model.init(nOrder);  // PPMdH (Ppmd7) only takes order parameter
 
     // Decompress symbol by symbol
     const qint32 N_BUFFER_SIZE = 0x4000;
     char sBufferOut[N_BUFFER_SIZE];
 
+    const bool bSizeKnown = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
     qint64 nUncompressedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, -1).toLongLong();
+    if (bSizeKnown && (nUncompressedSize < 0)) return false;
     qint64 nDecompressed = 0;
     bool bResult = true;
+    bool bEndOfStream = false;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (bSizeKnown && (nDecompressed >= nUncompressedSize)) break;
+
         qint32 nActual = 0;
 
         // Decode buffer
         for (qint32 i = 0; i < N_BUFFER_SIZE && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-            if (nUncompressedSize > 0 && nDecompressed >= nUncompressedSize) {
+            if (bSizeKnown && (nDecompressed + nActual >= nUncompressedSize)) {
                 break;  // Reached expected size
             }
 
@@ -3041,14 +3166,14 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
 
             if (nSymbol < 0) {
                 // End of stream or error
-                if (nUncompressedSize > 0 && nDecompressed < nUncompressedSize) {
+                if (bSizeKnown && (nDecompressed + nActual < nUncompressedSize)) {
                     bResult = false;  // Unexpected end
                 }
+                bEndOfStream = true;
                 break;
             }
 
             sBufferOut[nActual++] = (char)nSymbol;
-            nDecompressed++;
         }
 
         // Write decoded data
@@ -3057,22 +3182,28 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
                 bResult = false;
                 break;
             }
+            nDecompressed += nActual;
         } else {
             // No more data
             break;
         }
     }
 
+    const bool bInputError = model.hasInputError();
+    pDecompressState->nCountInput = model.inputBytesRead();
+    pDecompressState->bReadError = bInputError;
     model.free();
 
     // Verify size if known
-    if (nUncompressedSize > 0) {
-        if (nDecompressed != nUncompressedSize) {
+    if (bSizeKnown) {
+        if ((nDecompressed != nUncompressedSize) || !bResult || bInputError || pDecompressState->bWriteError ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         return true;
     }
 
     // If size is unknown, check if we successfully decoded something and there was no write error
-    return bResult && (nDecompressed > 0) && !pDecompressState->bWriteError;
+    return bResult && bEndOfStream && !bInputError && !pDecompressState->bWriteError &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }

@@ -27,6 +27,12 @@ class XTARCOMPRESSED : public XTAR {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XTAR::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     enum COMPRESSION_TYPE {
         COMPRESSION_UNKNOWN = 0,
         COMPRESSION_GZIP,      // .tar.gz, .tgz, .taz
@@ -48,6 +54,7 @@ public:
     static COMPRESSION_TYPE detectCompressionType(QIODevice *pDevice);
     static XArchive *getCompressionClassInstance(COMPRESSION_TYPE compressionType, QIODevice *pDevice);
 
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -77,6 +84,8 @@ protected:
 
     // Utility methods
     static QIODevice *createMemoryBuffer(const QByteArray &baData);
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XTARCOMPRESSED_H

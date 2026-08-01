@@ -158,3 +158,34 @@ quint32 XJAR::ftStringToStructID(const QString &sFtString)
 {
     return XCONVERT_ftStringToId(sFtString, _TABLE_XJAR_STRUCTID, sizeof(_TABLE_XJAR_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
+
+bool XJAR::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XZip::handleInternalInfo(pPdStruct);
+        static_cast<XZip::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XZip::INTERNAL_INFO *>(XZip::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XJAR::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XJAR::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XZip::setInternalInfo(static_cast<XZip::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XZip::setInternalInfo(nullptr);
+    }
+}

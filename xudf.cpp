@@ -438,13 +438,20 @@ QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     return listResult;
 }
 
+QMap<XBinary::UNPACK_PROP, QVariant> XUDF::getDefaultUnpackProperties()
+{
+    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
+
+    return result;
+}
+
 bool XUDF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(mapProperties)
-
     bool bResult = false;
 
     if (pState) {
+        pState->mapUnpackProperties = mapProperties;
+
         UDF_UNPACK_CONTEXT *pContext = new UDF_UNPACK_CONTEXT;
         pContext->nBlockSize = _getBlockSize();
         pContext->listRecords = _parseFileSystem(pContext->nBlockSize, pPdStruct);
@@ -640,7 +647,10 @@ bool XUDF::_isValidTag(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    if (nOffset + sizeof(UDF_TAG) > getSize()) {
+    const qint64 nTagSize = static_cast<qint64>(sizeof(UDF_TAG));
+    const qint64 nDeviceSize = getSize();
+
+    if ((nOffset < 0) || (nDeviceSize < nTagSize) || (nOffset > nDeviceSize - nTagSize)) {
         return false;
     }
 
@@ -946,4 +956,35 @@ XBinary *XUDF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
     Q_UNUSED(nModuleAddress)
 
     return new XUDF(pDevice);
+}
+
+bool XUDF::handleInternalInfo(PDSTRUCT *pPdStruct)
+{
+    bool bResult = true;
+
+    if (!isInternalInfoHandled()) {
+        bResult = XArchive::handleInternalInfo(pPdStruct);
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
+            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    }
+
+    return bResult;
+}
+
+void *XUDF::getInternalInfo(PDSTRUCT *pPdStruct)
+{
+    handleInternalInfo(pPdStruct);
+
+    return &m_internalInfo;
+}
+
+void XUDF::setInternalInfo(void *pInternalInfo)
+{
+    if (pInternalInfo) {
+        m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+    } else {
+        m_internalInfo = INTERNAL_INFO();
+        XArchive::setInternalInfo(nullptr);
+    }
 }

@@ -27,6 +27,12 @@ class XTAR_GZ : public XTARCOMPRESSED {
     Q_OBJECT
 
 public:
+    struct INTERNAL_INFO : XTARCOMPRESSED::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
     explicit XTAR_GZ(QIODevice *pDevice = nullptr);
     virtual ~XTAR_GZ();
 
@@ -41,6 +47,8 @@ public:
 private:
     virtual QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
     virtual bool getOuterStreamInfo(qint64 &nOuterStreamOffset, qint64 &nOuterStreamSize, HANDLE_METHOD &handleMethod) override;
+private:
+    INTERNAL_INFO m_internalInfo;
 };
 
 #endif  // XTAR_GZ_H
