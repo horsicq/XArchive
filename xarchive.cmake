@@ -159,6 +159,10 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzwdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xascii85decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xascii85decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xasciihexdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xasciihexdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xrunlengthdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xrunlengthdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.cpp

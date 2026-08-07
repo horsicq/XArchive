@@ -18,6 +18,8 @@ HEADERS += \
     $$PWD/Algos/xlzmadecoder.h \
     $$PWD/Algos/xlzwdecoder.h \
     $$PWD/Algos/xascii85decoder.h \
+    $$PWD/Algos/xasciihexdecoder.h \
+    $$PWD/Algos/xrunlengthdecoder.h \
     $$PWD/Algos/xstoredecoder.h \
     $$PWD/Algos/xbzip2decoder.h \
     $$PWD/Algos/xbrotlidecoder.h \
@@ -111,6 +113,8 @@ SOURCES += \
     $$PWD/Algos/xlzmadecoder.cpp \
     $$PWD/Algos/xlzwdecoder.cpp \
     $$PWD/Algos/xascii85decoder.cpp \
+    $$PWD/Algos/xasciihexdecoder.cpp \
+    $$PWD/Algos/xrunlengthdecoder.cpp \
     $$PWD/Algos/xstoredecoder.cpp \
     $$PWD/Algos/xbzip2decoder.cpp \
     $$PWD/Algos/xbrotlidecoder.cpp \

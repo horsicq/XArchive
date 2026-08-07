@@ -757,6 +757,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         // bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ASCII85) {
         bResult = XASCII85Decoder::decompress_pdf(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ASCIIHEX) {
+        bResult = XASCIIHexDecoder::decompress_pdf(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_RUNLENGTH) {
+        bResult = XRunLengthDecoder::decompress_pdf(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH1) {
         bResult = XLZHDecoder::decompress(pState, 1, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH5) {

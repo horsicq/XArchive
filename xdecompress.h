@@ -33,6 +33,8 @@
 #include "xlzmadecoder.h"
 #include "xlzwdecoder.h"
 #include "xascii85decoder.h"
+#include "xasciihexdecoder.h"
+#include "xrunlengthdecoder.h"
 #include "xbzip2decoder.h"
 #include "xbrotlidecoder.h"
 #include "xzstddecoder.h"
