@@ -21,6 +21,10 @@
 #include "xstoredecoder.h"
 #include "algo_utils.h"
 
+#include <limits>
+#include <new>
+#include <new>
+
 XStoreDecoder::XStoreDecoder(QObject *parent) : QObject(parent)
 {
 }
@@ -29,16 +33,48 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 {
     bool bResult = false;
 
-    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && (pDecompressState->nInputOffset >= 0) &&
+        (pDecompressState->nInputLimit >= -1)) {
+        const bool bHasExpectedSize = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
+        const qint64 nExpectedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
 
-        char *bufferIn = new char[_nBufferSize];
+        // STORE has a one-to-one compressed/output byte mapping.  Reject a
+        // bounded member whose declared output size disagrees before writing
+        // anything; otherwise a truncated member could be reported as a
+        // successful shorter file.
+        if (bHasExpectedSize && ((nExpectedSize < 0) ||
+                                 ((pDecompressState->nInputLimit != -1) && (nExpectedSize != pDecompressState->nInputLimit)))) {
+            return false;
+        }
+
+        if ((pDecompressState->nProcessedOffset < 0) || (pDecompressState->nProcessedLimit < -1) ||
+            ((pDecompressState->nProcessedLimit != -1) &&
+             (pDecompressState->nProcessedOffset > ((std::numeric_limits<qint64>::max)() - pDecompressState->nProcessedLimit)))) {
+            pDecompressState->bWriteError = true;
+            return false;
+        }
+
+        const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
+        if (nRequestedBufferSize <= 0) {
+            return false;
+        }
+        const qint32 _nBufferSize = qBound((qint32)0x1000, nRequestedBufferSize, (qint32)0x100000);
+
+        char *bufferIn = new (std::nothrow) char[_nBufferSize];
+        if (!bufferIn) {
+            return false;
+        }
 
         Algo_utils::prepareState(pDecompressState);
 
         // Copy data from input to output
-        for (qint64 nOffset = 0; (nOffset < pDecompressState->nInputLimit) && XBinary::isPdStructNotCanceled(pPdStruct);) {
+        for (qint64 nOffset = 0;
+             ((pDecompressState->nInputLimit == -1) || (nOffset < pDecompressState->nInputLimit)) && XBinary::isPdStructNotCanceled(pPdStruct);) {
             qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
+
+            if (nBufferSize <= 0) {
+                break;
+            }
 
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
@@ -55,8 +91,10 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
             nOffset += nRead;
         }
 
-        // Success if no errors occurred
-        bResult = !pDecompressState->bReadError && !pDecompressState->bWriteError;
+        const bool bInputComplete = (pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit);
+        const bool bOutputSizeMatches = !bHasExpectedSize || (pDecompressState->nCountOutput == nExpectedSize);
+        bResult = bInputComplete && bOutputSizeMatches && XBinary::isPdStructNotCanceled(pPdStruct) && !pDecompressState->bReadError &&
+                  !pDecompressState->bWriteError;
 
         delete[] bufferIn;
     }

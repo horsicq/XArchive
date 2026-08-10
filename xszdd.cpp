@@ -24,6 +24,41 @@
 static XBinary::XCONVERT _TABLE_XSZDD_STRUCTID[] = {{XSZDD::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                     {XSZDD::STRUCTID_SZDD_HEADER, "SZDD_HEADER", QString("SZDD_HEADER")}};
 
+static const qint64 SZDD_STANDARD_HEADER_SIZE = 14;
+static const qint64 SZDD_LEGACY_HEADER_SIZE = 12;
+
+bool XSZDD::_isStandardSZDDSignature(const QByteArray &baSig)
+{
+    return (baSig.size() == 8) && (baSig.at(0) == 'S') && (baSig.at(1) == 'Z') && (baSig.at(2) == 'D') && (baSig.at(3) == 'D') &&
+           ((quint8)baSig.at(4) == 0x88) && ((quint8)baSig.at(5) == 0xF0) && ((quint8)baSig.at(6) == 0x27) &&
+           (((quint8)baSig.at(7) == 0x33) || ((quint8)baSig.at(7) == 0x3A));
+}
+
+bool XSZDD::_isLegacySZDDSignature(const QByteArray &baSig)
+{
+    return (baSig.size() == 8) && (baSig.at(0) == 'Z') && (baSig.at(1) == 'D') && (baSig.at(2) == 'D') && ((quint8)baSig.at(3) == 0x88) &&
+           ((quint8)baSig.at(4) == 0xF0) && ((quint8)baSig.at(5) == 0x27) && (((quint8)baSig.at(6) == 0x33) || ((quint8)baSig.at(6) == 0x3A)) &&
+           ((quint8)baSig.at(7) == 0x41);
+}
+
+qint64 XSZDD::_getHeaderSize()
+{
+    const QByteArray baSig = read_array(0, 8);
+
+    if (_isLegacySZDDSignature(baSig)) {
+        return SZDD_LEGACY_HEADER_SIZE;
+    }
+
+    return SZDD_STANDARD_HEADER_SIZE;
+}
+
+qint64 XSZDD::_getUncompressedSizeOffset()
+{
+    const QByteArray baSig = read_array(0, 8);
+
+    return _isLegacySZDDSignature(baSig) ? 8 : 10;
+}
+
 XSZDD::XSZDD(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -41,19 +76,15 @@ bool XSZDD::isValid(PDSTRUCT *pPdStruct)
 
     bool bResult = false;
 
-    if (getSize() >= 12) {
+    if (getSize() >= SZDD_LEGACY_HEADER_SIZE) {
         QByteArray baSig = read_array(0, 8);
 
-        // Standard: 53 5A 44 44 88 F0 27 33/3A  ("SZDD...")
-        if ((baSig.size() == 8) && (baSig.at(0) == 'S') && (baSig.at(1) == 'Z') && (baSig.at(2) == 'D') && (baSig.at(3) == 'D') && ((quint8)baSig.at(4) == 0x88) &&
-            ((quint8)baSig.at(5) == 0xF0) && ((quint8)baSig.at(6) == 0x27) && (((quint8)baSig.at(7) == 0x33) || ((quint8)baSig.at(7) == 0x3A))) {
+        if (_isStandardSZDDSignature(baSig) && (getSize() >= SZDD_STANDARD_HEADER_SIZE)) {
             bResult = true;
         }
 
         // Compact/legacy variant seen in tests: 5A 44 44 88 F0 27 33/3A 41  ("ZDD...")
-        if ((baSig.size() == 8) && (baSig.at(0) == 'Z') && (baSig.at(1) == 'D') && (baSig.at(2) == 'D') && ((quint8)baSig.at(3) == 0x88) &&
-            ((quint8)baSig.at(4) == 0xF0) && ((quint8)baSig.at(5) == 0x27) && (((quint8)baSig.at(6) == 0x33) || ((quint8)baSig.at(6) == 0x3A)) &&
-            ((quint8)baSig.at(7) == 0x41)) {
+        if (_isLegacySZDDSignature(baSig)) {
             bResult = true;
         }
     }
@@ -159,9 +190,12 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     qint32 nIndex = 0;
 
-    qint64 nHeaderSize = sizeof(SZDD_HEADER);
-    if ((getSize() >= 12) && (read_uint8(7) == 0x41)) {
-        nHeaderSize = 12;
+    const qint64 nHeaderSize = _getHeaderSize();
+    const qint64 nUncompressedOffset = _getUncompressedSizeOffset();
+
+    if ((nHeaderSize < SZDD_LEGACY_HEADER_SIZE) || (getSize() < nHeaderSize) || (nUncompressedOffset < 0) ||
+        (nUncompressedOffset + 4 > getSize())) {
+        return result;
     }
 
     _MEMORY_RECORD recHeader = {};
@@ -178,12 +212,11 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZSS_SZDD);
-        qint64 nUncompressedOffset = (nHeaderSize == 12) ? 8 : 10;
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, read_uint32(nUncompressedOffset));
         state.pDeviceInput = &sd;
         state.pDeviceOutput = nullptr;
         state.nInputOffset = 0;
-        state.nInputLimit = -1;
+        state.nInputLimit = getSize() - nHeaderSize;
         state.nProcessedOffset = 0;
         state.nProcessedLimit = -1;
 
@@ -318,13 +351,15 @@ QList<XBinary::XFRECORD> XSZDD::getXFRecords(FT fileType, quint32 nStructID, con
 QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(nLimit)
+    Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
 
-    qint64 nHeaderSize = sizeof(SZDD_HEADER);
-    if ((getSize() >= 12) && (read_uint8(7) == 0x41)) {
-        nHeaderSize = 12;
+    if (nFileParts == 0) {
+        return listResult;
     }
+
+    const qint64 nHeaderSize = _getHeaderSize();
 
     if (nFileParts & FILEPART_HEADER) {
         FPART record = {};
@@ -338,7 +373,10 @@ QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         listResult.append(record);
     }
 
-    qint64 nTotalSize = getSize();
+    const qint64 nTotalSize = getSize();
+    if (nTotalSize < nHeaderSize) {
+        return listResult;
+    }
     qint64 nDataOffset = nHeaderSize;
 
     if (nFileParts & FILEPART_REGION) {
@@ -381,15 +419,15 @@ bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             return false;
         }
 
-        SZDD_UNPACK_CONTEXT *pContext = new SZDD_UNPACK_CONTEXT;
+        Q_UNUSED(mapProperties)
 
-        qint64 nHeaderSize = sizeof(SZDD_HEADER);
-        if ((getSize() >= 12) && (read_uint8(7) == 0x41)) {
-            nHeaderSize = 12;
+        const qint64 nHeaderSize = _getHeaderSize();
+        const qint64 nUncompressedOffset = _getUncompressedSizeOffset();
+        if ((nHeaderSize < SZDD_LEGACY_HEADER_SIZE) || (getSize() < nHeaderSize) || (nUncompressedOffset < 0) || (nUncompressedOffset + 4 > getSize())) {
+            return false;
         }
 
-        qint64 nUncompressedOffset = (nHeaderSize == 12) ? 8 : 10;
-
+        SZDD_UNPACK_CONTEXT *pContext = new SZDD_UNPACK_CONTEXT;
         pContext->nHeaderSize = nHeaderSize;
         pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
         pContext->nCompressedSize = getSize() - pContext->nHeaderSize;
@@ -456,6 +494,10 @@ bool XSZDD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     SZDD_UNPACK_CONTEXT *pContext = reinterpret_cast<SZDD_UNPACK_CONTEXT *>(pState->pContext);
 
     qint64 nFileSize = getSize();
+    if ((pContext->nCompressedSize <= 0) || (nFileSize <= pContext->nHeaderSize)) {
+        return false;
+    }
+
     SubDevice sd(getDevice(), pContext->nHeaderSize, nFileSize - pContext->nHeaderSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
@@ -465,18 +507,13 @@ bool XSZDD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;
         state.nInputOffset = 0;
-        state.nInputLimit = -1;
+        state.nInputLimit = pContext->nCompressedSize;
         state.nProcessedOffset = 0;
-        state.nProcessedLimit = -1;
+        state.nProcessedLimit = pContext->nUncompressedSize > 0 ? pContext->nUncompressedSize : -1;
 
         bResult = XLZSSDecoder::decompress(&state, pPdStruct);
 
         sd.close();
-    }
-
-    // Fallback path for malformed/synthetic samples: copy payload as-is.
-    if (!bResult) {
-        bResult = XBinary::copyDeviceMemory(getDevice(), pContext->nHeaderSize, pDevice, 0, pContext->nCompressedSize, pPdStruct);
     }
 
     return bResult;

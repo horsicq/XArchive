@@ -22,10 +22,134 @@
 #include "subdevice.h"
 #include "xpng.h"
 #include "Algos/algo_utils.h"
+#include <algorithm>
 #include <limits>
+
+namespace {
+class DecBoundedReadDevice : public QIODevice {
+public:
+    DecBoundedReadDevice(QIODevice *pSource, qint64 nLimit)
+        : m_pSource(pSource), m_nLimit(nLimit), m_nConsumed(0), m_bError(false)
+    {
+    }
+
+    bool isSequential() const override { return true; }
+    qint64 consumed() const { return m_nConsumed; }
+    bool hasError() const { return m_bError; }
+
+protected:
+    qint64 readData(char *pData, qint64 nMaximumSize) override
+    {
+        if (!m_pSource || (nMaximumSize < 0) || ((nMaximumSize > 0) && !pData) || (m_nConsumed < 0) || (m_nConsumed > m_nLimit)) {
+            m_bError = true;
+            return -1;
+        }
+
+        const qint64 nRemaining = m_nLimit - m_nConsumed;
+        if ((nMaximumSize == 0) || (nRemaining == 0)) {
+            return 0;
+        }
+
+        const qint64 nRequest = (std::min)(nMaximumSize, nRemaining);
+        const qint64 nResult = m_pSource->read(pData, nRequest);
+        if ((nResult < 0) || (nResult > nRequest)) {
+            m_bError = true;
+            return -1;
+        }
+        if (nResult == 0) {
+            m_bError = true;
+            return 0;
+        }
+
+        m_nConsumed += nResult;
+        return nResult;
+    }
+
+    qint64 writeData(const char *, qint64) override { return -1; }
+
+private:
+    QIODevice *m_pSource;
+    qint64 m_nLimit;
+    qint64 m_nConsumed;
+    bool m_bError;
+};
+
+class DecWindowWriteDevice : public QIODevice {
+public:
+    explicit DecWindowWriteDevice(XBinary::DATAPROCESS_STATE *pState) : m_pState(pState), m_bError(false) {}
+
+    bool isSequential() const override { return true; }
+    bool hasError() const { return m_bError; }
+
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+
+    qint64 writeData(const char *pData, qint64 nSize) override
+    {
+        if (!m_pState || (nSize < 0) || ((nSize > 0) && !pData)) {
+            m_bError = true;
+            return -1;
+        }
+
+        qint64 nDone = 0;
+        while (nDone < nSize) {
+            const qint32 nChunk = (qint32)(std::min)(nSize - nDone, (qint64)(std::numeric_limits<qint32>::max)());
+            if (XBinary::_writeDevice(pData + nDone, nChunk, m_pState) != nChunk) {
+                m_bError = true;
+                return -1;
+            }
+            nDone += nChunk;
+        }
+
+        return nSize;
+    }
+
+private:
+    XBinary::DATAPROCESS_STATE *m_pState;
+    bool m_bError;
+};
+
+class DecDiscardWriteDevice : public QIODevice {
+public:
+    bool isSequential() const override { return true; }
+
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+    qint64 writeData(const char *pData, qint64 nSize) override
+    {
+        return ((nSize >= 0) && ((nSize == 0) || pData)) ? nSize : -1;
+    }
+};
+
+static bool decPrepareBoundedInput(QIODevice *pDevice, qint64 nOffset, qint64 nLimit, qint64 *pnEffectiveLimit)
+{
+    const qint64 nMax = (std::numeric_limits<qint64>::max)();
+    if (!pDevice || !pnEffectiveLimit || (nOffset < 0) || (nLimit < -1) || ((nLimit != -1) && (nOffset > (nMax - nLimit)))) {
+        return false;
+    }
+
+    const qint64 nDeviceSize = pDevice->size();
+    if (nLimit == -1) {
+        if ((nDeviceSize < 0) || (nOffset > nDeviceSize)) {
+            return false;
+        }
+        nLimit = nDeviceSize - nOffset;
+    } else if (!pDevice->isSequential() && (nDeviceSize >= 0) && ((nOffset > nDeviceSize) || (nLimit > (nDeviceSize - nOffset)))) {
+        return false;
+    }
+
+    if (!pDevice->seek(nOffset) && (pDevice->pos() != nOffset)) {
+        return false;
+    }
+
+    *pnEffectiveLimit = nLimit;
+    return true;
+}
+}  // namespace
 
 XDecompress::XDecompress(QObject *parent) : QObject(parent)
 {
+    m_pCurrentSolidDevice = nullptr;
     m_pRarUnpacker = nullptr;
     m_nRarSolidIndex = 0;
 }
@@ -35,6 +159,40 @@ XDecompress::XDecompress(QObject *parent) : QObject(parent)
 static bool decIsValidBufferSize(qint64 nSize)
 {
     return (nSize >= 0) && (nSize <= (std::numeric_limits<qint32>::max)());
+}
+
+static bool decReadInputToByteArray(XBinary::DATAPROCESS_STATE *pState, QByteArray *pData)
+{
+    if (!pState || !pState->pDeviceInput || !pData) return false;
+
+    qint64 nSize = pState->nInputLimit;
+    if (nSize == -1) {
+        const qint64 nDeviceSize = pState->pDeviceInput->size();
+        if ((nDeviceSize < 0) || (pState->nInputOffset < 0) || (pState->nInputOffset > nDeviceSize)) {
+            pState->bReadError = true;
+            return false;
+        }
+        nSize = nDeviceSize - pState->nInputOffset;
+    }
+    if (!decIsValidBufferSize(nSize)) {
+        pState->bReadError = true;
+        return false;
+    }
+
+    pData->resize((qint32)nSize);
+    qint64 nReadTotal = 0;
+    while (nReadTotal < nSize) {
+        const qint64 nRead = pState->pDeviceInput->read(pData->data() + nReadTotal, nSize - nReadTotal);
+        if ((nRead <= 0) || (nRead > (nSize - nReadTotal))) {
+            pState->bReadError = true;
+            pData->clear();
+            return false;
+        }
+        nReadTotal += nRead;
+    }
+
+    pState->nCountInput = nReadTotal;
+    return true;
 }
 
 // Decoders normally seek to offset zero before writing, but seeking alone does
@@ -75,6 +233,75 @@ static bool decWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBi
 
     return (nWritten == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
 }
+
+// Copy a complete logical result through XBinary's processed-output window.
+// The source is always consumed in full so nCountOutput continues to describe
+// the complete decoded stream, while only the requested slice reaches the
+// caller's device.
+static bool decEmitDevice(QIODevice *pSource, qint64 nOffset, qint64 nSize, XBinary::DATAPROCESS_STATE *pState,
+                          XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pSource || !pState || (nOffset < 0) || (nSize < 0) || !pState->pDeviceOutput ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (pState) pState->bWriteError = true;
+        return false;
+    }
+
+    pState->bReadError = false;
+    pState->bWriteError = false;
+    pState->nCountOutput = 0;
+
+    if (!decClearOutputDevice(pState->pDeviceOutput)) {
+        pState->bWriteError = true;
+        return false;
+    }
+    if (!pSource->seek(nOffset)) {
+        pState->bReadError = true;
+        return false;
+    }
+
+    char buffer[0x10000];
+    qint64 nReadTotal = 0;
+    while ((nReadTotal < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nRequest = (qint32)(std::min)(nSize - nReadTotal, (qint64)sizeof(buffer));
+        const qint64 nRead = pSource->read(buffer, nRequest);
+        if ((nRead <= 0) || (nRead > nRequest)) {
+            pState->bReadError = true;
+            break;
+        }
+        if (XBinary::_writeDevice(buffer, (qint32)nRead, pState) != (qint32)nRead) {
+            break;
+        }
+        nReadTotal += nRead;
+    }
+
+    return (nReadTotal == nSize) && (pState->nCountOutput == nSize) && !pState->bReadError && !pState->bWriteError &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+class DecInputStateGuard {
+public:
+    explicit DecInputStateGuard(XBinary::DATAPROCESS_STATE *pState)
+        : m_pState(pState), m_pDevice(pState ? pState->pDeviceInput : nullptr), m_nOffset(pState ? pState->nInputOffset : 0),
+          m_nLimit(pState ? pState->nInputLimit : 0)
+    {
+    }
+
+    ~DecInputStateGuard()
+    {
+        if (m_pState) {
+            m_pState->pDeviceInput = m_pDevice;
+            m_pState->nInputOffset = m_nOffset;
+            m_pState->nInputLimit = m_nLimit;
+        }
+    }
+
+private:
+    XBinary::DATAPROCESS_STATE *m_pState;
+    QIODevice *m_pDevice;
+    qint64 m_nOffset;
+    qint64 m_nLimit;
+};
 
 // Each MSZIP CFDATA block is a fresh raw-DEFLATE stream, but blocks after the
 // first inherit the previous 32 KiB as their dictionary.  The bundled inflater
@@ -181,6 +408,7 @@ void XDecompress::clearSolidCache()
     delete m_pRarUnpacker;
     m_pRarUnpacker = nullptr;
     m_nRarSolidIndex = 0;
+    m_pCurrentSolidDevice = nullptr;
 }
 
 bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
@@ -196,11 +424,18 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
     // names.  Include the solid folder and exact packed-stream region so a
     // duplicate name cannot return another record's cached bytes or skip the
     // decoder step required to advance solid state.
-    QString sCacheKey = QString("rar_%1_%2_%3").arg(nSolidFolderIndex).arg(pState->nInputOffset).arg(pState->nInputLimit);
+    QString sCacheKey = QString("rar_%1_%2_%3_%4")
+                            .arg(QString::number((qulonglong)(quintptr)pState->pDeviceInput, 16))
+                            .arg(nSolidFolderIndex)
+                            .arg(pState->nInputOffset)
+                            .arg(pState->nInputLimit);
 
     // If the requested file is not yet cached, decompress it using a persistent rar_Unpack
     // instance that maintains decoder dictionary state across sequential solid files.
     if (!m_mapSolidCache.contains(sCacheKey)) {
+        bool bCacheCreated = false;
+        bool bRarDecodeAttempted = false;
+        qint64 nConsumedInput = 0;
         XBinary::HANDLE_METHOD compressMethod =
             (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE).toUInt();
         qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
@@ -232,11 +467,13 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
                     decryptState.pDeviceOutput = pDecryptedDevice;
                     decryptState.nCountInput = 0;
                     decryptState.nCountOutput = 0;
+                    decryptState.nProcessedOffset = 0;
+                    decryptState.nProcessedLimit = -1;
 
                     if (XAESDecoder::decryptRar5(&decryptState, sPassword, pPdStruct)) {
                         pInputDevice = pDecryptedDevice;
                         nInputOffset = 0;
-                        nInputLimit = nEncryptedSize;
+                        nInputLimit = decryptState.nCountOutput;
                         bInputReady = true;
                     } else {
                         XBinary::freeFileBuffer(&pDecryptedDevice);
@@ -258,7 +495,10 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
                 if (compressMethod == XBinary::HANDLE_METHOD_STORE) {
                     // STORE: copy data directly, decoder state is unaffected
                     qint64 nStoreSize = qMin(qMax((qint64)0, nInputLimit), nUncompressedSize);
-                    bDecompressOk = XBinary::copyDeviceMemory(pInputDevice, nInputOffset, pBuffer, 0, nStoreSize);
+                    bDecompressOk = (nStoreSize == nUncompressedSize) &&
+                                    XBinary::copyDeviceMemory(pInputDevice, nInputOffset, pBuffer, 0, nStoreSize, pPdStruct) &&
+                                    XBinary::isPdStructNotCanceled(pPdStruct);
+                    if (bDecompressOk) nConsumedInput = nStoreSize;
                 } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_15) || (compressMethod == XBinary::HANDLE_METHOD_RAR_20) ||
                            (compressMethod == XBinary::HANDLE_METHOD_RAR_29) || (compressMethod == XBinary::HANDLE_METHOD_RAR_50) ||
                            (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
@@ -266,36 +506,53 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
                         m_pRarUnpacker = new rar_Unpack();
                     }
 
-                    SubDevice sd(pInputDevice, nInputOffset, nInputLimit);
+                    qint64 nEffectiveInputLimit = 0;
+                    if (m_pRarUnpacker && (nWindowSize >= 0) &&
+                        decPrepareBoundedInput(pInputDevice, nInputOffset, nInputLimit, &nEffectiveInputLimit) && decClearOutputDevice(pBuffer)) {
+                        DecBoundedReadDevice inputDevice(pInputDevice, nEffectiveInputLimit);
+                        XBinary::DATAPROCESS_STATE cacheOutputState = {};
+                        cacheOutputState.pDeviceOutput = pBuffer;
+                        cacheOutputState.nProcessedOffset = 0;
+                        cacheOutputState.nProcessedLimit = -1;
+                        DecWindowWriteDevice outputDevice(&cacheOutputState);
 
-                    if (sd.open(QIODevice::ReadOnly)) {
-                        m_pRarUnpacker->setDevices(&sd, pBuffer);
-                        qint32 nInit = m_pRarUnpacker->Init(nWindowSize, bIsSolid);
+                        if (inputDevice.open(QIODevice::ReadOnly) && outputDevice.open(QIODevice::WriteOnly)) {
+                            bRarDecodeAttempted = true;
+                            m_pRarUnpacker->setDevices(&inputDevice, &outputDevice);
+                            qint32 nInit = m_pRarUnpacker->Init(nWindowSize, bIsSolid);
 
-                        if (nInit > 0) {
-                            m_pRarUnpacker->SetDestSize(nUncompressedSize);
+                            if (nInit > 0) {
+                                m_pRarUnpacker->SetDestSize(nUncompressedSize);
 
-                            if (compressMethod == XBinary::HANDLE_METHOD_RAR_15) {
-                                m_pRarUnpacker->Unpack15(bIsSolid, pPdStruct);
-                                bDecompressOk = true;
-                            } else if (compressMethod == XBinary::HANDLE_METHOD_RAR_20) {
-                                m_pRarUnpacker->Unpack20(bIsSolid, pPdStruct);
-                                bDecompressOk = true;
-                            } else if (compressMethod == XBinary::HANDLE_METHOD_RAR_29) {
-                                m_pRarUnpacker->Unpack29(bIsSolid, pPdStruct);
-                                bDecompressOk = true;
-                            } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_50) || (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
-                                m_pRarUnpacker->Unpack5(bIsSolid, pPdStruct);
-                                bDecompressOk = true;
+                                if (compressMethod == XBinary::HANDLE_METHOD_RAR_15) {
+                                    m_pRarUnpacker->Unpack15(bIsSolid, pPdStruct);
+                                } else if (compressMethod == XBinary::HANDLE_METHOD_RAR_20) {
+                                    m_pRarUnpacker->Unpack20(bIsSolid, pPdStruct);
+                                } else if (compressMethod == XBinary::HANDLE_METHOD_RAR_29) {
+                                    m_pRarUnpacker->Unpack29(bIsSolid, pPdStruct);
+                                } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_50) || (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
+                                    m_pRarUnpacker->Unpack5(bIsSolid, pPdStruct);
+                                }
+
+                                bDecompressOk = m_pRarUnpacker->IsFileExtracted() && XBinary::isPdStructNotCanceled(pPdStruct) &&
+                                                !inputDevice.hasError() && !outputDevice.hasError() && !cacheOutputState.bWriteError &&
+                                                (cacheOutputState.nCountOutput == nUncompressedSize);
+                                if (bDecompressOk) nConsumedInput = inputDevice.consumed();
                             }
-                        }
 
-                        sd.close();
+                            outputDevice.close();
+                            inputDevice.close();
+                        } else {
+                            outputDevice.close();
+                            inputDevice.close();
+                        }
                     }
                 }
 
                 if (bDecompressOk) {
+                    pBuffer->setProperty("RAR_INPUT_CONSUMED", nConsumedInput);
                     m_mapSolidCache.insert(sCacheKey, pBuffer);
+                    bCacheCreated = true;
                 } else {
                     XBinary::freeFileBuffer(&pBuffer);
                 }
@@ -305,6 +562,15 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
         // Clean up decrypted device if we created one
         XBinary::freeFileBuffer(&pDecryptedDevice);
 
+        if (!bCacheCreated) {
+            if (bRarDecodeAttempted) {
+                // A failed solid decode can leave the persistent dictionary in
+                // an indeterminate state.  Drop it and its dependent cache.
+                clearSolidCache();
+            }
+            return false;
+        }
+
         m_nRarSolidIndex++;
     }
 
@@ -313,32 +579,53 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
         QIODevice *pCachedDevice = m_mapSolidCache.value(sCacheKey);
         qint64 nDecompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong();
 
-        if (pCachedDevice) {
-            pCachedDevice->seek(0);
+        pState->bReadError = false;
+        pState->bWriteError = false;
+        pState->nCountInput = 0;
+        pState->nCountOutput = 0;
 
-            if (nDecompressedSize == 0) {
-                bResult = decClearOutputDevice(pState->pDeviceOutput);
-                pState->nCountOutput = 0;
+        const qint64 nMax = (std::numeric_limits<qint64>::max)();
+        if (!pCachedDevice || (nDecompressedSize < 0) || (pCachedDevice->size() != nDecompressedSize) || (pState->nProcessedOffset < 0) ||
+            (pState->nProcessedLimit < -1) ||
+            ((pState->nProcessedLimit != -1) && (pState->nProcessedOffset > (nMax - pState->nProcessedLimit)))) {
+            return false;
+        }
 
-                if (!bResult) {
-                    pState->bWriteError = true;
-                }
-            } else {
-                QByteArray baData = pCachedDevice->read(nDecompressedSize);
-                pState->pDeviceOutput->seek(0);
-                pState->nCountOutput = pState->pDeviceOutput->write(baData);
-                bResult = (pState->nCountOutput == nDecompressedSize);
+        // Validate the full cached file before applying an output window; a CRC
+        // over only the requested slice would reject a valid record.
+        XBinary::CRC_TYPE crcType =
+            (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+        if (XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType)) {
+            QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+            if (!checkCRC(crcType, varCRC, pCachedDevice, pPdStruct)) {
+                return false;
             }
+        }
 
-            if (bResult) {
-                // Verify CRC of the extracted file
-                XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+        if (!decClearOutputDevice(pState->pDeviceOutput) || !pCachedDevice->seek(0)) {
+            pState->bWriteError = true;
+            return false;
+        }
 
-                if (XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType)) {
-                    QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
-                    bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
-                }
+        char buffer[0x10000];
+        qint64 nReadTotal = 0;
+        while ((nReadTotal < nDecompressedSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            const qint32 nRequest = (qint32)(std::min)(nDecompressedSize - nReadTotal, (qint64)sizeof(buffer));
+            const qint64 nRead = pCachedDevice->read(buffer, nRequest);
+            if ((nRead <= 0) || (nRead > nRequest)) {
+                pState->bReadError = true;
+                break;
             }
+            if (XBinary::_writeDevice(buffer, (qint32)nRead, pState) != (qint32)nRead) {
+                break;
+            }
+            nReadTotal += nRead;
+        }
+
+        bResult = (nReadTotal == nDecompressedSize) && (pState->nCountOutput == nDecompressedSize) &&
+                  XBinary::isPdStructNotCanceled(pPdStruct) && !pState->bReadError && !pState->bWriteError;
+        if (bResult) {
+            pState->nCountInput = pCachedDevice->property("RAR_INPUT_CONSUMED").toLongLong();
         }
     }
 
@@ -378,6 +665,26 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
 {
     bool bResult = false;
 
+    if (!pState) {
+        return false;
+    }
+
+    pState->bReadError = false;
+    pState->bWriteError = false;
+    pState->nCountInput = 0;
+    pState->nCountOutput = 0;
+
+    // Extraction has exact-replacement semantics.  Clearing up front also
+    // guarantees that cancellation, CRC failure, or an unsupported method
+    // cannot leave bytes from an earlier use of the destination behind.
+    if (pState->pDeviceOutput && !decClearOutputDevice(pState->pDeviceOutput)) {
+        pState->bWriteError = true;
+        return false;
+    }
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
     QString sArchiveMD5 = pState->mapProperties.value(XBinary::FPART_PROP_FILEMD5).toString();
     if (!sArchiveMD5.isEmpty() && sArchiveMD5 != m_sCurrentArchiveMD5) {
         clearSolidCache();
@@ -385,6 +692,11 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     }
 
     bool bIsSolid = pState->mapProperties.value(XBinary::FPART_PROP_ISSOLID, false).toBool();
+
+    if (bIsSolid && (m_pCurrentSolidDevice != pState->pDeviceInput)) {
+        clearSolidCache();
+        m_pCurrentSolidDevice = pState->pDeviceInput;
+    }
 
     qint32 nNumberOfMethods = 1;
 
@@ -399,14 +711,52 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     }
 
     if ((nNumberOfMethods == 1) && (!bIsSolid)) {
-        // Single-method, non-solid: decompress directly to the output device
-        bResult = decompress(pState, pPdStruct);
-        if (bResult && pState->pDeviceOutput) {
-            // Verify CRC of the decompressed result
-            XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+        const XBinary::CRC_TYPE crcType =
+            (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+        const bool bCheckCRC = (crcType != XBinary::CRC_TYPE_UNKNOWN) &&
+                               pState->mapProperties.contains(XBinary::FPART_PROP_RESULTCRC) &&
+                               XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType);
+        const bool bWindowed = (pState->nProcessedOffset != 0) || (pState->nProcessedLimit != -1);
 
-            if (XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType)) {
-                QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+        if (bCheckCRC && bWindowed) {
+            // A record CRC covers the complete decoded record, never a caller's
+            // output slice.  Decode and authenticate the full record first,
+            // then apply the requested processed-output window.
+            const qint64 nExpectedSize =
+                qMax<qint64>(0, pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong());
+            QIODevice *pFullDevice = XBinary::createFileBuffer(nExpectedSize, pPdStruct);
+            if (pFullDevice) {
+                XBinary::DATAPROCESS_STATE fullState = *pState;
+                fullState.pDeviceOutput = pFullDevice;
+                fullState.nProcessedOffset = 0;
+                fullState.nProcessedLimit = -1;
+                fullState.bReadError = false;
+                fullState.bWriteError = false;
+                fullState.nCountInput = 0;
+                fullState.nCountOutput = 0;
+
+                bResult = decompress(&fullState, pPdStruct);
+                pState->nCountInput = fullState.nCountInput;
+                pState->bReadError = fullState.bReadError;
+                pState->bWriteError = fullState.bWriteError;
+
+                const qint64 nFullSize = fullState.nCountOutput;
+                bResult = bResult && (nFullSize >= 0) && (pFullDevice->size() == nFullSize);
+                if (bResult) {
+                    const QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                    bResult = checkCRC(crcType, varCRC, pFullDevice, pPdStruct);
+                }
+                if (bResult) {
+                    bResult = decEmitDevice(pFullDevice, 0, nFullSize, pState, pPdStruct);
+                }
+                XBinary::freeFileBuffer(&pFullDevice);
+            }
+        } else {
+            // Full-output or unchecked single-method extraction can stream
+            // directly to the caller.
+            bResult = decompress(pState, pPdStruct);
+            if (bResult && bCheckCRC && pState->pDeviceOutput) {
+                const QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
                 bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
             }
         }
@@ -435,10 +785,11 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
             // via FPART_PROP_SOLIDFOLDERINDEX); fall back to offset_size when absent.
             QString sCacheKey;
             qint64 nSolidFolderIndex = pState->mapProperties.value(XBinary::FPART_PROP_SOLIDFOLDERINDEX, (qint64)-1).toLongLong();
+            const QString sDeviceKey = QString::number((qulonglong)(quintptr)pState->pDeviceInput, 16);
             if (nSolidFolderIndex >= 0) {
-                sCacheKey = QString("f%1").arg(nSolidFolderIndex);
+                sCacheKey = QString("%1_f%2_%3_%4").arg(sDeviceKey).arg(nSolidFolderIndex).arg(pState->nInputOffset).arg(pState->nInputLimit);
             } else {
-                sCacheKey = QString("%1_%2").arg(pState->nInputOffset).arg(pState->nInputLimit);
+                sCacheKey = QString("%1_%2_%3").arg(sDeviceKey).arg(pState->nInputOffset).arg(pState->nInputLimit);
             }
 
             if (!m_mapSolidCache.contains(sCacheKey)) {
@@ -449,6 +800,12 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
                 XBinary::DATAPROCESS_STATE blockState = *pState;
                 blockState.mapProperties.insert(XBinary::FPART_PROP_ISSOLID, false);
                 blockState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nStreamUnpackedSize);
+                blockState.nProcessedOffset = 0;
+                blockState.nProcessedLimit = -1;
+                blockState.bReadError = false;
+                blockState.bWriteError = false;
+                blockState.nCountInput = 0;
+                blockState.nCountOutput = 0;
                 // A solid folder CRC covers the complete decompressed block. If
                 // it is unavailable, remove the per-file CRC before decoding the block.
                 if (blockState.mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDCRC)) {
@@ -459,11 +816,14 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
                     blockState.mapProperties.remove(XBinary::FPART_PROP_RESULTCRC);
                 }
 
-                QIODevice *pSolidDevice = XBinary::createFileBuffer(nStreamUnpackedSize, pPdStruct);
+                QIODevice *pSolidDevice =
+                    (nStreamUnpackedSize >= 0) ? XBinary::createFileBuffer(nStreamUnpackedSize, pPdStruct) : nullptr;
                 blockState.pDeviceOutput = pSolidDevice;
 
-                bool bBlockResult = multiDecompress(&blockState, pPdStruct);
-                if (pSolidDevice && bBlockResult) {
+                bool bBlockResult = pSolidDevice && (nStreamUnpackedSize >= 0) && multiDecompress(&blockState, pPdStruct);
+                if (pSolidDevice && bBlockResult && (blockState.nCountOutput == nStreamUnpackedSize) &&
+                    (pSolidDevice->size() == nStreamUnpackedSize)) {
+                    pSolidDevice->setProperty("SOLID_INPUT_CONSUMED", blockState.nCountInput);
                     m_mapSolidCache.insert(sCacheKey, pSolidDevice);
                 } else {
                     XBinary::freeFileBuffer(&pSolidDevice);
@@ -471,39 +831,43 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
             }
 
             if (m_mapSolidCache.contains(sCacheKey)) {
-                qint64 nSubstreamOffset = pState->mapProperties.value(XBinary::FPART_PROP_SUBSTREAMOFFSET, (qint64)0).toLongLong();
-                qint64 nDecompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong();
+                const qint64 nSubstreamOffset = pState->mapProperties.value(XBinary::FPART_PROP_SUBSTREAMOFFSET, (qint64)0).toLongLong();
+                const qint64 nDecompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong();
                 QIODevice *pSolidDevice = m_mapSolidCache.value(sCacheKey);
-                if (pState->pDeviceOutput && pSolidDevice) {
-                    pSolidDevice->seek(nSubstreamOffset);
-                    QByteArray baSubStream = pSolidDevice->read(nDecompressedSize);
-                    pState->pDeviceOutput->seek(0);
-                    qint64 nWritten = pState->pDeviceOutput->write(baSubStream);
-                    pState->nCountOutput = nWritten;
-                    bResult = (nWritten == nDecompressedSize);
-                    if (bResult) {
-                        // Verify CRC of the extracted sub-stream
-                        XBinary::CRC_TYPE crcType =
-                            (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+                if (pState->pDeviceOutput && pSolidDevice && (nSubstreamOffset >= 0) && (nDecompressedSize >= 0) &&
+                    (nSubstreamOffset <= pSolidDevice->size()) && (nDecompressedSize <= (pSolidDevice->size() - nSubstreamOffset))) {
+                    bResult = true;
 
-                        if (XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType)) {
-                            QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
-                            bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+                    // Authenticate the complete logical file before applying a
+                    // partial output window.
+                    const XBinary::CRC_TYPE crcType =
+                        (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
+                    if (XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType)) {
+                        SubDevice crcDevice(pSolidDevice, nSubstreamOffset, nDecompressedSize);
+                        if (!crcDevice.open(QIODevice::ReadOnly)) {
+                            bResult = false;
+                        } else {
+                            const QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                            bResult = checkCRC(crcType, varCRC, &crcDevice, pPdStruct);
+                            crcDevice.close();
                         }
+                    }
+
+                    if (bResult) {
+                        pState->nCountInput = pSolidDevice->property("SOLID_INPUT_CONSUMED").toLongLong();
+                        bResult = decEmitDevice(pSolidDevice, nSubstreamOffset, nDecompressedSize, pState, pPdStruct);
                     }
                 }
             }
         }
     } else {
-        // Multi-method, non-solid: apply decompression layers in reverse order (outermost first)
-        QIODevice *pDeviceInput = nullptr;
-        QIODevice *pDeviceOutput = nullptr;
+        // Multi-method, non-solid: every layer is decoded in full into its own
+        // temporary device.  Processed-output windows belong only to the final
+        // logical record; inheriting them in an intermediate layer discards
+        // bytes required by the next filter.
+        QIODevice *pIntermediateDevice = nullptr;
         qint64 nIntermediateSize = 0;
-
-        qint64 nStreamSize = pState->mapProperties.value(XBinary::FPART_PROP_STREAMSIZE, 0).toLongLong();
-        if (nStreamSize == 0) {
-            nStreamSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
-        }
+        qint64 nSourceCount = 0;
 
         for (qint32 i = nNumberOfMethods - 1; i >= 0; i--) {
             XBinary::DATAPROCESS_STATE state = *pState;
@@ -529,61 +893,59 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
             state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSPROPERTIES, pState->mapProperties.value(fpCompressProperties));
             state.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, pState->mapProperties.value(fpCompressedSize));
             state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pState->mapProperties.value(fpUncompressedSize));
-
-            state.pDeviceInput = nullptr;
-            state.pDeviceOutput = nullptr;
+            state.nProcessedOffset = 0;
+            state.nProcessedLimit = -1;
+            state.bReadError = false;
+            state.bWriteError = false;
+            state.nCountInput = 0;
+            state.nCountOutput = 0;
 
             if (i == nNumberOfMethods - 1) {
                 state.pDeviceInput = pState->pDeviceInput;
-            } else if (i == 0) {
-                state.pDeviceOutput = pState->pDeviceOutput;
-            }
-
-            if (state.pDeviceInput == nullptr) {
-                state.pDeviceInput = pDeviceInput;
+            } else {
+                state.pDeviceInput = pIntermediateDevice;
                 state.nInputOffset = 0;
                 state.nInputLimit = nIntermediateSize;
             }
 
-            if (state.pDeviceOutput == nullptr) {
-                pDeviceOutput = XBinary::createFileBuffer(nStreamSize, pPdStruct);
-                state.pDeviceOutput = pDeviceOutput;
-            }
+            const qint64 nExpectedSize =
+                qMax<qint64>(0, state.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong());
+            QIODevice *pStageOutput = XBinary::createFileBuffer(nExpectedSize, pPdStruct);
+            state.pDeviceOutput = pStageOutput;
 
-            bResult = decompress(&state, pPdStruct);
+            bResult = pStageOutput && decompress(&state, pPdStruct);
             nIntermediateSize = state.nCountOutput;
+            if (i == nNumberOfMethods - 1) nSourceCount = state.nCountInput;
+            pState->bReadError = pState->bReadError || state.bReadError;
+            pState->bWriteError = pState->bWriteError || state.bWriteError;
 
-            if (pDeviceInput) {
-                XBinary::freeFileBuffer(&pDeviceInput);
-            }
+            if (pIntermediateDevice) XBinary::freeFileBuffer(&pIntermediateDevice);
 
-            if (pDeviceOutput) {
-                pDeviceInput = pDeviceOutput;
-                pDeviceOutput = nullptr;
-            }
-
-            if (!bResult) {
+            if (!bResult || (nIntermediateSize < 0) || !pStageOutput || (pStageOutput->size() != nIntermediateSize)) {
+                XBinary::freeFileBuffer(&pStageOutput);
+                bResult = false;
                 break;
             }
+
+            pIntermediateDevice = pStageOutput;
         }
 
-        if (pDeviceInput) {
-            XBinary::freeFileBuffer(&pDeviceInput);
-        }
-
-        if (pDeviceOutput) {
-            XBinary::freeFileBuffer(&pDeviceOutput);
-        }
-
-        if (bResult && pState->pDeviceOutput) {
-            // Verify CRC of the final decompressed result
-            XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
-
+        if (bResult && pIntermediateDevice) {
+            const XBinary::CRC_TYPE crcType =
+                (XBinary::CRC_TYPE)pState->mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
             if (XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType)) {
-                QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
-                bResult = checkCRC(crcType, varCRC, pState->pDeviceOutput, pPdStruct);
+                const QVariant varCRC = pState->mapProperties.value(XBinary::FPART_PROP_RESULTCRC, 0);
+                bResult = checkCRC(crcType, varCRC, pIntermediateDevice, pPdStruct);
             }
+            pState->nCountInput = nSourceCount;
+            if (bResult) bResult = decEmitDevice(pIntermediateDevice, 0, nIntermediateSize, pState, pPdStruct);
         }
+
+        if (pIntermediateDevice) XBinary::freeFileBuffer(&pIntermediateDevice);
+    }
+
+    if (!bResult && pState->pDeviceOutput && !pState->pDeviceOutput->isSequential()) {
+        decClearOutputDevice(pState->pDeviceOutput);
     }
 
     return bResult;
@@ -591,14 +953,31 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
 
 bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = true;
-
-    if (pState->pDeviceInput) {
-        pState->pDeviceInput->seek(pState->nInputOffset);
+    if (!pState) {
+        return false;
     }
 
-    if (pState->pDeviceOutput) {
-        pState->pDeviceOutput->seek(0);
+    DecInputStateGuard inputStateGuard(pState);
+    bool bResult = false;
+    pState->bReadError = false;
+    pState->bWriteError = false;
+    pState->nCountInput = 0;
+    pState->nCountOutput = 0;
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    if (pState->pDeviceInput) {
+        if (!pState->pDeviceInput->seek(pState->nInputOffset) && (pState->pDeviceInput->pos() != pState->nInputOffset)) {
+            pState->bReadError = true;
+            return false;
+        }
+    }
+
+    if (pState->pDeviceOutput && !decClearOutputDevice(pState->pDeviceOutput)) {
+        pState->bWriteError = true;
+        return false;
     }
 
     XBinary::HANDLE_METHOD compressMethod = (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE).toUInt();
@@ -606,11 +985,6 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     bool bUncompressedSizeDefined = pState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
     qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
     qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
-
-    if (bUncompressedSizeDefined && (nUncompressedSize == 0) && !decClearOutputDevice(pState->pDeviceOutput)) {
-        pState->bWriteError = true;
-        return false;
-    }
 
     // ARJ GARBLE pre-decryption: if PASSWORD_MODIFIER is present, XOR the compressed stream
     // with (modifier + password[i % len]) mod 256 before decompressing.
@@ -668,8 +1042,18 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     } else if (compressMethod == XBinary::HANDLE_METHOD_BCJ) {
         // x86 BCJ inverse filter — delegate to the single byte-exact reference port.
         if (pState->pDeviceInput && pState->pDeviceOutput) {
-            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
+            qint64 nFilterSize = pState->nInputLimit;
+            if (nFilterSize == -1) nFilterSize = pState->pDeviceInput->size() - pState->nInputOffset;
+            if (!decIsValidBufferSize(nFilterSize)) {
+                pState->bReadError = true;
+                return false;
+            }
+            QByteArray baData = pState->pDeviceInput->read(nFilterSize);
             pState->nCountInput = baData.size();
+            if (baData.size() != nFilterSize) {
+                pState->bReadError = true;
+                return false;
+            }
 
             // Optional 4-byte LE start-offset property (ip); absent/0 for standard 7z.
             quint32 nIp = 0;
@@ -680,9 +1064,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             Algo_utils::applyBCJX86Decode(baData, nIp);
 
-            qint64 nWritten = pState->pDeviceOutput->write(baData);
-            pState->nCountOutput = nWritten;
-            bResult = (nWritten == (qint64)baData.size());
+            bResult = XBinary::_writeDevice(baData.constData(), baData.size(), pState) == baData.size();
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARM64_BCJ) {
         bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARM64, pPdStruct);
@@ -703,16 +1085,24 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_XOR) {
         // KWAJ compression method 1: every byte XOR 0xFF
         if (pState->pDeviceInput && pState->pDeviceOutput) {
-            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
+            qint64 nFilterSize = pState->nInputLimit;
+            if (nFilterSize == -1) nFilterSize = pState->pDeviceInput->size() - pState->nInputOffset;
+            if (!decIsValidBufferSize(nFilterSize)) {
+                pState->bReadError = true;
+                return false;
+            }
+            QByteArray baData = pState->pDeviceInput->read(nFilterSize);
             pState->nCountInput = baData.size();
+            if (baData.size() != nFilterSize) {
+                pState->bReadError = true;
+                return false;
+            }
 
             for (qint32 i = 0; i < baData.size(); i++) {
                 baData[i] = (char)((quint8)baData.at(i) ^ 0xFF);
             }
 
-            qint64 nWritten = pState->pDeviceOutput->write(baData);
-            pState->nCountOutput = nWritten;
-            bResult = (nWritten == (qint64)baData.size());
+            bResult = XBinary::_writeDevice(baData.constData(), baData.size(), pState) == baData.size();
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_XZ) {
         bResult = XLZMADecoder::decompressXZ(pState, pPdStruct);
@@ -776,9 +1166,44 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     } else if ((compressMethod == XBinary::HANDLE_METHOD_RAR_15) || (compressMethod == XBinary::HANDLE_METHOD_RAR_20) ||
                (compressMethod == XBinary::HANDLE_METHOD_RAR_29) || (compressMethod == XBinary::HANDLE_METHOD_RAR_50) ||
                (compressMethod == XBinary::HANDLE_METHOD_RAR_70)) {
+        pState->bReadError = false;
+        pState->bWriteError = false;
+        pState->nCountInput = 0;
+        pState->nCountOutput = 0;
+
+        const qint64 nMax = (std::numeric_limits<qint64>::max)();
+        if (!pState->pDeviceInput || !pState->pDeviceOutput || !bUncompressedSizeDefined || (nUncompressedSize < 0) || (nWindowSize < 0) ||
+            (pState->nProcessedOffset < 0) || (pState->nProcessedLimit < -1) ||
+            ((pState->nProcessedLimit != -1) && (pState->nProcessedOffset > (nMax - pState->nProcessedLimit)))) {
+            pState->bWriteError = true;
+            return false;
+        }
+
+        qint64 nEffectiveInputLimit = 0;
+        if (!decPrepareBoundedInput(pState->pDeviceInput, pState->nInputOffset, pState->nInputLimit, &nEffectiveInputLimit)) {
+            pState->bReadError = true;
+            return false;
+        }
+        if (!decClearOutputDevice(pState->pDeviceOutput)) {
+            pState->bWriteError = true;
+            return false;
+        }
+
+        DecBoundedReadDevice inputDevice(pState->pDeviceInput, nEffectiveInputLimit);
+        DecWindowWriteDevice outputDevice(pState);
+        if (!inputDevice.open(QIODevice::ReadOnly)) {
+            pState->bReadError = true;
+            return false;
+        }
+        if (!outputDevice.open(QIODevice::WriteOnly)) {
+            inputDevice.close();
+            pState->bWriteError = true;
+            return false;
+        }
+
         bool bIsSolid = false;
         rar_Unpack rarUnpack;
-        rarUnpack.setDevices(pState->pDeviceInput, pState->pDeviceOutput);
+        rarUnpack.setDevices(&inputDevice, &outputDevice);
         qint32 nInit = rarUnpack.Init(nWindowSize, bIsSolid);
 
         if (nInit > 0) {
@@ -794,8 +1219,17 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 rarUnpack.Unpack5(bIsSolid, pPdStruct);
             }
 
-            bResult = true;
+            bResult = rarUnpack.IsFileExtracted() && XBinary::isPdStructNotCanceled(pPdStruct) && !inputDevice.hasError() &&
+                      !outputDevice.hasError() && !pState->bReadError && !pState->bWriteError && (pState->nCountOutput == nUncompressedSize);
+        } else {
+            bResult = false;
         }
+
+        pState->nCountInput = inputDevice.consumed();
+        if (inputDevice.hasError()) pState->bReadError = true;
+        if (outputDevice.hasError()) pState->bWriteError = true;
+        outputDevice.close();
+        inputDevice.close();
     } else if ((compressMethod == XBinary::HANDLE_METHOD_ZIP_AES) || (compressMethod == XBinary::HANDLE_METHOD_ZIP_AES128) ||
                (compressMethod == XBinary::HANDLE_METHOD_ZIP_AES192 || (compressMethod == XBinary::HANDLE_METHOD_ZIP_AES256))) {
         QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
@@ -970,8 +1404,23 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         QBuffer rangeBuf(&baRange);
                         if (mainBuf.open(QIODevice::ReadOnly) && callBuf.open(QIODevice::ReadOnly) && jmpBuf.open(QIODevice::ReadOnly)) {
                             if (rangeBuf.open(QIODevice::ReadOnly)) {
-                                bResult = XBCJ2Decoder::decompress(&mainBuf, &callBuf, &jmpBuf, &rangeBuf, pState->pDeviceOutput, nOutputSize, pPdStruct);
-                                pState->nCountOutput = nOutputSize;
+                                QIODevice *pBCJ2Output = XBinary::createFileBuffer(nOutputSize, pPdStruct);
+                                if (pBCJ2Output && decClearOutputDevice(pBCJ2Output)) {
+                                    bResult = XBCJ2Decoder::decompress(&mainBuf, &callBuf, &jmpBuf, &rangeBuf, pBCJ2Output, nOutputSize, pPdStruct) &&
+                                              (pBCJ2Output->size() == nOutputSize);
+                                    if (bResult) {
+                                        const qint64 nMax = (std::numeric_limits<qint64>::max)();
+                                        bResult = (pState->nInputLimit >= 0) && (nCallSize >= 0) && (nJmpSize >= 0) && (nRangeSize >= 0) &&
+                                                  (pState->nInputLimit <= nMax - nCallSize) &&
+                                                  (pState->nInputLimit + nCallSize <= nMax - nJmpSize) &&
+                                                  (pState->nInputLimit + nCallSize + nJmpSize <= nMax - nRangeSize);
+                                        if (bResult) {
+                                            pState->nCountInput = pState->nInputLimit + nCallSize + nJmpSize + nRangeSize;
+                                            bResult = decEmitDevice(pBCJ2Output, 0, nOutputSize, pState, pPdStruct);
+                                        }
+                                    }
+                                }
+                                XBinary::freeFileBuffer(&pBCJ2Output);
                             }
                         }
                     }
@@ -983,8 +1432,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     } else if (compressMethod == XBinary::HANDLE_METHOD_PDF_CCITTIMAGE) {
         // CCITT Fax image: wrap raw data in a TIFF container
         if (pState->pDeviceInput && pState->pDeviceOutput) {
-            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
-            pState->nCountInput = baData.size();
+            QByteArray baData;
+            if (!decReadInputToByteArray(pState, &baData)) return false;
 
             qint32 nWidth = pState->mapProperties.value(XBinary::FPART_PROP_WIDTH).toInt();
             qint32 nHeight = pState->mapProperties.value(XBinary::FPART_PROP_HEIGHT).toInt();
@@ -1045,15 +1494,13 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             tiffBuffer.close();
 
-            qint64 nWritten = pState->pDeviceOutput->write(baTiff);
-            pState->nCountOutput = nWritten;
-            bResult = (nWritten == baTiff.size());
+            bResult = XBinary::_writeDevice(baTiff.constData(), baTiff.size(), pState) == baTiff.size();
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_PDF_PALETTE) {
         // Palette data: build RIFF PAL container from decompressed RGB data
         if (pState->pDeviceInput && pState->pDeviceOutput) {
-            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
-            pState->nCountInput = baData.size();
+            QByteArray baData;
+            if (!decReadInputToByteArray(pState, &baData)) return false;
 
             qint32 nRgbSize = baData.size();
             qint32 nColorCount = nRgbSize / 3;
@@ -1095,21 +1542,17 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
                 palBuffer.close();
 
-                qint64 nWritten = pState->pDeviceOutput->write(baPal);
-                pState->nCountOutput = nWritten;
-                bResult = (nWritten == baPal.size());
+                bResult = XBinary::_writeDevice(baPal.constData(), baPal.size(), pState) == baPal.size();
             } else {
                 // Fallback: write raw data
-                qint64 nWritten = pState->pDeviceOutput->write(baData);
-                pState->nCountOutput = nWritten;
-                bResult = (nWritten == baData.size());
+                bResult = XBinary::_writeDevice(baData.constData(), baData.size(), pState) == baData.size();
             }
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_PDF_IMAGEDATA) {
         // Raw pixel data image: convert decompressed data to PNG
         if (pState->pDeviceInput && pState->pDeviceOutput) {
-            QByteArray baData = pState->pDeviceInput->read(pState->nInputLimit);
-            pState->nCountInput = baData.size();
+            QByteArray baData;
+            if (!decReadInputToByteArray(pState, &baData)) return false;
 
             qint32 nWidth = pState->mapProperties.value(XBinary::FPART_PROP_WIDTH).toInt();
             qint32 nHeight = pState->mapProperties.value(XBinary::FPART_PROP_HEIGHT).toInt();
@@ -1205,9 +1648,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         }
 
                         if (bConverted) {
-                            qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
-                            pState->nCountOutput = nWritten;
-                            bResult = (nWritten == pngBuffer.data().size());
+                            bResult = XBinary::_writeDevice(pngBuffer.data().constData(), pngBuffer.data().size(), pState) == pngBuffer.data().size();
                         }
                     }
                 }
@@ -1223,9 +1664,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         }
 
                         if (bConverted) {
-                            qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
-                            pState->nCountOutput = nWritten;
-                            bResult = (nWritten == pngBuffer.data().size());
+                            bResult = XBinary::_writeDevice(pngBuffer.data().constData(), pngBuffer.data().size(), pState) == pngBuffer.data().size();
                         }
                     }
                 }
@@ -1263,9 +1702,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         }
 
                         if (bConverted) {
-                            qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
-                            pState->nCountOutput = nWritten;
-                            bResult = (nWritten == pngBuffer.data().size());
+                            bResult = XBinary::_writeDevice(pngBuffer.data().constData(), pngBuffer.data().size(), pState) == pngBuffer.data().size();
                         }
                     }
                 }
@@ -1283,9 +1720,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         }
 
                         if (bConverted) {
-                            qint64 nWritten = pState->pDeviceOutput->write(pngBuffer.data());
-                            pState->nCountOutput = nWritten;
-                            bResult = (nWritten == pngBuffer.data().size());
+                            bResult = XBinary::_writeDevice(pngBuffer.data().constData(), pngBuffer.data().size(), pState) == pngBuffer.data().size();
                         }
                     }
                 }
@@ -1293,9 +1728,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             if (!bConverted) {
                 // Fallback: write raw decompressed data
-                qint64 nWritten = pState->pDeviceOutput->write(baData);
-                pState->nCountOutput = nWritten;
-                bResult = (nWritten == baData.size());
+                bResult = XBinary::_writeDevice(baData.constData(), baData.size(), pState) == baData.size();
             }
         }
     } else if ((compressMethod == XBinary::HANDLE_METHOD_STORE_CAB) || (compressMethod == XBinary::HANDLE_METHOD_MSZIP_CAB)) {
@@ -1498,6 +1931,12 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         qDebug() << "Unknown compression method" << XBinary::handleMethodToString(compressMethod);
 #endif
         emit errorMessage(QString("%1: %2").arg(tr("Unknown compression method")).arg(XBinary::handleMethodToString(compressMethod)));
+        bResult = false;
+    }
+
+    bResult = bResult && !pState->bReadError && !pState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
+    if (!bResult && pState->pDeviceOutput && !pState->pDeviceOutput->isSequential()) {
+        decClearOutputDevice(pState->pDeviceOutput);
     }
 
     return bResult;
@@ -1520,7 +1959,9 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
             state.nProcessedLimit = -1;
             state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
-            multiDecompress(&state, pPdStruct);
+            if (!multiDecompress(&state, pPdStruct)) {
+                baResult.clear();
+            }
 
             buffer.close();
         }
@@ -1531,25 +1972,32 @@ QByteArray XDecompress::decomressToByteArray(QIODevice *pDevice, qint64 nOffset,
 
 qint64 XDecompress::getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct)
 {
+    if (!pDevice || (nOffset < 0) || (nSize < -1)) {
+        return 0;
+    }
+
     if (nSize == -1) {
-        nSize = pDevice->size() - nOffset;
+        const qint64 nDeviceSize = pDevice->size();
+        if ((nDeviceSize < 0) || (nOffset > nDeviceSize)) return 0;
+        nSize = nDeviceSize - nOffset;
     }
 
     qint64 nResult = 0;
-
-    if (pDevice) {
+    DecDiscardWriteDevice outputDevice;
+    if (outputDevice.open(QIODevice::WriteOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
         state.pDeviceInput = pDevice;
-        state.pDeviceOutput = nullptr;
+        state.pDeviceOutput = &outputDevice;
         state.nInputOffset = nOffset;
         state.nInputLimit = nSize;
         state.nProcessedOffset = 0;
         state.nProcessedLimit = -1;
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
-        multiDecompress(&state, pPdStruct);
-
-        nResult = state.nCountInput;
+        if (multiDecompress(&state, pPdStruct)) {
+            nResult = state.nCountInput;
+        }
+        outputDevice.close();
     }
 
     return nResult;

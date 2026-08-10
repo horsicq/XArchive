@@ -32,6 +32,50 @@
 
 #include <QBuffer>
 
+namespace {
+
+// Compressed TAR handlers materialize the complete TAR so that the streaming
+// archive API can traverse it repeatedly.  Keep that unavoidable allocation
+// bounded for untrusted input instead of allowing a small compressed stream to
+// grow a QBuffer until the process runs out of memory.
+const qint64 TARCOMPRESSED_MAX_DECOMPRESSED_SIZE = Q_INT64_C(512) * 1024 * 1024;
+
+class BoundedTarOutputBuffer : public QBuffer {
+public:
+    BoundedTarOutputBuffer(QByteArray *pData, qint64 nLimit) : QBuffer(pData), m_nLimit(nLimit), m_bLimitExceeded(false) {}
+
+    bool seek(qint64 nPosition) override
+    {
+        if ((nPosition < 0) || (nPosition > m_nLimit)) {
+            m_bLimitExceeded = true;
+            return false;
+        }
+
+        return QBuffer::seek(nPosition);
+    }
+
+    bool isLimitExceeded() const { return m_bLimitExceeded; }
+
+protected:
+    qint64 writeData(const char *pData, qint64 nMaximumSize) override
+    {
+        const qint64 nPosition = pos();
+        if ((nMaximumSize < 0) || ((nMaximumSize > 0) && !pData) || (nPosition < 0) ||
+            (nPosition > m_nLimit) || (nMaximumSize > (m_nLimit - nPosition))) {
+            m_bLimitExceeded = true;
+            return -1;
+        }
+
+        return QBuffer::writeData(pData, nMaximumSize);
+    }
+
+private:
+    qint64 m_nLimit;
+    bool m_bLimitExceeded;
+};
+
+}  // namespace
+
 XTARCOMPRESSED::XTARCOMPRESSED(QIODevice *pDevice) : XTAR(pDevice)
 {
     m_pDecompressedData = nullptr;
@@ -281,14 +325,41 @@ QIODevice *XTARCOMPRESSED::decompressByMethod(HANDLE_METHOD handleMethod, qint64
         nInputSize = pDevice->size() - nOffset;
     }
 
-    if ((nOffset < 0) || (nInputSize <= 0) || ((nOffset + nInputSize) > pDevice->size())) {
+    const qint64 nDeviceSize = pDevice->size();
+    if ((nOffset < 0) || (nInputSize <= 0) || (nDeviceSize < 0) || (nOffset > nDeviceSize) ||
+        (nInputSize > (nDeviceSize - nOffset))) {
         return nullptr;
     }
 
-    XDecompress decompress;
-    QByteArray baData = decompress.decomressToByteArray(pDevice, nOffset, nInputSize, handleMethod, pPdStruct);
+    QByteArray baData;
+    BoundedTarOutputBuffer output(&baData, TARCOMPRESSED_MAX_DECOMPRESSED_SIZE);
+    if (!output.open(QIODevice::ReadWrite)) {
+        return nullptr;
+    }
 
-    if (baData.isEmpty()) {
+    XBinary::DATAPROCESS_STATE state = {};
+    state.pDeviceInput = pDevice;
+    state.pDeviceOutput = &output;
+    state.nInputOffset = nOffset;
+    state.nInputLimit = nInputSize;
+    state.nProcessedOffset = 0;
+    state.nProcessedLimit = -1;
+    state.mapProperties.insert(FPART_PROP_HANDLEMETHOD, handleMethod);
+
+    XDecompress decompress;
+    const bool bDecoded = decompress.multiDecompress(&state, pPdStruct);
+    output.close();
+
+    // decomressToByteArray() historically returned bytes even when the decoder
+    // reported failure.  Do not admit a parseable TAR prefix from a truncated or
+    // checksum-invalid compressed stream, and require the exact bounded source
+    // extent to have been consumed.
+    const bool bComplete = bDecoded && !state.bReadError && !state.bWriteError && !output.isLimitExceeded() &&
+                           XBinary::isPdStructNotCanceled(pPdStruct) && (state.nCountInput == nInputSize) &&
+                           (state.nCountOutput == baData.size()) && (state.nCountOutput > 0) &&
+                           (state.nCountOutput <= TARCOMPRESSED_MAX_DECOMPRESSED_SIZE);
+    if (!bComplete) {
+        baData.clear();
         return nullptr;
     }
 

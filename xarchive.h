@@ -63,6 +63,7 @@ public:
         quint64 nWindowSize;
         bool bIsSolid;  // For RAR
         HANDLE_METHOD compressMethod;
+        HANDLE_METHOD compressMethod2;  // Optional second stage for layered streams.
         // FT fileType;
     };
 

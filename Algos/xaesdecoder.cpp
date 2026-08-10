@@ -297,6 +297,28 @@ static const qint32 N_PBKDF2_ITERATIONS = 1000;
 static const qint32 N_PASSWORD_VERIFY_SIZE = 2;
 static const qint32 N_HMAC_SIZE = 10;
 static const qint32 N_AES_BLOCK_SIZE = 16;
+static const qint32 N_WINZIP_AES_COUNTER_BYTES = 8;
+
+static void initZipAesCounter(unsigned char *pCounter, const QByteArray &baNonce)
+{
+    if (!pCounter) {
+        return;
+    }
+
+    memset(pCounter, 0, N_AES_BLOCK_SIZE);
+
+    if (!baNonce.isEmpty()) {
+        const qint32 nNonceSize = qMin((qint32)baNonce.size(), N_AES_BLOCK_SIZE);
+        memcpy(pCounter, baNonce.constData(), nNonceSize);
+    }
+
+    // WinZip AES CTR starts from counter block value 1.
+    for (qint32 j = 0; j < N_WINZIP_AES_COUNTER_BYTES; j++) {
+        if (++pCounter[j] != 0) {
+            break;
+        }
+    }
+}
 
 bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QString &sPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
 {
@@ -799,11 +821,7 @@ bool XAESDecoder::decryptAESCTR(const QByteArray &baKey, const QByteArray &baNon
     }
 
     unsigned char counter[N_AES_BLOCK_SIZE];
-    memset(counter, 0, N_AES_BLOCK_SIZE);
-    if (!baNonce.isEmpty()) {
-        qint32 nNonceSize = qMin((qint32)baNonce.size(), N_AES_BLOCK_SIZE);
-        memcpy(counter, baNonce.constData(), nNonceSize);
-    }
+    initZipAesCounter(counter, baNonce);
 
     qint64 nOffset = 0;
     unsigned char encryptedCounter[N_AES_BLOCK_SIZE];
@@ -816,7 +834,7 @@ bool XAESDecoder::decryptAESCTR(const QByteArray &baKey, const QByteArray &baNon
             pOutputData[nOffset + i] = pInputData[nOffset + i] ^ encryptedCounter[i];
         }
 
-        for (qint32 j = 0; j < 8; j++) {
+        for (qint32 j = 0; j < N_WINZIP_AES_COUNTER_BYTES; j++) {
             if (++counter[j] != 0) {
                 break;
             }
@@ -840,11 +858,7 @@ bool XAESDecoder::encryptAESCTR(const QByteArray &baKey, const QByteArray &baNon
     }
 
     unsigned char counter[N_AES_BLOCK_SIZE];
-    memset(counter, 0, N_AES_BLOCK_SIZE);
-    if (!baNonce.isEmpty()) {
-        qint32 nNonceSize = qMin((qint32)baNonce.size(), N_AES_BLOCK_SIZE);
-        memcpy(counter, baNonce.constData(), nNonceSize);
-    }
+    initZipAesCounter(counter, baNonce);
 
     qint64 nOffset = 0;
     unsigned char encryptedCounter[N_AES_BLOCK_SIZE];
@@ -857,7 +871,7 @@ bool XAESDecoder::encryptAESCTR(const QByteArray &baKey, const QByteArray &baNon
             pOutputData[nOffset + i] = pInputData[nOffset + i] ^ encryptedCounter[i];
         }
 
-        for (qint32 j = 0; j < 8; j++) {
+        for (qint32 j = 0; j < N_WINZIP_AES_COUNTER_BYTES; j++) {
             if (++counter[j] != 0) {
                 break;
             }
@@ -1146,13 +1160,6 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
     if (baAESKeyProp.size() >= 45) {  // 33 + 12 = 45 (8 bytes pswCheck + 4 bytes checksum)
         // RAR5 password check: XOR-fold 32-byte pswCheck to 8 bytes
         quint8 aCheckCalced[8];
-        for (qint32 i = 0; i < 4; i++) {
-            quint32 nVal = 0;
-            for (qint32 j = 0; j < 8; j++) {
-                nVal ^= static_cast<quint32>(aPswCheck[i * 4 + j + (j >= 4 ? 12 : 0)]);
-                // XOR pairs: check[0]^check[2]^check[4]^check[6] and check[1]^check[3]^check[5]^check[7]
-            }
-        }
         // Simplified: XOR 32 bytes down to 8 bytes
         for (qint32 i = 0; i < 8; i++) {
             aCheckCalced[i] = aPswCheck[i] ^ aPswCheck[i + 8] ^ aPswCheck[i + 16] ^ aPswCheck[i + 24];
@@ -1204,9 +1211,7 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
         return false;
     }
 
-    // Write decrypted data - only the uncompressed size portion (RAR5 pads encrypted data to AES block boundary)
-    qint64 nOutputSize = pDecryptState->mapProperties.value(XBinary::FPART_PROP_COMPRESSEDSIZE, nTotalEncrypted).toLongLong();
-    // For encrypted RAR5, the actual compressed data may be smaller than the encrypted block
+    // For encrypted RAR5, the actual compressed data may be smaller than the encrypted block.
     // Use the full decrypted size since the decompressor will handle the actual data length
     qint64 nToWrite = nTotalEncrypted;
 

@@ -400,6 +400,8 @@ QList<XArchive::RECORD> XXZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     if (isValid(pPdStruct)) {
         RECORD record = {};
         record.spInfo.sRecordName = "stream";
+        record.spInfo.compressMethod = HANDLE_METHOD_XZ;
+        record.spInfo.nUncompressedSize = -1;  // Determined from the validated Index(es) while decoding.
         record.nDataOffset = 0;
         record.nDataSize = getSize();
         // TODO: parse uncompressed size, CRC, etc.
@@ -435,34 +437,18 @@ bool XXZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
         // Create and initialize context
         XXZ_UNPACK_CONTEXT *pContext = new XXZ_UNPACK_CONTEXT;
 
-        // XZ format: 6-byte header + stream flags (2 bytes) + CRC32 (4 bytes) + compressed blocks + index + stream footer
-        // For now, we treat the entire file as one compressed stream
-        qint64 nOffset = 0;
+        // The XZ decoder needs the complete container: Stream Headers, every
+        // Block and Index, Stream Footers, concatenated Streams, and Padding.
         qint64 nFileSize = getSize();
 
-        // Header size is always 12 bytes (6-byte magic + 2-byte flags + 4-byte CRC32)
-        pContext->nHeaderSize = 12;
-        nOffset = pContext->nHeaderSize;
+        pContext->nHeaderSize = 0;
 
         // Get filename from device
         pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
 
-        // Compressed data size: total size - header (12) - footer (12)
-        qint64 nCompressedDataSize = nFileSize - 12 - 12;
-        if (nCompressedDataSize < 0) {
-            nCompressedDataSize = 0;
-        }
-
-        pContext->nCompressedSize = nCompressedDataSize;
-        pContext->nUncompressedSize = 0;  // XZ uncompressed size would need to be parsed from blocks
-
-        // Read footer CRC32 if available
-        if (nFileSize >= 12) {
-            qint64 nFooterOffset = nFileSize - 12;
-            pContext->nCRC32 = read_uint32(nFooterOffset, false);  // Little-endian
-        } else {
-            pContext->nCRC32 = 0;
-        }
+        pContext->nCompressedSize = nFileSize;
+        pContext->nUncompressedSize = -1;  // The decoder derives and verifies this from every Index.
+        pContext->nCRC32 = 0;             // XZ integrity is per Stream/Block, not a record CRC32.
 
         // Initialize state
         pState->nCurrentOffset = 0;
@@ -494,7 +480,7 @@ XBinary::ARCHIVERECORD XXZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruc
     XXZ_UNPACK_CONTEXT *pContext = (XXZ_UNPACK_CONTEXT *)pState->pContext;
 
     // Fill ARCHIVERECORD
-    result.nStreamOffset = pContext->nHeaderSize;
+    result.nStreamOffset = 0;
     result.nStreamSize = pContext->nCompressedSize;
     // result.nDecompressedOffset = 0;
     // result.nDecompressedSize = pContext->nUncompressedSize;
@@ -502,8 +488,9 @@ XBinary::ARCHIVERECORD XXZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruc
     // Set properties
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
-    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
-    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZMA2);
+    // Do not publish a fake zero uncompressed size. The complete, validated
+    // total is available only after walking all concatenated Stream Indexes.
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_XZ);
 
     return result;
 }
@@ -522,12 +509,13 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
 
     XXZ_UNPACK_CONTEXT *pContext = (XXZ_UNPACK_CONTEXT *)pState->pContext;
 
-    // Create a sub-device for the compressed stream (skipping header and footer)
-    SubDevice sd(getDevice(), pContext->nHeaderSize, pContext->nCompressedSize);
+    // Keep the complete member so XLZMADecoder can validate container framing,
+    // all Block checks and Index records, and concatenated Streams.
+    SubDevice sd(getDevice(), 0, pContext->nCompressedSize);
 
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
-        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZMA2);
+        state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_XZ);
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDevice;
         state.nInputOffset = 0;
@@ -535,8 +523,7 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
         state.nProcessedOffset = 0;
         state.nProcessedLimit = -1;
 
-        // Use XLZMADecoder to decompress LZMA2 data (used by XZ format)
-        bResult = XLZMADecoder::decompressLZMA2(&state, pPdStruct);
+        bResult = XLZMADecoder::decompressXZ(&state, pPdStruct);
 
         sd.close();
     }

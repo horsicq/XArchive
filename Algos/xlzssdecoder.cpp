@@ -35,7 +35,11 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
         // LZSS parameters for SZDD format
         const qint32 N_WINDOW_SIZE = 4096;     // Size of sliding window
         const qint32 N_MATCH_MIN_LENGTH = 3;   // Minimum match length
-        const qint32 N_MATCH_MAX_LENGTH = 18;  // Maximum match length (3 + 15)
+        const qint32 N_MATCH_MAX_LENGTH = 16;  // Maximum match length in MS LZSS
+        const qint32 N_MATCH_BIAS = 16;        // MS LZSS copy offset bias
+
+        const qint64 nOutputLimit = pDecompressState->nProcessedLimit;
+        qint64 nOutputCount = 0;
 
         // Allocate sliding window buffer
         char *pWindowBuffer = new char[N_WINDOW_SIZE];
@@ -43,7 +47,7 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
             return false;
         }
 
-        memset(pWindowBuffer, 0, N_WINDOW_SIZE);
+        memset(pWindowBuffer, ' ', N_WINDOW_SIZE);
         qint32 nWindowPos = 0;
 
         // Output buffer
@@ -79,13 +83,21 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
                 // Read literal byte
                 char cByte;
                 if (XBinary::_readDevice(&cByte, 1, pDecompressState) != 1) {
+                    pDecompressState->bReadError = true;
+                    bResult = false;
                     break;  // End of input
+                }
+
+                if ((nOutputLimit != -1) && (nOutputCount + 1 > nOutputLimit)) {
+                    bResult = false;
+                    break;
                 }
 
                 // Write literal to output and window
                 pOutputBuffer[nOutputBufferPos++] = cByte;
                 pWindowBuffer[nWindowPos] = cByte;
                 nWindowPos = (nWindowPos + 1) & (N_WINDOW_SIZE - 1);
+                nOutputCount++;
 
                 // Flush output buffer if needed
                 if (nOutputBufferPos >= N_OUTPUT_BUFFER_SIZE) {
@@ -100,26 +112,27 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
                 // Read match: 2 bytes for position and length
                 char bytePos[2];
                 if (XBinary::_readDevice(bytePos, 2, pDecompressState) != 2) {
+                    pDecompressState->bReadError = true;
+                    bResult = false;
                     break;  // End of input
                 }
 
-                // Decode position and length
-                // Typically: position (12 bits) and length (4 bits)
-                quint16 nEncoded = (quint8)bytePos[0] | ((quint8)bytePos[1] << 8);
-                quint16 nPos = (nEncoded >> 4) & 0xFFF;                 // 12-bit position
-                quint16 nLen = (nEncoded & 0x0F) + N_MATCH_MIN_LENGTH;  // 4-bit length + 3
+                const quint8 nFirstByte = static_cast<quint8>(bytePos[0]);
+                const quint8 nSecondByte = static_cast<quint8>(bytePos[1]);
+                const quint16 nLen = (nSecondByte & 0x0F) + N_MATCH_MIN_LENGTH;      // 4-bit length + 3
+                const qint32 nPos = ((((qint16)(nSecondByte & 0xF0) << 4) | nFirstByte) + N_MATCH_BIAS) & (N_WINDOW_SIZE - 1);
 
-                // Copy match from window to output
-                qint32 nSrcPos = nWindowPos - nPos;
-                if (nSrcPos < 0) {
-                    nSrcPos += N_WINDOW_SIZE;
+                if ((nOutputLimit != -1) && (nOutputCount + nLen > nOutputLimit)) {
+                    bResult = false;
+                    break;
                 }
 
                 for (quint16 i = 0; i < nLen; i++) {
-                    char cByte = pWindowBuffer[(nSrcPos + i) & (N_WINDOW_SIZE - 1)];
+                    char cByte = pWindowBuffer[(nPos + i) & (N_WINDOW_SIZE - 1)];
                     pOutputBuffer[nOutputBufferPos++] = cByte;
                     pWindowBuffer[nWindowPos] = cByte;
                     nWindowPos = (nWindowPos + 1) & (N_WINDOW_SIZE - 1);
+                    nOutputCount++;
 
                     // Flush output buffer if needed
                     if (nOutputBufferPos >= N_OUTPUT_BUFFER_SIZE) {
@@ -135,6 +148,10 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
                 if (!bResult) {
                     break;
                 }
+            }
+
+            if ((nOutputLimit != -1) && (nOutputCount >= nOutputLimit)) {
+                break;
             }
         }
 

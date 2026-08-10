@@ -24,11 +24,31 @@
 #include <QCryptographicHash>
 #include <algorithm>
 #include <cstdlib>
+#include <limits>
 
 namespace {
 const qint32 N_ALGO_UTILS_BUFFER_SIZE = 65536;
 ISzAlloc g_lzmaAlloc = {Algo_utils::szAlloc, Algo_utils::szFree};
 ISzAlloc g_ppmdAlloc = {Algo_utils::szAlloc, Algo_utils::szFree};
+
+void rewindUnusedInput(XBinary::DATAPROCESS_STATE *pState, qint64 nUnusedSize)
+{
+    if (!pState || !pState->pDeviceInput || (nUnusedSize <= 0) || (nUnusedSize > pState->nCountInput) || pState->pDeviceInput->isSequential()) {
+        return;
+    }
+
+    // Look-ahead belongs to the following member/record.  Keep the physical
+    // device position and nCountInput consistent when the source is seekable;
+    // a sequential source cannot be unread, so its count intentionally remains
+    // the number of bytes physically consumed.
+    const qint64 nConsumed = pState->nCountInput - nUnusedSize;
+    const qint64 nMax = (std::numeric_limits<qint64>::max)();
+    if ((pState->nInputOffset < 0) || (nConsumed < 0) || (pState->nInputOffset > nMax - nConsumed)) return;
+    const qint64 nTarget = pState->nInputOffset + nConsumed;
+    if (pState->pDeviceInput->seek(nTarget)) {
+        pState->nCountInput -= nUnusedSize;
+    }
+}
 }  // namespace
 
 void Algo_utils::seekToStart(XBinary::DATAPROCESS_STATE *pState)
@@ -44,23 +64,41 @@ void Algo_utils::seekToStart(XBinary::DATAPROCESS_STATE *pState)
 
 void Algo_utils::prepareState(XBinary::DATAPROCESS_STATE *pState)
 {
+    if (!pState) {
+        return;
+    }
+
     pState->bReadError = false;
     pState->bWriteError = false;
     pState->nCountInput = 0;
     pState->nCountOutput = 0;
 
     seekToStart(pState);
+
+    if (!pState->pDeviceInput || (pState->nInputOffset < 0) || (pState->pDeviceInput->pos() != pState->nInputOffset)) {
+        pState->bReadError = true;
+    }
+    if (!pState->pDeviceOutput || (pState->pDeviceOutput->pos() != 0)) {
+        pState->bWriteError = true;
+    }
 }
 
 qint32 Algo_utils::getReadChunkSize(const XBinary::DATAPROCESS_STATE *pState, qint32 nBufferSize)
 {
-    qint32 nResult = nBufferSize;
-
-    if (pState->nInputLimit != -1) {
-        nResult = (qint32)(std::min)(pState->nInputLimit - pState->nCountInput, (qint64)nBufferSize);
+    if (!pState || (nBufferSize <= 0) || (pState->nCountInput < 0) || (pState->nInputLimit < -1)) {
+        return 0;
     }
 
-    return nResult;
+    if (pState->nInputLimit != -1) {
+        if (pState->nCountInput >= pState->nInputLimit) {
+            return 0;
+        }
+
+        const qint64 nRemaining = pState->nInputLimit - pState->nCountInput;
+        return (qint32)(std::min)(nRemaining, (qint64)nBufferSize);
+    }
+
+    return nBufferSize;
 }
 
 int Algo_utils::ascii85ReadByte(XBinary::DATAPROCESS_STATE *pState)
@@ -110,208 +148,228 @@ ISzAlloc *Algo_utils::ppmdAlloc()
 
 bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
-    qint64 nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    if (!pState || !pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
+        return false;
+    }
+
+    const qint32 nBufferSize = XBinary::getBufferSize(pPdStruct);
+    const qint64 nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    if ((nBufferSize <= 0) || (nExpectedOutput < -1)) {
+        return false;
+    }
+
+    QByteArray baPending;
+    baPending.reserve(nBufferSize);
+    QByteArray baOutput(nBufferSize, 0);
     qint64 nTotalOutput = 0;
-
-    char *bufferIn = new char[_nBufferSize];
-    char *bufferOut = new char[_nBufferSize];
-
+    bool bInputExhausted = false;
     ELzmaStatus lastStatus = LZMA_STATUS_NOT_FINISHED;
-    qint32 nLoopCount = 0;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nBufferSize = getReadChunkSize(pDecompressState, _nBufferSize);
-        if (nBufferSize <= 0) {
-            break;
+        while (!bInputExhausted && (baPending.size() < nBufferSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            const qint32 nRequest = getReadChunkSize(pDecompressState, nBufferSize - baPending.size());
+            if (nRequest <= 0) {
+                bInputExhausted = true;
+                break;
+            }
+
+            const qint32 nOldSize = baPending.size();
+            baPending.resize(nOldSize + nRequest);
+            const qint32 nRead = XBinary::_readDevice(baPending.data() + nOldSize, nRequest, pDecompressState);
+            if (nRead <= 0) {
+                baPending.resize(nOldSize);
+                bInputExhausted = true;
+                break;
+            }
+            baPending.resize(nOldSize + nRead);
+
+            if ((pDecompressState->nInputLimit != -1) && (pDecompressState->nCountInput == pDecompressState->nInputLimit)) {
+                bInputExhausted = true;
+            }
         }
-        qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
-        if (nSize < 0) {
-            delete[] bufferIn;
-            delete[] bufferOut;
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
 
-        nLoopCount++;
-        Q_UNUSED(nLoopCount)
+        SizeT inProcessed = (SizeT)baPending.size();
+        SizeT outProcessed = (SizeT)nBufferSize;
+        ELzmaFinishMode finishMode = LZMA_FINISH_ANY;
 
-        qint64 nPos = 0;
-        bool bContinueReading = true;
-
-        while (bContinueReading && nPos < nSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            ELzmaStatus status;
-            SizeT inProcessed = nSize - nPos;
-            SizeT outProcessed = _nBufferSize;
-            ELzmaFinishMode finishMode = LZMA_FINISH_ANY;
-
-            if (nExpectedOutput >= 0) {
-                qint64 nRemainingOutput = nExpectedOutput - nTotalOutput;
-
-                if (nRemainingOutput < 0) {
-                    delete[] bufferIn;
-                    delete[] bufferOut;
-                    return false;
-                }
-
-                // Even when the declared output size is zero, call the decoder
-                // with a zero-sized destination and FINISH_END.  The LZMA
-                // decoder can then consume/validate the range-coder
-                // initialization and optional end marker instead of us
-                // manufacturing a successful terminal status.
-                if (outProcessed >= (SizeT)nRemainingOutput) {
-                    outProcessed = (SizeT)nRemainingOutput;
-                    finishMode = LZMA_FINISH_END;
-                }
-            }
-
-            SRes ret = X_LzmaDec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, finishMode, &status);
-
-            if (ret != 0) {
-                delete[] bufferIn;
-                delete[] bufferOut;
+        if (nExpectedOutput >= 0) {
+            const qint64 nRemainingOutput = nExpectedOutput - nTotalOutput;
+            if (nRemainingOutput < 0) {
                 return false;
             }
-
-            nPos += inProcessed;
-
-            if (outProcessed > 0) {
-                if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pDecompressState)) {
-                    delete[] bufferIn;
-                    delete[] bufferOut;
-                    return false;
-                }
-                nTotalOutput += outProcessed;
-            }
-
-            lastStatus = status;
-
-            if ((status == LZMA_STATUS_FINISHED_WITH_MARK) ||
-                ((status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK) && (nExpectedOutput >= 0) && (nTotalOutput == nExpectedOutput))) {
-                bContinueReading = false;
-                break;
-            }
-
-            if ((inProcessed == 0) && (outProcessed == 0)) {
-                break;
+            if (outProcessed >= (SizeT)nRemainingOutput) {
+                outProcessed = (SizeT)nRemainingOutput;
+                finishMode = LZMA_FINISH_END;
             }
         }
 
-        if ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) ||
-            ((lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK) && (nExpectedOutput >= 0) && (nTotalOutput == nExpectedOutput))) {
-            // _readDevice() counts the whole chunk, while the LZMA decoder can
-            // stop before bytes belonging to a container footer.  Keep the
-            // public counter at the exact compressed-stream boundary.
-            qint64 nUnusedInput = nSize - nPos;
-            if ((nUnusedInput > 0) && (pDecompressState->nCountInput >= nUnusedInput)) {
-                pDecompressState->nCountInput -= nUnusedInput;
+        ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
+        const SRes ret = X_LzmaDec_DecodeToBuf(pState, (Byte *)baOutput.data(), &outProcessed, (const Byte *)baPending.constData(), &inProcessed,
+                                               finishMode, &status);
+        if ((ret != 0) || (inProcessed > (SizeT)baPending.size()) || (outProcessed > (SizeT)nBufferSize)) {
+            return false;
+        }
+
+        if (inProcessed > 0) {
+            baPending.remove(0, (qint32)inProcessed);
+        }
+        if (outProcessed > 0) {
+            if (XBinary::_writeDevice(baOutput.constData(), (qint32)outProcessed, pDecompressState) != (qint32)outProcessed) {
+                return false;
             }
+            nTotalOutput += (qint64)outProcessed;
+        }
+
+        lastStatus = status;
+        const bool bBoundedInputConsumed = (pDecompressState->nInputLimit != -1) && bInputExhausted && baPending.isEmpty();
+        const bool bFinished = (status == LZMA_STATUS_FINISHED_WITH_MARK) ||
+                               ((status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK) && (nExpectedOutput >= 0) &&
+                                (nTotalOutput == nExpectedOutput) && bBoundedInputConsumed);
+        if (bFinished) {
+            rewindUnusedInput(pDecompressState, baPending.size());
+            baPending.clear();
             break;
         }
 
-        if (nSize == 0) {
-            break;
+        if ((inProcessed == 0) && (outProcessed == 0)) {
+            // The decoder needs more input. Preserve the pending prefix and
+            // refill it; a full buffer or actual EOF with no progress is a
+            // malformed/stalled stream.
+            if (bInputExhausted || (baPending.size() >= nBufferSize)) {
+                return false;
+            }
         }
     }
 
-    delete[] bufferIn;
-    delete[] bufferOut;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || pDecompressState->bReadError || pDecompressState->bWriteError) {
+        return false;
+    }
 
     if (nExpectedOutput >= 0) {
-        return !pDecompressState->bReadError && !pDecompressState->bWriteError && (nTotalOutput == nExpectedOutput) &&
+        return (nTotalOutput == nExpectedOutput) &&
                ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
     }
 
-    return !pDecompressState->bReadError && !pDecompressState->bWriteError && (lastStatus == LZMA_STATUS_FINISHED_WITH_MARK);
+    return lastStatus == LZMA_STATUS_FINISHED_WITH_MARK;
 }
 
 bool Algo_utils::decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+    if (!pState || !pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
+        return false;
+    }
 
-    char *bufferIn = new char[_nBufferSize];
-    char *bufferOut = new char[_nBufferSize];
+    const qint32 nBufferSize = XBinary::getBufferSize(pPdStruct);
+    const qint64 nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    if ((nBufferSize <= 0) || (nExpectedOutput < -1)) {
+        return false;
+    }
 
+    QByteArray baPending;
+    baPending.reserve(nBufferSize);
+    QByteArray baOutput(nBufferSize, 0);
+    qint64 nTotalOutput = 0;
+    bool bInputExhausted = false;
     ELzmaStatus lastStatus = LZMA_STATUS_NOT_FINISHED;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nBufferSize = getReadChunkSize(pDecompressState, _nBufferSize);
-        if (nBufferSize <= 0) {
-            break;
+        while (!bInputExhausted && (baPending.size() < nBufferSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            const qint32 nRequest = getReadChunkSize(pDecompressState, nBufferSize - baPending.size());
+            if (nRequest <= 0) {
+                bInputExhausted = true;
+                break;
+            }
+
+            const qint32 nOldSize = baPending.size();
+            baPending.resize(nOldSize + nRequest);
+            const qint32 nRead = XBinary::_readDevice(baPending.data() + nOldSize, nRequest, pDecompressState);
+            if (nRead <= 0) {
+                baPending.resize(nOldSize);
+                bInputExhausted = true;
+                break;
+            }
+            baPending.resize(nOldSize + nRead);
+
+            if ((pDecompressState->nInputLimit != -1) && (pDecompressState->nCountInput == pDecompressState->nInputLimit)) {
+                bInputExhausted = true;
+            }
         }
-        qint32 nSize = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
-        if (nSize < 0) {
-            delete[] bufferIn;
-            delete[] bufferOut;
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
 
-        qint64 nPos = 0;
-        bool bContinueReading = true;
-
-        while (bContinueReading && nPos < nSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            ELzmaStatus status;
-            SizeT inProcessed = nSize - nPos;
-            SizeT outProcessed = _nBufferSize;
-
-            SRes ret = X_Lzma2Dec_DecodeToBuf(pState, (Byte *)bufferOut, &outProcessed, (Byte *)(bufferIn + nPos), &inProcessed, LZMA_FINISH_ANY, &status);
-
-            if (ret != 0) {
-                delete[] bufferIn;
-                delete[] bufferOut;
+        SizeT inProcessed = (SizeT)baPending.size();
+        SizeT outProcessed = (SizeT)nBufferSize;
+        ELzmaFinishMode finishMode = LZMA_FINISH_ANY;
+        if (nExpectedOutput >= 0) {
+            const qint64 nRemainingOutput = nExpectedOutput - nTotalOutput;
+            if (nRemainingOutput < 0) {
                 return false;
             }
-
-            nPos += inProcessed;
-
-            if (outProcessed > 0) {
-                if (!XBinary::_writeDevice((char *)bufferOut, (qint32)outProcessed, pDecompressState)) {
-                    delete[] bufferIn;
-                    delete[] bufferOut;
-                    return false;
-                }
-            }
-
-            lastStatus = status;
-
-            if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
-                bContinueReading = false;
-                break;
-            }
-
-            if (inProcessed == 0) {
-                break;
+            if (outProcessed >= (SizeT)nRemainingOutput) {
+                outProcessed = (SizeT)nRemainingOutput;
+                finishMode = LZMA_FINISH_END;
             }
         }
 
-        if (lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) {
+        ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
+        const SRes ret = X_Lzma2Dec_DecodeToBuf(pState, (Byte *)baOutput.data(), &outProcessed, (const Byte *)baPending.constData(), &inProcessed,
+                                                finishMode, &status);
+        if ((ret != 0) || (inProcessed > (SizeT)baPending.size()) || (outProcessed > (SizeT)nBufferSize)) {
+            return false;
+        }
+
+        if (inProcessed > 0) {
+            baPending.remove(0, (qint32)inProcessed);
+        }
+        if (outProcessed > 0) {
+            if (XBinary::_writeDevice(baOutput.constData(), (qint32)outProcessed, pDecompressState) != (qint32)outProcessed) {
+                return false;
+            }
+            nTotalOutput += (qint64)outProcessed;
+        }
+
+        lastStatus = status;
+        if (status == LZMA_STATUS_FINISHED_WITH_MARK) {
+            rewindUnusedInput(pDecompressState, baPending.size());
+            baPending.clear();
             break;
         }
 
-        if (nSize == 0) {
-            break;
+        if ((inProcessed == 0) && (outProcessed == 0) && (bInputExhausted || (baPending.size() >= nBufferSize))) {
+            return false;
         }
     }
 
-    delete[] bufferIn;
-    delete[] bufferOut;
-
-    return !pDecompressState->bReadError && !pDecompressState->bWriteError;
+    return XBinary::isPdStructNotCanceled(pPdStruct) && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+           (lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) && ((nExpectedOutput == -1) || (nTotalOutput == nExpectedOutput));
 }
 
 bool Algo_utils::xzReadVarInt(const QByteArray &baData, qint32 &nPos, quint64 &nValue)
 {
     nValue = 0;
-    qint32 nShift = 0;
+    if ((nPos < 0) || (nPos > baData.size())) {
+        return false;
+    }
 
-    while (nPos < baData.size()) {
-        quint8 nByte = (quint8)baData.at(nPos++);
-        nValue |= ((quint64)(nByte & 0x7F)) << nShift;
-        if (!(nByte & 0x80)) {
-            return true;
-        }
-        nShift += 7;
-        if (nShift > 63) {
+    for (qint32 nByteIndex = 0; nByteIndex < 9; nByteIndex++) {
+        if (nPos >= baData.size()) {
             return false;
+        }
+        quint8 nByte = (quint8)baData.at(nPos++);
+        const quint8 nPayload = nByte & 0x7F;
+        nValue |= ((quint64)nPayload) << (nByteIndex * 7);
+        if (!(nByte & 0x80)) {
+            // XZ VLIs must use their shortest encoding.
+            if ((nByteIndex > 0) && (nPayload == 0)) {
+                return false;
+            }
+            return true;
         }
     }
 

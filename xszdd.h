@@ -87,6 +87,11 @@ public:
     bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
+    static bool _isLegacySZDDSignature(const QByteArray &baSig);
+    static bool _isStandardSZDDSignature(const QByteArray &baSig);
+    qint64 _getHeaderSize();
+    qint64 _getUncompressedSizeOffset();
+
     struct SZDD_UNPACK_CONTEXT {
         qint64 nHeaderSize;
         qint64 nCompressedSize;
