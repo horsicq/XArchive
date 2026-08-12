@@ -29,11 +29,11 @@ const qint32 XPRESS_MIN_MATCH_LEN = 3;
 
 // ---- Plain XPRESS LZ77 (MS-XCA 2.1) ----
 //
-// The stream is a sequence of: a 32-bit LE "flags" word (LSB-first), followed by
+// The stream is a sequence of: a 32-bit LE flags word (consumed MSB-first), followed by
 // tokens. A 0 flag bit => literal byte; a 1 flag bit => match. A match is a
 // 16-bit LE value: high 13 bits = offset-1, low 3 bits = length-3 header; if the
 // header == 7 the real (length-3) continues as a nibble, then a byte, then a
-// 16-bit value, using the documented escalation.
+// 16-bit value, with a zero 16-bit value escaping to a 32-bit value.
 
 bool xpress_plain(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize,
                   XBinary::PDSTRUCT *pPdStruct)
@@ -77,11 +77,11 @@ bool xpress_plain(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize,
             nInPos += 2;
 
             qint32 nOffset = (qint32)(nMatch >> 3) + 1;
-            qint32 nLength = (qint32)(nMatch & 0x07);
+            quint64 nLength = (quint64)(nMatch & 0x07);
 
             if (nLength == 7) {
                 // Escalate: nibble, then byte, then 16-bit
-                qint32 nNibble;
+                quint32 nNibble;
                 if (nNibblePos == 0) {
                     if (nInPos >= nInSize) {
                         return false;
@@ -106,14 +106,22 @@ bool xpress_plain(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize,
                         if (nInPos + 2 > nInSize) {
                             return false;
                         }
-                        nLength = (qint32)((quint32)pIn[nInPos] | ((quint32)pIn[nInPos + 1] << 8));
+                        nLength = (quint32)pIn[nInPos] |
+                                  ((quint32)pIn[nInPos + 1] << 8);
                         nInPos += 2;
 
-                        if (nLength < 15 + 7) {
-                            return false;
+                        if (nLength == 0) {
+                            if (nInPos + 4 > nInSize) return false;
+                            nLength = (quint32)pIn[nInPos] |
+                                      ((quint32)pIn[nInPos + 1] << 8) |
+                                      ((quint32)pIn[nInPos + 2] << 16) |
+                                      ((quint32)pIn[nInPos + 3] << 24);
+                            nInPos += 4;
                         }
+
+                        if (nLength < 15 + 7) return false;
                         nLength -= (15 + 7);
-                    }
+                        }
 
                     nLength += 15;
                 }
@@ -125,18 +133,33 @@ bool xpress_plain(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize,
 
             qint32 nOutPos = (qint32)pbaOut->size();
             if ((nOffset > nOutPos) || (nOffset <= 0) ||
-                (nLength > nOutSize - nOutPos)) return false;
+                (nLength > (quint64)(nOutSize - nOutPos))) return false;
 
             qint32 nSrc = nOutPos - nOffset;
-            for (qint32 i = 0; i < nLength; i++) {
+            for (quint64 i = 0; i < nLength; i++) {
                 if (((i & 0x3FFF) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-                pbaOut->append(pbaOut->at(nSrc + i));
+                pbaOut->append(pbaOut->at(nSrc + (qint32)i));
             }
         }
     }
 
-    return ((qint32)pbaOut->size() == nOutSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    if (((qint32)pbaOut->size() != nOutSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    // The documented terminator is the next match flag when the input cursor
+    // is already at EOF.  It is required even when output ended exactly at a
+    // 32-token flag-word boundary.
+    if (nFlagCount == 0) {
+        if (nInPos + 4 > nInSize) return false;
+        nFlags = (quint32)pIn[nInPos] |
+                 ((quint32)pIn[nInPos + 1] << 8) |
+                 ((quint32)pIn[nInPos + 2] << 16) |
+                 ((quint32)pIn[nInPos + 3] << 24);
+        nInPos += 4;
+        nFlagCount = 32;
+    }
+    const bool bTerminalMatch = (nFlags & 0x80000000u) != 0;
+    return bTerminalMatch && (nInPos == nInSize);
 }
 
 // ---- XPRESS Huffman (MS-XCA 2.2) ----
@@ -333,6 +356,7 @@ bool xpress_huffman(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize,
                 if (nExtra == 255) {
                     nLength = (qint32)xpress_readRaw(&bits, 2);
                     if (bits.bError) return false;
+                    if (nLength < 15) return false;
                 } else {
                     nLength = nExtra + 15;
                 }
@@ -365,7 +389,9 @@ bool xpress_huffman(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize,
 bool XXPressDecoder::decompressPlain(const QByteArray &baCompressed, QByteArray *pbaUncompressed,
                                      qint32 nUncompressedSize, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pbaUncompressed || (nUncompressedSize <= 0)) {
+    if (!pbaUncompressed || (pbaUncompressed == &baCompressed) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (nUncompressedSize <= 0)) {
         return false;
     }
 
@@ -375,7 +401,9 @@ bool XXPressDecoder::decompressPlain(const QByteArray &baCompressed, QByteArray 
 bool XXPressDecoder::decompressHuffman(const QByteArray &baCompressed, QByteArray *pbaUncompressed,
                                        qint32 nUncompressedSize, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pbaUncompressed || (nUncompressedSize <= 0)) {
+    if (!pbaUncompressed || (pbaUncompressed == &baCompressed) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (nUncompressedSize <= 0)) {
         return false;
     }
 

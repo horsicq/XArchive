@@ -543,7 +543,8 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
             if ((nMatchOffset == 0) || (nMatchOffset > pState->nWindowSize) ||
                 ((quint64)nMatchOffset > qMin<quint64>((quint64)nOutCount, pState->nWindowSize)) ||
                 ((qint64)nMatchLen > nBlockRemaining) ||
-                ((qint64)nMatchLen > nUncompressedSize - nOutCount)) {
+                ((qint64)nMatchLen > nUncompressedSize - nOutCount) ||
+                (!bWIMVariant && ((qint64)nMatchLen > nNextFrame - nOutCount))) {
                 return false;
             }
 
@@ -602,7 +603,9 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
 bool XLZXDecoder::decompressCABFolder(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint64 nUncompressedSize, qint32 nWindowBits,
                                       XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pbaUncompressed || baCompressed.isEmpty() || (nUncompressedSize <= 0) ||
+    if (!pbaUncompressed || (pbaUncompressed == &baCompressed) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        baCompressed.isEmpty() || (nUncompressedSize <= 0) ||
         (nUncompressedSize > (std::numeric_limits<qint32>::max)() - LZX_MAX_MATCH_LENGTH) || (nWindowBits < 15) || (nWindowBits > 21)) {
         return false;
     }
@@ -617,7 +620,9 @@ bool XLZXDecoder::decompressWIMChunk(const QByteArray &baCompressed, QByteArray 
                                      qint32 nUncompressedSize, qint32 nWindowBits,
                                      XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pbaUncompressed || baCompressed.isEmpty() || (nUncompressedSize <= 0) ||
+    if (!pbaUncompressed || (pbaUncompressed == &baCompressed) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        baCompressed.isEmpty() || (nUncompressedSize <= 0) ||
         (nWindowBits < 15) || (nWindowBits > 21) ||
         (nUncompressedSize > ((qint32)1 << nWindowBits))) {
         return false;

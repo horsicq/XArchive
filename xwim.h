@@ -169,6 +169,7 @@ private:
     struct WIM_UNPACK_CONTEXT {
         QList<WIM_RECORD> listRecords;
         QIODevice *pSourceDevice;
+        bool bLegacy;
         quint32 nHeaderFlags;
         quint32 nChunkSize;
         HANDLE_METHOD compressedHandleMethod;

@@ -46,7 +46,7 @@ static const qint32 WIM_MAX_DIRECTORY_DEPTH = 256;
 static const qint32 WIM_MAX_PATH_LENGTH = 32768;
 static const quint64 WIM_MAX_BUFFERED_RESOURCE_SIZE = 256ULL * 1024ULL * 1024ULL;
 static const quint32 WIM_MAX_CHUNK_SIZE = 0x40000000U;
-static const quint32 WIM_MAX_XPRESS_CHUNK_SIZE = 64U * 1024U * 1024U;
+static const quint32 WIM_MAX_XPRESS_CHUNK_SIZE = 64U * 1024U;
 
 static XBinary::XCONVERT _TABLE_XWIM_STRUCTID[] = {{XWIM::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                    {XWIM::STRUCTID_WIM_HEADER, "WIM_HEADER", QString("WIM header")}};
@@ -730,6 +730,7 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
     pContext->pSourceDevice = getDevice();
+    pContext->bLegacy = (header.nHeaderSize == WIM_HEADER_SIZE_OLD);
     pContext->nHeaderFlags = header.nFlags;
     pContext->nChunkSize = header.nChunkSize;
     pContext->compressedHandleMethod = _getCompressionHandleMethod(header.nFlags);
@@ -752,7 +753,7 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         if ((streamInfo.resourceInfo.nFlags & RESOURCE_FLAG_METADATA) || (streamInfo.nRefCount == 0)) continue;
         if (bLegacy) {
             if ((streamInfo.nId == 0) || (streamInfo.baHash.size() != WIM_HASH_SIZE) ||
-                _isEmptyHash(streamInfo.baHash) || mapStreamsById.contains(streamInfo.nId)) {
+                mapStreamsById.contains(streamInfo.nId)) {
                 bStreamListOk = false;
                 break;
             }
@@ -961,11 +962,7 @@ XBinary::ARCHIVERECORD XWIM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pContext || !pDevice || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
-        if (pState) pState->nCurrentOffset = 0;
-        return false;
-    }
+    if (!pState || !pState->pContext) return false;
 
     WIM_UNPACK_CONTEXT *pContext = (WIM_UNPACK_CONTEXT *)pState->pContext;
 
@@ -973,6 +970,13 @@ bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     // initUnpack().  Reject a later setDevice() replacement before touching
     // either iterator state or the caller's output device.
     if (getDevice() != pContext->pSourceDevice) return false;
+
+    if (!pDevice || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+        pState->nCurrentOffset = 0;
+        return false;
+    }
 
     if (pState->nCurrentIndex >= pContext->listRecords.count()) {
         return false;
@@ -1008,8 +1012,9 @@ bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     }
 
     QByteArray baDigest;
+    const bool bDigestRequired = !(pContext->bLegacy && _isEmptyHash(record.baHash));
     if (!_stageResource(record, *pContext, &stageFile, &baDigest, pPdStruct) ||
-        (baDigest != record.baHash) || !stageFile.seek(0)) {
+        (bDigestRequired && (baDigest != record.baHash)) || !stageFile.seek(0)) {
         wimRollbackOutput(pDevice);
         return false;
     }
@@ -1475,7 +1480,8 @@ bool XWIM::_stageResource(const WIM_RECORD &record, const WIM_UNPACK_CONTEXT &co
     if (!pStageDevice || !pDigest || !pStageDevice->isOpen() || !pStageDevice->isWritable() ||
         !XBinary::isPdStructNotCanceled(pPdStruct) || (record.nUncompressedSize <= 0) ||
         ((quint64)record.nUncompressedSize != record.resourceInfo.nUnpackSize) ||
-        (record.baHash.size() != WIM_HASH_SIZE) || _isEmptyHash(record.baHash) ||
+        (record.baHash.size() != WIM_HASH_SIZE) ||
+        (!context.bLegacy && _isEmptyHash(record.baHash)) ||
         !isWimResourceExtentValid(record.resourceInfo, getSize())) return false;
 
     QCryptographicHash hash(QCryptographicHash::Sha1);

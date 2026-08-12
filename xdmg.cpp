@@ -50,6 +50,7 @@ const quint64 DMG_MAX_RESOURCE_SIZE = 1ULL << 24;
 const qint32 DMG_MAX_PARTITIONS = 65536;
 const quint32 DMG_MAX_STRIPES_PER_PARTITION = 1000000;
 const qint32 DMG_MAX_XML_DEPTH = 64;
+const qint32 DMG_MAX_XML_BASE_CANDIDATES = 4096;
 
 QString dmgFromMacRoman(const char *pData, qint32 nSize)
 {
@@ -90,12 +91,71 @@ bool dmgRangeWithin(quint64 nOffset, quint64 nLength, quint64 nContainerSize)
 
 bool dmgChecksumDescriptorValid(const quint32 *pChecksum)
 {
-    return pChecksum && (pChecksum[1] <= 1024);
+    if (!pChecksum || (pChecksum[1] > 1024)) return false;
+    if (pChecksum[0] == 0) return pChecksum[1] == 0;
+    if (pChecksum[0] == 2) return pChecksum[1] == 32;
+    return true;
 }
 
 bool dmgChecksumIsCRC32(const quint32 *pChecksum)
 {
     return dmgChecksumDescriptorValid(pChecksum) && (pChecksum[0] == 2) && (pChecksum[1] == 32);
+}
+
+quint32 dmgCrcMatrixTimes(const quint32 *pMatrix, quint32 nVector)
+{
+    quint32 nResult = 0;
+    while (nVector != 0) {
+        if (nVector & 1U) nResult ^= *pMatrix;
+        nVector >>= 1;
+        pMatrix++;
+    }
+    return nResult;
+}
+
+void dmgCrcMatrixSquare(quint32 *pSquare, const quint32 *pMatrix)
+{
+    for (qint32 i = 0; i < 32; i++) {
+        pSquare[i] = dmgCrcMatrixTimes(pMatrix, pMatrix[i]);
+    }
+}
+
+quint32 dmgCombineCRC32(quint32 nCRC1, quint32 nCRC2, quint64 nLength2)
+{
+    if (nLength2 == 0) return nCRC1;
+
+    quint32 odd[32] = {};
+    quint32 even[32] = {};
+    odd[0] = 0xEDB88320U;
+    quint32 nRow = 1;
+    for (qint32 i = 1; i < 32; i++) {
+        odd[i] = nRow;
+        nRow <<= 1;
+    }
+
+    dmgCrcMatrixSquare(even, odd);
+    dmgCrcMatrixSquare(odd, even);
+    do {
+        dmgCrcMatrixSquare(even, odd);
+        if (nLength2 & 1ULL) nCRC1 = dmgCrcMatrixTimes(even, nCRC1);
+        nLength2 >>= 1;
+        if (nLength2 == 0) break;
+
+        dmgCrcMatrixSquare(odd, even);
+        if (nLength2 & 1ULL) nCRC1 = dmgCrcMatrixTimes(odd, nCRC1);
+        nLength2 >>= 1;
+    } while (nLength2 != 0);
+
+    return nCRC1 ^ nCRC2;
+}
+
+quint32 dmgUpdateCRC32(quint32 nCRC, const char *pData, qint32 nSize)
+{
+    // XBinary exposes the running (uncomplemented) state, while the prefix
+    // index stores zlib-compatible finalized CRCs so they can be combined.
+    return XBinary::_getCRC32(pData, nSize, nCRC ^ 0xFFFFFFFFU,
+                              XBinary::_getCRC32Table_EDB88320()) ^
+           0xFFFFFFFFU;
 }
 
 bool dmgHasFullPartitionCRC(const QList<XDMG::BLOCK_DATA> &listStripes)
@@ -106,26 +166,69 @@ bool dmgHasFullPartitionCRC(const QList<XDMG::BLOCK_DATA> &listStripes)
     return true;
 }
 
-QString dmgSanitizePartitionName(QString sName, qint32 nIndex, QSet<QString> *pUsedNames)
+struct DMG_NAME_STATE {
+    QSet<QString> stUsedNames;
+    quint64 nNextSuffix = 2;
+};
+
+bool dmgTruncatePortable(const QString &sValue, qint32 nMaxUnits, qint32 nMaxUtf8Bytes,
+                         XBinary::PDSTRUCT *pPdStruct, QString *pResult)
 {
-    const auto truncatePortable = [](QString sValue, qint32 nMaxUnits,
-                                     qint32 nMaxUtf8Bytes) -> QString {
-        while ((sValue.size() > nMaxUnits) ||
-               (sValue.toUtf8().size() > nMaxUtf8Bytes)) {
-            if (sValue.isEmpty()) break;
-            const qint32 nLast = sValue.size() - 1;
-            if (sValue.at(nLast).isLowSurrogate() && (nLast > 0) &&
-                sValue.at(nLast - 1).isHighSurrogate()) {
-                sValue.chop(2);
-            } else {
-                sValue.chop(1);
-            }
+    if (pResult) pResult->clear();
+    if (!pResult || (nMaxUnits < 0) || (nMaxUtf8Bytes < 0) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    // Count UTF-8 bytes while walking at most the accepted UTF-16 prefix.
+    // Re-encoding the complete string after every one-unit chop made a legal
+    // 4096-unit plist name quadratic before it reached this small public cap.
+    qint32 nUnits = 0;
+    qint32 nUtf8Bytes = 0;
+    while ((nUnits < sValue.size()) && (nUnits < nMaxUnits)) {
+        if (((nUnits & 0x3F) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+        const QChar cFirst = sValue.at(nUnits);
+        qint32 nCharacterUnits = 1;
+        qint32 nCharacterBytes = 0;
+        if (cFirst.isHighSurrogate() && ((nUnits + 1) < sValue.size()) &&
+            sValue.at(nUnits + 1).isLowSurrogate()) {
+            nCharacterUnits = 2;
+            nCharacterBytes = 4;
+        } else if (cFirst.unicode() < 0x80) {
+            nCharacterBytes = 1;
+        } else if (cFirst.unicode() < 0x800) {
+            nCharacterBytes = 2;
+        } else {
+            // This also gives an isolated surrogate the three-byte replacement
+            // budget used by Qt's UTF-8 conversion.  XML input itself cannot
+            // contain an isolated surrogate.
+            nCharacterBytes = 3;
         }
-        return sValue;
-    };
+
+        if ((nCharacterUnits > (nMaxUnits - nUnits)) ||
+            (nCharacterBytes > (nMaxUtf8Bytes - nUtf8Bytes))) {
+            break;
+        }
+        nUnits += nCharacterUnits;
+        nUtf8Bytes += nCharacterBytes;
+    }
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    *pResult = sValue.left(nUnits);
+    return true;
+}
+
+bool dmgSanitizePartitionName(QString sName, qint32 nIndex, DMG_NAME_STATE *pNameState,
+                              XBinary::PDSTRUCT *pPdStruct, QString *pResult)
+{
+    if (pResult) pResult->clear();
+    if (!pResult || !pNameState || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     sName = sName.normalized(QString::NormalizationForm_C).trimmed();
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     for (qint32 i = 0; i < sName.size(); i++) {
+        if (((i & 0xFF) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         const QChar cValue = sName.at(i);
         if ((cValue.unicode() < 0x20) || (cValue.unicode() == 0x7F) ||
             QStringLiteral("<>:\"/\\|?*").contains(cValue)) {
@@ -162,26 +265,43 @@ QString dmgSanitizePartitionName(QString sName, qint32 nIndex, QSet<QString> *pU
     // filesystem component within both UTF-16 and UTF-8 portable limits.
     const qint32 nMaxNameLength = 240;
     const qint32 nMaxNameUtf8Bytes = 251;
-    sName = truncatePortable(sName, nMaxNameLength, nMaxNameUtf8Bytes);
+    QString sTruncatedName;
+    if (!dmgTruncatePortable(sName, nMaxNameLength, nMaxNameUtf8Bytes,
+                             pPdStruct, &sTruncatedName)) {
+        return false;
+    }
+    sName = sTruncatedName;
     while (sName.endsWith(QLatin1Char(' ')) || sName.endsWith(QLatin1Char('.'))) sName.chop(1);
     if (sName.isEmpty()) sName = QStringLiteral("partition%1").arg(nIndex);
 
-    if (pUsedNames) {
-        const QString sBaseName = sName;
-        qint32 nSuffix = 2;
-        while (pUsedNames->contains(sName.toCaseFolded())) {
-            const QString sSuffix = QStringLiteral("_%1").arg(nSuffix++);
-            qint32 nBaseLength = nMaxNameLength - sSuffix.size();
-            if (nBaseLength < 1) nBaseLength = 1;
-            const qint32 nBaseBytes = nMaxNameUtf8Bytes - sSuffix.toUtf8().size();
-            QString sCandidateBase = truncatePortable(sBaseName, nBaseLength,
-                                                       qMax(1, nBaseBytes));
-            sName = sCandidateBase + sSuffix;
+    const QString sBaseName = sName;
+    QString sFoldedName = sName.toCaseFolded();
+    while (pNameState->stUsedNames.contains(sFoldedName)) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
+            (pNameState->nNextSuffix == (std::numeric_limits<quint64>::max)())) {
+            return false;
         }
-        pUsedNames->insert(sName.toCaseFolded());
-    }
 
-    return sName;
+        // The suffix sequence is monotonic for the complete metadata batch,
+        // so one already-used candidate can never be probed again by another
+        // colliding base name.  Total QSet probes therefore remain linear even
+        // when input names preoccupy generated suffixes.
+        const QString sSuffix = QStringLiteral("_%1").arg(pNameState->nNextSuffix++);
+        const qint32 nBaseLength = qMax(1, nMaxNameLength - sSuffix.size());
+        const qint32 nBaseBytes = qMax(1, nMaxNameUtf8Bytes - sSuffix.size());
+        QString sCandidateBase;
+        if (!dmgTruncatePortable(sBaseName, nBaseLength, nBaseBytes,
+                                 pPdStruct, &sCandidateBase)) {
+            return false;
+        }
+        sName = sCandidateBase + sSuffix;
+        sFoldedName = sName.toCaseFolded();
+    }
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    pNameState->stUsedNames.insert(sFoldedName);
+
+    *pResult = sName;
+    return true;
 }
 
 bool dmgCalculateCRC32(XBinary *pBinary, qint64 nOffset, qint64 nSize,
@@ -527,10 +647,12 @@ QString XDMG::getVersion()
 }
 
 bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bRequireXml,
-                           PDSTRUCT *pPdStruct, qint64 *pKolyOffset)
+                           PDSTRUCT *pPdStruct, qint64 *pKolyOffset, qint64 *pArchiveBase,
+                           bool bAllowEmbeddedBase, bool bValidateDataForkCRC)
 {
     if (pXmlData) pXmlData->clear();
     if (pKolyOffset) *pKolyOffset = -1;
+    if (pArchiveBase) *pArchiveBase = -1;
     if (!pKolyBlock || !getDevice() || !getDevice()->isOpen() || !getDevice()->isReadable() ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
@@ -539,9 +661,10 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
     const qint64 nSize = getSize();
     if (nSize < 512) return false;
 
+    qint64 nSelectedArchiveBase = -1;
     const auto tryCandidate = [&](qint64 nKolyOffset, bool bFrontKoly,
                                   KOLY_BLOCK *pCandidate, QByteArray *pCandidateXml) -> bool {
-        const KOLY_BLOCK kolyBlock = readKolyBlock(getDevice(), nKolyOffset);
+        KOLY_BLOCK kolyBlock = readKolyBlock(getDevice(), nKolyOffset);
         if (bFrontKoly && ((nSize <= 512) || (kolyBlock.nDataForkOffset != 512))) return false;
 
         const quint64 nPayloadLimit = bFrontKoly ? (quint64)nSize : (quint64)nKolyOffset;
@@ -559,27 +682,211 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
             return false;
         }
 
-        if (dmgChecksumIsCRC32(kolyBlock.dataChecksum)) {
-            quint32 nDataForkCRC = 0;
-            if (!dmgCalculateCRC32(this, (qint64)kolyBlock.nDataForkOffset,
-                                   (qint64)kolyBlock.nDataForkLength, pPdStruct, &nDataForkCRC) ||
-                (nDataForkCRC != kolyBlock.dataChecksum[2])) return false;
-        }
+        // KOLY fork offsets are relative to the start of a carved/embedded
+        // image.  Optional code-signature fields are deliberately excluded
+        // from base discovery: old writers sometimes left a range-valid but
+        // unrelated pair in those slots.
+        quint64 nRequiredTop = 0;
+        const auto updateTop = [&](quint64 nOffset, quint64 nLength) {
+            if (nLength != 0) nRequiredTop = qMax(nRequiredTop, nOffset + nLength);
+        };
+        updateTop(kolyBlock.nDataForkOffset, kolyBlock.nDataForkLength);
+        updateTop(kolyBlock.nResourceForkOffset, kolyBlock.nResourceForkLength);
+        updateTop(kolyBlock.nXmlOffset, kolyBlock.nXmlLength);
+        if (nRequiredTop > nPayloadLimit) return false;
 
-        QByteArray baXml;
-        if (pXmlData && (kolyBlock.nXmlLength > 0)) {
-            if (kolyBlock.nXmlLength > (quint64)(std::numeric_limits<qint32>::max)()) return false;
-            baXml.resize((qint32)kolyBlock.nXmlLength);
-            if (read_array_process((qint64)kolyBlock.nXmlOffset, baXml.data(), baXml.size(), pPdStruct) !=
-                    baXml.size() ||
-                !XBinary::isPdStructNotCanceled(pPdStruct)) {
-                return false;
+        QList<quint64> listArchiveBases;
+        QSet<quint64> setArchiveBases;
+        const auto addArchiveBase = [&](quint64 nBase) {
+            if ((nBase <= nPayloadLimit) && !setArchiveBases.contains(nBase)) {
+                setArchiveBases.insert(nBase);
+                listArchiveBases.append(nBase);
             }
+        };
+
+        if (bFrontKoly || !bAllowEmbeddedBase) {
+            addArchiveBase(0);
+        } else {
+            // Index raw XML declarations once rather than probing an
+            // overlapping fixed-size window after every occurrence.  The
+            // candidate's exact declared XML range and authoritative parser
+            // below decide whether it is the real document; this preserves
+            // long prologs, comments and trailing whitespace.  Overflowing
+            // the explicit storage cap fails closed.
+            static const QByteArray baXmlPrefix("<?xml version");
+            if ((kolyBlock.nXmlLength >= (quint64)baXmlPrefix.size()) &&
+                (kolyBlock.nXmlOffset <= nPayloadLimit - kolyBlock.nXmlLength)) {
+                const qint64 nFirstXmlStart = (qint64)kolyBlock.nXmlOffset;
+                const qint64 nLastXmlStart =
+                    (qint64)(nPayloadLimit - kolyBlock.nXmlLength);
+                const qint64 nSearchEnd =
+                    nLastXmlStart + baXmlPrefix.size();
+                qint64 nCursor = nFirstXmlStart;
+                QList<quint64> listXmlBases;
+                const qint32 nOverlap = baXmlPrefix.size() - 1;
+                QByteArray baCarry;
+                QByteArray baChunk(0x10000, 0);
+                qint64 nLastDeclaration = -1;
+                while ((nCursor < nSearchEnd) &&
+                       XBinary::isPdStructNotCanceled(pPdStruct)) {
+                    const qint32 nReadSize = (qint32)qMin<qint64>(
+                        baChunk.size(), nSearchEnd - nCursor);
+                    if (read_array_process(nCursor, baChunk.data(), nReadSize,
+                                           pPdStruct) != nReadSize) {
+                        return false;
+                    }
+
+                    QByteArray baTokens = baCarry;
+                    baTokens.append(baChunk.constData(), nReadSize);
+                    const qint64 nTokensOffset = nCursor - baCarry.size();
+                    for (qint32 nFound = baTokens.indexOf(baXmlPrefix);
+                         nFound >= 0;) {
+                        const qint64 nDeclaration = nTokensOffset + nFound;
+                        if ((nDeclaration > nLastDeclaration) &&
+                            (nDeclaration <= nLastXmlStart)) {
+                            if (listXmlBases.size() >=
+                                DMG_MAX_XML_BASE_CANDIDATES) {
+                                return false;
+                            }
+                            listXmlBases.append(
+                                (quint64)nDeclaration - kolyBlock.nXmlOffset);
+                            nLastDeclaration = nDeclaration;
+                        }
+                        if (nFound ==
+                            (std::numeric_limits<qint32>::max)()) {
+                            return false;
+                        }
+                        nFound = baTokens.indexOf(baXmlPrefix, nFound + 1);
+                    }
+
+                    baCarry = (baTokens.size() > nOverlap) ?
+                        baTokens.right(nOverlap) : baTokens;
+                    nCursor += nReadSize;
+                }
+                if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+                // A terminal image normally has only a small alignment gap,
+                // so try the nearest declaration first without discarding an
+                // otherwise valid middle candidate.
+                for (auto it = listXmlBases.crbegin();
+                     it != listXmlBases.crend(); ++it) {
+                    addArchiveBase(*it);
+                }
+            }
+
+            // Retain both conventional layouts as fallbacks for resource-fork
+            // metadata and XML documents without a declaration.
+            if ((kolyBlock.nCodeSignatureLength != 0) &&
+                dmgRangeWithin(kolyBlock.nCodeSignatureOffset,
+                               kolyBlock.nCodeSignatureLength, nPayloadLimit)) {
+                const quint64 nOptionalTop =
+                    qMax(nRequiredTop, kolyBlock.nCodeSignatureOffset +
+                                           kolyBlock.nCodeSignatureLength);
+                // This candidate is still accepted only after the required
+                // forks pass their integrity and metadata checks below.
+                addArchiveBase(nPayloadLimit - nOptionalTop);
+            }
+            addArchiveBase(nPayloadLimit - nRequiredTop);
+            addArchiveBase(0);
         }
 
-        *pCandidate = kolyBlock;
-        if (pCandidateXml) *pCandidateXml = baXml;
-        return XBinary::isPdStructNotCanceled(pPdStruct);
+        const quint64 nMetadataBudget =
+            (nPayloadLimit > ((std::numeric_limits<quint64>::max)() / 4)) ?
+                (std::numeric_limits<quint64>::max)() : nPayloadLimit * 4;
+        quint64 nMetadataCost = 0;
+        const quint64 nDataHashBudget = nMetadataBudget;
+        quint64 nDataHashCost = 0;
+        for (quint64 nArchiveBase : listArchiveBases) {
+            KOLY_BLOCK candidate = kolyBlock;
+            const auto normalizePair = [&](quint64 *pOffset, quint64 nLength) -> bool {
+                if (!pOffset || (nLength == 0)) return true;
+                if (*pOffset > ((std::numeric_limits<quint64>::max)() - nArchiveBase)) return false;
+                *pOffset += nArchiveBase;
+                return dmgRangeWithin(*pOffset, nLength, nPayloadLimit);
+            };
+            if (!normalizePair(&candidate.nDataForkOffset, candidate.nDataForkLength) ||
+                !normalizePair(&candidate.nResourceForkOffset, candidate.nResourceForkLength) ||
+                !normalizePair(&candidate.nXmlOffset, candidate.nXmlLength)) {
+                continue;
+            }
+
+            // A candidate base is accepted only when it leads to coherent
+            // partition metadata.  Range checks alone are ambiguous in a
+            // carrier that happens to contain a false XML marker.
+            QByteArray baXml;
+            QList<DMG_PARTITION_INFO> listCandidatePartitions;
+            if (candidate.nXmlLength != 0) {
+                if (candidate.nXmlLength > (quint64)(std::numeric_limits<qint32>::max)()) continue;
+                if (candidate.nXmlLength > nMetadataBudget - nMetadataCost) continue;
+                nMetadataCost += candidate.nXmlLength;
+                baXml.resize((qint32)candidate.nXmlLength);
+                if ((read_array_process((qint64)candidate.nXmlOffset, baXml.data(), baXml.size(),
+                                        pPdStruct) != baXml.size()) ||
+                    !XBinary::isPdStructNotCanceled(pPdStruct)) {
+                    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+                    continue;
+                }
+                listCandidatePartitions = _parseBlkxPartitions(baXml, pPdStruct);
+            } else if ((candidate.nResourceForkLength >= 0x100) &&
+                       (candidate.nResourceForkLength <= DMG_MAX_RESOURCE_SIZE) &&
+                       (candidate.nResourceForkLength <=
+                        (quint64)(std::numeric_limits<qint32>::max)())) {
+                if (candidate.nResourceForkLength > nMetadataBudget - nMetadataCost) continue;
+                nMetadataCost += candidate.nResourceForkLength;
+                QByteArray baResource((qint32)candidate.nResourceForkLength, 0);
+                if ((read_array_process((qint64)candidate.nResourceForkOffset,
+                                        baResource.data(), baResource.size(), pPdStruct) ==
+                     baResource.size()) &&
+                    XBinary::isPdStructNotCanceled(pPdStruct)) {
+                    listCandidatePartitions =
+                        _parseResourceForkPartitions(baResource, pPdStruct);
+                }
+            }
+            if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+            QList<MISH_BLOCK> listCandidateMishBlocks;
+            if (listCandidatePartitions.isEmpty() ||
+                !_parseAllPartitions(listCandidatePartitions, candidate,
+                                     &listCandidateMishBlocks, nullptr,
+                                     pPdStruct) ||
+                listCandidateMishBlocks.isEmpty()) {
+                if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+                continue;
+            }
+
+            // Parse bounded metadata before hashing a potentially enormous
+            // fork.  Search/carving supplies an indexed exact CRC check and
+            // disables this duplicate linear pass.
+            if (bValidateDataForkCRC && dmgChecksumIsCRC32(candidate.dataChecksum)) {
+                if (candidate.nDataForkLength > nDataHashBudget - nDataHashCost) continue;
+                nDataHashCost += candidate.nDataForkLength;
+                quint32 nDataForkCRC = 0;
+                if (!dmgCalculateCRC32(this, (qint64)candidate.nDataForkOffset,
+                                       (qint64)candidate.nDataForkLength, pPdStruct,
+                                       &nDataForkCRC)) {
+                    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+                    continue;
+                }
+                if (nDataForkCRC != candidate.dataChecksum[2]) continue;
+            }
+
+            const bool bUseCodeSignature =
+                (candidate.nCodeSignatureLength != 0) &&
+                normalizePair(&candidate.nCodeSignatureOffset,
+                              candidate.nCodeSignatureLength);
+            if (!bUseCodeSignature) {
+                // Several old writers left garbage in this optional pair.  It
+                // is non-authoritative and cannot weaken required-fork checks.
+                candidate.nCodeSignatureOffset = 0;
+                candidate.nCodeSignatureLength = 0;
+            }
+
+            *pCandidate = candidate;
+            if (pCandidateXml) *pCandidateXml = baXml;
+            nSelectedArchiveBase = (qint64)nArchiveBase;
+            return true;
+        }
+
+        return false;
     };
 
     const qint64 nTrailerOffset = nSize - 512;
@@ -604,6 +911,7 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
     *pKolyBlock = kolyBlock;
     if (pXmlData) *pXmlData = baXml;
     if (pKolyOffset) *pKolyOffset = nSelectedOffset;
+    if (pArchiveBase) *pArchiveBase = nSelectedArchiveBase;
     return true;
 }
 
@@ -639,10 +947,20 @@ bool XDMG::_loadPartitionMetadata(KOLY_BLOCK *pKolyBlock,
         return false;
     }
 
-    QSet<QString> stUsedNames;
-    for (qint32 i = 0; i < pPartitions->size(); i++) {
-        (*pPartitions)[i].sName = dmgSanitizePartitionName((*pPartitions)[i].sName, i,
-                                                          &stUsedNames);
+    DMG_NAME_STATE nameState;
+    for (qint32 i = 0; (i < pPartitions->size()) &&
+                            XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        QString sSanitizedName;
+        if (!dmgSanitizePartitionName((*pPartitions)[i].sName, i, &nameState,
+                                      pPdStruct, &sSanitizedName)) {
+            pPartitions->clear();
+            return false;
+        }
+        (*pPartitions)[i].sName = sSanitizedName;
+    }
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        pPartitions->clear();
+        return false;
     }
     return true;
 }
@@ -744,6 +1062,8 @@ QList<XBinary::XFRECORD> XDMG::getXFRecords(FT fileType, quint32 nStructID, cons
         listResult.append({"dataChecksum", 80, 136, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
         listResult.append({"nXmlOffset", 216, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_OFFSET, VT_UINT64});
         listResult.append({"nXmlLength", 224, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_SIZE, VT_UINT64});
+        listResult.append({"nCodeSignatureOffset", 296, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_OFFSET, VT_UINT64});
+        listResult.append({"nCodeSignatureLength", 304, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_SIZE, VT_UINT64});
         listResult.append({"masterChecksum", 352, 136, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
         listResult.append({"nImageVariant", 488, 4, XFRECORD_FLAG_BE, VT_UINT32});
         listResult.append({"nSectorCount", 492, 8, XFRECORD_FLAG_BE | XFRECORD_FLAG_COUNT, VT_UINT64});
@@ -839,6 +1159,7 @@ QList<XBinary::FPART> XDMG::getFileParts(quint32 nFileParts, qint32 nLimit,
     accountRange(kolyBlock.nDataForkOffset, kolyBlock.nDataForkLength);
     accountRange(kolyBlock.nResourceForkOffset, kolyBlock.nResourceForkLength);
     accountRange(kolyBlock.nXmlOffset, kolyBlock.nXmlLength);
+    accountRange(kolyBlock.nCodeSignatureOffset, kolyBlock.nCodeSignatureLength);
 
     if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         appendPart(FILEPART_HEADER, nKolyOffset, 512, tr("KOLY header"));
@@ -855,6 +1176,10 @@ QList<XBinary::FPART> XDMG::getFileParts(quint32 nFileParts, qint32 nLimit,
         if ((kolyBlock.nXmlLength != 0) && canAppend()) {
             appendPart(FILEPART_DATA, (qint64)kolyBlock.nXmlOffset,
                        (qint64)kolyBlock.nXmlLength, tr("XML metadata"));
+        }
+        if ((kolyBlock.nCodeSignatureLength != 0) && canAppend()) {
+            appendPart(FILEPART_DATA, (qint64)kolyBlock.nCodeSignatureOffset,
+                       (qint64)kolyBlock.nCodeSignatureLength, tr("Code signature"));
         }
     }
 
@@ -1137,7 +1462,8 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
     // The parsed context is bound to one exact source device.  Reject a public
     // setDevice() replacement before resetting state or touching an output.
-    if (getDevice() != pContext->pSourceDevice) return false;
+    if (pContext->pSourceDevice.isNull() ||
+        (getDevice() != pContext->pSourceDevice.data())) return false;
 
     pState->nCurrentOffset = 0;
     if (!pDevice || !pDevice->isOpen() || !pDevice->isWritable() ||
@@ -1149,7 +1475,7 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         (pState->nCurrentIndex >= pContext->listMishBlocks.size())) {
         return false;
     }
-    if (dmgDevicesAlias(pContext->pSourceDevice, pDevice)) return false;
+    if (dmgDevicesAlias(pContext->pSourceDevice.data(), pDevice)) return false;
 
     // A valid extraction attempt owns the destination from this point on.
     // Clear random-access output before staging so every later failure leaves
@@ -1283,8 +1609,10 @@ XDMG::KOLY_BLOCK XDMG::readKolyBlock(QIODevice *pDevice, qint64 nOffset)
         // Skip dataChecksum (136 bytes)
         result.nXmlOffset = binary.read_uint64(nOffset + 216, true);
         result.nXmlLength = binary.read_uint64(nOffset + 224, true);
+        result.nCodeSignatureOffset = binary.read_uint64(nOffset + 296, true);
+        result.nCodeSignatureLength = binary.read_uint64(nOffset + 304, true);
 
-        // Skip padding and masterChecksum
+        // Skip reserved fields and masterChecksum
         result.nImageVariant = binary.read_uint32(nOffset + 488, true);
         result.nSectorCount = binary.read_uint64(nOffset + 492, true);
     }
@@ -1614,7 +1942,7 @@ QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseBlkxPartitions(const QByteArray &baX
                 break;
             }
 
-            const auto elementName = reader.name();
+            const QStringRef elementName = reader.name();
             if (bWaitingForRootDict) {
                 if (((nDepth - 1) != nPlistDepth) ||
                     (elementName != QLatin1String("dict"))) {
@@ -1812,7 +2140,7 @@ QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseBlkxPartitions(const QByteArray &baX
         } else if (token == QXmlStreamReader::Characters) {
             if (!reader.isWhitespace()) bMalformed = true;
         } else if (token == QXmlStreamReader::EndElement) {
-            const auto elementName = reader.name();
+            const QStringRef elementName = reader.name();
             if ((nPartitionDictDepth == nDepth) && (elementName == QLatin1String("dict"))) {
                 if (bPartitionKeyPending || !bDataSeen || baMishData.isEmpty() ||
                     (listResult.size() >= DMG_MAX_PARTITIONS)) {
@@ -2187,10 +2515,527 @@ QList<QString> XDMG::getSearchSignatures()
 {
     QList<QString> listResult;
 
-    // UDIF DMG trailer signature.
-    listResult.append("'koly'");
+    // UDIF KOLY magic, version 4 and the fixed 512-byte header length.
+    listResult.append("'koly'0000000400000200");
 
     return listResult;
+}
+
+XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    FFSEARCH_INFO result = {};
+    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct)) return result;
+
+    QIODevice *pSearchDevice = pState->pDevice ? pState->pDevice : getDevice();
+    if (!pSearchDevice || !pSearchDevice->isOpen() || !pSearchDevice->isReadable()) return result;
+
+    const qint64 nDeviceSize = pSearchDevice->size();
+    if ((nDeviceSize < 0) || (pState->nStartOffset < 0) ||
+        (pState->nStartOffset > nDeviceSize)) {
+        return result;
+    }
+
+    qint64 nRangeEnd = nDeviceSize;
+    if (pState->nSize > 0) {
+        nRangeEnd = pState->nStartOffset +
+                    qMin(pState->nSize, nDeviceSize - pState->nStartOffset);
+    }
+    const qint64 nCallStart = qMax(pState->nStartOffset, pState->nCurrentOffset);
+    if ((nCallStart < 0) || (nCallStart > nRangeEnd)) return result;
+
+    // No unread bytes remain.  Advancing to the range end makes repeated
+    // no-match calls stable without skipping a possible header on a nonempty
+    // range.
+    if (nCallStart == nRangeEnd) {
+        pState->nCurrentOffset = nRangeEnd;
+        return result;
+    }
+
+    XBinary searchBinary(pSearchDevice);
+
+    // Build standard prefix CRC checkpoints lazily up to the furthest range
+    // queried.  Arbitrary fork CRCs then require at most two small edge reads;
+    // coherent false KOLYs cannot rescan every preceding carrier byte.
+    static const qint64 N_MIN_CRC_CHECKPOINT_SIZE = 0x1000;
+    static const qint64 N_MAX_CRC_CHECKPOINTS = 4LL * 1024 * 1024;
+    const qint64 nSearchSpan = nRangeEnd - nCallStart;
+    qint64 nCrcCheckpointSize = N_MIN_CRC_CHECKPOINT_SIZE;
+    const qint64 nCheckpointDenominator = N_MAX_CRC_CHECKPOINTS - 1;
+    const qint64 nRequiredCheckpointSize =
+        (nSearchSpan / nCheckpointDenominator) +
+        ((nSearchSpan % nCheckpointDenominator) ? 1 : 0);
+    if (nRequiredCheckpointSize > nCrcCheckpointSize) {
+        nCrcCheckpointSize = nRequiredCheckpointSize;
+        const qint64 nRemainder =
+            nCrcCheckpointSize % N_MIN_CRC_CHECKPOINT_SIZE;
+        if (nRemainder != 0) {
+            nCrcCheckpointSize += N_MIN_CRC_CHECKPOINT_SIZE - nRemainder;
+        }
+    }
+    QVector<quint32> listCrcCheckpoints;
+    listCrcCheckpoints.append(0);
+    qint64 nCrcCheckpointEnd = nCallStart;
+    QByteArray baCrcBuffer(0x10000, 0);
+    bool bCrcReadFailure = false;
+    quint64 nCrcReadCost = 0;
+    quint64 nCrcBudgetExtent = 0;
+
+    const auto chargeCrcRead = [&](qint64 nRelativeEnd,
+                                   qint64 nReadSize) -> bool {
+        if ((nRelativeEnd < 0) || (nReadSize < 0)) return false;
+        nCrcBudgetExtent = qMax(nCrcBudgetExtent, (quint64)nRelativeEnd);
+        const quint64 nAllowed =
+            (nCrcBudgetExtent >
+             ((std::numeric_limits<quint64>::max)() / 8)) ?
+                (std::numeric_limits<quint64>::max)() :
+                nCrcBudgetExtent * 8;
+        if ((nCrcReadCost > nAllowed) ||
+            ((quint64)nReadSize > nAllowed - nCrcReadCost)) {
+            return false;
+        }
+        nCrcReadCost += (quint64)nReadSize;
+        return true;
+    };
+
+    const auto crcPrefixAt = [&](qint64 nEndOffset, quint32 *pCRC) -> bool {
+        if (pCRC) *pCRC = 0;
+        if (!pCRC || bCrcReadFailure || (nEndOffset < nCallStart) ||
+            (nEndOffset > nRangeEnd) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return false;
+        }
+
+        const qint64 nRelativeEnd = nEndOffset - nCallStart;
+        const qint64 nCheckpointRelative =
+            (nRelativeEnd / nCrcCheckpointSize) * nCrcCheckpointSize;
+        const qint64 nCheckpointAbsolute = nCallStart + nCheckpointRelative;
+        const qint64 nRequiredRead =
+            qMax<qint64>(0, nCheckpointAbsolute - nCrcCheckpointEnd) +
+            (nEndOffset - nCheckpointAbsolute);
+        if (!chargeCrcRead(nRelativeEnd, nRequiredRead)) return false;
+
+        while ((nCrcCheckpointEnd < nCheckpointAbsolute) &&
+               XBinary::isPdStructNotCanceled(pPdStruct)) {
+            const qint64 nCheckpointAdvance =
+                qMin(nCrcCheckpointSize,
+                     nCheckpointAbsolute - nCrcCheckpointEnd);
+            const qint64 nNextCheckpoint =
+                nCrcCheckpointEnd + nCheckpointAdvance;
+            qint64 nReadOffset = nCrcCheckpointEnd;
+            quint32 nNextCRC = listCrcCheckpoints.constLast();
+            while ((nReadOffset < nNextCheckpoint) &&
+                   XBinary::isPdStructNotCanceled(pPdStruct)) {
+                const qint32 nChunk = (qint32)qMin<qint64>(
+                    baCrcBuffer.size(), nNextCheckpoint - nReadOffset);
+                if (searchBinary.read_array_process(
+                        nReadOffset, baCrcBuffer.data(), nChunk,
+                        pPdStruct) != nChunk) {
+                    bCrcReadFailure = true;
+                    return false;
+                }
+                nNextCRC = dmgUpdateCRC32(
+                    nNextCRC, baCrcBuffer.constData(), nChunk);
+                nReadOffset += nChunk;
+            }
+            if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+            listCrcCheckpoints.append(nNextCRC);
+            nCrcCheckpointEnd = nNextCheckpoint;
+        }
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+        const qint64 nCheckpointIndex =
+            nCheckpointRelative / nCrcCheckpointSize;
+        if ((nCheckpointIndex < 0) ||
+            (nCheckpointIndex >= (qint64)listCrcCheckpoints.size())) {
+            bCrcReadFailure = true;
+            return false;
+        }
+
+        quint32 nCRC = listCrcCheckpoints.at((qint32)nCheckpointIndex);
+        qint64 nTailOffset = nCheckpointAbsolute;
+        while ((nTailOffset < nEndOffset) &&
+               XBinary::isPdStructNotCanceled(pPdStruct)) {
+            const qint32 nTailSize = (qint32)qMin<qint64>(
+                baCrcBuffer.size(), nEndOffset - nTailOffset);
+            if (searchBinary.read_array_process(nTailOffset,
+                                                baCrcBuffer.data(),
+                                                nTailSize, pPdStruct) !=
+                nTailSize) {
+                bCrcReadFailure = true;
+                return false;
+            }
+            nCRC = dmgUpdateCRC32(nCRC, baCrcBuffer.constData(),
+                                  nTailSize);
+            nTailOffset += nTailSize;
+        }
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+        *pCRC = nCRC;
+        return true;
+    };
+
+    const auto crcRange = [&](qint64 nOffset, qint64 nLength,
+                              quint32 *pCRC) -> bool {
+        if (pCRC) *pCRC = 0;
+        if (!pCRC || (nOffset < nCallStart) || (nLength < 0) ||
+            (nOffset > nRangeEnd) || (nLength > nRangeEnd - nOffset)) {
+            return false;
+        }
+        if (nLength == 0) {
+            *pCRC = 0;
+            return true;
+        }
+
+        quint32 nPrefixStart = 0;
+        quint32 nPrefixEnd = 0;
+        if (!crcPrefixAt(nOffset, &nPrefixStart) ||
+            !crcPrefixAt(nOffset + nLength, &nPrefixEnd)) {
+            return false;
+        }
+
+        const quint32 nShiftedPrefix =
+            dmgCombineCRC32(nPrefixStart, 0, (quint64)nLength);
+        *pCRC = nPrefixEnd ^ nShiftedPrefix;
+        return true;
+    };
+
+    quint64 nMetadataValidationCost = 0;
+    const auto tryExactImage = [&](qint64 nOffset, qint64 nLength,
+                                   const KOLY_BLOCK &rawKoly, bool bFrontKoly,
+                                   FFSEARCH_INFO *pInfo) -> bool {
+        if (!pInfo || (nOffset < nCallStart) || (nLength <= 0) ||
+            (nOffset > nRangeEnd) || (nLength > nRangeEnd - nOffset)) {
+            return false;
+        }
+
+        const qint64 nPayloadSize = bFrontKoly ? nLength : nLength - 512;
+        if ((nPayloadSize < 0) ||
+            !dmgRangeWithin(rawKoly.nDataForkOffset,
+                            rawKoly.nDataForkLength,
+                            (quint64)nPayloadSize)) {
+            return false;
+        }
+
+        if (dmgChecksumIsCRC32(rawKoly.dataChecksum)) {
+            if ((rawKoly.nDataForkOffset >
+                 (quint64)(std::numeric_limits<qint64>::max)()) ||
+                (rawKoly.nDataForkLength >
+                 (quint64)(std::numeric_limits<qint64>::max)())) {
+                return false;
+            }
+            const qint64 nDataOffset =
+                nOffset + (qint64)rawKoly.nDataForkOffset;
+            quint32 nDataCRC = 0;
+            if (!crcRange(nDataOffset, (qint64)rawKoly.nDataForkLength,
+                          &nDataCRC) ||
+                (nDataCRC != rawKoly.dataChecksum[2])) {
+                return false;
+            }
+        }
+
+        const quint64 nMetadataCost =
+            (rawKoly.nXmlLength != 0) ? rawKoly.nXmlLength :
+            (((rawKoly.nResourceForkLength >= 0x100) &&
+              (rawKoly.nResourceForkLength <= DMG_MAX_RESOURCE_SIZE)) ?
+                 rawKoly.nResourceForkLength : 0);
+        const quint64 nEarnedDistance = (quint64)((nOffset + nLength) - nCallStart);
+        const quint64 nAllowedMetadataCost =
+            (nEarnedDistance > ((std::numeric_limits<quint64>::max)() / 4)) ?
+                (std::numeric_limits<quint64>::max)() : nEarnedDistance * 4;
+        if ((nMetadataValidationCost > nAllowedMetadataCost) ||
+            (nMetadataCost > nAllowedMetadataCost - nMetadataValidationCost)) {
+            return false;
+        }
+        nMetadataValidationCost += nMetadataCost;
+
+        SubDevice subdevice(pSearchDevice, nOffset, nLength);
+        if (!subdevice.open(QIODevice::ReadOnly)) return false;
+        XDMG image(&subdevice);
+        KOLY_BLOCK exactKoly = {};
+        qint64 nSelectedKolyOffset = -1;
+        const bool bValid = image._loadKolyAndXml(
+            &exactKoly, nullptr, false, pPdStruct, &nSelectedKolyOffset, nullptr, false,
+            false);
+        const qint64 nExpectedKolyOffset = bFrontKoly ? 0 : (nLength - 512);
+        const bool bExactValid = bValid &&
+            (nSelectedKolyOffset == nExpectedKolyOffset) &&
+            XBinary::isPdStructNotCanceled(pPdStruct);
+        if (!bExactValid) {
+            return false;
+        }
+
+        FILEFORMATINFO formatInfo = {};
+        formatInfo.bIsValid = true;
+        formatInfo.fileType = FT_DMG;
+        formatInfo.sExt = QStringLiteral("dmg");
+        formatInfo.sVersion = QString::number(exactKoly.nVersion);
+
+        pInfo->bIsValid = true;
+        pInfo->fileTYPE = FT_DMG;
+        pInfo->nOffset = nOffset;
+        pInfo->nSize = nLength;
+        pInfo->sExt = QStringLiteral("dmg");
+        pInfo->sString = XBinary::getFileFormatString(&formatInfo);
+        subdevice.close();
+        return true;
+    };
+
+    static const QByteArray baKolySignature("koly\x00\x00\x00\x04\x00\x00\x02\x00", 12);
+    static const QByteArray baXmlPrefix("<?xml version");
+    QList<qint64> listXmlDeclarations;
+    qint64 nXmlScanCursor = nCallStart;
+    qint64 nLastXmlDeclaration = nCallStart - 1;
+    QByteArray baXmlScanCarry;
+    const auto scanXmlDeclarationsTo = [&](qint64 nEndOffset) -> bool {
+        if (nEndOffset <= nXmlScanCursor) return true;
+
+        // Index raw declaration offsets in a single forward pass.  Fixed-size
+        // head probes both amplified dense marker noise and imposed a semantic
+        // prolog-length limit.  Each KOLY below supplies the exact XML extent;
+        // indexed CRC validation and the authoritative parser decide which
+        // declaration is genuine.  The explicit candidate cap still bounds
+        // retained adversarial state.
+        const qint32 nTokenOverlap = baXmlPrefix.size() - 1;
+        QByteArray baChunk(0x10000, 0);
+        while ((nXmlScanCursor < nEndOffset) &&
+               XBinary::isPdStructNotCanceled(pPdStruct)) {
+            const qint32 nReadSize = (qint32)qMin<qint64>(
+                baChunk.size(), nEndOffset - nXmlScanCursor);
+            if (searchBinary.read_array_process(
+                    nXmlScanCursor, baChunk.data(), nReadSize,
+                    pPdStruct) != nReadSize) {
+                return false;
+            }
+
+            QByteArray baTokens = baXmlScanCarry;
+            baTokens.append(baChunk.constData(), nReadSize);
+            const qint64 nTokensOffset =
+                nXmlScanCursor - baXmlScanCarry.size();
+            for (qint32 nFound = baTokens.indexOf(baXmlPrefix);
+                 nFound >= 0;) {
+                const qint64 nDeclaration = nTokensOffset + nFound;
+                if (nDeclaration > nLastXmlDeclaration) {
+                    if (listXmlDeclarations.size() >=
+                        DMG_MAX_XML_BASE_CANDIDATES) {
+                        return false;
+                    }
+                    listXmlDeclarations.append(nDeclaration);
+                    nLastXmlDeclaration = nDeclaration;
+                }
+                if (nFound ==
+                    (std::numeric_limits<qint32>::max)()) return false;
+                nFound = baTokens.indexOf(baXmlPrefix, nFound + 1);
+            }
+
+            if (baTokens.size() > nTokenOverlap) {
+                baXmlScanCarry = baTokens.right(nTokenOverlap);
+            } else {
+                baXmlScanCarry = baTokens;
+            }
+            nXmlScanCursor += nReadSize;
+        }
+
+        return XBinary::isPdStructNotCanceled(pPdStruct);
+    };
+
+    qint64 nSignatureCursor = nCallStart;
+    while (XBinary::isPdStructNotCanceled(pPdStruct) &&
+           (nSignatureCursor <= nRangeEnd - 12)) {
+        const qint64 nHeaderOffset =
+            searchBinary.find_byteArray(nSignatureCursor, nRangeEnd - nSignatureCursor,
+                                        baKolySignature, pPdStruct);
+        if (nHeaderOffset < 0) break;
+
+        // Twelve signature bytes are not enough to admit a candidate: every
+        // subsequent structural field must also lie inside the search range.
+        if (nHeaderOffset > nRangeEnd - 512) break;
+
+        const KOLY_BLOCK rawKoly = readKolyBlock(pSearchDevice, nHeaderOffset);
+        if ((rawKoly.nMagic != 0x6b6f6c79) || (rawKoly.nVersion != 4) ||
+            (rawKoly.nHeaderLength != 512) || (rawKoly.nSegment > 1) ||
+            (rawKoly.nSegmentCount > 1) ||
+            (rawKoly.nXmlLength > DMG_MAX_XML_SIZE) ||
+            (rawKoly.nSectorCount >
+             ((quint64)(std::numeric_limits<qint64>::max)() / DMG_SECTOR_SIZE)) ||
+            !dmgChecksumDescriptorValid(rawKoly.dataChecksum) ||
+            !dmgChecksumDescriptorValid(rawKoly.masterChecksum)) {
+            if (nHeaderOffset == (std::numeric_limits<qint64>::max)()) break;
+            nSignatureCursor = nHeaderOffset + 1;
+            continue;
+        }
+
+        // A front-header image has no terminal KOLY.  Its declared fork top is
+        // the exact searchable size, so carrier bytes after it are not swallowed.
+        if (rawKoly.nDataForkOffset == 512) {
+            const quint64 nAvailable = (quint64)(nRangeEnd - nHeaderOffset);
+            quint64 nRequiredTop = 512;
+            bool bFrontRangesValid = true;
+            const auto accountRequired = [&](quint64 nOffset, quint64 nLength) {
+                if (nLength == 0) return;
+                if (!dmgRangeWithin(nOffset, nLength, nAvailable)) {
+                    bFrontRangesValid = false;
+                } else {
+                    nRequiredTop = qMax(nRequiredTop, nOffset + nLength);
+                }
+            };
+            accountRequired(rawKoly.nDataForkOffset, rawKoly.nDataForkLength);
+            accountRequired(rawKoly.nResourceForkOffset, rawKoly.nResourceForkLength);
+            accountRequired(rawKoly.nXmlOffset, rawKoly.nXmlLength);
+
+            if (bFrontRangesValid) {
+                // A declared code-signature extent that starts with another
+                // structural KOLY makes the front candidate ambiguous.  Do not
+                // accept it as a shortened front-header image; the embedded
+                // terminal candidate must validate independently below.
+                bool bFrontMetadataAmbiguous = false;
+                if ((rawKoly.nCodeSignatureLength == 512) &&
+                    dmgRangeWithin(rawKoly.nCodeSignatureOffset, 512,
+                                   nAvailable) &&
+                    (rawKoly.nCodeSignatureOffset <=
+                     (quint64)(std::numeric_limits<qint64>::max)())) {
+                    const qint64 nNestedKolyOffset = nHeaderOffset +
+                        (qint64)rawKoly.nCodeSignatureOffset;
+                    const KOLY_BLOCK nestedKoly =
+                        readKolyBlock(pSearchDevice, nNestedKolyOffset);
+                    bFrontMetadataAmbiguous =
+                        (nestedKoly.nMagic == 0x6b6f6c79) &&
+                        (nestedKoly.nVersion == 4) &&
+                        (nestedKoly.nHeaderLength == 512);
+                }
+                QList<quint64> listTops;
+                if ((rawKoly.nCodeSignatureLength != 0) &&
+                    dmgRangeWithin(rawKoly.nCodeSignatureOffset,
+                                   rawKoly.nCodeSignatureLength, nAvailable)) {
+                    listTops.append(qMax(nRequiredTop, rawKoly.nCodeSignatureOffset +
+                                                          rawKoly.nCodeSignatureLength));
+                }
+                if (!listTops.contains(nRequiredTop)) listTops.append(nRequiredTop);
+
+                for (quint64 nTop : listTops) {
+                    if (bFrontMetadataAmbiguous) break;
+                    if ((nTop > 512) &&
+                        (nTop <= (quint64)(std::numeric_limits<qint64>::max)()) &&
+                        tryExactImage(nHeaderOffset, (qint64)nTop, rawKoly,
+                                      true, &result)) {
+                        pState->nCurrentOffset = nHeaderOffset + (qint64)nTop;
+                        return result;
+                    }
+                    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return FFSEARCH_INFO{};
+                }
+            }
+        }
+
+        // A terminal KOLY identifies the end, not the beginning, of an image.
+        // Declaration discovery is one-pass and the exact data CRC uses the
+        // shared prefix index above before authoritative metadata parsing.
+        if (nHeaderOffset <= nRangeEnd - 512) {
+            const qint64 nImageEnd = nHeaderOffset + 512;
+            if (!scanXmlDeclarationsTo(nHeaderOffset)) return FFSEARCH_INFO{};
+
+            bool bRequiredTopValid = true;
+            quint64 nRequiredTop = 0;
+            const auto accountRelativeRange = [&](quint64 nOffset, quint64 nLength) {
+                if (nLength == 0) return;
+                if (nOffset > (std::numeric_limits<quint64>::max)() - nLength) {
+                    bRequiredTopValid = false;
+                } else {
+                    nRequiredTop = qMax(nRequiredTop, nOffset + nLength);
+                }
+            };
+            accountRelativeRange(rawKoly.nDataForkOffset, rawKoly.nDataForkLength);
+            accountRelativeRange(rawKoly.nResourceForkOffset, rawKoly.nResourceForkLength);
+            accountRelativeRange(rawKoly.nXmlOffset, rawKoly.nXmlLength);
+
+            QList<qint64> listBases;
+            QSet<qint64> setBases;
+            const auto addBase = [&](qint64 nBase) {
+                if ((nBase < nCallStart) || (nBase > nHeaderOffset) ||
+                    setBases.contains(nBase)) {
+                    return;
+                }
+                const quint64 nRelativeSize = (quint64)(nHeaderOffset - nBase);
+                const auto pairFits = [&](quint64 nOffset, quint64 nLength) {
+                    return (nLength == 0) ||
+                           dmgRangeWithin(nOffset, nLength, nRelativeSize);
+                };
+                if (pairFits(rawKoly.nDataForkOffset, rawKoly.nDataForkLength) &&
+                    pairFits(rawKoly.nResourceForkOffset,
+                             rawKoly.nResourceForkLength) &&
+                    pairFits(rawKoly.nXmlOffset, rawKoly.nXmlLength)) {
+                    setBases.insert(nBase);
+                    listBases.append(nBase);
+                }
+            };
+
+            if (bRequiredTopValid) {
+                const auto addXmlMarkerBase = [&](qint64 nXmlDeclaration) {
+                    if ((nXmlDeclaration >= nCallStart) &&
+                        (nXmlDeclaration <= nHeaderOffset) &&
+                        (rawKoly.nXmlLength >=
+                         (quint64)baXmlPrefix.size()) &&
+                        (rawKoly.nXmlLength <=
+                         (quint64)(nHeaderOffset - nXmlDeclaration)) &&
+                        ((quint64)(nXmlDeclaration - nCallStart) >=
+                         rawKoly.nXmlOffset)) {
+                        const quint64 nBaseRelative =
+                            (quint64)(nXmlDeclaration - nCallStart) -
+                            rawKoly.nXmlOffset;
+                        if (nBaseRelative <=
+                            (quint64)(nHeaderOffset - nCallStart)) {
+                            addBase(nCallStart + (qint64)nBaseRelative);
+                        }
+                    }
+                };
+
+                // Nearest declarations are most likely to describe a terminal
+                // image, but every exact-range candidate is retained up to the
+                // explicit fail-closed resource cap.
+                for (auto it = listXmlDeclarations.crbegin();
+                     it != listXmlDeclarations.crend(); ++it) {
+                    addXmlMarkerBase(*it);
+                    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+                        return FFSEARCH_INFO{};
+                    }
+                }
+
+                const quint64 nAvailable =
+                    (quint64)(nHeaderOffset - nCallStart);
+                if ((rawKoly.nCodeSignatureLength != 0) &&
+                    (rawKoly.nCodeSignatureOffset <=
+                     (std::numeric_limits<quint64>::max)() -
+                         rawKoly.nCodeSignatureLength)) {
+                    const quint64 nOptionalTop = qMax(
+                        nRequiredTop, rawKoly.nCodeSignatureOffset +
+                                          rawKoly.nCodeSignatureLength);
+                    if (nOptionalTop <= nAvailable) {
+                        addBase(nHeaderOffset - (qint64)nOptionalTop);
+                    }
+                }
+                if (nRequiredTop <= nAvailable) {
+                    addBase(nHeaderOffset - (qint64)nRequiredTop);
+                }
+                addBase(nCallStart);
+            }
+
+            for (qint64 nImageOffset : listBases) {
+                if (tryExactImage(nImageOffset, nImageEnd - nImageOffset,
+                                  rawKoly, false, &result)) {
+                    pState->nCurrentOffset = nImageEnd;
+                    return result;
+                }
+                if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+                    return FFSEARCH_INFO{};
+                }
+            }
+        }
+
+        if (nHeaderOffset == (std::numeric_limits<qint64>::max)()) break;
+        nSignatureCursor = nHeaderOffset + 1;
+    }
+
+    if (XBinary::isPdStructNotCanceled(pPdStruct)) {
+        pState->nCurrentOffset = nRangeEnd;
+    }
+    return FFSEARCH_INFO{};
 }
 
 XBinary *XDMG::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)

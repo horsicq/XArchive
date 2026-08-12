@@ -23,15 +23,131 @@
 #include <new>
 #include "Algos/xdeflatedecoder.h"
 #include "Algos/xlzhdecoder.h"
+#include "subdevice.h"
 
+#include <QBuffer>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QSet>
+#include <algorithm>
 #include <limits>
+
+#ifdef Q_OS_WIN
+#include <io.h>
+#include <windows.h>
+#elif defined(Q_OS_UNIX)
+#include <sys/stat.h>
+#endif
 
 static XBinary::XCONVERT _TABLE_XCAB_STRUCTID[] = {{XCab::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                    {XCab::STRUCTID_CFHEADER, "CFHEADER", QString("CFHEADER")},
                                                    {XCab::STRUCTID_CFFOLDER, "CFFOLDER", QString("CFFOLDER")},
                                                    {XCab::STRUCTID_CFFILE, "CFFILE", QString("CFFILE")},
                                                    {XCab::STRUCTID_CFDATA, "CFDATA", QString("CFDATA")}};
-static const qint64 CAB_MAX_FOLDER_SIZE = 512LL * 1024 * 1024;
+static const qint64 CAB_MAX_FOLDER_SIZE = 0x7FFF8000LL;
+static const quint16 CAB_MAX_DATA_BLOCK_SIZE = 0x9800;
+
+struct CAB_DEVICE_CHAIN {
+    QList<QIODevice *> listDevices;
+    QIODevice *pRoot;
+    bool bCycle;
+};
+
+static CAB_DEVICE_CHAIN cabGetDeviceChain(QIODevice *pDevice)
+{
+    CAB_DEVICE_CHAIN result = {};
+    QSet<QIODevice *> setVisited;
+
+    while (pDevice) {
+        if (setVisited.contains(pDevice)) {
+            result.bCycle = true;
+            break;
+        }
+
+        setVisited.insert(pDevice);
+        result.listDevices.append(pDevice);
+        result.pRoot = pDevice;
+
+        SubDevice *pSubDevice = dynamic_cast<SubDevice *>(pDevice);
+        if (!pSubDevice) break;
+        pDevice = pSubDevice->getOrigDevice();
+    }
+
+    return result;
+}
+
+static bool cabDevicesAlias(QIODevice *pSource, QIODevice *pDestination)
+{
+    const CAB_DEVICE_CHAIN sourceChain = cabGetDeviceChain(pSource);
+    const CAB_DEVICE_CHAIN destinationChain = cabGetDeviceChain(pDestination);
+    if (sourceChain.listDevices.isEmpty() || destinationChain.listDevices.isEmpty()) return false;
+
+    QSet<QIODevice *> setSourceDevices;
+    for (QIODevice *pDevice : sourceChain.listDevices) setSourceDevices.insert(pDevice);
+    for (QIODevice *pDevice : destinationChain.listDevices) {
+        if (setSourceDevices.contains(pDevice)) return true;
+    }
+
+    // A cyclic wrapper graph cannot be resolved to an independent backing
+    // object safely.  Fail closed instead of risking a destructive alias.
+    if (sourceChain.bCycle || destinationChain.bCycle) return true;
+
+    QIODevice *pSourceRoot = sourceChain.pRoot;
+    QIODevice *pDestinationRoot = destinationChain.pRoot;
+    if (!pSourceRoot || !pDestinationRoot) return false;
+
+    QBuffer *pSourceBuffer = dynamic_cast<QBuffer *>(pSourceRoot);
+    QBuffer *pDestinationBuffer = dynamic_cast<QBuffer *>(pDestinationRoot);
+    if (pSourceBuffer && pDestinationBuffer &&
+        (&pSourceBuffer->buffer() == &pDestinationBuffer->buffer())) {
+        return true;
+    }
+
+    QFile *pSourceFile = dynamic_cast<QFile *>(pSourceRoot);
+    QFile *pDestinationFile = dynamic_cast<QFile *>(pDestinationRoot);
+    if (!pSourceFile || !pDestinationFile) return false;
+
+    const QFileInfo sourceInfo(pSourceFile->fileName());
+    const QFileInfo destinationInfo(pDestinationFile->fileName());
+    QString sSourcePath = sourceInfo.canonicalFilePath();
+    QString sDestinationPath = destinationInfo.canonicalFilePath();
+    if (sSourcePath.isEmpty()) sSourcePath = QDir::cleanPath(sourceInfo.absoluteFilePath());
+    if (sDestinationPath.isEmpty()) sDestinationPath = QDir::cleanPath(destinationInfo.absoluteFilePath());
+#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
+    const Qt::CaseSensitivity caseSensitivity = Qt::CaseInsensitive;
+#else
+    const Qt::CaseSensitivity caseSensitivity = Qt::CaseSensitive;
+#endif
+    if (!sSourcePath.isEmpty() && !sDestinationPath.isEmpty() &&
+        (QString::compare(QDir::fromNativeSeparators(sSourcePath),
+                          QDir::fromNativeSeparators(sDestinationPath), caseSensitivity) == 0)) {
+        return true;
+    }
+
+    if ((pSourceFile->handle() < 0) || (pDestinationFile->handle() < 0)) return false;
+#ifdef Q_OS_WIN
+    const intptr_t nSourceHandle = _get_osfhandle(pSourceFile->handle());
+    const intptr_t nDestinationHandle = _get_osfhandle(pDestinationFile->handle());
+    if ((nSourceHandle == -1) || (nDestinationHandle == -1)) return false;
+    BY_HANDLE_FILE_INFORMATION sourceFileInformation = {};
+    BY_HANDLE_FILE_INFORMATION destinationFileInformation = {};
+    return GetFileInformationByHandle(reinterpret_cast<HANDLE>(nSourceHandle), &sourceFileInformation) &&
+           GetFileInformationByHandle(reinterpret_cast<HANDLE>(nDestinationHandle), &destinationFileInformation) &&
+           (sourceFileInformation.dwVolumeSerialNumber == destinationFileInformation.dwVolumeSerialNumber) &&
+           (sourceFileInformation.nFileIndexHigh == destinationFileInformation.nFileIndexHigh) &&
+           (sourceFileInformation.nFileIndexLow == destinationFileInformation.nFileIndexLow);
+#elif defined(Q_OS_UNIX)
+    struct stat sourceStatus = {};
+    struct stat destinationStatus = {};
+    return (fstat(pSourceFile->handle(), &sourceStatus) == 0) &&
+           (fstat(pDestinationFile->handle(), &destinationStatus) == 0) &&
+           (sourceStatus.st_dev == destinationStatus.st_dev) &&
+           (sourceStatus.st_ino == destinationStatus.st_ino);
+#else
+    return false;
+#endif
+}
 
 static quint32 cabDataChecksum(const char *pData, qint32 nSize, quint32 nSeed = 0)
 {
@@ -66,16 +182,16 @@ XCab::XCab(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XCab::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() > (qint64)sizeof(CFHEADER))) {
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
-        if (compareSignature(&memoryMap, "'MSCF'00000000........00000000........00000000", 0, pPdStruct)) {
-            bResult = true;
-        }
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (getSize() < (qint64)sizeof(CFHEADER))) {
+        return false;
     }
 
-    return bResult;
+    UNPACK_STATE state = {};
+    const bool bResult = initUnpack(&state, getDefaultUnpackProperties(),
+                                    pPdStruct);
+    finishUnpack(&state, nullptr);
+    return bResult && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XCab::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -90,40 +206,78 @@ QString XCab::getVersion()
     return QString("%1.%2").arg(read_uint8(25)).arg(read_uint8(24), 2, 10, QChar('0'));
 }
 
-XCab::CFFILE XCab::readCFFILE(qint64 nOffset)
+XCab::CFFILE XCab::readCFFILE(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     CFFILE result = {};
-
-    result.cbFile = read_uint32(nOffset + offsetof(CFFILE, cbFile));
-    result.uoffFolderStart = read_uint32(nOffset + offsetof(CFFILE, uoffFolderStart));
-    result.iFolder = read_uint16(nOffset + offsetof(CFFILE, iFolder));
-    result.date = read_uint16(nOffset + offsetof(CFFILE, date));
-    result.time = read_uint16(nOffset + offsetof(CFFILE, time));
-    result.attribs = read_uint16(nOffset + offsetof(CFFILE, attribs));
-
+    _readCFFILEExact(nOffset, &result, pPdStruct);
     return result;
 }
 
-XCab::CFHEADER XCab::readCFHeader(qint64 nOffset)
+bool XCab::_readCFFILEExact(qint64 nOffset, CFFILE *pResult, PDSTRUCT *pPdStruct)
+{
+    if (!pResult) return false;
+    *pResult = {};
+    QByteArray baData(sizeof(CFFILE), 0);
+    if (read_array_process(nOffset, baData.data(), baData.size(), pPdStruct) !=
+            baData.size() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+    CFFILE result = {};
+    result.cbFile = qFromLittleEndian<quint32>(
+        reinterpret_cast<const uchar *>(baData.constData() + offsetof(CFFILE, cbFile)));
+    result.uoffFolderStart = qFromLittleEndian<quint32>(
+        reinterpret_cast<const uchar *>(baData.constData() + offsetof(CFFILE, uoffFolderStart)));
+    result.iFolder = qFromLittleEndian<quint16>(
+        reinterpret_cast<const uchar *>(baData.constData() + offsetof(CFFILE, iFolder)));
+    result.date = qFromLittleEndian<quint16>(
+        reinterpret_cast<const uchar *>(baData.constData() + offsetof(CFFILE, date)));
+    result.time = qFromLittleEndian<quint16>(
+        reinterpret_cast<const uchar *>(baData.constData() + offsetof(CFFILE, time)));
+    result.attribs = qFromLittleEndian<quint16>(
+        reinterpret_cast<const uchar *>(baData.constData() + offsetof(CFFILE, attribs)));
+
+    *pResult = result;
+    return true;
+}
+
+XCab::CFHEADER XCab::readCFHeader(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     CFHEADER result = {};
+    _readCFHeaderExact(nOffset, &result, pPdStruct);
+    return result;
+}
 
-    result.signature[0] = read_uint8(nOffset + 0);
-    result.signature[1] = read_uint8(nOffset + 1);
-    result.signature[2] = read_uint8(nOffset + 2);
-    result.signature[3] = read_uint8(nOffset + 3);
-    result.reserved1 = read_uint32(nOffset + offsetof(CFHEADER, reserved1));
-    result.cbCabinet = read_uint32(nOffset + offsetof(CFHEADER, cbCabinet));
-    result.reserved2 = read_uint32(nOffset + offsetof(CFHEADER, reserved2));
-    result.coffFiles = read_uint32(nOffset + offsetof(CFHEADER, coffFiles));
-    result.reserved3 = read_uint32(nOffset + offsetof(CFHEADER, reserved3));
-    result.versionMinor = read_uint8(nOffset + offsetof(CFHEADER, versionMinor));
-    result.versionMajor = read_uint8(nOffset + offsetof(CFHEADER, versionMajor));
-    result.cFolders = read_uint16(nOffset + offsetof(CFHEADER, cFolders));
-    result.cFiles = read_uint16(nOffset + offsetof(CFHEADER, cFiles));
-    result.flags = read_uint16(nOffset + offsetof(CFHEADER, flags));
-    result.setID = read_uint16(nOffset + offsetof(CFHEADER, setID));
-    result.iCabinet = read_uint16(nOffset + offsetof(CFHEADER, iCabinet));
+bool XCab::_readCFHeaderExact(qint64 nOffset, CFHEADER *pResult, PDSTRUCT *pPdStruct)
+{
+    if (!pResult) return false;
+    *pResult = {};
+    QByteArray baData(sizeof(CFHEADER), 0);
+    if (read_array_process(nOffset, baData.data(), baData.size(), pPdStruct) !=
+            baData.size() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+    CFHEADER result = {};
+    memcpy(result.signature, baData.constData(), 4);
+    const auto le16 = [&](qint32 nFieldOffset) {
+        return qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baData.constData() + nFieldOffset));
+    };
+    const auto le32 = [&](qint32 nFieldOffset) {
+        return qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baData.constData() + nFieldOffset));
+    };
+    result.reserved1 = le32(offsetof(CFHEADER, reserved1));
+    result.cbCabinet = le32(offsetof(CFHEADER, cbCabinet));
+    result.reserved2 = le32(offsetof(CFHEADER, reserved2));
+    result.coffFiles = le32(offsetof(CFHEADER, coffFiles));
+    result.reserved3 = le32(offsetof(CFHEADER, reserved3));
+    result.versionMinor = (quint8)baData.at(offsetof(CFHEADER, versionMinor));
+    result.versionMajor = (quint8)baData.at(offsetof(CFHEADER, versionMajor));
+    result.cFolders = le16(offsetof(CFHEADER, cFolders));
+    result.cFiles = le16(offsetof(CFHEADER, cFiles));
+    result.flags = le16(offsetof(CFHEADER, flags));
+    result.setID = le16(offsetof(CFHEADER, setID));
+    result.iCabinet = le16(offsetof(CFHEADER, iCabinet));
 
     // if (result.flags & 0x0004)  // TODO const
     // {
@@ -132,34 +286,67 @@ XCab::CFHEADER XCab::readCFHeader(qint64 nOffset)
     //     result.cbCFData = read_uint8(offsetof(CFHEADER, cbCFData));
     // }
 
-    return result;
+    *pResult = result;
+    return true;
 }
 
-XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset)
+XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     CFFOLDER result = {};
-
-    result.coffCabStart = read_uint32(nOffset + offsetof(CFFOLDER, coffCabStart));
-    result.cCFData = read_uint16(nOffset + offsetof(CFFOLDER, cCFData));
-    result.typeCompress = read_uint16(nOffset + offsetof(CFFOLDER, typeCompress));
-
+    _readCFFolderExact(nOffset, &result, pPdStruct);
     return result;
 }
 
-XCab::CFDATA XCab::readCFData(qint64 nOffset)
+bool XCab::_readCFFolderExact(qint64 nOffset, CFFOLDER *pResult, PDSTRUCT *pPdStruct)
+{
+    if (!pResult) return false;
+    *pResult = {};
+    QByteArray baData(sizeof(CFFOLDER), 0);
+    if (read_array_process(nOffset, baData.data(), baData.size(), pPdStruct) !=
+            baData.size() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+    CFFOLDER result = {};
+    result.coffCabStart = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baData.constData()));
+    result.cCFData = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baData.constData() + 4));
+    result.typeCompress = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baData.constData() + 6));
+
+    *pResult = result;
+    return true;
+}
+
+XCab::CFDATA XCab::readCFData(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     CFDATA result = {};
-
-    result.csum = read_uint32(nOffset + offsetof(CFDATA, csum));
-    result.cbData = read_uint16(nOffset + offsetof(CFDATA, cbData));
-    result.cbUncomp = read_uint16(nOffset + offsetof(CFDATA, cbUncomp));
-
+    _readCFDataExact(nOffset, &result, pPdStruct);
     return result;
 }
 
-qint64 XCab::_getStreamSize(qint64 nOffset, qint32 nCount, qint32 nReservedSize, qint64 nCabinetSize, qint64 *pUncompressedSize)
+bool XCab::_readCFDataExact(qint64 nOffset, CFDATA *pResult, PDSTRUCT *pPdStruct)
 {
-    if ((nOffset < 0) || (nCount < 0) || (nReservedSize < 0) || (nCabinetSize < 0) || (nOffset > nCabinetSize)) {
+    if (!pResult) return false;
+    *pResult = {};
+    QByteArray baData(sizeof(CFDATA), 0);
+    if (read_array_process(nOffset, baData.data(), baData.size(), pPdStruct) !=
+            baData.size() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+    CFDATA result = {};
+    result.csum = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(baData.constData()));
+    result.cbData = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baData.constData() + 4));
+    result.cbUncomp = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(baData.constData() + 6));
+
+    *pResult = result;
+    return true;
+}
+
+qint64 XCab::_getStreamSize(qint64 nOffset, qint32 nCount, qint32 nReservedSize, qint64 nCabinetSize, qint64 *pUncompressedSize,
+                            PDSTRUCT *pPdStruct)
+{
+    if ((nOffset < 0) || (nCount < 0) || (nReservedSize < 0) || (nCabinetSize < 0) || (nOffset > nCabinetSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return -1;
     }
 
@@ -167,14 +354,22 @@ qint64 XCab::_getStreamSize(qint64 nOffset, qint32 nCount, qint32 nReservedSize,
     qint64 nUncompressedSize = 0;
 
     for (qint32 i = 0; i < nCount; i++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return -1;
+        }
+
         if ((qint64)sizeof(CFDATA) + nReservedSize > nCabinetSize - nCurrentOffset) {
             return -1;
         }
 
-        CFDATA cfData = readCFData(nCurrentOffset);
+        CFDATA cfData = {};
+        if (!_readCFDataExact(nCurrentOffset, &cfData, pPdStruct)) {
+            return -1;
+        }
         qint64 nBlockSize = (qint64)sizeof(CFDATA) + nReservedSize + (qint64)cfData.cbData;
 
-        if ((cfData.cbData == 0) || (nBlockSize > nCabinetSize - nCurrentOffset) ||
+        if ((cfData.cbData == 0) || (cfData.cbData > CAB_MAX_DATA_BLOCK_SIZE) ||
+            (nBlockSize > nCabinetSize - nCurrentOffset) ||
             ((qint64)cfData.cbUncomp > (std::numeric_limits<qint64>::max)() - nUncompressedSize)) {
             return -1;
         }
@@ -235,152 +430,148 @@ QList<XBinary::XFHEADER> XCab::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
 {
     QList<XBinary::XFHEADER> listResult;
 
-    quint32 nStructID = xfStruct.nStructID;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return listResult;
 
-    if (nStructID == STRUCTID_UNKNOWN) {
-        XFSTRUCT _xfStruct = xfStruct;
-        _xfStruct.nStructID = STRUCTID_CFHEADER;
-        _xfStruct.xLoc = offsetToLoc(0);
-        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
-    } else if (nStructID == STRUCTID_CFHEADER) {
-        XLOC headerLoc = xfStruct.xLoc;
-        if (headerLoc.locType == LT_UNKNOWN) {
-            headerLoc = offsetToLoc(0);
-        }
+    UNPACK_STATE state = {};
+    if (!initUnpack(&state, getDefaultUnpackProperties(), pPdStruct) ||
+        !state.pContext) {
+        finishUnpack(&state, nullptr);
+        return listResult;
+    }
 
+    CAB_UNPACK_CONTEXT *pContext =
+        static_cast<CAB_UNPACK_CONTEXT *>(state.pContext);
+    const quint32 nStructID = xfStruct.nStructID;
+    QString sChildParent = xfStruct.sParent;
+
+    if ((nStructID == STRUCTID_UNKNOWN) ||
+        (nStructID == STRUCTID_CFHEADER)) {
         XFHEADER xfHeader = {};
         xfHeader.sParentTag = xfStruct.sParent;
         xfHeader.fileType = xfStruct.fileType;
         xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFHEADER);
-        xfHeader.xLoc = headerLoc;
+        xfHeader.xLoc = offsetToLoc(0);
         xfHeader.nSize = sizeof(CFHEADER);
         xfHeader.xfType = XFTYPE_HEADER;
-        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFHEADER, headerLoc);
-        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_CFHEADER), xfHeader.sParentTag);
+        xfHeader.listFields = getXFRecords(xfStruct.fileType,
+                                           STRUCTID_CFHEADER,
+                                           xfHeader.xLoc);
+        xfHeader.sTag = xfHeaderToTag(
+            xfHeader, structIDToString(STRUCTID_CFHEADER),
+            xfHeader.sParentTag);
+        sChildParent = xfHeader.sTag;
         listResult.append(xfHeader);
+    }
 
-        if (xfStruct.bIsParent) {
-            CFHEADER cfHeader = readCFHeader(0);
-
-            XFSTRUCT _xfStruct = xfStruct;
-            _xfStruct.sParent = xfHeader.sTag;
-
-            _xfStruct.nStructID = STRUCTID_CFFOLDER;
-            _xfStruct.xLoc = offsetToLoc(sizeof(CFHEADER));
-            _xfStruct.nCount = cfHeader.cFolders;
-            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
-
-            _xfStruct.nStructID = STRUCTID_CFFILE;
-            _xfStruct.xLoc = offsetToLoc(cfHeader.coffFiles);
-            _xfStruct.nCount = cfHeader.cFiles;
-            listResult.append(getXFHeaders(_xfStruct, pPdStruct));
+    const bool bIncludeChildren = xfStruct.bIsParent &&
+        ((nStructID == STRUCTID_UNKNOWN) ||
+         (nStructID == STRUCTID_CFHEADER));
+    const bool bIncludeFolders = bIncludeChildren ||
+                                 (nStructID == STRUCTID_CFFOLDER);
+    QString sFolderTag;
+    if (bIncludeFolders && !pContext->listFolderOffsets.isEmpty()) {
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = bIncludeChildren ? sChildParent :
+                                                 xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFFOLDER);
+        xfHeader.xfType = XFTYPE_TABLE;
+        for (qint64 nOffset : qAsConst(pContext->listFolderOffsets)) {
+            xfHeader.listRowLocations.append((XADDR)nOffset);
         }
-    } else if (nStructID == STRUCTID_CFFOLDER) {
-        qint64 nOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
-        qint32 nCount = xfStruct.nCount;
-        qint64 nFileSize = getSize();
-
-        if (nOffset == -1) {
-            nOffset = sizeof(CFHEADER);
+        if (!bIncludeChildren && (xfStruct.nCount > 0) &&
+            (xfHeader.listRowLocations.size() > xfStruct.nCount)) {
+            xfHeader.listRowLocations =
+                xfHeader.listRowLocations.mid(0, xfStruct.nCount);
         }
-        if (nCount == 0) {
-            nCount = readCFHeader(0).cFolders;
+        xfHeader.xLoc = offsetToLoc(xfHeader.listRowLocations.constFirst());
+        xfHeader.listFields = getXFRecords(xfStruct.fileType,
+                                           STRUCTID_CFFOLDER,
+                                           xfHeader.xLoc);
+        xfHeader.sTag = xfHeaderToTag(
+            xfHeader, structIDToString(STRUCTID_CFFOLDER),
+            xfHeader.sParentTag);
+        sFolderTag = xfHeader.sTag;
+        listResult.append(xfHeader);
+    }
+
+    const bool bIncludeFiles = bIncludeChildren ||
+                               (nStructID == STRUCTID_CFFILE);
+    if (bIncludeFiles && !pContext->listFileOffsets.isEmpty()) {
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = bIncludeChildren ? sChildParent :
+                                                 xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFFILE);
+        xfHeader.xfType = XFTYPE_TABLE;
+        for (qint64 nOffset : qAsConst(pContext->listFileOffsets)) {
+            xfHeader.listRowLocations.append((XADDR)nOffset);
         }
+        if (!bIncludeChildren && (xfStruct.nCount > 0) &&
+            (xfHeader.listRowLocations.size() > xfStruct.nCount)) {
+            xfHeader.listRowLocations =
+                xfHeader.listRowLocations.mid(0, xfStruct.nCount);
+        }
+        xfHeader.xLoc = offsetToLoc(xfHeader.listRowLocations.constFirst());
+        xfHeader.listFields = getXFRecords(xfStruct.fileType,
+                                           STRUCTID_CFFILE,
+                                           xfHeader.xLoc);
+        xfHeader.sTag = xfHeaderToTag(
+            xfHeader, structIDToString(STRUCTID_CFFILE),
+            xfHeader.sParentTag);
+        listResult.append(xfHeader);
+    }
 
-        if (nCount > 0) {
-            XFHEADER xfHeader = {};
-            xfHeader.sParentTag = xfStruct.sParent;
-            xfHeader.fileType = xfStruct.fileType;
-            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFFOLDER);
-            xfHeader.xLoc = offsetToLoc(nOffset);
-            xfHeader.xfType = XFTYPE_TABLE;
-            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFFOLDER, xfHeader.xLoc);
-
-            qint64 nCurrentOffset = nOffset;
-            for (qint32 i = 0; i < nCount; i++) {
-                if ((nCurrentOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
-                    break;
-                }
-                xfHeader.listRowLocations.append(nCurrentOffset);
-                nCurrentOffset += sizeof(CFFOLDER);
+    const bool bIncludeData = bIncludeChildren ||
+                              (nStructID == STRUCTID_CFDATA) ||
+                              ((nStructID == STRUCTID_CFFOLDER) &&
+                               xfStruct.bIsParent);
+    if (bIncludeData) {
+        QList<qint64> listDataOffsets;
+        const qint32 nRequestedCount = xfStruct.nCount > 0 ?
+                                           xfStruct.nCount :
+                                           (std::numeric_limits<qint32>::max)();
+        for (qint32 i = 0; (i < pContext->listFolders.size()) &&
+                           (listDataOffsets.size() < nRequestedCount) &&
+                           XBinary::isPdStructNotCanceled(pPdStruct); ++i) {
+            qint64 nDataOffset = pContext->listFolders.at(i).coffCabStart;
+            const quint16 nBlockCount =
+                pContext->listFolders.at(i).cCFData;
+            for (quint16 j = 0; (j < nBlockCount) &&
+                               (listDataOffsets.size() < nRequestedCount) &&
+                               XBinary::isPdStructNotCanceled(pPdStruct); ++j) {
+                listDataOffsets.append(nDataOffset);
+                const CFDATA cfData = readCFData(nDataOffset, pPdStruct);
+                nDataOffset += (qint64)sizeof(CFDATA) +
+                               pContext->nCbCFData + cfData.cbData;
             }
-
-            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_CFFOLDER), xfHeader.sParentTag);
+        }
+        if (!listDataOffsets.isEmpty()) {
+            XFHEADER xfHeader = {};
+            xfHeader.sParentTag =
+                (bIncludeChildren || (nStructID == STRUCTID_CFFOLDER)) ?
+                    sFolderTag : xfStruct.sParent;
+            xfHeader.fileType = xfStruct.fileType;
+            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFDATA);
+            xfHeader.xfType = XFTYPE_TABLE;
+            for (qint64 nOffset : qAsConst(listDataOffsets)) {
+                xfHeader.listRowLocations.append((XADDR)nOffset);
+            }
+            xfHeader.xLoc = offsetToLoc(listDataOffsets.constFirst());
+            xfHeader.listFields = getXFRecords(xfStruct.fileType,
+                                               STRUCTID_CFDATA,
+                                               xfHeader.xLoc);
+            xfHeader.sTag = xfHeaderToTag(
+                xfHeader, structIDToString(STRUCTID_CFDATA),
+                xfHeader.sParentTag);
             listResult.append(xfHeader);
-
-            if (xfStruct.bIsParent) {
-                XFHEADER xfHeaderData = {};
-                xfHeaderData.sParentTag = xfHeader.sTag;
-                xfHeaderData.fileType = xfStruct.fileType;
-                xfHeaderData.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFDATA);
-                xfHeaderData.xfType = XFTYPE_TABLE;
-
-                nCurrentOffset = nOffset;
-                for (qint32 i = 0; i < nCount; i++) {
-                    if ((nCurrentOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) {
-                        break;
-                    }
-                    CFFOLDER cfFolder = readCFFolder(nCurrentOffset);
-                    qint64 nDataOffset = cfFolder.coffCabStart;
-                    for (quint32 j = 0; j < cfFolder.cCFData; j++) {
-                        if ((nDataOffset + (qint64)sizeof(CFDATA)) > nFileSize) {
-                            break;
-                        }
-                        xfHeaderData.listRowLocations.append(nDataOffset);
-                        CFDATA cfData = readCFData(nDataOffset);
-                        nDataOffset += (qint64)sizeof(CFDATA) + cfData.cbData;
-                    }
-                    nCurrentOffset += sizeof(CFFOLDER);
-                }
-
-                if (!xfHeaderData.listRowLocations.isEmpty()) {
-                    xfHeaderData.xLoc = offsetToLoc(xfHeaderData.listRowLocations.first());
-                    xfHeaderData.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFDATA, xfHeaderData.xLoc);
-                    xfHeaderData.sTag = xfHeaderToTag(xfHeaderData, structIDToString(STRUCTID_CFDATA), xfHeaderData.sParentTag);
-                    listResult.append(xfHeaderData);
-                }
-            }
-        }
-    } else if (nStructID == STRUCTID_CFFILE) {
-        qint64 nOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
-        qint32 nCount = xfStruct.nCount;
-        qint64 nFileSize = getSize();
-
-        CFHEADER cfHeader = readCFHeader(0);
-
-        if (nOffset == -1) {
-            nOffset = cfHeader.coffFiles;
-        }
-        if (nCount == 0) {
-            nCount = cfHeader.cFiles;
-        }
-
-        if ((nOffset > 0) && (nCount > 0)) {
-            XFHEADER xfHeader = {};
-            xfHeader.sParentTag = xfStruct.sParent;
-            xfHeader.fileType = xfStruct.fileType;
-            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFFILE);
-            xfHeader.xLoc = offsetToLoc(nOffset);
-            xfHeader.xfType = XFTYPE_TABLE;
-
-            qint64 nCurrentOffset = nOffset;
-            for (qint32 i = 0; i < nCount; i++) {
-                if ((nCurrentOffset + (qint64)sizeof(CFFILE)) > nFileSize) {
-                    break;
-                }
-                xfHeader.listRowLocations.append(nCurrentOffset);
-                QString sFileName = read_ansiString(nCurrentOffset + sizeof(CFFILE));
-                nCurrentOffset += (qint64)sizeof(CFFILE) + sFileName.size() + 1;
-            }
-
-            if (!xfHeader.listRowLocations.isEmpty()) {
-                xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_CFFILE, offsetToLoc(xfHeader.listRowLocations.first()));
-                xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_CFFILE), xfHeader.sParentTag);
-                listResult.append(xfHeader);
-            }
         }
     }
 
+    const bool bFinished = finishUnpack(&state, nullptr);
+    if (!bFinished || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        listResult.clear();
+    }
     return listResult;
 }
 
@@ -416,8 +607,12 @@ QList<XBinary::XFRECORD> XCab::getXFRecords(FT fileType, quint32 nStructID, cons
         listResult.append({"time", (qint32)offsetof(CFFILE, time), 2, XFRECORD_FLAG_DOSTIME, VT_UINT16});
         listResult.append({"attribs", (qint32)offsetof(CFFILE, attribs), 2, XFRECORD_FLAG_NONE, VT_UINT16});
         // Variable-length fields
-        QString sFileName = read_ansiString(xLoc.nLocation + sizeof(CFFILE));
-        listResult.append({"szName", (qint32)sizeof(CFFILE), (qint32)(sFileName.size() + 1), XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        const QByteArray baName = read_array_process(
+            xLoc.nLocation + sizeof(CFFILE), 257, nullptr);
+        const qint32 nTerminator = baName.indexOf('\0');
+        const qint32 nNameFieldSize = (nTerminator >= 0) ?
+                                         (nTerminator + 1) : baName.size();
+        listResult.append({"szName", (qint32)sizeof(CFFILE), nNameFieldSize, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
     } else if (nStructID == STRUCTID_CFDATA) {
         listResult.append({"csum", (qint32)offsetof(CFDATA, csum), 4, XFRECORD_FLAG_NONE, VT_UINT32});
         listResult.append({"cbData", (qint32)offsetof(CFDATA, cbData), 2, XFRECORD_FLAG_SIZE, VT_UINT16});
@@ -454,20 +649,47 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return listResult;
     }
 
+    // initUnpack is the authoritative CAB parser.  Running it for every part
+    // mask keeps DATA/OVERLAY-only queries from accepting layouts that a
+    // HEADER/STREAM query or extraction would reject.
+    UNPACK_STATE state = {};
+    if (!initUnpack(&state, getDefaultUnpackProperties(), pPdStruct) || !state.pContext) {
+        finishUnpack(&state, nullptr);
+        return listResult;
+    }
+
+    CAB_UNPACK_CONTEXT *pContext = static_cast<CAB_UNPACK_CONTEXT *>(state.pContext);
+    const qint64 nFileSize = getSize();
+    const qint64 nFileFormatSize = state.nTotalSize;
+    bool bContextValid =
+        (pContext->listFolderOffsets.size() == pContext->listFolders.size()) &&
+        (pContext->listFileOffsets.size() == pContext->listFileEnds.size()) &&
+        (pContext->listFileOffsets.size() == pContext->listFileNames.size());
+    for (qint32 i = 0; bContextValid && (i < pContext->listFolders.size()); ++i) {
+        bContextValid = (pContext->listFolderOffsets.at(i) >= 0) &&
+                        (pContext->mapFolderStreamSizes.value((quint16)i, -1) >= 0) &&
+                        (pContext->mapFolderDataSizes.value((quint16)i, -1) >= 0);
+    }
+    for (qint32 i = 0; bContextValid && (i < pContext->listFileOffsets.size()); ++i) {
+        bContextValid = (pContext->listFileOffsets.at(i) >= 0) &&
+                        (pContext->listFileEnds.at(i) >
+                         pContext->listFileOffsets.at(i));
+    }
+
+    if (!bContextValid) {
+        finishUnpack(&state, nullptr);
+        return listResult;
+    }
+
     auto canAppend = [&]() -> bool {
         return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.count() < nLimit));
     };
-
-    qint64 nFileSize = getSize();
-    qint64 nFileFormatSize = getFileFormatSize(pPdStruct);
-
-    CFHEADER cfHeader = readCFHeader(0);
 
     if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
-        record.nFileSize = qMin<qint64>(sizeof(CFHEADER), nFileSize);
+        record.nFileSize = pContext->nMainHeaderSize;
         record.nVirtualAddress = -1;
         record.sName = tr("Header");
 
@@ -485,109 +707,69 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         listResult.append(record);
     }
 
-    qint64 nCurrentOffset = sizeof(CFHEADER);
-
-    if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
-        // Regions: enumerate folders, files, and data blocks
-        // 1) CFFOLDER area and per-folder entries (best-effort)
-        if (cfHeader.cFolders) {
-            for (quint32 i = 0; (i < cfHeader.cFolders) && canAppend(); ++i) {
-                if ((nCurrentOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) break;
-
-                if ((nFileParts & FILEPART_HEADER) && canAppend()) {
-                    FPART rec = {};
-                    rec.filePart = FILEPART_HEADER;
-                    rec.nFileOffset = nCurrentOffset;
-                    rec.nFileSize = sizeof(CFFOLDER);
-                    rec.nVirtualAddress = -1;
-                    rec.sName = QString("CFFOLDER(%1)").arg(i);
-                    listResult.append(rec);
-                }
-
-                if ((nFileParts & FILEPART_STREAM) && canAppend()) {
-                    CFFOLDER cfFolder = readCFFolder(nCurrentOffset);
-
-                    FPART rec = {};
-                    rec.filePart = FILEPART_STREAM;
-                    rec.nFileOffset = cfFolder.coffCabStart;
-                    rec.nFileSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData, 0, nFileFormatSize);
-                    rec.nVirtualAddress = -1;
-                    rec.sName = tr("Stream") + QString(" (%1)").arg(i);
-
-                    if (cfFolder.typeCompress == 0x0000) {
-                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE_CAB);
-                    } else if (cfFolder.typeCompress == 0x0001) {
-                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_MSZIP_CAB);
-                    } else if (cfFolder.typeCompress == 0x0003) {
-                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZX_CAB);
-                    } else {
-                        rec.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN);
-                    }
-
-                    listResult.append(rec);
-                }
-
-                nCurrentOffset += sizeof(CFFOLDER);
-            }
-            // // Heuristic: assume folders area ends at coffFiles; derive start by subtracting cFolders*sizeof(CFFOLDER)
-            // qint64 foldersEnd = qMin<qint64>(cfHeader.coffFiles, nFileSize);
-            // qint64 foldersStart = qMax<qint64>(0, foldersEnd - (qint64)cfHeader.cFolders * (qint64)sizeof(CFFOLDER));
-
-            // // Whole folders area
-            // if ((foldersStart < foldersEnd) && (foldersEnd <= nFileSize)) {
-            //     FPART area = {};
-            //     area.filePart = FILEPART_REGION;
-            //     area.nFileOffset = foldersStart;
-            //     area.nFileSize = foldersEnd - foldersStart;
-            //     area.nVirtualAddress = -1;
-            //     area.sName = tr("CFFOLDER area");
-            //     listResult.append(area);
-
-            //     // Individual folder records (best-effort sequential)
-
-            //     // Use folder records to enumerate CFDATA blocks
-            //     for (quint32 i = 0; i < cfHeader.cFolders; ++i) {
-            //         qint64 recOff = foldersStart + (qint64)i * (qint64)sizeof(CFFOLDER);
-            //         if ((recOff + (qint64)sizeof(CFFOLDER)) > nFileSize) break;
-            //         CFFOLDER fol = readCFFolder(recOff);
-
-            //         qint64 dataOff = fol.coffCabStart;
-            //         for (quint32 j = 0; j < fol.cCFData; ++j) {
-            //             if ((dataOff + (qint64)sizeof(CFDATA)) > nFileSize) break;
-            //             // CFDATA header entry
-            //             FPART drec = {};
-            //             drec.filePart = FILEPART_REGION;
-            //             drec.nFileOffset = dataOff;
-            //             drec.nFileSize = sizeof(CFDATA);
-            //             drec.nVirtualAddress = -1;
-            //             drec.sName = QString("%1(%2,%3)").arg("CFDATA").arg(i + 1).arg(j + 1);
-            //             listResult.append(drec);
-
-            //             // Advance to next block: header + compressed bytes
-            //             CFDATA hdr = readCFData(dataOff);
-            //             qint64 advance = (qint64)sizeof(CFDATA) + (qint64)hdr.cbData;
-            //             if (advance <= 0) break;
-            //             dataOff += advance;
-            //         }
-            //     }
-            // }
+    if (nFileParts & FILEPART_HEADER) {
+        for (qint32 i = 0; (i < pContext->listFolders.size()) &&
+                           canAppend(); ++i) {
+            FPART record = {};
+            record.filePart = FILEPART_HEADER;
+            record.nFileOffset = pContext->listFolderOffsets.at(i);
+            record.nFileSize = (qint64)sizeof(CFFOLDER) +
+                               pContext->nCbCFFolder;
+            record.nVirtualAddress = -1;
+            record.sName = QString("CFFOLDER(%1)").arg(i);
+            listResult.append(record);
         }
 
-        // // 2) CFFILE table and per-file entries starting at coffFiles
-        // if (cfHeader.coffFiles && cfHeader.cFiles) {
-        //     // Whole files area (size unknown if names present); add per-record entries with fixed struct size
-        //     for (quint32 i = 0; i < cfHeader.cFiles; ++i) {
-        //         qint64 recOff = (qint64)cfHeader.coffFiles + (qint64)i * (qint64)sizeof(CFFILE);
-        //         if ((recOff + (qint64)sizeof(CFFILE)) > nFileSize) break;
-        //         FPART rec = {};
-        //         rec.filePart = FILEPART_REGION;
-        //         rec.nFileOffset = recOff;
-        //         rec.nFileSize = sizeof(CFFILE);
-        //         rec.nVirtualAddress = -1;
-        //         rec.sName = QString("%1(%2)").arg("CFFILE").arg(i + 1);
-        //         listResult.append(rec);
-        //     }
-        // }
+        for (qint32 i = 0; (i < pContext->listFileOffsets.size()) &&
+                           canAppend(); ++i) {
+            FPART record = {};
+            record.filePart = FILEPART_HEADER;
+            record.nFileOffset = pContext->listFileOffsets.at(i);
+            record.nFileSize = pContext->listFileEnds.at(i) -
+                               record.nFileOffset;
+            record.nVirtualAddress = -1;
+            record.sName = QString("CFFILE(%1)").arg(i);
+            record.mapProperties.insert(FPART_PROP_ORIGINALNAME,
+                                        pContext->listFileNames.at(i));
+            listResult.append(record);
+        }
+    }
+
+    if (nFileParts & FILEPART_STREAM) {
+        for (qint32 i = 0; (i < pContext->listFolders.size()) && canAppend(); ++i) {
+            const CFFOLDER &folder = pContext->listFolders.at(i);
+            const quint16 nFolderIndex = (quint16)i;
+            const qint64 nStreamSize = pContext->mapFolderStreamSizes.value(nFolderIndex, -1);
+            const qint64 nUncompressedSize = pContext->mapFolderDataSizes.value(nFolderIndex, -1);
+
+            if ((nStreamSize >= 0) && (nUncompressedSize >= 0) && canAppend()) {
+                FPART record = {};
+                record.filePart = FILEPART_STREAM;
+                record.nFileOffset = folder.coffCabStart;
+                record.nFileSize = nStreamSize;
+                record.nVirtualAddress = -1;
+                record.sName = tr("Stream") + QString(" (%1)").arg(i);
+                record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nStreamSize);
+                record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
+                record.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nUncompressedSize);
+                record.mapProperties.insert(FPART_PROP_TYPE, (quint32)folder.typeCompress);
+                record.mapProperties.insert(FPART_PROP_OPTHEADER_SIZE, (qint64)pContext->nCbCFData);
+
+                const quint16 nCompressionType = folder.typeCompress & 0x000F;
+                if (nCompressionType == 0) {
+                    record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE_CAB);
+                } else if (nCompressionType == 1) {
+                    record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_MSZIP_CAB);
+                } else if (nCompressionType == 3) {
+                    record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZX_CAB);
+                    record.mapProperties.insert(FPART_PROP_WINDOWSIZE, (qint64)((folder.typeCompress >> 8) & 0x1F));
+                } else {
+                    record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN);
+                }
+
+                listResult.append(record);
+            }
+        }
     }
 
     if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
@@ -604,7 +786,8 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         }
     }
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+    const bool bFinished = finishUnpack(&state, nullptr);
+    if (!bFinished || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         listResult.clear();
     }
 
@@ -798,7 +981,7 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     // Read CAB header
-    CFHEADER cfHeader = readCFHeader(0);
+    CFHEADER cfHeader = readCFHeader(0, pPdStruct);
     if (cfHeader.signature[0] != 'M' || cfHeader.signature[1] != 'S' || cfHeader.signature[2] != 'C' || cfHeader.signature[3] != 'F') {
         return false;  // Invalid CAB signature
     }
@@ -807,8 +990,12 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // contain alignment padding after it, but no CAB structure may reference
     // that padding.
     qint64 nCabinetSize = cfHeader.cbCabinet;
-    if ((cfHeader.reserved1 != 0) || (cfHeader.reserved2 != 0) || (cfHeader.reserved3 != 0) || (cfHeader.flags & ~0x0007) ||
-        (nCabinetSize < (qint64)sizeof(CFHEADER)) || (nCabinetSize > nFileSize)) {
+    if ((cfHeader.reserved1 != 0) || (cfHeader.reserved2 != 0) || (cfHeader.reserved3 != 0) ||
+        (cfHeader.versionMinor != 3) || (cfHeader.versionMajor != 1) ||
+        ((((cfHeader.flags & 0x0001) != 0) != (cfHeader.iCabinet != 0))) ||
+        (cfHeader.cFolders == 0) || (cfHeader.cFiles == 0) ||
+        (nCabinetSize <= (qint64)sizeof(CFHEADER)) ||
+        (nCabinetSize > 0x7FFFFFFFLL) || (nCabinetSize > nFileSize)) {
         return false;
     }
 
@@ -821,6 +1008,7 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pContext->nCbCFHeader = 0;
     pContext->nCbCFFolder = 0;
     pContext->nCbCFData = 0;
+    pContext->nMainHeaderSize = 0;
 
     auto fail = [&]() -> bool {
         delete pContext;
@@ -831,12 +1019,14 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // CAB strings are byte-counted by their terminating NUL, not by the
     // decoded QString length.  Requiring the terminator also prevents a
     // malformed field from walking into the folder/file tables.
-    auto readCabString = [&](qint64 *pOffset, QByteArray *pBytes) -> bool {
+    auto readCabString = [&](qint64 *pOffset, QByteArray *pBytes,
+                             qint32 nMaximumFieldSize) -> bool {
         if (!pOffset || !pBytes || (*pOffset < 0) || (*pOffset >= nCabinetSize)) {
             return false;
         }
 
-        qint32 nMaximum = (qint32)qMin<qint64>(256, nCabinetSize - *pOffset);
+        qint32 nMaximum = (qint32)qMin<qint64>(nMaximumFieldSize,
+                                               nCabinetSize - *pOffset);
         QByteArray baValue = read_array_process(*pOffset, nMaximum, pPdStruct);
         if ((baValue.size() != nMaximum) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
@@ -864,7 +1054,8 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pContext->nCbCFData = read_uint8(nFolderOffset + 3);
         nFolderOffset += 4;
 
-        if ((qint64)pContext->nCbCFHeader > nCabinetSize - nFolderOffset) {
+        if ((pContext->nCbCFHeader > 60000) ||
+            ((qint64)pContext->nCbCFHeader > nCabinetSize - nFolderOffset)) {
             return fail();
         }
 
@@ -875,7 +1066,8 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     if (cfHeader.flags & 0x0001) {
         QByteArray baPreviousCabinet;
         QByteArray baPreviousDisk;
-        if (!readCabString(&nFolderOffset, &baPreviousCabinet) || !readCabString(&nFolderOffset, &baPreviousDisk)) {
+        if (!readCabString(&nFolderOffset, &baPreviousCabinet, 256) ||
+            !readCabString(&nFolderOffset, &baPreviousDisk, 256)) {
             return fail();
         }
     }
@@ -884,10 +1076,13 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     if (cfHeader.flags & 0x0002) {
         QByteArray baNextCabinet;
         QByteArray baNextDisk;
-        if (!readCabString(&nFolderOffset, &baNextCabinet) || !readCabString(&nFolderOffset, &baNextDisk)) {
+        if (!readCabString(&nFolderOffset, &baNextCabinet, 256) ||
+            !readCabString(&nFolderOffset, &baNextDisk, 256)) {
             return fail();
         }
     }
+
+    pContext->nMainHeaderSize = nFolderOffset;
 
     // Parse folders (each CFFOLDER may have per-folder reserved area)
     qint64 nFolderStructSize = (qint64)sizeof(CFFOLDER) + pContext->nCbCFFolder;
@@ -895,37 +1090,69 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return fail();
     }
 
+    qint64 nAggregateStreamSize = 0;
+    QSet<qint64> setNonemptyStreamStarts;
     for (quint16 i = 0; i < cfHeader.cFolders; i++) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             return fail();
         }
 
-        CFFOLDER cfFolder = readCFFolder(nFolderOffset);
+        CFFOLDER cfFolder = readCFFolder(nFolderOffset, pPdStruct);
         quint16 nCompressionType = cfFolder.typeCompress & 0x000F;
-        if (nCompressionType > 3) {
+        const quint16 nCompressionLevel = cfFolder.typeCompress & 0x00F0;
+        const qint32 nWindowBits = (cfFolder.typeCompress >> 8) & 0x1F;
+        if ((cfFolder.typeCompress & 0xE000) || (nCompressionType > 3) ||
+            (((nCompressionType == 0) || (nCompressionType == 1)) &&
+             (cfFolder.typeCompress & 0x1FF0)) ||
+            ((nCompressionType == 2) &&
+             ((nCompressionLevel < 0x0010) || (nCompressionLevel > 0x0070) ||
+              (nWindowBits < 10) || (nWindowBits > 21))) ||
+            ((nCompressionType == 3) &&
+             ((nCompressionLevel != 0) || (nWindowBits < 15) ||
+              (nWindowBits > 21)))) {
             return fail();
-        }
-        if (nCompressionType == 3) {
-            qint32 nWindowBits = (cfFolder.typeCompress >> 8) & 0x1F;
-            if ((nWindowBits < 15) || (nWindowBits > 21)) {
-                return fail();
-            }
         }
 
         qint64 nFolderDataSize = 0;
-        qint64 nStreamSize =
-            _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData, pContext->nCbCFData, nCabinetSize, &nFolderDataSize);
+        qint64 nStreamSize = _getStreamSize(cfFolder.coffCabStart, cfFolder.cCFData, pContext->nCbCFData, nCabinetSize,
+                                            &nFolderDataSize, pPdStruct);
         if ((nStreamSize < 0) || (nFolderDataSize > CAB_MAX_FOLDER_SIZE)) {
             return fail();
+        }
+        if ((nStreamSize > nCabinetSize - nAggregateStreamSize) ||
+            ((nStreamSize > 0) && setNonemptyStreamStarts.contains(
+                                      (qint64)cfFolder.coffCabStart))) {
+            return fail();
+        }
+        nAggregateStreamSize += nStreamSize;
+        if (nStreamSize > 0) {
+            setNonemptyStreamStarts.insert((qint64)cfFolder.coffCabStart);
         }
 
         // STORE blocks are byte-for-byte and every CAB data block represents
         // at most 32 KiB of uncompressed folder data.
         qint64 nBlockOffset = cfFolder.coffCabStart;
         for (quint16 nBlock = 0; nBlock < cfFolder.cCFData; nBlock++) {
-            CFDATA cfData = readCFData(nBlockOffset);
-            if ((cfData.cbUncomp > 32768) || ((nCompressionType == 0) && (cfData.cbData != cfData.cbUncomp)) ||
-                ((nCompressionType == 1) && (cfData.cbData < 2))) {
+            if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+                return fail();
+            }
+
+            CFDATA cfData = readCFData(nBlockOffset, pPdStruct);
+            const bool bContinuesToNext =
+                (i + 1 == cfHeader.cFolders) &&
+                (nBlock + 1 == cfFolder.cCFData) &&
+                (cfData.cbUncomp == 0) && ((cfHeader.flags & 0x0002) != 0);
+            const bool bContinuesFromPrevious =
+                (i == 0) && (nBlock == 0) &&
+                ((cfHeader.flags & 0x0001) != 0);
+            if ((cfData.cbUncomp > 32768) ||
+                ((nBlock + 1 < cfFolder.cCFData) && (cfData.cbUncomp != 32768)) ||
+                ((cfData.cbUncomp == 0) && !bContinuesToNext) ||
+                ((nCompressionType == 0) &&
+                 (cfData.cbData != cfData.cbUncomp) &&
+                 !bContinuesToNext && !bContinuesFromPrevious) ||
+                ((nCompressionType == 1) && (cfData.cbData < 2) &&
+                 !bContinuesToNext && !bContinuesFromPrevious)) {
                 return fail();
             }
 
@@ -949,6 +1176,7 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         }
 
         pContext->listFolders.append(cfFolder);
+        pContext->listFolderOffsets.append(nFolderOffset);
         pContext->mapFolderStreamSizes.insert(i, nStreamSize);
         pContext->mapFolderDataSizes.insert(i, nFolderDataSize);
         nFolderOffset += nFolderStructSize;
@@ -956,10 +1184,14 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
     // Parse file offsets starting at coffFiles
     qint64 nFileOffset = cfHeader.coffFiles;
-    if ((cfHeader.cFiles > 0) && ((nFileOffset < nFolderOffset) || (nFileOffset >= nCabinetSize))) {
+    if ((nFileOffset < nFolderOffset) || (nFileOffset > nCabinetSize) ||
+        ((cfHeader.cFiles > 0) && (nFileOffset == nCabinetSize))) {
         return fail();
     }
 
+    quint32 nPreviousLogicalFolder = 0;
+    quint32 nPreviousFolderOffset = 0;
+    bool bHavePreviousFile = false;
     for (quint16 i = 0; i < cfHeader.cFiles; i++) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             return fail();
@@ -969,10 +1201,12 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             return fail();
         }
 
-        CFFILE cfFile = readCFFILE(nFileOffset);
+        CFFILE cfFile = readCFFILE(nFileOffset, pPdStruct);
+        if (cfFile.cbFile > 0x7FFF8000U) return fail();
         qint64 nNameOffset = nFileOffset + sizeof(CFFILE);
         QByteArray baFileName;
-        if (!readCabString(&nNameOffset, &baFileName) || baFileName.isEmpty()) {
+        if (!readCabString(&nNameOffset, &baFileName, 257) ||
+            baFileName.isEmpty()) {
             return fail();
         }
 
@@ -983,32 +1217,94 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
                 return fail();
             }
         } else {
-            sFileName = QString::fromLatin1(baFileName);
+            sFileName = QString::fromLocal8Bit(baFileName);
         }
 
-        if (cfFile.iFolder < (quint16)pContext->listFolders.size()) {
+        const bool bSpecialFolder = cfFile.iFolder >= 0xFFFD;
+        if (!bSpecialFolder &&
+            (cfFile.iFolder < (quint16)pContext->listFolders.size())) {
             qint64 nFileEnd = (qint64)cfFile.uoffFolderStart + (qint64)cfFile.cbFile;
             if (nFileEnd > pContext->mapFolderDataSizes.value(cfFile.iFolder, -1)) {
                 return fail();
             }
             pContext->mapFolderUncompressedSizes[cfFile.iFolder] = qMax(pContext->mapFolderUncompressedSizes.value(cfFile.iFolder, 0), nFileEnd);
-        } else if ((cfFile.iFolder != 0xFFFD) && (cfFile.iFolder != 0xFFFE) && (cfFile.iFolder != 0xFFFF)) {
-            return fail();
+        } else {
+            const bool bHasPrevious = (cfHeader.flags & 0x0001) != 0;
+            const bool bHasNext = (cfHeader.flags & 0x0002) != 0;
+            const bool bSpecialFolderValid = !pContext->listFolders.isEmpty() &&
+                (((cfFile.iFolder == 0xFFFD) && bHasPrevious) ||
+                 ((cfFile.iFolder == 0xFFFE) && bHasNext) ||
+                 ((cfFile.iFolder == 0xFFFF) && bHasPrevious && bHasNext &&
+                  (pContext->listFolders.size() == 1)));
+            if (!bSpecialFolderValid) return fail();
         }
 
+        quint32 nLogicalFolder = cfFile.iFolder;
+        if (cfFile.iFolder == 0xFFFD) nLogicalFolder = 0;
+        else if (cfFile.iFolder == 0xFFFE) {
+            nLogicalFolder = (quint32)pContext->listFolders.size() - 1;
+        } else if (cfFile.iFolder == 0xFFFF) nLogicalFolder = 0;
+        if (bHavePreviousFile &&
+            ((nLogicalFolder < nPreviousLogicalFolder) ||
+             ((nLogicalFolder == nPreviousLogicalFolder) &&
+              (cfFile.uoffFolderStart < nPreviousFolderOffset)))) {
+            return fail();
+        }
+        bool bEarlierIsNormalOrNext = false;
+        if (i > 0) {
+            const CFFILE previousFile =
+                readCFFILE(pContext->listFileOffsets.constLast(), pPdStruct);
+            bEarlierIsNormalOrNext = (previousFile.iFolder != 0xFFFD) &&
+                                     (previousFile.iFolder != 0xFFFF);
+        }
+        if (((cfFile.iFolder == 0xFFFD) ||
+             (cfFile.iFolder == 0xFFFF)) && bEarlierIsNormalOrNext) {
+            return fail();
+        }
+        if (bHavePreviousFile &&
+            ((nPreviousLogicalFolder ==
+              (quint32)pContext->listFolders.size() - 1)) &&
+            (cfFile.iFolder != 0xFFFE) &&
+            (cfFile.iFolder != 0xFFFF) &&
+            (readCFFILE(pContext->listFileOffsets.constLast(), pPdStruct).iFolder >= 0xFFFE)) {
+            return fail();
+        }
+        bHavePreviousFile = true;
+        nPreviousLogicalFolder = nLogicalFolder;
+        nPreviousFolderOffset = cfFile.uoffFolderStart;
+
         pContext->listFileOffsets.append(nFileOffset);
+        pContext->listFileEnds.append(nNameOffset);
         pContext->listFileNames.append(sFileName);
         nFileOffset = nNameOffset;
     }
 
-    // The variable-length file table must end before the first folder data
-    // stream.  This catches unterminated/overlapping file entries even when a
-    // forged offset happens to remain inside the cabinet.
-    for (const CFFOLDER &cfFolder : pContext->listFolders) {
-        if ((qint64)cfFolder.coffCabStart < nFileOffset) {
+    const qint64 nMetadataEnd = qMax(nFolderOffset, nFileOffset);
+
+    // The variable-length file table must end before every non-empty folder
+    // stream, and folder streams may not overlap one another.
+    QList<QPair<qint64, qint64> > listStreamRanges;
+    for (qint32 i = 0; i < pContext->listFolders.size(); ++i) {
+        const qint64 nStreamOffset = pContext->listFolders.at(i).coffCabStart;
+        const qint64 nStreamSize = pContext->mapFolderStreamSizes.value((quint16)i, -1);
+        if ((nStreamSize < 0) || (nStreamOffset < nMetadataEnd)) {
+            return fail();
+        }
+        if (nStreamSize > 0) {
+            listStreamRanges.append(qMakePair(nStreamOffset, nStreamOffset + nStreamSize));
+        }
+    }
+
+    std::sort(listStreamRanges.begin(), listStreamRanges.end(), [](const QPair<qint64, qint64> &a, const QPair<qint64, qint64> &b) {
+        return (a.first < b.first) || ((a.first == b.first) && (a.second < b.second));
+    });
+    for (qint32 i = 1; i < listStreamRanges.size(); ++i) {
+        if (listStreamRanges.at(i).first < listStreamRanges.at(i - 1).second) {
             return fail();
         }
     }
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return fail();
 
     // Initialize state
     pState->nCurrentOffset = cfHeader.coffFiles;
@@ -1038,32 +1334,22 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
     qint64 nFileOffset = pContext->listFileOffsets.at(pState->nCurrentIndex);
 
-    CFFILE cfFile = readCFFILE(nFileOffset);
+    CFFILE cfFile = readCFFILE(nFileOffset, pPdStruct);
     QString sFileName = pContext->listFileNames.value(pState->nCurrentIndex);
 
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sFileName);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)cfFile.cbFile);
-    result.mapProperties.insert(FPART_PROP_FILEMODE, (quint32)cfFile.attribs);
+    result.mapProperties.insert(FPART_PROP_FILEMODE,
+                                (quint32)(cfFile.attribs & ~0x0080U));
 
-    // Convert DOS date/time to QDateTime
-    quint32 nDosDate = (quint32)cfFile.date;
-    quint32 nDosTime = (quint32)cfFile.time;
-    qint32 nYear = ((nDosDate >> 9) & 0x7F) + 1980;
-    qint32 nMonth = (nDosDate >> 5) & 0x0F;
-    qint32 nDay = nDosDate & 0x1F;
-    qint32 nHour = (nDosTime >> 11) & 0x1F;
-    qint32 nMinute = (nDosTime >> 5) & 0x3F;
-    qint32 nSecond = (nDosTime & 0x1F) * 2;
-
-    QDate date(nYear, nMonth, nDay);
-    QTime time(nHour, nMinute, nSecond);
-
-    if (date.isValid() && time.isValid()) {
-        QDateTime dateTime(date, time, Qt::UTC);
+    const QDateTime dateTime = XBinary::dosDateTimeToQDateTime(
+        cfFile.date, cfFile.time);
+    if (dateTime.isValid()) {
         result.mapProperties.insert(FPART_PROP_MTIME, dateTime);
     }
 
-    if (cfFile.iFolder < (quint16)pContext->listFolders.size()) {
+    if ((cfFile.iFolder < 0xFFFD) &&
+        (cfFile.iFolder < (quint16)pContext->listFolders.size())) {
         CFFOLDER cfFolder = pContext->listFolders.at(cfFile.iFolder);
 
         result.nStreamOffset = cfFolder.coffCabStart;
@@ -1095,6 +1381,134 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     }
 
     return result;
+}
+
+bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
+                         PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pContext || !pDevice || !pDevice->isOpen() ||
+        !pDevice->isWritable() || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+        return false;
+    }
+    if (pDevice->isSequential() && (pDevice->pos() != 0)) return false;
+
+    pState->nCurrentOffset = 0;
+    if (!pDevice->isSequential() &&
+        (!pDevice->seek(0) ||
+         ((pDevice->size() != 0) && !XBinary::resize(pDevice, 0)))) {
+        return false;
+    }
+    const auto failOutput = [&]() -> bool {
+        pState->nCurrentOffset = 0;
+        if (!pDevice->isSequential()) {
+            XBinary::resize(pDevice, 0);
+            pDevice->seek(0);
+        }
+        return false;
+    };
+
+    CAB_UNPACK_CONTEXT *pContext =
+        static_cast<CAB_UNPACK_CONTEXT *>(pState->pContext);
+    const qint64 nFileOffset =
+        pContext->listFileOffsets.value(pState->nCurrentIndex, -1);
+    if (nFileOffset < 0) return failOutput();
+
+    const CFFILE cfFile = readCFFILE(nFileOffset, pPdStruct);
+    if ((cfFile.iFolder >= 0xFFFD) ||
+        (cfFile.iFolder >= (quint16)pContext->listFolders.size())) {
+        // Multi-cabinet spanning records require neighboring cabinet streams
+        // and cannot be decoded atomically by this single-device context.
+        return failOutput();
+    }
+
+    const quint16 nFolderIndex = cfFile.iFolder;
+    if (!pContext->mapFolderCache.contains(nFolderIndex)) {
+        const CFFOLDER &folder = pContext->listFolders.at(nFolderIndex);
+        const qint64 nStreamSize =
+            pContext->mapFolderStreamSizes.value(nFolderIndex, -1);
+        const qint64 nFolderSize =
+            pContext->mapFolderDataSizes.value(nFolderIndex, -1);
+        if ((nStreamSize < 0) || (nFolderSize < 0) ||
+            (nFolderSize > CAB_MAX_FOLDER_SIZE)) return failOutput();
+
+        FPART streamPart = {};
+        streamPart.filePart = FILEPART_STREAM;
+        streamPart.nFileOffset = folder.coffCabStart;
+        streamPart.nFileSize = nStreamSize;
+        streamPart.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE,
+                                        nStreamSize);
+        streamPart.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE,
+                                        nFolderSize);
+        streamPart.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE,
+                                        nFolderSize);
+        streamPart.mapProperties.insert(FPART_PROP_OPTHEADER_SIZE,
+                                        (qint64)pContext->nCbCFData);
+        const quint16 nCompressionType = folder.typeCompress & 0x000F;
+        if (nCompressionType == 0) {
+            streamPart.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
+                                            HANDLE_METHOD_STORE_CAB);
+        } else if (nCompressionType == 1) {
+            streamPart.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
+                                            HANDLE_METHOD_MSZIP_CAB);
+        } else if (nCompressionType == 3) {
+            streamPart.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
+                                            HANDLE_METHOD_LZX_CAB);
+            streamPart.mapProperties.insert(
+                FPART_PROP_WINDOWSIZE,
+                (qint64)((folder.typeCompress >> 8) & 0x1F));
+        } else {
+            return failOutput();
+        }
+
+        QByteArray baFolderData;
+        QBuffer folderBuffer(&baFolderData);
+        if (!folderBuffer.open(QIODevice::ReadWrite)) return failOutput();
+        XDecompress decompressor;
+        const bool bDecoded = decompressor.decompressFPART(
+            streamPart, getDevice(), &folderBuffer, pPdStruct);
+        folderBuffer.close();
+        if (!bDecoded || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+            (baFolderData.size() != nFolderSize)) {
+            return failOutput();
+        }
+        // Retain only the active solid folder.  CFFILE entries are ordered by
+        // folder, so this prevents aggregate cache growth without re-decoding
+        // adjacent files from the same folder.
+        pContext->mapFolderCache.clear();
+        pContext->mapFolderCache.insert(nFolderIndex, baFolderData);
+    }
+
+    const QByteArray &baFolderData =
+        pContext->mapFolderCache.value(nFolderIndex);
+    const qint64 nSubstreamOffset = cfFile.uoffFolderStart;
+    const qint64 nSubstreamSize = cfFile.cbFile;
+    if ((nSubstreamOffset < 0) || (nSubstreamSize < 0) ||
+        (nSubstreamOffset > baFolderData.size()) ||
+        (nSubstreamSize > baFolderData.size() - nSubstreamOffset)) {
+        return failOutput();
+    }
+
+    DATAPROCESS_STATE writeState = {};
+    writeState.pDeviceOutput = pDevice;
+    writeState.nProcessedLimit = -1;
+    qint64 nWritten = 0;
+    while ((nWritten < nSubstreamSize) &&
+           XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nChunk = (qint32)qMin<qint64>(
+            0x10000, nSubstreamSize - nWritten);
+        const qint32 nResult = XBinary::_writeDevice(
+            baFolderData.constData() + nSubstreamOffset + nWritten,
+            nChunk, &writeState);
+        if (nResult != nChunk) break;
+        nWritten += nResult;
+    }
+    const bool bResult = (nWritten == nSubstreamSize) &&
+                         XBinary::isPdStructNotCanceled(pPdStruct);
+    if (!bResult) return failOutput();
+    pState->nCurrentOffset = bResult ? nSubstreamSize : 0;
+    return bResult;
 }
 
 // bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)

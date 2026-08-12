@@ -23,6 +23,7 @@
 #define XDMG_H
 
 #include "xarchive.h"
+#include <QPointer>
 
 class XDMG : public XArchive {
     Q_OBJECT
@@ -72,7 +73,10 @@ public:
         quint32 dataChecksum[34];
         quint64 nXmlOffset;
         quint64 nXmlLength;
-        quint8 padding[120];
+        quint8 reserved1[64];
+        quint64 nCodeSignatureOffset;
+        quint64 nCodeSignatureLength;
+        quint8 reserved2[40];
         quint32 masterChecksum[34];
         quint32 nImageVariant;
         quint64 nSectorCount;
@@ -104,7 +108,7 @@ public:
     };
 
     struct DMG_UNPACK_CONTEXT {
-        QIODevice *pSourceDevice;
+        QPointer<QIODevice> pSourceDevice;
         QByteArray baXmlData;
         qint64 nDataForkOffset;
         qint64 nDataForkLength;
@@ -141,6 +145,7 @@ public:
     virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
     virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
     virtual QList<QString> getSearchSignatures() override;
+    virtual FFSEARCH_INFO searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
 
     virtual QList<MAPMODE> getMapModesList() override;
@@ -167,7 +172,10 @@ public:
 
 private:
     bool _loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bRequireXml,
-                         PDSTRUCT *pPdStruct, qint64 *pKolyOffset = nullptr);
+                         PDSTRUCT *pPdStruct, qint64 *pKolyOffset = nullptr,
+                         qint64 *pArchiveBase = nullptr,
+                         bool bAllowEmbeddedBase = true,
+                         bool bValidateDataForkCRC = true);
     bool _loadPartitionMetadata(KOLY_BLOCK *pKolyBlock, QList<DMG_PARTITION_INFO> *pPartitions,
                                 PDSTRUCT *pPdStruct);
     bool _parsePartition(const DMG_PARTITION_INFO &partitionInfo, const KOLY_BLOCK &kolyBlock,
