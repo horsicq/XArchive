@@ -90,7 +90,8 @@ private:
 
     // Returns [jsonLength, jsonStringOffset] via out params; false if not ASAR.
     bool _readHeader(qint64 *pnJsonOffset, qint64 *pnJsonSize, qint64 *pnBlobOffset);
-    void _walkTree(const class QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords);
+    bool _walkTree(const class QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords,
+                   PDSTRUCT *pPdStruct, qint32 nDepth);
 private:
     INTERNAL_INFO m_internalInfo;
 };

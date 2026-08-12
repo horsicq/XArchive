@@ -23,6 +23,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <cmath>
+#include <limits>
+#include <new>
 
 static XBinary::XCONVERT _TABLE_XASAR_STRUCTID[] = {{XASAR::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                     {XASAR::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
@@ -65,6 +68,9 @@ bool XASAR::_readHeader(qint64 *pnJsonOffset, qint64 *pnJsonSize, qint64 *pnBlob
     if (nBlobOffset % 4) {
         nBlobOffset += 4 - (nBlobOffset % 4);
     }
+    if (nBlobOffset > getSize()) {
+        return false;
+    }
 
     if (pnJsonOffset) *pnJsonOffset = nJsonOffset;
     if (pnJsonSize) *pnJsonSize = (qint64)nJsonSize;
@@ -75,7 +81,9 @@ bool XASAR::_readHeader(qint64 *pnJsonOffset, qint64 *pnJsonSize, qint64 *pnBlob
 
 bool XASAR::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     qint64 nJsonOffset = 0;
     qint64 nJsonSize = 0;
@@ -104,11 +112,22 @@ bool XASAR::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
     return xasar.isValid(pPdStruct);
 }
 
-void XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords)
+bool XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords,
+                     PDSTRUCT *pPdStruct, qint32 nDepth)
 {
+    const qint32 nMaximumDepth = 256;
+    const qint32 nMaximumRecords = 1000000;
+    if (!pListRecords || (nDepth < 0) || (nDepth > nMaximumDepth) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
     const QStringList listKeys = objFiles.keys();
 
     for (const QString &sKey : listKeys) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) || (pListRecords->count() >= nMaximumRecords)) {
+            return false;
+        }
+
         QJsonObject objEntry = objFiles.value(sKey).toObject();
         QString sPath = sParent.isEmpty() ? sKey : (sParent + QLatin1Char('/') + sKey);
 
@@ -120,23 +139,30 @@ void XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint6
             folderRecord.bIsFolder = true;
             pListRecords->append(folderRecord);
 
-            _walkTree(objEntry.value("files").toObject(), sPath, nBlobOffset, pListRecords);
+            if (!_walkTree(objEntry.value("files").toObject(), sPath, nBlobOffset, pListRecords, pPdStruct, nDepth + 1)) {
+                return false;
+            }
         } else if (objEntry.contains("offset")) {
             // offset is a string (may exceed 32-bit range)
             bool bOk = false;
             qint64 nRelOffset = objEntry.value("offset").toString().toLongLong(&bOk);
-            qint64 nSize = (qint64)objEntry.value("size").toDouble();
+            const double dSize = objEntry.value("size").toDouble(-1);
 
-            if (bOk) {
+            if (bOk && (nRelOffset >= 0) && (nBlobOffset >= 0) &&
+                (nRelOffset <= (std::numeric_limits<qint64>::max)() - nBlobOffset) &&
+                std::isfinite(dSize) && (dSize >= 0) && (dSize < 9223372036854775808.0) &&
+                (std::floor(dSize) == dSize)) {
                 ASAR_RECORD fileRecord;
                 fileRecord.sFileName = sPath;
                 fileRecord.nOffset = nBlobOffset + nRelOffset;
-                fileRecord.nSize = nSize;
+                fileRecord.nSize = (qint64)dSize;
                 fileRecord.bIsFolder = false;
                 pListRecords->append(fileRecord);
             }
         }
     }
+
+    return true;
 }
 
 XBinary::FT XASAR::getFileType()
@@ -311,10 +337,15 @@ QList<XBinary::XFRECORD> XASAR::getXFRecords(FT fileType, quint32 nStructID, con
 
 QList<XBinary::FPART> XASAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     qint64 nJsonOffset = 0;
     qint64 nJsonSize = 0;
@@ -322,7 +353,7 @@ QList<XBinary::FPART> XASAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 
     _readHeader(&nJsonOffset, &nJsonSize, &nBlobOffset);
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
@@ -332,7 +363,7 @@ QList<XBinary::FPART> XASAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && (nBlobOffset > 0) && (nBlobOffset < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && canAppend() && (nBlobOffset > 0) && (nBlobOffset < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nBlobOffset;
@@ -367,11 +398,15 @@ QMap<XBinary::UNPACK_PROP, QVariant> XASAR::getDefaultUnpackProperties()
 
 bool XASAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !isValid(pPdStruct)) {
+    if (!pState) {
         return false;
     }
 
-    pState->mapUnpackProperties = mapProperties;
+    finishUnpack(pState, nullptr);
+
+    if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+        return false;
+    }
 
     qint64 nJsonOffset = 0;
     qint64 nJsonSize = 0;
@@ -388,11 +423,30 @@ bool XASAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
 
-    ASAR_UNPACK_CONTEXT *pContext = new ASAR_UNPACK_CONTEXT;
-    _walkTree(doc.object().value("files").toObject(), QString(), nBlobOffset, &(pContext->listRecords));
-
-    if (pContext->listRecords.isEmpty()) {
+    ASAR_UNPACK_CONTEXT *pContext = new (std::nothrow) ASAR_UNPACK_CONTEXT;
+    if (!pContext) {
+        finishUnpack(pState, nullptr);
+        return false;
+    }
+    if (!_walkTree(doc.object().value("files").toObject(), QString(), nBlobOffset, &(pContext->listRecords), pPdStruct, 0)) {
         delete pContext;
+        finishUnpack(pState, nullptr);
+        return false;
+    }
+
+    const qint64 nTotalSize = getSize();
+    for (const ASAR_RECORD &record : pContext->listRecords) {
+        if (!record.bIsFolder && ((record.nOffset < nBlobOffset) || (record.nOffset > nTotalSize) ||
+                                 (record.nSize < 0) || (record.nSize > nTotalSize - record.nOffset))) {
+            delete pContext;
+            finishUnpack(pState, nullptr);
+            return false;
+        }
+    }
+
+    if (pContext->listRecords.isEmpty() || !isPdStructNotCanceled(pPdStruct)) {
+        delete pContext;
+        finishUnpack(pState, nullptr);
         return false;
     }
 
@@ -401,17 +455,17 @@ bool XASAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nNumberOfRecords = pContext->listRecords.count();
     pState->nTotalSize = getSize();
     pState->nCurrentOffset = 0;
+    pState->mapUnpackProperties = mapProperties;
 
     return true;
 }
 
 XBinary::ARCHIVERECORD XASAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -439,9 +493,8 @@ XBinary::ARCHIVERECORD XASAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XASAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -463,6 +516,13 @@ bool XASAR::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         delete pContext;
         pState->pContext = nullptr;
     }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

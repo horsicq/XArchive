@@ -20,6 +20,8 @@
  */
 #include "xkwaj.h"
 
+#include <new>
+
 static XBinary::XCONVERT _TABLE_XKWAJ_STRUCTID[] = {{XKWAJ::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                     {XKWAJ::STRUCTID_KWAJ_HEADER, "KWAJ_HEADER", QString("KWAJ_HEADER")}};
 
@@ -29,7 +31,9 @@ XKWAJ::XKWAJ(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XKWAJ::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     bool bResult = false;
 
@@ -231,17 +235,22 @@ QList<XBinary::XFRECORD> XKWAJ::getXFRecords(FT fileType, quint32 nStructID, con
 
 QList<XBinary::FPART> XKWAJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
     if ((nDataOffset <= 0) || (nDataOffset > getSize())) {
         nDataOffset = sizeof(KWAJ_HEADER);
     }
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
@@ -251,7 +260,7 @@ QList<XBinary::FPART> XKWAJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && (nDataOffset < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && canAppend() && (nDataOffset < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nDataOffset;
@@ -286,11 +295,15 @@ QMap<XBinary::UNPACK_PROP, QVariant> XKWAJ::getDefaultUnpackProperties()
 
 bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !isValid(pPdStruct)) {
+    if (!pState) {
         return false;
     }
 
-    pState->mapUnpackProperties = mapProperties;
+    finishUnpack(pState, nullptr);
+
+    if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+        return false;
+    }
 
     quint16 nCompType = read_uint16(offsetof(KWAJ_HEADER, comp_type));
     qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
@@ -300,7 +313,10 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
 
-    KWAJ_UNPACK_CONTEXT *pContext = new KWAJ_UNPACK_CONTEXT;
+    KWAJ_UNPACK_CONTEXT *pContext = new (std::nothrow) KWAJ_UNPACK_CONTEXT;
+    if (!pContext) {
+        return false;
+    }
     pContext->nDataOffset = nDataOffset;
     pContext->nDataSize = getSize() - nDataOffset;
     pContext->compressMethod = _compTypeToMethod(nCompType);
@@ -346,17 +362,17 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nNumberOfRecords = 1;
     pState->nCurrentOffset = nDataOffset;
     pState->nTotalSize = getSize();
+    pState->mapUnpackProperties = mapProperties;
 
     return true;
 }
 
 XBinary::ARCHIVERECORD XKWAJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -376,9 +392,8 @@ XBinary::ARCHIVERECORD XKWAJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XKWAJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -400,6 +415,13 @@ bool XKWAJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         delete pContext;
         pState->pContext = nullptr;
     }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

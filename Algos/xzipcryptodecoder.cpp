@@ -21,6 +21,8 @@
 #include "xzipcryptodecoder.h"
 #include "algo_utils.h"
 
+#include <new>
+
 const qint32 N_ENCRYPTION_HEADER_SIZE = 12;
 
 XZipCryptoDecoder::XZipCryptoDecoder(QObject *pParent) : QObject(pParent)
@@ -36,11 +38,20 @@ bool XZipCryptoDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, co
 {
     bool bResult = false;
 
-    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && !baPassword.isEmpty()) {
-        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
-        char *bufferIn = new char[_nBufferSize];
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && !baPassword.isEmpty() &&
+        (pDecompressState->nInputOffset >= 0) && (pDecompressState->nInputLimit >= -1) &&
+        ((pDecompressState->nInputLimit == -1) || (pDecompressState->nInputLimit >= N_ENCRYPTION_HEADER_SIZE))) {
+        const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
+        if (nRequestedBufferSize <= 0 || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        const qint32 _nBufferSize = qBound((qint32)0x1000, nRequestedBufferSize, (qint32)0x100000);
+        char *bufferIn = new (std::nothrow) char[_nBufferSize];
+        if (!bufferIn) return false;
 
         Algo_utils::prepareState(pDecompressState);
+        if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            delete[] bufferIn;
+            return false;
+        }
 
         quint32 nKeys[3];
         initKeys(nKeys, baPassword);
@@ -55,19 +66,37 @@ bool XZipCryptoDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, co
                 updateKeys(nKeys, nDecryptedByte);
             }
 
-            qint64 nDataSize = pDecompressState->nInputLimit - N_ENCRYPTION_HEADER_SIZE;
-
-            for (qint64 nOffset = 0; (nOffset < nDataSize) && XBinary::isPdStructNotCanceled(pPdStruct);) {
+            while (((pDecompressState->nInputLimit == -1) ||
+                    (pDecompressState->nCountInput < pDecompressState->nInputLimit)) &&
+                   XBinary::isPdStructNotCanceled(pPdStruct)) {
                 qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
+                if (nBufferSize <= 0) break;
+                if (nBufferSize > _nBufferSize) {
+                    pDecompressState->bReadError = true;
+                    break;
+                }
                 qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
+                // Keep the buffer contract local as well as in _readDevice.
+                // Besides making this loop robust to future reader changes, it
+                // prevents a malformed QIODevice result from becoming an index
+                // outside of the allocation below.
+                if ((nRead < 0) || (nRead > nBufferSize) || (nRead > _nBufferSize)) {
+                    pDecompressState->bReadError = true;
+                    break;
+                }
+
                 if (nRead > 0) {
-                    for (qint32 i = 0; i < nRead; i++) {
+                    // Bound the index directly by the allocation. nRead was
+                    // validated above, so the early exit preserves the exact
+                    // byte count while making the memory contract explicit.
+                    for (qint32 i = 0; i < _nBufferSize; i++) {
+                        if (i >= nRead) break;
                         quint8 nDecryptedByte = (quint8)bufferIn[i] ^ decryptByte(nKeys);
                         bufferIn[i] = (char)nDecryptedByte;
                         updateKeys(nKeys, nDecryptedByte);
                     }
-                    XBinary::_writeDevice(bufferIn, nRead, pDecompressState);
+                    if (XBinary::_writeDevice(bufferIn, nRead, pDecompressState) != nRead) break;
                 } else {
                     break;
                 }
@@ -76,10 +105,12 @@ bool XZipCryptoDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, co
                     break;
                 }
 
-                nOffset += nRead;
             }
 
-            bResult = !pDecompressState->bReadError && !pDecompressState->bWriteError;
+            bResult = !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+                      ((pDecompressState->nInputLimit == -1) ||
+                       (pDecompressState->nCountInput == pDecompressState->nInputLimit)) &&
+                      XBinary::isPdStructNotCanceled(pPdStruct);
         } else {
             pDecompressState->bReadError = true;
         }
@@ -145,11 +176,19 @@ bool XZipCryptoDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, cons
 {
     bool bResult = false;
 
-    if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput && !baPassword.isEmpty()) {
-        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
-        char *bufferIn = new char[_nBufferSize];
+    if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput && !baPassword.isEmpty() &&
+        (pCompressState->nInputOffset >= 0) && (pCompressState->nInputLimit >= -1)) {
+        const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
+        if (nRequestedBufferSize <= 0 || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        const qint32 _nBufferSize = qBound((qint32)0x1000, nRequestedBufferSize, (qint32)0x100000);
+        char *bufferIn = new (std::nothrow) char[_nBufferSize];
+        if (!bufferIn) return false;
 
         Algo_utils::prepareState(pCompressState);
+        if (pCompressState->bReadError || pCompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            delete[] bufferIn;
+            return false;
+        }
 
         quint32 nKeys[3];
         initKeys(nKeys, baPassword);
@@ -168,21 +207,35 @@ bool XZipCryptoDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, cons
             updateKeys(nKeys, nByte);
         }
 
-        XBinary::_writeDevice(bufferHeader, N_ENCRYPTION_HEADER_SIZE, pCompressState);
+        const qint32 nHeaderWritten = XBinary::_writeDevice(bufferHeader, N_ENCRYPTION_HEADER_SIZE, pCompressState);
 
-        qint64 nDataSize = pCompressState->nInputLimit;
-
-        for (qint64 nOffset = 0; (nOffset < nDataSize) && XBinary::isPdStructNotCanceled(pPdStruct);) {
+        while ((nHeaderWritten == N_ENCRYPTION_HEADER_SIZE) &&
+               ((pCompressState->nInputLimit == -1) || (pCompressState->nCountInput < pCompressState->nInputLimit)) &&
+               XBinary::isPdStructNotCanceled(pPdStruct)) {
             qint32 nBufferSize = Algo_utils::getReadChunkSize(pCompressState, _nBufferSize);
+            if (nBufferSize <= 0) break;
+            if (nBufferSize > _nBufferSize) {
+                pCompressState->bReadError = true;
+                break;
+            }
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pCompressState);
 
+            if ((nRead < 0) || (nRead > nBufferSize) || (nRead > _nBufferSize)) {
+                pCompressState->bReadError = true;
+                break;
+            }
+
             if (nRead > 0) {
-                for (qint32 i = 0; i < nRead; i++) {
+                // Bound the index directly by the allocation. nRead was
+                // validated above, so the early exit preserves the exact
+                // byte count while making the memory contract explicit.
+                for (qint32 i = 0; i < _nBufferSize; i++) {
+                    if (i >= nRead) break;
                     quint8 nByte = (quint8)bufferIn[i];
                     bufferIn[i] = (char)(nByte ^ decryptByte(nKeys));
                     updateKeys(nKeys, nByte);
                 }
-                XBinary::_writeDevice(bufferIn, nRead, pCompressState);
+                if (XBinary::_writeDevice(bufferIn, nRead, pCompressState) != nRead) break;
             } else {
                 break;
             }
@@ -191,10 +244,11 @@ bool XZipCryptoDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, cons
                 break;
             }
 
-            nOffset += nRead;
         }
 
-        bResult = !pCompressState->bReadError && !pCompressState->bWriteError;
+        bResult = (nHeaderWritten == N_ENCRYPTION_HEADER_SIZE) && !pCompressState->bReadError && !pCompressState->bWriteError &&
+                  ((pCompressState->nInputLimit == -1) || (pCompressState->nCountInput == pCompressState->nInputLimit)) &&
+                  XBinary::isPdStructNotCanceled(pPdStruct);
 
         delete[] bufferIn;
     }

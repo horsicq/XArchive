@@ -69,6 +69,11 @@ public:
 
     struct RECORD {  // Obsolete, use ARCHIVERECORD
         SPINFO spInfo;
+        // Preserve the complete modern record contract for legacy callers.
+        // Solid-substream coordinates, CRC type, folder state, encryption
+        // properties, and codec-specific metadata cannot be represented by
+        // SPINFO alone.
+        QMap<FPART_PROP, QVariant> mapProperties;
         qint64 nDataOffset;
         qint64 nDataSize;
         qint64 nHeaderOffset;
@@ -129,6 +134,7 @@ public:
     bool decompressToPath(QList<RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(const QString &sArchiveFileName, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToPath(const QString &sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
+    bool unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool dumpToFile(const RECORD *pRecord, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr);
     static RECORD getArchiveRecord(const QString &sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);
     static RECORD getArchiveRecordByUUID(const QString &sUUID, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);

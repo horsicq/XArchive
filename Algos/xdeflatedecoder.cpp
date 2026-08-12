@@ -339,35 +339,22 @@ const char *ZEXPORT zlibVersion()
     return ZLIB_VERSION;
 }
 
+local uLong zlibSizeCompileFlag(size_t size)
+{
+    if (size == 2) return 0;
+    if (size == 4) return 1;
+    if (size == 8) return 2;
+    return 3;
+}
+
 uLong ZEXPORT zlibCompileFlags()
 {
     uLong flags;
 
-    flags = 0;
-    switch ((int)(sizeof(uInt))) {
-        case 2: break;
-        case 4: flags += 1; break;
-        case 8: flags += 2; break;
-        default: flags += 3;
-    }
-    switch ((int)(sizeof(uLong))) {
-        case 2: break;
-        case 4: flags += 1 << 2; break;
-        case 8: flags += 2 << 2; break;
-        default: flags += 3 << 2;
-    }
-    switch ((int)(sizeof(voidpf))) {
-        case 2: break;
-        case 4: flags += 1 << 4; break;
-        case 8: flags += 2 << 4; break;
-        default: flags += 3 << 4;
-    }
-    switch ((int)(sizeof(z_off_t))) {
-        case 2: break;
-        case 4: flags += 1 << 6; break;
-        case 8: flags += 2 << 6; break;
-        default: flags += 3 << 6;
-    }
+    flags = zlibSizeCompileFlag(sizeof(uInt));
+    flags += zlibSizeCompileFlag(sizeof(uLong)) << 2;
+    flags += zlibSizeCompileFlag(sizeof(voidpf)) << 4;
+    flags += zlibSizeCompileFlag(sizeof(z_off_t)) << 6;
 #ifdef ZLIB_DEBUG
     flags += 1 << 8;
 #endif
@@ -1731,6 +1718,9 @@ local void gen_bitlen(deflate_state *s, tree_desc *desc)
     ush f;            /* frequency */
     int overflow = 0; /* number of elements with bit length too large */
 
+    /* All bl_count accesses below are indexed by a generated bit length. */
+    if (max_length < 1 || max_length > MAX_BITS) return;
+
     for (bits = 0; bits <= MAX_BITS; bits++) s->bl_count[bits] = 0;
 
     /* In a first pass, compute the optimal bit lengths (which may
@@ -1762,7 +1752,8 @@ local void gen_bitlen(deflate_state *s, tree_desc *desc)
     /* Find the first bit length which could increase: */
     do {
         bits = max_length - 1;
-        while (s->bl_count[bits] == 0) bits--;
+        while (bits > 0 && s->bl_count[bits] == 0) bits--;
+        if (bits == 0) return;
         s->bl_count[bits]--;        /* move one leaf down the tree */
         s->bl_count[bits + 1] += 2; /* move one overflow item as its brother */
         s->bl_count[max_length]--;
@@ -9480,6 +9471,7 @@ uLong ZEXPORT adler32_combine64(uLong adler1, uLong adler2, z_off64_t len2)
 #endif
 
 #include "xdeflatedecoder.h"
+#include <limits>
 #include "algo_utils.h"
 #include "xalgo_local.h"
 
@@ -10522,41 +10514,101 @@ bool XDeflateDecoder::decompress64(XBinary::DATAPROCESS_STATE *pDecompressState,
 
 bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    Algo_utils::seekToStart(pDecompressState);
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
+        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < 6) ||
+        (pDecompressState->nInputOffset > (std::numeric_limits<qint64>::max)() - pDecompressState->nInputLimit) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    Algo_utils::prepareState(pDecompressState);
+    if (pDecompressState->bReadError || pDecompressState->bWriteError) {
+        return false;
+    }
+
+    const auto readExactAt = [pDecompressState](qint64 nOffset, char *pData, qint32 nSize) -> bool {
+        if (!pData || (nOffset < 0) || (nSize <= 0) || !pDecompressState->pDeviceInput->seek(nOffset)) {
+            return false;
+        }
+
+        qint32 nTotal = 0;
+        while (nTotal < nSize) {
+            const qint64 nRead = pDecompressState->pDeviceInput->read(pData + nTotal, nSize - nTotal);
+            if ((nRead <= 0) || (nRead > (nSize - nTotal))) {
+                return false;
+            }
+            nTotal += (qint32)nRead;
+        }
+        return true;
+    };
+
+    char aHeader[2] = {};
+    char aFooter[4] = {};
+    const qint64 nFooterOffset = pDecompressState->nInputOffset + pDecompressState->nInputLimit - 4;
+    if (!readExactAt(pDecompressState->nInputOffset, aHeader, sizeof(aHeader)) ||
+        !readExactAt(nFooterOffset, aFooter, sizeof(aFooter))) {
+        pDecompressState->bReadError = true;
+        return false;
+    }
+
+    const quint8 nCMF = (quint8)aHeader[0];
+    const quint8 nFLG = (quint8)aHeader[1];
+    const quint16 nHeader = ((quint16)nCMF << 8) | nFLG;
+    // RFC 1950: DEFLATE method, a window no larger than 32 KiB, a header
+    // divisible by 31, and no preset dictionary (not supported by this API).
+    if (((nCMF & 0x0F) != 8) || ((nCMF >> 4) > 7) || ((nHeader % 31) != 0) || ((nFLG & 0x20) != 0)) {
+        pDecompressState->bReadError = true;
+        return false;
+    }
+
+    const quint32 nExpectedAdler = ((quint32)(quint8)aFooter[0] << 24) | ((quint32)(quint8)aFooter[1] << 16) |
+                                   ((quint32)(quint8)aFooter[2] << 8) | (quint32)(quint8)aFooter[3];
+    const qint64 nCompressedSize = pDecompressState->nInputLimit - 6;
 
     XBinary::DATAPROCESS_STATE decompressState = *pDecompressState;
-    decompressState.nInputLimit = pDecompressState->nInputLimit - 6;    // Skip zlib header and footer
-    decompressState.nInputOffset = pDecompressState->nInputOffset + 2;  // Skip zlib header
-
-    quint32 nAdler = XBinary(pDecompressState->pDeviceInput).read_uint32(pDecompressState->nInputOffset + pDecompressState->nInputLimit - 4, true);
+    decompressState.nInputOffset = pDecompressState->nInputOffset + 2;
+    decompressState.nInputLimit = nCompressedSize;
+    decompressState.bReadError = false;
+    decompressState.bWriteError = false;
+    decompressState.nCountInput = 0;
+    decompressState.nCountOutput = 0;
 
     bool bResult = decompress(&decompressState, pPdStruct);
+    pDecompressState->bReadError = decompressState.bReadError;
+    pDecompressState->bWriteError = decompressState.bWriteError;
+    pDecompressState->nCountInput = 2 + decompressState.nCountInput;
+    pDecompressState->nCountOutput = decompressState.nCountOutput;
+
+    // A bounded zlib member owns the complete raw-DEFLATE extent.  Accepting
+    // an early end marker would otherwise make bytes before the Adler footer
+    // unauthenticated and was also what allowed a bad footer to pass the old
+    // header-only retry path.
+    bResult = bResult && (decompressState.nCountInput == nCompressedSize) &&
+              !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+              XBinary::isPdStructNotCanceled(pPdStruct);
+
+    if (bResult && pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
+        const qint64 nExpectedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
+        bResult = (nExpectedSize >= 0) && (decompressState.nCountOutput == nExpectedSize);
+    }
 
     if (bResult) {
-        quint32 _nAdler = XBinary::getAdler32(pDecompressState->pDeviceOutput, pPdStruct);
-        bResult = (nAdler == _nAdler);
+        const quint32 nActualAdler = XBinary::getAdler32(pDecompressState->pDeviceOutput, pPdStruct);
+        bResult = XBinary::isPdStructNotCanceled(pPdStruct) && (nActualAdler == nExpectedAdler);
     }
 
     if (!bResult) {
-        // Retry with header-only stripping (no Adler32 footer) for streams that omit the checksum
-        XBinary::DATAPROCESS_STATE retryState = *pDecompressState;
-        retryState.nInputLimit = pDecompressState->nInputLimit - 2;    // Skip zlib header only
-        retryState.nInputOffset = pDecompressState->nInputOffset + 2;  // Skip zlib header
-
-        if (pDecompressState->pDeviceOutput) {
-            pDecompressState->pDeviceOutput->seek(0);
-        }
-
-        bResult = decompress(&retryState, pPdStruct);
-
-        if (bResult) {
-            pDecompressState->nCountOutput = retryState.nCountOutput;
-        }
-    } else {
-        pDecompressState->nCountOutput = decompressState.nCountOutput;
+        pDecompressState->bReadError = pDecompressState->bReadError || !pDecompressState->bWriteError;
+        return false;
     }
 
-    return bResult;
+    pDecompressState->nCountInput = pDecompressState->nInputLimit;
+    if (!pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset + pDecompressState->nInputLimit)) {
+        pDecompressState->bReadError = true;
+        return false;
+    }
+
+    return true;
 }
 
 bool XDeflateDecoder::compress(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel)

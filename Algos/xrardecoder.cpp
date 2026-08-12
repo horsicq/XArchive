@@ -83,7 +83,8 @@ inline void _PPMD_SWAP(T &t1, T &t2)
 
 void rar_Unpack::Unpack5(bool Solid, XBinary::PDSTRUCT *pPdStruct)
 {
-    FileExtracted = true;
+    FileExtracted = false;
+    bool bCompleted = false;
 
     if (!Suspended) {
         UnpInitData(Solid);
@@ -112,6 +113,7 @@ void rar_Unpack::Unpack5(bool Solid, XBinary::PDSTRUCT *pPdStruct)
                    Inp.InAddr == BlockHeader.BlockStart + BlockHeader.BlockSize - 1 && Inp.InBit >= BlockHeader.BlockBitSize) {
                 if (BlockHeader.LastBlockInFile) {
                     FileDone = true;
+                    bCompleted = true;
                     break;
                 }
                 if (!ReadBlockHeader(Inp, BlockHeader) || !ReadTables(Inp, BlockHeader, BlockTables)) return;
@@ -211,6 +213,7 @@ void rar_Unpack::Unpack5(bool Solid, XBinary::PDSTRUCT *pPdStruct)
         }
     }
     UnpWriteBuf();
+    FileExtracted = bCompleted && !WriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool rar_Unpack::UnpReadBuf()
@@ -309,14 +312,8 @@ void rar_Unpack::UnpWriteBuf()
                     Filters[I].Type = FILTER_NONE;
 
                     if (OutMem != NULL) {
-                        qint64 nWritten = m_pDeviceOutput->write((char *)OutMem, BlockLength);
-                        if (nWritten > 0) {
-                            WrittenFileSize += nWritten;
-                        }
-                        if (nWritten != (qint64)BlockLength) {
-                            DestUnpSize = WrittenFileSize;
-                            return;
-                        }
+                        if (!WriteOutput(OutMem, BlockLength)) return;
+                        WrittenFileSize += BlockLength;
                     }
 
                     UnpSomeRead = true;
@@ -332,8 +329,8 @@ void rar_Unpack::UnpWriteBuf()
                 // all following filters for this data block and reset 'NextWindow'
                 // flag for them.
                 for (size_t J = I; J < Filters.size(); J++) {
-                    UnpackFilter *flt = &Filters[J];
-                    if (flt->Type != FILTER_NONE) flt->NextWindow = false;
+                    UnpackFilter *queuedFilter = &Filters[J];
+                    if (queuedFilter->Type != FILTER_NONE) queuedFilter->NextWindow = false;
                 }
 
                 // Do not write data left after current filter now.
@@ -468,13 +465,34 @@ void rar_Unpack::UnpWriteData(quint8 *Data, size_t Size)
     size_t WriteSize = Size;
     qint64 LeftToWrite = DestUnpSize - WrittenFileSize;
     if ((qint64)WriteSize > LeftToWrite) WriteSize = (size_t)LeftToWrite;
-    qint64 nWritten = m_pDeviceOutput->write((char *)Data, WriteSize);
-    if (nWritten > 0) {
-        WrittenFileSize += nWritten;
+    if (!WriteOutput(Data, WriteSize)) return;
+    WrittenFileSize += WriteSize;
+}
+
+bool rar_Unpack::WriteOutput(const quint8 *pData, size_t nSize)
+{
+    if (WriteError) return false;
+    if (!m_pDeviceOutput || ((nSize > 0) && !pData) ||
+        (nSize > (size_t)(std::numeric_limits<qint64>::max)()) ||
+        (ExpectedFileSize < 0) || (PublishedFileSize < 0) ||
+        (PublishedFileSize > ExpectedFileSize) ||
+        ((qint64)nSize > (ExpectedFileSize - PublishedFileSize))) {
+        WriteError = true;
+        return false;
     }
-    if (nWritten != (qint64)WriteSize) {
-        DestUnpSize = WrittenFileSize;
+
+    qint64 nDone = 0;
+    const qint64 nTotal = (qint64)nSize;
+    while (nDone < nTotal) {
+        const qint64 nWritten = m_pDeviceOutput->write(reinterpret_cast<const char *>(pData) + nDone, nTotal - nDone);
+        if ((nWritten <= 0) || (nWritten > (nTotal - nDone))) {
+            WriteError = true;
+            return false;
+        }
+        nDone += nWritten;
+        PublishedFileSize += nWritten;
     }
+    return true;
 }
 
 uint rar_Unpack::SlotToLength(BitInput &Inp, uint Slot)
@@ -703,7 +721,11 @@ void rar_Unpack::MakeDecodeTables(quint8 *LengthTable, DecodeTable *Dec, uint Si
         case NC:
         case NC20:
         case NC30: Dec->QuickBits = MAX_QUICK_DECODE_BITS; break;
-        default: Dec->QuickBits = MAX_QUICK_DECODE_BITS > 3 ? MAX_QUICK_DECODE_BITS - 3 : 0; break;
+#if MAX_QUICK_DECODE_BITS > 3
+        default: Dec->QuickBits = MAX_QUICK_DECODE_BITS - 3; break;
+#else
+        default: Dec->QuickBits = 0; break;
+#endif
     }
 
     // Size of tables for quick mode.
@@ -986,9 +1008,10 @@ void rar_Unpack::InitFilters()
 
 void rar_Unpack::Unpack15(bool Solid, XBinary::PDSTRUCT *pPdStruct)
 {
+    FileExtracted = false;
     UnpInitData(Solid);
     UnpInitData15(Solid);
-    UnpReadBuf();
+    if (!UnpReadBuf() || !XBinary::isPdStructNotCanceled(pPdStruct)) return;
     if (!Solid) {
         InitHuff();
         UnpPtr = 0;
@@ -999,7 +1022,7 @@ void rar_Unpack::Unpack15(bool Solid, XBinary::PDSTRUCT *pPdStruct)
         FlagsCnt = 8;
     }
 
-    while (DestUnpSize >= 0) {
+    while ((DestUnpSize >= 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         UnpPtr &= MaxWinMask;
 
         FirstWinDone |= (PrevPtr > UnpPtr);
@@ -1037,7 +1060,10 @@ void rar_Unpack::Unpack15(bool Solid, XBinary::PDSTRUCT *pPdStruct)
             }
         }
     }
-    UnpWriteBuf20();
+    if (XBinary::isPdStructNotCanceled(pPdStruct)) {
+        UnpWriteBuf20();
+        FileExtracted = DestUnpSize < 0;
+    }
 }
 
 void rar_Unpack::ShortLZ()
@@ -1355,15 +1381,17 @@ void rar_Unpack::Unpack20(bool Solid, XBinary::PDSTRUCT *pPdStruct)
     static unsigned char SDBits[] = {2, 2, 3, 4, 5, 6, 6, 6};
     uint Bits;
 
+    FileExtracted = false;
+
     if (Suspended) UnpPtr = WrPtr;
     else {
         UnpInitData(Solid);
-        if (!UnpReadBuf()) return;
+        if (!UnpReadBuf() || !XBinary::isPdStructNotCanceled(pPdStruct)) return;
         if ((!Solid || !TablesRead2) && !ReadTables20()) return;
         --DestUnpSize;
     }
 
-    while (DestUnpSize >= 0) {
+    while ((DestUnpSize >= 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         UnpPtr &= MaxWinMask;
 
         FirstWinDone |= (PrevPtr > UnpPtr);
@@ -1452,8 +1480,11 @@ void rar_Unpack::Unpack20(bool Solid, XBinary::PDSTRUCT *pPdStruct)
             continue;
         }
     }
-    ReadLastTables();
-    UnpWriteBuf20();
+    if (XBinary::isPdStructNotCanceled(pPdStruct)) {
+        ReadLastTables();
+        UnpWriteBuf20();
+        FileExtracted = DestUnpSize < 0;
+    }
 }
 
 void rar_Unpack::CopyString20(uint Length, uint Distance)
@@ -1536,14 +1567,16 @@ void rar_Unpack::UnpWriteBuf20()
 {
     if (UnpPtr != WrPtr) UnpSomeRead = true;
     if (UnpPtr < WrPtr) {
-        m_pDeviceOutput->write((char *)&Window[WrPtr], -(int)WrPtr & MaxWinMask);
-        m_pDeviceOutput->write((char *)Window, UnpPtr);
+        if (!WriteOutput(&Window[WrPtr], -(int)WrPtr & MaxWinMask)) return;
+        if (!WriteOutput(Window, UnpPtr)) return;
 
         // 2024.12.24: Before 7.10 we set "UnpAllBuf=true" here. It was needed for
         // Pack::PrepareSolidAppend(). Since both UnpAllBuf and FirstWinDone
         // variables indicate the same thing and we set FirstWinDone in other place
         // anyway, we replaced UnpAllBuf with FirstWinDone and removed this code.
-    } else m_pDeviceOutput->write((char *)&Window[WrPtr], UnpPtr - WrPtr);
+    } else if (!WriteOutput(&Window[WrPtr], UnpPtr - WrPtr)) {
+        return;
+    }
     WrPtr = UnpPtr;
 }
 
@@ -1680,7 +1713,8 @@ void rar_Unpack::Unpack29(bool Solid, XBinary::PDSTRUCT *pPdStruct)
             }
     }
 
-    FileExtracted = true;
+    FileExtracted = false;
+    bool bCompleted = false;
 
     if (!Suspended) {
         UnpInitData(Solid);
@@ -1726,7 +1760,10 @@ void rar_Unpack::Unpack29(bool Solid, XBinary::PDSTRUCT *pPdStruct)
                 if (NextCh == -1)  // Corrupt PPM data found.
                     break;
                 if (NextCh == 2)  // End of file in PPM mode.
+                {
+                    bCompleted = true;
                     break;
+                }
                 if (NextCh == 3)  // Read VM code.
                 {
                     if (!ReadVMCodePPM()) break;
@@ -1734,13 +1771,13 @@ void rar_Unpack::Unpack29(bool Solid, XBinary::PDSTRUCT *pPdStruct)
                 }
                 if (NextCh == 4)  // LZ inside of PPM.
                 {
-                    unsigned int Distance = 0, Length;
+                    unsigned int Distance = 0, Length = 0;
                     bool Failed = false;
                     for (int I = 0; I < 4 && !Failed; I++) {
-                        int Ch = SafePPMDecodeChar();
-                        if (Ch == -1) Failed = true;
-                        else if (I == 3) Length = (quint8)Ch;
-                        else Distance = (Distance << 8) + (quint8)Ch;
+                        int decodedByte = SafePPMDecodeChar();
+                        if (decodedByte == -1) Failed = true;
+                        else if (I == 3) Length = (quint8)decodedByte;
+                        else Distance = (Distance << 8) + (quint8)decodedByte;
                     }
                     if (Failed) break;
 
@@ -1811,7 +1848,11 @@ void rar_Unpack::Unpack29(bool Solid, XBinary::PDSTRUCT *pPdStruct)
             continue;
         }
         if (Number == 256) {
-            if (!ReadEndOfBlock()) break;
+            bool bNewFile = false;
+            if (!ReadEndOfBlock(&bNewFile)) {
+                bCompleted = bNewFile;
+                break;
+            }
             continue;
         }
         if (Number == 257) {
@@ -1851,6 +1892,7 @@ void rar_Unpack::Unpack29(bool Solid, XBinary::PDSTRUCT *pPdStruct)
         }
     }
     UnpWriteBuf30();
+    FileExtracted = bCompleted && !WriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 void rar_Unpack::InitFilters30(bool Solid)
@@ -1866,8 +1908,9 @@ void rar_Unpack::InitFilters30(bool Solid)
     PrgStack.clear();
 }
 
-bool rar_Unpack::ReadEndOfBlock()
+bool rar_Unpack::ReadEndOfBlock(bool *pNewFile)
 {
+    if (pNewFile) *pNewFile = false;
     uint BitField = Inp.getbits();
     bool NewTable, NewFile = false;
 
@@ -1888,7 +1931,10 @@ bool rar_Unpack::ReadEndOfBlock()
     // Quit immediately if "new file" flag is set. If "new table" flag
     // is present, we'll read the table in beginning of next file
     // based on 'TablesRead3' 'false' value.
-    if (NewFile) return false;
+    if (NewFile) {
+        if (pNewFile) *pNewFile = true;
+        return false;
+    }
     return ReadTables30();  // Quit only if we failed to read tables.
 }
 
@@ -2200,7 +2246,6 @@ void rar_Unpack::UnpWriteBuf30()
                     VM.SetMemory(FirstPartLength, Window, BlockEnd);
                 }
 
-                VM_PreparedProgram *ParentPrg = &Filters30[flt->ParentFilter]->Prg;
                 VM_PreparedProgram *Prg = &flt->Prg;
 
                 ExecuteCode(Prg);
@@ -2219,7 +2264,6 @@ void rar_Unpack::UnpWriteBuf30()
 
                     VM.SetMemory(0, FilteredData, FilteredDataSize);
 
-                    VM_PreparedProgram *ParentPrg = &Filters30[NextFilter->ParentFilter]->Prg;
                     VM_PreparedProgram *NextPrg = &NextFilter->Prg;
 
                     ExecuteCode(NextPrg);
@@ -2231,14 +2275,8 @@ void rar_Unpack::UnpWriteBuf30()
                     PrgStack[I] = nullptr;
                 }
                 // UnpIO->UnpWrite(FilteredData,FilteredDataSize);
-                qint64 nWritten = m_pDeviceOutput->write((char *)FilteredData, FilteredDataSize);
-                if (nWritten > 0) {
-                    WrittenFileSize += nWritten;
-                }
-                if (nWritten != (qint64)FilteredDataSize) {
-                    DestUnpSize = WrittenFileSize;
-                    return;
-                }
+                if (!WriteOutput(FilteredData, FilteredDataSize)) return;
+                WrittenFileSize += FilteredDataSize;
                 UnpSomeRead = true;
                 WrittenBorder = BlockEnd;
                 WriteSize = uint((UnpPtr - WrittenBorder) & MaxWinMask);
@@ -2246,8 +2284,8 @@ void rar_Unpack::UnpWriteBuf30()
                 // Current filter intersects the window write border, so we adjust
                 // the window border to process this filter next time, not now.
                 for (size_t J = I; J < PrgStack.size(); J++) {
-                    UnpackFilter30 *flt = PrgStack[J];
-                    if (flt != nullptr && flt->NextWindow) flt->NextWindow = false;
+                    UnpackFilter30 *pendingFilter = PrgStack[J];
+                    if (pendingFilter != nullptr && pendingFilter->NextWindow) pendingFilter->NextWindow = false;
                 }
                 WrPtr = WrittenBorder;
                 return;
@@ -2278,6 +2316,12 @@ rar_Unpack::rar_Unpack() : Inp(true), VMCodeInp(true)
     Fragmented = false;
     Suspended = false;
     UnpSomeRead = false;
+    WriteError = false;
+    DestUnpSize = -1;
+    ExpectedFileSize = -1;
+    PublishedFileSize = 0;
+    WrittenFileSize = 0;
+    FileExtracted = false;
     ExtraDist = false;
     AllocWinSize = 0;
     MaxWinSize = 0;
@@ -2350,12 +2394,15 @@ qint32 rar_Unpack::Init(quint64 WinSize, bool Solid)
     {
     }
 
-    if (Window == nullptr)
-        if (WinSize < 0x1000000 || sizeof(size_t) > 4) return -1;  // Exclude RAR4, small dictionaries and 64-bit.
-        else {
-            if (WinSize > FragWindow.GetWinSize()) FragWindow.Init((size_t)WinSize);
-            Fragmented = true;
-        }
+    if (Window == nullptr) {
+        if (WinSize < 0x1000000) return -1;  // Exclude RAR4 and small dictionaries.
+#if QT_POINTER_SIZE > 4
+        return -1;  // Fragmented windows are only a 32-bit allocation fallback.
+#else
+        if (WinSize > FragWindow.GetWinSize()) FragWindow.Init((size_t)WinSize);
+        Fragmented = true;
+#endif
+    }
 
     if (!Fragmented) {
         // Clean the window to generate the same output when unpacking corrupt
@@ -2502,12 +2549,21 @@ SubAllocator::SubAllocator()
 void SubAllocator::Clean()
 {
     SubAllocatorSize = 0;
+    HeapStart = nullptr;
+    LoUnit = nullptr;
+    HiUnit = nullptr;
+    pText = nullptr;
+    UnitsStart = nullptr;
+    HeapEnd = nullptr;
+    FakeUnitsStart = nullptr;
 }
 
 bool SubAllocator::StartSubAllocator(int SASize)
 {
-    uint t = SASize << 20;
-    if (SubAllocatorSize == t) return true;
+    if ((SASize <= 0) || (SASize > 256)) return false;
+
+    uint t = (uint)SASize << 20;
+    if (SubAllocatorSize == (long)t) return true;
     StopSubAllocator();
 
     // Original algorithm expects FIXED_UNIT_SIZE, but actual structure size
@@ -2531,9 +2587,9 @@ bool SubAllocator::StartSubAllocator(int SASize)
 void SubAllocator::StopSubAllocator()
 {
     if (SubAllocatorSize) {
-        SubAllocatorSize = 0;
         free(HeapStart);
     }
+    Clean();
 }
 
 void SubAllocator::InitSubAllocator()
@@ -2860,7 +2916,8 @@ RarVM::RarVM()
 
 RarVM::~RarVM()
 {
-    if (Mem == NULL) Mem = new quint8[VM_MEMSIZE + 4];
+    delete[] Mem;
+    Mem = nullptr;
 }
 
 void RarVM::Init()
@@ -2870,6 +2927,11 @@ void RarVM::Init()
 
 void RarVM::Prepare(quint8 *Code, uint CodeSize, VM_PreparedProgram *Prg)
 {
+    if (!Prg) return;
+
+    Prg->Type = VMSF_NONE;
+    if (!Code || (CodeSize == 0) || (CodeSize > (uint)(std::numeric_limits<qint32>::max)())) return;
+
     // Calculate the single byte XOR checksum to check validity of VM code.
     quint8 XorSum = 0;
     for (uint I = 1; I < CodeSize; I++) XorSum ^= Code[I];
@@ -2893,8 +2955,13 @@ void RarVM::Prepare(quint8 *Code, uint CodeSize, VM_PreparedProgram *Prg)
 
 void RarVM::Execute(VM_PreparedProgram *Prg)
 {
+    if (!Prg) return;
+
+    Prg->FilteredData = nullptr;
+    Prg->FilteredDataSize = 0;
+    if (!Mem) return;
+
     memcpy(R, Prg->InitR, sizeof(Prg->InitR));
-    Prg->FilteredData = NULL;
     if (Prg->Type != VMSF_NONE) {
         bool Success = ExecuteStandardFilter(Prg->Type);
         uint BlockSize = Prg->InitR[4] & VM_MEMMASK;
@@ -2907,13 +2974,10 @@ void RarVM::Execute(VM_PreparedProgram *Prg)
 
 void RarVM::SetMemory(size_t Pos, quint8 *Data, size_t DataSize)
 {
-    if (Pos < VM_MEMSIZE && Data != Mem + Pos) {
-        // We can have NULL Data for invalid filters with DataSize==0. While most
-        // sensible memmove implementations do not care about data if size is 0,
-        // let's follow the standard and check the size first.
-        size_t CopySize = qMin(DataSize, (size_t)(VM_MEMSIZE - Pos));
-        if (CopySize != 0) memmove(Mem + Pos, Data, CopySize);
-    }
+    if (!Mem || !Data || (DataSize == 0) || (Pos >= VM_MEMSIZE)) return;
+
+    const size_t CopySize = qMin(DataSize, (size_t)(VM_MEMSIZE - Pos));
+    if (Data != Mem + Pos) memmove(Mem + Pos, Data, CopySize);
 }
 
 uint RarVM::ReadData(BitInput &Inp)
@@ -2948,31 +3012,27 @@ uint RarVM::ReadData(BitInput &Inp)
 void FragmentedWindow::Reset()
 {
     LastAllocated = 0;
-    for (uint I = 0; I < ASIZE(Mem); I++)
+    for (uint I = 0; I < ASIZE(Mem); I++) {
         if (Mem[I] != NULL) {
             free(Mem[I]);
             Mem[I] = NULL;
         }
+        MemSize[I] = 0;
+    }
 }
 
 FragmentedWindow::FragmentedWindow()
 {
     LastAllocated = 0;
-    for (uint I = 0; I < ASIZE(Mem); I++)
-        if (Mem[I] != NULL) {
-            Mem[I] = NULL;
-        }
-    // Reset();
+    for (uint I = 0; I < ASIZE(Mem); I++) {
+        Mem[I] = NULL;
+        MemSize[I] = 0;
+    }
 }
 
 FragmentedWindow::~FragmentedWindow()
 {
-    LastAllocated = 0;
-    for (uint I = 0; I < ASIZE(Mem); I++)
-        if (Mem[I] != NULL) {
-            free(Mem[I]);
-            Mem[I] = NULL;
-        }
+    Reset();
 }
 
 void FragmentedWindow::Init(size_t WinSize)
@@ -3126,6 +3186,8 @@ void ModelPPM::StartModelRare(int MaxOrder)
 RARPPM_CONTEXT *ModelPPM::CreateSuccessors(bool Skip, RARPPM_STATE *p1)
 {
     RARPPM_STATE UpState;
+    if (!MinContext || !FoundState || !FoundState->Successor) return nullptr;
+
     RARPPM_CONTEXT *pc = MinContext, *UpBranch = FoundState->Successor;
     RARPPM_STATE *p, *ps[MAX_O], **pps = ps;
     if (!Skip) {
@@ -3134,11 +3196,13 @@ RARPPM_CONTEXT *ModelPPM::CreateSuccessors(bool Skip, RARPPM_STATE *p1)
     }
     if (p1) {
         p = p1;
+        if (!pc->Suffix) return nullptr;
         pc = pc->Suffix;
         goto LOOP_ENTRY;
     }
     do {
         pc = pc->Suffix;
+        if (!pc) return nullptr;
         if (pc->NumStats != 1) {
             if ((p = pc->U.Stats)->Symbol != FoundState->Symbol) do {
                     p++;
@@ -3157,6 +3221,7 @@ RARPPM_CONTEXT *ModelPPM::CreateSuccessors(bool Skip, RARPPM_STATE *p1)
         *pps++ = p;
     } while (pc->Suffix);
 NO_LOOP:
+    if (!pc) return nullptr;
     if (pps == ps) return pc;
     UpState.Symbol = *(quint8 *)UpBranch;
     UpState.Successor = (RARPPM_CONTEXT *)(((quint8 *)UpBranch) + 1);
@@ -3269,13 +3334,28 @@ ModelPPM::ModelPPM()
     MinContext = nullptr;
     MaxContext = nullptr;
     MedContext = nullptr;
+    FoundState = nullptr;
 }
 
 void ModelPPM::CleanUp()
 {
     SubAlloc.StopSubAllocator();
-    SubAlloc.StartSubAllocator(1);
-    StartModelRare(2);
+    MinContext = nullptr;
+    MaxContext = nullptr;
+    MedContext = nullptr;
+    FoundState = nullptr;
+
+    if (!SubAlloc.StartSubAllocator(1)) return;
+
+    try {
+        StartModelRare(2);
+    } catch (const std::bad_alloc &) {
+        SubAlloc.StopSubAllocator();
+        MinContext = nullptr;
+        MaxContext = nullptr;
+        MedContext = nullptr;
+        FoundState = nullptr;
+    }
 }
 
 bool ModelPPM::DecodeInit(rar_Unpack *UnpackRead, int &EscChar)
@@ -3283,7 +3363,7 @@ bool ModelPPM::DecodeInit(rar_Unpack *UnpackRead, int &EscChar)
     int MaxOrder = UnpackRead->GetChar();
     bool Reset = (MaxOrder & 0x20) != 0;
 
-    int MaxMB;
+    int MaxMB = 0;
     if (Reset) MaxMB = UnpackRead->GetChar();
     else if (SubAlloc.GetAllocatedMemory() == 0) return false;
     if (MaxOrder & 0x40) EscChar = UnpackRead->GetChar();
@@ -3295,8 +3375,23 @@ bool ModelPPM::DecodeInit(rar_Unpack *UnpackRead, int &EscChar)
             SubAlloc.StopSubAllocator();
             return false;
         }
-        SubAlloc.StartSubAllocator(MaxMB + 1);
-        StartModelRare(MaxOrder);
+        if (!SubAlloc.StartSubAllocator(MaxMB + 1)) {
+            MinContext = nullptr;
+            MaxContext = nullptr;
+            MedContext = nullptr;
+            FoundState = nullptr;
+            return false;
+        }
+        try {
+            StartModelRare(MaxOrder);
+        } catch (const std::bad_alloc &) {
+            SubAlloc.StopSubAllocator();
+            MinContext = nullptr;
+            MaxContext = nullptr;
+            MedContext = nullptr;
+            FoundState = nullptr;
+            return false;
+        }
     }
     return MinContext != nullptr;
 }

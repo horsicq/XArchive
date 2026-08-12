@@ -363,7 +363,9 @@ XARJ::XARJ(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XARJ::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     bool bResult = false;
 
@@ -520,6 +522,12 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (pState) {
+        finishUnpack(pState, nullptr);
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return false;
+        }
+
         pState->nCurrentOffset = 0;
         pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
@@ -531,7 +539,10 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pState->nCurrentOffset = nOffset;
         pState->nNumberOfRecords = countFileRecords(this, nOffset, pPdStruct, nullptr);
 
-        bResult = (pState->nNumberOfRecords > 0);
+        bResult = (pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+        if (!bResult) {
+            finishUnpack(pState, nullptr);
+        }
     }
 
     return bResult;
@@ -539,11 +550,10 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         ARJ_ENTRY_INFO info = {};
 
         if (!readEntryInfo(this, pState->nCurrentOffset, &info) || info.bEndOfArchive) {
@@ -582,11 +592,10 @@ XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XARJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         ARJ_ENTRY_INFO info = {};
 
         if (readEntryInfo(this, pState->nCurrentOffset, &info) && !info.bEndOfArchive) {
@@ -602,8 +611,19 @@ bool XARJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XARJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pState)
     Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = nullptr;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }
@@ -753,33 +773,37 @@ QList<XBinary::XFRECORD> XARJ::getXFRecords(FT fileType, quint32 nStructID, cons
 
 QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     qint64 nFileSize = getSize();
     qint64 nCurrentOffset = firstFileRecordOffset(this);
     qint64 nMaxOffset = 0;
 
-    while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((nCurrentOffset < nFileSize) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct)) {
         ARJ_ENTRY_INFO info = {};
 
         if (!readEntryInfo(this, nCurrentOffset, &info) || info.bEndOfArchive) {
             break;
         }
 
-        if (nFileParts & FILEPART_HEADER) {
+        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
             listResult.append(createFilePart(FILEPART_HEADER, nCurrentOffset, info.nHeaderSize, tr("Header")));
         }
 
-        if (nFileParts & FILEPART_STREAM) {
+        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
             FPART record = createFilePart(FILEPART_STREAM, entryStreamOffset(info), info.nCompressedSize, info.sFileName);
             record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)info.nOriginalSize);
 
             listResult.append(record);
         }
 
-        if (nFileParts & FILEPART_REGION) {
+        if ((nFileParts & FILEPART_REGION) && canAppend()) {
             listResult.append(createFilePart(FILEPART_REGION, nCurrentOffset, info.nHeaderSize + info.nCompressedSize, info.sFileName));
         }
 
@@ -787,7 +811,7 @@ QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         nCurrentOffset = nMaxOffset;
     }
 
-    if (nFileParts & FILEPART_OVERLAY) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
         if (nMaxOffset < nFileSize) {
             listResult.append(createFilePart(FILEPART_OVERLAY, nMaxOffset, nFileSize - nMaxOffset, tr("Overlay")));
         }

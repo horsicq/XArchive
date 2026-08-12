@@ -92,13 +92,10 @@ void lzx_ensureBits(LZX_STATE *pState, qint32 nBits)
 
         if (pState->nInPos + 1 < pState->nInSize) {
             nWord = (quint32)pState->pIn[pState->nInPos] | ((quint32)pState->pIn[pState->nInPos + 1] << 8);
-        } else if (pState->nInPos < pState->nInSize) {
-            nWord = (quint32)pState->pIn[pState->nInPos];
         } else {
             pState->nOverrun++;
-            if (pState->nOverrun > 4) {
-                pState->bError = true;
-            }
+            pState->bError = true;
+            return;
         }
 
         pState->nInPos += 2;
@@ -114,6 +111,7 @@ quint32 lzx_readBits(LZX_STATE *pState, qint32 nBits)
     }
 
     lzx_ensureBits(pState, nBits);
+    if (pState->bError || (pState->nBitCount < nBits)) return 0;
 
     quint32 nResult = (quint32)(pState->nBitBuf >> (64 - nBits));
     pState->nBitBuf <<= nBits;
@@ -123,7 +121,13 @@ quint32 lzx_readBits(LZX_STATE *pState, qint32 nBits)
 }
 
 // Canonical Huffman table: codes assigned in order of (length, symbol)
-bool lzx_buildHuff(LZX_HUFF *pTable, const quint8 *pLens, qint32 nSymbols)
+enum LZX_HUFF_MODE {
+    LZX_HUFF_FULL,
+    LZX_HUFF_FULL_OR_EMPTY
+};
+
+bool lzx_buildHuff(LZX_HUFF *pTable, const quint8 *pLens, qint32 nSymbols,
+                   LZX_HUFF_MODE mode)
 {
     for (qint32 i = 0; i <= LZX_MAX_CODE_LENGTH; i++) {
         pTable->nCount[i] = 0;
@@ -136,7 +140,7 @@ bool lzx_buildHuff(LZX_HUFF *pTable, const quint8 *pLens, qint32 nSymbols)
     pTable->bEmpty = (pTable->nCount[0] == nSymbols);
 
     if (pTable->bEmpty) {
-        return true;
+        return mode == LZX_HUFF_FULL_OR_EMPTY;
     }
 
     // Check the code space is not over-subscribed
@@ -148,6 +152,8 @@ bool lzx_buildHuff(LZX_HUFF *pTable, const quint8 *pLens, qint32 nSymbols)
             return false;
         }
     }
+
+    if (nLeft != 0) return false;
 
     // Sort symbols by (length, symbol index)
     qint32 nOffsets[LZX_MAX_CODE_LENGTH + 1];
@@ -201,7 +207,7 @@ bool lzx_readLengths(LZX_STATE *pState, quint8 *pLens, qint32 nFirst, qint32 nLa
         preLens[i] = (quint8)lzx_readBits(pState, 4);
     }
 
-    if (!lzx_buildHuff(&pState->preTree, preLens, LZX_PRETREE_SYMBOLS)) {
+    if (!lzx_buildHuff(&pState->preTree, preLens, LZX_PRETREE_SYMBOLS, LZX_HUFF_FULL)) {
         return false;
     }
 
@@ -259,16 +265,18 @@ void lzx_initPositionSlots(LZX_STATE *pState, qint32 nWindowBits)
 // Discard bits so the next read starts at a 16-bit stream boundary.
 // bAtLeastOne: consume a full padding word even when already aligned
 // (uncompressed-block rule); otherwise only when misaligned (frame rule).
-void lzx_align16(LZX_STATE *pState, bool bAtLeastOne)
+bool lzx_align16(LZX_STATE *pState, bool bAtLeastOne)
 {
     qint32 nMisaligned = pState->nBitCount & 15;
 
     if (nMisaligned) {
+        if ((pState->nBitBuf >> (64 - nMisaligned)) != 0) return false;
         pState->nBitBuf <<= nMisaligned;
         pState->nBitCount -= nMisaligned;
     } else if (bAtLeastOne) {
-        lzx_readBits(pState, 16);
+        if (lzx_readBits(pState, 16) != 0) return false;
     }
+    return !pState->bError;
 }
 
 // Current raw byte position in the input (all buffered bits are whole words here)
@@ -362,6 +370,11 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
                     nBlockSize = LZX_FRAME_SIZE;
                 } else {
                     nBlockSize = lzx_readBits(pState, 16);
+                    // WIM LZX dictionaries larger than 32 KiB use the 24-bit
+                    // explicit block-size form used by wimlib and 7-Zip.
+                    if (nWindowBits >= 16) {
+                        nBlockSize = (nBlockSize << 8) | lzx_readBits(pState, 8);
+                    }
                 }
             } else {
                 nBlockSize = lzx_readBits(pState, 24);
@@ -378,7 +391,7 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
                 for (qint32 i = 0; i < LZX_ALIGNED_SYMBOLS; i++) {
                     alignedLens[i] = (quint8)lzx_readBits(pState, 3);
                 }
-                if (!lzx_buildHuff(&pState->alignedTree, alignedLens, LZX_ALIGNED_SYMBOLS)) {
+                if (!lzx_buildHuff(&pState->alignedTree, alignedLens, LZX_ALIGNED_SYMBOLS, LZX_HUFF_FULL)) {
                     return false;
                 }
             }
@@ -390,18 +403,19 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
                 if (!lzx_readLengths(pState, pState->mainLens, 256, pState->nMainSymbols)) {
                     return false;
                 }
-                if (!lzx_buildHuff(&pState->mainTree, pState->mainLens, pState->nMainSymbols)) {
+                if (!lzx_buildHuff(&pState->mainTree, pState->mainLens, pState->nMainSymbols, LZX_HUFF_FULL)) {
                     return false;
                 }
                 if (!lzx_readLengths(pState, pState->lengthLens, 0, LZX_LENGTH_SYMBOLS)) {
                     return false;
                 }
-                if (!lzx_buildHuff(&pState->lengthTree, pState->lengthLens, LZX_LENGTH_SYMBOLS)) {
+                if (!lzx_buildHuff(&pState->lengthTree, pState->lengthLens, LZX_LENGTH_SYMBOLS,
+                                   LZX_HUFF_FULL_OR_EMPTY)) {
                     return false;
                 }
             } else if (nBlockType == LZX_BLOCK_UNCOMPRESSED) {
                 // Align to a 16-bit boundary (1-16 pad bits), then 12 bytes of R0/R1/R2
-                lzx_align16(pState, true);
+                if (!lzx_align16(pState, true)) return false;
 
                 qint64 nRawPos = lzx_rawPosition(pState);
                 pState->nBitBuf = 0;
@@ -417,7 +431,10 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
                 pState->R2 = (quint32)p[8] | ((quint32)p[9] << 8) | ((quint32)p[10] << 16) | ((quint32)p[11] << 24);
                 nRawPos += 12;
 
-                if ((pState->R0 == 0) || (pState->R1 == 0) || (pState->R2 == 0)) {
+                const quint32 nMaxRepeatOffset = pState->nWindowSize - 3;
+                if ((pState->R0 == 0) || (pState->R0 > nMaxRepeatOffset) ||
+                    (pState->R1 == 0) || (pState->R1 > nMaxRepeatOffset) ||
+                    (pState->R2 == 0) || (pState->R2 > nMaxRepeatOffset)) {
                     return false;
                 }
 
@@ -435,8 +452,14 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
                 nRawPos += nBlockRemaining;
 
                 if (nBlockRemaining & 1) {
-                    if (nRawPos >= pState->nInSize) return false;
-                    nRawPos++;  // pad byte
+                    // A zero pad byte is required before another block.  The
+                    // final odd uncompressed block may end exactly at EOF.
+                    if (nRawPos < pState->nInSize) {
+                        if (pState->pIn[nRawPos] != 0) return false;
+                        nRawPos++;
+                    } else if (nOutCount != nUncompressedSize) {
+                        return false;
+                    }
                 }
 
                 nBlockRemaining = 0;
@@ -517,7 +540,9 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
                 pState->R0 = nMatchOffset;
             }
 
-            if ((nMatchOffset == 0) || (nMatchOffset > pState->nWindowSize) || ((qint64)nMatchLen > nBlockRemaining) ||
+            if ((nMatchOffset == 0) || (nMatchOffset > pState->nWindowSize) ||
+                ((quint64)nMatchOffset > qMin<quint64>((quint64)nOutCount, pState->nWindowSize)) ||
+                ((qint64)nMatchLen > nBlockRemaining) ||
                 ((qint64)nMatchLen > nUncompressedSize - nOutCount)) {
                 return false;
             }
@@ -540,13 +565,15 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
         // Bitstream realigns to 16 bits at every 32KB output frame boundary (CAB)
         while (nOutCount >= nNextFrame) {
             if (!bWIMVariant) {
-                lzx_align16(pState, false);
+                if (!lzx_align16(pState, false)) return false;
             }
             nNextFrame += LZX_FRAME_SIZE;
         }
     }
 
     if (pState->bError || pState->nOverrun || (nOutCount != nUncompressedSize) || (nBlockRemaining != 0) ||
+        (pState->nInPos != pState->nInSize) ||
+        (pState->nBitBuf != 0) ||
         (pbaOut->size() != nUncompressedSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -586,14 +613,19 @@ bool XLZXDecoder::decompressCABFolder(const QByteArray &baCompressed, QByteArray
     return lzx_decompressStream(&state, pbaUncompressed, nUncompressedSize, nWindowBits, false, pPdStruct);
 }
 
-bool XLZXDecoder::decompressWIMChunk(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint32 nUncompressedSize)
+bool XLZXDecoder::decompressWIMChunk(const QByteArray &baCompressed, QByteArray *pbaUncompressed,
+                                     qint32 nUncompressedSize, qint32 nWindowBits,
+                                     XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pbaUncompressed || baCompressed.isEmpty() || (nUncompressedSize <= 0) || (nUncompressedSize > 32768)) {
+    if (!pbaUncompressed || baCompressed.isEmpty() || (nUncompressedSize <= 0) ||
+        (nWindowBits < 15) || (nWindowBits > 21) ||
+        (nUncompressedSize > ((qint32)1 << nWindowBits))) {
         return false;
     }
 
     LZX_STATE state = {};
     lzx_initBitReader(&state, reinterpret_cast<const quint8 *>(baCompressed.constData()), baCompressed.size());
 
-    return lzx_decompressStream(&state, pbaUncompressed, nUncompressedSize, 15, true, nullptr);
+    return lzx_decompressStream(&state, pbaUncompressed, nUncompressedSize,
+                                nWindowBits, true, pPdStruct);
 }

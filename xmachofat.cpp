@@ -38,7 +38,9 @@ XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XMACHOFat::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     bool bResult = false;
 
@@ -123,6 +125,10 @@ XBinary::OSNAME XMACHOFat::getOsName()
 QList<XArchive::RECORD> XMACHOFat::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
 
     qint32 nNumberOfRecords = (qint32)getNumberOfRecords(pPdStruct);
 
@@ -578,9 +584,13 @@ QMap<XBinary::UNPACK_PROP, QVariant> XMACHOFat::getDefaultUnpackProperties()
 
 bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     if (!pState) {
+        return false;
+    }
+
+    finishUnpack(pState, nullptr);
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -591,16 +601,20 @@ bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     pState->mapUnpackProperties = mapProperties;
     pState->pContext = nullptr;
 
-    return (pState->nNumberOfRecords > 0);
+    if ((pState->nNumberOfRecords <= 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        finishUnpack(pState, nullptr);
+        return false;
+    }
+
+    return true;
 }
 
 XBinary::ARCHIVERECORD XMACHOFat::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD result = {};
 
-    if (!pState || pState->nCurrentIndex >= pState->nNumberOfRecords) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -625,15 +639,14 @@ XBinary::ARCHIVERECORD XMACHOFat::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
 
 bool XMACHOFat::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
     pState->nCurrentIndex++;
 
-    return (pState->nCurrentIndex <= pState->nNumberOfRecords);
+    return (pState->nCurrentIndex < pState->nNumberOfRecords);
 }
 
 bool XMACHOFat::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -645,9 +658,12 @@ bool XMACHOFat::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
     pState->pContext = nullptr;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

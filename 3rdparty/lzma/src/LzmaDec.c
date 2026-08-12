@@ -463,7 +463,7 @@ int Z7_FASTCALL LZMA_DECODE_REAL(CLzmaDec *p, SizeT limit, const Byte *bufLimit)
       {
         UInt32 distance;
         prob = probs + PosSlot +
-            ((len < kNumLenToPosStates ? len : kNumLenToPosStates - 1) << kNumPosSlotBits);
+            ((size_t)(len < kNumLenToPosStates ? len : kNumLenToPosStates - 1) << kNumPosSlotBits);
         TREE_6_DECODE(prob, distance)
         if (distance >= kStartPosModelIndex)
         {
@@ -858,7 +858,7 @@ static ELzmaDummy LzmaDec_TryDummy(const CLzmaDec *p, const Byte *buf, const Byt
       {
         unsigned posSlot;
         prob = probs + PosSlot +
-            ((len < kNumLenToPosStates - 1 ? len : kNumLenToPosStates - 1) <<
+            ((size_t)(len < kNumLenToPosStates - 1 ? len : kNumLenToPosStates - 1) <<
             kNumPosSlotBits);
         TREE_DECODE_CHECK(prob, 1 << kNumPosSlotBits, posSlot)
         if (posSlot >= kStartPosModelIndex)
@@ -867,7 +867,7 @@ static ELzmaDummy LzmaDec_TryDummy(const CLzmaDec *p, const Byte *buf, const Byt
 
           if (posSlot < kEndPosModelIndex)
           {
-            prob = probs + SpecPos + ((2 | (posSlot & 1)) << numDirectBits);
+            prob = probs + SpecPos + ((size_t)(2 | (posSlot & 1)) << numDirectBits);
           }
           else
           {

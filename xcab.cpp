@@ -19,6 +19,8 @@
  * SOFTWARE.
  */
 #include "xcab.h"
+
+#include <new>
 #include "Algos/xdeflatedecoder.h"
 #include "Algos/xlzhdecoder.h"
 
@@ -66,7 +68,7 @@ bool XCab::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (getSize() > (qint64)sizeof(CFHEADER)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() > (qint64)sizeof(CFHEADER))) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
         if (compareSignature(&memoryMap, "'MSCF'00000000........00000000........00000000", 0, pPdStruct)) {
             bResult = true;
@@ -80,7 +82,7 @@ bool XCab::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XCab xcab(pDevice);
 
-    return xcab.isValid();
+    return xcab.isValid(pPdStruct);
 }
 
 QString XCab::getVersion()
@@ -448,12 +450,20 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 {
     QList<XBinary::FPART> listResult;
 
+    if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return listResult;
+    }
+
+    auto canAppend = [&]() -> bool {
+        return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.count() < nLimit));
+    };
+
     qint64 nFileSize = getSize();
     qint64 nFileFormatSize = getFileFormatSize(pPdStruct);
 
     CFHEADER cfHeader = readCFHeader(0);
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
@@ -464,7 +474,7 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         listResult.append(record);
     }
 
-    if (nFileParts & FILEPART_DATA) {
+    if ((nFileParts & FILEPART_DATA) && canAppend()) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_DATA;
         record.nFileOffset = 0;
@@ -481,10 +491,10 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         // Regions: enumerate folders, files, and data blocks
         // 1) CFFOLDER area and per-folder entries (best-effort)
         if (cfHeader.cFolders) {
-            for (quint32 i = 0; i < cfHeader.cFolders; ++i) {
+            for (quint32 i = 0; (i < cfHeader.cFolders) && canAppend(); ++i) {
                 if ((nCurrentOffset + (qint64)sizeof(CFFOLDER)) > nFileSize) break;
 
-                if (nFileParts & FILEPART_HEADER) {
+                if ((nFileParts & FILEPART_HEADER) && canAppend()) {
                     FPART rec = {};
                     rec.filePart = FILEPART_HEADER;
                     rec.nFileOffset = nCurrentOffset;
@@ -494,7 +504,7 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                     listResult.append(rec);
                 }
 
-                if (nFileParts & FILEPART_STREAM) {
+                if ((nFileParts & FILEPART_STREAM) && canAppend()) {
                     CFFOLDER cfFolder = readCFFolder(nCurrentOffset);
 
                     FPART rec = {};
@@ -580,7 +590,7 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         // }
     }
 
-    if (nFileParts & FILEPART_OVERLAY) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
         if (nFileFormatSize < nFileSize) {
             FPART record = {};
 
@@ -592,6 +602,10 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
             listResult.append(record);
         }
+    }
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        listResult.clear();
     }
 
     return listResult;
@@ -771,12 +785,11 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
 
-    pState->nCurrentOffset = 0;
-    pState->nTotalSize = getSize();
-    pState->nCurrentIndex = 0;
-    pState->nNumberOfRecords = 0;
-    pState->pContext = nullptr;
-    pState->mapUnpackProperties = mapProperties;
+    finishUnpack(pState, nullptr);
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     qint64 nFileSize = getSize();
 
@@ -800,7 +813,10 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     // Create unpack context
-    CAB_UNPACK_CONTEXT *pContext = new CAB_UNPACK_CONTEXT;
+    CAB_UNPACK_CONTEXT *pContext = new (std::nothrow) CAB_UNPACK_CONTEXT;
+    if (!pContext) {
+        return false;
+    }
     pContext->nCurrentFileIndex = 0;
     pContext->nCbCFHeader = 0;
     pContext->nCbCFFolder = 0;
@@ -808,6 +824,7 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
     auto fail = [&]() -> bool {
         delete pContext;
+        finishUnpack(pState, nullptr);
         return false;
     };
 
@@ -999,6 +1016,7 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = cfHeader.cFiles;
     pState->pContext = pContext;
+    pState->mapUnpackProperties = mapProperties;
 
     return true;
 }
@@ -1009,11 +1027,11 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
         return result;
     }
 
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -1267,11 +1285,10 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
-    if (pState && pState->pContext && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
 
         pState->nCurrentIndex++;
@@ -1307,6 +1324,8 @@ bool XCab::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

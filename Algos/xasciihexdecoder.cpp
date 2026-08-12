@@ -58,11 +58,16 @@ XASCIIHexDecoder::XASCIIHexDecoder(QObject *parent) : QObject(parent)
 // yields one byte; a trailing odd digit is treated as if followed by '0'. Liberal on malformed input.
 bool XASCIIHexDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
+        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1)) {
         return false;
     }
 
-    Algo_utils::seekToStart(pDecompressState);
+    Algo_utils::prepareState(pDecompressState);
+    if (pDecompressState->bReadError || pDecompressState->bWriteError ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     bool bHaveHigh = false;
     int nHigh = 0;
@@ -96,15 +101,20 @@ bool XASCIIHexDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressSta
             bHaveHigh = true;
         } else {
             unsigned char nByte = static_cast<unsigned char>((nHigh << 4) | nValue);
-            XBinary::_writeDevice(reinterpret_cast<char *>(&nByte), 1, pDecompressState);
+            if (XBinary::_writeDevice(reinterpret_cast<char *>(&nByte), 1, pDecompressState) != 1) {
+                return false;
+            }
             bHaveHigh = false;
         }
     }
 
     // A dangling high nibble at EOD/EOF is completed with an implicit low nibble of 0.
-    if (bHaveHigh && !pDecompressState->bWriteError && !pDecompressState->bReadError) {
+    if (bHaveHigh && !pDecompressState->bWriteError && !pDecompressState->bReadError &&
+        XBinary::isPdStructNotCanceled(pPdStruct)) {
         unsigned char nByte = static_cast<unsigned char>(nHigh << 4);
-        XBinary::_writeDevice(reinterpret_cast<char *>(&nByte), 1, pDecompressState);
+        if (XBinary::_writeDevice(reinterpret_cast<char *>(&nByte), 1, pDecompressState) != 1) {
+            return false;
+        }
     }
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {

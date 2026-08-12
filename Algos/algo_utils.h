@@ -43,7 +43,7 @@ public:
     static qint32 getReadChunkSize(const XBinary::DATAPROCESS_STATE *pState, qint32 nBufferSize);
 
     static int ascii85ReadByte(XBinary::DATAPROCESS_STATE *pState);
-    static void ascii85WriteBytes(XBinary::DATAPROCESS_STATE *pState, const unsigned char *pBuffer, int nSize);
+    static bool ascii85WriteBytes(XBinary::DATAPROCESS_STATE *pState, const unsigned char *pBuffer, int nSize);
 
     static void *szAlloc(ISzAllocPtr pAlloc, size_t nSize);
     static void szFree(ISzAllocPtr pAlloc, void *pAddress);

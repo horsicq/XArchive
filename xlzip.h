@@ -102,6 +102,16 @@ public:
     quint32 _getDictionarySize(quint8 nDictSizeCode);
 
 private:
+    struct LZIP_MEMBER {
+        qint64 nOffset;
+        qint64 nCompressedOffset;
+        qint64 nCompressedSize;
+        qint64 nUncompressedSize;
+        qint64 nMemberSize;
+        quint32 nCRC32;
+        quint8 nDictSizeCode;
+    };
+
     // Format-specific unpacking context
     struct LZIP_UNPACK_CONTEXT {
         qint64 nHeaderSize;        // Size of LZIP header (6 bytes min)
@@ -111,7 +121,9 @@ private:
         quint32 nCRC32;            // CRC32 of uncompressed data
         quint8 nDictSizeCode;      // Dictionary size code from header
         bool bFooterValid;         // Footer belongs to the represented member
+        QList<LZIP_MEMBER> listMembers;
     };
+    bool getMembers(QList<LZIP_MEMBER> *pMembers, PDSTRUCT *pPdStruct);
 private:
     INTERNAL_INFO m_internalInfo;
 };

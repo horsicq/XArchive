@@ -22,17 +22,19 @@
 #include "algo_utils.h"
 
 namespace {
-// Read one input byte, bounded by nInputLimit. Returns -1 on limit/EOF without flagging a read error,
-// so a truncated run at EOF ends the stream gracefully instead of reporting failure.
+// Read one input byte, bounded by nInputLimit. RunLengthDecode has an explicit
+// EOD byte, so reaching the boundary while a byte is requested is malformed.
 int rleReadByte(XBinary::DATAPROCESS_STATE *pState)
 {
     if ((pState->nInputLimit >= 0) && (pState->nCountInput >= pState->nInputLimit)) {
+        pState->bReadError = true;
         return -1;
     }
 
     char c = 0;
     qint64 nRead = pState->pDeviceInput->read(&c, 1);
     if (nRead != 1) {
+        pState->bReadError = true;
         return -1;
     }
 
@@ -56,7 +58,8 @@ bool XRunLengthDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressSt
         return false;
     }
 
-    Algo_utils::seekToStart(pDecompressState);
+    Algo_utils::prepareState(pDecompressState);
+    if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     bool bEnd = false;
 
@@ -74,25 +77,24 @@ bool XRunLengthDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressSt
         if (nLength < 128) {
             // Literal run of (nLength + 1) bytes.
             const int nCount = nLength + 1;
-            for (int i = 0; (i < nCount) && !pDecompressState->bWriteError; ++i) {
+            for (int i = 0; (i < nCount) && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct); ++i) {
                 const int nByte = rleReadByte(pDecompressState);
                 if (nByte < 0) {
-                    bEnd = true;  // truncated literal run: stop gracefully
                     break;
                 }
                 unsigned char c = static_cast<unsigned char>(nByte);
-                XBinary::_writeDevice(reinterpret_cast<char *>(&c), 1, pDecompressState);
+                if (XBinary::_writeDevice(reinterpret_cast<char *>(&c), 1, pDecompressState) != 1) return false;
             }
         } else {
             // Repeat run: the next byte is emitted (257 - nLength) times.
             const int nCount = 257 - nLength;
             const int nByte = rleReadByte(pDecompressState);
             if (nByte < 0) {
-                break;  // truncated repeat run
+                break;
             }
             unsigned char c = static_cast<unsigned char>(nByte);
-            for (int i = 0; (i < nCount) && !pDecompressState->bWriteError; ++i) {
-                XBinary::_writeDevice(reinterpret_cast<char *>(&c), 1, pDecompressState);
+            for (int i = 0; (i < nCount) && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct); ++i) {
+                if (XBinary::_writeDevice(reinterpret_cast<char *>(&c), 1, pDecompressState) != 1) return false;
             }
         }
     }
@@ -101,5 +103,5 @@ bool XRunLengthDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressSt
         return false;
     }
 
-    return !(pDecompressState->bReadError || pDecompressState->bWriteError);
+    return bEnd && !(pDecompressState->bReadError || pDecompressState->bWriteError);
 }

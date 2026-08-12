@@ -104,7 +104,7 @@ private:
 
     qint64 _getHeapOffset();
     QByteArray _readTOC(PDSTRUCT *pPdStruct);
-    bool _parseTOC(const QByteArray &baXML, qint64 nHeapOffset, QList<XAR_RECORD> *pListRecords);
+    bool _parseTOC(const QByteArray &baXML, qint64 nHeapOffset, QList<XAR_RECORD> *pListRecords, PDSTRUCT *pPdStruct);
     HANDLE_METHOD _encodingToMethod(const QString &sStyle);
 private:
     INTERNAL_INFO m_internalInfo;

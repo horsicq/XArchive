@@ -27,7 +27,7 @@
 // (CAB SDK / [MS-PATCH]). Two container variants are supported:
 //  - CAB: continuous folder stream, 24-bit block sizes, optional Intel E8
 //    header, bitstream realignment at every 32KB output frame.
-//  - WIM: independent chunks (32KB window), 1-bit default-size block header,
+//  - WIM: independent chunks (32KB..2MB window), 1-bit default-size block header,
 //    Intel E8 post-processing always applied with fixed file size 12000000.
 class XLZXDecoder {
 public:
@@ -35,8 +35,10 @@ public:
     static bool decompressCABFolder(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint64 nUncompressedSize, qint32 nWindowBits,
                                     XBinary::PDSTRUCT *pPdStruct = nullptr);
 
-    // One independent WIM chunk (chunk uncompressed size <= 32768)
-    static bool decompressWIMChunk(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint32 nUncompressedSize);
+    // One independent WIM chunk. nWindowBits is log2 of the WIM header chunk size.
+    static bool decompressWIMChunk(const QByteArray &baCompressed, QByteArray *pbaUncompressed,
+                                   qint32 nUncompressedSize, qint32 nWindowBits,
+                                   XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XLZXDECODER_H

@@ -233,7 +233,22 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
 
     // Read first code (must be a literal 0..255)
     qint32 nOldCode = compressReadCode(&br, nCodeBits);
-    if (nOldCode < 0 || nOldCode >= 256) {
+    if (nOldCode < 0) {
+        // A valid empty .Z stream has only the three-byte header (and may
+        // contain fewer than nine zero padding bits). Nonzero residual bits
+        // are a truncated first code, not an empty payload.
+        const bool bZeroPadding = (br.nBitsInBuf >= 0) && (br.nBitsInBuf < nCodeBits) && (br.nBitBuf == 0);
+        const bool bEmptyResult = bZeroPadding && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+                                  ((pDecompressState->nInputLimit == -1) ||
+                                   (pDecompressState->nCountInput == pDecompressState->nInputLimit)) &&
+                                  (!bHasExpectedSize || (nExpectedSize == 0)) && (pDecompressState->nCountOutput == 0) &&
+                                  XBinary::isPdStructNotCanceled(pPdStruct);
+        delete[] pPrefix;
+        delete[] pSuffix;
+        delete[] pStack;
+        return bEmptyResult;
+    }
+    if (nOldCode >= 256) {
         delete[] pPrefix;
         delete[] pSuffix;
         delete[] pStack;
@@ -259,21 +274,25 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
 
         // Handle CLEAR code in block_compress mode
         if (bBlockCompress && nCode == COMPRESS_CLEAR) {
-            if (!compressAlignCodeGroup(&br, nCodeBits, &nGroupStartBits)) {
-                bResult = false;
-                break;
-            }
+            do {
+                if (!compressAlignCodeGroup(&br, nCodeBits, &nGroupStartBits) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+                    bResult = false;
+                    break;
+                }
 
-            // Reset table
-            nNextCode = COMPRESS_FIRST;
-            nCodeBits = COMPRESS_MINBITS;
-            nMaxVal = (1 << nCodeBits);
+                // Reset table. Some canonical encoders can emit more than one
+                // CLEAR before the next literal, with every CLEAR starting a
+                // newly aligned 9-bit group.
+                nNextCode = COMPRESS_FIRST;
+                nCodeBits = COMPRESS_MINBITS;
+                nMaxVal = (1 << nCodeBits);
+                nCode = compressReadCode(&br, nCodeBits);
+            } while (nCode == COMPRESS_CLEAR);
 
-            nCode = compressReadCode(&br, nCodeBits);
             // The first code after a CLEAR starts a fresh dictionary and must
             // therefore be a literal. Accepting a forward dictionary code here
             // leaves prefix/suffix entries uninitialized for malformed input.
-            if ((nCode < 0) || (nCode >= 256)) {
+            if (!bResult || (nCode < 0) || (nCode >= 256)) {
                 bResult = false;
                 break;
             }

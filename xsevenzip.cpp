@@ -279,7 +279,7 @@ bool XSevenZip::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (getSize() >= (qint64)sizeof(SIGNATUREHEADER)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= (qint64)sizeof(SIGNATUREHEADER))) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
         bool bSignatureValid = compareSignature(&memoryMap, "'7z'BCAF271C", 0, pPdStruct);
 
@@ -802,8 +802,13 @@ QList<XBinary::XFRECORD> XSevenZip::getXFRecords(FT fileType, quint32 nStructID,
 
 QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 nFileSize = getSize();
     if (nFileSize < (qint64)sizeof(SIGNATUREHEADER)) return listResult;
@@ -819,7 +824,7 @@ QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit,
         nMaxOffset = nextHeaderOffset + nextHeaderSize;
     }
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         // Signature header
         FPART hdr = {};
         hdr.filePart = FILEPART_HEADER;
@@ -830,7 +835,7 @@ QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit,
         listResult.append(hdr);
     }
 
-    if (nFileParts & FILEPART_REGION) {
+    if ((nFileParts & FILEPART_REGION) && canAppend()) {
         // Packed streams between signature header and next header
         qint64 nDataOff = nBase;
         qint64 nDataSize = 0;
@@ -847,7 +852,7 @@ QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit,
         }
     }
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         // Next header block
         if ((nextHeaderSize > 0) && (nextHeaderOffset >= 0) && (nextHeaderOffset + nextHeaderSize) <= nFileSize) {
             FPART nh = {};
@@ -860,7 +865,7 @@ QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit,
         }
     }
 
-    if (nFileParts & FILEPART_DATA) {
+    if ((nFileParts & FILEPART_DATA) && canAppend()) {
         FPART nh = {};
         nh.filePart = FILEPART_DATA;
         nh.nFileOffset = 0;
@@ -870,7 +875,7 @@ QList<XBinary::FPART> XSevenZip::getFileParts(quint32 nFileParts, qint32 nLimit,
         listResult.append(nh);
     }
 
-    if (nFileParts & FILEPART_OVERLAY) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
         if (nMaxOffset < nFileSize) {
             FPART ov = {};
             ov.filePart = FILEPART_OVERLAY;
@@ -1666,15 +1671,15 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                             break;
                         }
 
-                        SZRECORD record = {};
-                        record.nRelOffset = (qint32)nNameStartOffset;
-                        record.nSize = (qint32)(nNameLenBytes + 2);
-                        record.varValue = sFilename;
-                        record.srType = SRTYPE_ARRAY;
-                        record.valType = VT_STRING;
-                        record.impType = IMPTYPE_FILENAME;
-                        record.sName = QString("FileName[%1]").arg(nFileIndex);
-                        pListRecords->append(record);
+                        SZRECORD fileNameRecord = {};
+                        fileNameRecord.nRelOffset = (qint32)nNameStartOffset;
+                        fileNameRecord.nSize = (qint32)(nNameLenBytes + 2);
+                        fileNameRecord.varValue = sFilename;
+                        fileNameRecord.srType = SRTYPE_ARRAY;
+                        fileNameRecord.valType = VT_STRING;
+                        fileNameRecord.impType = IMPTYPE_FILENAME;
+                        fileNameRecord.sName = QString("FileName[%1]").arg(nFileIndex);
+                        pListRecords->append(fileNameRecord);
 
                         pState->listFileNames.append(sFilename);
                         nFileIndex++;
@@ -2240,10 +2245,17 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSevenZip::getDefaultUnpackProperties()
 bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
+    SEVENZ_UNPACK_CONTEXT *pContext = nullptr;
 
     QString sMD5;
 
     if (pState) {
+        finishUnpack(pState, nullptr);
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return false;
+        }
+
         pState->nCurrentOffset = 0;
         pState->nTotalSize = getSize();
         pState->nCurrentIndex = 0;
@@ -2255,12 +2267,17 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         qint64 nNextHeaderOffset = 0;
 
         if (!_loadValidatedNextHeader(&baData, &nNextHeaderOffset, pPdStruct) || baData.isEmpty()) {
+            finishUnpack(pState, nullptr);
             return false;
         }
         qint64 nNextHeaderSize = baData.size();
 
         // Create context
-        SEVENZ_UNPACK_CONTEXT *pContext = new SEVENZ_UNPACK_CONTEXT;
+        pContext = new (std::nothrow) SEVENZ_UNPACK_CONTEXT;
+        if (!pContext) {
+            finishUnpack(pState, nullptr);
+            return false;
+        }
         // pContext->nSignatureSize = sizeof(SIGNATUREHEADER);
 
         pState->pContext = pContext;
@@ -2861,6 +2878,7 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
             if (!bResult) {
                 delete pContext;
+                pContext = nullptr;
                 pState->pContext = nullptr;
             } else {
                 pState->mapArchiveProperties.insert(FPART_PROP_FILEMD5, sMD5);
@@ -2868,26 +2886,28 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
         }  // End if next header is present
 
-        if (!bResult && (pState->pContext == pContext)) {
+        if (!bResult && pContext && (pState->pContext == pContext)) {
             delete pContext;
             pState->pContext = nullptr;
         }
     }  // End outer scope
+
+    if (!bResult && pState) {
+        finishUnpack(pState, nullptr);
+    }
 
     return bResult;
 }
 
 XBinary::ARCHIVERECORD XSevenZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
         return result;
     }
 
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -2905,9 +2925,11 @@ bool XSevenZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    bool bResult = true;
+    if (!pState) {
+        return false;
+    }
 
-    if (pState && pState->pContext) {
+    if (pState->pContext) {
         SEVENZ_UNPACK_CONTEXT *pContext = (SEVENZ_UNPACK_CONTEXT *)pState->pContext;
 
         // Delete context
@@ -2915,16 +2937,22 @@ bool XSevenZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         pState->pContext = nullptr;
     }
 
-    return bResult;
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
+
+    return true;
 }
 
 bool XSevenZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
-    if (!pState || !pState->pContext) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 

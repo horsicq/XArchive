@@ -210,36 +210,26 @@ bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecor
 
 bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    if (!pDevice) return false;
 
     XBinary::PDSTRUCT pdStructEmpty = {};
-
     if (!pPdStruct) {
         pdStructEmpty = XBinary::createPdStruct();
         pPdStruct = &pdStructEmpty;
     }
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    QList<XArchive::RECORD> listRecords = getRecords(pDevice, XBinary::FT_UNKNOWN, -1, pPdStruct);
+    const XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
+    XArchive *pArchive = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
+    if (!pArchive) return false;
 
-    qint32 nNumberOfRecords = listRecords.count();
-
-    QString sCanonicalRoot = QDir::cleanPath(QDir(sResultFileFolder).absolutePath());
-
-    for (qint32 i = 0; (i < nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-        XArchive::RECORD record = listRecords.at(i);
-        QString sResultFileName = QDir::cleanPath(sResultFileFolder + QDir::separator() + record.spInfo.sRecordName);
-
-        if (!sResultFileName.startsWith(sCanonicalRoot + "/")) {
-            bResult = false;
-            continue;
-        }
-
-        bResult = decompressToFile(pDevice, &record, sResultFileName, pPdStruct);
-
-        if (!bResult) {
-            //            break;
-        }
+    bool bResult = pArchive->unpackToFolder(sResultFileFolder, pPdStruct);
+    if (!bResult && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        QList<XArchive::RECORD> listRecords = pArchive->getRecords(-1, pPdStruct);
+        bResult = !listRecords.isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct) &&
+                  pArchive->decompressToPath(&listRecords, QString(), sResultFileFolder, pPdStruct);
     }
+    delete pArchive;
 
     return bResult;
 }

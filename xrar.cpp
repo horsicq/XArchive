@@ -22,6 +22,7 @@
 #include "Algos/xrardecoder.h"
 #include "Algos/xaesdecoder.h"
 #include <QBuffer>
+#include <new>
 
 namespace {
 const qint64 XRAR_MAX_RAR5_HEADER_SIZE = 4 * 1024 * 1024;
@@ -719,6 +720,11 @@ QList<XBinary::XFRECORD> XRar::getXFRecords(FT fileType, quint32 nStructID, cons
 QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
     UNPACK_STATE state = {};
     QMap<UNPACK_PROP, QVariant> properties;
 
@@ -727,6 +733,11 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     }
 
     RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)state.pContext;
+    if (!pContext) {
+        finishUnpack(&state, nullptr);
+        return listResult;
+    }
+
     const qint32 nInternVersion = pContext->nVersion;
     const qint64 nSignatureSize = (nInternVersion == 1) ? 4 : ((nInternVersion == 4) ? 7 : 8);
     const qint64 nTotalSize = getSize();
@@ -1316,7 +1327,9 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
     if ((quint64)baName.size() != parsed.nNameLength) {
         return result;
     }
-    parsed.sFileName = decodeRarUnicodeName(baName);
+    if (!decodeRar5Name(baName, &parsed.sFileName)) {
+        return result;
+    }
     nCurrentOffset += (qint64)parsed.nNameLength;
 
     if (nCurrentOffset != nBodyEnd) {
@@ -1398,9 +1411,9 @@ XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
 
         // Handle Unicode filenames
         if (result.genericBlock4.nFlags & RAR4_FILE_UNICODE_FILENAME) {
-            // This is a simplified approach for Unicode filename handling
-            // Real implementation would need more complex parsing of the RarUnicodeFileName format
-            result.sFileName = decodeRarUnicodeName(nameData);
+            if (!decodeRar4UnicodeName(nameData, &result.sFileName)) {
+                return FILEBLOCK4();
+            }
         } else {
             result.sFileName = QString::fromLatin1(nameData);
         }
@@ -1494,19 +1507,89 @@ XRar::FILEBLOCK14 XRar::readFileBlock14(qint64 nOffset)
     return result;
 }
 
-QString XRar::decodeRarUnicodeName(const QByteArray &nameData)
+bool XRar::decodeRar5Name(const QByteArray &nameData, QString *pResult)
 {
-    // This is a complex process in RAR - simplified version here
-    // Real implementation would need to follow the RarUnicodeFileName format
+    if (!pResult || nameData.isEmpty() || nameData.contains('\0')) return false;
 
-    // Try UTF-8 first
-    QString result = QString::fromUtf8(nameData);
-    if (!result.contains(QChar(0xFFFD))) {  // No replacement character
-        return result;
+    // RAR 5 names are UTF-8. A round trip is a compact strict validator on
+    // Qt 5: malformed, overlong, surrogate, and truncated sequences decode to
+    // replacement characters and cannot reproduce the original bytes. A real
+    // encoded U+FFFD (EF BF BD) remains valid because it round-trips exactly.
+    const QString sResult = QString::fromUtf8(nameData.constData(), nameData.size());
+    if (sResult.toUtf8() != nameData) return false;
+
+    *pResult = sResult;
+    return true;
+}
+
+bool XRar::decodeRar4UnicodeName(const QByteArray &nameData, QString *pResult)
+{
+    if (!pResult) return false;
+
+    const qint32 nSeparator = nameData.indexOf('\0');
+    if ((nSeparator <= 0) || (nSeparator >= (nameData.size() - 1))) return false;
+
+    const QByteArray baAnsiName = nameData.left(nSeparator);
+    const QByteArray baEncoded = nameData.mid(nSeparator + 1);
+    qint32 nEncodedPosition = 0;
+    qint32 nDecodedPosition = 0;
+    const quint16 nHighByte = (quint16)(quint8)baEncoded.at(nEncodedPosition++) << 8;
+    QString sDecoded;
+    sDecoded.reserve(baAnsiName.size());
+
+    while (nEncodedPosition < baEncoded.size()) {
+        quint8 nFlags = (quint8)baEncoded.at(nEncodedPosition++);
+        bool bDecodedFromThisFlag = false;
+
+        for (qint32 nFlagIndex = 0; nFlagIndex < 4; nFlagIndex++, nFlags <<= 2) {
+            if (nEncodedPosition >= baEncoded.size()) break;
+
+            const quint8 nMode = nFlags >> 6;
+            if (nMode == 0) {
+                sDecoded.append(QChar((quint8)baEncoded.at(nEncodedPosition++)));
+                nDecodedPosition++;
+            } else if (nMode == 1) {
+                sDecoded.append(QChar(nHighByte | (quint8)baEncoded.at(nEncodedPosition++)));
+                nDecodedPosition++;
+            } else if (nMode == 2) {
+                if ((baEncoded.size() - nEncodedPosition) < 2) return false;
+                const quint16 nCodeUnit = (quint8)baEncoded.at(nEncodedPosition) |
+                                          ((quint16)(quint8)baEncoded.at(nEncodedPosition + 1) << 8);
+                nEncodedPosition += 2;
+                sDecoded.append(QChar(nCodeUnit));
+                nDecodedPosition++;
+            } else {
+                const quint8 nLengthByte = (quint8)baEncoded.at(nEncodedPosition++);
+                const qint32 nRunLength = (nLengthByte & 0x7F) + 2;
+                quint8 nCorrection = 0;
+                if (nLengthByte & 0x80) {
+                    if (nEncodedPosition >= baEncoded.size()) return false;
+                    nCorrection = (quint8)baEncoded.at(nEncodedPosition++);
+                }
+                if ((nDecodedPosition > baAnsiName.size()) ||
+                    (nRunLength > (baAnsiName.size() - nDecodedPosition))) {
+                    return false;
+                }
+
+                for (qint32 i = 0; i < nRunLength; i++, nDecodedPosition++) {
+                    quint16 nCodeUnit = (quint8)baAnsiName.at(nDecodedPosition);
+                    if (nLengthByte & 0x80) {
+                        nCodeUnit = nHighByte | ((nCodeUnit + nCorrection) & 0xFF);
+                    }
+                    sDecoded.append(QChar(nCodeUnit));
+                }
+            }
+
+            bDecodedFromThisFlag = true;
+        }
+
+        if (!bDecodedFromThisFlag) return false;
     }
 
-    // Fall back to system locale
-    return QString::fromLocal8Bit(nameData);
+    if (sDecoded.isEmpty() || sDecoded.contains(QChar(0))) return false;
+
+    *pResult = sDecoded;
+    return true;
 }
 
 quint16 XRar::calculateCRC16(const QByteArray &data)
@@ -1598,14 +1681,28 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
         return false;
     }
 
-    pUnpackState->mapUnpackProperties = mapProperties;
+    if (pUnpackState->pContext) {
+        delete static_cast<RAR_UNPACK_CONTEXT *>(pUnpackState->pContext);
+    }
+    pUnpackState->pContext = nullptr;
+    pUnpackState->mapUnpackProperties.clear();
+    pUnpackState->mapArchiveProperties.clear();
     pUnpackState->nCurrentOffset = 0;
-    pUnpackState->nTotalSize = getSize();
+    pUnpackState->nTotalSize = 0;
     pUnpackState->nCurrentIndex = 0;
     pUnpackState->nNumberOfRecords = 0;
-    pUnpackState->pContext = nullptr;
 
-    RAR_UNPACK_CONTEXT *pContext = new RAR_UNPACK_CONTEXT;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    pUnpackState->mapUnpackProperties = mapProperties;
+    pUnpackState->nTotalSize = getSize();
+
+    RAR_UNPACK_CONTEXT *pContext = new (std::nothrow) RAR_UNPACK_CONTEXT;
+    if (!pContext) {
+        pUnpackState->mapUnpackProperties.clear();
+        pUnpackState->nTotalSize = 0;
+        return false;
+    }
     pContext->nVersion = getInternVersion(pPdStruct);
     pContext->bArchiveIsSolid = false;
     pContext->bHeadersEncrypted = false;
@@ -1616,6 +1713,9 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
         pUnpackState->nCurrentOffset = 0;
         pUnpackState->nCurrentIndex = 0;
         pUnpackState->nNumberOfRecords = 0;
+        pUnpackState->nTotalSize = 0;
+        pUnpackState->mapUnpackProperties.clear();
+        pUnpackState->mapArchiveProperties.clear();
         pUnpackState->pContext = nullptr;
         return false;
     };
@@ -2010,12 +2110,11 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
 XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD record = {};
 
     if (!pUnpackState || !pUnpackState->pContext || (pUnpackState->nCurrentIndex < 0) ||
-        (pUnpackState->nCurrentIndex >= pUnpackState->nNumberOfRecords)) {
+        (pUnpackState->nCurrentIndex >= pUnpackState->nNumberOfRecords) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return record;
     }
 
@@ -2105,9 +2204,8 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
 
 bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutputDevice, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pUnpackState || !pUnpackState->pContext || !pOutputDevice) {
+    if (!pUnpackState || !pUnpackState->pContext || !pOutputDevice || !pOutputDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -2118,7 +2216,10 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
     RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
     ARCHIVERECORD archiveRecord = infoCurrent(pUnpackState, pPdStruct);
 
-    if (archiveRecord.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) return true;  // Directory
+    if (archiveRecord.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) {
+        if (pOutputDevice->isSequential()) return pOutputDevice->pos() == 0;
+        return XBinary::resize(pOutputDevice, 0) && pOutputDevice->seek(0);
+    }
 
     bool bResult = pContext->decompress.decompressArchiveRecord(archiveRecord, getDevice(), pOutputDevice, pUnpackState->mapUnpackProperties, pPdStruct);
 
@@ -2168,10 +2269,9 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
 
 bool XRar::moveToNext(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     if (!pUnpackState || !pUnpackState->pContext || (pUnpackState->nCurrentIndex < 0) ||
-        (pUnpackState->nCurrentIndex >= pUnpackState->nNumberOfRecords)) {
+        (pUnpackState->nCurrentIndex >= pUnpackState->nNumberOfRecords) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -2202,8 +2302,11 @@ bool XRar::finishUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct
     }
 
     pUnpackState->nCurrentOffset = 0;
+    pUnpackState->nTotalSize = 0;
     pUnpackState->nCurrentIndex = 0;
     pUnpackState->nNumberOfRecords = 0;
+    pUnpackState->mapUnpackProperties.clear();
+    pUnpackState->mapArchiveProperties.clear();
     return true;
 }
 
@@ -2418,11 +2521,11 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
                             mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD2, (quint32)HANDLE_METHOD_RAR5_AES);
 
                             // Encryption flag bit 1 replaces the stored CRC32 with
-                            // an authentication-code-derived value. Without that
-                            // flag the normal plaintext CRC32 remains verifiable.
+                            // a keyed value derived from the plaintext CRC32. Keep
+                            // the field and mark it so extraction authenticates it
+                            // with the RAR5 hash key after decryption/decompression.
                             if (nCryptoFlags & 0x0002) {
-                                mapResult.remove(XBinary::FPART_PROP_CRC_TYPE);
-                                mapResult.remove(XBinary::FPART_PROP_RESULTCRC);
+                                mapResult.insert(XBinary::FPART_PROP_RAR5_HASHMAC, true);
                             }
                         }
                     }

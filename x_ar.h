@@ -92,8 +92,17 @@ public:
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
+    struct AR_PACK_CONTEXT {
+        qint64 nStartOffset;
+        qint64 nCurrentOffset;
+        qint32 nNumberOfRecords;
+        bool bFailed;
+    };
+
+    static bool isPackStateConsistent(const PACK_STATE *pState, const AR_PACK_CONTEXT *pContext);
     FRECORD readFRECORD(qint64 nOffset);
     static FRECORD createHeader(const QString &sFileName, qint64 nFileSize, quint32 nMode, qint64 nMTime);
 private:

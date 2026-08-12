@@ -19,6 +19,8 @@
  * SOFTWARE.
  */
 #include "xminidump.h"
+
+#include <new>
 #include "xdecompress.h"
 
 XBinary::XCONVERT _TABLE_XMINIDUMP_STRUCTID[] = {
@@ -33,7 +35,9 @@ XMiniDump::XMiniDump(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XMiniDump::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     bool bResult = false;
 
@@ -408,9 +412,13 @@ QList<XBinary::XFRECORD> XMiniDump::getXFRecords(FT fileType, quint32 nStructID,
 
 QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     qint64 nFileSize = getSize();
 
@@ -419,7 +427,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
     }
 
     // Add header
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
 
         record.filePart = FILEPART_HEADER;
@@ -434,7 +442,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
     MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
 
     // Add directory
-    if (nFileParts & FILEPART_REGION) {
+    if ((nFileParts & FILEPART_REGION) && canAppend()) {
         FPART record = {};
 
         record.filePart = FILEPART_REGION;
@@ -449,7 +457,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
     // Add streams
     QList<MINIDUMP_DIRECTORY> listDirectories = read_MINIDUMP_DIRECTORY_list(pPdStruct);
 
-    for (qint32 i = 0; (i < listDirectories.count()) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+    for (qint32 i = 0; (i < listDirectories.count()) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         MINIDUMP_DIRECTORY directory = listDirectories.at(i);
 
         // Validate stream is within file bounds
@@ -457,7 +465,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
             continue;
         }
 
-        if (nFileParts & FILEPART_STREAM) {
+        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
             FPART record = {};
 
             record.filePart = FILEPART_STREAM;
@@ -471,7 +479,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
     }
 
     // Check for overlay
-    if (nFileParts & FILEPART_OVERLAY) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
         // Find the maximum offset + size from all streams and directory
         qint64 nMaxOffset = sizeof(MINIDUMP_HEADER);
         qint64 nDirectoryEnd = header.StreamDirectoryRva + header.NumberOfStreams * sizeof(MINIDUMP_DIRECTORY);
@@ -858,11 +866,18 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         return false;
     }
 
+    finishUnpack(pState, nullptr);
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
     pState->mapUnpackProperties = mapProperties;
 
     qint64 nFileSize = getSize();
 
     if (nFileSize < (qint64)sizeof(MINIDUMP_HEADER)) {
+        finishUnpack(pState, nullptr);
         return false;
     }
 
@@ -870,11 +885,16 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
     // Validate header
     if (header.Signature != 0x504D444D) {
+        finishUnpack(pState, nullptr);
         return false;
     }
 
     // Create and initialize context
-    MINIDUMP_UNPACK_CONTEXT *pContext = new MINIDUMP_UNPACK_CONTEXT;
+    MINIDUMP_UNPACK_CONTEXT *pContext = new (std::nothrow) MINIDUMP_UNPACK_CONTEXT;
+    if (!pContext) {
+        finishUnpack(pState, nullptr);
+        return false;
+    }
 
     // Initialize state
     pState->nCurrentOffset = (qint64)sizeof(MINIDUMP_HEADER);
@@ -896,6 +916,7 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
         if ((nStreamOffset >= 0) && (nStreamSize >= 0) && (nStreamOffset < nFileSize) && (nStreamOffset + nStreamSize <= nFileSize)) {
             pContext->listStreamOffsets.append(nStreamOffset);
+            pContext->listValidDirectoryIndexes.append(i);
             pState->nNumberOfRecords++;
         } else {
             // Invalid stream, add -1 as placeholder
@@ -904,23 +925,18 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     }
 
     // Reset to first valid stream
-    if (pState->nNumberOfRecords > 0) {
-        // Find first valid stream
-        for (qint32 i = 0; i < pContext->listStreamOffsets.count(); i++) {
-            if (pContext->listStreamOffsets.at(i) >= 0) {
-                pState->nCurrentIndex = i;
-                pState->nCurrentOffset = pContext->listStreamOffsets.at(i);
-                bResult = true;
-                break;
-            }
-        }
+    if ((pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qint32 nDirectoryIndex = pContext->listValidDirectoryIndexes.first();
+        pState->nCurrentIndex = 0;
+        pState->nCurrentOffset = pContext->listStreamOffsets.at(nDirectoryIndex);
+        bResult = true;
     }
 
     // Clean up if no valid streams found
     if (!bResult) {
         delete pContext;
         pState->pContext = nullptr;
-        pState->nNumberOfRecords = 0;
+        finishUnpack(pState, nullptr);
     }
 
     return bResult;
@@ -928,26 +944,29 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
 XBinary::ARCHIVERECORD XMiniDump::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
         return result;
     }
 
-    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= (qint32)pState->nNumberOfRecords)) {
+    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
     MINIDUMP_UNPACK_CONTEXT *pContext = static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
 
-    if ((pState->nCurrentIndex >= pContext->listDirectories.count()) || (pState->nCurrentIndex >= pContext->listStreamOffsets.count())) {
+    if (pState->nCurrentIndex >= pContext->listValidDirectoryIndexes.count()) {
         return result;
     }
 
-    MINIDUMP_DIRECTORY directory = pContext->listDirectories.at(pState->nCurrentIndex);
-    qint64 nStreamOffset = pContext->listStreamOffsets.at(pState->nCurrentIndex);
+    qint32 nDirectoryIndex = pContext->listValidDirectoryIndexes.at(pState->nCurrentIndex);
+    if ((nDirectoryIndex < 0) || (nDirectoryIndex >= pContext->listDirectories.count()) ||
+        (nDirectoryIndex >= pContext->listStreamOffsets.count())) {
+        return result;
+    }
+    MINIDUMP_DIRECTORY directory = pContext->listDirectories.at(nDirectoryIndex);
+    qint64 nStreamOffset = pContext->listStreamOffsets.at(nDirectoryIndex);
 
     // Skip invalid streams
     if (nStreamOffset < 0) {
@@ -987,23 +1006,22 @@ bool XMiniDump::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
 
 bool XMiniDump::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
-    if (!pState || !pState->pContext) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
     MINIDUMP_UNPACK_CONTEXT *pContext = static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
 
-    // Move to next stream (skip invalid ones)
-    for (qint32 i = pState->nCurrentIndex + 1; i < pContext->listStreamOffsets.count(); i++) {
-        if (pContext->listStreamOffsets.at(i) >= 0) {
-            pState->nCurrentIndex = i;
-            pState->nCurrentOffset = pContext->listStreamOffsets.at(i);
+    qint32 nNextIndex = pState->nCurrentIndex + 1;
+    if (nNextIndex < pContext->listValidDirectoryIndexes.count()) {
+        qint32 nDirectoryIndex = pContext->listValidDirectoryIndexes.at(nNextIndex);
+        if ((nDirectoryIndex >= 0) && (nDirectoryIndex < pContext->listStreamOffsets.count())) {
+            pState->nCurrentIndex = nNextIndex;
+            pState->nCurrentOffset = pContext->listStreamOffsets.at(nDirectoryIndex);
             bResult = true;
-            break;
         }
     }
 
@@ -1030,6 +1048,8 @@ bool XMiniDump::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

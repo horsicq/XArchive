@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <limits>
+#include <new>
 
 namespace {
 const qint32 N_ALGO_UTILS_BUFFER_SIZE = 65536;
@@ -103,6 +104,12 @@ qint32 Algo_utils::getReadChunkSize(const XBinary::DATAPROCESS_STATE *pState, qi
 
 int Algo_utils::ascii85ReadByte(XBinary::DATAPROCESS_STATE *pState)
 {
+    if (!pState || !pState->pDeviceInput || (pState->nCountInput < 0) || (pState->nInputLimit < -1) ||
+        ((pState->nInputLimit != -1) && (pState->nCountInput >= pState->nInputLimit))) {
+        if (pState) pState->bReadError = true;
+        return -1;
+    }
+
     char c = 0;
     qint64 nRead = pState->pDeviceInput->read(&c, 1);
     if (nRead != 1) {
@@ -115,11 +122,10 @@ int Algo_utils::ascii85ReadByte(XBinary::DATAPROCESS_STATE *pState)
     return (unsigned char)c;
 }
 
-void Algo_utils::ascii85WriteBytes(XBinary::DATAPROCESS_STATE *pState, const unsigned char *pBuffer, int nSize)
+bool Algo_utils::ascii85WriteBytes(XBinary::DATAPROCESS_STATE *pState, const unsigned char *pBuffer, int nSize)
 {
-    if (nSize > 0) {
-        XBinary::_writeDevice((char *)pBuffer, nSize, pState);
-    }
+    if (!pState || (nSize < 0) || ((nSize > 0) && !pBuffer)) return false;
+    return (nSize == 0) || (XBinary::_writeDevice((char *)pBuffer, nSize, pState) == nSize);
 }
 
 void *Algo_utils::szAlloc(ISzAllocPtr pAlloc, size_t nSize)
@@ -470,95 +476,128 @@ int Algo_utils::deflate64WriteFunc(void *pOutDesc, unsigned char *pBuffer, unsig
 {
     XBinary::DATAPROCESS_STATE *pDecompressState = (XBinary::DATAPROCESS_STATE *)pOutDesc;
 
-    XBinary::_writeDevice((char *)pBuffer, nSize, pDecompressState);
+    if (!pDecompressState || (nSize > (unsigned)(std::numeric_limits<qint32>::max)())) {
+        if (pDecompressState) pDecompressState->bWriteError = true;
+        return 1;
+    }
 
-    return pDecompressState->bWriteError ? 1 : 0;
+    return (XBinary::_writeDevice((char *)pBuffer, (qint32)nSize, pDecompressState) == (qint32)nSize) &&
+                   !pDecompressState->bWriteError
+               ? 0
+               : 1;
 }
 
 bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel, int nWindowBits)
 {
-    bool bResult = false;
-
-    if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput) {
-        prepareState(pCompressState);
-
-        z_stream stream;
-        stream.zalloc = Z_NULL;
-        stream.zfree = Z_NULL;
-        stream.opaque = Z_NULL;
-
-        if (X_deflateInit2(&stream, nCompressionLevel, Z_DEFLATED, nWindowBits, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-            return false;
-        }
-
-        char inputBuffer[N_ALGO_UTILS_BUFFER_SIZE];
-        char outputBuffer[N_ALGO_UTILS_BUFFER_SIZE];
-
-        qint64 nTotalProcessed = 0;
-        int flush = Z_NO_FLUSH;
-        int ret = Z_OK;
-
-        do {
-            qint32 nToRead = getReadChunkSize(pCompressState, N_ALGO_UTILS_BUFFER_SIZE);
-            if (nToRead == 0) {
-                flush = Z_FINISH;
-                stream.avail_in = 0;
-            } else {
-                qint32 nRead = pCompressState->pDeviceInput->read(inputBuffer, nToRead);
-                if (nRead < 0) {
-                    pCompressState->bReadError = true;
-                    X_deflateEnd(&stream);
-                    return false;
-                } else if (nRead == 0) {
-                    if ((pCompressState->nInputLimit != -1) && (nTotalProcessed < pCompressState->nInputLimit)) {
-                        pCompressState->bReadError = true;
-                        X_deflateEnd(&stream);
-                        return false;
-                    }
-                    flush = Z_FINISH;
-                    stream.avail_in = 0;
-                } else {
-                    pCompressState->nCountInput += nRead;
-                    nTotalProcessed += nRead;
-                    stream.avail_in = nRead;
-                    stream.next_in = (Bytef *)inputBuffer;
-                }
-            }
-
-            do {
-                stream.avail_out = N_ALGO_UTILS_BUFFER_SIZE;
-                stream.next_out = (Bytef *)outputBuffer;
-
-                ret = X_deflate(&stream, flush);
-                if (ret == Z_STREAM_ERROR) {
-                    X_deflateEnd(&stream);
-                    return false;
-                }
-
-                qint32 nCompressed = N_ALGO_UTILS_BUFFER_SIZE - stream.avail_out;
-                if (nCompressed > 0) {
-                    qint64 nWritten = pCompressState->pDeviceOutput->write(outputBuffer, nCompressed);
-                    if (nWritten != nCompressed) {
-                        pCompressState->bWriteError = true;
-                        X_deflateEnd(&stream);
-                        return false;
-                    }
-                    pCompressState->nCountOutput += nCompressed;
-                }
-            } while ((stream.avail_out == 0) && (ret != Z_STREAM_END));
-
-            if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-                X_deflateEnd(&stream);
-                return false;
-            }
-        } while ((flush != Z_FINISH) || (ret != Z_STREAM_END));
-
-        X_deflateEnd(&stream);
-        bResult =
-            !pCompressState->bReadError && !pCompressState->bWriteError && ((pCompressState->nInputLimit == -1) || (nTotalProcessed == pCompressState->nInputLimit));
+    if (!pCompressState || !pCompressState->pDeviceInput || !pCompressState->pDeviceOutput ||
+        (pCompressState->nInputOffset < 0) || (pCompressState->nInputLimit < -1)) {
+        return false;
     }
 
-    return bResult;
+    pCompressState->bReadError = false;
+    pCompressState->bWriteError = false;
+    pCompressState->nCountInput = 0;
+    pCompressState->nCountOutput = 0;
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!pCompressState->pDeviceInput->seek(pCompressState->nInputOffset) &&
+        (pCompressState->pDeviceInput->pos() != pCompressState->nInputOffset)) {
+        pCompressState->bReadError = true;
+        return false;
+    }
+
+    // Compression appends at the destination's current position.  Archive
+    // writers use this to place a raw DEFLATE stream after their own header.
+    if (pCompressState->pDeviceOutput->pos() < 0) {
+        pCompressState->bWriteError = true;
+        return false;
+    }
+
+    char *pInputBuffer = new (std::nothrow) char[N_ALGO_UTILS_BUFFER_SIZE];
+    if (!pInputBuffer) {
+        return false;
+    }
+
+    char *pOutputBuffer = new (std::nothrow) char[N_ALGO_UTILS_BUFFER_SIZE];
+    if (!pOutputBuffer) {
+        delete[] pInputBuffer;
+        return false;
+    }
+
+    z_stream stream = {};
+    stream.zalloc = Z_NULL;
+    stream.zfree = Z_NULL;
+    stream.opaque = Z_NULL;
+
+    int ret = X_deflateInit2(&stream, nCompressionLevel, Z_DEFLATED, nWindowBits, 8, Z_DEFAULT_STRATEGY);
+    bool bInputFinished = false;
+
+    if (ret == Z_OK) {
+        do {
+            if (!XBinary::isPdStructNotCanceled(pPdStruct)) break;
+
+            const qint32 nToRead = getReadChunkSize(pCompressState, N_ALGO_UTILS_BUFFER_SIZE);
+            qint32 nRead = 0;
+            if (nToRead > 0) {
+                nRead = XBinary::_readDevice(pInputBuffer, nToRead, pCompressState);
+                if (nRead < 0) break;
+            } else if ((pCompressState->nInputLimit != -1) &&
+                       (pCompressState->nCountInput != pCompressState->nInputLimit)) {
+                pCompressState->bReadError = true;
+                break;
+            }
+
+            if (nRead == 0) {
+                if ((pCompressState->nInputLimit == -1) && !pCompressState->pDeviceInput->atEnd()) {
+                    pCompressState->bReadError = true;
+                    break;
+                }
+                bInputFinished = true;
+            }
+
+            stream.avail_in = static_cast<uInt>(nRead);
+            stream.next_in = reinterpret_cast<Bytef *>(pInputBuffer);
+            const int nFlush = bInputFinished ? Z_FINISH : Z_NO_FLUSH;
+
+            do {
+                if (!XBinary::isPdStructNotCanceled(pPdStruct)) break;
+                stream.avail_out = N_ALGO_UTILS_BUFFER_SIZE;
+                stream.next_out = reinterpret_cast<Bytef *>(pOutputBuffer);
+                ret = X_deflate(&stream, nFlush);
+                if ((ret != Z_OK) && (ret != Z_STREAM_END)) break;
+
+                const qint32 nCompressed = N_ALGO_UTILS_BUFFER_SIZE - static_cast<qint32>(stream.avail_out);
+                qint64 nWrittenTotal = 0;
+                while ((nWrittenTotal < nCompressed) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+                    const qint64 nWritten = pCompressState->pDeviceOutput->write(pOutputBuffer + nWrittenTotal,
+                                                                                nCompressed - nWrittenTotal);
+                    if ((nWritten <= 0) || (nWritten > (nCompressed - nWrittenTotal)) ||
+                        (pCompressState->nCountOutput >
+                         ((std::numeric_limits<qint64>::max)() - nWritten))) {
+                        pCompressState->bWriteError = true;
+                        break;
+                    }
+                    nWrittenTotal += nWritten;
+                    pCompressState->nCountOutput += nWritten;
+                }
+                if (pCompressState->bWriteError || (nWrittenTotal != nCompressed)) break;
+            } while ((stream.avail_out == 0) && (ret != Z_STREAM_END));
+
+            if (pCompressState->bReadError || pCompressState->bWriteError ||
+                ((ret != Z_OK) && (ret != Z_STREAM_END))) {
+                break;
+            }
+        } while (ret != Z_STREAM_END);
+
+        X_deflateEnd(&stream);
+    }
+
+    delete[] pInputBuffer;
+    delete[] pOutputBuffer;
+
+    return (ret == Z_STREAM_END) && bInputFinished && !pCompressState->bReadError && !pCompressState->bWriteError &&
+           XBinary::isPdStructNotCanceled(pPdStruct) &&
+           ((pCompressState->nInputLimit == -1) || (pCompressState->nCountInput == pCompressState->nInputLimit));
 }
 
 bool Algo_utils::getUclMethodFromState(const XBinary::DATAPROCESS_STATE *pDecompressState, XUCLDecoder::METHOD *pMethod)

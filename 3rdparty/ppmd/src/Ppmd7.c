@@ -461,7 +461,7 @@ static PPMD7_CTX_PTR Ppmd7_CreateSuccessors(CPpmd7 *p)
   CPpmd_Byte_Ref upBranch = (CPpmd_Byte_Ref)SUCCESSOR(p->FoundState);
   Byte newSym, newFreq;
   unsigned numPs = 0;
-  CPpmd_State *ps[PPMD7_MAX_ORDER];
+  CPpmd_State *ps[PPMD7_MAX_ORDER] = { NULL };
 
   if (p->OrderFall != 0)
     ps[numPs++] = p->FoundState;
@@ -497,8 +497,14 @@ static PPMD7_CTX_PTR Ppmd7_CreateSuccessors(CPpmd7 *p)
       }
       break;
     }
+    if (numPs >= PPMD7_MAX_ORDER)
+      return NULL;
     ps[numPs++] = s;
   }
+
+  /* A valid context chain always leaves at least one pending state here. */
+  if (numPs == 0)
+    return NULL;
   
   // All created contexts will have single-symbol with new RAW-Successor
   // All new RAW-Successors will point to next position in RAW text
@@ -549,7 +555,8 @@ static PPMD7_CTX_PTR Ppmd7_CreateSuccessors(CPpmd7 *p)
     ONE_STATE(c1)->Freq = newFreq;
     SetSuccessor(ONE_STATE(c1), upBranch);
     c1->Suffix = REF(c);
-    SetSuccessor(ps[--numPs], REF(c1));
+    numPs--;
+    SetSuccessor(ps[numPs], REF(c1));
     c = c1;
   }
   while (numPs != 0);

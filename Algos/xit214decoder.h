@@ -27,11 +27,9 @@ class XIT214Decoder : public QObject {
     Q_OBJECT
 
     struct STATE {
-        char *ibuf;
-        quint32 bitlen;
-        quint8 bitnum;
-        qint32 nInputBufferSize;
-        char *pBufferIn;
+        QByteArray baInput;
+        quint64 nBitPosition;
+        bool bError;
     };
 
 public:
@@ -40,7 +38,7 @@ public:
 
 private:
     static quint32 readbits(STATE *pState, quint8 n);
-    static bool readBlock(STATE *pState, XBinary::DATAPROCESS_STATE *pDecompressState);
+    static bool readBlock(STATE *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct);
 };
 
 #endif  // XIT214DECODER_H

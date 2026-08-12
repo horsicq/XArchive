@@ -60,7 +60,7 @@ private:
         qint32 nBitCount;
         quint16 nBlockSize;
         qint16 nGetLen;
-        qint16 nGetBuf;
+        quint16 nGetBuf;
         quint16 arrLeft[2 * NC - 1];
         quint16 arrRight[2 * NC - 1];
         quint8 arrCLen[NC];
@@ -73,14 +73,14 @@ private:
         const quint8 *pBuf;
         qint32 nBufAvail;
         quint32 nCompLeft;
-        // I/O devices for refilling
-        QIODevice *pInput;
-        qint64 nInputBytesRead;
+        // Exact bounded I/O state.
+        XBinary::DATAPROCESS_STATE *pProcessState;
+        XBinary::PDSTRUCT *pPdStruct;
         quint8 *pReadBuffer;
         qint32 nReadBufferSize;
     };
 
-    static void refillInputBuffer(ArjDecodeState *pState);
+    static bool refillInputBuffer(ArjDecodeState *pState);
     static bool fillBuf(ArjDecodeState *pState, qint32 nBits);
     static quint16 getBits(ArjDecodeState *pState, qint32 nBits);
     static bool initGetBits(ArjDecodeState *pState);
@@ -95,6 +95,8 @@ private:
     // Method 4 helpers
     static quint16 decodeLen(ArjDecodeState *pState);
     static quint16 decodePtr(ArjDecodeState *pState);
+
+    static bool decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct, bool bFastest);
 };
 
 #endif  // XARJDECODER_H

@@ -30,7 +30,7 @@ bool XAPK::isValid(PDSTRUCT *pPdStruct)
 
     XZip xzip(getDevice());
 
-    if (xzip.isValid()) {
+    if (xzip.isValid(pPdStruct)) {
         qint64 nECDOffset = xzip.findECDOffset(pPdStruct);
         bResult = xzip.isAPK(nECDOffset, pPdStruct);
     }
@@ -42,7 +42,7 @@ bool XAPK::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XAPK xapk(pDevice);
 
-    return xapk.isValid();
+    return xapk.isValid(pPdStruct);
 }
 
 bool XAPK::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)

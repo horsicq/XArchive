@@ -42,6 +42,8 @@ public:
         DMG_STRIPE_ADC = 0x80000004,
         DMG_STRIPE_DEFLATE = 0x80000005,
         DMG_STRIPE_BZ = 0x80000006,
+        DMG_STRIPE_LZFSE = 0x80000007,
+        DMG_STRIPE_XZ = 0x80000008,
         DMG_STRIPE_SKIP = 0x7FFFFFFE,
         DMG_STRIPE_END = 0xFFFFFFFF
     };
@@ -105,6 +107,7 @@ public:
         QIODevice *pSourceDevice;
         QByteArray baXmlData;
         qint64 nDataForkOffset;
+        qint64 nDataForkLength;
         QList<QString> listPartitionNames;
         QList<MISH_BLOCK> listMishBlocks;
         QList<QList<BLOCK_DATA>> listStripes;
@@ -142,10 +145,13 @@ public:
 
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1,
+                                      PDSTRUCT *pPdStruct = nullptr) override;
 
     // Archive methods
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
+    virtual QList<PM_INFO> unpackImplemented() override;
 
     // Streaming unpack API
     virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
@@ -160,9 +166,23 @@ public:
     static BLOCK_DATA readBlockData(QIODevice *pDevice, qint64 nOffset);
 
 private:
+    bool _loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bRequireXml,
+                         PDSTRUCT *pPdStruct, qint64 *pKolyOffset = nullptr);
+    bool _loadPartitionMetadata(KOLY_BLOCK *pKolyBlock, QList<DMG_PARTITION_INFO> *pPartitions,
+                                PDSTRUCT *pPdStruct);
+    bool _parsePartition(const DMG_PARTITION_INFO &partitionInfo, const KOLY_BLOCK &kolyBlock,
+                         MISH_BLOCK *pMishBlock, QList<BLOCK_DATA> *pStripes, PDSTRUCT *pPdStruct);
+    bool _parseAllPartitions(const QList<DMG_PARTITION_INFO> &listPartitions, const KOLY_BLOCK &kolyBlock,
+                             QList<MISH_BLOCK> *pMishBlocks, QList<QList<BLOCK_DATA>> *pStripes,
+                             PDSTRUCT *pPdStruct);
     QList<DMG_PARTITION_INFO> _parseBlkxPartitions(const QByteArray &baXml, PDSTRUCT *pPdStruct);
-    bool _decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, QIODevice *pDevice, PDSTRUCT *pPdStruct);
-    bool _writeZeroes(QIODevice *pDevice, qint64 nSize);
+    QList<DMG_PARTITION_INFO> _parseResourceForkPartitions(const QByteArray &baResource,
+                                                           PDSTRUCT *pPdStruct);
+    bool _decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, qint64 nDataForkLength,
+                           qint64 nMishDataOffset, QIODevice *pDevice, PDSTRUCT *pPdStruct);
+    bool _writeZeroes(QIODevice *pDevice, qint64 nSize, PDSTRUCT *pPdStruct);
+    bool _validatePartitionCRC(QIODevice *pDevice, const MISH_BLOCK &mishBlock,
+                               const QList<BLOCK_DATA> &listStripes, PDSTRUCT *pPdStruct);
 private:
     INTERNAL_INFO m_internalInfo;
 };

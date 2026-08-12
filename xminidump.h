@@ -301,6 +301,7 @@ private:
     struct MINIDUMP_UNPACK_CONTEXT {
         QList<qint64> listStreamOffsets;            // Pre-computed offsets for each stream
         QList<MINIDUMP_DIRECTORY> listDirectories;  // Cached directory entries
+        QList<qint32> listValidDirectoryIndexes;    // Public enumeration index -> directory entry
     };
 private:
     INTERNAL_INFO m_internalInfo;

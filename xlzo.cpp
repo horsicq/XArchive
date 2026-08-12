@@ -21,6 +21,51 @@
 #include "xlzo.h"
 #include "Algos/xlzodecoder.h"
 
+#include <new>
+
+namespace {
+class LzoDiscardDevice : public QIODevice {
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+    qint64 writeData(const char *, qint64 nSize) override { return (nSize >= 0) ? nSize : -1; }
+};
+
+bool measureLzoStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize,
+                      XBinary::PDSTRUCT *pPdStruct)
+{
+    if (pnCompressedSize) *pnCompressedSize = 0;
+    if (pnUncompressedSize) *pnUncompressedSize = 0;
+    if (!pDevice || (nFileSize <= 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    SubDevice input(pDevice, 0, nFileSize);
+    LzoDiscardDevice output;
+    if (!input.open(QIODevice::ReadOnly) || !output.open(QIODevice::WriteOnly)) {
+        if (input.isOpen()) input.close();
+        if (output.isOpen()) output.close();
+        return false;
+    }
+
+    XBinary::DATAPROCESS_STATE state = {};
+    state.pDeviceInput = &input;
+    state.pDeviceOutput = &output;
+    state.nInputOffset = 0;
+    state.nInputLimit = nFileSize;
+    state.nProcessedLimit = -1;
+
+    const bool bResult = XLZODecoder::decompress(&state, pPdStruct) &&
+                         (state.nCountInput >= 0) && (state.nCountInput <= nFileSize) &&
+                         (state.nCountOutput >= 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+    if (bResult) {
+        if (pnCompressedSize) *pnCompressedSize = state.nCountInput;
+        if (pnUncompressedSize) *pnUncompressedSize = state.nCountOutput;
+    }
+
+    output.close();
+    input.close();
+    return bResult;
+}
+}  // namespace
+
 XBinary::XCONVERT _TABLE_XLzo_STRUCTID[] = {{XLzo::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                             {XLzo::STRUCTID_LZO_HEADER, "LZO_HEADER", QString("LZOP header")}};
 
@@ -34,16 +79,14 @@ XLzo::~XLzo()
 
 bool XLzo::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    return isValid(getDevice());
+    return isValid(getDevice(), pPdStruct);
 }
 
 bool XLzo::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (pDevice && pDevice->seek(0)) {
+    if (pDevice && XBinary::isPdStructNotCanceled(pPdStruct) && pDevice->seek(0)) {
         quint8 magic[9];
         if (pDevice->read((char *)magic, 9) == 9) {
             const quint8 nExpected[] = {0x89, 0x4C, 0x5A, 0x4F, 0x00, 0x0D, 0x0A, 0x1A, 0x0A};
@@ -292,13 +335,18 @@ QList<XBinary::XFRECORD> XLzo::getXFRecords(FT fileType, quint32 nStructID, cons
 
 QList<XBinary::FPART> XLzo::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 nFileSize = getSize();
     if (nFileSize <= 0) return listResult;
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
@@ -306,63 +354,44 @@ QList<XBinary::FPART> XLzo::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         header.nVirtualAddress = -1;
         header.sName = tr("Header");
         listResult.append(header);
+        if (!canAppend()) return listResult;
     }
 
-    qint64 nMaxOffset = 0;
+    if (!(nFileParts & (FILEPART_STREAM | FILEPART_DATA | FILEPART_OVERLAY))) return listResult;
 
-    {
-        SubDevice sd(getDevice(), 0, nFileSize);
+    qint64 nCompressedSize = 0;
+    qint64 nUncompressedSize = 0;
+    if (!measureLzoStream(getDevice(), nFileSize, &nCompressedSize, &nUncompressedSize, pPdStruct)) return listResult;
 
-        if (sd.open(QIODevice::ReadOnly)) {
-            QBuffer buffer;
-            if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.pDeviceInput = &sd;
-                decompressState.pDeviceOutput = &buffer;
-                decompressState.nInputOffset = 0;
-                decompressState.nInputLimit = nFileSize;
-
-                if (XLZODecoder::decompress(&decompressState, pPdStruct)) {
-                    nMaxOffset = decompressState.nCountInput;
-
-                    if (nFileParts & FILEPART_STREAM) {
-                        FPART region = {};
-                        region.filePart = FILEPART_STREAM;
-                        region.nFileOffset = 0;
-                        region.nFileSize = nMaxOffset;
-                        region.nVirtualAddress = -1;
-                        region.sName = tr("Stream");
-                        region.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZOP);
-                        region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, decompressState.nCountOutput);
-                        region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, decompressState.nCountInput);
-
-                        listResult.append(region);
-                    }
-                }
-
-                buffer.close();
-            }
-
-            sd.close();
-        }
+    if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+        FPART region = {};
+        region.filePart = FILEPART_STREAM;
+        region.nFileOffset = 0;
+        region.nFileSize = nCompressedSize;
+        region.nVirtualAddress = -1;
+        region.sName = tr("Stream");
+        region.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZOP);
+        region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
+        region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nCompressedSize);
+        listResult.append(region);
     }
 
-    if (nFileParts & FILEPART_DATA) {
+    if ((nFileParts & FILEPART_DATA) && canAppend()) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 0;
-        data.nFileSize = nMaxOffset;
+        data.nFileSize = nCompressedSize;
         data.nVirtualAddress = -1;
         data.sName = tr("Data");
         listResult.append(data);
     }
 
-    if (nFileParts & FILEPART_OVERLAY) {
-        if (nMaxOffset < nFileSize) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+        if (nCompressedSize < nFileSize) {
             FPART ov = {};
             ov.filePart = FILEPART_OVERLAY;
-            ov.nFileOffset = nMaxOffset;
-            ov.nFileSize = nFileSize - nMaxOffset;
+            ov.nFileOffset = nCompressedSize;
+            ov.nFileSize = nFileSize - nCompressedSize;
             ov.nVirtualAddress = -1;
             ov.sName = tr("Overlay");
             listResult.append(ov);
@@ -381,73 +410,44 @@ QMap<XBinary::UNPACK_PROP, QVariant> XLzo::getDefaultUnpackProperties()
 
 bool XLzo::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState) {
-        pState->mapUnpackProperties = mapProperties;
+    if (!pState) return false;
+    finishUnpack(pState, nullptr);
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) return false;
 
-        if (!isValid(pPdStruct)) {
-            return false;
-        }
+    const qint64 nFileSize = getSize();
+    qint64 nCompressedSize = 0;
+    qint64 nUncompressedSize = 0;
+    if (!measureLzoStream(getDevice(), nFileSize, &nCompressedSize, &nUncompressedSize, pPdStruct)) return false;
 
-        LZO_UNPACK_CONTEXT *pContext = new LZO_UNPACK_CONTEXT;
-        pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+    LZO_UNPACK_CONTEXT *pContext = new (std::nothrow) LZO_UNPACK_CONTEXT;
+    if (!pContext) return false;
+    pContext->nCompressedSize = nCompressedSize;
+    pContext->nUncompressedSize = nUncompressedSize;
+    pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
 
-        qint64 nFileSize = getSize();
-        SubDevice sd(getDevice(), 0, nFileSize);
-
-        if (sd.open(QIODevice::ReadOnly)) {
-            QBuffer buffer;
-            if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.pDeviceInput = &sd;
-                decompressState.pDeviceOutput = &buffer;
-                decompressState.nInputOffset = 0;
-                decompressState.nInputLimit = nFileSize;
-                decompressState.nProcessedLimit = -1;
-
-                if (XLZODecoder::decompress(&decompressState, pPdStruct)) {
-                    pContext->nCompressedSize = decompressState.nCountInput;
-                    pContext->nUncompressedSize = decompressState.nCountOutput;
-                } else {
-                    pContext->nCompressedSize = nFileSize;
-                    pContext->nUncompressedSize = 0;
-                }
-
-                buffer.close();
-            }
-
-            sd.close();
-        }
-
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 1;
-        pState->pContext = pContext;
-
-        bResult = true;
-    }
-
-    return bResult;
+    pState->mapUnpackProperties = mapProperties;
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = nFileSize;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 1;
+    pState->pContext = pContext;
+    return true;
 }
 
 XBinary::ARCHIVERECORD XLzo::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext) {
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return result;
     }
 
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -466,50 +466,49 @@ XBinary::ARCHIVERECORD XLzo::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XLzo::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
+    if (!pState || !pState->pContext || !pDevice || !pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+
+    if (pDevice->isSequential()) {
+        if (pDevice->pos() != 0) return false;
+    } else if (!pDevice->seek(0) || ((pDevice->size() != 0) && !XBinary::resize(pDevice, 0))) {
+        return false;
+    }
+
+    LZO_UNPACK_CONTEXT *pContext = static_cast<LZO_UNPACK_CONTEXT *>(pState->pContext);
+    SubDevice input(getDevice(), 0, pContext->nCompressedSize);
     bool bResult = false;
 
-    if (!pState || !pState->pContext || !pDevice) {
-        return false;
+    if (input.open(QIODevice::ReadOnly)) {
+        XBinary::DATAPROCESS_STATE state = {};
+        state.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+        state.pDeviceInput = &input;
+        state.pDeviceOutput = pDevice;
+        state.nInputOffset = 0;
+        state.nInputLimit = pContext->nCompressedSize;
+        state.nProcessedLimit = -1;
+        bResult = XLZODecoder::decompress(&state, pPdStruct) &&
+                  (state.nCountInput == pContext->nCompressedSize) &&
+                  (state.nCountOutput == pContext->nUncompressedSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+        input.close();
     }
 
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
-        return false;
+    if (!bResult && !pDevice->isSequential()) {
+        XBinary::resize(pDevice, 0);
+        pDevice->seek(0);
     }
-
-    qint64 nFileSize = getSize();
-    SubDevice sd(getDevice(), 0, nFileSize);
-
-    if (sd.open(QIODevice::ReadOnly)) {
-        XBinary::DATAPROCESS_STATE decompressState = {};
-        decompressState.pDeviceInput = &sd;
-        decompressState.pDeviceOutput = pDevice;
-        decompressState.nInputOffset = 0;
-        decompressState.nInputLimit = nFileSize;
-        decompressState.nProcessedLimit = -1;
-
-        bResult = XLZODecoder::decompress(&decompressState, pPdStruct);
-
-        sd.close();
-    }
-
+    pState->nCurrentOffset = bResult ? pContext->nCompressedSize : 0;
     return bResult;
 }
 
 bool XLzo::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
 
-    bool bResult = false;
-
-    if (!pState || !pState->pContext) {
-        return false;
-    }
-
-    pState->nCurrentIndex++;
-
-    bResult = false;
-
-    return bResult;
+    if (pState->nCurrentIndex < pState->nNumberOfRecords) ++pState->nCurrentIndex;
+    return pState->nCurrentIndex < pState->nNumberOfRecords;
 }
 
 bool XLzo::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -530,6 +529,8 @@ bool XLzo::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

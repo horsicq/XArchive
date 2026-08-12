@@ -21,225 +21,274 @@
 #include "xit214decoder.h"
 #include "algo_utils.h"
 
+#include <algorithm>
+
 XIT214Decoder::XIT214Decoder(QObject *parent) : QObject(parent)
 {
 }
 
 bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct)
 {
-    Algo_utils::seekToStart(pDecompressState);
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
+        ((nBits != 8) && (nBits != 16)) || (pDecompressState->nInputOffset < 0) ||
+        (pDecompressState->nInputLimit < -1) ||
+        !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
+        return false;
+    }
 
-    quint16 blklen; /* length of compressed data block in samples */
-    quint16 blkpos; /* position in block */
-    quint8 width;   /* actual "bit width" */
+    const qint64 nExpectedOutput =
+        pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
+    const qint32 nBytesPerSample = nBits / 8;
+    if ((nExpectedOutput < 0) || ((nExpectedOutput % nBytesPerSample) != 0)) {
+        return false;
+    }
 
-    qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+    Algo_utils::prepareState(pDecompressState);
+    if (pDecompressState->bReadError || pDecompressState->bWriteError ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
-    char *bufferOut = new char[_nBufferSize];
+    const qint32 nMaxBlockSamples = (nBits == 8) ? 0x8000 : 0x4000;
+    QByteArray baOutput(nMaxBlockSamples * nBytesPerSample, 0);
+    bool bResult = true;
 
-    bool bProcess = true;
-
-    while (XBinary::isPdStructNotCanceled(pPdStruct) && bProcess) {
-        STATE state = {};
-        memset(bufferOut, 0, _nBufferSize);
-        char *pDestpos = bufferOut; /* position in output buffer */
-
-        qint32 nBufferSize = _nBufferSize;
-
-        /* now unpack data till the dest buffer is full */
-        /* read a new block of compressed data and reset variables */
-
-        if (!readBlock(&state, pDecompressState)) {
-            bProcess = false;
+    while ((pDecompressState->nCountOutput < nExpectedOutput) && bResult &&
+           XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint64 nRemainingBytes = nExpectedOutput - pDecompressState->nCountOutput;
+        const qint32 nBlockSamples =
+            (qint32)(std::min)((qint64)nMaxBlockSamples, nRemainingBytes / nBytesPerSample);
+        if (nBlockSamples <= 0) {
+            bResult = false;
             break;
         }
 
-        blkpos = 0;
-        blklen = 0;
+        STATE state = {};
+        if (!readBlock(&state, pDecompressState, pPdStruct)) {
+            bResult = false;
+            break;
+        }
+
+        qint32 nBlockPosition = 0;
+        quint8 nWidth = (nBits == 8) ? 9 : 17;
 
         if (nBits == 8) {
-            quint16 value; /* value read from file to be processed */
-            char d1, d2;   /* integrator buffers (d2 for it2.15) */
+            quint8 nD1 = 0;
+            quint8 nD2 = 0;
 
-            d1 = d2 = 0; /* reset integrator buffers */
-            blklen = (nBufferSize < 0x8000) ? nBufferSize : 0x8000;
-            width = 9; /* start with width of 9 bits */
+            while ((nBlockPosition < nBlockSamples) && !state.bError &&
+                   XBinary::isPdStructNotCanceled(pPdStruct)) {
+                quint32 nValue = readbits(&state, nWidth);
+                if (state.bError) break;
 
-            /* now uncompress the data block */
-            while (blkpos < blklen) {
-                quint8 v;
-
-                value = readbits(&state, width); /* read bits */
-
-                if (width < 7) {                                     /* method 1 (1-6 bits) */
-                    if (value == (1 << (width - 1))) {               /* check for "100..." */
-                        value = readbits(&state, 3) + 1;             /* yes -> read new width; */
-                        width = (value < width) ? value : value + 1; /* and expand it */
-                        continue;                                    /* ... next value */
+                bool bWidthChange = false;
+                quint32 nNewWidth = nWidth;
+                if (nWidth < 7) {
+                    if (nValue == (1U << (nWidth - 1))) {
+                        nValue = readbits(&state, 3);
+                        if (state.bError) break;
+                        nValue++;
+                        nNewWidth = (nValue < nWidth) ? nValue : nValue + 1;
+                        bWidthChange = true;
                     }
-                } else if (width < 9) {                                      /* method 2 (7-8 bits) */
-                    quint16 border = (quint16)((0xFFu >> (9 - width)) - 4u); /* lower border for width chg */
-
-                    if (value > border && value <= (border + 8u)) {
-                        value -= border;                             /* convert width to 1-8 */
-                        width = (value < width) ? value : value + 1; /* and expand it */
-                        continue;                                    /* ... next value */
+                } else if (nWidth < 9) {
+                    const quint32 nBorder = (0xFFU >> (9 - nWidth)) - 4U;
+                    if ((nValue > nBorder) && (nValue <= (nBorder + 8U))) {
+                        nValue -= nBorder;
+                        nNewWidth = (nValue < nWidth) ? nValue : nValue + 1;
+                        bWidthChange = true;
                     }
-                } else if (width == 9) {            /* method 3 (9 bits) */
-                    if (value & 0x100) {            /* bit 8 set? */
-                        width = (value + 1) & 0xff; /* new width... */
-                        continue;                   /* ... and next value */
+                } else if (nWidth == 9) {
+                    if (nValue & 0x100U) {
+                        nNewWidth = (nValue + 1U) & 0xFFU;
+                        bWidthChange = true;
                     }
-                } else { /* illegal width, abort */
-                    bProcess = false;
+                } else {
+                    state.bError = true;
                     break;
                 }
 
-                /* now expand value to signed byte */
-                /*      sbyte v;  // sample value */
-                if (width < 8) {
-                    char shift = 8 - width;
-                    v = (value << shift);
-                    v >>= shift;
-                } else v = (quint8)value;
-
-                /* integrate upon the sample values */
-                d1 += v;
-                d2 += d1;
-
-                /* ... and store it into the buffer */
-                *(char *)pDestpos = bIs215 ? d2 : d1;
-                pDestpos++;
-
-                blkpos++;
-            }
-        } else if (nBits == 16) {
-            quint32 value; /* value read from file to be processed */
-            qint16 d1, d2; /* integrator buffers (d2 for it2.15) */
-
-            d1 = d2 = 0; /* reset integrator buffers */
-            blklen = (nBufferSize < 0x4000) ? nBufferSize : 0x4000;
-            width = 17; /* start with width of 17 bits */
-
-            while (blkpos < blklen) {
-                qint16 v;
-
-                value = readbits(&state, width); /* read bits */
-
-                if (width < 7) {                                     /* method 1 (1-6 bits) */
-                    if (value == (1 << (width - 1))) {               /* check for "100..." */
-                        value = readbits(&state, 4) + 1;             /* yes -> read new width; */
-                        width = (value < width) ? value : value + 1; /* and expand it */
-                        continue;                                    /* ... next value */
+                if (bWidthChange) {
+                    if ((nNewWidth < 1) || (nNewWidth > 9)) {
+                        state.bError = true;
+                        break;
                     }
-                } else if (width < 17) {                           /* method 2 (7-16 bits) */
-                    quint16 border = (0xFFFF >> (17 - width)) - 8; /* lower border for width chg */
-
-                    if (value > border && value <= (border + 16u)) {
-                        value -= border;                             /* convert width to 1-8 */
-                        width = (value < width) ? value : value + 1; /* and expand it */
-                        continue;                                    /* ... next value */
-                    }
-                } else if (width == 17) {           /* method 3 (17 bits) */
-                    if (value & 0x10000) {          /* bit 16 set? */
-                        width = (value + 1) & 0xff; /* new width... */
-                        continue;                   /* ... and next value */
-                    }
-                } else { /* illegal width, abort */
-                    bProcess = false;
-                    break;
+                    nWidth = (quint8)nNewWidth;
+                    continue;
                 }
 
-                /* now expand value to signed word */
-                /* sword v; // sample value */
-                if (width < 16) {
-                    quint8 shift = 16 - width;
-                    v = (value << shift);
-                    v >>= shift;
-                } else v = (qint16)value;
+                qint32 nSignedValue = (qint32)nValue;
+                if (nWidth < 8) {
+                    const quint32 nSignBit = 1U << (nWidth - 1);
+                    if (nValue & nSignBit) nSignedValue -= (qint32)(1U << nWidth);
+                } else {
+                    nSignedValue = (qint8)(quint8)nValue;
+                }
 
-                /* integrate upon the sample values */
-                d1 += v;
-                d2 += d1;
-
-                /* ... and store it into the buffer */
-                *(qint16 *)pDestpos = bIs215 ? d2 : d1;
-                pDestpos += 2;
-                blkpos++;
+                nD1 = (quint8)(nD1 + (quint8)nSignedValue);
+                nD2 = (quint8)(nD2 + nD1);
+                baOutput[nBlockPosition++] = (char)(bIs215 ? nD2 : nD1);
             }
-        }
-
-        if (state.pBufferIn) {
-            delete[] state.pBufferIn;
-            state.pBufferIn = nullptr;
-        }
-
-        /* now subtract block lenght from total length and go on */
-        nBufferSize -= blklen;
-
-        qint32 nCount = pDestpos - bufferOut;
-
-        if (nCount > 0) {
-            XBinary::_writeDevice(bufferOut, nCount, pDecompressState);
         } else {
-            bProcess = false;
+            quint16 nD1 = 0;
+            quint16 nD2 = 0;
+
+            while ((nBlockPosition < nBlockSamples) && !state.bError &&
+                   XBinary::isPdStructNotCanceled(pPdStruct)) {
+                quint32 nValue = readbits(&state, nWidth);
+                if (state.bError) break;
+
+                bool bWidthChange = false;
+                quint32 nNewWidth = nWidth;
+                if (nWidth < 7) {
+                    if (nValue == (1U << (nWidth - 1))) {
+                        nValue = readbits(&state, 4);
+                        if (state.bError) break;
+                        nValue++;
+                        nNewWidth = (nValue < nWidth) ? nValue : nValue + 1;
+                        bWidthChange = true;
+                    }
+                } else if (nWidth < 17) {
+                    const quint32 nBorder = (0xFFFFU >> (17 - nWidth)) - 8U;
+                    if ((nValue > nBorder) && (nValue <= (nBorder + 16U))) {
+                        nValue -= nBorder;
+                        nNewWidth = (nValue < nWidth) ? nValue : nValue + 1;
+                        bWidthChange = true;
+                    }
+                } else if (nWidth == 17) {
+                    if (nValue & 0x10000U) {
+                        nNewWidth = (nValue + 1U) & 0xFFU;
+                        bWidthChange = true;
+                    }
+                } else {
+                    state.bError = true;
+                    break;
+                }
+
+                if (bWidthChange) {
+                    if ((nNewWidth < 1) || (nNewWidth > 17)) {
+                        state.bError = true;
+                        break;
+                    }
+                    nWidth = (quint8)nNewWidth;
+                    continue;
+                }
+
+                qint32 nSignedValue = (qint32)nValue;
+                if (nWidth < 16) {
+                    const quint32 nSignBit = 1U << (nWidth - 1);
+                    if (nValue & nSignBit) nSignedValue -= (qint32)(1U << nWidth);
+                } else {
+                    nSignedValue = (qint16)(quint16)nValue;
+                }
+
+                nD1 = (quint16)(nD1 + (quint16)nSignedValue);
+                nD2 = (quint16)(nD2 + nD1);
+                const quint16 nSample = bIs215 ? nD2 : nD1;
+                const qint32 nOutputOffset = nBlockPosition * 2;
+                baOutput[nOutputOffset] = (char)(nSample & 0xFF);
+                baOutput[nOutputOffset + 1] = (char)(nSample >> 8);
+                nBlockPosition++;
+            }
+        }
+
+        if (state.bError || (nBlockPosition != nBlockSamples) ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            pDecompressState->bReadError = pDecompressState->bReadError || state.bError;
+            bResult = false;
+            break;
+        }
+
+        const qint32 nOutputBytes = nBlockSamples * nBytesPerSample;
+        if (XBinary::_writeDevice(baOutput.constData(), nOutputBytes, pDecompressState) != nOutputBytes) {
+            bResult = false;
+            break;
         }
     }
 
-    delete[] bufferOut;
-
-    return true;
+    const bool bInputConsumed = (pDecompressState->nInputLimit == -1)
+                                    ? pDecompressState->pDeviceInput->atEnd()
+                                    : (pDecompressState->nCountInput == pDecompressState->nInputLimit);
+    return bResult && bInputConsumed && (pDecompressState->nCountOutput == nExpectedOutput) &&
+           !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 quint32 XIT214Decoder::readbits(STATE *pState, quint8 n)
 {
-    quint32 retval = 0;
-    int offset = 0;
-    while (n) {
-        int m = n;
-
-        if (!pState->bitlen) {
-            return 0;
-        }
-
-        if (m > pState->bitnum) m = pState->bitnum;
-        retval |= (*(pState->ibuf) & ((1L << m) - 1)) << offset;
-        *(pState->ibuf) >>= m;
-        n -= m;
-        offset += m;
-        if (!(pState->bitnum -= m)) {
-            pState->bitlen--;
-            pState->ibuf++;
-            pState->bitnum = 8;
-        }
+    if (!pState || (n == 0) || (n > 32)) {
+        if (pState) pState->bError = true;
+        return 0;
     }
-    return retval;
+
+    const quint64 nTotalBits = (quint64)pState->baInput.size() * 8;
+    if ((pState->nBitPosition > nTotalBits) || ((quint64)n > (nTotalBits - pState->nBitPosition))) {
+        pState->bError = true;
+        return 0;
+    }
+
+    quint32 nResult = 0;
+    quint8 nOutputShift = 0;
+    quint8 nRemaining = n;
+    while (nRemaining > 0) {
+        const quint64 nByteIndex = pState->nBitPosition / 8;
+        const quint8 nBitOffset = (quint8)(pState->nBitPosition % 8);
+        const quint8 nTake = (std::min)((quint8)(8 - nBitOffset), nRemaining);
+        const quint32 nMask = (1U << nTake) - 1U;
+        const quint32 nByte = (quint8)pState->baInput.at((qint32)nByteIndex);
+        nResult |= ((nByte >> nBitOffset) & nMask) << nOutputShift;
+        pState->nBitPosition += nTake;
+        nOutputShift += nTake;
+        nRemaining -= nTake;
+    }
+
+    return nResult;
 }
 
-bool XIT214Decoder::readBlock(STATE *pState, XBinary::DATAPROCESS_STATE *pDecompressState)
+bool XIT214Decoder::readBlock(STATE *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    if (!pState || !pDecompressState || !pDecompressState->pDeviceInput) return false;
 
-    quint8 a = 0;
-    quint8 b = 0;
-
-    XBinary::_readDevice((char *)&a, 1, pDecompressState);
-    XBinary::_readDevice((char *)&b, 1, pDecompressState);
-
-    pState->nInputBufferSize = (b << 8) | a;
-
-    if ((pState->nInputBufferSize > 0) &&
-        (pDecompressState->pDeviceInput->size() - pDecompressState->nInputOffset + pDecompressState->nCountInput >= pState->nInputBufferSize)) {
-        pState->pBufferIn = new char[pState->nInputBufferSize];
-
-        bResult = (pState->nInputBufferSize == XBinary::_readDevice(pState->pBufferIn, pState->nInputBufferSize, pDecompressState));
-
-        pState->ibuf = pState->pBufferIn;
-        pState->bitlen = pState->nInputBufferSize;
-        pState->bitnum = 8;
-    } else {
-        bResult = false;
+    char header[2] = {};
+    qint32 nHeaderRead = 0;
+    while ((nHeaderRead < (qint32)sizeof(header)) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nRequest = Algo_utils::getReadChunkSize(pDecompressState, (qint32)sizeof(header) - nHeaderRead);
+        if (nRequest <= 0) break;
+        const qint32 nRead = XBinary::_readDevice(header + nHeaderRead, nRequest, pDecompressState);
+        if (nRead <= 0) break;
+        nHeaderRead += nRead;
     }
 
-    return bResult;
+    if ((nHeaderRead != (qint32)sizeof(header)) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        pDecompressState->bReadError = true;
+        return false;
+    }
+
+    const qint32 nInputBufferSize = (quint8)header[0] | ((qint32)(quint8)header[1] << 8);
+    if ((nInputBufferSize <= 0) ||
+        ((pDecompressState->nInputLimit != -1) &&
+         (nInputBufferSize > (pDecompressState->nInputLimit - pDecompressState->nCountInput)))) {
+        pDecompressState->bReadError = true;
+        return false;
+    }
+
+    pState->baInput.resize(nInputBufferSize);
+    qint32 nPayloadRead = 0;
+    while ((nPayloadRead < nInputBufferSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nRequest = Algo_utils::getReadChunkSize(pDecompressState, nInputBufferSize - nPayloadRead);
+        if (nRequest <= 0) break;
+        const qint32 nRead = XBinary::_readDevice(pState->baInput.data() + nPayloadRead, nRequest, pDecompressState);
+        if (nRead <= 0) break;
+        nPayloadRead += nRead;
+    }
+
+    if ((nPayloadRead != nInputBufferSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        pDecompressState->bReadError = true;
+        pState->baInput.clear();
+        return false;
+    }
+
+    pState->nBitPosition = 0;
+    pState->bError = false;
+    return true;
 }

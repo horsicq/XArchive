@@ -23,6 +23,7 @@
 #include "xbinary.h"
 
 #include <limits>
+#include <memory>
 #include <new>
 
 // LH1 currently uses whole-member input and output buffers. Bound both sides
@@ -30,9 +31,7 @@
 // near-2-GiB allocations (or two such allocations at once).
 static const qint64 LH1_MAX_PACKED_BUFFER_SIZE = 256LL * 1024 * 1024;
 static const qint64 LH1_MAX_UNPACKED_BUFFER_SIZE = 256LL * 1024 * 1024;
-
-static const quint16 cache_masks[] = {0x0000, 0x0001, 0x0003, 0x0007, 0x000F, 0x001F, 0x003F, 0x007F, 0x00FF, 0x01FF,
-                                      0x03FF, 0x07FF, 0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
+static const qint32 LH1_READ_BUFFER_SIZE = 0x10000;
 
 static const char bitlen_tbl[0x400] = {
     7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,
@@ -63,6 +62,34 @@ static const char bitlen_tbl[0x400] = {
 
 XLZHDecoder::XLZHDecoder(QObject *pParent) : QObject(pParent)
 {
+}
+
+bool XLZHDecoder::lzh_br_bit_count_is_valid(qint32 n)
+{
+    return (n >= 0) && (n <= 16);
+}
+
+quint16 XLZHDecoder::lzh_br_bits(const lzh_br *br, qint32 n)
+{
+    if ((br == nullptr) || !lzh_br_bit_count_is_valid(n) || (br->cache_avail < n) || (br->cache_avail > (qint32)CACHE_BITS) || (n == 0)) {
+        return 0;
+    }
+
+    const quint64 nMask = (((quint64)1) << n) - 1;
+    return (quint16)((br->cache_buffer >> (br->cache_avail - n)) & nMask);
+}
+
+quint16 XLZHDecoder::lzh_br_bits_forced(const lzh_br *br, qint32 n)
+{
+    if ((br == nullptr) || !lzh_br_bit_count_is_valid(n) || (br->cache_avail < 0) || (br->cache_avail > (qint32)CACHE_BITS) || (n == 0)) {
+        return 0;
+    }
+    if (br->cache_avail >= n) {
+        return lzh_br_bits(br, n);
+    }
+
+    const quint64 nMask = (((quint64)1) << n) - 1;
+    return (quint16)((br->cache_buffer << (n - br->cache_avail)) & nMask);
 }
 
 bool XLZHDecoder::lzh_decode_init(lzh_stream *strm, qint32 method)
@@ -236,6 +263,7 @@ qint32 XLZHDecoder::lzh_read_blocks(lzh_stream *strm, qint32 last)
                 /* Note: ST_RD_PT_1, ST_RD_PT_2 and ST_RD_PT_4 are
                  * used in reading both a literal table and a
                  * position table. */
+                if (!lzh_br_bit_count_is_valid(ds->pt.len_bits)) goto failed;
                 if (!lzh_br_read_ahead(strm, br, ds->pt.len_bits)) {
                     if (last) goto failed; /* Truncated data. */
                     ds->state = ST_RD_PT_1;
@@ -245,6 +273,7 @@ qint32 XLZHDecoder::lzh_read_blocks(lzh_stream *strm, qint32 last)
                 lzh_br_consume(br, ds->pt.len_bits);
                 /* FALL THROUGH */
             case ST_RD_PT_2:
+                if (!lzh_br_bit_count_is_valid(ds->pt.len_bits)) goto failed;
                 if (ds->pt.len_avail == 0) {
                     /* There is no bitlen. */
                     if (!lzh_br_read_ahead(strm, br, ds->pt.len_bits)) {
@@ -300,6 +329,7 @@ qint32 XLZHDecoder::lzh_read_blocks(lzh_stream *strm, qint32 last)
                 }
                 /* FALL THROUGH */
             case ST_RD_LITERAL_1:
+                if (!lzh_br_bit_count_is_valid(ds->lt.len_bits)) goto failed;
                 if (!lzh_br_read_ahead(strm, br, ds->lt.len_bits)) {
                     if (last) goto failed; /* Truncated data. */
                     ds->state = ST_RD_LITERAL_1;
@@ -309,6 +339,7 @@ qint32 XLZHDecoder::lzh_read_blocks(lzh_stream *strm, qint32 last)
                 lzh_br_consume(br, ds->lt.len_bits);
                 /* FALL THROUGH */
             case ST_RD_LITERAL_2:
+                if (!lzh_br_bit_count_is_valid(ds->lt.len_bits)) goto failed;
                 if (ds->lt.len_avail == 0) {
                     /* There is no bitlen. */
                     if (!lzh_br_read_ahead(strm, br, ds->lt.len_bits)) {
@@ -325,6 +356,7 @@ qint32 XLZHDecoder::lzh_read_blocks(lzh_stream *strm, qint32 last)
                 memset(ds->lt.freq, 0, sizeof(ds->lt.freq));
                 /* FALL THROUGH */
             case ST_RD_LITERAL_3:
+                if (!lzh_br_bit_count_is_valid(ds->pt.max_bits)) goto failed;
                 i = ds->loop;
                 while (i < ds->lt.len_avail) {
                     if (!lzh_br_read_ahead(strm, br, ds->pt.max_bits)) {
@@ -400,6 +432,8 @@ qint32 XLZHDecoder::lzh_decode_blocks(lzh_stream *strm, qint32 last)
     qint32 w_pos = ds->w_pos, w_mask = ds->w_mask, w_size = ds->w_size;
     qint32 lt_max_bits = lt->max_bits, pt_max_bits = pt->max_bits;
     qint32 state = ds->state;
+
+    if (!lzh_br_bit_count_is_valid(lt_max_bits) || !lzh_br_bit_count_is_valid(pt_max_bits)) goto failed;
 
     for (;;) {
         switch (state) {
@@ -480,6 +514,7 @@ qint32 XLZHDecoder::lzh_decode_blocks(lzh_stream *strm, qint32 last)
                     /* We need an additional adjustment number to
                      * the position. */
                     qint32 p = copy_pos - 1;
+                    if (!lzh_br_bit_count_is_valid(p)) goto failed;
                     if (!lzh_br_read_ahead(strm, &bre, p)) {
                         if (last) goto failed; /* Truncated data.*/
                         state = ST_GET_POS_2;
@@ -560,6 +595,11 @@ next_data:
 
 qint32 XLZHDecoder::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
 {
+    if ((strm == nullptr) || (br == nullptr) || (br->cache_avail < 0) || (br->cache_avail > (qint32)CACHE_BITS) || (strm->avail_in < 0) ||
+        ((strm->avail_in > 0) && (strm->next_in == nullptr))) {
+        return 0;
+    }
+
     qint32 n = CACHE_BITS - br->cache_avail;
 
     for (;;) {
@@ -568,24 +608,24 @@ qint32 XLZHDecoder::lzh_br_fillup(lzh_stream *strm, lzh_br *br)
             switch (x) {
                 case 8:
                     br->cache_buffer = ((quint64)strm->next_in[0]) << 56 | ((quint64)strm->next_in[1]) << 48 | ((quint64)strm->next_in[2]) << 40 |
-                                       ((quint64)strm->next_in[3]) << 32 | ((quint32)strm->next_in[4]) << 24 | ((quint32)strm->next_in[5]) << 16 |
-                                       ((quint32)strm->next_in[6]) << 8 | (quint32)strm->next_in[7];
+                                       ((quint64)strm->next_in[3]) << 32 | ((quint64)strm->next_in[4]) << 24 | ((quint64)strm->next_in[5]) << 16 |
+                                       ((quint64)strm->next_in[6]) << 8 | (quint64)strm->next_in[7];
                     strm->next_in += 8;
                     strm->avail_in -= 8;
                     br->cache_avail += 8 * 8;
                     return (1);
                 case 7:
                     br->cache_buffer = (br->cache_buffer << 56) | ((quint64)strm->next_in[0]) << 48 | ((quint64)strm->next_in[1]) << 40 |
-                                       ((quint64)strm->next_in[2]) << 32 | ((quint32)strm->next_in[3]) << 24 | ((quint32)strm->next_in[4]) << 16 |
-                                       ((quint32)strm->next_in[5]) << 8 | (quint32)strm->next_in[6];
+                                       ((quint64)strm->next_in[2]) << 32 | ((quint64)strm->next_in[3]) << 24 | ((quint64)strm->next_in[4]) << 16 |
+                                       ((quint64)strm->next_in[5]) << 8 | (quint64)strm->next_in[6];
                     strm->next_in += 7;
                     strm->avail_in -= 7;
                     br->cache_avail += 7 * 8;
                     return (1);
                 case 6:
                     br->cache_buffer = (br->cache_buffer << 48) | ((quint64)strm->next_in[0]) << 40 | ((quint64)strm->next_in[1]) << 32 |
-                                       ((quint32)strm->next_in[2]) << 24 | ((quint32)strm->next_in[3]) << 16 | ((quint32)strm->next_in[4]) << 8 |
-                                       (quint32)strm->next_in[5];
+                                       ((quint64)strm->next_in[2]) << 24 | ((quint64)strm->next_in[3]) << 16 | ((quint64)strm->next_in[4]) << 8 |
+                                       (quint64)strm->next_in[5];
                     strm->next_in += 6;
                     strm->avail_in -= 6;
                     br->cache_avail += 6 * 8;
@@ -1272,7 +1312,10 @@ bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     } catch (const std::bad_alloc &) {
         return false;
     }
-    char buffer[0x10000];
+    std::unique_ptr<char[]> pReadBuffer(new (std::nothrow) char[LH1_READ_BUFFER_SIZE]);
+    if (!pReadBuffer) {
+        return false;
+    }
     while (((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput < pDecompressState->nInputLimit)) &&
            XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((pDecompressState->nInputLimit == -1) && (baIn.size() >= LH1_MAX_PACKED_BUFFER_SIZE)) {
@@ -1286,11 +1329,11 @@ bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XB
             break;
         }
 
-        const qint32 nReadSize = Algo_utils::getReadChunkSize(pDecompressState, (qint32)sizeof(buffer));
+        const qint32 nReadSize = Algo_utils::getReadChunkSize(pDecompressState, LH1_READ_BUFFER_SIZE);
         if (nReadSize <= 0) {
             break;
         }
-        const qint32 nRead = XBinary::_readDevice(buffer, nReadSize, pDecompressState);
+        const qint32 nRead = XBinary::_readDevice(pReadBuffer.get(), nReadSize, pDecompressState);
         if (nRead <= 0) {
             break;
         }
@@ -1298,7 +1341,7 @@ bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XB
             return false;
         }
         try {
-            baIn.append(buffer, nRead);
+            baIn.append(pReadBuffer.get(), nRead);
         } catch (const std::bad_alloc &) {
             return false;
         }
@@ -1314,8 +1357,8 @@ bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     }
 
     QByteArray baOut;
-    Lzhuf decoder(reinterpret_cast<const quint8 *>(baIn.constData()), baIn.size());
-    if (!decoder.decode(&baOut, nTextSize, pPdStruct)) {
+    std::unique_ptr<Lzhuf> pDecoder(new (std::nothrow) Lzhuf(reinterpret_cast<const quint8 *>(baIn.constData()), baIn.size()));
+    if (!pDecoder || !pDecoder->decode(&baOut, nTextSize, pPdStruct)) {
         return false;
     }
 
@@ -1323,7 +1366,7 @@ bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     // unused bytes mean the declared compressed member contains trailing data
     // and must not be accepted as an exact LH1 stream.
     const qint64 nTotalInputBits = (qint64)baIn.size() * 8;
-    if ((decoder.bitsConsumed > nTotalInputBits) || ((nTotalInputBits - decoder.bitsConsumed) >= 8)) {
+    if ((pDecoder->bitsConsumed > nTotalInputBits) || ((nTotalInputBits - pDecoder->bitsConsumed) >= 8)) {
         return false;
     }
 

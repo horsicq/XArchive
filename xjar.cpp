@@ -32,7 +32,7 @@ bool XJAR::isValid(PDSTRUCT *pPdStruct)
 {
     XZip xzip(getDevice());
 
-    if (xzip.isValid()) {
+    if (xzip.isValid(pPdStruct)) {
         qint64 nECDOffset = xzip.findECDOffset(pPdStruct);
         return xzip.isJAR(nECDOffset, pPdStruct);
     }

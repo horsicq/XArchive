@@ -870,7 +870,7 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
   CPpmd_Byte_Ref upBranch = (CPpmd_Byte_Ref)SUCCESSOR(p->FoundState);
   Byte newSym, newFreq, flags;
   unsigned numPs = 0;
-  CPpmd_State *ps[PPMD8_MAX_ORDER + 1]; /* fixed over Shkarin's code. Maybe it could work without + 1 too. */
+  CPpmd_State *ps[PPMD8_MAX_ORDER + 1] = { NULL }; /* fixed over Shkarin's code. Maybe it could work without + 1 too. */
   
   if (!skip)
     ps[numPs++] = p->FoundState;
@@ -891,7 +891,7 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
     else
     {
       s = ONE_STATE(c);
-      s->Freq = (Byte)(s->Freq + (!SUFFIX(c)->NumStats & (s->Freq < 24)));
+      s->Freq = (Byte)(s->Freq + (!SUFFIX(c)->NumStats && (s->Freq < 24)));
     }
     successor = SUCCESSOR(s);
     if (successor != upBranch)
@@ -906,8 +906,14 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
       }
       break;
     }
+    if (numPs >= PPMD8_MAX_ORDER + 1)
+      return NULL;
     ps[numPs++] = s;
   }
+
+  /* A valid context chain always leaves at least one pending state here. */
+  if (numPs == 0)
+    return NULL;
   
   
   
@@ -958,7 +964,8 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
     c1->Union2.State2.Freq = newFreq;
     Ppmd8State_SetSuccessor(ONE_STATE(c1), upBranch);
     c1->Suffix = REF(c);
-    Ppmd8State_SetSuccessor(ps[--numPs], REF(c1));
+    numPs--;
+    Ppmd8State_SetSuccessor(ps[numPs], REF(c1));
     c = c1;
   }
   while (numPs != 0);

@@ -2723,16 +2723,25 @@ FORCE_INLINE_TEMPLATE size_t FSE_decompress_usingDTable_generic(
     for ( ; (BIT_reloadDStream(&bitD)==BIT_DStream_unfinished) & (op<olimit) ; op+=4) {
         op[0] = FSE_GETSYMBOL(&state1);
 
+#if defined(_MSC_VER)
+#pragma warning(suppress : 6326)  /* Compile-time 32/64-bit accumulator selection. */
+#endif
         if (FSE_MAX_TABLELOG*2+7 > sizeof(bitD.bitContainer)*8)
             BIT_reloadDStream(&bitD);
 
         op[1] = FSE_GETSYMBOL(&state2);
 
+#if defined(_MSC_VER)
+#pragma warning(suppress : 6326)  /* Compile-time 32/64-bit accumulator selection. */
+#endif
         if (FSE_MAX_TABLELOG*4+7 > sizeof(bitD.bitContainer)*8)
             { if (BIT_reloadDStream(&bitD) > BIT_DStream_unfinished) { op+=2; break; } }
 
         op[2] = FSE_GETSYMBOL(&state1);
 
+#if defined(_MSC_VER)
+#pragma warning(suppress : 6326)  /* Compile-time 32/64-bit accumulator selection. */
+#endif
         if (FSE_MAX_TABLELOG*2+7 > sizeof(bitD.bitContainer)*8)
             BIT_reloadDStream(&bitD);
 

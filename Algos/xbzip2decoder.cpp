@@ -1112,6 +1112,8 @@ void BZ2_hbMakeCodeLengths(UChar *len, Int32 *freq, Int32 alphaSize, Int32 maxLe
     Int32 weight[BZ_MAX_ALPHA_SIZE * 2];
     Int32 parent[BZ_MAX_ALPHA_SIZE * 2];
 
+    if (len == NULL || freq == NULL || alphaSize < 1 || alphaSize > BZ_MAX_ALPHA_SIZE || maxLen < 1) return;
+
     for (i = 0; i < alphaSize; i++) weight[i + 1] = (freq[i] == 0 ? 1 : freq[i]) << 8;
 
     while (SZ_True) {
@@ -1155,8 +1157,12 @@ void BZ2_hbMakeCodeLengths(UChar *len, Int32 *freq, Int32 alphaSize, Int32 maxLe
         for (i = 1; i <= alphaSize; i++) {
             j = 0;
             k = i;
-            while (parent[k] >= 0) {
-                k = parent[k];
+            while (SZ_True) {
+                if (k < 0 || k >= (BZ_MAX_ALPHA_SIZE * 2)) return;
+                const Int32 parentIndex = parent[k];
+                if (parentIndex < 0) break;
+                if (parentIndex <= k || parentIndex >= (BZ_MAX_ALPHA_SIZE * 2)) return;
+                k = parentIndex;
                 j++;
             }
             len[i - 1] = j;
@@ -1861,6 +1867,8 @@ save_state_and_return:
 
 /* ===== End embedded bzip2 helper sources ===== */
 
+#include <new>
+
 XBZIP2Decoder::XBZIP2Decoder(QObject *parent) : QObject(parent)
 {
 }
@@ -1869,13 +1877,27 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 {
     bool bResult = false;
 
-    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput &&
+        (pDecompressState->nInputOffset >= 0) && (pDecompressState->nInputLimit >= -1) &&
+        XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
+        if (nRequestedBufferSize <= 0) return false;
+        const qint32 _nBufferSize = qBound((qint32)0x1000, nRequestedBufferSize, (qint32)0x100000);
 
-        char *bufferIn = new char[_nBufferSize];
-        char *bufferOut = new char[_nBufferSize];
+        char *bufferIn = new (std::nothrow) char[_nBufferSize];
+        if (!bufferIn) return false;
+        char *bufferOut = new (std::nothrow) char[_nBufferSize];
+        if (!bufferOut) {
+            delete[] bufferIn;
+            return false;
+        }
 
-        Algo_utils::seekToStart(pDecompressState);
+        Algo_utils::prepareState(pDecompressState);
+        if (pDecompressState->bReadError || pDecompressState->bWriteError) {
+            delete[] bufferIn;
+            delete[] bufferOut;
+            return false;
+        }
 
         bz_stream strm = {};
         qint32 ret = BZ_MEM_ERROR;
@@ -1939,9 +1961,15 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 
             X_BZ2_bzDecompressEnd(&strm);
 
-            if (ret == BZ_STREAM_END) {
-                bResult = true;
-            }
+            const bool bConsumedInput = (strm.avail_in == 0) &&
+                                        ((pDecompressState->nInputLimit == -1) ||
+                                         (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+            const bool bExpectedOutput = !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) ||
+                                         ((pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() >= 0) &&
+                                          (pDecompressState->nCountOutput ==
+                                           pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
+            bResult = (ret == BZ_STREAM_END) && bConsumedInput && bExpectedOutput && !pDecompressState->bReadError &&
+                      !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         delete[] bufferIn;

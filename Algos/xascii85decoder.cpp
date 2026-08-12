@@ -33,25 +33,17 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) return false;
 
-    Algo_utils::seekToStart(pDecompressState);
+    Algo_utils::prepareState(pDecompressState);
+    if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     // Detect optional opening marker <~ (Adobe style) but it's not required in PDF.
     // Peek first two bytes if at beginning of provided range.
-    if (pDecompressState->nCountInput == 0 && pDecompressState->nInputLimit != 0) {
-        qint64 pos = pDecompressState->pDeviceInput->pos();
-        char marker[2];
-        qint64 r = pDecompressState->pDeviceInput->read(marker, 2);
-        if (r == 2) {
-            if (!(marker[0] == '<' && marker[1] == '~')) {
-                // Not a marker: rewind to allow normal processing
-                pDecompressState->pDeviceInput->seek(pos);
-            } else {
-                pDecompressState->nCountInput += 2;
-            }
-        } else {
-            if (r > 0) {
-                // Not enough data
-                pDecompressState->pDeviceInput->seek(pos);
+    if ((pDecompressState->nInputLimit == -1) || (pDecompressState->nInputLimit >= 2)) {
+        const QByteArray baMarker = pDecompressState->pDeviceInput->peek(2);
+        if (baMarker == QByteArrayLiteral("<~")) {
+            char marker[2] = {};
+            if (XBinary::_readDevice(marker, sizeof(marker), pDecompressState) != sizeof(marker)) {
+                return false;
             }
         }
     }
@@ -78,21 +70,20 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
                 end = true;
                 break;
             } else {
-                // Malformed end marker; treat as end anyway.
-                end = true;
+                pDecompressState->bReadError = true;
                 break;
             }
         } else if (c == 'z') {  // Shortcut for 0x00000000, only allowed when no digits collected
             if (count != 0) {
-                // Invalid placement; ignore per robustness principle.
-                continue;
+                pDecompressState->bReadError = true;
+                break;
             }
             unsigned char zeros[4] = {0, 0, 0, 0};
-            Algo_utils::ascii85WriteBytes(pDecompressState, zeros, 4);
+            if (!Algo_utils::ascii85WriteBytes(pDecompressState, zeros, 4)) return false;
             continue;
         } else if (c < '!' || c > 'u') {
-            // Out of range character – skip (could set error flag, but being liberal aids damaged PDFs)
-            continue;
+            pDecompressState->bReadError = true;
+            break;
         } else {
             // Accumulate digit
             accum = accum * 85 + (quint32)(c - '!');
@@ -106,7 +97,7 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
                 tuple[1] = (unsigned char)((accum >> 16) & 0xFF);
                 tuple[2] = (unsigned char)((accum >> 8) & 0xFF);
                 tuple[3] = (unsigned char)(accum & 0xFF);
-                Algo_utils::ascii85WriteBytes(pDecompressState, tuple, 4);
+                if (!Algo_utils::ascii85WriteBytes(pDecompressState, tuple, 4)) return false;
                 accum = 0;
                 count = 0;
             }
@@ -114,9 +105,9 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
     }
 
     // Handle partial tuple at EOF/EOD: count 2..4 digits => produce (count - 1) bytes.
-    if (!pDecompressState->bWriteError && !pDecompressState->bReadError) {
+    if (!pDecompressState->bWriteError && !pDecompressState->bReadError && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (count == 1) {
-            // Single leftover digit is invalid – ignore.
+            pDecompressState->bReadError = true;
         } else if (count > 1) {
             for (int i = count; i < 5; ++i) accum = accum * 85 + 84;  // Pad with 'u'
             if (accum > 0xFFFFFFFFULL) {
@@ -127,7 +118,7 @@ bool XASCII85Decoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressStat
                 tail[1] = (unsigned char)((accum >> 16) & 0xFF);
                 tail[2] = (unsigned char)((accum >> 8) & 0xFF);
                 tail[3] = (unsigned char)(accum & 0xFF);
-                Algo_utils::ascii85WriteBytes(pDecompressState, tail, count - 1);
+                if (!Algo_utils::ascii85WriteBytes(pDecompressState, tail, count - 1)) return false;
             }
         }
     }

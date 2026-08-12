@@ -30,8 +30,10 @@
 // Both decode a single chunk whose uncompressed size is known by the caller.
 class XXPressDecoder {
 public:
-    static bool decompressPlain(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint32 nUncompressedSize);
-    static bool decompressHuffman(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint32 nUncompressedSize);
+    static bool decompressPlain(const QByteArray &baCompressed, QByteArray *pbaUncompressed,
+                                qint32 nUncompressedSize, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompressHuffman(const QByteArray &baCompressed, QByteArray *pbaUncompressed,
+                                  qint32 nUncompressedSize, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XXPRESSDECODER_H

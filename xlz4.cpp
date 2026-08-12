@@ -40,11 +40,9 @@ bool XLZ4::isValid(PDSTRUCT *pPdStruct)
 
 bool XLZ4::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XLZ4 lz4(pDevice);
 
-    return lz4.isValid();
+    return lz4.isValid(pPdStruct);
 }
 
 XBinary::MODE XLZ4::getMode()
@@ -239,13 +237,18 @@ QList<XBinary::XFRECORD> XLZ4::getXFRecords(FT fileType, quint32 nStructID, cons
 
 QList<XBinary::FPART> XLZ4::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
     qint64 nFileSize = getSize();
 
-    if ((nFileParts & FILEPART_HEADER) && (nFileSize > 0)) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend() && (nFileSize > 0)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
@@ -255,7 +258,7 @@ QList<XBinary::FPART> XLZ4::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         listResult.append(header);
     }
 
-    if ((nFileParts & FILEPART_STREAM) && (nFileSize > (qint64)sizeof(LZ4_FRAME_HEADER))) {
+    if ((nFileParts & FILEPART_STREAM) && canAppend() && (nFileSize > (qint64)sizeof(LZ4_FRAME_HEADER))) {
         FPART stream = {};
         stream.filePart = FILEPART_STREAM;
         stream.nFileOffset = sizeof(LZ4_FRAME_HEADER);

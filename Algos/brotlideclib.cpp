@@ -921,9 +921,10 @@ BROTLI_UNUSED_FUNCTION void BrotliSuppressUnusedFunctions(void)
 #define BROTLI_MAX_NPOSTFIX 3
 #define BROTLI_MAX_NDIRECT 120
 #define BROTLI_MAX_DISTANCE_BITS 24U
-#define BROTLI_DISTANCE_ALPHABET_SIZE(NPOSTFIX, NDIRECT, MAXNBITS) (BROTLI_NUM_DISTANCE_SHORT_CODES + (NDIRECT) + ((MAXNBITS) << ((NPOSTFIX) + 1)))
+#define BROTLI_DISTANCE_ALPHABET_SIZE(NPOSTFIX, NDIRECT, MAXNBITS) \
+    (BROTLI_NUM_DISTANCE_SHORT_CODES + (NDIRECT) + ((brotli_reg_t)(MAXNBITS) << ((NPOSTFIX) + 1)))
 
-#define BROTLI_NUM_DISTANCE_SYMBOLS BROTLI_DISTANCE_ALPHABET_SIZE(BROTLI_MAX_NDIRECT, BROTLI_MAX_NPOSTFIX, BROTLI_LARGE_MAX_DISTANCE_BITS)
+#define BROTLI_NUM_DISTANCE_SYMBOLS BROTLI_DISTANCE_ALPHABET_SIZE(BROTLI_MAX_NPOSTFIX, BROTLI_MAX_NDIRECT, BROTLI_LARGE_MAX_DISTANCE_BITS)
 
 #define BROTLI_MAX_DISTANCE 0x3FFFFFC
 
@@ -5721,11 +5722,14 @@ BROTLI_INTERNAL extern const brotli_reg_t kBrotliBitMask[33];
 
 static BROTLI_INLINE brotli_reg_t BitMask(brotli_reg_t n)
 {
-    if (BROTLI_IS_CONSTANT(n) || BROTLI_HAS_UBFX) {
-        return ~(~((brotli_reg_t)0) << n);
-    } else {
-        return kBrotliBitMask[n];
-    }
+#if defined(BROTLI_TARGET_ARMV7) || defined(BROTLI_TARGET_ARMV8_ANY)
+    return ~(~((brotli_reg_t)0) << n);
+#elif BROTLI_GNUC_HAS_BUILTIN(__builtin_constant_p, 3, 0, 1) || BROTLI_INTEL_VERSION_CHECK(16, 0, 0)
+    if (BROTLI_IS_CONSTANT(n)) return ~(~((brotli_reg_t)0) << n);
+    return kBrotliBitMask[n];
+#else
+    return kBrotliBitMask[n];
+#endif
 }
 
 typedef struct {
@@ -9694,6 +9698,10 @@ BrotliDecoderResult BrotliDecoderDecompressStream(BrotliDecoderState* s, size_t*
             case BROTLI_STATE_CONTEXT_MAP_2: {
                 brotli_reg_t npostfix = s->distance_postfix_bits;
                 brotli_reg_t ndirect = s->num_direct_distance_codes;
+                if (npostfix > BROTLI_MAX_NPOSTFIX || ndirect > BROTLI_MAX_NDIRECT) {
+                    result = BROTLI_FAILURE(BROTLI_DECODER_ERROR_FORMAT_DISTANCE);
+                    break;
+                }
                 brotli_reg_t distance_alphabet_size_max = BROTLI_DISTANCE_ALPHABET_SIZE(npostfix, ndirect, BROTLI_MAX_DISTANCE_BITS);
                 brotli_reg_t distance_alphabet_size_limit = distance_alphabet_size_max;
                 BROTLI_BOOL allocation_success = BROTLI_TRUE;

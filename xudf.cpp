@@ -21,6 +21,8 @@
 #include "xudf.h"
 #include "Algos/xstoredecoder.h"
 
+#include <new>
+
 static XBinary::XCONVERT _TABLE_XUDF_STRUCTID[] = {{XUDF::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                    {XUDF::STRUCTID_TAG, "TAG", QString("Tag")},
                                                    {XUDF::STRUCTID_ANCHOR_VOLUME_DESCRIPTOR, "ANCHOR_VOLUME_DESCRIPTOR", QString("Anchor Volume Descriptor")},
@@ -43,7 +45,7 @@ bool XUDF::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (getSize() >= 0x8000) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 0x8000)) {
         _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
 
         // UDF Anchor Volume Descriptor Pointer is typically at sector 256 (offset 0x20000)
@@ -380,13 +382,17 @@ QList<XBinary::XFRECORD> XUDF::getXFRecords(FT fileType, quint32 nStructID, cons
 
 QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
     qint64 nTotalSize = getSize();
     qint64 nFormatSize = getFileFormatSize(pPdStruct);
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
 
         if (nAnchorOffset != -1) {
@@ -401,7 +407,7 @@ QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         }
     }
 
-    if (nFileParts & FILEPART_STREAM) {
+    if ((nFileParts & FILEPART_STREAM) && canAppend()) {
         qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
         qint64 nStreamOffset = 0;
         qint64 nStreamSize = nTotalSize;
@@ -422,7 +428,7 @@ QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         }
     }
 
-    if (nFileParts & FILEPART_OVERLAY) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
         if (nFormatSize > 0 && nFormatSize < nTotalSize) {
             FPART record = {};
             record.filePart = FILEPART_OVERLAY;
@@ -450,16 +456,34 @@ bool XUDF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     bool bResult = false;
 
     if (pState) {
+        finishUnpack(pState, nullptr);
+
+        if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+            return false;
+        }
+
         pState->mapUnpackProperties = mapProperties;
 
-        UDF_UNPACK_CONTEXT *pContext = new UDF_UNPACK_CONTEXT;
+        UDF_UNPACK_CONTEXT *pContext = new (std::nothrow) UDF_UNPACK_CONTEXT;
+        if (!pContext) {
+            finishUnpack(pState, nullptr);
+            return false;
+        }
         pContext->nBlockSize = _getBlockSize();
         pContext->listRecords = _parseFileSystem(pContext->nBlockSize, pPdStruct);
         pContext->nCurrentRecordIndex = 0;
 
+        if (!isPdStructNotCanceled(pPdStruct)) {
+            delete pContext;
+            finishUnpack(pState, nullptr);
+            return false;
+        }
+
         pState->pContext = pContext;
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = pContext->listRecords.count();
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = getSize();
 
         bResult = true;
     }
@@ -469,14 +493,14 @@ bool XUDF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XUDF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD result = {};
 
-    if (pState && pState->pContext) {
+    if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         UDF_UNPACK_CONTEXT *pContext = (UDF_UNPACK_CONTEXT *)pState->pContext;
 
-        if (pContext->nCurrentRecordIndex < pContext->listRecords.count()) {
+        if ((pContext->nCurrentRecordIndex >= 0) && (pContext->nCurrentRecordIndex < pContext->listRecords.count()) &&
+            (pContext->nCurrentRecordIndex == pState->nCurrentIndex)) {
             result = pContext->listRecords.at(pContext->nCurrentRecordIndex);
         }
     }
@@ -517,11 +541,10 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
 bool XUDF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
-    if (pState && pState->pContext) {
+    if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         UDF_UNPACK_CONTEXT *pContext = (UDF_UNPACK_CONTEXT *)pState->pContext;
 
         pContext->nCurrentRecordIndex++;
@@ -537,17 +560,24 @@ bool XUDF::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
-    bool bResult = false;
+    if (!pState) {
+        return false;
+    }
 
-    if (pState && pState->pContext) {
+    if (pState->pContext) {
         UDF_UNPACK_CONTEXT *pContext = (UDF_UNPACK_CONTEXT *)pState->pContext;
         delete pContext;
         pState->pContext = nullptr;
-
-        bResult = true;
     }
 
-    return bResult;
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
+
+    return true;
 }
 
 XUDF::UDF_TAG XUDF::_readTag(qint64 nOffset)

@@ -431,7 +431,7 @@ static PPMD7_CTX_PTR Ppmd7_CreateSuccessors(CPpmd7 *p)
     CPpmd_Byte_Ref upBranch = (CPpmd_Byte_Ref)SUCCESSOR(p->FoundState);
     Byte newSym, newFreq;
     unsigned numPs = 0;
-    CPpmd_State *ps[PPMD7_MAX_ORDER];
+    CPpmd_State *ps[PPMD7_MAX_ORDER] = {NULL};
 
     if (p->OrderFall != 0) ps[numPs++] = p->FoundState;
 
@@ -458,8 +458,13 @@ static PPMD7_CTX_PTR Ppmd7_CreateSuccessors(CPpmd7 *p)
             }
             break;
         }
+        if (numPs >= PPMD7_MAX_ORDER) return NULL;
         ps[numPs++] = s;
     }
+
+    // A valid model always has at least one pending state here. Reject a
+    // damaged context chain instead of allowing the decrement below to wrap.
+    if (numPs == 0) return NULL;
 
     // All created contexts will have single-symbol with new RAW-Successor
     // All new RAW-Successors will point to next position in RAW text
@@ -502,7 +507,8 @@ static PPMD7_CTX_PTR Ppmd7_CreateSuccessors(CPpmd7 *p)
         ONE_STATE(c1)->Freq = newFreq;
         SetSuccessor(ONE_STATE(c1), upBranch);
         c1->Suffix = REF(c);
-        SetSuccessor(ps[--numPs], REF(c1));
+        numPs--;
+        SetSuccessor(ps[numPs], REF(c1));
         c = c1;
     } while (numPs != 0);
 
@@ -2063,7 +2069,7 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
     CPpmd_Byte_Ref upBranch = (CPpmd_Byte_Ref)SUCCESSOR(p->FoundState);
     Byte newSym, newFreq, flags;
     unsigned numPs = 0;
-    CPpmd_State *ps[PPMD8_MAX_ORDER + 1]; /* fixed over Shkarin's code. Maybe it could work without + 1 too. */
+    CPpmd_State *ps[PPMD8_MAX_ORDER + 1] = {NULL}; /* fixed over Shkarin's code. Maybe it could work without + 1 too. */
 
     if (!skip) ps[numPs++] = p->FoundState;
 
@@ -2084,7 +2090,7 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
             }
         } else {
             s = ONE_STATE(c);
-            if (!X_Ppmd8_IsGentee(p)) s->Freq = (Byte)(s->Freq + (!SUFFIX(c)->NumStats & (s->Freq < 24)));
+            if (!X_Ppmd8_IsGentee(p)) s->Freq = (Byte)(s->Freq + (!SUFFIX(c)->NumStats && (s->Freq < 24)));
         }
         successor = SUCCESSOR(s);
         if (successor != upBranch) {
@@ -2094,10 +2100,14 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
             }
             break;
         }
+        if (numPs >= PPMD8_MAX_ORDER + 1) return NULL;
         ps[numPs++] = s;
     }
 
     if (X_Ppmd8_IsGentee(p) && numPs == 0) return c;
+    // Non-Gentee callers also require a pending state before creating a
+    // successor. A zero count means the model's context chain is damaged.
+    if (numPs == 0) return NULL;
 
     newSym = *(const Byte *)Ppmd8_GetPtr(p, upBranch);
     upBranch++;
@@ -2135,7 +2145,8 @@ static PPMD8_CTX_PTR Ppmd8_CreateSuccessors(CPpmd8 *p, BoolInt skip, CPpmd_State
         c1->Union2.State2.Freq = newFreq;
         Ppmd8State_SetSuccessor(ONE_STATE(c1), upBranch);
         c1->Suffix = REF(c);
-        Ppmd8State_SetSuccessor(ps[--numPs], REF(c1));
+        numPs--;
+        Ppmd8State_SetSuccessor(ps[numPs], REF(c1));
         c = c1;
     } while (numPs != 0);
 
@@ -2958,6 +2969,9 @@ int X_Ppmd8g_DecodeSymbol(CPpmd8 *p)
 #include "xppmdmodel.h"
 #include "xppmd7model.h"
 
+#include <memory>
+#include <new>
+
 XPPMdDecoder::XPPMdDecoder(QObject *pParent) : QObject(pParent)
 {
 }
@@ -3013,6 +3027,10 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
         return false;
     }
 
+    const qint32 N_BUFFER_SIZE = 0x4000;
+    std::unique_ptr<char[]> pBufferOut(new (std::nothrow) char[N_BUFFER_SIZE]);
+    if (!pBufferOut) return false;
+
     // Initialize PPMd8 decoder using wrapper classes
     XPPMdModel model;
 
@@ -3026,9 +3044,6 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
     model.init(nOrder, nRestor);
 
     // Decompress
-    const qint32 N_BUFFER_SIZE = 0x4000;
-    char sBufferOut[N_BUFFER_SIZE];
-
     const bool bSizeKnown = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
     qint64 nUncompressedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, -1).toLongLong();
     if (bSizeKnown && (nUncompressedSize < 0)) return false;
@@ -3062,11 +3077,11 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
                 break;
             }
 
-            sBufferOut[nActual++] = (char)nSymbol;
+            pBufferOut[nActual++] = (char)nSymbol;
         }
 
         if (nActual > 0) {
-            if (!XBinary::_writeDevice(sBufferOut, nActual, pDecompressState)) {
+            if (!XBinary::_writeDevice(pBufferOut.get(), nActual, pDecompressState)) {
                 bSuccess = false;
                 break;
             }
@@ -3127,6 +3142,10 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
         return false;
     }
 
+    const qint32 N_BUFFER_SIZE = 0x4000;
+    std::unique_ptr<char[]> pBufferOut(new (std::nothrow) char[N_BUFFER_SIZE]);
+    if (!pBufferOut) return false;
+
     // Initialize Ppmd7 model (PPMdH variant used by 7z)
     XPPMd7Model model;
 
@@ -3141,9 +3160,6 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
     model.init(nOrder);  // PPMdH (Ppmd7) only takes order parameter
 
     // Decompress symbol by symbol
-    const qint32 N_BUFFER_SIZE = 0x4000;
-    char sBufferOut[N_BUFFER_SIZE];
-
     const bool bSizeKnown = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
     qint64 nUncompressedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, -1).toLongLong();
     if (bSizeKnown && (nUncompressedSize < 0)) return false;
@@ -3173,12 +3189,12 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
                 break;
             }
 
-            sBufferOut[nActual++] = (char)nSymbol;
+            pBufferOut[nActual++] = (char)nSymbol;
         }
 
         // Write decoded data
         if (nActual > 0) {
-            if (!XBinary::_writeDevice(sBufferOut, nActual, pDecompressState)) {
+            if (!XBinary::_writeDevice(pBufferOut.get(), nActual, pDecompressState)) {
                 bResult = false;
                 break;
             }

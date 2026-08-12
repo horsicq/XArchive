@@ -201,6 +201,11 @@ public:
 
     struct ZIP_PACK_CONTEXT {
         QList<ZIPFILE_RECORD> *pListZipFileRecords;
+        QIODevice *pDevice;
+        qint64 nStartOffset;
+        qint64 nCurrentOffset;
+        qint32 nNumberOfRecords;
+        bool bFailed;
     };
 
     // Format-specific context structures
@@ -224,7 +229,8 @@ public:
     static FT _getFileType(QIODevice *pDevice, QList<XArchive::RECORD> *pListRecords, bool bDeep, PDSTRUCT *pPdStruct);
 
     static bool addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord, PDSTRUCT *pPdStruct = nullptr);
-    static bool addCentralDirectory(QIODevice *pDest, QList<ZIPFILE_RECORD> *pListZipFileRecords, const QString &sComment = "");
+    static bool addCentralDirectory(QIODevice *pDest, QList<ZIPFILE_RECORD> *pListZipFileRecords, const QString &sComment = "",
+                                    PDSTRUCT *pPdStruct = nullptr, qint64 nStartPosition = -1);
 
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
@@ -280,6 +286,8 @@ public:
 
 protected:
     HANDLE_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
+    bool _readFileName(qint64 nFileNameOffset, qint64 nFileNameLength, quint16 nFlags,
+                       qint64 nExtraFieldOffset, qint64 nExtraFieldLength, QString *pFileName);
     bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith);
     qint32 _getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *pnRealSize, PDSTRUCT *pPdStruct);
     bool _isECDSignaturePresent(qint64 nOffset, PDSTRUCT *pPdStruct);

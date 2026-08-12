@@ -100,11 +100,15 @@ public:
 private:
     // Header structure size (including its 16-byte intro), starting at nOffset.
     qint64 _readHeaderSize(qint64 nOffset);
+    qint64 _getMainHeaderOffset();
     QString _readPayloadCompressorTag(qint64 nHeaderOffset);
 
     struct RPM_UNPACK_CONTEXT {
         qint64 nPayloadOffset;
         qint64 nPayloadSize;
+        qint64 nUncompressedSize;
+        quint32 nCRC32;
+        bool bHasCRC32;
         HANDLE_METHOD compressMethod;
         QString sFileName;
     };

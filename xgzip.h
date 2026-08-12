@@ -105,7 +105,7 @@ private:
         QString sFileName;         // Original file name (if available)
     };
 
-    bool _getHeaderInfo(qint64 *pHeaderSize, QString *pFileName = nullptr);
+    bool _getHeaderInfo(qint64 *pHeaderSize, QString *pFileName = nullptr, PDSTRUCT *pPdStruct = nullptr);
     bool _getFirstMemberInfo(GZIP_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct = nullptr);
 
 private:

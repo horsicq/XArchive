@@ -34,7 +34,7 @@ bool XNPM::isValid(PDSTRUCT *pPdStruct)
 
     XTAR_GZ xtarGz(getDevice());
 
-    if (xtarGz.isValid()) {
+    if (xtarGz.isValid(pPdStruct)) {
         QList<XArchive::RECORD> listArchiveRecords = xtarGz.getRecords(20000, pPdStruct);
 
         bResult = isValid(&listArchiveRecords, pPdStruct);
@@ -47,7 +47,7 @@ bool XNPM::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XNPM xtar(pDevice);
 
-    return xtar.isValid();
+    return xtar.isValid(pPdStruct);
 }
 
 bool XNPM::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)

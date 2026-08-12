@@ -24,35 +24,94 @@ XBinary::XCONVERT _TABLE_XDEB_STRUCTID[] = {
     {XDEB::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
 };
 
+namespace {
+static const qint32 N_DEB_MAX_MEMBERS = 0x10000;
+
+bool isDebTarMember(const QString &sName, const QString &sPrefix)
+{
+    if (sName == (sPrefix + QStringLiteral(".tar"))) {
+        return true;
+    }
+
+    static const char *const pSuffixes[] = {".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2", ".tar.lzma"};
+    for (qint32 i = 0; i < (qint32)(sizeof(pSuffixes) / sizeof(pSuffixes[0])); i++) {
+        if (sName == (sPrefix + QLatin1String(pSuffixes[i]))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+}  // namespace
+
 XDEB::XDEB(QIODevice *pDevice) : X_Ar(pDevice)
 {
 }
 
 bool XDEB::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    X_Ar xar(getDevice());
-
-    if (xar.isValid()) {
-        QList<XArchive::RECORD> listArchiveRecords = xar.getRecords(10, pPdStruct);  // TODO remove
-
-        bResult = isValid(&listArchiveRecords, pPdStruct);
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
     }
 
-    return bResult;
+    X_Ar xar(getDevice());
+    if (!xar.isValid(pPdStruct)) {
+        return false;
+    }
+
+    QList<XArchive::RECORD> listArchiveRecords = xar.getRecords(N_DEB_MAX_MEMBERS + 1, pPdStruct);
+    if (!isValid(&listArchiveRecords, pPdStruct)) {
+        return false;
+    }
+
+    const QByteArray baVersion = xar.decompress(&listArchiveRecords[0], pPdStruct);
+    return XBinary::isPdStructNotCanceled(pPdStruct) && (baVersion == QByteArrayLiteral("2.0\n"));
 }
 
 bool XDEB::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XDEB xdeb(pDevice);
 
-    return xdeb.isValid();
+    return xdeb.isValid(pPdStruct);
 }
 
 bool XDEB::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    return isArchiveRecordPresent("debian-binary", pListRecords, pPdStruct);
+    if (!pListRecords || (pListRecords->count() < 3) || (pListRecords->count() > N_DEB_MAX_MEMBERS) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    const RECORD &versionRecord = pListRecords->at(0);
+    if ((versionRecord.spInfo.sRecordName != QStringLiteral("debian-binary")) ||
+        (versionRecord.spInfo.nUncompressedSize != 4)) {
+        return false;
+    }
+
+    bool bControlSeen = false;
+    bool bDataSeen = false;
+    for (qint32 i = 1; i < pListRecords->count(); i++) {
+        const QString &sName = pListRecords->at(i).spInfo.sRecordName;
+        if (bDataSeen) {
+            // The format explicitly reserves members after data.tar for
+            // future extensions; current readers must ignore them.
+            continue;
+        }
+        if (sName.startsWith(QLatin1Char('_'))) {
+            // Ignorable extension members may appear between the required
+            // members when their names begin with an underscore.
+            continue;
+        }
+        if (!bControlSeen) {
+            if (!isDebTarMember(sName, QStringLiteral("control"))) return false;
+            bControlSeen = true;
+        } else {
+            if (!isDebTarMember(sName, QStringLiteral("data"))) return false;
+            bDataSeen = true;
+        }
+    }
+
+    return bControlSeen && bDataSeen;
 }
 
 QString XDEB::getVersion()
@@ -74,28 +133,26 @@ XBinary::FILEFORMATINFO XDEB::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
     XBinary::FILEFORMATINFO result = {};
 
-    QList<XArchive::RECORD> listArchiveRecords = getRecords(3, nullptr);
+    QList<XArchive::RECORD> listArchiveRecords = getRecords(N_DEB_MAX_MEMBERS + 1, pPdStruct);
 
     if (isValid(&listArchiveRecords, pPdStruct)) {
-        result.bIsValid = true;
-        result.nSize = getSize();
-        result.sExt = "deb";
-        result.fileType = FT_DEB;
-
         RECORD record = getArchiveRecord("debian-binary", &listArchiveRecords);
+        QByteArray baVersion = decompress(&record, pPdStruct);
 
-        if (record.spInfo.nUncompressedSize < 10) {
-            QByteArray baVersion = decompress(&record);
-            result.sVersion.append(baVersion);
-            result.sVersion = result.sVersion.trimmed();
+        if ((baVersion == QByteArrayLiteral("2.0\n")) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            result.bIsValid = true;
+            result.nSize = getSize();
+            result.sExt = "deb";
+            result.fileType = FT_DEB;
+            result.sVersion = QStringLiteral("2.0");
+
+            result.osName = OSNAME_DEBIANLINUX;
+
+            result.sArch = getArch();
+            result.mode = getMode();
+            result.sType = typeIdToString(getType());
+            result.endian = getEndian();
         }
-
-        result.osName = OSNAME_DEBIANLINUX;
-
-        result.sArch = getArch();
-        result.mode = getMode();
-        result.sType = typeIdToString(getType());
-        result.endian = getEndian();
     }
 
     return result;

@@ -237,7 +237,8 @@ private:
     FILEBLOCK14 readFileBlock14(qint64 nOffset);
     FILEBLOCK4 readFileBlock4(qint64 nOffset);
     FILEHEADER5 readFileHeader5(qint64 nOffset);
-    QString decodeRarUnicodeName(const QByteArray &nameData);
+    static bool decodeRar4UnicodeName(const QByteArray &nameData, QString *pResult);
+    static bool decodeRar5Name(const QByteArray &nameData, QString *pResult);
 
     // Decrypt a single RAR5 encrypted header block (IV + AES-CBC data)
     // Returns decrypted header bytes; sets *pConsumedSize to total bytes consumed from file

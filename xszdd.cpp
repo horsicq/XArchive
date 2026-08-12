@@ -19,6 +19,8 @@
  * SOFTWARE.
  */
 #include "xszdd.h"
+
+#include <new>
 #include "Algos/xlzssdecoder.h"
 
 static XBinary::XCONVERT _TABLE_XSZDD_STRUCTID[] = {{XSZDD::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -67,14 +69,16 @@ bool XSZDD::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XSZDD xszdd(pDevice);
 
-    return xszdd.isValid();
+    return xszdd.isValid(pPdStruct);
 }
 
 bool XSZDD::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     if (getSize() >= SZDD_LEGACY_HEADER_SIZE) {
         QByteArray baSig = read_array(0, 8);
@@ -350,10 +354,15 @@ QList<XBinary::XFRECORD> XSZDD::getXFRecords(FT fileType, quint32 nStructID, con
 
 QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     if (nFileParts == 0) {
         return listResult;
@@ -361,7 +370,7 @@ QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 
     const qint64 nHeaderSize = _getHeaderSize();
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
 
         record.filePart = FILEPART_HEADER;
@@ -379,7 +388,7 @@ QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     }
     qint64 nDataOffset = nHeaderSize;
 
-    if (nFileParts & FILEPART_REGION) {
+    if ((nFileParts & FILEPART_REGION) && canAppend()) {
         if (nDataOffset < nTotalSize) {
             FPART record = {};
 
@@ -413,13 +422,11 @@ bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
 
     if (pState) {
-        pState->mapUnpackProperties = mapProperties;
+        finishUnpack(pState, nullptr);
 
-        if (!isValid(pPdStruct)) {
+        if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
             return false;
         }
-
-        Q_UNUSED(mapProperties)
 
         const qint64 nHeaderSize = _getHeaderSize();
         const qint64 nUncompressedOffset = _getUncompressedSizeOffset();
@@ -427,7 +434,10 @@ bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             return false;
         }
 
-        SZDD_UNPACK_CONTEXT *pContext = new SZDD_UNPACK_CONTEXT;
+        SZDD_UNPACK_CONTEXT *pContext = new (std::nothrow) SZDD_UNPACK_CONTEXT;
+        if (!pContext) {
+            return false;
+        }
         pContext->nHeaderSize = nHeaderSize;
         pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
         pContext->nCompressedSize = getSize() - pContext->nHeaderSize;
@@ -445,6 +455,7 @@ bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = 1;
         pState->pContext = pContext;
+        pState->mapUnpackProperties = mapProperties;
 
         bResult = true;
     }
@@ -454,15 +465,13 @@ bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
 XBinary::ARCHIVERECORD XSZDD::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
         return result;
     }
 
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -521,9 +530,8 @@ bool XSZDD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
 
 bool XSZDD::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -550,6 +558,8 @@ bool XSZDD::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

@@ -19,9 +19,10 @@
  * SOFTWARE.
  */
 #include "xace.h"
-#include "xdecompress.h"
 
-// ACE magic: "**ACE**" at offset 7 of the archive header block
+#include <cstring>
+#include <new>
+
 const quint8 XACE::MAGIC[7] = {0x2A, 0x2A, 0x41, 0x43, 0x45, 0x2A, 0x2A};
 
 XBinary::XCONVERT _TABLE_XACE_STRUCTID[] = {
@@ -30,57 +31,436 @@ XBinary::XCONVERT _TABLE_XACE_STRUCTID[] = {
     {XACE::STRUCTID_RECORD, "RECORD", QString("Record")},
 };
 
-XACE::XACE(QIODevice *pDevice) : XArchive(pDevice)
+namespace {
+const quint16 ACE1_MAX_FILENAME = 512;
+const quint16 ACE1_MAX_COMMENT = 2048;
+const quint16 ACE1_MAIN_MIN_HEAD_SIZE = 27;
+const quint16 ACE1_FILE_MIN_HEAD_SIZE = 31;
+const quint16 ACE1_RECOVERY_MIN_HEAD_SIZE = 28;
+const qint32 ACE1_MAX_BLOCKS = 1000000;
+const quint16 ACE1_MAIN_ALLOWED_FLAGS = 0xFE02;
+const quint16 ACE1_FILE_ALLOWED_FLAGS = 0xF003;
+const qint32 ACE1_CRC_BUFFER_SIZE = 0x10000;
+
+QString decodeAceOemName(const QByteArray &baData, const QString &sCodePage)
 {
+    // Raw ACE 1.x names are locale-dependent DOS OEM bytes.  CP850 matches
+    // the original UnACE compatibility fallback; callers can select CP437 or
+    // another Qt-supported OEM codec for archives created in other locales.
+    static const quint16 g_anCP437HighBytes[128] = {
+        0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7,
+        0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5,
+        0x00C9, 0x00E6, 0x00C6, 0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9,
+        0x00FF, 0x00D6, 0x00DC, 0x00A2, 0x00A3, 0x00A5, 0x20A7, 0x0192,
+        0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1, 0x00AA, 0x00BA,
+        0x00BF, 0x2310, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB,
+        0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556,
+        0x2555, 0x2563, 0x2551, 0x2557, 0x255D, 0x255C, 0x255B, 0x2510,
+        0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x255E, 0x255F,
+        0x255A, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256C, 0x2567,
+        0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256B,
+        0x256A, 0x2518, 0x250C, 0x2588, 0x2584, 0x258C, 0x2590, 0x2580,
+        0x03B1, 0x00DF, 0x0393, 0x03C0, 0x03A3, 0x03C3, 0x03BC, 0x03C4,
+        0x03A6, 0x0398, 0x03A9, 0x03B4, 0x221E, 0x03C6, 0x03B5, 0x2229,
+        0x2261, 0x00B1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00F7, 0x2248,
+        0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00A0,
+    };
+
+    static const quint16 g_anCP850HighBytes[128] = {
+        0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7,
+        0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5,
+        0x00C9, 0x00E6, 0x00C6, 0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9,
+        0x00FF, 0x00D6, 0x00DC, 0x00F8, 0x00A3, 0x00D8, 0x00D7, 0x0192,
+        0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1, 0x00AA, 0x00BA,
+        0x00BF, 0x00AE, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB,
+        0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x00C1, 0x00C2, 0x00C0,
+        0x00A9, 0x2563, 0x2551, 0x2557, 0x255D, 0x00A2, 0x00A5, 0x2510,
+        0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x00E3, 0x00C3,
+        0x255A, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256C, 0x00A4,
+        0x00F0, 0x00D0, 0x00CA, 0x00CB, 0x00C8, 0x0131, 0x00CD, 0x00CE,
+        0x00CF, 0x2518, 0x250C, 0x2588, 0x2584, 0x00A6, 0x00CC, 0x2580,
+        0x00D3, 0x00DF, 0x00D4, 0x00D2, 0x00F5, 0x00D5, 0x00B5, 0x00FE,
+        0x00DE, 0x00DA, 0x00DB, 0x00D9, 0x00FD, 0x00DD, 0x00AF, 0x00B4,
+        0x00AD, 0x00B1, 0x2017, 0x00BE, 0x00B6, 0x00A7, 0x00F7, 0x00B8,
+        0x00B0, 0x00A8, 0x00B7, 0x00B9, 0x00B3, 0x00B2, 0x25A0, 0x00A0,
+    };
+
+    const bool bCP437 = (sCodePage.compare(QStringLiteral("CP437"), Qt::CaseInsensitive) == 0) ||
+                        (sCodePage.compare(QStringLiteral("IBM437"), Qt::CaseInsensitive) == 0);
+    const bool bCP850 = sCodePage.isEmpty() ||
+                        (sCodePage.compare(QStringLiteral("CP850"), Qt::CaseInsensitive) == 0) ||
+                        (sCodePage.compare(QStringLiteral("IBM850"), Qt::CaseInsensitive) == 0);
+
+#if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
+    if (!bCP437 && !bCP850) {
+        QTextCodec *pCodec = QTextCodec::codecForName(sCodePage.toLatin1());
+        if (pCodec) {
+            return pCodec->toUnicode(baData);
+        }
+    }
+#endif
+
+    const quint16 *pHighBytes = bCP437 ? g_anCP437HighBytes : g_anCP850HighBytes;
+
+    QString sResult;
+    sResult.reserve(baData.size());
+
+    for (char cValue : baData) {
+        const quint8 nValue = static_cast<quint8>(cValue);
+        const quint16 nUnicode = (nValue < 0x80) ? nValue : pHighBytes[nValue - 0x80];
+        sResult.append(QChar(nUnicode));
+    }
+
+    return sResult;
+}
+}  // namespace
+
+XACE::XACE(QIODevice *pDevice) : XArchive(pDevice), m_sFileNameCodePage(QStringLiteral("IBM850"))
+{
+}
+
+void XACE::setFileNameCodePage(const QString &sCodePage)
+{
+    m_sFileNameCodePage = sCodePage.trimmed();
+}
+
+QString XACE::getFileNameCodePage() const
+{
+    return m_sFileNameCodePage;
+}
+
+qint64 XACE::_blockEnd(const BLOCK_INFO &info)
+{
+    return info.nDataOffset + info.nAddSize;
+}
+
+bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
+{
+    if (!pInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    *pInfo = BLOCK_INFO();
+
+    const qint64 nFileSize = getSize();
+
+    if ((nOffset < 0) || (nOffset > nFileSize) || ((nFileSize - nOffset) < 4)) {
+        return false;
+    }
+
+    BLOCK_INFO info = {};
+    info.nOffset = nOffset;
+    info.nHeadCRC = read_uint16(nOffset, false);
+    info.nHeadSize = read_uint16(nOffset + 2, false);
+
+    // HEAD_SIZE covers bytes starting at HEAD_TYPE.  A generic header contains
+    // at least HEAD_TYPE and HEAD_FLAGS (three bytes).
+    if ((info.nHeadSize < 3) || (info.nHeadSize > (nFileSize - nOffset - 4))) {
+        return false;
+    }
+
+    info.nHeaderSize = 4 + info.nHeadSize;
+    info.nDataOffset = nOffset + info.nHeaderSize;
+    info.nHeadType = read_uint8(nOffset + 4);
+    info.nHeadFlags = read_uint16(nOffset + 5, false);
+
+    if ((info.nHeadType != HEADTYPE_ARCHIVE) && (info.nHeadType != HEADTYPE_FILE) &&
+        (info.nHeadType != HEADTYPE_RECOVERY)) {
+        return false;
+    }
+
+    QByteArray baHeader = read_array(nOffset + 4, info.nHeadSize);
+
+    if (baHeader.size() != info.nHeadSize) {
+        return false;
+    }
+
+    const quint32 nHeaderCRC =
+        XBinary::_getCRC32(baHeader, 0xFFFFFFFFU, XBinary::_getCRC32Table_EDB88320());
+
+    if (info.nHeadCRC != static_cast<quint16>(nHeaderCRC & 0xFFFFU)) {
+        return false;
+    }
+
+    if (info.nHeadFlags & FLAG_ADDSIZE) {
+        if (info.nHeadSize < 7) {
+            return false;
+        }
+
+        info.nAddSize = read_uint32(nOffset + 7, false);
+    }
+
+    if (info.nAddSize > static_cast<quint64>(nFileSize - info.nDataOffset)) {
+        return false;
+    }
+
+    if (info.nHeadType == HEADTYPE_ARCHIVE) {
+        // A main header never has generic ADD_SIZE; at +7 it contains ACESIGN.
+        if ((info.nHeadFlags & static_cast<quint16>(~ACE1_MAIN_ALLOWED_FLAGS)) ||
+            (info.nHeadSize < ACE1_MAIN_MIN_HEAD_SIZE)) {
+            return false;
+        }
+
+        QByteArray baMagic = read_array(nOffset + MAGIC_OFFSET, 7);
+
+        if ((baMagic.size() != 7) || (std::memcmp(baMagic.constData(), MAGIC, 7) != 0)) {
+            return false;
+        }
+
+        info.nVersionExtract = read_uint8(nOffset + 14);
+        info.nVersionCreated = read_uint8(nOffset + 15);
+        info.nHostCreated = read_uint8(nOffset + 16);
+        info.nVolumeNumber = read_uint8(nOffset + 17);
+        info.nTimeCreated = read_uint32(nOffset + 18, false);
+        info.nMainReserved1 = read_uint16(nOffset + 22, false);
+        info.nMainReserved2 = read_uint16(nOffset + 24, false);
+        info.nMainReserved = read_uint32(nOffset + 26, false);
+        info.nAVSize = read_uint8(nOffset + 30);
+        info.nAVOffset = nOffset + 31;
+
+        if (((info.nHeadFlags & ARCHFLAG_AV) != 0) != (info.nAVSize != 0)) {
+            return false;
+        }
+
+        quint32 nVariableEnd = 27U + info.nAVSize;
+
+        if (nVariableEnd > info.nHeadSize) {
+            return false;
+        }
+
+        if (info.nHeadFlags & FLAG_COMMENT) {
+            if ((info.nHeadSize - nVariableEnd) < 2U) {
+                return false;
+            }
+
+            const qint64 nCommentSizeOffset = nOffset + 4 + nVariableEnd;
+            info.nCommentSize = read_uint16(nCommentSizeOffset, false);
+            info.nCommentOffset = nCommentSizeOffset + 2;
+
+            if ((info.nCommentSize > ACE1_MAX_COMMENT) ||
+                (info.nCommentSize > (info.nHeadSize - nVariableEnd - 2U))) {
+                return false;
+            }
+        }
+    } else if (info.nHeadType == HEADTYPE_FILE) {
+        if ((info.nHeadFlags & static_cast<quint16>(~ACE1_FILE_ALLOWED_FLAGS)) ||
+            !(info.nHeadFlags & FILEFLAG_ADDSIZE) ||
+            (info.nHeadSize < ACE1_FILE_MIN_HEAD_SIZE)) {
+            return false;
+        }
+
+        info.nPackedSize = read_uint32(nOffset + 7, false);
+        info.nUnpackedSize = read_uint32(nOffset + 11, false);
+        info.nFileTime = read_uint32(nOffset + 15, false);
+        info.nAttributes = read_uint32(nOffset + 19, false);
+        info.nFileCRC = read_uint32(nOffset + 23, false);
+        info.nTechType = read_uint8(nOffset + 27);
+        info.nTechQuality = read_uint8(nOffset + 28);
+        info.nTechParameter = read_uint16(nOffset + 29, false);
+        info.nReserved = read_uint16(nOffset + 31, false);
+        info.nFileNameSize = read_uint16(nOffset + 33, false);
+        info.nFileNameOffset = nOffset + 35;
+
+        if ((info.nFileNameSize > ACE1_MAX_FILENAME) ||
+            (info.nFileNameSize > (info.nHeadSize - ACE1_FILE_MIN_HEAD_SIZE))) {
+            return false;
+        }
+
+        QByteArray baFileName = read_array(info.nFileNameOffset, info.nFileNameSize);
+
+        if ((baFileName.size() != info.nFileNameSize) || baFileName.contains('\0')) {
+            return false;
+        }
+
+        info.sFileName = decodeAceOemName(baFileName, m_sFileNameCodePage);
+
+        const quint32 nVariableEnd = ACE1_FILE_MIN_HEAD_SIZE + info.nFileNameSize;
+
+        if (info.nHeadFlags & FLAG_COMMENT) {
+            if ((info.nHeadSize - nVariableEnd) < 2U) {
+                return false;
+            }
+
+            const qint64 nCommentSizeOffset = nOffset + 4 + nVariableEnd;
+            info.nCommentSize = read_uint16(nCommentSizeOffset, false);
+            info.nCommentOffset = nCommentSizeOffset + 2;
+
+            if ((info.nCommentSize > ACE1_MAX_COMMENT) ||
+                (info.nCommentSize > (info.nHeadSize - nVariableEnd - 2U))) {
+                return false;
+            }
+        }
+
+    } else {
+        // ACE 1.x recovery record (32-bit form): REC_BLK_SIZE aliases ADD_SIZE,
+        // followed by ACESIGN, REL_STRT, CLUSTER, CL_SIZE and REC_CRC.
+        if ((info.nHeadFlags != FLAG_ADDSIZE) ||
+            (info.nHeadSize != ACE1_RECOVERY_MIN_HEAD_SIZE)) {
+            return false;
+        }
+
+        QByteArray baMagic = read_array(nOffset + 11, 7);
+
+        if ((baMagic.size() != 7) || (std::memcmp(baMagic.constData(), MAGIC, 7) != 0)) {
+            return false;
+        }
+
+        info.nRecoveryRelativeStart = read_uint32(nOffset + 18, false);
+        info.nRecoveryBlockCount = read_uint32(nOffset + 22, false);
+        info.nRecoveryClusterSize = read_uint32(nOffset + 26, false);
+        info.nRecoveryCRC = read_uint16(nOffset + 30, false);
+
+        const quint64 nExpectedRecoverySize =
+            static_cast<quint64>(info.nRecoveryBlockCount) * 2U +
+            static_cast<quint64>(info.nRecoveryClusterSize);
+        if (nExpectedRecoverySize != info.nAddSize) {
+            return false;
+        }
+
+        quint32 nRecoveryCRC = 0xFFFFFFFFU;
+        qint64 nCRCOffset = info.nDataOffset;
+        qint64 nCRCRemaining = info.nAddSize;
+        QByteArray baCRCBuffer;
+        if (nCRCRemaining > 0) {
+            baCRCBuffer.resize(static_cast<qint32>(qMin(nCRCRemaining, (qint64)ACE1_CRC_BUFFER_SIZE)));
+        }
+
+        while (nCRCRemaining > 0) {
+            if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+                return false;
+            }
+
+            const qint32 nChunk = static_cast<qint32>(qMin(nCRCRemaining, (qint64)baCRCBuffer.size()));
+            if ((nChunk <= 0) || (read_array(nCRCOffset, baCRCBuffer.data(), nChunk) != nChunk)) {
+                return false;
+            }
+            nRecoveryCRC = XBinary::_getCRC32(baCRCBuffer.constData(), nChunk, nRecoveryCRC,
+                                               XBinary::_getCRC32Table_EDB88320());
+            nCRCOffset += nChunk;
+            nCRCRemaining -= nChunk;
+        }
+
+        if (info.nRecoveryCRC != static_cast<quint16>(nRecoveryCRC & 0xFFFFU)) {
+            return false;
+        }
+    }
+
+    *pInfo = info;
+
+    return true;
+}
+
+bool XACE::_isRawAce1Main(const BLOCK_INFO &info) const
+{
+    return (info.nOffset == 0) && (info.nHeadType == HEADTYPE_ARCHIVE) &&
+           !(info.nHeadFlags & ARCHFLAG_V20FORMAT) &&
+           (info.nVersionExtract >= 10) && (info.nVersionExtract < 20);
+}
+
+bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
+{
+    if (!pListBlocks) {
+        return false;
+    }
+
+    pListBlocks->clear();
+
+    BLOCK_INFO mainInfo = {};
+
+    if (!_readBlock(0, &mainInfo, pPdStruct) || !_isRawAce1Main(mainInfo)) {
+        return false;
+    }
+
+    pListBlocks->append(mainInfo);
+
+    qint64 nOffset = _blockEnd(mainInfo);
+    const qint64 nFileSize = getSize();
+    bool bHasRecoveryRecord = false;
+
+    if (!(mainInfo.nHeadFlags & ARCHFLAG_MULTIVOLUME) && (mainInfo.nVolumeNumber != 0)) {
+        pListBlocks->clear();
+        return false;
+    }
+
+    while (nOffset < nFileSize) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            pListBlocks->clear();
+            return false;
+        }
+
+        if (pListBlocks->count() >= ACE1_MAX_BLOCKS) {
+            pListBlocks->clear();
+            return false;
+        }
+
+        BLOCK_INFO info = {};
+
+        if (!_readBlock(nOffset, &info, pPdStruct) || (info.nHeadType == HEADTYPE_ARCHIVE)) {
+            pListBlocks->clear();
+            return false;
+        }
+
+        if (info.nHeadType == HEADTYPE_FILE) {
+            const quint16 nSplitFlags = info.nHeadFlags &
+                                        (FILEFLAG_SPLIT_BEFORE | FILEFLAG_SPLIT_AFTER);
+            if ((nSplitFlags && !(mainInfo.nHeadFlags & ARCHFLAG_MULTIVOLUME)) ||
+                ((info.nHeadFlags & FILEFLAG_SPLIT_BEFORE) && (mainInfo.nVolumeNumber == 0)) ||
+                ((info.nHeadFlags & FILEFLAG_SOLID) && !(mainInfo.nHeadFlags & ARCHFLAG_SOLID))) {
+                pListBlocks->clear();
+                return false;
+            }
+        } else if (bHasRecoveryRecord || (_blockEnd(info) != nFileSize)) {
+            // An ACE1 recovery record describes the preceding archive blocks;
+            // it is unique and terminal.
+            pListBlocks->clear();
+            return false;
+        }
+
+        pListBlocks->append(info);
+        if (info.nHeadType == HEADTYPE_RECOVERY) {
+            bHasRecoveryRecord = true;
+        }
+        nOffset = _blockEnd(info);
+    }
+
+    const bool bRecoveryDeclared = (mainInfo.nHeadFlags & ARCHFLAG_RECOVERY) != 0;
+    if ((nOffset != nFileSize) || (bRecoveryDeclared != bHasRecoveryRecord) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        pListBlocks->clear();
+        return false;
+    }
+
+    return true;
 }
 
 bool XACE::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    QList<BLOCK_INFO> listBlocks;
 
-    bool bResult = false;
-
-    // ACE archive: minimum 14 bytes needed (4 common hdr + 10 bytes into archive block)
-    // The archive header block (head_type=0) must start at offset 0.
-    // Layout: [0-1]=head_crc, [2-3]=head_size, [4]=head_type(0), [5-6]=head_flags
-    //         [7-13]="**ACE**" magic
-    // head_size counts bytes from head_type onwards, so minimum head_size = 10 (for magic check at +3..+9 of head_size data)
-    if (getSize() >= 14) {
-        quint8 nHeadType = read_uint8(4);
-        quint16 nHeadSize = read_uint16(2, false);
-
-        if ((nHeadType == HEADTYPE_ARCHIVE) && (nHeadSize >= 10)) {
-            // Check magic bytes at offset 7
-            QByteArray baHeader = read_array(7, 7);
-
-            if (baHeader.size() == 7) {
-                bResult = (memcmp(baHeader.constData(), MAGIC, 7) == 0);
-            }
-        }
-    }
-
-    return bResult;
+    return _collectBlocks(&listBlocks, pPdStruct);
 }
 
 bool XACE::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XACE xace(pDevice);
 
-    return xace.isValid();
+    return xace.isValid(pPdStruct);
 }
 
 qint64 XACE::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    return _calculateRawSize(pPdStruct);
+    QList<BLOCK_INFO> listBlocks;
+
+    if (!_collectBlocks(&listBlocks, pPdStruct) || listBlocks.isEmpty()) {
+        return 0;
+    }
+
+    return _blockEnd(listBlocks.constLast());
 }
 
 QList<XBinary::MAPMODE> XACE::getMapModesList()
 {
-    QList<MAPMODE> listResult;
-
-    listResult.append(MAPMODE_REGIONS);
-
-    return listResult;
+    return {MAPMODE_REGIONS};
 }
 
 XBinary::_MEMORY_MAP XACE::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
@@ -109,30 +489,30 @@ XBinary::FT XACE::getFileType()
 
 QString XACE::getFileFormatExt()
 {
-    return "ace";
+    return QStringLiteral("ace");
 }
 
 QString XACE::getFileFormatExtsString()
 {
-    return "ACE (*.ace)";
+    return QStringLiteral("ACE (*.ace)");
 }
 
 QString XACE::getMIMEString()
 {
-    return "application/x-ace";
+    return QStringLiteral("application/x-ace");
 }
 
 QString XACE::getVersion()
 {
-    // ver_created is at offset 15 within file (byte 11 within archive header block data, i.e. head_type + 11)
-    // Archive block: [4]=head_type, [5-6]=head_flags, [7-13]="**ACE**", [14]=ver_extract, [15]=ver_created
-    if (getSize() >= 16) {
-        quint8 nVerCreated = read_uint8(15);
+    QList<BLOCK_INFO> listBlocks;
 
-        return QString::number(nVerCreated);
+    if (!_collectBlocks(&listBlocks, nullptr) || listBlocks.isEmpty()) {
+        return QString();
     }
 
-    return QString();
+    const quint8 nVersion = listBlocks.constFirst().nVersionCreated;
+
+    return QStringLiteral("%1.%2").arg(nVersion / 10).arg(nVersion % 10);
 }
 
 QString XACE::getArch()
@@ -152,14 +532,14 @@ XBinary::MODE XACE::getMode()
 
 QMap<XBinary::UNPACK_PROP, QVariant> XACE::getDefaultUnpackProperties()
 {
-    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
-
-    return result;
+    return XArchive::getDefaultUnpackProperties();
 }
 
 bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    if (!pState) {
+        return false;
+    }
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
@@ -167,657 +547,519 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState) {
-        pState->mapUnpackProperties = mapProperties;
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 0;
+    // UNPACK_STATE is reusable. Always discard a context left by an earlier
+    // successful initialization before attempting to parse the new state.
+    if (pState->pContext) {
+        delete static_cast<UNPACK_CONTEXT *>(pState->pContext);
         pState->pContext = nullptr;
-
-        qint64 nOffset = 0;
-        qint64 nFileSize = pState->nTotalSize;
-
-        // Skip the archive header block (head_type == 0)
-        if (nFileSize >= 5) {
-            quint8 nHeadType = read_uint8(nOffset + 4);
-
-            if (nHeadType == HEADTYPE_ARCHIVE) {
-                qint64 nArchHdrSize = _getBlockHeaderSize(nOffset);
-
-                if (nArchHdrSize > 0) {
-                    nOffset += nArchHdrSize;
-                }
-            }
-        }
-
-        pState->nCurrentOffset = nOffset;
-
-        // Count file records (head_type == 1)
-        qint64 nCountOffset = nOffset;
-
-        while (XBinary::isPdStructNotCanceled(pPdStruct) && (nCountOffset < nFileSize)) {
-            if ((nFileSize - nCountOffset) < 5) {
-                break;
-            }
-
-            quint8 nHeadType = read_uint8(nCountOffset + 4);
-            quint16 nHeadSize = read_uint16(nCountOffset + 2, false);
-
-            // End-of-archive block
-            if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
-                break;
-            }
-
-            qint64 nBlockHdrSize = _getBlockHeaderSize(nCountOffset);
-
-            if (nBlockHdrSize <= 0) {
-                break;
-            }
-
-            if (nHeadType == HEADTYPE_FILE) {
-                pState->nNumberOfRecords++;
-
-                quint32 nCompSize = _getCompressedSize(nCountOffset);
-                nCountOffset += nBlockHdrSize + nCompSize;
-            } else {
-                // Skip non-file blocks (recovery records, etc.)
-                quint32 nAddSize = 0;
-                quint16 nHeadFlags = read_uint16(nCountOffset + 5, false);
-
-                if (nHeadFlags & FILEFLAG_ADDSIZE) {
-                    // Additional size field is at same position as compsize in file blocks
-                    // For non-file blocks, it's a generic 4-byte add_size after head_flags
-                    // In ACE, for non-file blocks with ADDSIZE, the 4 bytes immediately after head_flags carry add_size
-                    // head_type at +4, head_flags at +5..+6, add_size at +7 for non-file blocks
-                    nAddSize = read_uint32(nCountOffset + 7, false);
-                }
-
-                nCountOffset += nBlockHdrSize + nAddSize;
-            }
-        }
-
-        bResult = (pState->nNumberOfRecords > 0);
     }
 
-    return bResult;
+    pState->mapUnpackProperties = mapProperties;
+    pState->mapArchiveProperties.clear();
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = getSize();
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    QList<BLOCK_INFO> listBlocks;
+
+    if (!_collectBlocks(&listBlocks, pPdStruct) || listBlocks.isEmpty()) {
+        return false;
+    }
+
+    UNPACK_CONTEXT *pContext = new (std::nothrow) UNPACK_CONTEXT;
+    if (!pContext) {
+        return false;
+    }
+    pContext->nArchiveFlags = listBlocks.constFirst().nHeadFlags;
+    pContext->nArchiveSize = _blockEnd(listBlocks.constLast());
+
+    for (const BLOCK_INFO &info : listBlocks) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            delete pContext;
+            return false;
+        }
+        if (info.nHeadType == HEADTYPE_FILE) {
+            pContext->listFileBlocks.append(info);
+        }
+    }
+
+    pState->pContext = pContext;
+    pState->nNumberOfRecords = pContext->listFileBlocks.count();
+    pState->nCurrentOffset = pContext->listFileBlocks.isEmpty()
+                                 ? pContext->nArchiveSize
+                                 : pContext->listFileBlocks.constFirst().nOffset;
+    pState->mapArchiveProperties.insert(FPART_PROP_FLAGS, pContext->nArchiveFlags);
+
+    if (pContext->nArchiveFlags & ARCHFLAG_SOLID) {
+        pState->mapArchiveProperties.insert(FPART_PROP_ISSOLID, true);
+    }
+
+    return true;
 }
 
 XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        qint64 nBase = pState->nCurrentOffset;
+    if (!pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return result;
+    }
 
-        qint64 nBlockHdrSize = _getBlockHeaderSize(nBase);
-        quint32 nCompSize = _getCompressedSize(nBase);
+    UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
 
-        // File header fields (all relative to start of block at nBase)
-        // [7]  uint32 pack_size (compressed size)
-        // [11] uint32 orig_size (uncompressed size)
-        // [15] uint32 ftime (DOS date-time)
-        // [19] uint32 attr (file attributes)
-        // [23] uint32 crc32
-        // [27] uint16 tech_info (low byte = method: 0=stored, 1=compressed; high byte = level)
-        // [29] uint16 req_ver
-        // [31] uint16 ???
-        // [33] uint16 fname_size
-        // [35] char[] fname
+    if (pState->nCurrentIndex >= pContext->listFileBlocks.count()) {
+        return result;
+    }
 
-        quint32 nDateTime = read_uint32(nBase + 15, false);
-        quint32 nAttr = read_uint32(nBase + 19, false);
-        quint32 nUncompSize = read_uint32(nBase + 11, false);
-        quint32 nCRC32 = read_uint32(nBase + 23, false);
-        quint16 nTechInfo = read_uint16(nBase + 27, false);
-        quint16 nHeadFlags = read_uint16(nBase + 5, false);
+    const BLOCK_INFO &info = pContext->listFileBlocks.at(pState->nCurrentIndex);
+    QString sFileName = info.sFileName;
+    sFileName.replace(QLatin1Char('\\'), QLatin1Char('/'));
 
-        quint8 nCompType = (quint8)(nTechInfo & 0xFF);
+    result.nStreamOffset = info.nDataOffset;
+    result.nStreamSize = info.nAddSize;
 
-        QString sFileName = _getFileName(nBase);
-        sFileName = sFileName.replace("\\", "/");
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sFileName);
+    result.mapProperties.insert(FPART_PROP_STREAMOFFSET, result.nStreamOffset);
+    result.mapProperties.insert(FPART_PROP_STREAMSIZE, result.nStreamSize);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, static_cast<qint64>(info.nAddSize));
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, static_cast<qint64>(info.nUnpackedSize));
+    result.mapProperties.insert(FPART_PROP_HEADER_OFFSET, info.nOffset);
+    result.mapProperties.insert(FPART_PROP_HEADER_SIZE, info.nHeaderSize);
+    result.mapProperties.insert(FPART_PROP_FLAGS, info.nHeadFlags);
+    result.mapProperties.insert(FPART_PROP_TYPE, static_cast<quint32>(info.nTechType));
+    result.mapProperties.insert(FPART_PROP_RESULTCRC, info.nFileCRC);
+    result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_00000000);
 
-        result.nStreamOffset = nBase + nBlockHdrSize;
-        result.nStreamSize = nCompSize;
+    const qint32 nDictionaryBits = (info.nTechParameter & 15) + 10;
+    result.mapProperties.insert(FPART_PROP_WINDOWSIZE, static_cast<qint64>(quint64(1) << nDictionaryBits));
 
-        result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
-        result.mapProperties.insert(XBinary::FPART_PROP_STREAMOFFSET, result.nStreamOffset);
-        result.mapProperties.insert(XBinary::FPART_PROP_STREAMSIZE, result.nStreamSize);
-        result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompSize);
-        result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nCompSize);
-        result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, nCRC32 ^ 0xFFFFFFFF);
-        result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
-        result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nCompType);
+    if (info.nHeadFlags & FILEFLAG_PASSWORD) {
+        result.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
+    }
 
-        // Encrypted flag
-        if (nHeadFlags & FILEFLAG_ENCRYPT) {
-            result.mapProperties.insert(XBinary::FPART_PROP_ENCRYPTED, true);
-        }
+    const bool bSolid = (pContext->nArchiveFlags & ARCHFLAG_SOLID) ||
+                        (info.nHeadFlags & FILEFLAG_SOLID);
 
-        // Folder check: DOS archive attribute bit 4 (0x10)
-        if (nAttr & 0x10) {
-            result.mapProperties.insert(XBinary::FPART_PROP_ISFOLDER, true);
-        }
+    if (bSolid) {
+        result.mapProperties.insert(FPART_PROP_ISSOLID, true);
+    }
 
-        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
+    if (info.nHeadFlags & FILEFLAG_COMMENT) {
+        result.mapProperties.insert(FPART_PROP_ISCOMMENTPRESENT, true);
+        result.mapProperties.insert(FPART_PROP_FILECOMMENTOFFSET, info.nCommentOffset);
+        result.mapProperties.insert(FPART_PROP_FILECOMMENTLENGTH, info.nCommentSize);
+    }
 
-        if (nCompType == CTYPE_STORED) {
+    if (info.nAttributes & 0x01U) {
+        result.mapProperties.insert(FPART_PROP_ISREADONLY, true);
+    }
+    if (info.nAttributes & 0x02U) {
+        result.mapProperties.insert(FPART_PROP_ISHIDDEN, true);
+    }
+    if (info.nAttributes & 0x04U) {
+        result.mapProperties.insert(FPART_PROP_ISSYSTEM, true);
+    }
+    if (info.nAttributes & 0x10U) {
+        result.mapProperties.insert(FPART_PROP_ISFOLDER, true);
+    }
+    if (info.nAttributes & 0x20U) {
+        result.mapProperties.insert(FPART_PROP_ISARCHIVE, true);
+    }
+
+    const quint16 nDosTime = static_cast<quint16>(info.nFileTime & 0xFFFFU);
+    const quint16 nDosDate = static_cast<quint16>(info.nFileTime >> 16);
+    const QDateTime dtMTime(
+        QDate(((nDosDate >> 9) & 0x7F) + 1980, (nDosDate >> 5) & 0x0F, nDosDate & 0x1F),
+        QTime((nDosTime >> 11) & 0x1F, (nDosTime >> 5) & 0x3F, (nDosTime & 0x1F) * 2));
+
+    if (dtMTime.isValid()) {
+        result.mapProperties.insert(FPART_PROP_DATETIME, dtMTime);
+        result.mapProperties.insert(FPART_PROP_MTIME, dtMTime);
+    }
+
+    HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
+    const bool bUnsupportedFlags = bSolid || (info.nHeadFlags & FILEFLAG_PASSWORD) ||
+                                   (info.nHeadFlags & FILEFLAG_SPLIT_BEFORE) ||
+                                   (info.nHeadFlags & FILEFLAG_SPLIT_AFTER);
+
+    if (!bUnsupportedFlags) {
+        if (info.nTechType == CTYPE_STORED) {
             compressMethod = HANDLE_METHOD_STORE;
-        } else if (nCompType == CTYPE_LZ_HUFFMAN) {
+        } else if (info.nTechType == CTYPE_LZ_HUFFMAN) {
             compressMethod = HANDLE_METHOD_ACE;
-        } else if (nCompType == CTYPE_LZ_HUFFMAN_DELTA) {
-            compressMethod = HANDLE_METHOD_ACE_DELTA;
-        }
-
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
-
-        // Convert DOS date/time: same encoding as ARJ
-        // DOS time: [4:0]=seconds/2, [10:5]=minutes, [15:11]=hours
-        // DOS date: [4:0]=day, [8:5]=month, [15:9]=year-1980
-        quint16 nDosTime = (quint16)(nDateTime & 0xFFFF);
-        quint16 nDosDate = (quint16)(nDateTime >> 16);
-
-        qint32 nSecond = (nDosTime & 0x1F) * 2;
-        qint32 nMinute = (nDosTime >> 5) & 0x3F;
-        qint32 nHour = (nDosTime >> 11) & 0x1F;
-        qint32 nDay = nDosDate & 0x1F;
-        qint32 nMonth = (nDosDate >> 5) & 0x0F;
-        qint32 nYear = ((nDosDate >> 9) & 0x7F) + 1980;
-
-        QDateTime dtMTime(QDate(nYear, nMonth, nDay), QTime(nHour, nMinute, nSecond));
-
-        if (dtMTime.isValid()) {
-            result.mapProperties.insert(XBinary::FPART_PROP_MTIME, dtMTime);
         }
     }
+
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, compressMethod);
 
     return result;
 }
 
 bool XACE::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    bool bResult = false;
-
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        qint64 nBlockHdrSize = _getBlockHeaderSize(pState->nCurrentOffset);
-        quint32 nCompSize = _getCompressedSize(pState->nCurrentOffset);
-
-        pState->nCurrentOffset += nBlockHdrSize + nCompSize;
-        pState->nCurrentIndex++;
-
-        // Skip non-file blocks if any
-        while (pState->nCurrentIndex < pState->nNumberOfRecords) {
-            if ((pState->nCurrentOffset + 5) > pState->nTotalSize) {
-                break;
-            }
-
-            quint8 nHeadType = read_uint8(pState->nCurrentOffset + 4);
-
-            if (nHeadType == HEADTYPE_FILE) {
-                break;
-            }
-
-            if ((nHeadType == HEADTYPE_EOF) || (read_uint16(pState->nCurrentOffset + 2, false) == 0)) {
-                break;
-            }
-
-            qint64 nSkipHdrSize = _getBlockHeaderSize(pState->nCurrentOffset);
-
-            if (nSkipHdrSize <= 0) {
-                break;
-            }
-
-            quint16 nHeadFlags = read_uint16(pState->nCurrentOffset + 5, false);
-            quint32 nAddSize = 0;
-
-            if (nHeadFlags & FILEFLAG_ADDSIZE) {
-                nAddSize = read_uint32(pState->nCurrentOffset + 7, false);
-            }
-
-            pState->nCurrentOffset += nSkipHdrSize + nAddSize;
-        }
-
-        bResult = (pState->nCurrentIndex < pState->nNumberOfRecords);
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
     }
 
-    return bResult;
+    UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
+
+    if ((pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pContext->listFileBlocks.count())) {
+        return false;
+    }
+
+    ++pState->nCurrentIndex;
+
+    if (pState->nCurrentIndex < pContext->listFileBlocks.count()) {
+        pState->nCurrentOffset = pContext->listFileBlocks.at(pState->nCurrentIndex).nOffset;
+        return true;
+    }
+
+    pState->nCurrentOffset = pContext->nArchiveSize;
+
+    return false;
 }
 
 bool XACE::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pState)
     Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    if (pState->pContext) {
+        delete static_cast<UNPACK_CONTEXT *>(pState->pContext);
+        pState->pContext = nullptr;
+    }
+
+    pState->nCurrentOffset = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
 
     return true;
 }
 
 QString XACE::structIDToString(quint32 nID)
 {
-    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XBinary::XCONVERT_idToTransString(
+        nID, _TABLE_XACE_STRUCTID,
+        sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
 QString XACE::structIDToFtString(quint32 nID)
 {
-    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XBinary::XCONVERT_idToFtString(
+        nID, _TABLE_XACE_STRUCTID,
+        sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
 quint32 XACE::ftStringToStructID(const QString &sFtString)
 {
-    return XCONVERT_ftStringToId(sFtString, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XCONVERT_ftStringToId(
+        sFtString, _TABLE_XACE_STRUCTID,
+        sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
 QList<XBinary::XFHEADER> XACE::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::XFHEADER> listResult;
+    QList<BLOCK_INFO> listBlocks;
 
-    quint32 nStructID = xfStruct.nStructID;
+    if (!_collectBlocks(&listBlocks, pPdStruct) || listBlocks.isEmpty()) {
+        return listResult;
+    }
+
+    const quint32 nStructID = xfStruct.nStructID;
 
     if (nStructID == STRUCTID_UNKNOWN) {
-        XFSTRUCT _xfStruct = xfStruct;
-        _xfStruct.nStructID = STRUCTID_HEADER;
-        _xfStruct.xLoc = offsetToLoc(0);
-        listResult.append(getXFHeaders(_xfStruct, pPdStruct));
-    } else if (nStructID == STRUCTID_HEADER) {
+        XFSTRUCT child = xfStruct;
+        child.nStructID = STRUCTID_HEADER;
+        child.xLoc = offsetToLoc(0);
+        return getXFHeaders(child, pPdStruct);
+    }
+
+    if (nStructID == STRUCTID_HEADER) {
         XLOC headerLoc = xfStruct.xLoc;
+
         if (headerLoc.locType == LT_UNKNOWN) {
             headerLoc = offsetToLoc(0);
         }
 
-        qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
-        qint64 nBlockHdrSize = (nHeaderOffset != -1) ? _getBlockHeaderSize(nHeaderOffset) : 0;
+        const qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
 
-        if ((nHeaderOffset != -1) && (nBlockHdrSize > 0)) {
-            XFHEADER xfHeader = {};
-            xfHeader.sParentTag = xfStruct.sParent;
-            xfHeader.fileType = xfStruct.fileType;
-            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_HEADER);
-            xfHeader.xLoc = headerLoc;
-            xfHeader.nSize = nBlockHdrSize;
-            xfHeader.xfType = XFTYPE_HEADER;
-            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_HEADER, headerLoc);
-            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_HEADER), xfHeader.sParentTag);
-            listResult.append(xfHeader);
-
-            if (xfStruct.bIsParent) {
-                XFSTRUCT _xfStruct = xfStruct;
-                _xfStruct.sParent = xfHeader.sTag;
-                _xfStruct.nStructID = STRUCTID_RECORD;
-                _xfStruct.xLoc = offsetToLoc(nHeaderOffset + nBlockHdrSize);
-                listResult.append(getXFHeaders(_xfStruct, pPdStruct));
-            }
+        if (nHeaderOffset != 0) {
+            return listResult;
         }
-    } else if (nStructID == STRUCTID_RECORD) {
+
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_HEADER);
+        xfHeader.xLoc = headerLoc;
+        xfHeader.nSize = listBlocks.constFirst().nHeaderSize;
+        xfHeader.xfType = XFTYPE_HEADER;
+        xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_HEADER, headerLoc);
+        xfHeader.sTag = xfHeaderToTag(
+            xfHeader, structIDToString(STRUCTID_HEADER), xfHeader.sParentTag);
+        listResult.append(xfHeader);
+
+        if (xfStruct.bIsParent) {
+            XFSTRUCT child = xfStruct;
+            child.sParent = xfHeader.sTag;
+            child.nStructID = STRUCTID_RECORD;
+            child.xLoc = offsetToLoc(_blockEnd(listBlocks.constFirst()));
+            listResult.append(getXFHeaders(child, pPdStruct));
+        }
+
+        return listResult;
+    }
+
+    if (nStructID == STRUCTID_RECORD) {
         qint64 nStartOffset = locToOffset(xfStruct.pMemoryMap, xfStruct.xLoc);
-        qint64 nFileSize = getSize();
 
         if (nStartOffset == -1) {
-            nStartOffset = _getBlockHeaderSize(0);
+            nStartOffset = _blockEnd(listBlocks.constFirst());
         }
 
-        if (nStartOffset > 0) {
-            XFHEADER xfHeader = {};
-            xfHeader.sParentTag = xfStruct.sParent;
-            xfHeader.fileType = xfStruct.fileType;
-            xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_RECORD);
-            xfHeader.xLoc = offsetToLoc(nStartOffset);
-            xfHeader.xfType = XFTYPE_TABLE;
+        XFHEADER xfHeader = {};
+        xfHeader.sParentTag = xfStruct.sParent;
+        xfHeader.fileType = xfStruct.fileType;
+        xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_RECORD);
+        xfHeader.xfType = XFTYPE_TABLE;
 
-            qint64 nCurrentOffset = nStartOffset;
-
-            while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                if ((nFileSize - nCurrentOffset) < 5) {
-                    break;
-                }
-
-                quint8 nHeadType = read_uint8(nCurrentOffset + 4);
-                quint16 nHeadSize = read_uint16(nCurrentOffset + 2, false);
-
-                if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
-                    break;
-                }
-
-                qint64 nBlockHdrSize = _getBlockHeaderSize(nCurrentOffset);
-
-                if (nBlockHdrSize <= 0) {
-                    break;
-                }
-
-                if (nHeadType == HEADTYPE_FILE) {
-                    xfHeader.listRowLocations.append(nCurrentOffset);
-                    nCurrentOffset += nBlockHdrSize + _getCompressedSize(nCurrentOffset);
-                } else {
-                    quint16 nHeadFlags = read_uint16(nCurrentOffset + 5, false);
-                    quint32 nAddSize = 0;
-
-                    if (nHeadFlags & FILEFLAG_ADDSIZE) {
-                        nAddSize = read_uint32(nCurrentOffset + 7, false);
-                    }
-
-                    nCurrentOffset += nBlockHdrSize + nAddSize;
-                }
+        for (const BLOCK_INFO &info : listBlocks) {
+            if ((info.nHeadType == HEADTYPE_FILE) && (info.nOffset >= nStartOffset)) {
+                xfHeader.listRowLocations.append(info.nOffset);
             }
+        }
 
-            if (!xfHeader.listRowLocations.isEmpty()) {
-                xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_RECORD, offsetToLoc(xfHeader.listRowLocations.first()));
-                xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_RECORD), xfHeader.sParentTag);
-                listResult.append(xfHeader);
-            }
+        if (!xfHeader.listRowLocations.isEmpty()) {
+            xfHeader.xLoc = offsetToLoc(xfHeader.listRowLocations.constFirst());
+            xfHeader.nSize = _blockEnd(listBlocks.constLast()) -
+                             xfHeader.listRowLocations.constFirst();
+            xfHeader.listFields = getXFRecords(
+                xfStruct.fileType, STRUCTID_RECORD, xfHeader.xLoc);
+            xfHeader.sTag = xfHeaderToTag(
+                xfHeader, structIDToString(STRUCTID_RECORD), xfHeader.sParentTag);
+            listResult.append(xfHeader);
         }
     }
 
     return listResult;
 }
 
-QList<XBinary::XFRECORD> XACE::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
+QList<XBinary::XFRECORD> XACE::getXFRecords(FT fileType, quint32 nStructID,
+                                             const XLOC &xLoc)
 {
     Q_UNUSED(fileType)
 
     QList<XBinary::XFRECORD> listResult;
+    qint64 nOffset = xLoc.nLocation;
 
-    if (nStructID == STRUCTID_HEADER) {
+    if (xLoc.locType == LT_UNKNOWN) {
+        nOffset = 0;
+    }
+
+    BLOCK_INFO info = {};
+
+    if (!_readBlock(nOffset, &info, nullptr)) {
+        return listResult;
+    }
+
+    if ((nStructID == STRUCTID_HEADER) && (info.nHeadType == HEADTYPE_ARCHIVE) &&
+        _isRawAce1Main(info)) {
         listResult.append({"HeadCRC", 0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"HeadSize", 2, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
         listResult.append({"HeadType", 4, 1, XFRECORD_FLAG_NONE, VT_UINT8});
         listResult.append({"HeadFlags", 5, 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"Magic", 7, 7, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
-        listResult.append({"VersionModify", 14, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"VersionCreate", 15, 1, XFRECORD_FLAG_NONE, VT_UINT8});
-        listResult.append({"HostCreate", 16, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"VersionExtract", 14, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"VersionCreated", 15, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"HostCreated", 16, 1, XFRECORD_FLAG_NONE, VT_UINT8});
         listResult.append({"VolumeNumber", 17, 1, XFRECORD_FLAG_COUNT, VT_UINT8});
-        listResult.append({"DateTimeCreated", 18, 4, XFRECORD_FLAG_NONE, VT_UINT32});
-    } else if (nStructID == STRUCTID_RECORD) {
+        listResult.append({"TimeCreated", 18, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"Reserved1", 22, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Reserved2", 24, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"Reserved", 26, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"AVSize", 30, 1, XFRECORD_FLAG_SIZE, VT_UINT8});
+
+        if (info.nAVSize) {
+            listResult.append({"AuthenticityVerification", 31, info.nAVSize,
+                               XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        }
+
+        if (info.nHeadFlags & FLAG_COMMENT) {
+            const qint32 nCommentSizeOffset = 31 + info.nAVSize;
+            listResult.append({"CommentSize", nCommentSizeOffset, 2,
+                               XFRECORD_FLAG_SIZE, VT_UINT16});
+
+            if (info.nCommentSize) {
+                listResult.append({"CompressedComment", nCommentSizeOffset + 2,
+                                   info.nCommentSize, XFRECORD_FLAG_NONE,
+                                   VT_BYTE_ARRAY});
+            }
+        }
+    } else if ((nStructID == STRUCTID_RECORD) &&
+               (info.nHeadType == HEADTYPE_FILE)) {
         listResult.append({"HeadCRC", 0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"HeadSize", 2, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
         listResult.append({"HeadType", 4, 1, XFRECORD_FLAG_NONE, VT_UINT8});
         listResult.append({"HeadFlags", 5, 2, XFRECORD_FLAG_NONE, VT_UINT16});
-        listResult.append({"CompressedSize", 7, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
-        listResult.append({"UncompressedSize", 11, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
-        listResult.append({"DateTime", 15, 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"PackedSize", 7, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"UnpackedSize", 11, 4, XFRECORD_FLAG_SIZE, VT_UINT32});
+        listResult.append({"FileTime", 15, 4, XFRECORD_FLAG_NONE, VT_UINT32});
         listResult.append({"Attributes", 19, 4, XFRECORD_FLAG_NONE, VT_UINT32});
         listResult.append({"CRC32", 23, 4, XFRECORD_FLAG_NONE, VT_UINT32});
-        listResult.append({"TechInfo", 27, 2, XFRECORD_FLAG_NONE, VT_UINT16});
-        listResult.append({"RequiredVersion", 29, 2, XFRECORD_FLAG_NONE, VT_UINT16});
+        listResult.append({"TechType", 27, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"TechQuality", 28, 1, XFRECORD_FLAG_NONE, VT_UINT8});
+        listResult.append({"TechParameter", 29, 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"Reserved", 31, 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"FilenameSize", 33, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
-        // Variable-length fields
-        quint16 nFnameSize = read_uint16(xLoc.nLocation + 33, false);
-        listResult.append({"Filename", 35, (qint32)nFnameSize, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+
+        if (info.nFileNameSize) {
+            listResult.append({"Filename", 35, info.nFileNameSize,
+                               XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+        }
+
+        if (info.nHeadFlags & FLAG_COMMENT) {
+            const qint32 nCommentSizeOffset = 35 + info.nFileNameSize;
+            listResult.append({"CommentSize", nCommentSizeOffset, 2,
+                               XFRECORD_FLAG_SIZE, VT_UINT16});
+
+            if (info.nCommentSize) {
+                listResult.append({"CompressedComment", nCommentSizeOffset + 2,
+                                   info.nCommentSize, XFRECORD_FLAG_NONE,
+                                   VT_BYTE_ARRAY});
+            }
+        }
     }
 
     return listResult;
 }
 
-// QList<XBinary::DATA_HEADER> XACE::getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct)
-// {
-//     QList<DATA_HEADER> listResult;
-
-//     if (dataHeadersOptions.nID == STRUCTID_UNKNOWN) {
-//         DATA_HEADERS_OPTIONS _dataHeadersOptions = dataHeadersOptions;
-//         _dataHeadersOptions.bChildren = true;
-//         _dataHeadersOptions.dsID_parent = _addDefaultHeaders(&listResult, pPdStruct);
-//         _dataHeadersOptions.dhMode = XBinary::DHMODE_TABLE;
-//         _dataHeadersOptions.fileType = dataHeadersOptions.pMemoryMap->fileType;
-
-//         qint64 nRealSize = 0;
-//         qint32 nCount = 0;
-//         qint64 nFileSize = getSize();
-
-//         // Skip archive header
-//         qint64 nOffset = 0;
-
-//         if (nFileSize >= 5) {
-//             quint8 nHeadType = read_uint8(4);
-
-//             if (nHeadType == HEADTYPE_ARCHIVE) {
-//                 qint64 nArchHdrSize = _getBlockHeaderSize(0);
-
-//                 if (nArchHdrSize > 0) {
-//                     nOffset = nArchHdrSize;
-//                 }
-//             }
-//         }
-
-//         // Count file records
-//         qint64 nCurOffset = nOffset;
-
-//         while ((nCurOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-//             if ((nFileSize - nCurOffset) < 5) {
-//                 break;
-//             }
-
-//             quint8 nHeadType = read_uint8(nCurOffset + 4);
-//             quint16 nHeadSize = read_uint16(nCurOffset + 2, false);
-
-//             if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
-//                 break;
-//             }
-
-//             qint64 nBlockHdrSize = _getBlockHeaderSize(nCurOffset);
-
-//             if (nBlockHdrSize <= 0) {
-//                 break;
-//             }
-
-//             if (nHeadType == HEADTYPE_FILE) {
-//                 quint32 nCompSize = _getCompressedSize(nCurOffset);
-
-//                 nCount++;
-//                 nRealSize = nCurOffset + nBlockHdrSize + nCompSize;
-//                 nCurOffset += nBlockHdrSize + nCompSize;
-//             } else {
-//                 quint16 nHeadFlags = read_uint16(nCurOffset + 5, false);
-//                 quint32 nAddSize = 0;
-
-//                 if (nHeadFlags & FILEFLAG_ADDSIZE) {
-//                     nAddSize = read_uint32(nCurOffset + 7, false);
-//                 }
-
-//                 nCurOffset += nBlockHdrSize + nAddSize;
-//             }
-//         }
-
-//         _dataHeadersOptions.nID = STRUCTID_RECORD;
-//         _dataHeadersOptions.nLocation = nOffset;
-//         _dataHeadersOptions.locType = XBinary::LT_OFFSET;
-//         _dataHeadersOptions.nCount = nCount;
-//         _dataHeadersOptions.nSize = nRealSize - nOffset;
-
-//         listResult.append(getDataHeaders(_dataHeadersOptions, pPdStruct));
-//     } else {
-//         qint64 nStartOffset = locationToOffset(dataHeadersOptions.pMemoryMap, dataHeadersOptions.locType, dataHeadersOptions.nLocation);
-
-//         if (nStartOffset != -1) {
-//             if (dataHeadersOptions.nID == STRUCTID_RECORD) {
-//                 qint64 nCurrentOffset = nStartOffset;
-//                 qint32 nCount = 0;
-//                 qint64 nFileSize = getSize();
-
-//                 while ((nCount < dataHeadersOptions.nCount) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-//                     if ((nFileSize - nCurrentOffset) < 5) {
-//                         break;
-//                     }
-
-//                     quint8 nHeadType = read_uint8(nCurrentOffset + 4);
-//                     quint16 nHeadSize = read_uint16(nCurrentOffset + 2, false);
-
-//                     if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
-//                         break;
-//                     }
-
-//                     qint64 nBlockHdrSize = _getBlockHeaderSize(nCurrentOffset);
-
-//                     if (nBlockHdrSize <= 0) {
-//                         break;
-//                     }
-
-//                     if (nHeadType != HEADTYPE_FILE) {
-//                         quint16 nHeadFlags = read_uint16(nCurrentOffset + 5, false);
-//                         quint32 nAddSize = 0;
-
-//                         if (nHeadFlags & FILEFLAG_ADDSIZE) {
-//                             nAddSize = read_uint32(nCurrentOffset + 7, false);
-//                         }
-
-//                         nCurrentOffset += nBlockHdrSize + nAddSize;
-//                         continue;
-//                     }
-
-//                     quint32 nCompSize = _getCompressedSize(nCurrentOffset);
-
-//                     DATA_HEADER dataHeader = _initDataHeader(dataHeadersOptions, structIDToString(STRUCTID_RECORD));
-//                     dataHeader.nSize = nBlockHdrSize + nCompSize;
-
-//                     dataHeader.listRecords.append(getDataRecord(0, 2, "Head CRC", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(2, 2, "Head Size", VT_UINT16, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(4, 1, "Head Type", VT_UINT8, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(5, 2, "Head Flags", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(7, 4, "Compressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(11, 4, "Uncompressed Size", VT_UINT32, DRF_SIZE, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(15, 4, "Date/Time", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(19, 4, "Attributes", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(23, 4, "CRC32", VT_UINT32, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(27, 2, "Tech Info", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(29, 2, "Required Version", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(31, 2, "Reserved", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     dataHeader.listRecords.append(getDataRecord(33, 2, "Filename Size", VT_UINT16, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-
-//                     quint16 nFnameSize = read_uint16(nCurrentOffset + 33, false);
-
-//                     if (nFnameSize > 0) {
-//                         dataHeader.listRecords.append(getDataRecord(35, nFnameSize, "Filename", VT_CHAR_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     }
-
-//                     if (nCompSize > 0) {
-//                         dataHeader.listRecords.append(
-//                             getDataRecord(nBlockHdrSize, nCompSize, "Compressed Data", VT_BYTE_ARRAY, DRF_UNKNOWN, dataHeadersOptions.pMemoryMap->endian));
-//                     }
-
-//                     listResult.append(dataHeader);
-
-//                     nCurrentOffset += nBlockHdrSize + nCompSize;
-//                     nCount++;
-//                 }
-//             }
-//         }
-//     }
-
-//     return listResult;
-// }
-
-QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
+QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
+                                         PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+    QList<BLOCK_INFO> listBlocks;
 
-    qint64 nFileSize = getSize();
-    qint64 nCurrentOffset = 0;
-    qint64 nMaxOffset = 0;
-
-    // Skip archive header
-    if (nFileSize >= 5) {
-        quint8 nHeadType = read_uint8(4);
-
-        if (nHeadType == HEADTYPE_ARCHIVE) {
-            qint64 nArchHdrSize = _getBlockHeaderSize(0);
-
-            if (nArchHdrSize > 0) {
-                nCurrentOffset = nArchHdrSize;
-            }
-        }
+    if (nLimit < -1 || nLimit == 0) {
+        return listResult;
     }
 
-    while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if ((nFileSize - nCurrentOffset) < 5) {
+    if (!_collectBlocks(&listBlocks, pPdStruct) || listBlocks.isEmpty()) {
+        return listResult;
+    }
+
+    const quint16 nArchiveFlags = listBlocks.constFirst().nHeadFlags;
+    const auto canAppend = [&]() -> bool {
+        return (nLimit == -1) || (listResult.size() < nLimit);
+    };
+
+    for (const BLOCK_INFO &info : listBlocks) {
+        if (!canAppend()) {
             break;
         }
 
-        quint8 nHeadType = read_uint8(nCurrentOffset + 4);
-        quint16 nHeadSize = read_uint16(nCurrentOffset + 2, false);
+        QString sName;
 
-        if ((nHeadType == HEADTYPE_EOF) || (nHeadSize == 0)) {
-            break;
-        }
-
-        qint64 nBlockHdrSize = _getBlockHeaderSize(nCurrentOffset);
-
-        if (nBlockHdrSize <= 0) {
-            break;
-        }
-
-        if (nHeadType == HEADTYPE_FILE) {
-            quint32 nCompSize = _getCompressedSize(nCurrentOffset);
-            quint32 nOrigSize = read_uint32(nCurrentOffset + 11, false);
-            QString sFileName = _getFileName(nCurrentOffset);
-
-            if (nFileParts & FILEPART_HEADER) {
-                FPART record = {};
-
-                record.filePart = FILEPART_HEADER;
-                record.nFileOffset = nCurrentOffset;
-                record.nFileSize = nBlockHdrSize;
-                record.nVirtualAddress = -1;
-                record.sName = tr("Header");
-
-                listResult.append(record);
-            }
-
-            if (nFileParts & FILEPART_STREAM) {
-                FPART record = {};
-
-                record.filePart = FILEPART_STREAM;
-                record.nFileOffset = nCurrentOffset + nBlockHdrSize;
-                record.nFileSize = nCompSize;
-                record.nVirtualAddress = -1;
-                record.sName = sFileName;
-                record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nOrigSize);
-
-                listResult.append(record);
-            }
-
-            if (nFileParts & FILEPART_REGION) {
-                FPART record = {};
-
-                record.filePart = FILEPART_REGION;
-                record.nFileOffset = nCurrentOffset;
-                record.nFileSize = nBlockHdrSize + nCompSize;
-                record.nVirtualAddress = -1;
-                record.sName = sFileName;
-
-                listResult.append(record);
-            }
-
-            nMaxOffset = nCurrentOffset + nBlockHdrSize + nCompSize;
-            nCurrentOffset += nBlockHdrSize + nCompSize;
+        if (info.nHeadType == HEADTYPE_ARCHIVE) {
+            sName = tr("Archive header");
+        } else if (info.nHeadType == HEADTYPE_RECOVERY) {
+            sName = tr("Recovery record");
         } else {
-            quint16 nHeadFlags = read_uint16(nCurrentOffset + 5, false);
-            quint32 nAddSize = 0;
+            sName = info.sFileName;
+            sName.replace(QLatin1Char('\\'), QLatin1Char('/'));
+        }
 
-            if (nHeadFlags & FILEFLAG_ADDSIZE) {
-                nAddSize = read_uint32(nCurrentOffset + 7, false);
+        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+            FPART part = {};
+            part.filePart = FILEPART_HEADER;
+            part.nFileOffset = info.nOffset;
+            part.nFileSize = info.nHeaderSize;
+            part.nVirtualAddress = -1;
+            part.sName = sName;
+            listResult.append(part);
+        }
+
+        if ((nFileParts & FILEPART_STREAM) && canAppend() &&
+            (info.nHeadType == HEADTYPE_FILE)) {
+            FPART part = {};
+            part.filePart = FILEPART_STREAM;
+            part.nFileOffset = info.nDataOffset;
+            part.nFileSize = info.nAddSize;
+            part.nVirtualAddress = -1;
+            part.sName = sName;
+            part.mapProperties.insert(FPART_PROP_ORIGINALNAME, sName);
+            part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE,
+                                      static_cast<qint64>(info.nAddSize));
+            part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE,
+                                      static_cast<qint64>(info.nUnpackedSize));
+            part.mapProperties.insert(FPART_PROP_FLAGS, info.nHeadFlags);
+            part.mapProperties.insert(FPART_PROP_RESULTCRC, info.nFileCRC);
+            part.mapProperties.insert(FPART_PROP_CRC_TYPE,
+                                      CRC_TYPE_FFFFFFFF_EDB88320_00000000);
+            part.mapProperties.insert(
+                FPART_PROP_WINDOWSIZE,
+                static_cast<qint64>(quint64(1) << ((info.nTechParameter & 15) + 10)));
+
+            HANDLE_METHOD method = HANDLE_METHOD_UNKNOWN;
+            const bool bUnsupported = (nArchiveFlags & ARCHFLAG_SOLID) ||
+                                      (info.nHeadFlags & (FILEFLAG_PASSWORD |
+                                                          FILEFLAG_SPLIT_BEFORE |
+                                                          FILEFLAG_SPLIT_AFTER |
+                                                          FILEFLAG_SOLID));
+
+            if (!bUnsupported) {
+                if (info.nTechType == CTYPE_STORED) {
+                    method = HANDLE_METHOD_STORE;
+                } else if (info.nTechType == CTYPE_LZ_HUFFMAN) {
+                    method = HANDLE_METHOD_ACE;
+                }
             }
 
-            nCurrentOffset += nBlockHdrSize + nAddSize;
+            part.mapProperties.insert(FPART_PROP_HANDLEMETHOD, method);
+            listResult.append(part);
+        }
+
+        if ((nFileParts & FILEPART_REGION) && canAppend()) {
+            FPART part = {};
+            part.filePart = FILEPART_REGION;
+            part.nFileOffset = info.nOffset;
+            part.nFileSize = info.nHeaderSize + info.nAddSize;
+            part.nVirtualAddress = -1;
+            part.sName = sName;
+            listResult.append(part);
         }
     }
 
-    // Overlay
-    if (nFileParts & FILEPART_OVERLAY) {
-        if (nMaxOffset < nFileSize) {
-            FPART record = {};
+    const qint64 nArchiveSize = _blockEnd(listBlocks.constLast());
 
-            record.filePart = FILEPART_OVERLAY;
-            record.nFileOffset = nMaxOffset;
-            record.nFileSize = nFileSize - nMaxOffset;
-            record.nVirtualAddress = -1;
-            record.sName = tr("Overlay");
+    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+        FPART part = {};
+        part.filePart = FILEPART_DATA;
+        part.nFileOffset = 0;
+        part.nFileSize = nArchiveSize;
+        part.nVirtualAddress = -1;
+        part.sName = tr("Data");
+        listResult.append(part);
+    }
 
-            listResult.append(record);
-        }
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nArchiveSize < getSize())) {
+        FPART part = {};
+        part.filePart = FILEPART_OVERLAY;
+        part.nFileOffset = nArchiveSize;
+        part.nFileSize = getSize() - nArchiveSize;
+        part.nVirtualAddress = -1;
+        part.sName = tr("Overlay");
+        listResult.append(part);
     }
 
     return listResult;
@@ -825,90 +1067,66 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
 qint64 XACE::_getBlockHeaderSize(qint64 nOffset)
 {
-    // Generic ACE block: [0-1]=head_crc, [2-3]=head_size, [4]=head_type, ...
-    // Total header = 4 + head_size
-    if ((nOffset + 4) > getSize()) {
-        return -1;
-    }
+    BLOCK_INFO info = {};
 
-    quint16 nHeadSize = read_uint16(nOffset + 2, false);
-
-    if (nHeadSize == 0) {
-        return 4;  // End-of-archive marker
-    }
-
-    if ((nOffset + 4 + nHeadSize) > getSize()) {
-        return -1;
-    }
-
-    return 4 + nHeadSize;
+    return _readBlock(nOffset, &info, nullptr) ? info.nHeaderSize : -1;
 }
 
 bool XACE::_isFileBlock(qint64 nOffset)
 {
-    if ((nOffset + 5) > getSize()) {
-        return false;
-    }
+    BLOCK_INFO info = {};
 
-    return read_uint8(nOffset + 4) == HEADTYPE_FILE;
+    return _readBlock(nOffset, &info, nullptr) &&
+           (info.nHeadType == HEADTYPE_FILE);
 }
 
 bool XACE::_isValidBlock(qint64 nOffset)
 {
-    if ((nOffset + 4) > getSize()) {
-        return false;
-    }
+    BLOCK_INFO info = {};
 
-    quint16 nHeadSize = read_uint16(nOffset + 2, false);
-
-    return (nHeadSize > 0);
+    return _readBlock(nOffset, &info, nullptr);
 }
 
 quint32 XACE::_getCompressedSize(qint64 nOffset)
 {
-    // File header: pack_size (compressed) at offset +7
-    if ((nOffset + 11) > getSize()) {
+    BLOCK_INFO info = {};
+
+    if (!_readBlock(nOffset, &info, nullptr) ||
+        (info.nHeadType != HEADTYPE_FILE)) {
         return 0;
     }
 
-    if (!_isFileBlock(nOffset)) {
-        return 0;
-    }
-
-    return read_uint32(nOffset + 7, false);
+    return info.nAddSize;
 }
 
 QString XACE::_getFileName(qint64 nOffset)
 {
-    // fname_size (uint16) at offset +33, fname at offset +35
-    if ((nOffset + 35) > getSize()) {
+    BLOCK_INFO info = {};
+
+    if (!_readBlock(nOffset, &info, nullptr) ||
+        (info.nHeadType != HEADTYPE_FILE)) {
         return QString();
     }
 
-    quint16 nFnameSize = read_uint16(nOffset + 33, false);
-
-    if (nFnameSize == 0) {
-        return QString();
-    }
-
-    return read_ansiString(nOffset + 35, nFnameSize);
+    return info.sFileName;
 }
 
 QList<QString> XACE::getSearchSignatures()
 {
-    QList<QString> listResult;
-
-    listResult.append("...............'**ACE**'");
-
-    return listResult;
+    // Magic begins seven bytes from the raw ACE header start: fourteen wildcard
+    // nibbles followed by the seven-byte ASCII signature.
+    return {QStringLiteral("..............'**ACE**'")};
 }
 
-XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
+XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage,
+                              XADDR nModuleAddress)
 {
     Q_UNUSED(bIsImage)
     Q_UNUSED(nModuleAddress)
 
-    return new XACE(pDevice);
+    XACE *pResult = new XACE(pDevice);
+    pResult->setFileNameCodePage(m_sFileNameCodePage);
+    return pResult;
 }
 
 bool XACE::handleInternalInfo(PDSTRUCT *pPdStruct)
@@ -918,7 +1136,8 @@ bool XACE::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = XArchive::handleInternalInfo(pPdStruct);
         static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+            *static_cast<XArchive::INTERNAL_INFO *>(
+                XArchive::getInternalInfo(pPdStruct));
     }
 
     return bResult;
@@ -935,7 +1154,8 @@ void XACE::setInternalInfo(void *pInternalInfo)
 {
     if (pInternalInfo) {
         m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
-        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+        XArchive::setInternalInfo(
+            static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
     } else {
         m_internalInfo = INTERNAL_INFO();
         XArchive::setInternalInfo(nullptr);

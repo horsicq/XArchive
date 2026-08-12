@@ -19,39 +19,86 @@
  * SOFTWARE.
  */
 #include "xbcj2decoder.h"
-#include <QDebug>
+
+#include <limits>
 
 // BCJ2 range-coder constants
 static const quint32 BCJ2_RC_RANGE_MIN = 0x01000000U;
 static const quint32 BCJ2_PROB_INIT = 0x400U;  // 50% = 1024 out of 2048
 static const qint32 BCJ2_NUM_PROBS = 258;      // 0: JCC (0x0F 0x8x, unused); 1: E9 (JMP); 2..257: E8 keyed by prevByte
 
-// Append bytes to the output device, advancing *pnOutputPos. Returns false on short write.
-static bool bcj2WriteOutput(QIODevice *pOutput, const char *pData, qint64 nSize, qint64 *pnOutputPos)
+// Append bytes to the output device, advancing *pnOutputPos. Positive short
+// writes are legal QIODevice progress and must be drained.
+static bool bcj2ReadExact(QIODevice *pInput, char *pData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (nSize <= 0) {
-        return true;
+    if (!pInput || (nSize < 0) || ((nSize > 0) && !pData)) return false;
+
+    qint64 nDone = 0;
+    while ((nDone < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint64 nRead = pInput->read(pData + nDone, nSize - nDone);
+        if ((nRead <= 0) || (nRead > (nSize - nDone))) return false;
+        nDone += nRead;
     }
-    qint64 nWritten = pOutput->write(pData, nSize);
-    if (nWritten != nSize) {
-        return false;
+
+    return (nDone == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+static bool bcj2WriteOutput(QIODevice *pOutput, const char *pData, qint64 nSize,
+                            qint64 *pnOutputPos, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pOutput || !pnOutputPos || (nSize < 0) || ((nSize > 0) && !pData)) return false;
+
+    qint64 nDone = 0;
+    while ((nDone < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint64 nWritten = pOutput->write(pData + nDone, nSize - nDone);
+        if ((nWritten <= 0) || (nWritten > (nSize - nDone))) return false;
+        nDone += nWritten;
     }
-    *pnOutputPos += nWritten;
+
+    if ((nDone != nSize) || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (*pnOutputPos > (std::numeric_limits<qint64>::max)() - nDone)) return false;
+    *pnOutputPos += nDone;
     return true;
+}
+
+static bool bcj2GetRemainingSize(QIODevice *pInput, qint64 *pnSize)
+{
+    if (!pInput || !pnSize || pInput->isSequential()) return false;
+    const qint64 nPosition = pInput->pos();
+    const qint64 nSize = pInput->size();
+    if ((nPosition < 0) || (nSize < nPosition)) return false;
+    *pnSize = nSize - nPosition;
+    return true;
+}
+
+static bool bcj2IsExactEnd(QIODevice *pInput)
+{
+    if (!pInput) return false;
+    if (!pInput->isSequential()) return (pInput->pos() >= 0) && (pInput->pos() == pInput->size());
+
+    char cExtra = 0;
+    const qint64 nRead = pInput->read(&cExtra, 1);
+    return (nRead == 0) && pInput->atEnd();
+}
+
+static bool bcj2ResetOutput(QIODevice *pOutput)
+{
+    return pOutput && !pOutput->isSequential() && XBinary::isResizeEnable(pOutput) &&
+           XBinary::resize(pOutput, 0) && pOutput->seek(0);
 }
 
 XBCJ2Decoder::XBCJ2Decoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XBCJ2Decoder::_rcInit(RC_STATE *pRC)
+bool XBCJ2Decoder::_rcInit(RC_STATE *pRC, XBinary::PDSTRUCT *pPdStruct)
 {
     // BCJ2 range coder initialisation:
     // Read 5 bytes: byte[0] is dummy (0x00), bytes[1..4] form the initial Code value.
-    char buf[5];
-    qint64 nRead = pRC->pStream->read(buf, 5);
-
-    if (nRead < 5) {
+    if (!pRC) return false;
+    char buf[5] = {};
+    if (!pRC->pStream || !bcj2ReadExact(pRC->pStream, buf, sizeof(buf), pPdStruct) ||
+        ((quint8)buf[0] != 0)) {
         pRC->bEof = true;
         pRC->nRange = 0;
         pRC->nCode = 0;
@@ -62,47 +109,90 @@ bool XBCJ2Decoder::_rcInit(RC_STATE *pRC)
     pRC->nRange = 0xFFFFFFFFU;
     pRC->nCode = ((quint32)(quint8)buf[1] << 24) | ((quint32)(quint8)buf[2] << 16) | ((quint32)(quint8)buf[3] << 8) | (quint32)(quint8)buf[4];
 
-    return true;
+    if (pRC->nCode == 0xFFFFFFFFU) {
+        pRC->bEof = true;
+        pRC->nRange = 0;
+        pRC->nCode = 0;
+        return false;
+    }
+
+    return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-void XBCJ2Decoder::_rcNormalize(RC_STATE *pRC)
+bool XBCJ2Decoder::_rcNormalize(RC_STATE *pRC, XBinary::PDSTRUCT *pPdStruct)
 {
-    while (pRC->nRange < BCJ2_RC_RANGE_MIN) {
-        char b;
-        if (pRC->pStream->read(&b, 1) != 1) {
+    if (!pRC || !pRC->pStream || pRC->bEof) return false;
+
+    while ((pRC->nRange < BCJ2_RC_RANGE_MIN) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        char b = 0;
+        if (!bcj2ReadExact(pRC->pStream, &b, 1, pPdStruct)) {
             pRC->bEof = true;
-            pRC->nRange <<= 8;
-            pRC->nCode <<= 8;
-            return;
+            return false;
         }
         pRC->nRange <<= 8;
         pRC->nCode = (pRC->nCode << 8) | (quint8)b;
     }
+
+    return (pRC->nRange >= BCJ2_RC_RANGE_MIN) && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-quint32 XBCJ2Decoder::_rcDecodeBit(RC_STATE *pRC, quint32 *pProb)
+bool XBCJ2Decoder::_rcDecodeBit(RC_STATE *pRC, quint32 *pProb, quint32 *pBit,
+                                XBinary::PDSTRUCT *pPdStruct)
 {
-    _rcNormalize(pRC);
+    if (!pProb || !pBit || !_rcNormalize(pRC, pPdStruct)) return false;
 
     quint32 nBound = (pRC->nRange >> 11) * (*pProb);
 
     if (pRC->nCode < nBound) {
         pRC->nRange = nBound;
         *pProb += (2048U - *pProb) >> 5;
-        return 0U;
+        *pBit = 0U;
     } else {
         pRC->nCode -= nBound;
         pRC->nRange -= nBound;
         *pProb -= *pProb >> 5;
-        return 1U;
+        *pBit = 1U;
     }
+
+    return true;
 }
 
 bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QIODevice *pJmpStream, QIODevice *pRangeStream, QIODevice *pOutput, qint64 nOutputSize,
                               XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pMainStream || !pCallStream || !pJmpStream || !pRangeStream || !pOutput) {
+    if (!pMainStream || !pCallStream || !pJmpStream || !pRangeStream || !pOutput ||
+        !pMainStream->isOpen() || !pMainStream->isReadable() ||
+        !pCallStream->isOpen() || !pCallStream->isReadable() ||
+        !pJmpStream->isOpen() || !pJmpStream->isReadable() ||
+        !pRangeStream->isOpen() || !pRangeStream->isReadable() ||
+        !pOutput->isOpen() || !pOutput->isWritable() || pOutput->isSequential() ||
+        !XBinary::isResizeEnable(pOutput) || (nOutputSize < 0)) {
         return false;
+    }
+
+    if (!bcj2ResetOutput(pOutput)) return false;
+    const auto fail = [&]() -> bool {
+        bcj2ResetOutput(pOutput);
+        return false;
+    };
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return fail();
+
+    qint64 nMainRemaining = 0;
+    qint64 nCallRemaining = 0;
+    qint64 nJmpRemaining = 0;
+    qint64 nRangeRemaining = 0;
+    const bool bMainSizeKnown = bcj2GetRemainingSize(pMainStream, &nMainRemaining);
+    const bool bCallSizeKnown = bcj2GetRemainingSize(pCallStream, &nCallRemaining);
+    const bool bJmpSizeKnown = bcj2GetRemainingSize(pJmpStream, &nJmpRemaining);
+    const bool bRangeSizeKnown = bcj2GetRemainingSize(pRangeStream, &nRangeRemaining);
+    if ((bCallSizeKnown && ((nCallRemaining & 3) != 0)) ||
+        (bJmpSizeKnown && ((nJmpRemaining & 3) != 0)) ||
+        (bRangeSizeKnown && (nRangeRemaining < 5))) return fail();
+    if (bMainSizeKnown && bCallSizeKnown && bJmpSizeKnown) {
+        const qint64 nMax = (std::numeric_limits<qint64>::max)();
+        if ((nMainRemaining > nMax - nCallRemaining) ||
+            (nMainRemaining + nCallRemaining > nMax - nJmpRemaining) ||
+            (nMainRemaining + nCallRemaining + nJmpRemaining != nOutputSize)) return fail();
     }
 
     // Initialise probability table: 256 slots for E8 (indexed by previous byte) + 1 for E9
@@ -118,28 +208,17 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
     rc.nCode = 0;
     rc.bEof = false;
 
-    if (!_rcInit(&rc)) {
-        return false;
-    }
+    if (!_rcInit(&rc, pPdStruct)) return fail();
 
     quint8 nPrevByte = 0;
     qint64 nOutputPos = 0;
 
-    if (!pOutput->seek(0)) {
-        return false;
-    }
-
     while ((nOutputPos < nOutputSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        char bMain;
-        if (pMainStream->read(&bMain, 1) != 1) {
-            qDebug() << "BCJ2Decoder: main stream EOF at outputPos=" << nOutputPos;
-            break;
-        }
+        char bMain = 0;
+        if (!bcj2ReadExact(pMainStream, &bMain, 1, pPdStruct)) return fail();
 
         quint8 nByte = (quint8)bMain;
-        if (!bcj2WriteOutput(pOutput, &bMain, 1, &nOutputPos)) {
-            return false;
-        }
+        if (!bcj2WriteOutput(pOutput, &bMain, 1, &nOutputPos, pPdStruct)) return fail();
 
         if (nByte == 0xE8 || nByte == 0xE9) {
             // 7-zip BCJ2 probability table layout (from Bcj2.c):
@@ -147,17 +226,17 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
             //   probs[1]        : E9 (JMP NEAR)
             //   probs[2..257]   : E8 (CALL NEAR) keyed by previous byte
             quint32 nProbIndex = (nByte == 0xE8) ? (2U + (quint32)nPrevByte) : 1U;
-            quint32 nBit = _rcDecodeBit(&rc, &probs[nProbIndex]);
+            quint32 nBit = 0;
+            if (!_rcDecodeBit(&rc, &probs[nProbIndex], &nBit, pPdStruct)) return fail();
 
             if (nBit == 1U) {
                 // Real CALL/JMP: read 4-byte absolute address from call/jmp stream.
                 // The address is stored big-endian (see GetBe32 in 7-zip Bcj2.c).
                 QIODevice *pAddrStream = (nByte == 0xE8) ? pCallStream : pJmpStream;
 
-                char addr[4];
-                if (pAddrStream->read(addr, 4) != 4) {
-                    break;
-                }
+                if ((nOutputSize - nOutputPos) < 4) return fail();
+                char addr[4] = {};
+                if (!bcj2ReadExact(pAddrStream, addr, sizeof(addr), pPdStruct)) return fail();
 
                 // Big-endian absolute address stored in stream
                 quint32 nAbsAddr = ((quint32)(quint8)addr[0] << 24) | ((quint32)(quint8)addr[1] << 16) | ((quint32)(quint8)addr[2] << 8) | (quint32)(quint8)addr[3];
@@ -171,13 +250,7 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
                 relAddr[2] = (char)(nRelAddr >> 16);
                 relAddr[3] = (char)(nRelAddr >> 24);
 
-                if ((nOutputSize - nOutputPos) < 4) {
-                    return false;
-                }
-
-                if (!bcj2WriteOutput(pOutput, relAddr, 4, &nOutputPos)) {
-                    return false;
-                }
+                if (!bcj2WriteOutput(pOutput, relAddr, 4, &nOutputPos, pPdStruct)) return fail();
 
                 // prevByte for next E8 lookup = last byte of relative address written
                 nPrevByte = (quint8)relAddr[3];
@@ -188,13 +261,13 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
         } else if (((quint8)nByte & 0xF0U) == 0x80U && nPrevByte == 0x0FU) {
             // JCC: 0x0F followed by 0x8x (conditional branch, e.g. JNE/JE/JL/...).
             // Uses probs[0] and the jmp stream (same as E9).
-            quint32 nBit = _rcDecodeBit(&rc, &probs[0]);
+            quint32 nBit = 0;
+            if (!_rcDecodeBit(&rc, &probs[0], &nBit, pPdStruct)) return fail();
 
             if (nBit == 1U) {
-                char addr[4];
-                if (pJmpStream->read(addr, 4) != 4) {
-                    break;
-                }
+                if ((nOutputSize - nOutputPos) < 4) return fail();
+                char addr[4] = {};
+                if (!bcj2ReadExact(pJmpStream, addr, sizeof(addr), pPdStruct)) return fail();
 
                 quint32 nAbsAddr = ((quint32)(quint8)addr[0] << 24) | ((quint32)(quint8)addr[1] << 16) | ((quint32)(quint8)addr[2] << 8) | (quint32)(quint8)addr[3];
 
@@ -207,13 +280,7 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
                 relAddr[2] = (char)(nRelAddr >> 16);
                 relAddr[3] = (char)(nRelAddr >> 24);
 
-                if ((nOutputSize - nOutputPos) < 4) {
-                    return false;
-                }
-
-                if (!bcj2WriteOutput(pOutput, relAddr, 4, &nOutputPos)) {
-                    return false;
-                }
+                if (!bcj2WriteOutput(pOutput, relAddr, 4, &nOutputPos, pPdStruct)) return fail();
 
                 nPrevByte = (quint8)relAddr[3];
             } else {
@@ -224,5 +291,11 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
         }
     }
 
-    return (nOutputPos == nOutputSize);
+    if ((nOutputPos != nOutputSize) || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        !_rcNormalize(&rc, pPdStruct) || rc.bEof || (rc.nCode != 0) ||
+        !bcj2IsExactEnd(pMainStream) || !bcj2IsExactEnd(pCallStream) ||
+        !bcj2IsExactEnd(pJmpStream) || !bcj2IsExactEnd(pRangeStream) ||
+        (pOutput->pos() != nOutputSize) || (pOutput->size() != nOutputSize)) return fail();
+
+    return true;
 }

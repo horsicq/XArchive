@@ -64,13 +64,18 @@ public:
     // RAR5 header key derivation (returns 32-byte AES key for encrypted-headers archives)
     static QByteArray deriveRar5HeaderKey(const QString &sPassword, const QByteArray &baSalt, quint8 nKdfCount);
 
+    // Convert a plaintext CRC32 to the keyed value stored by RAR5 encrypted records.
+    static bool calculateRar5CRC32MAC(const QString &sPassword, const QByteArray &baAESKeyProperties, quint32 nCRC32,
+                                      quint32 *pnMAC, XBinary::PDSTRUCT *pPdStruct = nullptr);
+
     // Custom AES block cipher
     static qint32 custom_aes_set_encrypt_key(const quint8 *pUserKey, qint32 nBits, CUSTOM_AES_KEY *pKey);
     static void custom_aes_encrypt(const quint8 *pInput, quint8 *pOutput, const CUSTOM_AES_KEY *pKey);
 
 private:
     // 7z key derivation (SHA-256 iterated)
-    static void deriveKey(const QString &sPassword, const QByteArray &baSalt, quint8 nNumCyclesPower, quint8 *pKey);
+    static bool deriveKey(const QString &sPassword, const QByteArray &baSalt, quint8 nNumCyclesPower, quint8 *pKey,
+                          XBinary::PDSTRUCT *pPdStruct);
 
     // ZIP key derivation helpers (PBKDF2-HMAC-SHA1)
     static void pbkdf2(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nIterations, qint32 nKeyLength, QByteArray &baResult);
@@ -84,7 +89,8 @@ private:
     static void hmacSha256Final(XSha256Decoder::Context *pInnerCtx, XSha256Decoder::Context *pOuterCtx, quint8 *pDigest);
 
     // RAR5 key derivation (PBKDF2-HMAC-SHA256, 3-key)
-    static void deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSalt, quint8 nCnt, quint8 *pAesKey, quint8 *pHashKey, quint8 *pPswCheck);
+    static bool deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSalt, quint8 nCnt, quint8 *pAesKey, quint8 *pHashKey,
+                               quint8 *pPswCheck, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XAESDECODER_H

@@ -86,19 +86,21 @@ quint64 xzCRC64Update(quint64 nCRC, const char *pData, qint32 nSize)
     static const quint64 XZ_CRC64_POLYNOMIAL = Q_UINT64_C(0xC96C5795D7870F42);
     static const std::array<quint64, 256> XZ_CRC64_TABLE = []() {
         std::array<quint64, 256> result = {};
-        for (qint32 i = 0; i < 256; i++) {
-            quint64 nEntry = (quint64)i;
+        quint64 nTableIndex = 0;
+        for (quint64 &nTableEntry : result) {
+            quint64 nEntry = nTableIndex++;
             for (qint32 nBit = 0; nBit < 8; nBit++) {
                 const quint64 nMask = (quint64)0 - (nEntry & 1);
                 nEntry = (nEntry >> 1) ^ (XZ_CRC64_POLYNOMIAL & nMask);
             }
-            result[(size_t)i] = nEntry;
+            nTableEntry = nEntry;
         }
         return result;
     }();
 
     for (qint32 i = 0; i < nSize; i++) {
-        nCRC = XZ_CRC64_TABLE[(size_t)((nCRC ^ (quint8)pData[i]) & 0xFF)] ^ (nCRC >> 8);
+        const quint8 nTableIndex = (quint8)(nCRC ^ (quint8)pData[i]);
+        nCRC = XZ_CRC64_TABLE[(size_t)nTableIndex] ^ (nCRC >> 8);
     }
 
     return nCRC;
@@ -1427,7 +1429,8 @@ static int Z7_FASTCALL LZMA_DECODE_REAL(CLzmaDec *p, SizeT limit, const Byte *bu
 
             if (state >= kNumStates) {
                 UInt32 distance;
-                prob = probs + PosSlot + ((len < kNumLenToPosStates ? len : kNumLenToPosStates - 1) << kNumPosSlotBits);
+                prob = probs + PosSlot +
+                       ((size_t)(len < kNumLenToPosStates ? len : kNumLenToPosStates - 1) << kNumPosSlotBits);
                 TREE_6_DECODE(prob, distance)
                 if (distance >= kStartPosModelIndex) {
                     unsigned posSlot = (unsigned)distance;
@@ -1777,13 +1780,14 @@ static ELzmaDummy LzmaDec_TryDummy(const CLzmaDec *p, const Byte *buf, const Byt
 
             if (state < 4) {
                 unsigned posSlot;
-                prob = probs + PosSlot + ((len < kNumLenToPosStates - 1 ? len : kNumLenToPosStates - 1) << kNumPosSlotBits);
+                prob = probs + PosSlot +
+                       ((size_t)(len < kNumLenToPosStates - 1 ? len : kNumLenToPosStates - 1) << kNumPosSlotBits);
                 TREE_DECODE_CHECK(prob, 1 << kNumPosSlotBits, posSlot)
                 if (posSlot >= kStartPosModelIndex) {
                     unsigned numDirectBits = ((posSlot >> 1) - 1);
 
                     if (posSlot < kEndPosModelIndex) {
-                        prob = probs + SpecPos + ((2 | (posSlot & 1)) << numDirectBits);
+                        prob = probs + SpecPos + ((size_t)(2 | (posSlot & 1)) << numDirectBits);
                     } else {
                         numDirectBits -= kNumAlignBits;
                         do {

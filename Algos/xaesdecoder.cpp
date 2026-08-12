@@ -20,17 +20,39 @@
  */
 #include "xaesdecoder.h"
 #include "algo_utils.h"
-#include <QBuffer>
 #include <QCryptographicHash>
 #include <QDebug>
 #include <QRandomGenerator>
 #include <cstring>
+#include <limits>
+
+// These paths currently materialize both plaintext and ciphertext. Keep the
+// aggregate allocation bounded until they are converted to streaming crypto.
+static constexpr qint64 N_MAX_AES_WHOLE_BUFFER_SIZE = 256LL * 1024 * 1024;
+
+static bool isAesWholeBufferSizeValid(qint64 nSize)
+{
+    return (nSize >= 0) && (nSize <= N_MAX_AES_WHOLE_BUFFER_SIZE) &&
+           (nSize <= (std::numeric_limits<qint32>::max)());
+}
+
+static bool readAesExact(char *pData, qint32 nSize, XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+{
+    qint32 nTotal = 0;
+    while ((nTotal < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nRead = XBinary::_readDevice(pData + nTotal, nSize - nTotal, pState);
+        if (nRead <= 0) return false;
+        nTotal += nRead;
+    }
+    return (nTotal == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+}
 
 XAESDecoder::XAESDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-void XAESDecoder::deriveKey(const QString &sPassword, const QByteArray &baSalt, quint8 nNumCyclesPower, quint8 *pKey)
+bool XAESDecoder::deriveKey(const QString &sPassword, const QByteArray &baSalt, quint8 nNumCyclesPower, quint8 *pKey,
+                           XBinary::PDSTRUCT *pPdStruct)
 {
     // Note: tiny-AES-c does not require table initialization
 
@@ -43,13 +65,26 @@ void XAESDecoder::deriveKey(const QString &sPassword, const QByteArray &baSalt, 
         baPassword.append(static_cast<char>((ch >> 8) & 0xFF));
     }
 
+    // 7-Zip reserves 0x3f for direct salt/password key material. Other
+    // exponents above 24 are outside the practical decoder range and would
+    // otherwise permit undefined shifts or attacker-controlled CPU exhaustion.
+    if (nNumCyclesPower == 0x3f) {
+        QByteArray baDirectKey = baSalt + baPassword;
+        memset(pKey, 0, 32);
+        memcpy(pKey, baDirectKey.constData(), qMin(baDirectKey.size(), 32));
+        return XBinary::isPdStructNotCanceled(pPdStruct);
+    }
+    if (nNumCyclesPower > 24) {
+        memset(pKey, 0, 32);
+        return false;
+    }
+
     // Note: Test code removed to reduce debug output
     // AES-256-CBC and SHA256 implementations verified correct with NIST test vectors
 
     // 7z AES key derivation algorithm
     // Key = SHA256^(2^NumCyclesPower) (Salt + Password + Counter)
 
-    const quint32 nKeySize = 32;  // AES-256 key size
     const quint32 nNumRounds = static_cast<quint32>(1) << nNumCyclesPower;
 
     // Prepare buffer: Salt + Password + 8-byte counter field
@@ -68,6 +103,10 @@ void XAESDecoder::deriveKey(const QString &sPassword, const QByteArray &baSalt, 
     XSha256Decoder::init(&sha);
 
     for (quint32 nRound = 0; nRound < nNumRounds; nRound++) {
+        if (((nRound & 0x3fff) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            memset(pKey, 0, 32);
+            return false;
+        }
         // Update 32-bit counter at end of buffer (little-endian)
         // CRITICAL: 7z uses ONLY 32-bit counter, not 64-bit!
         baBuffer[nCounterOffset + 0] = (nRound >> 0) & 0xFF;
@@ -82,6 +121,7 @@ void XAESDecoder::deriveKey(const QString &sPassword, const QByteArray &baSalt, 
 
     // Finalize and get the key
     XSha256Decoder::final(&sha, pKey);
+    return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByteArray &baProperties, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct)
@@ -96,9 +136,20 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
         return false;
     }
 
-    pDecryptState->bReadError = false;
-    pDecryptState->bWriteError = false;
-    pDecryptState->nCountOutput = 0;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    if ((pDecryptState->nInputOffset < 0) || (pDecryptState->nInputLimit <= 0) ||
+        (pDecryptState->nInputLimit > N_MAX_AES_WHOLE_BUFFER_SIZE + AES_BLOCK_SIZE)) {
+        qWarning() << "[XAESDecoder] Invalid or oversized input limit:" << pDecryptState->nInputLimit;
+        return false;
+    }
+
+    Algo_utils::prepareState(pDecryptState);
+    if (pDecryptState->bReadError || pDecryptState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     // Parse properties: FirstByte + Salt (0-16 bytes) + IV (16 bytes)
     // FirstByte format (from 7-Zip source):
@@ -164,23 +215,23 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
         } else {
             // IV in stream
             baIV.resize(16);
-            qint64 nIvRead = pDecryptState->pDeviceInput->read(baIV.data(), 16);
-            if (nIvRead != 16) {
-                qWarning() << "[XAESDecoder] Failed to read IV from stream: got" << nIvRead << "bytes";
+            if (!readAesExact(baIV.data(), 16, pDecryptState, pPdStruct)) {
+                qWarning() << "[XAESDecoder] Failed to read IV from stream";
                 return false;
             }
-            pDecryptState->nCountInput += 16;
         }
     }
 
     // Derive key from password
     quint8 aKey[32];  // AES-256 key
-    deriveKey(sPassword, baSalt, nNumCyclesPower, aKey);
+    if (!deriveKey(sPassword, baSalt, nNumCyclesPower, aKey, pPdStruct)) {
+        return false;
+    }
 
     // Read all remaining encrypted data
     qint64 nTotalEncrypted = pDecryptState->nInputLimit - pDecryptState->nCountInput;
 
-    if (nTotalEncrypted <= 0 || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
+    if (nTotalEncrypted <= 0 || !isAesWholeBufferSizeValid(nTotalEncrypted) || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
         qWarning() << "[XAESDecoder] Invalid encrypted data size:" << nTotalEncrypted;
         memset(aKey, 0, sizeof(aKey));
         return false;
@@ -264,22 +315,11 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
         }
     }
 
-    // Write to output device (works with any QIODevice: QBuffer, QFile, etc.)
-    if (nTotalDecrypted > 0) {
-        QBuffer *pBuffer = qobject_cast<QBuffer *>(pDecryptState->pDeviceOutput);
-        if (pBuffer) {
-            // For QBuffer: replace the buffer directly for efficiency
-            pBuffer->buffer() = baDecrypted;
-        } else {
-            // For other devices (QFile, etc.): write directly
-            qint64 nWritten = pDecryptState->pDeviceOutput->write(baDecrypted.constData(), nTotalDecrypted);
-            if (nWritten != nTotalDecrypted) {
-                qWarning() << "[XAESDecoder] Write error: wrote" << nWritten << "of" << nTotalDecrypted << "bytes";
-                memset(aKey, 0, sizeof(aKey));
-                return false;
-            }
-        }
-        pDecryptState->nCountOutput += nTotalDecrypted;
+    if ((nTotalDecrypted > 0) &&
+        (XBinary::_writeDevice(baDecrypted.data(), static_cast<qint32>(nTotalDecrypted), pDecryptState) != nTotalDecrypted)) {
+        qWarning() << "[XAESDecoder] Write error for" << nTotalDecrypted << "bytes";
+        memset(aKey, 0, sizeof(aKey));
+        return false;
     }
 
     // Zero out sensitive data
@@ -329,12 +369,8 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QB
 {
     bool bResult = false;
 
-    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && !baPassword.isEmpty()) {
-        pDecompressState->bReadError = false;
-        pDecompressState->bWriteError = false;
-        pDecompressState->nCountInput = 0;
-        pDecompressState->nCountOutput = 0;
-
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && !baPassword.isEmpty() &&
+        XBinary::isPdStructNotCanceled(pPdStruct)) {
         qint32 nKeySize = 0;
         qint32 nSaltSize = 0;
 
@@ -356,17 +392,26 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QB
                 return false;
         }
 
+        const qint64 nEnvelopeSize = (qint64)nSaltSize + N_PASSWORD_VERIFY_SIZE + N_HMAC_SIZE;
+        if ((pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < nEnvelopeSize) ||
+            !isAesWholeBufferSizeValid(pDecompressState->nInputLimit - nEnvelopeSize)) {
+            return false;
+        }
+
+        Algo_utils::prepareState(pDecompressState);
+        if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return false;
+        }
+
         char bufferSalt[16];
-        qint32 nSaltRead = XBinary::_readDevice(bufferSalt, nSaltSize, pDecompressState);
-        if (nSaltRead != nSaltSize) {
+        if (!readAesExact(bufferSalt, nSaltSize, pDecompressState, pPdStruct)) {
             pDecompressState->bReadError = true;
             return false;
         }
         QByteArray baSalt(bufferSalt, nSaltSize);
 
         char bufferPasswordVerify[N_PASSWORD_VERIFY_SIZE];
-        qint32 nPasswordVerifyRead = XBinary::_readDevice(bufferPasswordVerify, N_PASSWORD_VERIFY_SIZE, pDecompressState);
-        if (nPasswordVerifyRead != N_PASSWORD_VERIFY_SIZE) {
+        if (!readAesExact(bufferPasswordVerify, N_PASSWORD_VERIFY_SIZE, pDecompressState, pPdStruct)) {
             pDecompressState->bReadError = true;
             return false;
         }
@@ -417,8 +462,7 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QB
         }
 
         char bufferHmac[N_HMAC_SIZE];
-        qint32 nHmacRead = XBinary::_readDevice(bufferHmac, N_HMAC_SIZE, pDecompressState);
-        if (nHmacRead != N_HMAC_SIZE) {
+        if (!readAesExact(bufferHmac, N_HMAC_SIZE, pDecompressState, pPdStruct)) {
             pDecompressState->bReadError = true;
             baAESKey.fill('\0');
             baPasswordVerifyKey.fill('\0');
@@ -443,10 +487,12 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QB
         bResult = decryptAESCTR(baAESKey, baNonce, baEncryptedData.constData(), baDecryptedData.data(), nEncryptedDataSize, pPdStruct);
 
         if (bResult) {
-            XBinary::_writeDevice(baDecryptedData.data(), static_cast<qint32>(nEncryptedDataSize), pDecompressState);
+            bResult = XBinary::_writeDevice(baDecryptedData.data(), static_cast<qint32>(nEncryptedDataSize), pDecompressState) ==
+                      static_cast<qint32>(nEncryptedDataSize);
         }
 
-        bResult = !pDecompressState->bReadError && !pDecompressState->bWriteError;
+        bResult = bResult && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+                  XBinary::isPdStructNotCanceled(pPdStruct);
 
         baAESKey.fill('\0');
         baPasswordVerifyKey.fill('\0');
@@ -489,7 +535,9 @@ void XAESDecoder::pbkdf2(const QByteArray &baPassword, const QByteArray &baSalt,
 bool XAESDecoder::deriveKeys(const QByteArray &baPassword, const QByteArray &baSalt, qint32 nKeySize, QByteArray &baAESKey, QByteArray &baPasswordVerify,
                             QByteArray &baHMACKey, XBinary::PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     qint32 nPasswordVerifyAlignedSize = (N_PASSWORD_VERIFY_SIZE + 3) & ~3;
     qint32 nTotalKeySize = 2 * nKeySize + nPasswordVerifyAlignedSize;
@@ -507,7 +555,7 @@ bool XAESDecoder::deriveKeys(const QByteArray &baPassword, const QByteArray &baS
     baPasswordVerify = baDerivedKeys.mid(nPasswordVerifyOffset, N_PASSWORD_VERIFY_SIZE);
     baHMACKey = baDerivedKeys.mid(nKeySize, nKeySize);
 
-    return true;
+    return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 //------------------------------------------------------------------------------
@@ -892,12 +940,8 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
 {
     bool bResult = false;
 
-    if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput && !baPassword.isEmpty()) {
-        pCompressState->bReadError = false;
-        pCompressState->bWriteError = false;
-        pCompressState->nCountInput = 0;
-        pCompressState->nCountOutput = 0;
-
+    if (pCompressState && pCompressState->pDeviceInput && pCompressState->pDeviceOutput && !baPassword.isEmpty() &&
+        XBinary::isPdStructNotCanceled(pPdStruct)) {
         qint32 nKeySize = 0;
         qint32 nSaltSize = 0;
 
@@ -917,6 +961,16 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
                 break;
             default:
                 return false;
+        }
+
+        if ((pCompressState->nInputOffset < 0) || !isAesWholeBufferSizeValid(pCompressState->nInputLimit) ||
+            (pCompressState->nInputLimit <= 0)) {
+            return false;
+        }
+
+        Algo_utils::prepareState(pCompressState);
+        if (pCompressState->bReadError || pCompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return false;
         }
 
         if (nKeySize <= 0) {
@@ -945,14 +999,12 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
             return false;
         }
 
-        XBinary::_writeDevice((char *)baSalt.constData(), nSaltSize, pCompressState);
-        if (pCompressState->bWriteError) {
+        if (XBinary::_writeDevice((char *)baSalt.constData(), nSaltSize, pCompressState) != nSaltSize) {
             clearZipKeys();
             return false;
         }
 
-        XBinary::_writeDevice((char *)baPasswordVerify.constData(), N_PASSWORD_VERIFY_SIZE, pCompressState);
-        if (pCompressState->bWriteError) {
+        if (XBinary::_writeDevice((char *)baPasswordVerify.constData(), N_PASSWORD_VERIFY_SIZE, pCompressState) != N_PASSWORD_VERIFY_SIZE) {
             clearZipKeys();
             return false;
         }
@@ -987,13 +1039,17 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
         const QByteArray baNonce(N_AES_BLOCK_SIZE, '\0');
         bResult = encryptAESCTR(baAESKey, baNonce, baPlainData.constData(), baEncryptedData.data(), nPlainDataSize, pPdStruct);
 
-        if (bResult) {
+        if (bResult && XBinary::isPdStructNotCanceled(pPdStruct)) {
             QByteArray baComputedHmac = Algo_utils::hmacSha1(baHMACKey, baEncryptedData);
-            XBinary::_writeDevice((char *)baEncryptedData.constData(), static_cast<qint32>(nPlainDataSize), pCompressState);
-            XBinary::_writeDevice((char *)baComputedHmac.constData(), N_HMAC_SIZE, pCompressState);
+            bResult = XBinary::_writeDevice((char *)baEncryptedData.constData(), static_cast<qint32>(nPlainDataSize), pCompressState) ==
+                      static_cast<qint32>(nPlainDataSize);
+            if (bResult) {
+                bResult = XBinary::_writeDevice((char *)baComputedHmac.constData(), N_HMAC_SIZE, pCompressState) == N_HMAC_SIZE;
+            }
         }
 
-        bResult = !pCompressState->bReadError && !pCompressState->bWriteError;
+        bResult = bResult && !pCompressState->bReadError && !pCompressState->bWriteError &&
+                  XBinary::isPdStructNotCanceled(pPdStruct);
         clearZipKeys();
     }
 
@@ -1047,8 +1103,11 @@ void XAESDecoder::hmacSha256Final(XSha256Decoder::Context *pInnerCtx, XSha256Dec
 
 // RAR5 key derivation: PBKDF2-HMAC-SHA256 producing 3 keys (AES key, hash key, password check)
 // Follows the RAR5 spec: 2^nCnt main iterations, then 16 extra per additional key
-void XAESDecoder::deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSalt, quint8 nCnt, quint8 *pAesKey, quint8 *pHashKey, quint8 *pPswCheck)
+bool XAESDecoder::deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSalt, quint8 nCnt, quint8 *pAesKey, quint8 *pHashKey,
+                                quint8 *pPswCheck, XBinary::PDSTRUCT *pPdStruct)
 {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
     // Set up base HMAC context with password as key
     XSha256Decoder::Context baseInner, baseOuter;
     hmacSha256SetKey(&baseInner, &baseOuter, reinterpret_cast<const quint8 *>(baPassword.constData()), baPassword.size());
@@ -1072,6 +1131,11 @@ void XAESDecoder::deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSa
     // 3 keys: i=0 → AES key, i=1 → hashKey, i=2 → pswCheck
     for (qint32 i = 0; i < 3; i++) {
         for (; nIterations != 0; nIterations--) {
+            if (((nIterations & 0x3fff) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
+                memset(aU, 0, 32);
+                memset(aKey, 0, 32);
+                return false;
+            }
             // u = HMAC(password, u)
             ctxInner = baseInner;
             ctxOuter = baseOuter;
@@ -1099,17 +1163,65 @@ void XAESDecoder::deriveRar5Keys(const QByteArray &baPassword, const quint8 *pSa
 
     memset(aU, 0, 32);
     memset(aKey, 0, 32);
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+bool XAESDecoder::calculateRar5CRC32MAC(const QString &sPassword, const QByteArray &baAESKeyProperties, quint32 nCRC32,
+                                        quint32 *pnMAC, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pnMAC || sPassword.isEmpty() || (baAESKeyProperties.size() < 33) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    const quint8 nCnt = (quint8)baAESKeyProperties.at(0);
+    if (nCnt > 24) {
+        return false;
+    }
+
+    quint8 aAesKey[32] = {};
+    quint8 aHashKey[32] = {};
+    quint8 aPswCheck[32] = {};
+    quint8 aDigest[32] = {};
+    quint8 aRawCRC[4] = {(quint8)nCRC32, (quint8)(nCRC32 >> 8), (quint8)(nCRC32 >> 16), (quint8)(nCRC32 >> 24)};
+
+    const QByteArray baPassword = sPassword.toUtf8();
+    const quint8 *pSalt = reinterpret_cast<const quint8 *>(baAESKeyProperties.constData()) + 1;
+    bool bResult = deriveRar5Keys(baPassword, pSalt, nCnt, aAesKey, aHashKey, aPswCheck, pPdStruct);
+
+    if (bResult) {
+        XSha256Decoder::Context innerContext;
+        XSha256Decoder::Context outerContext;
+        hmacSha256SetKey(&innerContext, &outerContext, aHashKey, sizeof(aHashKey));
+        XSha256Decoder::update(&innerContext, aRawCRC, sizeof(aRawCRC));
+        hmacSha256Final(&innerContext, &outerContext, aDigest);
+
+        quint32 nMAC = 0;
+        for (qint32 i = 0; i < (qint32)sizeof(aDigest); i++) {
+            nMAC ^= (quint32)aDigest[i] << ((i & 3) * 8);
+        }
+        *pnMAC = nMAC;
+        bResult = XBinary::isPdStructNotCanceled(pPdStruct);
+    }
+
+    memset(aAesKey, 0, sizeof(aAesKey));
+    memset(aHashKey, 0, sizeof(aHashKey));
+    memset(aPswCheck, 0, sizeof(aPswCheck));
+    memset(aDigest, 0, sizeof(aDigest));
+    memset(aRawCRC, 0, sizeof(aRawCRC));
+    return bResult;
 }
 
 QByteArray XAESDecoder::deriveRar5HeaderKey(const QString &sPassword, const QByteArray &baSalt, quint8 nKdfCount)
 {
-    if (sPassword.isEmpty() || baSalt.size() < 16) {
+    if (sPassword.isEmpty() || baSalt.size() < 16 || nKdfCount > 24) {
         return QByteArray();
     }
 
     QByteArray baPassword = sPassword.toUtf8();
     quint8 aAesKey[32], aHashKey[32], aPswCheck[32];
-    deriveRar5Keys(baPassword, reinterpret_cast<const quint8 *>(baSalt.constData()), nKdfCount, aAesKey, aHashKey, aPswCheck);
+    if (!deriveRar5Keys(baPassword, reinterpret_cast<const quint8 *>(baSalt.constData()), nKdfCount, aAesKey, aHashKey, aPswCheck)) {
+        return QByteArray();
+    }
 
     QByteArray baResult(reinterpret_cast<const char *>(aAesKey), 32);
 
@@ -1123,8 +1235,6 @@ QByteArray XAESDecoder::deriveRar5HeaderKey(const QString &sPassword, const QByt
 // RAR5 AES-256-CBC decrypt
 bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     if (!pDecryptState || !pDecryptState->pDeviceInput || !pDecryptState->pDeviceOutput) {
         qWarning() << "[XAESDecoder::decryptRar5] Invalid state or devices";
         return false;
@@ -1132,6 +1242,21 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
 
     if (sPassword.isEmpty()) {
         qWarning() << "[XAESDecoder::decryptRar5] Password is required for RAR5 AES decryption";
+        return false;
+    }
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    if ((pDecryptState->nInputOffset < 0) || !isAesWholeBufferSizeValid(pDecryptState->nInputLimit) ||
+        (pDecryptState->nInputLimit <= 0) || ((pDecryptState->nInputLimit % AES_BLOCK_SIZE) != 0)) {
+        qWarning() << "[XAESDecoder::decryptRar5] Invalid or oversized input limit:" << pDecryptState->nInputLimit;
+        return false;
+    }
+
+    Algo_utils::prepareState(pDecryptState);
+    if (pDecryptState->bReadError || pDecryptState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -1144,6 +1269,9 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
     }
 
     quint8 nCnt = static_cast<quint8>(baAESKeyProp.at(0));
+    if (nCnt > 24 || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
     QByteArray baSalt = baAESKeyProp.mid(1, 16);
     QByteArray baIV = baAESKeyProp.mid(17, 16);
 
@@ -1154,7 +1282,12 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
     quint8 aAesKey[32];
     quint8 aHashKey[32];
     quint8 aPswCheck[32];
-    deriveRar5Keys(baPassword, reinterpret_cast<const quint8 *>(baSalt.constData()), nCnt, aAesKey, aHashKey, aPswCheck);
+    if (!deriveRar5Keys(baPassword, reinterpret_cast<const quint8 *>(baSalt.constData()), nCnt, aAesKey, aHashKey, aPswCheck, pPdStruct)) {
+        memset(aAesKey, 0, 32);
+        memset(aHashKey, 0, 32);
+        memset(aPswCheck, 0, 32);
+        return false;
+    }
 
     // Optional password verification (if pswCheck present in AESKEY)
     if (baAESKeyProp.size() >= 45) {  // 33 + 12 = 45 (8 bytes pswCheck + 4 bytes checksum)
@@ -1178,7 +1311,7 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
     // Read all encrypted data
     qint64 nTotalEncrypted = pDecryptState->nInputLimit - pDecryptState->nCountInput;
 
-    if (nTotalEncrypted <= 0 || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
+    if (nTotalEncrypted <= 0 || !isAesWholeBufferSizeValid(nTotalEncrypted) || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
         qWarning() << "[XAESDecoder::decryptRar5] Invalid encrypted data size:" << nTotalEncrypted;
         memset(aAesKey, 0, 32);
         memset(aHashKey, 0, 32);
@@ -1188,9 +1321,15 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
 
     QByteArray baEncrypted;
     baEncrypted.resize(static_cast<qint32>(nTotalEncrypted));
-    qint32 nRead = XBinary::_readDevice(baEncrypted.data(), static_cast<qint32>(nTotalEncrypted), pDecryptState);
-    if (nRead != static_cast<qint32>(nTotalEncrypted)) {
-        qWarning() << "[XAESDecoder::decryptRar5] Failed to read encrypted data: got" << nRead << "expected" << nTotalEncrypted;
+    qint64 nReadTotal = 0;
+    while ((nReadTotal < nTotalEncrypted) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nToRead = qMin<qint64>(N_BUFFER_SIZE, nTotalEncrypted - nReadTotal);
+        const qint32 nRead = XBinary::_readDevice(baEncrypted.data() + nReadTotal, nToRead, pDecryptState);
+        if (nRead <= 0) break;
+        nReadTotal += nRead;
+    }
+    if ((nReadTotal != nTotalEncrypted) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qWarning() << "[XAESDecoder::decryptRar5] Failed to read encrypted data: got" << nReadTotal << "expected" << nTotalEncrypted;
         memset(aAesKey, 0, 32);
         memset(aHashKey, 0, 32);
         memset(aPswCheck, 0, 32);
@@ -1215,14 +1354,13 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
     // Use the full decrypted size since the decompressor will handle the actual data length
     qint64 nToWrite = nTotalEncrypted;
 
-    pDecryptState->pDeviceOutput->seek(0);
-    qint64 nWritten = pDecryptState->pDeviceOutput->write(baDecrypted.constData(), nToWrite);
-    pDecryptState->nCountOutput = nWritten;
+    qint32 nWritten = XBinary::_writeDevice(baDecrypted.data(), static_cast<qint32>(nToWrite), pDecryptState);
 
     // Clear sensitive data
     memset(aAesKey, 0, 32);
     memset(aHashKey, 0, 32);
     memset(aPswCheck, 0, 32);
 
-    return (nWritten == nToWrite);
+    return (nWritten == nToWrite) && !pDecryptState->bReadError && !pDecryptState->bWriteError &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }

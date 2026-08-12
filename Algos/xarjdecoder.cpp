@@ -21,57 +21,178 @@
 #include "xarjdecoder.h"
 #include "algo_utils.h"
 
+#include <algorithm>
 #include <cstring>
+#include <limits>
+#include <memory>
+#include <new>
+
+namespace {
+bool arjPrepareState(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct, quint32 *pCompressedSize, quint32 *pOriginalSize)
+{
+    if (!pState || !pCompressedSize || !pOriginalSize) return false;
+
+    Algo_utils::prepareState(pState);
+
+    if (!pState->pDeviceInput || !pState->pDeviceInput->isReadable()) {
+        pState->bReadError = true;
+    }
+    if (!pState->pDeviceOutput || !pState->pDeviceOutput->isWritable()) {
+        pState->bWriteError = true;
+    }
+    if (pState->bReadError || pState->bWriteError) return false;
+
+    const qint64 nMax32 = (std::numeric_limits<quint32>::max)();
+    if ((pState->nInputLimit < 0) || (pState->nInputLimit > nMax32)) {
+        pState->bReadError = true;
+        return false;
+    }
+
+    bool bOriginalSizeValid = false;
+    const qint64 nOriginalSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bOriginalSizeValid);
+    if (!pState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) || !bOriginalSizeValid || (nOriginalSize < 0) ||
+        (nOriginalSize > nMax32)) {
+        return false;
+    }
+
+    const qint64 nMax64 = (std::numeric_limits<qint64>::max)();
+    if ((pState->nProcessedOffset < 0) || (pState->nProcessedLimit < -1) ||
+        ((pState->nProcessedLimit != -1) && (pState->nProcessedOffset > nMax64 - pState->nProcessedLimit))) {
+        pState->bWriteError = true;
+        return false;
+    }
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    *pCompressedSize = static_cast<quint32>(pState->nInputLimit);
+    *pOriginalSize = static_cast<quint32>(nOriginalSize);
+    return true;
+}
+
+bool arjWriteAll(XBinary::DATAPROCESS_STATE *pState, const char *pData, qint32 nSize, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pState || (nSize < 0) || ((nSize > 0) && !pData) || (pState->nCountOutput < 0)) {
+        if (pState) pState->bWriteError = true;
+        return false;
+    }
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    const qint64 nChunkStart = pState->nCountOutput;
+    const qint64 nWindowOffset = pState->nProcessedOffset;
+    const qint64 nWindowSize = pState->nProcessedLimit;
+    const qint64 nMax64 = (std::numeric_limits<qint64>::max)();
+    if ((nWindowOffset < 0) || (nWindowSize < -1) || (nChunkStart > nMax64 - nSize) ||
+        ((nWindowSize != -1) && (nWindowOffset > nMax64 - nWindowSize))) {
+        pState->bWriteError = true;
+        return false;
+    }
+
+    const qint64 nChunkEnd = nChunkStart + nSize;
+    const qint64 nWindowEnd = (nWindowSize == -1) ? nMax64 : nWindowOffset + nWindowSize;
+    const qint64 nWriteStart = (std::max)(nChunkStart, nWindowOffset);
+    const qint64 nWriteEnd = (std::min)(nChunkEnd, nWindowEnd);
+    if (nWriteEnd <= nWriteStart) {
+        pState->nCountOutput = nChunkEnd;
+        return XBinary::isPdStructNotCanceled(pPdStruct);
+    }
+
+    if (!pState->pDeviceOutput || !pState->pDeviceOutput->isWritable()) {
+        pState->bWriteError = true;
+        return false;
+    }
+
+    const qint64 nDataOffset = nWriteStart - nChunkStart;
+    const qint64 nWriteSize = nWriteEnd - nWriteStart;
+    qint64 nWrittenTotal = 0;
+    pState->nCountOutput = nWriteStart;
+
+    while (nWrittenTotal < nWriteSize) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+        const qint64 nWritten = pState->pDeviceOutput->write(pData + nDataOffset + nWrittenTotal, nWriteSize - nWrittenTotal);
+        if ((nWritten <= 0) || (nWritten > (nWriteSize - nWrittenTotal))) {
+            pState->bWriteError = true;
+            return false;
+        }
+
+        nWrittenTotal += nWritten;
+        pState->nCountOutput = nWriteStart + nWrittenTotal;
+    }
+
+    pState->nCountOutput = nChunkEnd;
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+}  // namespace
 
 XArjDecoder::XArjDecoder(QObject *pParent) : QObject(pParent)
 {
 }
 
-void XArjDecoder::refillInputBuffer(ArjDecodeState *pState)
+bool XArjDecoder::refillInputBuffer(ArjDecodeState *pState)
 {
-    if (pState->pInput) {
-        qint32 nToRead = pState->nReadBufferSize;
-        qint32 nRead = pState->pInput->read(reinterpret_cast<char *>(pState->pReadBuffer), nToRead);
-
-        if (nRead > 0) {
-            pState->pBuf = pState->pReadBuffer;
-            pState->nBufAvail = nRead;
-            pState->nInputBytesRead += nRead;
-        } else {
-            pState->nBufAvail = 0;
+    if (!pState || pState->bError || !pState->pProcessState || !pState->pReadBuffer || (pState->nReadBufferSize <= 0) ||
+        (pState->nCompLeft == 0)) {
+        if (pState) {
+            pState->bError = true;
+            if (pState->pProcessState) pState->pProcessState->bReadError = true;
         }
+        return false;
     }
+    if (!XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+        pState->bError = true;
+        return false;
+    }
+
+    const qint32 nToRead = static_cast<qint32>((std::min)(static_cast<quint32>(pState->nReadBufferSize), pState->nCompLeft));
+    const qint32 nRead = XBinary::_readDevice(reinterpret_cast<char *>(pState->pReadBuffer), nToRead, pState->pProcessState);
+    if ((nRead <= 0) || (nRead > nToRead)) {
+        pState->nBufAvail = 0;
+        pState->bError = true;
+        pState->pProcessState->bReadError = true;
+        return false;
+    }
+
+    pState->pBuf = pState->pReadBuffer;
+    pState->nBufAvail = nRead;
+    return true;
 }
 
 bool XArjDecoder::fillBuf(ArjDecodeState *pState, qint32 nBits)
 {
-    if (pState->bError) {
+    if (!pState || pState->bError || (nBits < 0) || (nBits > 16)) {
+        if (pState) pState->bError = true;
+        return false;
+    }
+    if (!XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+        pState->bError = true;
         return false;
     }
 
-    pState->nBitBuf = (pState->nBitBuf << nBits) & 0xFFFF;
+    pState->nBitBuf = static_cast<quint16>((static_cast<quint32>(pState->nBitBuf) << nBits) & 0xFFFFU);
 
     while (nBits > pState->nBitCount) {
-        pState->nBitBuf |= (quint16)(pState->nSubBitBuf << (nBits - pState->nBitCount));
+        pState->nBitBuf |= static_cast<quint16>(static_cast<quint32>(pState->nSubBitBuf) << (nBits - pState->nBitCount));
         nBits -= pState->nBitCount;
 
-        if (pState->nCompLeft > 0) {
-            pState->nCompLeft--;
-
-            if (pState->nBufAvail <= 0) {
-                refillInputBuffer(pState);
-            }
-
-            if (pState->nBufAvail > 0) {
-                pState->nSubBitBuf = *pState->pBuf++;
-                pState->nBufAvail--;
-            } else {
-                pState->nSubBitBuf = 0;
-            }
-        } else {
-            pState->nSubBitBuf = 0;
+        if (!XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+            pState->bError = true;
+            return false;
+        }
+        if (pState->nCompLeft == 0) {
+            pState->bError = true;
+            if (pState->pProcessState) pState->pProcessState->bReadError = true;
+            return false;
+        }
+        if ((pState->nBufAvail <= 0) && !refillInputBuffer(pState)) return false;
+        if (!pState->pBuf || (pState->nBufAvail <= 0)) {
+            pState->bError = true;
+            if (pState->pProcessState) pState->pProcessState->bReadError = true;
+            return false;
         }
 
+        pState->nSubBitBuf = *pState->pBuf++;
+        pState->nBufAvail--;
+        pState->nCompLeft--;
         pState->nBitCount = 8;
     }
 
@@ -83,8 +204,13 @@ bool XArjDecoder::fillBuf(ArjDecodeState *pState, qint32 nBits)
 
 quint16 XArjDecoder::getBits(ArjDecodeState *pState, qint32 nBits)
 {
-    quint16 nResult = pState->nBitBuf >> (16 - nBits);
-    fillBuf(pState, nBits);
+    if (!pState || pState->bError || (nBits < 0) || (nBits > 16)) {
+        if (pState) pState->bError = true;
+        return 0;
+    }
+
+    const quint16 nResult = (nBits == 0) ? 0 : static_cast<quint16>(pState->nBitBuf >> (16 - nBits));
+    if (!fillBuf(pState, nBits)) return 0;
     return nResult;
 }
 
@@ -235,7 +361,8 @@ bool XArjDecoder::readPtLen(ArjDecodeState *pState, qint32 nCount, qint32 nBitWi
     if (nN == 0) {
         qint16 nC = getBits(pState, nBitWidth);
 
-        if (pState->bError) {
+        if (pState->bError || (nC < 0) || (nC >= nCount) || (nC >= NPT)) {
+            pState->bError = true;
             return false;
         }
 
@@ -247,6 +374,11 @@ bool XArjDecoder::readPtLen(ArjDecodeState *pState, qint32 nCount, qint32 nBitWi
             pState->arrPtTable[i] = nC;
         }
     } else {
+        if ((nN > nCount) || (nN > NPT)) {
+            pState->bError = true;
+            return false;
+        }
+
         qint32 i = 0;
 
         while ((i < nN) && (i < NPT)) {
@@ -305,7 +437,8 @@ bool XArjDecoder::readCLen(ArjDecodeState *pState)
     if (nN == 0) {
         qint16 nC = getBits(pState, CBIT);
 
-        if (pState->bError) {
+        if (pState->bError || (nC < 0) || (nC >= NC)) {
+            pState->bError = true;
             return false;
         }
 
@@ -317,6 +450,11 @@ bool XArjDecoder::readCLen(ArjDecodeState *pState)
             pState->arrCTable[i] = nC;
         }
     } else {
+        if (nN > NC) {
+            pState->bError = true;
+            return false;
+        }
+
         qint32 i = 0;
 
         while (i < nN) {
@@ -399,9 +537,11 @@ quint16 XArjDecoder::decodeC(ArjDecodeState *pState)
 {
     if (pState->nBlockSize == 0) {
         pState->nBlockSize = getBits(pState, 16);
-        readPtLen(pState, NT, TBIT, 3);
-        readCLen(pState);
-        readPtLen(pState, NP, PBIT, -1);
+        if (pState->bError || (pState->nBlockSize == 0) || !readPtLen(pState, NT, TBIT, 3) || !readCLen(pState) ||
+            !readPtLen(pState, NP, PBIT, -1)) {
+            pState->bError = true;
+            return 0;
+        }
     }
 
     if (pState->bError) {
@@ -461,6 +601,8 @@ quint16 XArjDecoder::decodeP(ArjDecodeState *pState)
 
     fillBuf(pState, pState->arrPtLen[nJ]);
 
+    if (pState->bError) return 0;
+
     if (nJ != 0) {
         quint16 nBitsToRead = nJ - 1;
         nJ = (1 << nBitsToRead) + getBits(pState, nBitsToRead);
@@ -471,6 +613,11 @@ quint16 XArjDecoder::decodeP(ArjDecodeState *pState)
 
 quint16 XArjDecoder::decodeLen(ArjDecodeState *pState)
 {
+    if (!pState || pState->bError || (pState->nGetLen < 0) || (pState->nGetLen > CODE_BIT)) {
+        if (pState) pState->bError = true;
+        return 0;
+    }
+
     quint16 nC = 0;
     quint16 nWidth = 0;
     quint16 nPlus = 0;
@@ -479,8 +626,8 @@ quint16 XArjDecoder::decodeLen(ArjDecodeState *pState)
     for (nWidth = STRTL; nWidth < STOPL; nWidth++) {
         // getbit
         if (pState->nGetLen <= 0) {
-            pState->nGetBuf |= pState->nBitBuf >> pState->nGetLen;
-            fillBuf(pState, CODE_BIT - pState->nGetLen);
+            pState->nGetBuf |= pState->nBitBuf;
+            if (!fillBuf(pState, CODE_BIT)) return 0;
             pState->nGetLen = CODE_BIT;
         }
 
@@ -503,8 +650,12 @@ quint16 XArjDecoder::decodeLen(ArjDecodeState *pState)
     if (nWidth != 0) {
         // getbits
         if (pState->nGetLen < nWidth) {
+            if ((pState->nGetLen < 0) || (pState->nGetLen > CODE_BIT)) {
+                pState->bError = true;
+                return 0;
+            }
             pState->nGetBuf |= pState->nBitBuf >> pState->nGetLen;
-            fillBuf(pState, CODE_BIT - pState->nGetLen);
+            if (!fillBuf(pState, CODE_BIT - pState->nGetLen)) return 0;
             pState->nGetLen = CODE_BIT;
         }
 
@@ -524,6 +675,11 @@ quint16 XArjDecoder::decodeLen(ArjDecodeState *pState)
 
 quint16 XArjDecoder::decodePtr(ArjDecodeState *pState)
 {
+    if (!pState || pState->bError || (pState->nGetLen < 0) || (pState->nGetLen > CODE_BIT)) {
+        if (pState) pState->bError = true;
+        return 0;
+    }
+
     quint16 nC = 0;
     quint16 nWidth = 0;
     quint16 nPlus = 0;
@@ -532,8 +688,8 @@ quint16 XArjDecoder::decodePtr(ArjDecodeState *pState)
     for (nWidth = STRTP; nWidth < STOPP; nWidth++) {
         // getbit
         if (pState->nGetLen <= 0) {
-            pState->nGetBuf |= pState->nBitBuf >> pState->nGetLen;
-            fillBuf(pState, CODE_BIT - pState->nGetLen);
+            pState->nGetBuf |= pState->nBitBuf;
+            if (!fillBuf(pState, CODE_BIT)) return 0;
             pState->nGetLen = CODE_BIT;
         }
 
@@ -556,8 +712,12 @@ quint16 XArjDecoder::decodePtr(ArjDecodeState *pState)
     if (nWidth != 0) {
         // getbits
         if (pState->nGetLen < nWidth) {
+            if ((pState->nGetLen < 0) || (pState->nGetLen > CODE_BIT)) {
+                pState->bError = true;
+                return 0;
+            }
             pState->nGetBuf |= pState->nBitBuf >> pState->nGetLen;
-            fillBuf(pState, CODE_BIT - pState->nGetLen);
+            if (!fillBuf(pState, CODE_BIT - pState->nGetLen)) return 0;
             pState->nGetLen = CODE_BIT;
         }
 
@@ -577,283 +737,131 @@ quint16 XArjDecoder::decodePtr(ArjDecodeState *pState)
 
 bool XArjDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
-        return false;
-    }
-
-    XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
-
-    if (!pPdStruct) {
-        pPdStruct = &pdStructEmpty;
-    }
-
-    qint64 nOrigSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
-
-    ArjDecodeState state = {};
-    state.nReadBufferSize = 8192;
-    state.pReadBuffer = new quint8[state.nReadBufferSize];
-    state.pText = new quint8[DDICSIZ];
-
-    if (!state.pReadBuffer || !state.pText) {
-        delete[] state.pReadBuffer;
-        delete[] state.pText;
-        return false;
-    }
-
-    memset(state.pText, 0, DDICSIZ);
-
-    Algo_utils::seekToStart(pDecompressState);
-
-    state.nCompLeft = static_cast<quint32>(pDecompressState->nInputLimit);
-    state.pInput = pDecompressState->pDeviceInput;
-    state.nInputBytesRead = 0;
-    state.pBuf = nullptr;
-    state.nBufAvail = 0;
-
-    if (!initGetBits(&state)) {
-        delete[] state.pReadBuffer;
-        delete[] state.pText;
-        return false;
-    }
-
-    quint32 nCount = 0;
-    quint32 nOutPtr = 0;
-    qint64 nOutputWritten = 0;
-
-    while ((nCount < (quint32)nOrigSize) && !state.bError && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint16 nChr = static_cast<qint16>(decodeC(&state));
-
-        if (state.bError) {
-            break;
-        }
-
-        if (nChr <= 255) {
-            state.pText[nOutPtr] = (quint8)nChr;
-            nCount++;
-
-            if (++nOutPtr >= (quint32)DDICSIZ) {
-                nOutPtr = 0;
-                qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), DDICSIZ);
-
-                if (nWritten != DDICSIZ) {
-                    state.bError = true;
-                    break;
-                }
-
-                nOutputWritten += nWritten;
-            }
-        } else {
-            qint32 nMatchLen = nChr - (255 + 1 - THRESHOLD);
-            nCount += nMatchLen;
-
-            qint32 nPos = decodeP(&state);
-
-            if (state.bError) {
-                break;
-            }
-
-            qint32 nSrcIdx = nOutPtr - nPos - 1;
-
-            if (nSrcIdx < 0) {
-                nSrcIdx += DDICSIZ;
-            }
-
-            if ((nSrcIdx >= DDICSIZ) || (nSrcIdx < 0)) {
-                state.bError = true;
-                break;
-            }
-
-            if ((quint32)nSrcIdx < nOutPtr && nOutPtr < (quint32)(DDICSIZ - MAXMATCH - 1)) {
-                while ((--nMatchLen >= 0) && (nSrcIdx < DDICSIZ) && (nOutPtr < (quint32)DDICSIZ)) {
-                    state.pText[nOutPtr++] = state.pText[nSrcIdx++];
-                }
-            } else {
-                while (--nMatchLen >= 0) {
-                    state.pText[nOutPtr] = state.pText[nSrcIdx];
-
-                    if (++nOutPtr >= (quint32)DDICSIZ) {
-                        nOutPtr = 0;
-                        qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), DDICSIZ);
-
-                        if (nWritten != DDICSIZ) {
-                            state.bError = true;
-                            break;
-                        }
-
-                        nOutputWritten += nWritten;
-                    }
-
-                    if (++nSrcIdx >= DDICSIZ) {
-                        nSrcIdx = 0;
-                    }
-                }
-            }
-        }
-    }
-
-    if (!state.bError && (nOutPtr != 0)) {
-        qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), nOutPtr);
-
-        if (nWritten != static_cast<qint64>(nOutPtr)) {
-            state.bError = true;
-        } else {
-            nOutputWritten += nWritten;
-        }
-    }
-
-    pDecompressState->nCountInput = state.nInputBytesRead;
-    pDecompressState->nCountOutput = nOutputWritten;
-
-    delete[] state.pReadBuffer;
-    delete[] state.pText;
-
-    return !state.bError;
+    return decompressInternal(pDecompressState, pPdStruct, false);
 }
 
 bool XArjDecoder::decompressFastest(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
-        return false;
-    }
+    return decompressInternal(pDecompressState, pPdStruct, true);
+}
 
+bool XArjDecoder::decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct, bool bFastest)
+{
     XBinary::PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) pPdStruct = &pdStructEmpty;
 
-    if (!pPdStruct) {
-        pPdStruct = &pdStructEmpty;
+    quint32 nCompressedSize = 0;
+    quint32 nOriginalSize = 0;
+    if (!arjPrepareState(pDecompressState, pPdStruct, &nCompressedSize, &nOriginalSize)) return false;
+
+    if (nOriginalSize == 0) {
+        return (nCompressedSize == 0) && (pDecompressState->nCountInput == 0) && (pDecompressState->nCountOutput == 0) &&
+               !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
     }
 
-    qint64 nOrigSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
+    std::unique_ptr<quint8[]> pReadBuffer(new (std::nothrow) quint8[8192]);
+    std::unique_ptr<quint8[]> pText(new (std::nothrow) quint8[DDICSIZ]);
+    if (!pReadBuffer || !pText) return false;
+
+    memset(pText.get(), 0, DDICSIZ);
 
     ArjDecodeState state = {};
     state.nReadBufferSize = 8192;
-    state.pReadBuffer = new quint8[state.nReadBufferSize];
-    state.pText = new quint8[DDICSIZ];
+    state.pReadBuffer = pReadBuffer.get();
+    state.pText = pText.get();
+    state.nCompLeft = nCompressedSize;
+    state.pProcessState = pDecompressState;
+    state.pPdStruct = pPdStruct;
 
-    if (!state.pReadBuffer || !state.pText) {
-        delete[] state.pReadBuffer;
-        delete[] state.pText;
-        return false;
-    }
-
-    memset(state.pText, 0, DDICSIZ);
-
-    Algo_utils::seekToStart(pDecompressState);
-
-    state.nCompLeft = static_cast<quint32>(pDecompressState->nInputLimit);
-    state.pInput = pDecompressState->pDeviceInput;
-    state.nInputBytesRead = 0;
-    state.pBuf = nullptr;
-    state.nBufAvail = 0;
-
-    if (!initGetBits(&state)) {
-        delete[] state.pReadBuffer;
-        delete[] state.pText;
-        return false;
-    }
+    if (!initGetBits(&state)) return false;
 
     quint32 nCount = 0;
     quint32 nOutPtr = 0;
-    qint64 nOutputWritten = 0;
 
-    while ((nCount < (quint32)nOrigSize) && !state.bError && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint16 nChr = static_cast<qint16>(decodeLen(&state));
+    while ((nCount < nOriginalSize) && !state.bError && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nToken = bFastest ? static_cast<qint32>(decodeLen(&state)) : static_cast<qint32>(decodeC(&state));
+        if (state.bError) break;
 
-        if (state.bError) {
-            break;
-        }
-
-        if (nChr == 0) {
-            // Literal byte: getbits(8)
-            if (state.nGetLen < 8) {
-                state.nGetBuf |= state.nBitBuf >> state.nGetLen;
-                fillBuf(&state, CODE_BIT - state.nGetLen);
-                state.nGetLen = CODE_BIT;
-            }
-
-            nChr = (quint16)state.nGetBuf >> (CODE_BIT - 8);
-
-            for (qint32 i = 0; i < 8; i++) {
-                state.nGetBuf = (quint16)(state.nGetBuf * 2);
-            }
-
-            state.nGetLen -= 8;
-
-            if (state.bError) {
-                break;
-            }
-
-            state.pText[nOutPtr] = (quint8)nChr;
-            nCount++;
-
-            if (++nOutPtr >= (quint32)DDICSIZ) {
-                nOutPtr = 0;
-                qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), DDICSIZ);
-
-                if (nWritten != DDICSIZ) {
+        const bool bLiteral = bFastest ? (nToken == 0) : (nToken <= 255);
+        if (bLiteral) {
+            quint8 nLiteral = static_cast<quint8>(nToken);
+            if (bFastest) {
+                if ((state.nGetLen < 0) || (state.nGetLen > CODE_BIT)) {
                     state.bError = true;
                     break;
                 }
+                if (state.nGetLen < 8) {
+                    state.nGetBuf |= state.nBitBuf >> state.nGetLen;
+                    if (!fillBuf(&state, CODE_BIT - state.nGetLen)) break;
+                    state.nGetLen = CODE_BIT;
+                }
 
-                nOutputWritten += nWritten;
+                nLiteral = static_cast<quint8>(state.nGetBuf >> (CODE_BIT - 8));
+                state.nGetBuf = static_cast<quint16>(state.nGetBuf << 8);
+                state.nGetLen -= 8;
             }
+
+            state.pText[nOutPtr++] = nLiteral;
+            nCount++;
         } else {
-            qint32 nMatchLen = nChr - 1 + THRESHOLD;
-            nCount += nMatchLen;
-
-            qint32 nPos = decodePtr(&state);
-
-            if (state.bError) {
-                break;
-            }
-
-            qint32 nSrcIdx = nOutPtr - nPos - 1;
-
-            if (nSrcIdx < 0) {
-                nSrcIdx += DDICSIZ;
-            }
-
-            if ((nSrcIdx >= DDICSIZ) || (nSrcIdx < 0)) {
+            const qint32 nMatchLen = bFastest ? (nToken - 1 + THRESHOLD) : (nToken - (255 + 1 - THRESHOLD));
+            if ((nMatchLen <= 0) || (nMatchLen > MAXMATCH) ||
+                (static_cast<quint32>(nMatchLen) > (nOriginalSize - nCount))) {
                 state.bError = true;
                 break;
             }
 
-            while (--nMatchLen >= 0) {
+            const qint32 nPos = bFastest ? static_cast<qint32>(decodePtr(&state)) : static_cast<qint32>(decodeP(&state));
+            if (state.bError) break;
+            if ((nPos < 0) || (nPos >= DDICSIZ)) {
+                state.bError = true;
+                break;
+            }
+
+            qint32 nSrcIdx = static_cast<qint32>(nOutPtr) - nPos - 1;
+            if (nSrcIdx < 0) nSrcIdx += DDICSIZ;
+            if ((nSrcIdx < 0) || (nSrcIdx >= DDICSIZ)) {
+                state.bError = true;
+                break;
+            }
+
+            nCount += static_cast<quint32>(nMatchLen);
+            for (qint32 i = 0; (i < nMatchLen) && !state.bError; i++) {
                 state.pText[nOutPtr] = state.pText[nSrcIdx];
+                nOutPtr++;
+                nSrcIdx++;
 
-                if (++nOutPtr >= (quint32)DDICSIZ) {
-                    nOutPtr = 0;
-                    qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), DDICSIZ);
-
-                    if (nWritten != DDICSIZ) {
+                if (nOutPtr == static_cast<quint32>(DDICSIZ)) {
+                    if (!arjWriteAll(pDecompressState, reinterpret_cast<const char *>(state.pText), DDICSIZ, pPdStruct)) {
                         state.bError = true;
                         break;
                     }
-
-                    nOutputWritten += nWritten;
+                    nOutPtr = 0;
                 }
-
-                if (++nSrcIdx >= DDICSIZ) {
-                    nSrcIdx = 0;
-                }
+                if (nSrcIdx == DDICSIZ) nSrcIdx = 0;
             }
         }
-    }
 
-    if (!state.bError && (nOutPtr != 0)) {
-        qint64 nWritten = pDecompressState->pDeviceOutput->write(reinterpret_cast<char *>(state.pText), nOutPtr);
-
-        if (nWritten != static_cast<qint64>(nOutPtr)) {
-            state.bError = true;
-        } else {
-            nOutputWritten += nWritten;
+        if (!state.bError && (nOutPtr == static_cast<quint32>(DDICSIZ))) {
+            if (!arjWriteAll(pDecompressState, reinterpret_cast<const char *>(state.pText), DDICSIZ, pPdStruct)) {
+                state.bError = true;
+                break;
+            }
+            nOutPtr = 0;
         }
     }
 
-    pDecompressState->nCountInput = state.nInputBytesRead;
-    pDecompressState->nCountOutput = nOutputWritten;
+    const bool bExactInput = (pDecompressState->nCountInput == static_cast<qint64>(nCompressedSize)) &&
+                             (state.nCompLeft == 0) && (state.nBufAvail == 0);
+    const bool bCodecStateExact = bFastest || (state.nBlockSize == 0);
+    const bool bDecodedExact = !state.bError && (nCount == nOriginalSize) && bExactInput && bCodecStateExact &&
+                               !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+                               XBinary::isPdStructNotCanceled(pPdStruct);
+    if (bDecodedExact && (nOutPtr != 0) &&
+        !arjWriteAll(pDecompressState, reinterpret_cast<const char *>(state.pText), static_cast<qint32>(nOutPtr), pPdStruct)) {
+        state.bError = true;
+    }
 
-    delete[] state.pReadBuffer;
-    delete[] state.pText;
-
-    return !state.bError;
+    return !state.bError && bDecodedExact && (pDecompressState->nCountOutput == static_cast<qint64>(nOriginalSize)) &&
+           !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

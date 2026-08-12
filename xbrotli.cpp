@@ -22,6 +22,52 @@
 #include "Algos/xbrotlidecoder.h"
 #include "xdecompress.h"
 
+#include <new>
+
+namespace {
+class BrotliDiscardDevice : public QIODevice {
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+    qint64 writeData(const char *, qint64 nSize) override { return (nSize >= 0) ? nSize : -1; }
+};
+
+bool measureBrotliStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize,
+                         XBinary::PDSTRUCT *pPdStruct)
+{
+    if (pnCompressedSize) *pnCompressedSize = 0;
+    if (pnUncompressedSize) *pnUncompressedSize = 0;
+
+    if (!pDevice || (nFileSize <= 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    SubDevice input(pDevice, 0, nFileSize);
+    BrotliDiscardDevice output;
+    if (!input.open(QIODevice::ReadOnly) || !output.open(QIODevice::WriteOnly)) {
+        if (input.isOpen()) input.close();
+        if (output.isOpen()) output.close();
+        return false;
+    }
+
+    XBinary::DATAPROCESS_STATE state = {};
+    state.pDeviceInput = &input;
+    state.pDeviceOutput = &output;
+    state.nInputOffset = 0;
+    state.nInputLimit = nFileSize;
+    state.nProcessedLimit = -1;
+
+    const bool bResult = XBrotliDecoder::decompress(&state, pPdStruct) &&
+                         (state.nCountInput >= 0) && (state.nCountInput <= nFileSize) &&
+                         (state.nCountOutput >= 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+    if (bResult) {
+        if (pnCompressedSize) *pnCompressedSize = state.nCountInput;
+        if (pnUncompressedSize) *pnUncompressedSize = state.nCountOutput;
+    }
+
+    output.close();
+    input.close();
+    return bResult;
+}
+}  // namespace
+
 XBinary::XCONVERT _TABLE_XBrotli_STRUCTID[] = {{XBrotli::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                {XBrotli::STRUCTID_BROTLI_STREAM, "BROTLI_STREAM", QString("Brotli stream")}};
 
@@ -35,33 +81,7 @@ XBrotli::~XBrotli()
 
 bool XBrotli::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    // Brotli has no magic bytes. Validate by attempting a trial decompression.
-    qint64 nFileSize = getSize();
-
-    if (nFileSize >= 1) {
-        SubDevice sd(getDevice(), 0, nFileSize);
-
-        if (sd.open(QIODevice::ReadOnly)) {
-            QBuffer buffer;
-            if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.pDeviceInput = &sd;
-                decompressState.pDeviceOutput = &buffer;
-                decompressState.nInputOffset = 0;
-                decompressState.nInputLimit = nFileSize;
-
-                bResult = XBrotliDecoder::decompress(&decompressState, pPdStruct);
-
-                buffer.close();
-            }
-
-            sd.close();
-        }
-    }
-
-    return bResult;
+    return measureBrotliStream(getDevice(), getSize(), nullptr, nullptr, pPdStruct);
 }
 
 XBinary::MODE XBrotli::getMode()
@@ -247,69 +267,54 @@ QList<XBinary::XFRECORD> XBrotli::getXFRecords(FT fileType, quint32 nStructID, c
 
 QList<XBinary::FPART> XBrotli::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 nFileSize = getSize();
     if (nFileSize <= 0) return listResult;
 
-    qint64 nMaxOffset = 0;
+    if (!(nFileParts & (FILEPART_STREAM | FILEPART_DATA | FILEPART_OVERLAY))) return listResult;
 
-    {
-        SubDevice sd(getDevice(), 0, nFileSize);
+    qint64 nCompressedSize = 0;
+    qint64 nUncompressedSize = 0;
+    if (!measureBrotliStream(getDevice(), nFileSize, &nCompressedSize, &nUncompressedSize, pPdStruct)) return listResult;
 
-        if (sd.open(QIODevice::ReadOnly)) {
-            QBuffer buffer;
-            if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.pDeviceInput = &sd;
-                decompressState.pDeviceOutput = &buffer;
-                decompressState.nInputOffset = 0;
-                decompressState.nInputLimit = nFileSize;
-
-                if (XBrotliDecoder::decompress(&decompressState, pPdStruct)) {
-                    nMaxOffset = decompressState.nCountInput;
-
-                    if (nFileParts & FILEPART_STREAM) {
-                        FPART region = {};
-                        region.filePart = FILEPART_STREAM;
-                        region.nFileOffset = 0;
-                        region.nFileSize = nMaxOffset;
-                        region.nVirtualAddress = -1;
-                        region.sName = tr("Stream");
-                        region.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_BROTLI);
-                        region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, decompressState.nCountOutput);
-                        region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, decompressState.nCountInput);
-
-                        listResult.append(region);
-                    }
-                }
-
-                buffer.close();
-            }
-
-            sd.close();
-        }
+    if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+        FPART region = {};
+        region.filePart = FILEPART_STREAM;
+        region.nFileOffset = 0;
+        region.nFileSize = nCompressedSize;
+        region.nVirtualAddress = -1;
+        region.sName = tr("Stream");
+        region.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_BROTLI);
+        region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
+        region.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nCompressedSize);
+        listResult.append(region);
     }
 
     // Data: entire file
-    if (nFileParts & FILEPART_DATA) {
+    if ((nFileParts & FILEPART_DATA) && canAppend()) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 0;
-        data.nFileSize = nMaxOffset;
+        data.nFileSize = nCompressedSize;
         data.nVirtualAddress = -1;
         data.sName = tr("Data");
         listResult.append(data);
     }
 
     // Overlay: trailing bytes
-    if (nFileParts & FILEPART_OVERLAY) {
-        if (nMaxOffset < nFileSize) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+        if (nCompressedSize < nFileSize) {
             FPART ov = {};
             ov.filePart = FILEPART_OVERLAY;
-            ov.nFileOffset = nMaxOffset;
-            ov.nFileSize = nFileSize - nMaxOffset;
+            ov.nFileOffset = nCompressedSize;
+            ov.nFileSize = nFileSize - nCompressedSize;
             ov.nVirtualAddress = -1;
             ov.sName = tr("Overlay");
             listResult.append(ov);
@@ -328,72 +333,44 @@ QMap<XBinary::UNPACK_PROP, QVariant> XBrotli::getDefaultUnpackProperties()
 
 bool XBrotli::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState) {
-        pState->mapUnpackProperties = mapProperties;
+    if (!pState) return false;
+    finishUnpack(pState, nullptr);
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-        if (!isValid(pPdStruct)) {
-            return false;
-        }
+    const qint64 nFileSize = getSize();
+    qint64 nCompressedSize = 0;
+    qint64 nUncompressedSize = 0;
+    if (!measureBrotliStream(getDevice(), nFileSize, &nCompressedSize, &nUncompressedSize, pPdStruct)) return false;
 
-        BROTLI_UNPACK_CONTEXT *pContext = new BROTLI_UNPACK_CONTEXT;
-        pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+    BROTLI_UNPACK_CONTEXT *pContext = new (std::nothrow) BROTLI_UNPACK_CONTEXT;
+    if (!pContext) return false;
+    pContext->nCompressedSize = nCompressedSize;
+    pContext->nUncompressedSize = nUncompressedSize;
+    pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
 
-        qint64 nFileSize = getSize();
-        SubDevice sd(getDevice(), 0, nFileSize);
-
-        if (sd.open(QIODevice::ReadOnly)) {
-            QBuffer buffer;
-            if (buffer.open(QIODevice::WriteOnly)) {
-                XBinary::DATAPROCESS_STATE decompressState = {};
-                decompressState.pDeviceInput = &sd;
-                decompressState.pDeviceOutput = &buffer;
-                decompressState.nInputOffset = 0;
-                decompressState.nInputLimit = nFileSize;
-
-                if (XBrotliDecoder::decompress(&decompressState, pPdStruct)) {
-                    pContext->nCompressedSize = decompressState.nCountInput;
-                    pContext->nUncompressedSize = decompressState.nCountOutput;
-                } else {
-                    pContext->nCompressedSize = nFileSize;
-                    pContext->nUncompressedSize = 0;
-                }
-
-                buffer.close();
-            }
-
-            sd.close();
-        }
-
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 1;
-        pState->pContext = pContext;
-
-        bResult = true;
-    }
-
-    return bResult;
+    pState->mapUnpackProperties = mapProperties;
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = nFileSize;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 1;
+    pState->pContext = pContext;
+    return true;
 }
 
 XBinary::ARCHIVERECORD XBrotli::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext) {
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return result;
     }
 
-    if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -410,21 +387,24 @@ XBinary::ARCHIVERECORD XBrotli::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
     return result;
 }
 
+bool XBrotli::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pContext || !pDevice || !pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+
+    const bool bResult = XArchive::unpackCurrent(pState, pDevice, pPdStruct);
+    pState->nCurrentOffset = bResult ? static_cast<BROTLI_UNPACK_CONTEXT *>(pState->pContext)->nCompressedSize : 0;
+    return bResult;
+}
+
 bool XBrotli::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
 
-    bool bResult = false;
-
-    if (!pState || !pState->pContext) {
-        return false;
-    }
-
-    pState->nCurrentIndex++;
-
-    bResult = false;
-
-    return bResult;
+    if (pState->nCurrentIndex < pState->nNumberOfRecords) ++pState->nCurrentIndex;
+    return pState->nCurrentIndex < pState->nNumberOfRecords;
 }
 
 bool XBrotli::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -445,6 +425,8 @@ bool XBrotli::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->nTotalSize = 0;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

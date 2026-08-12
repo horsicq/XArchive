@@ -22,6 +22,9 @@
 #include "xdecompress.h"
 #include "Algos/xdeflatedecoder.h"
 
+#include <limits>
+#include <new>
+
 namespace {
 class XZlibDiscardDevice : public QIODevice {
 public:
@@ -100,10 +103,149 @@ private:
     quint32 m_nA;
     quint32 m_nB;
 };
+
+class XZlibAdlerInputDevice : public QIODevice {
+public:
+    explicit XZlibAdlerInputDevice(QIODevice *pInputDevice)
+        : m_pInputDevice(pInputDevice), m_nA(1), m_nB(0), m_nCount(0)
+    {
+    }
+
+    bool isSequential() const override
+    {
+        return !m_pInputDevice || m_pInputDevice->isSequential();
+    }
+
+    qint64 pos() const override
+    {
+        return m_pInputDevice ? m_pInputDevice->pos() : -1;
+    }
+
+    qint64 size() const override
+    {
+        return m_pInputDevice ? m_pInputDevice->size() : -1;
+    }
+
+    qint64 bytesAvailable() const override
+    {
+        return m_pInputDevice ? (m_pInputDevice->bytesAvailable() + QIODevice::bytesAvailable()) : 0;
+    }
+
+    bool atEnd() const override
+    {
+        return !m_pInputDevice || m_pInputDevice->atEnd();
+    }
+
+    bool seek(qint64 nPosition) override
+    {
+        if (!m_pInputDevice || m_pInputDevice->isSequential() || (nPosition != 0) ||
+            !m_pInputDevice->seek(nPosition)) {
+            return false;
+        }
+
+        m_nA = 1;
+        m_nB = 0;
+        m_nCount = 0;
+        return QIODevice::seek(nPosition);
+    }
+
+    quint32 getAdler32() const
+    {
+        return (m_nB << 16) | m_nA;
+    }
+
+    qint64 getCount() const
+    {
+        return m_nCount;
+    }
+
+protected:
+    qint64 readData(char *pData, qint64 nMaximumSize) override
+    {
+        if (!m_pInputDevice || (nMaximumSize < 0) || ((nMaximumSize > 0) && !pData)) return -1;
+
+        const qint64 nRead = m_pInputDevice->read(pData, nMaximumSize);
+        if ((nRead <= 0) || (nRead > nMaximumSize)) return nRead;
+        if (m_nCount > ((std::numeric_limits<qint64>::max)() - nRead)) return -1;
+
+        for (qint64 i = 0; i < nRead; i++) {
+            m_nA += (quint8)pData[i];
+            if (m_nA >= 65521) m_nA -= 65521;
+            m_nB += m_nA;
+            if (m_nB >= 65521) m_nB -= 65521;
+        }
+        m_nCount += nRead;
+        return nRead;
+    }
+
+    qint64 writeData(const char *, qint64) override
+    {
+        return -1;
+    }
+
+private:
+    QIODevice *m_pInputDevice;
+    quint32 m_nA;
+    quint32 m_nB;
+    qint64 m_nCount;
+};
+
+bool zlibWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct,
+                  qint64 *pnWritten = nullptr)
+{
+    if (pnWritten) *pnWritten = 0;
+    if (!pDevice || !pDevice->isWritable() || (nSize < 0) || ((nSize > 0) && !pData) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    qint64 nWritten = 0;
+    while ((nWritten < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint64 nResult = pDevice->write(pData + nWritten, nSize - nWritten);
+        if ((nResult <= 0) || (nResult > (nSize - nWritten))) return false;
+        nWritten += nResult;
+        if (pnWritten) *pnWritten = nWritten;
+    }
+
+    return (nWritten == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+bool zlibCanAppendAt(QIODevice *pDevice, qint64 nOffset)
+{
+    if (!pDevice || !pDevice->isWritable() || (nOffset < 0)) return false;
+    if (pDevice->isSequential()) return true;
+    return XBinary::isResizeEnable(pDevice) && (pDevice->pos() == nOffset) && (pDevice->size() == nOffset);
+}
+
+bool zlibRollbackWrite(QIODevice *pDevice, qint64 nOffset)
+{
+    return pDevice && !pDevice->isSequential() && (nOffset >= 0) && XBinary::isResizeEnable(pDevice) &&
+           XBinary::resize(pDevice, nOffset) && pDevice->seek(nOffset);
+}
 }  // namespace
 
 XZlib::XZlib(QIODevice *pDevice) : XArchive(pDevice)
 {
+}
+
+bool XZlib::isPackStateConsistent(const PACK_STATE *pState, const ZLIB_PACK_CONTEXT *pContext)
+{
+    if (!pState || !pContext || (pState->pContext != pContext) || !pState->pDevice ||
+        !pState->pDevice->isWritable() || (pContext->nStartOffset < 0) ||
+        (pContext->nStartOffset > ((std::numeric_limits<qint64>::max)() - 8)) ||
+        (pContext->nDataOffset != (pContext->nStartOffset + 2)) ||
+        (pContext->nCurrentOffset < pContext->nStartOffset) ||
+        (pContext->nNumberOfRecords < 0) || (pContext->nNumberOfRecords > 1) ||
+        (pState->nCurrentOffset != pContext->nCurrentOffset) ||
+        (pState->nNumberOfRecords != pContext->nNumberOfRecords) ||
+        (pContext->bDataAdded != (pContext->nNumberOfRecords == 1))) {
+        return false;
+    }
+
+    if (!pContext->bFailed && (pContext->nCurrentOffset < pContext->nDataOffset)) return false;
+    if (pState->pDevice->isSequential()) return true;
+
+    return zlibCanAppendAt(pState->pDevice, pContext->nCurrentOffset);
 }
 
 bool XZlib::isValid(PDSTRUCT *pPdStruct)
@@ -132,7 +274,7 @@ bool XZlib::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XZlib xzlib(pDevice);
 
-    return xzlib.isValid();
+    return xzlib.isValid(pPdStruct);
 }
 
 qint64 XZlib::getFileFormatSize(PDSTRUCT *pPdStruct)
@@ -172,9 +314,13 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
 QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 fileSize = getSize();
     if (fileSize <= 0) return listResult;
@@ -188,7 +334,7 @@ QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     const qint64 nFormatSize = context.nFooterOffset + 4;
 
     // Zlib header (2 bytes)
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
@@ -199,7 +345,7 @@ QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     }
 
     // Compressed data region
-    if (nFileParts & FILEPART_REGION) {
+    if ((nFileParts & FILEPART_REGION) && canAppend()) {
         FPART region = {};
         region.filePart = FILEPART_REGION;
         region.nFileOffset = context.nHeaderSize;
@@ -210,7 +356,7 @@ QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     }
 
     // Footer (4-byte Adler32)
-    if ((nFileParts & FILEPART_FOOTER) && context.bFooterValid) {
+    if ((nFileParts & FILEPART_FOOTER) && canAppend() && context.bFooterValid) {
         FPART footer = {};
         footer.filePart = FILEPART_FOOTER;
         footer.nFileOffset = context.nFooterOffset;
@@ -221,7 +367,7 @@ QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     }
 
     // Data: the zlib member itself, excluding any trailing overlay.
-    if (nFileParts & FILEPART_DATA) {
+    if ((nFileParts & FILEPART_DATA) && canAppend()) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 0;
@@ -231,7 +377,7 @@ QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         listResult.append(data);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && (nFormatSize < fileSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nFormatSize < fileSize)) {
         FPART overlay = {};
         overlay.filePart = FILEPART_OVERLAY;
         overlay.nFileOffset = nFormatSize;
@@ -527,22 +673,57 @@ bool XZlib::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XZlib::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState) {
+    if (!pState || !pDevice || !pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    pState->pDevice = pDevice;
-    pState->mapProperties = mapProperties;
+    bool bLevelValid = true;
+    const qint32 nCompressionLevel = mapProperties.contains(PACK_PROP_COMPRESSIONLEVEL)
+                                               ? mapProperties.value(PACK_PROP_COMPRESSIONLEVEL).toInt(&bLevelValid)
+                                               : 6;
+    if (!bLevelValid || (nCompressionLevel < -1) || (nCompressionLevel > 9)) return false;
 
-    // Create and initialize pack context
-    ZLIB_PACK_CONTEXT *pContext = new ZLIB_PACK_CONTEXT;
-    pContext->bDataAdded = false;
+    qint64 nStartOffset = pDevice->pos();
+    if (!zlibCanAppendAt(pDevice, nStartOffset) ||
+        (nStartOffset > ((std::numeric_limits<qint64>::max)() - 8))) {
+        return false;
+    }
+
+    ZLIB_PACK_CONTEXT *pContext = new (std::nothrow) ZLIB_PACK_CONTEXT();
+    if (!pContext) return false;
+
+    // Reinitializing an unfinished seekable member aborts it atomically.  A
+    // different destination can also replace an irrecoverable sequential
+    // member, but the same sequential stream cannot be made valid again.
+    ZLIB_PACK_CONTEXT *pOldContext = static_cast<ZLIB_PACK_CONTEXT *>(pState->pContext);
+    if (pOldContext) {
+        QIODevice *pOldDevice = pState->pDevice;
+        if (pOldDevice && !pOldDevice->isSequential()) {
+            if (!isPackStateConsistent(pState, pOldContext) ||
+                !zlibRollbackWrite(pOldDevice, pOldContext->nStartOffset)) {
+                delete pContext;
+                return false;
+            }
+        } else if (pOldDevice == pDevice) {
+            delete pContext;
+            return false;
+        }
+
+        delete pOldContext;
+        pState->pContext = nullptr;
+    }
+
+    nStartOffset = pDevice->pos();
+    if (!zlibCanAppendAt(pDevice, nStartOffset) ||
+        (nStartOffset > ((std::numeric_limits<qint64>::max)() - 8))) {
+        delete pContext;
+        *pState = PACK_STATE();
+        return false;
+    }
 
     // Determine compression level from options
-    // Default to level 6 (default compression)
-    qint32 nCompressionLevel = mapProperties.value(PACK_PROP_COMPRESSIONLEVEL, 6).toInt();
+    const qint32 nHeaderLevel = (nCompressionLevel == -1) ? 6 : nCompressionLevel;
 
     // Write zlib header (2 bytes)
     // Format: CMF (Compression Method and Flags) + FLG (Flags)
@@ -552,12 +733,14 @@ bool XZlib::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PRO
 
     // Set compression-level hint bits (FLEVEL, bits 6-7). FCHECK is added
     // below after its five bits have been cleared.
-    if (nCompressionLevel <= 2) {
+    if (nHeaderLevel <= 1) {
         nFLevel = 0;  // Fastest compression
-    } else if (nCompressionLevel >= 7) {
-        nFLevel = 3;  // Best compression
-    } else {
+    } else if (nHeaderLevel <= 5) {
+        nFLevel = 1;
+    } else if (nHeaderLevel <= 6) {
         nFLevel = 2;  // Default compression
+    } else {
+        nFLevel = 3;  // Best compression
     }
 
     // Calculate FCHECK to make header checksum valid (must be multiple of 31)
@@ -570,102 +753,143 @@ bool XZlib::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PRO
     baHeader.append((char)nCMF);
     baHeader.append((char)nFLG);
 
-    if (pState->pDevice->write(baHeader) != baHeader.size()) {
-        delete pContext;
+    pContext->nStartOffset = nStartOffset;
+    pContext->nDataOffset = nStartOffset + 2;
+    pContext->nCurrentOffset = nStartOffset;
+    pContext->nNumberOfRecords = 0;
+    pContext->bDataAdded = false;
+    pContext->bFailed = false;
+
+    pState->pDevice = pDevice;
+    pState->mapProperties = mapProperties;
+    pState->nCurrentOffset = nStartOffset;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = pContext;
+
+    qint64 nHeaderWritten = 0;
+    if (!zlibWriteAll(pDevice, baHeader.constData(), baHeader.size(), pPdStruct, &nHeaderWritten)) {
+        if (zlibRollbackWrite(pDevice, nStartOffset) || (nHeaderWritten == 0)) {
+            delete pContext;
+            *pState = PACK_STATE();
+        } else {
+            pContext->bFailed = true;
+            pContext->nCurrentOffset = nStartOffset + nHeaderWritten;
+            pState->nCurrentOffset = pContext->nCurrentOffset;
+        }
         return false;
     }
 
     // Initialize state
-    pState->nCurrentOffset = 2;  // After header
-    pState->nNumberOfRecords = 1;
-    pState->pContext = pContext;
+    pContext->nCurrentOffset = pContext->nDataOffset;
+    pState->nCurrentOffset = pContext->nDataOffset;
 
     return true;
 }
 
 bool XZlib::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pContext || !pState->pDevice || !pDevice) {
+    if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
+        !pDevice || !pDevice->isReadable() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    ZLIB_PACK_CONTEXT *pContext = (ZLIB_PACK_CONTEXT *)pState->pContext;
+    ZLIB_PACK_CONTEXT *pContext = static_cast<ZLIB_PACK_CONTEXT *>(pState->pContext);
 
     // Zlib format only supports one compressed stream
-    if (pContext->bDataAdded) {
+    if (pContext->bDataAdded || pContext->bFailed || !isPackStateConsistent(pState, pContext) ||
+        (pContext->nCurrentOffset != pContext->nDataOffset) || (pContext->nNumberOfRecords != 0)) {
         return false;  // Already added data
     }
 
-    // Get device size
-    qint64 nDeviceSize = pDevice->size();
-    if (nDeviceSize <= 0) {
-        return false;
+    qint64 nInputLimit = -1;
+    if (pDevice->isSequential()) {
+        // The historical API packs a complete device, not an arbitrary suffix.
+        if (pDevice->pos() != 0) return false;
+    } else {
+        nInputLimit = pDevice->size();
+        if ((nInputLimit < 0) || !pDevice->seek(0)) return false;
     }
 
-    // Compress data from device using DEFLATE
-    pDevice->seek(0);
-
-    QByteArray baUncompressed = pDevice->readAll();
-    if (baUncompressed.isEmpty()) {
-        return false;
-    }
-
-    // Calculate Adler32 checksum of uncompressed data using static method
-    quint32 nAdler32 = XBinary::getAdler32(pDevice, pPdStruct);
-
-    // Prepare input buffer for compression
-    QBuffer inputBuffer;
-    inputBuffer.setData(baUncompressed);
-    if (!inputBuffer.open(QIODevice::ReadOnly)) {
-        return false;
-    }
+    XZlibAdlerInputDevice adlerInputDevice(pDevice);
+    if (!adlerInputDevice.open(QIODevice::ReadOnly)) return false;
 
     // Compress using DEFLATE (raw, not zlib wrapper since we add our own header)
     XBinary::DATAPROCESS_STATE compressState = {};
-    compressState.pDeviceInput = &inputBuffer;
+    compressState.pDeviceInput = &adlerInputDevice;
     compressState.pDeviceOutput = pState->pDevice;
     compressState.nInputOffset = 0;
-    compressState.nInputLimit = baUncompressed.size();
+    compressState.nInputLimit = nInputLimit;
 
-    qint32 nCompressionLevel = pState->mapProperties.value(PACK_PROP_COMPRESSIONLEVEL, 6).toInt();
-
-    bool bCompress = XDeflateDecoder::compress(&compressState, pPdStruct, nCompressionLevel);
-
-    inputBuffer.close();
-
-    if (!bCompress) {
+    bool bLevelValid = true;
+    const qint32 nCompressionLevel = pState->mapProperties.contains(PACK_PROP_COMPRESSIONLEVEL)
+                                               ? pState->mapProperties.value(PACK_PROP_COMPRESSIONLEVEL).toInt(&bLevelValid)
+                                               : 6;
+    if (!bLevelValid || (nCompressionLevel < -1) || (nCompressionLevel > 9)) {
+        adlerInputDevice.close();
         return false;
     }
 
-    qint64 nCompressedSize = compressState.nCountOutput;
+    const bool bCompress = XDeflateDecoder::compress(&compressState, pPdStruct, nCompressionLevel);
+    const quint32 nAdler32 = adlerInputDevice.getAdler32();
+    const qint64 nAdlerInputCount = adlerInputDevice.getCount();
+    adlerInputDevice.close();
+
+    const qint64 nDataOffset = pContext->nDataOffset;
+    const auto failWrite = [pState, pContext, nDataOffset](qint64 nWritten) -> bool {
+        if (zlibRollbackWrite(pState->pDevice, nDataOffset)) {
+            pContext->nCurrentOffset = nDataOffset;
+            pContext->nNumberOfRecords = 0;
+            pState->nCurrentOffset = nDataOffset;
+            pState->nNumberOfRecords = 0;
+            return false;
+        }
+
+        if (nWritten <= 0) return false;
+        const qint64 nPosition = pState->pDevice ? pState->pDevice->pos() : -1;
+        pContext->bFailed = true;
+        if (pState->pDevice && pState->pDevice->isSequential()) {
+            pContext->nCurrentOffset = nDataOffset + nWritten;
+        } else if (nPosition >= nDataOffset) {
+            pContext->nCurrentOffset = nPosition;
+        } else if (nDataOffset <= ((std::numeric_limits<qint64>::max)() - nWritten)) {
+            pContext->nCurrentOffset = nDataOffset + nWritten;
+        }
+        pState->nCurrentOffset = pContext->nCurrentOffset;
+        return false;
+    };
+
+    const qint64 nCompressedSize = compressState.nCountOutput;
+    if (!bCompress || (nCompressedSize < 0) || (nAdlerInputCount != compressState.nCountInput) ||
+        ((nInputLimit != -1) && (nAdlerInputCount != nInputLimit)) ||
+        (nDataOffset > ((std::numeric_limits<qint64>::max)() - nCompressedSize)) ||
+        ((nDataOffset + nCompressedSize) > ((std::numeric_limits<qint64>::max)() - 4))) {
+        return failWrite(compressState.nCountOutput);
+    }
 
     // Write Adler32 checksum (4 bytes, big-endian)
     quint32 nAdler32BE = qToBigEndian(nAdler32);
     QByteArray baAdler32((const char *)&nAdler32BE, 4);
 
-    if (pState->pDevice->write(baAdler32) != baAdler32.size()) {
-        return false;
+    qint64 nFooterWritten = 0;
+    if (!zlibWriteAll(pState->pDevice, baAdler32.constData(), baAdler32.size(), pPdStruct, &nFooterWritten)) {
+        return failWrite(nCompressedSize + nFooterWritten);
     }
 
     // Update state
-    pState->nCurrentOffset += nCompressedSize + 4;  // Compressed data + Adler32
-    pState->nNumberOfRecords = 1;
+    pContext->nCurrentOffset = nDataOffset + nCompressedSize + 4;
+    pContext->nNumberOfRecords = 1;
     pContext->bDataAdded = true;
+    pState->nCurrentOffset = pContext->nCurrentOffset;
+    pState->nNumberOfRecords = pContext->nNumberOfRecords;
 
     return true;
 }
 
 bool XZlib::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pContext) {
+    if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
-    }
-
-    ZLIB_PACK_CONTEXT *pContext = (ZLIB_PACK_CONTEXT *)pState->pContext;
-
-    // Zlib format only supports one compressed stream
-    if (pContext->bDataAdded) {
-        return false;  // Already added data
     }
 
     // Open file
@@ -684,9 +908,8 @@ bool XZlib::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdS
 
 bool XZlib::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext) {
+    if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -700,13 +923,13 @@ bool XZlib::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUC
 
 bool XZlib::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext || !pState->pDevice) {
+    if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    ZLIB_PACK_CONTEXT *pContext = (ZLIB_PACK_CONTEXT *)pState->pContext;
+    ZLIB_PACK_CONTEXT *pContext = static_cast<ZLIB_PACK_CONTEXT *>(pState->pContext);
+    if (pContext->bFailed || !isPackStateConsistent(pState, pContext)) return false;
 
     // If no data was added, write an empty DEFLATE stream
     if (!pContext->bDataAdded) {
@@ -715,21 +938,39 @@ bool XZlib::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
         baEmpty.append((char)0x03);
         baEmpty.append((char)0x00);
 
-        if (pState->pDevice->write(baEmpty) != baEmpty.size()) {
-            delete pContext;
-            return false;
-        }
-
         // Adler32 of empty data is 1
         quint32 nAdler32BE = qToBigEndian((quint32)1);
         QByteArray baAdler32((const char *)&nAdler32BE, 4);
+        const QByteArray baEmptyMember = baEmpty + baAdler32;
+        const qint64 nDataOffset = pContext->nDataOffset;
 
-        if (pState->pDevice->write(baAdler32) != baAdler32.size()) {
-            delete pContext;
+        qint64 nEmptyWritten = 0;
+        if (!zlibWriteAll(pState->pDevice, baEmptyMember.constData(), baEmptyMember.size(), pPdStruct, &nEmptyWritten)) {
+            if (zlibRollbackWrite(pState->pDevice, nDataOffset)) {
+                pContext->nCurrentOffset = nDataOffset;
+                pContext->nNumberOfRecords = 0;
+                pState->nCurrentOffset = nDataOffset;
+                pState->nNumberOfRecords = 0;
+            } else if (nEmptyWritten > 0) {
+                pContext->bFailed = true;
+                const qint64 nPosition = pState->pDevice->pos();
+                if (pState->pDevice->isSequential()) {
+                    pContext->nCurrentOffset = nDataOffset + nEmptyWritten;
+                } else if (nPosition >= nDataOffset) {
+                    pContext->nCurrentOffset = nPosition;
+                } else {
+                    pContext->nCurrentOffset = nDataOffset + nEmptyWritten;
+                }
+                pState->nCurrentOffset = pContext->nCurrentOffset;
+            }
             return false;
         }
 
-        pState->nCurrentOffset += 2 + 4;  // Empty block + Adler32
+        pContext->nCurrentOffset = nDataOffset + baEmptyMember.size();
+        pContext->nNumberOfRecords = 1;
+        pContext->bDataAdded = true;
+        pState->nCurrentOffset = pContext->nCurrentOffset;
+        pState->nNumberOfRecords = pContext->nNumberOfRecords;
     }
 
     // Clean up context

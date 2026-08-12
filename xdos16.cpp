@@ -54,7 +54,7 @@ bool XDOS16::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XDOS16 xdos16(pDevice);
 
-    return xdos16.isValid();
+    return xdos16.isValid(pPdStruct);
 }
 
 quint64 XDOS16::getNumberOfRecords(PDSTRUCT *pPdStruct)
@@ -104,10 +104,13 @@ XBinary::OSNAME XDOS16::getOsName()
 
 QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     Q_UNUSED(pPdStruct)
 
     QList<XArchive::RECORD> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
 
     quint16 nCP = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cp));
     quint16 nCblp = read_uint16(offsetof(XMSDOS_DEF::IMAGE_DOS_HEADER, e_cblp));
@@ -125,6 +128,10 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             record.spInfo.compressMethod = HANDLE_METHOD_STORE;
 
             listResult.append(record);
+        }
+
+        if ((nLimit != -1) && (listResult.count() >= nLimit)) {
+            return listResult;
         }
 
         if (nSize - nSignatureOffset) {
@@ -146,6 +153,10 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
                     record.spInfo.compressMethod = HANDLE_METHOD_STORE;
 
                     listResult.append(record);
+
+                    if ((nLimit != -1) && (listResult.count() >= nLimit)) {
+                        break;
+                    }
 
                     nSignatureOffset = nNewSignatureOffset;
                 } else if (nSignature == 0x464D) {  // MF - find info
@@ -174,9 +185,13 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
 QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 nFileSize = getSize();
 
@@ -191,7 +206,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     nSignatureOffset = qBound<qint64>(0, nSignatureOffset, nFileSize);
 
     // Optional: header part (loader before first signature)
-    if ((nFileParts & FILEPART_HEADER) && (nSignatureOffset > 0)) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend() && (nSignatureOffset > 0)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
@@ -205,7 +220,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     qint32 nIndex = 0;
     qint64 nCur = nSignatureOffset;
     if (nFileSize > nCur) {
-        while (isPdStructNotCanceled(pPdStruct)) {
+        while (canAppend() && isPdStructNotCanceled(pPdStruct)) {
             if (!isOffsetValid(nCur + 1)) break;
             quint16 nSig = read_uint16(nCur);
 
@@ -214,7 +229,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
                 QString sName = read_ansiString(nCur + offsetof(XMSDOS_DEF::dos16m_exe_header, EXP_path));
                 if ((nNext <= 0) || (nNext > nFileSize)) nNext = nFileSize;  // clamp
 
-                if (nFileParts & FILEPART_REGION) {
+                if ((nFileParts & FILEPART_REGION) && canAppend()) {
                     FPART part = {};
                     part.filePart = FILEPART_REGION;
                     part.nFileOffset = nCur;
@@ -230,7 +245,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
                 qint64 nSkip = read_uint32(nCur + 2);
                 nCur += qMax<qint64>(0, nSkip);
             } else if (nSig == 0x5A4D) {  // MZ payload
-                if (nFileParts & (FILEPART_REGION | FILEPART_DATA)) {
+                if ((nFileParts & (FILEPART_REGION | FILEPART_DATA)) && canAppend()) {
                     FPART data = {};
                     data.filePart = (nFileParts & FILEPART_DATA) ? FILEPART_DATA : FILEPART_REGION;
                     data.nFileOffset = nCur;
@@ -247,7 +262,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     }
 
     // Overlay: any tail not covered by the above when not using DATA-only
-    if ((nFileParts & FILEPART_OVERLAY) && !listResult.isEmpty()) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && !listResult.isEmpty()) {
         qint64 nCoveredEnd = 0;
         for (qint32 nI = 0; nI < listResult.size(); nI++) {
             const FPART &record = listResult.at(nI);

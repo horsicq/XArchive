@@ -20,6 +20,10 @@
  */
 #include "xcpio.h"
 
+#include <limits>
+#include <memory>
+#include <new>
+
 XBinary::XCONVERT _TABLE_XCPIO_STRUCTID[] = {{XCPIO::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                              {XCPIO::STRUCTID_NEWC_HEADER, "NEWC_HEADER", QString("CPIO newc header")},
                                              {XCPIO::STRUCTID_CRC_HEADER, "CRC_HEADER", QString("CPIO CRC header")},
@@ -28,6 +32,7 @@ XBinary::XCONVERT _TABLE_XCPIO_STRUCTID[] = {{XCPIO::STRUCTID_UNKNOWN, "Unknown"
 
 static const quint32 CPIO_MODE_IFMT = 0170000;
 static const quint32 CPIO_MODE_IFDIR = 0040000;
+static const qint32 CPIO_MAX_RECORDS = 0x100000;
 
 XCPIO::XCPIO(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -39,9 +44,7 @@ XCPIO::~XCPIO()
 
 bool XCPIO::isValid(PDSTRUCT *pPdStruct)
 {
-    CPIO_RECORD_INFO info = {};
-
-    return _parseRecord(0, &info);
+    return _scanArchive(-1, nullptr, nullptr, pPdStruct);
 }
 
 bool XCPIO::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -54,7 +57,11 @@ XCPIO::CPIO_FORMAT XCPIO::_detectFormat(qint64 nOffset)
 {
     CPIO_FORMAT result = CPIO_FORMAT_UNKNOWN;
 
-    qint64 nAvailableSize = getSize() - nOffset;
+    const qint64 nTotalSize = getSize();
+    if ((nOffset < 0) || (nOffset > nTotalSize)) {
+        return result;
+    }
+    const qint64 nAvailableSize = nTotalSize - nOffset;
 
     if (nAvailableSize < 2) {
         return result;
@@ -62,7 +69,9 @@ XCPIO::CPIO_FORMAT XCPIO::_detectFormat(qint64 nOffset)
 
     if (nAvailableSize >= 6) {
         char szMagic[7] = {0};
-        read_array(nOffset, szMagic, 6);
+        if (read_array_process(nOffset, szMagic, 6, nullptr) != 6) {
+            return result;
+        }
 
         QString sMagic = QString::fromLatin1(szMagic, 6);
 
@@ -87,27 +96,49 @@ XCPIO::CPIO_FORMAT XCPIO::_detectFormat(qint64 nOffset)
 qint64 XCPIO::_readHexValue(const char *pValue, qint32 nSize)
 {
     if (!pValue || nSize <= 0) {
-        return 0;
+        return -1;
     }
 
-    QString sValue = QString::fromLatin1(pValue, nSize).trimmed();
-    bool bOk = false;
-    qint64 nResult = sValue.toLongLong(&bOk, 16);
+    qint64 nResult = 0;
+    for (qint32 i = 0; i < nSize; i++) {
+        const quint8 nCharacter = (quint8)pValue[i];
+        qint32 nDigit = -1;
+        if ((nCharacter >= '0') && (nCharacter <= '9')) {
+            nDigit = nCharacter - '0';
+        } else if ((nCharacter >= 'a') && (nCharacter <= 'f')) {
+            nDigit = nCharacter - 'a' + 10;
+        } else if ((nCharacter >= 'A') && (nCharacter <= 'F')) {
+            nDigit = nCharacter - 'A' + 10;
+        }
+        if ((nDigit < 0) || (nResult > (((std::numeric_limits<qint64>::max)() - nDigit) / 16))) {
+            return -1;
+        }
+        nResult = nResult * 16 + nDigit;
+    }
 
-    return bOk ? nResult : 0;
+    return nResult;
 }
 
 qint64 XCPIO::_readOctValue(const char *pValue, qint32 nSize)
 {
     if (!pValue || nSize <= 0) {
-        return 0;
+        return -1;
     }
 
-    QString sValue = QString::fromLatin1(pValue, nSize).trimmed();
-    bool bOk = false;
-    qint64 nResult = sValue.toLongLong(&bOk, 8);
+    qint64 nResult = 0;
+    for (qint32 i = 0; i < nSize; i++) {
+        const quint8 nCharacter = (quint8)pValue[i];
+        if ((nCharacter < '0') || (nCharacter > '7')) {
+            return -1;
+        }
+        const qint32 nDigit = nCharacter - '0';
+        if (nResult > (((std::numeric_limits<qint64>::max)() - nDigit) / 8)) {
+            return -1;
+        }
+        nResult = nResult * 8 + nDigit;
+    }
 
-    return bOk ? nResult : 0;
+    return nResult;
 }
 
 quint16 XCPIO::_readBinaryUInt16(qint64 nOffset, bool bIsBigEndian)
@@ -126,20 +157,20 @@ quint32 XCPIO::_readBinaryUInt32(qint64 nOffset, bool bIsBigEndian)
 XCPIO::CPIO_NEWC_HEADER XCPIO::_readNewcHeader(qint64 nOffset)
 {
     CPIO_NEWC_HEADER header = {};
-    read_array(nOffset, (char *)&header, sizeof(CPIO_NEWC_HEADER));
+    read_array_process(nOffset, (char *)&header, sizeof(CPIO_NEWC_HEADER), nullptr);
     return header;
 }
 
 XCPIO::CPIO_ODC_HEADER XCPIO::_readOdcHeader(qint64 nOffset)
 {
     CPIO_ODC_HEADER header = {};
-    read_array(nOffset, (char *)&header, sizeof(CPIO_ODC_HEADER));
+    read_array_process(nOffset, (char *)&header, sizeof(CPIO_ODC_HEADER), nullptr);
     return header;
 }
 
-bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo)
+bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdStruct)
 {
-    if ((!pInfo) || (nOffset < 0)) {
+    if ((!pInfo) || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -154,13 +185,23 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo)
     const qint64 nTotalSize = getSize();
     qint64 nNameSize = 0;
     qint64 nDataSize = 0;
+    qint64 nExpectedCheck = -1;
 
     if ((pInfo->format == CPIO_FORMAT_NEWC) || (pInfo->format == CPIO_FORMAT_CRC)) {
-        if ((nOffset + (qint64)sizeof(CPIO_NEWC_HEADER)) > nTotalSize) {
+        if ((nOffset > nTotalSize) || ((qint64)sizeof(CPIO_NEWC_HEADER) > (nTotalSize - nOffset))) {
             return false;
         }
 
         CPIO_NEWC_HEADER header = _readNewcHeader(nOffset);
+
+        const char *pFields[] = {header.ino,       header.mode,      header.uid,      header.gid,   header.nlink,
+                                 header.mtime,     header.filesize,  header.devmajor, header.devminor,
+                                 header.rdevmajor, header.rdevminor, header.namesize, header.check};
+        for (qint32 i = 0; i < (qint32)(sizeof(pFields) / sizeof(pFields[0])); i++) {
+            if (_readHexValue(pFields[i], 8) < 0) {
+                return false;
+            }
+        }
 
         pInfo->nHeaderSize = sizeof(CPIO_NEWC_HEADER);
         nNameSize = _readHexValue(header.namesize, 8);
@@ -170,12 +211,21 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo)
         pInfo->nGID = (quint32)_readHexValue(header.gid, 8);
         pInfo->nNLink = (quint32)_readHexValue(header.nlink, 8);
         pInfo->nMTime = (quint64)_readHexValue(header.mtime, 8);
+        nExpectedCheck = _readHexValue(header.check, 8);
     } else if (pInfo->format == CPIO_FORMAT_ODC) {
-        if ((nOffset + (qint64)sizeof(CPIO_ODC_HEADER)) > nTotalSize) {
+        if ((nOffset > nTotalSize) || ((qint64)sizeof(CPIO_ODC_HEADER) > (nTotalSize - nOffset))) {
             return false;
         }
 
         CPIO_ODC_HEADER header = _readOdcHeader(nOffset);
+
+        if ((_readOctValue(header.dev, 6) < 0) || (_readOctValue(header.ino, 6) < 0) ||
+            (_readOctValue(header.mode, 6) < 0) || (_readOctValue(header.uid, 6) < 0) ||
+            (_readOctValue(header.gid, 6) < 0) || (_readOctValue(header.nlink, 6) < 0) ||
+            (_readOctValue(header.rdev, 6) < 0) || (_readOctValue(header.mtime, 11) < 0) ||
+            (_readOctValue(header.namesize, 6) < 0) || (_readOctValue(header.filesize, 11) < 0)) {
+            return false;
+        }
 
         pInfo->nHeaderSize = sizeof(CPIO_ODC_HEADER);
         nNameSize = _readOctValue(header.namesize, 6);
@@ -189,7 +239,7 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo)
     } else {
         bool bIsBigEndian = (pInfo->format == CPIO_FORMAT_BINARY_BE);
 
-        if ((nOffset + (qint64)sizeof(CPIO_BINARY_HEADER)) > nTotalSize) {
+        if ((nOffset > nTotalSize) || ((qint64)sizeof(CPIO_BINARY_HEADER) > (nTotalSize - nOffset))) {
             return false;
         }
 
@@ -204,25 +254,29 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo)
         pInfo->nMTime = _readBinaryUInt32(nOffset + offsetof(CPIO_BINARY_HEADER, mtimeHigh), bIsBigEndian);
     }
 
-    if ((nNameSize <= 0) || (nNameSize > 0x10000) || (nDataSize < 0)) {
+    if ((nNameSize <= 0) || (nNameSize > 0x10000) || (nDataSize < 0) ||
+        ((pInfo->format == CPIO_FORMAT_CRC) && (nExpectedCheck < 0))) {
         return false;
     }
 
-    qint64 nNameOffset = nOffset + pInfo->nHeaderSize;
-    qint64 nNameEnd = nNameOffset + nNameSize;
+    if ((nOffset > nTotalSize) || (pInfo->nHeaderSize > (nTotalSize - nOffset))) {
+        return false;
+    }
+    const qint64 nNameOffset = nOffset + pInfo->nHeaderSize;
+    if (nNameSize > (nTotalSize - nNameOffset)) {
+        return false;
+    }
+    const qint64 nNameEnd = nNameOffset + nNameSize;
 
-    if ((nNameOffset < 0) || (nNameEnd > nTotalSize)) {
+    QByteArray baName = read_array_process(nNameOffset, nNameSize, pPdStruct);
+
+    if ((baName.size() != nNameSize) || baName.isEmpty() || (baName.back() != '\0')) {
         return false;
     }
 
-    QByteArray baName = read_array(nNameOffset, nNameSize);
-
-    if (baName.size() != nNameSize) {
+    baName.chop(1);
+    if (baName.contains('\0')) {
         return false;
-    }
-
-    if (baName.endsWith('\0')) {
-        baName.chop(1);
     }
 
     pInfo->sFileName = QString::fromLatin1(baName.constData(), baName.size());
@@ -230,20 +284,32 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo)
     qint64 nDataOffset = nNameEnd;
 
     if ((pInfo->format == CPIO_FORMAT_NEWC) || (pInfo->format == CPIO_FORMAT_CRC)) {
+        if (nDataOffset > ((std::numeric_limits<qint64>::max)() - 3)) {
+            return false;
+        }
         nDataOffset = (nDataOffset + 3) & ~((qint64)3);
     } else if ((pInfo->format == CPIO_FORMAT_BINARY_LE) || (pInfo->format == CPIO_FORMAT_BINARY_BE)) {
+        if (nDataOffset == (std::numeric_limits<qint64>::max)()) {
+            return false;
+        }
         nDataOffset = (nDataOffset + 1) & ~((qint64)1);
     }
 
-    if ((nDataOffset < 0) || ((nDataOffset + nDataSize) > nTotalSize)) {
+    if ((nDataOffset < 0) || (nDataOffset > nTotalSize) || (nDataSize > (nTotalSize - nDataOffset))) {
         return false;
     }
 
     qint64 nNextOffset = nDataOffset + nDataSize;
 
     if ((pInfo->format == CPIO_FORMAT_NEWC) || (pInfo->format == CPIO_FORMAT_CRC)) {
+        if (nNextOffset > ((std::numeric_limits<qint64>::max)() - 3)) {
+            return false;
+        }
         nNextOffset = (nNextOffset + 3) & ~((qint64)3);
     } else if ((pInfo->format == CPIO_FORMAT_BINARY_LE) || (pInfo->format == CPIO_FORMAT_BINARY_BE)) {
+        if (nNextOffset == (std::numeric_limits<qint64>::max)()) {
+            return false;
+        }
         nNextOffset = (nNextOffset + 1) & ~((qint64)1);
     }
 
@@ -257,7 +323,99 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo)
     pInfo->nNextOffset = nNextOffset;
     pInfo->bIsFolder = ((pInfo->nMode & CPIO_MODE_IFMT) == CPIO_MODE_IFDIR) || pInfo->sFileName.endsWith(QLatin1Char('/'));
 
-    return true;
+    if (pInfo->format == CPIO_FORMAT_CRC) {
+        quint32 nCalculatedCheck = 0;
+        qint64 nCurrentOffset = nDataOffset;
+        qint64 nRemaining = nDataSize;
+        const qint32 nBufferCapacity = 0x4000;
+        std::unique_ptr<char[]> pBuffer(new (std::nothrow) char[nBufferCapacity]);
+        if (!pBuffer) {
+            return false;
+        }
+
+        while ((nRemaining > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            const qint32 nChunkSize = (qint32)qMin<qint64>(nBufferCapacity, nRemaining);
+            if (read_array_process(nCurrentOffset, pBuffer.get(), nChunkSize, pPdStruct) != nChunkSize) {
+                return false;
+            }
+            for (qint32 i = 0; i < nChunkSize; i++) {
+                nCalculatedCheck += (quint8)pBuffer[i];
+            }
+            nCurrentOffset += nChunkSize;
+            nRemaining -= nChunkSize;
+        }
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) || (nRemaining != 0) ||
+            (nCalculatedCheck != (quint32)nExpectedCheck)) {
+            return false;
+        }
+    }
+
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+bool XCPIO::_scanArchive(qint32 nLimit, QList<RECORD> *pListRecords, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct)
+{
+    if (pListRecords) {
+        pListRecords->clear();
+    }
+    if (pArchiveEnd) {
+        *pArchiveEnd = 0;
+    }
+    if ((nLimit < -1) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    qint64 nOffset = 0;
+    const qint64 nTotalSize = getSize();
+    qint32 nRecordCount = 0;
+    bool bSawTrailer = false;
+
+    while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        CPIO_RECORD_INFO info = {};
+        if (!_parseRecord(nOffset, &info, pPdStruct)) {
+            break;
+        }
+
+        if (_isTrailerRecord(info.sFileName)) {
+            if (info.nDataSize != 0) {
+                break;
+            }
+            bSawTrailer = true;
+            if (pArchiveEnd) {
+                *pArchiveEnd = info.nNextOffset;
+            }
+            break;
+        }
+
+        if (nRecordCount >= CPIO_MAX_RECORDS) {
+            break;
+        }
+        nRecordCount++;
+
+        if (pListRecords && ((nLimit == -1) || (pListRecords->count() < nLimit))) {
+            RECORD record = {};
+            record.spInfo.sRecordName = info.sFileName;
+            record.spInfo.nUncompressedSize = info.nDataSize;
+            record.spInfo.compressMethod = HANDLE_METHOD_STORE;
+            record.nHeaderOffset = info.nHeaderOffset;
+            record.nHeaderSize = info.nHeaderSize;
+            record.nDataOffset = info.nDataOffset;
+            record.nDataSize = info.nDataSize;
+            pListRecords->append(record);
+        }
+
+        nOffset = info.nNextOffset;
+    }
+
+    const bool bResult = bSawTrailer && XBinary::isPdStructNotCanceled(pPdStruct);
+    if (!bResult && pListRecords) {
+        pListRecords->clear();
+    }
+    if (!bResult && pArchiveEnd) {
+        *pArchiveEnd = 0;
+    }
+    return bResult;
 }
 
 bool XCPIO::_isTrailerRecord(const QString &sFileName)
@@ -328,40 +486,11 @@ QList<XArchive::RECORD> XCPIO::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> listResult;
 
-    qint64 nOffset = 0;
-    qint64 nTotalSize = getSize();
-
-    while ((nOffset < nTotalSize) && isPdStructNotCanceled(pPdStruct)) {
-        CPIO_RECORD_INFO info = {};
-
-        if (!_parseRecord(nOffset, &info)) {
-            break;
-        }
-
-        bool bIsTrailer = _isTrailerRecord(info.sFileName);
-
-        if (!bIsTrailer) {
-            RECORD record = {};
-            record.spInfo.sRecordName = info.sFileName;
-            record.spInfo.nUncompressedSize = info.nDataSize;
-            record.spInfo.compressMethod = HANDLE_METHOD_STORE;
-            record.nHeaderOffset = info.nHeaderOffset;
-            record.nHeaderSize = info.nHeaderSize;
-            record.nDataOffset = info.nDataOffset;
-            record.nDataSize = info.nDataSize;
-            listResult.append(record);
-
-            if ((nLimit != -1) && (listResult.count() >= nLimit)) {
-                break;
-            }
-        }
-
-        nOffset = info.nNextOffset;
-
-        if (bIsTrailer) {
-            break;
-        }
+    if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return listResult;
     }
+
+    _scanArchive(nLimit, &listResult, nullptr, pPdStruct);
 
     return listResult;
 }
@@ -618,22 +747,39 @@ QList<XBinary::XFRECORD> XCPIO::getXFRecords(FT fileType, quint32 nStructID, con
 QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return listResult;
+    }
+
     const qint64 nTotalSize = getSize();
     qint64 nOffset = 0;
     qint64 nArchiveEnd = 0;
     qint32 nRecordCount = 0;
+    bool bSawTrailer = false;
+    bool bParseError = false;
+    auto canAppend = [&]() -> bool {
+        return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.count() < nLimit));
+    };
 
-    while ((nOffset < nTotalSize) && isPdStructNotCanceled(pPdStruct)) {
+    while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         CPIO_RECORD_INFO info = {};
 
-        if (!_parseRecord(nOffset, &info)) {
+        if (!_parseRecord(nOffset, &info, pPdStruct)) {
+            bParseError = true;
             break;
         }
 
         nArchiveEnd = info.nNextOffset;
 
         if (!_isTrailerRecord(info.sFileName)) {
-            if (nFileParts & FILEPART_HEADER) {
+            if (nRecordCount >= CPIO_MAX_RECORDS) {
+                bParseError = true;
+                break;
+            }
+            nRecordCount++;
+
+            if ((nFileParts & FILEPART_HEADER) && canAppend()) {
                 FPART header = {};
                 header.filePart = FILEPART_HEADER;
                 header.nFileOffset = info.nHeaderOffset;
@@ -643,7 +789,7 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                 listResult.append(header);
             }
 
-            if (nFileParts & FILEPART_REGION) {
+            if ((nFileParts & FILEPART_REGION) && canAppend()) {
                 FPART region = {};
                 region.filePart = FILEPART_REGION;
                 region.nFileOffset = info.nDataOffset;
@@ -653,18 +799,28 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                 listResult.append(region);
             }
 
-            nRecordCount++;
-            if ((nLimit != -1) && (nRecordCount >= nLimit)) {
+        } else {
+            if (info.nDataSize != 0) {
+                bParseError = true;
                 break;
             }
-        } else {
+            if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+                FPART trailer = {};
+                trailer.filePart = FILEPART_HEADER;
+                trailer.nFileOffset = info.nHeaderOffset;
+                trailer.nFileSize = info.nHeaderSize;
+                trailer.nVirtualAddress = -1;
+                trailer.sName = tr("Trailer");
+                listResult.append(trailer);
+            }
+            bSawTrailer = true;
             break;
         }
 
         nOffset = info.nNextOffset;
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && (nArchiveEnd < nTotalSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && bSawTrailer && (nArchiveEnd < nTotalSize)) {
         FPART record = {};
         record.filePart = FILEPART_OVERLAY;
         record.nFileOffset = nArchiveEnd;
@@ -673,6 +829,10 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         record.sName = tr("Overlay");
 
         listResult.append(record);
+    }
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || bParseError || !bSawTrailer) {
+        listResult.clear();
     }
 
     return listResult;
@@ -691,9 +851,19 @@ bool XCPIO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
 
+    finishUnpack(pState, nullptr);
+
+    if (!isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
     pState->mapUnpackProperties = mapProperties;
 
-    CPIO_UNPACK_CONTEXT *pContext = new CPIO_UNPACK_CONTEXT;
+    CPIO_UNPACK_CONTEXT *pContext = new (std::nothrow) CPIO_UNPACK_CONTEXT;
+    if (!pContext) {
+        finishUnpack(pState, nullptr);
+        return false;
+    }
     pContext->format = _detectFormat(0);
     if ((pContext->format == CPIO_FORMAT_NEWC) || (pContext->format == CPIO_FORMAT_CRC)) {
         pContext->nHeaderSize = sizeof(CPIO_NEWC_HEADER);
@@ -703,13 +873,19 @@ bool XCPIO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         pContext->nHeaderSize = sizeof(CPIO_BINARY_HEADER);
     } else {
         delete pContext;
+        finishUnpack(pState, nullptr);
         return false;
     }
-    pContext->listRecords = getRecords(-1, pPdStruct);
+    if (!_scanArchive(-1, &pContext->listRecords, nullptr, pPdStruct)) {
+        delete pContext;
+        finishUnpack(pState, nullptr);
+        return false;
+    }
     pContext->nCurrentRecord = 0;
 
-    if (pContext->listRecords.isEmpty()) {
+    if (!isPdStructNotCanceled(pPdStruct)) {
         delete pContext;
+        finishUnpack(pState, nullptr);
         return false;
     }
 
@@ -717,17 +893,17 @@ bool XCPIO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = pContext->listRecords.count();
     pState->nCurrentOffset = (pState->nNumberOfRecords > 0) ? pContext->listRecords.at(0).nHeaderOffset : 0;
+    pState->nTotalSize = getSize();
 
     return true;
 }
 
 XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext ||
+        (pState->nTotalSize != getSize()) || (pState->nNumberOfRecords < 0)) {
         return result;
     }
 
@@ -736,6 +912,13 @@ XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
     if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listRecords.count())) {
         const RECORD &record = pContext->listRecords.at(pState->nCurrentIndex);
         CPIO_RECORD_INFO info = {};
+
+        if (!_parseRecord(record.nHeaderOffset, &info, pPdStruct) ||
+            (info.nHeaderOffset != record.nHeaderOffset) || (info.nHeaderSize != record.nHeaderSize) ||
+            (info.nDataOffset != record.nDataOffset) || (info.nDataSize != record.nDataSize) ||
+            (info.sFileName != record.spInfo.sRecordName)) {
+            return ARCHIVERECORD();
+        }
 
         result.nStreamOffset = record.nDataOffset;
         result.nStreamSize = record.nDataSize;
@@ -746,18 +929,16 @@ XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
         result.mapProperties.insert(XBinary::FPART_PROP_HEADER_OFFSET, record.nHeaderOffset);
         result.mapProperties.insert(XBinary::FPART_PROP_HEADER_SIZE, record.nHeaderSize);
 
-        if (_parseRecord(record.nHeaderOffset, &info)) {
-            result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, info.nMode);
-            result.mapProperties.insert(XBinary::FPART_PROP_UID, info.nUID);
-            result.mapProperties.insert(XBinary::FPART_PROP_GID, info.nGID);
-            result.mapProperties.insert(XBinary::FPART_PROP_ISFOLDER, info.bIsFolder);
+        result.mapProperties.insert(XBinary::FPART_PROP_FILEMODE, info.nMode);
+        result.mapProperties.insert(XBinary::FPART_PROP_UID, info.nUID);
+        result.mapProperties.insert(XBinary::FPART_PROP_GID, info.nGID);
+        result.mapProperties.insert(XBinary::FPART_PROP_ISFOLDER, info.bIsFolder);
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
-            result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, QDateTime::fromSecsSinceEpoch((qint64)info.nMTime));
+        result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, QDateTime::fromSecsSinceEpoch((qint64)info.nMTime));
 #else
-            result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, QDateTime::fromMSecsSinceEpoch((qint64)info.nMTime * 1000));
+        result.mapProperties.insert(XBinary::FPART_PROP_DATETIME, QDateTime::fromMSecsSinceEpoch((qint64)info.nMTime * 1000));
 #endif
-        }
     }
 
     return result;
@@ -765,9 +946,8 @@ XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
 
 bool XCPIO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nTotalSize != getSize())) {
         return false;
     }
 
@@ -799,6 +979,11 @@ bool XCPIO::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

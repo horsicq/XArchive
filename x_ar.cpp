@@ -20,6 +20,99 @@
  */
 #include "x_ar.h"
 
+#include <limits>
+#include <new>
+
+namespace {
+bool arWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct,
+                qint64 *pnWritten = nullptr)
+{
+    if (pnWritten) *pnWritten = 0;
+    if (!pDevice || !pDevice->isWritable() || (nSize < 0) || ((nSize > 0) && !pData) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    qint64 nWritten = 0;
+    while ((nWritten < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint64 nResult = pDevice->write(pData + nWritten, nSize - nWritten);
+        if ((nResult <= 0) || (nResult > (nSize - nWritten))) return false;
+        nWritten += nResult;
+        if (pnWritten) *pnWritten = nWritten;
+    }
+
+    return (nWritten == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+bool arCanAppendAt(QIODevice *pDevice, qint64 nOffset)
+{
+    if (!pDevice || !pDevice->isWritable() || (nOffset < 0)) return false;
+    if (pDevice->isSequential()) return true;
+    return XBinary::isResizeEnable(pDevice) && (pDevice->pos() == nOffset) && (pDevice->size() == nOffset);
+}
+
+bool arRollbackWrite(QIODevice *pDevice, qint64 nStartPosition)
+{
+    return pDevice && !pDevice->isSequential() && (nStartPosition >= 0) && XBinary::isResizeEnable(pDevice) &&
+           XBinary::resize(pDevice, nStartPosition) && pDevice->seek(nStartPosition);
+}
+
+bool arParseDecimalField(const char *pData, qint32 nSize, qint64 *pValue)
+{
+    if (!pData || (nSize <= 0) || !pValue) return false;
+
+    QByteArray baValue(pData, nSize);
+    baValue = baValue.trimmed();
+    if (baValue.isEmpty()) return false;
+
+    qint64 nValue = 0;
+    for (char cValue : baValue) {
+        if ((cValue < '0') || (cValue > '9')) return false;
+        const qint32 nDigit = cValue - '0';
+        if (nValue > (((std::numeric_limits<qint64>::max)() - nDigit) / 10)) return false;
+        nValue = (nValue * 10) + nDigit;
+    }
+
+    *pValue = nValue;
+    return true;
+}
+
+bool arGetRecordSize(qint64 nDataSize, qint64 *pRecordSize)
+{
+    if ((nDataSize < 0) || !pRecordSize ||
+        (nDataSize > ((std::numeric_limits<qint64>::max)() - 61))) {
+        return false;
+    }
+
+    *pRecordSize = 60 + nDataSize + (nDataSize & 1);
+    return true;
+}
+
+bool arGetBsdNameLength(const char *pData, qint32 nSize, qint64 nRecordDataSize, qint32 *pNameLength)
+{
+    if (!pData || (nSize <= 0) || !pNameLength || (nRecordDataSize < 0)) return false;
+    *pNameLength = 0;
+
+    QByteArray baName(pData, nSize);
+    baName = baName.trimmed();
+    if (!baName.startsWith("#1/")) return true;
+
+    QByteArray baLength = baName.mid(3);
+    if (baLength.endsWith('/')) baLength.chop(1);
+    if (baLength.isEmpty()) return false;
+
+    qint64 nNameLength = 0;
+    if (!arParseDecimalField(baLength.constData(), baLength.size(), &nNameLength) ||
+        (nNameLength <= 0) || (nNameLength > nRecordDataSize) ||
+        (nNameLength > (std::numeric_limits<qint32>::max)())) {
+        return false;
+    }
+
+    *pNameLength = (qint32)nNameLength;
+    return true;
+}
+}  // namespace
+
 XBinary::XCONVERT _TABLE_XAr_STRUCTID[] = {
     {X_Ar::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
     {X_Ar::STRUCTID_FRECORD, "FRECORD", QString("FRECORD")},
@@ -30,32 +123,62 @@ X_Ar::X_Ar(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
-bool X_Ar::isValid(PDSTRUCT *pPdStruct)
+bool X_Ar::isPackStateConsistent(const PACK_STATE *pState, const AR_PACK_CONTEXT *pContext)
 {
-    // TODO more checks
-    bool bResult = false;
-
-    _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
-
-    if (getSize() > (qint64)(8 + sizeof(RECORD)))  // TODO const
-    {
-        if (compareSignature(&memoryMap, "'!<arch>'0a", 0, pPdStruct)) {
-            FRECORD frecord = readFRECORD(8);
-
-            if ((frecord.endChar[0] == 0x60) && (frecord.endChar[1] == 0x0a)) {
-                bResult = true;
-            }
-        }
+    if (!pState || !pContext || (pState->pContext != pContext) || !pState->pDevice ||
+        !pState->pDevice->isWritable() || (pContext->nStartOffset < 0) ||
+        (pContext->nStartOffset > ((std::numeric_limits<qint64>::max)() - 8)) ||
+        (pContext->nCurrentOffset < pContext->nStartOffset) ||
+        (pContext->nNumberOfRecords < 0) ||
+        (pState->nCurrentOffset != pContext->nCurrentOffset) ||
+        (pState->nNumberOfRecords != pContext->nNumberOfRecords)) {
+        return false;
     }
 
-    return bResult;
+    if (!pContext->bFailed && (pContext->nCurrentOffset < (pContext->nStartOffset + 8))) return false;
+    if (pState->pDevice->isSequential()) return true;
+
+    return arCanAppendAt(pState->pDevice, pContext->nCurrentOffset);
+}
+
+bool X_Ar::isValid(PDSTRUCT *pPdStruct)
+{
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    const qint64 nTotalSize = getSize();
+    if (nTotalSize < 8) return false;
+
+    _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
+    if (!compareSignature(&memoryMap, "'!<arch>'0a", 0, pPdStruct)) return false;
+
+    qint64 nOffset = 8;
+    while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if ((nTotalSize - nOffset) < (qint64)sizeof(FRECORD)) return false;
+
+        const FRECORD frecord = readFRECORD(nOffset);
+        if ((frecord.endChar[0] != 0x60) || (frecord.endChar[1] != 0x0a)) return false;
+
+        qint64 nDataSize = 0;
+        qint64 nRecordSize = 0;
+        qint32 nBsdNameLength = 0;
+        if (!arParseDecimalField(frecord.fileSize, sizeof(frecord.fileSize), &nDataSize) ||
+            !arGetRecordSize(nDataSize, &nRecordSize) ||
+            !arGetBsdNameLength(frecord.fileId, sizeof(frecord.fileId), nDataSize, &nBsdNameLength) ||
+            (nRecordSize > (nTotalSize - nOffset))) {
+            return false;
+        }
+
+        nOffset += nRecordSize;
+    }
+
+    return (nOffset == nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool X_Ar::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     X_Ar x_ar(pDevice);
 
-    return x_ar.isValid();
+    return x_ar.isValid(pPdStruct);
 }
 
 QString X_Ar::getFileFormatExt()
@@ -324,36 +447,25 @@ QList<XBinary::XFRECORD> X_Ar::getXFRecords(FT fileType, quint32 nStructID, cons
 quint64 X_Ar::_getNumberOfStreams(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     quint64 nResult = 0;
+    const qint64 nTotalSize = getSize();
+    if ((nOffset < 0) || (nOffset > nTotalSize)) return 0;
 
-    qint64 nSize = getSize() - nOffset;
+    while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if ((nTotalSize - nOffset) < (qint64)sizeof(FRECORD)) break;
 
-    while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        FRECORD frecord = readFRECORD(nOffset);
-
-        // Validate header terminator for safety
-        if (!((frecord.endChar[0] == 0x60) && (frecord.endChar[1] == 0x0a))) {
+        const FRECORD frecord = readFRECORD(nOffset);
+        qint64 nDataSize = 0;
+        qint64 nRecordSize = 0;
+        qint32 nBsdNameLength = 0;
+        if ((frecord.endChar[0] != 0x60) || (frecord.endChar[1] != 0x0a) ||
+            !arParseDecimalField(frecord.fileSize, sizeof(frecord.fileSize), &nDataSize) ||
+            !arGetRecordSize(nDataSize, &nRecordSize) ||
+            !arGetBsdNameLength(frecord.fileId, sizeof(frecord.fileId), nDataSize, &nBsdNameLength) ||
+            (nRecordSize > (nTotalSize - nOffset))) {
             break;
         }
 
-        QString sSize = QString::fromLatin1(frecord.fileSize, sizeof(frecord.fileSize)).trimmed();
-        qint64 nRecordSize = sSize.toLongLong();
-
-        if (nRecordSize <= 0) {
-            break;
-        }
-
-        // BSD style name: "#1/<len>" has embedded filename immediately after header
-        QString sName = QString::fromLatin1(frecord.fileId, sizeof(frecord.fileId)).trimmed();
-        if (sName.section('/', 0, 0) == "#1") {
-            qint32 nFileNameLength = sName.section('/', 1, 1).toInt();
-            if (nRecordSize < nFileNameLength) {
-                break;  // malformed; avoid underflow/loop
-            }
-        }
-
-        qint64 nStep = (qint64)sizeof(FRECORD) + (qint64)S_ALIGN_UP(nRecordSize, 2);
-        nOffset += nStep;
-        nSize -= nStep;
+        nOffset += nRecordSize;
         nResult++;
     }
 
@@ -398,58 +510,56 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 {
     QList<FPART> listResult;
 
-    const qint64 fileSize = getSize();
-    if (fileSize < 8) return listResult;
+    if ((nLimit < -1) || (nLimit == 0) || !isValid(pPdStruct) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return listResult;
+    }
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
-    qint64 nOffset = 0;
-    qint64 nSize = fileSize;
+    const qint64 fileSize = getSize();
+    qint64 nOffset = 8;
 
     // Header magic
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
-        header.nFileSize = qMin<qint64>(8, fileSize);
+        header.nFileSize = 8;
         header.nVirtualAddress = -1;
         header.sName = tr("Header");
         listResult.append(header);
     }
 
-    nOffset += 8;
-    nSize -= 8;
-
     qint32 nIndex = 0;
-
-    while ((nSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        FRECORD frecord = readFRECORD(nOffset);
-
-        QString sSize = QString::fromLatin1(frecord.fileSize, sizeof(frecord.fileSize)).trimmed();
-        qint64 nRecordSize = sSize.toLongLong();
-        if (nRecordSize <= 0) break;
-
-        QString sOriginalName = QString::fromLatin1(frecord.fileId, sizeof(frecord.fileId)).trimmed();
-
-        qint64 dataOffset = nOffset + (qint64)sizeof(FRECORD);
-        qint64 dataSize = nRecordSize;
+    while ((nOffset < fileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const FRECORD frecord = readFRECORD(nOffset);
+        qint64 nDataFieldSize = 0;
+        qint64 nRecordSize = 0;
         qint32 nFileNameLength = 0;
-
-        if (sOriginalName == "//") {
-            // GNU table of long filenames; still a data region
-        } else if (sOriginalName.section('/', 0, 0) == "#1") {  // BSD style
-            nFileNameLength = sOriginalName.section('/', 1, 1).toInt();
-            dataOffset += nFileNameLength;
-            dataSize -= nFileNameLength;
-        } else if (sOriginalName.size() >= 2) {
-            if ((sOriginalName.at(0) == QChar('/')) && (sOriginalName.at(sOriginalName.size() - 1) != QChar('/'))) {
-                // Name comes from the string table; keep raw for part name
-            } else if ((sOriginalName.size() > 2) && (sOriginalName.at(sOriginalName.size() - 1) == QChar('/'))) {
-                sOriginalName.remove(sOriginalName.size() - 1, 1);
-            }
+        if (!arParseDecimalField(frecord.fileSize, sizeof(frecord.fileSize), &nDataFieldSize) ||
+            !arGetRecordSize(nDataFieldSize, &nRecordSize) ||
+            !arGetBsdNameLength(frecord.fileId, sizeof(frecord.fileId), nDataFieldSize, &nFileNameLength) ||
+            (nRecordSize > (fileSize - nOffset))) {
+            return QList<FPART>();
         }
 
-        if (dataSize < 0) dataSize = 0;
+        qint64 dataOffset = nOffset + (qint64)sizeof(FRECORD) + nFileNameLength;
+        qint64 dataSize = nDataFieldSize - nFileNameLength;
+        QByteArray baOriginalName(frecord.fileId, sizeof(frecord.fileId));
+        while (baOriginalName.endsWith(' ')) baOriginalName.chop(1);
+        QString sOriginalName;
+        if (nFileNameLength > 0) {
+            const QByteArray baEmbeddedName = read_array(nOffset + sizeof(FRECORD), nFileNameLength);
+            if (baEmbeddedName.size() != nFileNameLength) return QList<FPART>();
+            sOriginalName = QString::fromUtf8(baEmbeddedName);
+        } else {
+            if ((baOriginalName.size() > 1) && baOriginalName.endsWith('/')) baOriginalName.chop(1);
+            sOriginalName = QString::fromUtf8(baOriginalName);
+        }
 
-        if (nFileParts & FILEPART_HEADER) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return QList<FPART>();
+
+        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
             FPART h = {};
             h.filePart = FILEPART_HEADER;
             h.nFileOffset = nOffset;
@@ -459,7 +569,7 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             listResult.append(h);
         }
 
-        if (nFileParts & FILEPART_STREAM) {
+        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
             FPART part = {};
             part.filePart = FILEPART_STREAM;
             part.nFileOffset = dataOffset;
@@ -482,16 +592,14 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             listResult.append(part);
         }
 
-        // advance to next, 2-byte aligned
-        qint64 nAligned = S_ALIGN_UP(nRecordSize, 2);
-        nOffset += (qint64)sizeof(FRECORD) + nAligned;
-        nSize -= (qint64)sizeof(FRECORD) + nAligned;
+        nOffset += nRecordSize;
         nIndex++;
-
-        if ((nLimit != -1) && (nIndex >= nLimit)) break;
     }
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return QList<FPART>();
+
     // Total parsed data area
-    if (nFileParts & FILEPART_DATA) {
+    if ((nFileParts & FILEPART_DATA) && canAppend()) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 8;
@@ -501,50 +609,111 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         listResult.append(data);
     }
 
-    // Trailing bytes after the last record are overlay
-    if ((nFileParts & FILEPART_OVERLAY) && (nOffset < fileSize)) {
-        FPART overlay = {};
-        overlay.filePart = FILEPART_OVERLAY;
-        overlay.nFileOffset = nOffset;
-        overlay.nFileSize = fileSize - nOffset;
-        overlay.nVirtualAddress = -1;
-        overlay.sName = tr("Overlay");
-        listResult.append(overlay);
-    }
-
-    return listResult;
+    return XBinary::isPdStructNotCanceled(pPdStruct) ? listResult : QList<FPART>();
 }
 
 bool X_Ar::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState) {
+    if (!pState || !pDevice || !pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
+    qint64 nStartPosition = pDevice->pos();
+    if (!arCanAppendAt(pDevice, nStartPosition) ||
+        (nStartPosition > ((std::numeric_limits<qint64>::max)() - 8))) {
+        return false;
+    }
+
+    AR_PACK_CONTEXT *pNewContext = new (std::nothrow) AR_PACK_CONTEXT();
+    if (!pNewContext) return false;
+
+    AR_PACK_CONTEXT *pOldContext = static_cast<AR_PACK_CONTEXT *>(pState->pContext);
+    if (pOldContext) {
+        QIODevice *pOldDevice = pState->pDevice;
+        if (pOldDevice && !pOldDevice->isSequential()) {
+            if (!isPackStateConsistent(pState, pOldContext) ||
+                !arRollbackWrite(pOldDevice, pOldContext->nStartOffset)) {
+                delete pNewContext;
+                return false;
+            }
+        } else if (pOldDevice == pDevice) {
+            delete pNewContext;
+            return false;
+        }
+
+        delete pOldContext;
+        *pState = PACK_STATE();
+    }
+
+    nStartPosition = pDevice->pos();
+    if (!arCanAppendAt(pDevice, nStartPosition) ||
+        (nStartPosition > ((std::numeric_limits<qint64>::max)() - 8))) {
+        delete pNewContext;
+        *pState = PACK_STATE();
+        return false;
+    }
+
+    pNewContext->nStartOffset = nStartPosition;
+    pNewContext->nCurrentOffset = nStartPosition;
+    pNewContext->nNumberOfRecords = 0;
+    pNewContext->bFailed = false;
+
     pState->pDevice = pDevice;
     pState->mapProperties = mapProperties;
+    pState->nCurrentOffset = nStartPosition;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = pNewContext;
 
     // Write AR signature: "!<arch>\n"
-    QByteArray baSignature = "!<arch>\n";
-    if (pState->pDevice->write(baSignature) != baSignature.size()) {
+    const QByteArray baSignature = QByteArrayLiteral("!<arch>\n");
+    qint64 nSignatureWritten = 0;
+    if (!arWriteAll(pDevice, baSignature.constData(), baSignature.size(), pPdStruct, &nSignatureWritten)) {
+        if (arRollbackWrite(pDevice, nStartPosition) || (nSignatureWritten == 0)) {
+            delete pNewContext;
+            *pState = PACK_STATE();
+        } else {
+            pNewContext->bFailed = true;
+            pNewContext->nCurrentOffset = nStartPosition + nSignatureWritten;
+            pState->nCurrentOffset = pNewContext->nCurrentOffset;
+        }
         return false;
     }
 
     // Initialize state
-    pState->nCurrentOffset = 8;  // After signature
-    pState->nNumberOfRecords = 0;
-    pState->pContext = nullptr;
+    pNewContext->nCurrentOffset = nStartPosition + baSignature.size();
+    pState->nCurrentOffset = pNewContext->nCurrentOffset;
 
     return true;
 }
 
 bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pDevice) {
+    if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
+
+    AR_PACK_CONTEXT *pContext = static_cast<AR_PACK_CONTEXT *>(pState->pContext);
+    if (pContext->bFailed || !isPackStateConsistent(pState, pContext) ||
+        (pContext->nNumberOfRecords == (std::numeric_limits<qint32>::max)())) {
+        return false;
+    }
+
+    const qint64 nStartPosition = pContext->nCurrentOffset;
+    qint64 nRecordWritten = 0;
+    const auto failWrite = [pState, pContext, nStartPosition, &nRecordWritten]() -> bool {
+        if (arRollbackWrite(pState->pDevice, nStartPosition)) return false;
+
+        if ((nRecordWritten > 0) || !pState->pDevice->isSequential()) {
+            pContext->bFailed = true;
+            if (nRecordWritten <= ((std::numeric_limits<qint64>::max)() - nStartPosition)) {
+                pContext->nCurrentOffset = nStartPosition + nRecordWritten;
+                pState->nCurrentOffset = pContext->nCurrentOffset;
+            }
+        }
+        return false;
+    };
 
     // Check if file exists and is readable
     QFileInfo fileInfo(sFilePath);
@@ -583,27 +752,47 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     QByteArray baFileName = sBaseName.toUtf8();
     bool bUseBsdFormat = (baFileName.size() > 15);
 
+    if (baFileName.isEmpty() || (nFileSize < 0) ||
+        (bUseBsdFormat && ((qint64)baFileName.size() > ((std::numeric_limits<qint64>::max)() - nFileSize)))) {
+        return false;
+    }
+
+    const qint64 nTotalDataSize = nFileSize + (bUseBsdFormat ? baFileName.size() : 0);
+    qint64 nRecordSize = 0;
+    if ((QString::number(nTotalDataSize).size() > (qint32)sizeof(((FRECORD *)0)->fileSize)) ||
+        (QString::number(nMTime).size() > (qint32)sizeof(((FRECORD *)0)->fileMod)) ||
+        (QString::number(nMode, 8).size() > (qint32)sizeof(((FRECORD *)0)->fileMode)) ||
+        !arGetRecordSize(nTotalDataSize, &nRecordSize) ||
+        (nStartPosition > ((std::numeric_limits<qint64>::max)() - nRecordSize))) {
+        return false;
+    }
+
+    QFile file(sFilePath);
+    if (!file.open(QIODevice::ReadOnly)) return false;
+
     FRECORD header = createHeader(sBaseName, nFileSize, nMode, nMTime);
 
     // Write header
-    if (pState->pDevice->write((char *)&header, sizeof(FRECORD)) != sizeof(FRECORD)) {
-        return false;
+    qint64 nWritten = 0;
+    if (!arWriteAll(pState->pDevice, reinterpret_cast<const char *>(&header), sizeof(FRECORD), pPdStruct, &nWritten)) {
+        nRecordWritten += nWritten;
+        file.close();
+        return failWrite();
     }
+    nRecordWritten += nWritten;
 
     // If using BSD format, write the filename first
     if (bUseBsdFormat) {
-        if (pState->pDevice->write(baFileName) != baFileName.size()) {
-            return false;
+        nWritten = 0;
+        if (!arWriteAll(pState->pDevice, baFileName.constData(), baFileName.size(), pPdStruct, &nWritten)) {
+            nRecordWritten += nWritten;
+            file.close();
+            return failWrite();
         }
+        nRecordWritten += nWritten;
     }
 
     // Write file content
-    QFile file(sFilePath);
-
-    if (!file.open(QIODevice::ReadOnly)) {
-        return false;
-    }
-
     qint64 nBytesWritten = 0;
 
     while (nBytesWritten < nFileSize && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -611,49 +800,60 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
 
         if (baBuffer.isEmpty()) {
             file.close();
-            return false;
+            return failWrite();
         }
 
-        if (pState->pDevice->write(baBuffer) != baBuffer.size()) {
+        nWritten = 0;
+        if (!arWriteAll(pState->pDevice, baBuffer.constData(), baBuffer.size(), pPdStruct, &nWritten)) {
+            nRecordWritten += nWritten;
             file.close();
-            return false;
+            return failWrite();
         }
 
+        nRecordWritten += nWritten;
         nBytesWritten += baBuffer.size();
     }
 
     file.close();
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return false;
+    if ((nBytesWritten != nFileSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return failWrite();
     }
 
     // Add padding if total size (filename + file content for BSD, or just file content for standard) is odd
-    qint64 nTotalDataSize = nFileSize;
-    if (bUseBsdFormat) {
-        nTotalDataSize += baFileName.size();
-    }
-
     if (nTotalDataSize % 2 != 0) {
         char cPadding = '\n';
-        if (pState->pDevice->write(&cPadding, 1) != 1) {
-            return false;
+        nWritten = 0;
+        if (!arWriteAll(pState->pDevice, &cPadding, 1, pPdStruct, &nWritten)) {
+            nRecordWritten += nWritten;
+            return failWrite();
         }
+        nRecordWritten += nWritten;
     }
 
     // Update state
-    qint64 nRecordSize = sizeof(FRECORD) + S_ALIGN_UP(nTotalDataSize, 2);
-    pState->nCurrentOffset += nRecordSize;
-    pState->nNumberOfRecords++;
+    if ((nRecordWritten != nRecordSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) return failWrite();
+
+    pContext->nCurrentOffset = nStartPosition + nRecordSize;
+    pContext->nNumberOfRecords++;
+    pState->nCurrentOffset = pContext->nCurrentOffset;
+    pState->nNumberOfRecords = pContext->nNumberOfRecords;
 
     return true;
 }
 
 bool X_Ar::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pDevice) {
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) pPdStruct = &pdStructEmpty;
+
+    if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
+
+    AR_PACK_CONTEXT *pContext = static_cast<AR_PACK_CONTEXT *>(pState->pContext);
+    if (pContext->bFailed || !isPackStateConsistent(pState, pContext)) return false;
 
     // Check if directory exists
     if (!XBinary::isDirectoryExists(sDirectoryPath)) {
@@ -663,6 +863,8 @@ bool X_Ar::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
     // Enumerate all files in directory
     QList<QString> listFiles;
     XBinary::findFiles(sDirectoryPath, &listFiles, true, 0, pPdStruct);
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     qint32 nNumberOfFiles = listFiles.count();
 
@@ -682,19 +884,23 @@ bool X_Ar::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
         }
     }
 
-    return true;
+    return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool X_Ar::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pDevice) {
+    if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
+    AR_PACK_CONTEXT *pContext = static_cast<AR_PACK_CONTEXT *>(pState->pContext);
+    if (pContext->bFailed || !isPackStateConsistent(pState, pContext)) return false;
+
     // AR archives don't require any terminator
-    // Just ensure everything is flushed
+    delete pContext;
+    pState->pContext = nullptr;
+
     return true;
 }
 
@@ -783,85 +989,87 @@ QMap<XBinary::UNPACK_PROP, QVariant> X_Ar::getDefaultUnpackProperties()
 
 bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) pPdStruct = &pdStructEmpty;
+    if (!pState) return false;
 
-    if (!pPdStruct) {
-        pPdStruct = &pdStructEmpty;
-    }
+    *pState = UNPACK_STATE();
+    if (!isValid(pPdStruct)) return false;
 
-    if (pState) {
-        pState->mapUnpackProperties = mapProperties;
-        pState->nCurrentOffset = 8;  // Start after the "!<arch>\n" signature
-        pState->nTotalSize = getSize();
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 0;
-        pState->pContext = nullptr;
+    pState->mapUnpackProperties = mapProperties;
+    pState->nCurrentOffset = 8;
+    pState->nTotalSize = getSize();
+    pState->nCurrentIndex = 0;
+    pState->pContext = nullptr;
 
-        // Count total number of records
-        qint64 nOffset = 8;
-        qint64 nTotalSize = pState->nTotalSize;
-
-        while ((nOffset + (qint64)sizeof(FRECORD) <= nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            FRECORD header = readFRECORD(nOffset);
-
-            // Validate header terminator
-            if (!((header.endChar[0] == 0x60) && (header.endChar[1] == 0x0a))) {
-                break;
-            }
-
-            QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
-            qint64 nFileSize = sSize.toLongLong();
-
-            if (nFileSize < 0) {
-                break;
-            }
-
-            qint64 nRecordSize = sizeof(FRECORD) + S_ALIGN_UP(nFileSize, 2);
-
-            pState->nNumberOfRecords++;
-            nOffset += nRecordSize;
+    qint64 nOffset = 8;
+    while ((nOffset < pState->nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if ((pState->nTotalSize - nOffset) < (qint64)sizeof(FRECORD)) {
+            *pState = UNPACK_STATE();
+            return false;
         }
 
-        bResult = (pState->nNumberOfRecords > 0);
+        const FRECORD header = readFRECORD(nOffset);
+        qint64 nFileSize = 0;
+        qint64 nRecordSize = 0;
+        qint32 nBsdNameLength = 0;
+        if ((header.endChar[0] != 0x60) || (header.endChar[1] != 0x0a) ||
+            !arParseDecimalField(header.fileSize, sizeof(header.fileSize), &nFileSize) ||
+            !arGetRecordSize(nFileSize, &nRecordSize) ||
+            !arGetBsdNameLength(header.fileId, sizeof(header.fileId), nFileSize, &nBsdNameLength) ||
+            (nRecordSize > (pState->nTotalSize - nOffset)) ||
+            (pState->nNumberOfRecords == (std::numeric_limits<qint32>::max)())) {
+            *pState = UNPACK_STATE();
+            return false;
+        }
+        pState->nNumberOfRecords++;
+        nOffset += nRecordSize;
     }
 
-    return bResult;
+    if ((nOffset != pState->nTotalSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    return true;
 }
 
 XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        FRECORD header = readFRECORD(pState->nCurrentOffset);
-
-        QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
-        qint64 nFileSize = sSize.toLongLong();
+    if (pState && XBinary::isPdStructNotCanceled(pPdStruct) &&
+        (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords) &&
+        (pState->nCurrentOffset >= 8) && (pState->nTotalSize == getSize()) &&
+        (pState->nCurrentOffset <= (pState->nTotalSize - (qint64)sizeof(FRECORD)))) {
+        const FRECORD header = readFRECORD(pState->nCurrentOffset);
+        qint64 nFileSize = 0;
+        qint64 nRecordSize = 0;
+        qint32 nFileNameLength = 0;
+        if ((header.endChar[0] != 0x60) || (header.endChar[1] != 0x0a) ||
+            !arParseDecimalField(header.fileSize, sizeof(header.fileSize), &nFileSize) ||
+            !arGetRecordSize(nFileSize, &nRecordSize) ||
+            !arGetBsdNameLength(header.fileId, sizeof(header.fileId), nFileSize, &nFileNameLength) ||
+            (nRecordSize > (pState->nTotalSize - pState->nCurrentOffset))) {
+            return result;
+        }
 
         // Extract file name
-        QString sFileName = QString::fromUtf8(header.fileId, (qint32)sizeof(header.fileId));
-        sFileName = sFileName.trimmed();
+        QByteArray baFileName(header.fileId, sizeof(header.fileId));
+        while (baFileName.endsWith(' ')) baFileName.chop(1);
+        QString sFileName;
 
         // Handle BSD-style long names
-        if (sFileName.section("/", 0, 0) == "#1") {
-            qint32 nFileNameLength = sFileName.section("/", 1, 1).toInt();
-            if (nFileNameLength > 0 && nFileNameLength <= nFileSize) {
-                sFileName = read_ansiString(pState->nCurrentOffset + sizeof(FRECORD), nFileNameLength);
-                result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD) + nFileNameLength;
-                result.nStreamSize = nFileSize - nFileNameLength;
-            } else {
-                result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD);
-                result.nStreamSize = nFileSize;
-            }
+        if (nFileNameLength > 0) {
+            const QByteArray baEmbeddedName = read_array(pState->nCurrentOffset + sizeof(FRECORD), nFileNameLength);
+            if (baEmbeddedName.size() != nFileNameLength) return XBinary::ARCHIVERECORD();
+            sFileName = QString::fromUtf8(baEmbeddedName);
+            result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD) + nFileNameLength;
+            result.nStreamSize = nFileSize - nFileNameLength;
         } else {
             // Remove trailing '/' if present
-            if (sFileName.endsWith('/')) {
-                sFileName = sFileName.left(sFileName.length() - 1);
-            }
+            if ((baFileName.size() > 1) && baFileName.endsWith('/')) baFileName.chop(1);
+            sFileName = QString::fromUtf8(baFileName);
 
             result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD);
             result.nStreamSize = nFileSize;
@@ -904,25 +1112,43 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    bool bResult = false;
-
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        FRECORD header = readFRECORD(pState->nCurrentOffset);
-
-        QString sSize = QString::fromLatin1(header.fileSize, sizeof(header.fileSize)).trimmed();
-        qint64 nFileSize = sSize.toLongLong();
-
-        qint64 nRecordSize = sizeof(FRECORD) + S_ALIGN_UP(nFileSize, 2);
-
-        pState->nCurrentOffset += nRecordSize;
-        pState->nCurrentIndex++;
-
-        bResult = (pState->nCurrentIndex < pState->nNumberOfRecords);
+    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
+        (pState->nCurrentOffset < 8) || (pState->nTotalSize != getSize()) ||
+        (pState->nCurrentOffset > (pState->nTotalSize - (qint64)sizeof(FRECORD)))) {
+        return false;
     }
 
-    return bResult;
+    const FRECORD header = readFRECORD(pState->nCurrentOffset);
+    qint64 nFileSize = 0;
+    qint64 nRecordSize = 0;
+    if ((header.endChar[0] != 0x60) || (header.endChar[1] != 0x0a) ||
+        !arParseDecimalField(header.fileSize, sizeof(header.fileSize), &nFileSize) ||
+        !arGetRecordSize(nFileSize, &nRecordSize) ||
+        (nRecordSize > (pState->nTotalSize - pState->nCurrentOffset))) {
+        return false;
+    }
+
+    pState->nCurrentOffset += nRecordSize;
+    pState->nCurrentIndex++;
+
+    return pState->nCurrentIndex < pState->nNumberOfRecords;
+}
+
+bool X_Ar::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    // AR enumeration has no heap context, but it still owns all public cursor
+    // and property state.  XArchive::getRecords() treats cleanup failure as an
+    // incomplete enumeration, so the inherited false-returning stub used to
+    // discard every otherwise valid AR/DEB record list.
+    *pState = UNPACK_STATE();
+    return true;
 }
 
 QList<QString> X_Ar::getSearchSignatures()

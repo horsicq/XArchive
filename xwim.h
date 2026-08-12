@@ -23,6 +23,8 @@
 
 #include "xarchive.h"
 
+class QCryptographicHash;
+
 class XWIM : public XArchive {
     Q_OBJECT
 
@@ -124,8 +126,10 @@ private:
     static const qint32 WIM_HEADER_SIZE_NEW = 0xD0;
     static const qint32 WIM_RESOURCE_SIZE = 0x18;
     static const qint32 WIM_STREAM_INFO_SIZE = 50;
+    static const qint32 WIM_STREAM_INFO_SIZE_OLD = 52;
     static const qint32 WIM_HASH_SIZE = 20;
     static const qint32 WIM_DIR_ENTRY_SIZE = 0x66;
+    static const qint32 WIM_DIR_ENTRY_SIZE_OLD = 0x3E;
 
     enum RESOURCE_FLAG {
         RESOURCE_FLAG_METADATA = 1 << 1,
@@ -137,6 +141,7 @@ private:
         RESOURCE_INFO resourceInfo;
         quint16 nPartNumber;
         quint32 nRefCount;
+        quint32 nId;
         QByteArray baHash;
     };
 
@@ -148,6 +153,7 @@ private:
     };
 
     struct WIM_RECORD {
+        bool bValid;
         QString sFileName;
         bool bIsFolder;
         qint64 nStreamOffset;
@@ -156,27 +162,61 @@ private:
         HANDLE_METHOD handleMethod;
         QDateTime mtDateTime;
         RESOURCE_INFO resourceInfo;
+        QByteArray baHash;
+        quint32 nStreamId;
     };
 
     struct WIM_UNPACK_CONTEXT {
         QList<WIM_RECORD> listRecords;
+        QIODevice *pSourceDevice;
         quint32 nHeaderFlags;
         quint32 nChunkSize;
+        HANDLE_METHOD compressedHandleMethod;
+    };
+
+    struct WIM_METADATA_CONTEXT {
+        bool bLegacy;
+        qint32 nAlignMask;
+        qint32 nDirEntrySize;
+        qint64 nDirStart;
+        QMap<QByteArray, STREAM_INFO> mapStreamsByHash;
+        QMap<quint32, STREAM_INFO> mapStreamsById;
+        QMap<qint64, qint64> mapParsedRanges;
+        QList<WIM_RECORD> *pListRecords;
+        QMap<QByteArray, quint64> *pHashReferenceCounts;
+        QMap<quint32, quint64> *pIdReferenceCounts;
+        PDSTRUCT *pPdStruct;
     };
 
     bool _isSupportedVersion(quint32 nVersion, quint32 nHeaderSize) const;
+    bool _isCompressionConfigurationValid(quint32 nHeaderFlags, quint32 nChunkSize,
+                                          bool bRequireImplemented) const;
     void _appendResourcePart(QList<FPART> *pListResult, quint32 nFileParts, const RESOURCE_INFO &resourceInfo, const QString &sName, qint32 nLimit);
     bool _isResourceStored(const RESOURCE_INFO &resourceInfo) const;
     QByteArray _readStoredResource(const RESOURCE_INFO &resourceInfo, PDSTRUCT *pPdStruct);
     WIM_COMPRESSION _getCompressionType(quint32 nHeaderFlags) const;
+    HANDLE_METHOD _getCompressionHandleMethod(quint32 nHeaderFlags) const;
     qint32 _getChunkSize(quint32 nChunkSize) const;
-    QByteArray _readResource(const RESOURCE_INFO &resourceInfo, quint32 nHeaderFlags, quint32 nChunkSize, PDSTRUCT *pPdStruct);
+    QByteArray _readResource(const RESOURCE_INFO &resourceInfo, quint32 nHeaderFlags, quint32 nChunkSize,
+                             quint64 nMaxBufferSize, PDSTRUCT *pPdStruct);
     QByteArray _decompressChunkedResource(const RESOURCE_INFO &resourceInfo, WIM_COMPRESSION compression, qint32 nChunkSize, PDSTRUCT *pPdStruct);
-    QList<STREAM_INFO> _readStreamInfoList(const WIM_HEADER &header, PDSTRUCT *pPdStruct);
-    bool _parseMetadata(const QByteArray &baMetadata, const QList<STREAM_INFO> &listStreams, QList<WIM_RECORD> *pListRecords);
-    bool _parseMetadataDir(const QByteArray &baMetadata, qint64 nOffset, const QString &sParent, const QMap<QByteArray, STREAM_INFO> &mapStreams,
-                           QList<WIM_RECORD> *pListRecords, QSet<qint64> *pStVisited);
-    WIM_RECORD _createRecordFromMetadataItem(const QByteArray &baMetadata, qint64 nOffset, const QString &sParent, const QMap<QByteArray, STREAM_INFO> &mapStreams);
+    bool _stageResource(const WIM_RECORD &record, const WIM_UNPACK_CONTEXT &context, QIODevice *pStageDevice,
+                        QByteArray *pDigest, PDSTRUCT *pPdStruct);
+    bool _stageChunkedResource(const RESOURCE_INFO &resourceInfo, WIM_COMPRESSION compression, qint32 nChunkSize,
+                               QIODevice *pStageDevice, QCryptographicHash *pHash, PDSTRUCT *pPdStruct);
+    QList<STREAM_INFO> _readStreamInfoList(const WIM_HEADER &header, bool *pOk, PDSTRUCT *pPdStruct);
+    bool _parseMetadata(const QByteArray &baMetadata, const QMap<QByteArray, STREAM_INFO> &mapStreamsByHash,
+                        const QMap<quint32, STREAM_INFO> &mapStreamsById, const WIM_HEADER &header,
+                        QList<WIM_RECORD> *pListRecords, QMap<QByteArray, quint64> *pHashReferenceCounts,
+                        QMap<quint32, quint64> *pIdReferenceCounts, PDSTRUCT *pPdStruct);
+    bool _parseMetadataDir(const QByteArray &baMetadata, qint64 nOffset, const QString &sParent,
+                           WIM_METADATA_CONTEXT *pContext, qint32 nDepth);
+    bool _reserveMetadataRange(WIM_METADATA_CONTEXT *pContext, qint64 nOffset, qint64 nSize, qint64 nMetadataSize);
+    bool _applyStreamReference(const QByteArray &baHash, quint32 nId, const WIM_METADATA_CONTEXT &context,
+                               WIM_RECORD *pRecord);
+    bool _applyStreamInfo(const STREAM_INFO &streamInfo, WIM_RECORD *pRecord);
+    WIM_RECORD _createRecordFromMetadataItem(const QByteArray &baMetadata, qint64 nOffset, const QString &sParent,
+                                             const WIM_METADATA_CONTEXT &context);
     QString _readUTF16LEString(const QByteArray &baData, qint64 nOffset, qint32 nSize);
     static bool _isEmptyHash(const QByteArray &baHash);
 private:

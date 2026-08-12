@@ -342,6 +342,9 @@ struct VM_PreparedProgram {
 
 class RarVM {
 private:
+    RarVM(const RarVM &) = delete;
+    RarVM &operator=(const RarVM &) = delete;
+
     bool ExecuteStandardFilter(VM_StandardFilters FilterType);
     uint FilterItanium_GetBits(quint8 *Data, uint BitPos, uint BitCount);
     void FilterItanium_SetBits(quint8 *Data, uint BitField, uint BitPos, uint BitCount);
@@ -623,6 +626,7 @@ public:
 private:
     bool UnpReadBuf();
     void UnpWriteBuf();
+    bool WriteOutput(const quint8 *pData, size_t nSize);
     quint8 *ApplyFilter(quint8 *Data, uint DataSize, UnpackFilter *Flt);
     void UnpWriteArea(size_t StartPtr, size_t EndPtr);
     void UnpWriteData(quint8 *Data, size_t Size);
@@ -684,11 +688,14 @@ private:
     bool Fragmented;
 
     qint64 DestUnpSize;
+    qint64 ExpectedFileSize;
+    qint64 PublishedFileSize;
 
     bool Suspended;
     bool UnpSomeRead;
     qint64 WrittenFileSize;
     bool FileExtracted;
+    bool WriteError;
 
     /***************************** rar_Unpack v 1.5 *********************************/
 public:
@@ -745,7 +752,7 @@ public:
 
 private:
     void InitFilters30(bool Solid);
-    bool ReadEndOfBlock();
+    bool ReadEndOfBlock(bool *pNewFile = nullptr);
     bool ReadVMCode();
     bool ReadVMCodePPM();
     bool AddVMCode(uint FirstByte, quint8 *Code, uint CodeSize);
@@ -804,12 +811,16 @@ public:
     void DoUnpack(uint Method, bool Solid);
     bool IsFileExtracted()
     {
-        return FileExtracted;
+        return FileExtracted && !WriteError && (ExpectedFileSize >= 0) &&
+               (PublishedFileSize == ExpectedFileSize);
     }
     void SetDestSize(qint64 DestSize)
     {
         DestUnpSize = DestSize;
+        ExpectedFileSize = DestSize;
+        PublishedFileSize = 0;
         FileExtracted = false;
+        WriteError = false;
     }
     void SetSuspended(bool Suspended)
     {

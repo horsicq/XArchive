@@ -60,7 +60,8 @@ public:
                                  const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct);
     bool multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
     bool decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
-    bool checkCRC(XBinary::CRC_TYPE crcType, QVariant value, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    bool checkCRC(XBinary::CRC_TYPE crcType, QVariant value, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct = nullptr,
+                  const XBinary::DATAPROCESS_STATE *pState = nullptr);
     QByteArray decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
     qint64 getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
 
@@ -68,7 +69,7 @@ private:
     void clearSolidCache();
     bool decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
     QMap<QString, QIODevice *> m_mapSolidCache;
-    QString m_sCurrentArchiveMD5;
+    QString m_sCurrentArchiveIdentity;
     QIODevice *m_pCurrentSolidDevice;
     rar_Unpack *m_pRarUnpacker;
     qint32 m_nRarSolidIndex;

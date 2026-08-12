@@ -32,9 +32,11 @@ XFREEARC::XFREEARC(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XFREEARC::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     // FreeARC archive: starts with "ArC\x01" (4 bytes)
     // Minimum: signature(4) + header_flags(2) + version(2) = 8 bytes
@@ -61,7 +63,7 @@ bool XFREEARC::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XFREEARC xfreearc(pDevice);
 
-    return xfreearc.isValid();
+    return xfreearc.isValid(pPdStruct);
 }
 
 qint64 XFREEARC::getFileFormatSize(PDSTRUCT *pPdStruct)
@@ -154,18 +156,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XFREEARC::getDefaultUnpackProperties()
 
 bool XFREEARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapProperties)
     Q_UNUSED(pPdStruct)
 
     // TODO: FreeARC unpacking requires parsing the directory block,
     // which is itself compressed (typically with LZMA).
     // For now, return false to indicate unpacking is not yet supported.
     if (pState) {
-        pState->mapUnpackProperties = mapProperties;
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 0;
-        pState->pContext = nullptr;
+        finishUnpack(pState, nullptr);
     }
 
     return false;
@@ -184,22 +182,27 @@ XBinary::ARCHIVERECORD XFREEARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
 
 bool XFREEARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pState)
     Q_UNUSED(pPdStruct)
 
-    bool bResult = false;
-
-    if (pState) {
-        pState->nCurrentIndex++;
-        bResult = (pState->nCurrentIndex < pState->nNumberOfRecords);
-    }
-
-    return bResult;
+    return false;
 }
 
 bool XFREEARC::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pState)
     Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = nullptr;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }
@@ -373,14 +376,18 @@ QList<XBinary::XFRECORD> XFREEARC::getXFRecords(FT fileType, quint32 nStructID, 
 
 QList<XBinary::FPART> XFREEARC::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     qint64 nFileSize = getSize();
 
     // Archive header
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
 
         record.filePart = FILEPART_HEADER;
@@ -396,10 +403,10 @@ QList<XBinary::FPART> XFREEARC::getFileParts(quint32 nFileParts, qint32 nLimit, 
     QList<BLOCK> listBlocks = getBlocks(pPdStruct);
     qint64 nMaxOffset = FREEARC_HEADER_SIZE;
 
-    for (qint32 i = 0; i < listBlocks.count(); i++) {
+    for (qint32 i = 0; (i < listBlocks.count()) && canAppend(); i++) {
         BLOCK block = listBlocks.at(i);
 
-        if (nFileParts & FILEPART_STREAM) {
+        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
             FPART record = {};
 
             record.filePart = FILEPART_STREAM;
@@ -411,7 +418,7 @@ QList<XBinary::FPART> XFREEARC::getFileParts(quint32 nFileParts, qint32 nLimit, 
             listResult.append(record);
         }
 
-        if (nFileParts & FILEPART_REGION) {
+        if ((nFileParts & FILEPART_REGION) && canAppend()) {
             FPART record = {};
 
             record.filePart = FILEPART_REGION;
@@ -431,7 +438,7 @@ QList<XBinary::FPART> XFREEARC::getFileParts(quint32 nFileParts, qint32 nLimit, 
     }
 
     // Add overlay if any
-    if ((nFileParts & FILEPART_OVERLAY) && (nMaxOffset < nFileSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nMaxOffset < nFileSize)) {
         FPART record = {};
 
         record.filePart = FILEPART_OVERLAY;

@@ -43,7 +43,7 @@ public:
     // pCallStream  : decompressed call (E8) addresses (from LZMA2)
     // pJmpStream   : decompressed jmp  (E9) addresses (from LZMA3)
     // pRangeStream : raw range-coder data (4th pack stream, not LZMA)
-    // pOutput      : destination device (must be open for writing)
+    // pOutput      : destination device (must be open, seekable and resizable)
     // nOutputSize  : expected number of output bytes
     static bool decompress(QIODevice *pMainStream, QIODevice *pCallStream, QIODevice *pJmpStream, QIODevice *pRangeStream, QIODevice *pOutput, qint64 nOutputSize,
                            XBinary::PDSTRUCT *pPdStruct = nullptr);
@@ -57,9 +57,9 @@ private:
         bool bEof;
     };
 
-    static bool _rcInit(RC_STATE *pRC);
-    static void _rcNormalize(RC_STATE *pRC);
-    static quint32 _rcDecodeBit(RC_STATE *pRC, quint32 *pProb);
+    static bool _rcInit(RC_STATE *pRC, XBinary::PDSTRUCT *pPdStruct);
+    static bool _rcNormalize(RC_STATE *pRC, XBinary::PDSTRUCT *pPdStruct);
+    static bool _rcDecodeBit(RC_STATE *pRC, quint32 *pProb, quint32 *pBit, XBinary::PDSTRUCT *pPdStruct);
 };
 
 #endif  // XBCJ2DECODER_H

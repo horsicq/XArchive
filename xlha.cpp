@@ -53,7 +53,7 @@ bool XLHA::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (getSize() >= 12) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 12)) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
         if (compareSignature(&memoryMap, "....'-lh'..2d", 0, pPdStruct) || compareSignature(&memoryMap, "....'-lz'..2d", 0, pPdStruct) ||
@@ -78,7 +78,7 @@ bool XLHA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XLHA xhla(pDevice);
 
-    return xhla.isValid();
+    return xhla.isValid(pPdStruct);
 }
 
 qint64 XLHA::getFileFormatSize(PDSTRUCT *pPdStruct)
@@ -183,6 +183,12 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (pState) {
+        finishUnpack(pState, nullptr);
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return false;
+        }
+
         pState->mapUnpackProperties = mapProperties;
         pState->nCurrentOffset = 0;
         pState->nTotalSize = getSize();
@@ -207,16 +213,24 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
                     break;
                 }
 
+                const qint64 nRecordSize = nHeaderSize + nCompressedSize;
+                if ((nRecordSize <= 0) || (nRecordSize > nFileSize)) {
+                    break;
+                }
+
                 pState->nNumberOfRecords++;
 
-                nOffset += (nHeaderSize + nCompressedSize);
-                nFileSize -= (nHeaderSize + nCompressedSize);
+                nOffset += nRecordSize;
+                nFileSize -= nRecordSize;
             } else {
                 break;
             }
         }
 
-        bResult = (pState->nNumberOfRecords > 0);
+        bResult = (pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+        if (!bResult) {
+            finishUnpack(pState, nullptr);
+        }
     }
 
     return bResult;
@@ -224,11 +238,10 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         quint8 nLevel = read_uint8(pState->nCurrentOffset + 20);
         qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(pState->nCurrentOffset) : (qint64)(read_uint8(pState->nCurrentOffset) + 2);
         qint64 nSkipSize = (qint64)(quint32)read_uint32(pState->nCurrentOffset + 7);
@@ -283,11 +296,10 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XLHA::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         quint8 nLevel = read_uint8(pState->nCurrentOffset + 20);
         qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(pState->nCurrentOffset) : (qint64)(read_uint8(pState->nCurrentOffset) + 2);
         qint64 nCompressedSize = read_uint32(pState->nCurrentOffset + 7);
@@ -303,8 +315,19 @@ bool XLHA::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XLHA::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pState)
     Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = nullptr;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }
@@ -576,9 +599,13 @@ QList<XBinary::XFRECORD> XLHA::getXFRecords(FT fileType, quint32 nStructID, cons
 
 QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     qint64 nFileSize = getSize();
     qint64 nCurrentOffset = 0;
@@ -586,7 +613,7 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
     // Iterate through all records and create file parts
-    while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((nFileSize > 0) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (compareSignature(&memoryMap, "....'-lh'..2d", nCurrentOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nCurrentOffset) ||
             compareSignature(&memoryMap, "....'-pm'..2d", nCurrentOffset)) {
             quint8 nLevel = read_uint8(nCurrentOffset + 20);
@@ -601,7 +628,7 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             }
 
             // Header part
-            if (nFileParts & FILEPART_HEADER) {
+            if ((nFileParts & FILEPART_HEADER) && canAppend()) {
                 FPART record = {};
 
                 record.filePart = FILEPART_HEADER;
@@ -614,7 +641,7 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             }
 
             // Data/Stream part
-            if (nFileParts & FILEPART_STREAM) {
+            if ((nFileParts & FILEPART_STREAM) && canAppend()) {
                 FPART record = {};
 
                 record.filePart = FILEPART_STREAM;
@@ -628,7 +655,7 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             }
 
             // Region part (header + data)
-            if (nFileParts & FILEPART_REGION) {
+            if ((nFileParts & FILEPART_REGION) && canAppend()) {
                 FPART record = {};
 
                 record.filePart = FILEPART_REGION;
@@ -649,7 +676,7 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     }
 
     // Data part (all archive data)
-    if (nFileParts & FILEPART_DATA) {
+    if ((nFileParts & FILEPART_DATA) && canAppend()) {
         FPART record = {};
 
         record.filePart = FILEPART_DATA;
@@ -662,7 +689,7 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     }
 
     // Overlay part (any trailing data)
-    if (nFileParts & FILEPART_OVERLAY) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
         if (nMaxOffset < getSize()) {
             FPART record = {};
 

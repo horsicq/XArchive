@@ -20,6 +20,8 @@
  */
 #include "xzoo.h"
 
+#include <new>
+
 static XBinary::XCONVERT _TABLE_XZOO_STRUCTID[] = {{XZOO::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                    {XZOO::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
 
@@ -32,7 +34,9 @@ XZOO::XZOO(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XZOO::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     bool bResult = false;
 
@@ -318,17 +322,22 @@ QList<XBinary::XFRECORD> XZOO::getXFRecords(FT fileType, quint32 nStructID, cons
 
 QList<XBinary::FPART> XZOO::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     qint64 nPosEnt = read_uint32(24);
     if ((nPosEnt <= 0) || (nPosEnt > getSize())) {
         nPosEnt = 34;
     }
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
@@ -338,7 +347,7 @@ QList<XBinary::FPART> XZOO::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && (nPosEnt < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && canAppend() && (nPosEnt < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nPosEnt;
@@ -374,16 +383,25 @@ QMap<XBinary::UNPACK_PROP, QVariant> XZOO::getDefaultUnpackProperties()
 
 bool XZOO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !isValid(pPdStruct)) {
+    if (!pState) {
         return false;
     }
 
-    pState->mapUnpackProperties = mapProperties;
+    finishUnpack(pState, nullptr);
 
-    ZOO_UNPACK_CONTEXT *pContext = new ZOO_UNPACK_CONTEXT;
+    if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+        return false;
+    }
 
-    if (!_parseEntries(&(pContext->listRecords), pPdStruct)) {
+    ZOO_UNPACK_CONTEXT *pContext = new (std::nothrow) ZOO_UNPACK_CONTEXT;
+    if (!pContext) {
+        finishUnpack(pState, nullptr);
+        return false;
+    }
+
+    if (!_parseEntries(&(pContext->listRecords), pPdStruct) || !isPdStructNotCanceled(pPdStruct)) {
         delete pContext;
+        finishUnpack(pState, nullptr);
         return false;
     }
 
@@ -392,17 +410,17 @@ bool XZOO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = pContext->listRecords.count();
     pState->nTotalSize = getSize();
     pState->nCurrentOffset = 0;
+    pState->mapUnpackProperties = mapProperties;
 
     return true;
 }
 
 XBinary::ARCHIVERECORD XZOO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
@@ -430,9 +448,8 @@ XBinary::ARCHIVERECORD XZOO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XZOO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -454,6 +471,13 @@ bool XZOO::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         delete pContext;
         pState->pContext = nullptr;
     }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

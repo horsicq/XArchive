@@ -21,6 +21,8 @@
 #include "xucldecoder.h"
 #include "algo_utils.h"
 
+#include <limits>
+
 #if defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wregister"
@@ -4238,48 +4240,54 @@ static bool _decompressBuffer(UCL_DECOMPRESS_ROUTINE pRoutine, const unsigned ch
 
 bool XUCLDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-        pDecompressState->bReadError = false;
-        pDecompressState->bWriteError = false;
-        pDecompressState->nCountInput = 0;
-        pDecompressState->nCountOutput = 0;
-
-        XUCLDecoder::METHOD method = XUCLDecoder::METHOD_NRV2B_8;
-
-        if (Algo_utils::getUclMethodFromState(pDecompressState, &method)) {
-            qint64 nExpectedOutputSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
-
-            if ((nExpectedOutputSize <= 0) && (pDecompressState->nProcessedLimit > 0)) {
-                nExpectedOutputSize = pDecompressState->nProcessedLimit;
-            }
-
-            if (nExpectedOutputSize > 0) {
-                QByteArray baInput;
-
-                if (Algo_utils::readInputData(pDecompressState, &baInput, pPdStruct)) {
-                    QByteArray baOutput;
-                    baOutput.resize(nExpectedOutputSize);
-
-                    quint32 nDecodedSize = (quint32)nExpectedOutputSize;
-                    UCL_DECOMPRESS_ROUTINE pRoutine = _getDecompressRoutine(method);
-
-                    if (_decompressBuffer(pRoutine, (const unsigned char *)baInput.constData(), (quint32)baInput.size(), (unsigned char *)baOutput.data(),
-                                          &nDecodedSize)) {
-                        if (baOutput.size() != (qint32)nDecodedSize) {
-                            baOutput.resize(nDecodedSize);
-                        }
-
-                        pDecompressState->pDeviceOutput->seek(0);
-                        XBinary::_writeDevice(baOutput.data(), baOutput.size(), pDecompressState);
-
-                        bResult = !pDecompressState->bWriteError;
-                    }
-                }
-            }
-        }
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
+        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1) ||
+        (XBinary::getBufferSize(pPdStruct) <= 0)) {
+        return false;
     }
 
-    return bResult;
+    qint64 nExpectedOutputSize =
+        pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    if ((nExpectedOutputSize <= 0) && (pDecompressState->nProcessedLimit > 0)) {
+        nExpectedOutputSize = pDecompressState->nProcessedLimit;
+    }
+    if ((nExpectedOutputSize <= 0) ||
+        (nExpectedOutputSize > (qint64)(std::numeric_limits<qint32>::max)()) ||
+        ((pDecompressState->nInputLimit != -1) &&
+         (pDecompressState->nInputLimit > (qint64)(std::numeric_limits<qint32>::max)()))) {
+        return false;
+    }
+
+    XUCLDecoder::METHOD method = XUCLDecoder::METHOD_NRV2B_8;
+    if (!Algo_utils::getUclMethodFromState(pDecompressState, &method) || !_getDecompressRoutine(method)) {
+        return false;
+    }
+
+    Algo_utils::prepareState(pDecompressState);
+    if (pDecompressState->bReadError || pDecompressState->bWriteError ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    QByteArray baInput;
+    if (!Algo_utils::readInputData(pDecompressState, &baInput, pPdStruct) || baInput.isEmpty() ||
+        pDecompressState->bReadError || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        ((pDecompressState->nInputLimit != -1) &&
+         (pDecompressState->nCountInput != pDecompressState->nInputLimit))) {
+        return false;
+    }
+
+    QByteArray baOutput((qint32)nExpectedOutputSize, 0);
+    quint32 nDecodedSize = (quint32)nExpectedOutputSize;
+    UCL_DECOMPRESS_ROUTINE pRoutine = _getDecompressRoutine(method);
+    if (!_decompressBuffer(pRoutine, (const unsigned char *)baInput.constData(), (quint32)baInput.size(),
+                           (unsigned char *)baOutput.data(), &nDecodedSize) ||
+        (nDecodedSize != (quint32)nExpectedOutputSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    const qint32 nOutputSize = baOutput.size();
+    return (XBinary::_writeDevice(baOutput.constData(), nOutputSize, pDecompressState) == nOutputSize) &&
+           !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }

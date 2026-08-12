@@ -78,9 +78,15 @@ private:
     };
 
     struct ZLIB_PACK_CONTEXT {
+        qint64 nStartOffset;
+        qint64 nDataOffset;
+        qint64 nCurrentOffset;
+        qint32 nNumberOfRecords;
         bool bDataAdded;  // Track if data has been added (only one stream allowed)
+        bool bFailed;     // A sequential destination cannot roll back a partial member
     };
 
+    static bool isPackStateConsistent(const PACK_STATE *pState, const ZLIB_PACK_CONTEXT *pContext);
     bool _getStreamInfo(ZLIB_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct);
 
 private:

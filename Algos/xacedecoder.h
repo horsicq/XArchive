@@ -31,7 +31,8 @@ public:
 
     // Decompress ACE method 1: LZ77 + Huffman
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    // Decompress ACE method 2: LZ77 + Huffman + inverse byte-delta filter
+    // Legacy API retained for source compatibility. ACE TECH.TYPE 2 is the
+    // unsupported ACE 2.x BLOCKED_1 codec, not a whole-stream delta filter.
     static bool decompressDelta(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 
 private:
@@ -58,6 +59,7 @@ private:
         qint32  nRPos;                      // current DWORD index
         qint32  nBitsRd;                    // bit offset within DWORD (0-31)
         quint32 nCodeRd;                    // current 32-bit code window
+        qint64  nBitsConsumed;               // logical compressed bits consumed
 
         // Huffman decode tables
         quint16 nCodeMn[ACE_CODE_MN_SZ];    // main symbol decode table
@@ -76,6 +78,7 @@ private:
         qint32  nDPos;       // current write position
         qint32  nDicSiz;     // 1 << dicbits (from PARM)
         qint32  nDicAnd;     // nDicSiz - 1
+        qint32  nHistorySize; // initialized dictionary bytes available to matches
 
         // LZ77 state
         quint32 nOldDist[4]; // recent distances (ring)
@@ -89,13 +92,16 @@ private:
 
         // I/O
         QIODevice *pInput;
+        XBinary::PDSTRUCT *pPdStruct;
         qint64     nInputBytesRead;
         qint64     nInputLimit;  // compressed bytes available
 
         bool bError;
+        bool bReadError;
     };
 
     // Bit reader
+    static qint32 readInput(AceDecodeState *pState, char *pBuffer, qint32 nSize);
     static void readDat(AceDecodeState *pState);
     static void addBits(AceDecodeState *pState, qint32 nBits);
     static quint32 peekBits(AceDecodeState *pState, qint32 nBits);

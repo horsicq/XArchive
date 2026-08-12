@@ -20,6 +20,7 @@
  */
 #include "xzstddecoder.h"
 #include "algo_utils.h"
+#include <new>
 
 XZstdDecoder::XZstdDecoder(QObject *parent) : QObject(parent)
 {
@@ -29,13 +30,27 @@ bool XZstdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
 {
     bool bResult = false;
 
-    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput &&
+        (pDecompressState->nInputOffset >= 0) && (pDecompressState->nInputLimit >= -1) &&
+        XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
+        if (nRequestedBufferSize <= 0) return false;
+        const qint32 _nBufferSize = qBound((qint32)0x1000, nRequestedBufferSize, (qint32)0x100000);
 
-        char *bufferIn = new char[_nBufferSize];
-        char *bufferOut = new char[_nBufferSize];
+        char *bufferIn = new (std::nothrow) char[_nBufferSize];
+        if (!bufferIn) return false;
+        char *bufferOut = new (std::nothrow) char[_nBufferSize];
+        if (!bufferOut) {
+            delete[] bufferIn;
+            return false;
+        }
 
-        Algo_utils::seekToStart(pDecompressState);
+        Algo_utils::prepareState(pDecompressState);
+        if (pDecompressState->bReadError || pDecompressState->bWriteError) {
+            delete[] bufferIn;
+            delete[] bufferOut;
+            return false;
+        }
 
         ZSTD_DStream *pDStream = ZSTD_createDStream();
 
@@ -98,9 +113,16 @@ bool XZstdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
                     }
                 } while (true);
 
-                if (bFinished) {
-                    bResult = true;
-                }
+                const size_t nUnusedInput = (input.size >= input.pos) ? (input.size - input.pos) : 1;
+                const bool bConsumedInput = (nUnusedInput == 0) &&
+                                            ((pDecompressState->nInputLimit == -1) ||
+                                             (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+                const bool bExpectedOutput = !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) ||
+                                             ((pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() >= 0) &&
+                                              (pDecompressState->nCountOutput ==
+                                               pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
+                bResult = bFinished && bConsumedInput && bExpectedOutput && !pDecompressState->bReadError &&
+                          !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
             }
 
             ZSTD_freeDStream(pDStream);

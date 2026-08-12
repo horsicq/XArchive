@@ -50,7 +50,7 @@ bool XSquashfs::isValid(PDSTRUCT *pPdStruct)
 bool XSquashfs::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XSquashfs xsquashfs(pDevice);
-    return xsquashfs.isValid();
+    return xsquashfs.isValid(pPdStruct);
 }
 
 XSquashfs::SQUASHFS_HEADER XSquashfs::_readHeader(qint64 nOffset)
@@ -218,13 +218,18 @@ QList<XBinary::XFRECORD> XSquashfs::getXFRecords(FT fileType, quint32 nStructID,
 
 QList<XBinary::FPART> XSquashfs::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
     Q_UNUSED(pPdStruct)
 
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
     qint64 nTotalSize = getSize();
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
@@ -235,7 +240,7 @@ QList<XBinary::FPART> XSquashfs::getFileParts(quint32 nFileParts, qint32 nLimit,
         listResult.append(record);
     }
 
-    if (nFileParts & FILEPART_REGION) {
+    if ((nFileParts & FILEPART_REGION) && canAppend()) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = sizeof(SQUASHFS_HEADER);

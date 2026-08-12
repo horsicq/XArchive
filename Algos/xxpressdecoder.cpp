@@ -35,7 +35,8 @@ const qint32 XPRESS_MIN_MATCH_LEN = 3;
 // header == 7 the real (length-3) continues as a nibble, then a byte, then a
 // 16-bit value, using the documented escalation.
 
-bool xpress_plain(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize)
+bool xpress_plain(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize,
+                  XBinary::PDSTRUCT *pPdStruct)
 {
     const quint8 *pIn = reinterpret_cast<const quint8 *>(baIn.constData());
     qint64 nInSize = baIn.size();
@@ -48,7 +49,8 @@ bool xpress_plain(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize)
     qint32 nFlagCount = 0;
     qint32 nNibblePos = 0;  // position of a half-consumed nibble byte, 0 = none
 
-    while ((qint32)pbaOut->size() < nOutSize) {
+    while (((qint32)pbaOut->size() < nOutSize) &&
+           XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (nFlagCount == 0) {
             if (nInPos + 4 > nInSize) {
                 return false;
@@ -122,21 +124,19 @@ bool xpress_plain(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize)
             nLength += XPRESS_MIN_MATCH_LEN;
 
             qint32 nOutPos = (qint32)pbaOut->size();
-            if ((nOffset > nOutPos) || (nOutPos + nLength > nOutSize + 0)) {
-                // Allow overrun only up to a small guard; strict bound keeps us safe
-                if (nOffset > nOutPos) {
-                    return false;
-                }
-            }
+            if ((nOffset > nOutPos) || (nOffset <= 0) ||
+                (nLength > nOutSize - nOutPos)) return false;
 
             qint32 nSrc = nOutPos - nOffset;
             for (qint32 i = 0; i < nLength; i++) {
+                if (((i & 0x3FFF) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
                 pbaOut->append(pbaOut->at(nSrc + i));
             }
         }
     }
 
-    return ((qint32)pbaOut->size() == nOutSize);
+    return ((qint32)pbaOut->size() == nOutSize) &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 // ---- XPRESS Huffman (MS-XCA 2.2) ----
@@ -165,12 +165,15 @@ void xpress_initBits(XPRESS_BITS *pBits, const quint8 *pIn, qint64 nInSize, qint
     pBits->nBitCount = 0;
     pBits->bError = false;
 
-    // Prime with two 16-bit LE words in the high bits
+    // XPRESS Huffman primes exactly two 16-bit words.  Missing input must not
+    // be synthesized as zero bits because those bits can decode valid symbols.
     for (qint32 i = 0; i < 2; i++) {
-        quint32 nWord = 0;
-        if (pBits->nInPos + 1 < pBits->nInSize) {
-            nWord = (quint32)pBits->pIn[pBits->nInPos] | ((quint32)pBits->pIn[pBits->nInPos + 1] << 8);
+        if (pBits->nInPos + 1 >= pBits->nInSize) {
+            pBits->bError = true;
+            return;
         }
+        const quint32 nWord = (quint32)pBits->pIn[pBits->nInPos] |
+                              ((quint32)pBits->pIn[pBits->nInPos + 1] << 8);
         pBits->nInPos += 2;
         pBits->nBitBuf |= nWord << (16 - pBits->nBitCount);
         pBits->nBitCount += 16;
@@ -179,6 +182,11 @@ void xpress_initBits(XPRESS_BITS *pBits, const quint8 *pIn, qint64 nInSize, qint
 
 quint32 xpress_readBits(XPRESS_BITS *pBits, qint32 nBits)
 {
+    if (!pBits || pBits->bError || (nBits < 0) || (nBits > 16) ||
+        (nBits > pBits->nBitCount)) {
+        if (pBits) pBits->bError = true;
+        return 0;
+    }
     if (nBits == 0) {
         return 0;
     }
@@ -188,17 +196,30 @@ quint32 xpress_readBits(XPRESS_BITS *pBits, qint32 nBits)
     pBits->nBitCount -= nBits;
 
     if (pBits->nBitCount < 16) {
-        quint32 nWord = 0;
-        if (pBits->nInPos + 1 < pBits->nInSize) {
-            nWord = (quint32)pBits->pIn[pBits->nInPos] | ((quint32)pBits->pIn[pBits->nInPos + 1] << 8);
-        } else if (pBits->nInPos < pBits->nInSize) {
-            nWord = (quint32)pBits->pIn[pBits->nInPos];
+        if (pBits->nInPos + 1 >= pBits->nInSize) {
+            pBits->bError = true;
+            return nResult;
         }
+        const quint32 nWord = (quint32)pBits->pIn[pBits->nInPos] |
+                              ((quint32)pBits->pIn[pBits->nInPos + 1] << 8);
         pBits->nInPos += 2;
         pBits->nBitBuf |= nWord << (16 - pBits->nBitCount);
         pBits->nBitCount += 16;
     }
 
+    return nResult;
+}
+
+quint32 xpress_readRaw(XPRESS_BITS *pBits, qint32 nBytes)
+{
+    if (!pBits || pBits->bError || ((nBytes != 1) && (nBytes != 2)) ||
+        (pBits->nInPos > pBits->nInSize - nBytes)) {
+        if (pBits) pBits->bError = true;
+        return 0;
+    }
+
+    quint32 nResult = (quint32)pBits->pIn[pBits->nInPos++];
+    if (nBytes == 2) nResult |= (quint32)pBits->pIn[pBits->nInPos++] << 8;
     return nResult;
 }
 
@@ -220,6 +241,7 @@ bool xpress_buildHuff(XPRESS_HUFF *pTable, const quint8 *pLens)
             return false;
         }
     }
+    if (nLeft != 0) return false;
 
     qint32 nOffsets[XPRESS_MAX_CODEWORD_LEN + 2];
     nOffsets[1] = 0;
@@ -259,9 +281,10 @@ qint32 xpress_decodeSym(XPRESS_BITS *pBits, const XPRESS_HUFF *pTable)
     return -1;
 }
 
-bool xpress_huffman(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize)
+bool xpress_huffman(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize,
+                    XBinary::PDSTRUCT *pPdStruct)
 {
-    if (baIn.size() < XPRESS_TABLE_BYTES) {
+    if (baIn.size() < XPRESS_TABLE_BYTES + 4) {
         return false;
     }
 
@@ -280,15 +303,22 @@ bool xpress_huffman(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize)
 
     XPRESS_BITS bits;
     xpress_initBits(&bits, pIn, baIn.size(), XPRESS_TABLE_BYTES);
+    if (bits.bError) return false;
 
     pbaOut->clear();
     pbaOut->reserve(nOutSize);
 
-    while (((qint32)pbaOut->size() < nOutSize) && !bits.bError) {
+    while (!bits.bError && XBinary::isPdStructNotCanceled(pPdStruct)) {
         qint32 nSym = xpress_decodeSym(&bits, &table);
 
         if (bits.bError || (nSym < 0)) {
             return false;
+        }
+
+        if ((qint32)pbaOut->size() >= nOutSize) {
+            return (nSym == 256) && (bits.nBitBuf == 0) &&
+                   (bits.nInPos == bits.nInSize) &&
+                   XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         if (nSym < 256) {
@@ -298,54 +328,56 @@ bool xpress_huffman(const QByteArray &baIn, QByteArray *pbaOut, qint32 nOutSize)
             qint32 nOffsetSlot = (nSym >> 4) & 0x0F;
 
             if (nLength == 15) {
-                qint32 nExtra = (qint32)xpress_readBits(&bits, 8);
+                qint32 nExtra = (qint32)xpress_readRaw(&bits, 1);
+                if (bits.bError) return false;
                 if (nExtra == 255) {
-                    nLength = (qint32)xpress_readBits(&bits, 16);
-                    if (nLength < 15) {
-                        return false;
-                    }
-                    nLength -= 15;
+                    nLength = (qint32)xpress_readRaw(&bits, 2);
+                    if (bits.bError) return false;
                 } else {
-                    nLength = nExtra;
+                    nLength = nExtra + 15;
                 }
-                nLength += 15;
             }
 
             nLength += XPRESS_MIN_MATCH_LEN;
 
             qint32 nOffset = (qint32)((1u << nOffsetSlot) + xpress_readBits(&bits, nOffsetSlot));
+            if (bits.bError) return false;
 
             qint32 nOutPos = (qint32)pbaOut->size();
-            if ((nOffset > nOutPos) || (nOffset <= 0)) {
+            if ((nOffset > nOutPos) || (nOffset <= 0) ||
+                (nLength > nOutSize - nOutPos)) {
                 return false;
             }
 
             qint32 nSrc = nOutPos - nOffset;
-            for (qint32 i = 0; (i < nLength) && ((qint32)pbaOut->size() < nOutSize); i++) {
+            for (qint32 i = 0; i < nLength; i++) {
+                if (((i & 0x3FFF) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
                 pbaOut->append(pbaOut->at(nSrc + i));
             }
         }
     }
 
-    return ((qint32)pbaOut->size() == nOutSize);
+    return false;
 }
 
 }  // namespace
 
-bool XXPressDecoder::decompressPlain(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint32 nUncompressedSize)
+bool XXPressDecoder::decompressPlain(const QByteArray &baCompressed, QByteArray *pbaUncompressed,
+                                     qint32 nUncompressedSize, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaUncompressed || (nUncompressedSize <= 0)) {
         return false;
     }
 
-    return xpress_plain(baCompressed, pbaUncompressed, nUncompressedSize);
+    return xpress_plain(baCompressed, pbaUncompressed, nUncompressedSize, pPdStruct);
 }
 
-bool XXPressDecoder::decompressHuffman(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint32 nUncompressedSize)
+bool XXPressDecoder::decompressHuffman(const QByteArray &baCompressed, QByteArray *pbaUncompressed,
+                                       qint32 nUncompressedSize, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaUncompressed || (nUncompressedSize <= 0)) {
         return false;
     }
 
-    return xpress_huffman(baCompressed, pbaUncompressed, nUncompressedSize);
+    return xpress_huffman(baCompressed, pbaUncompressed, nUncompressedSize, pPdStruct);
 }

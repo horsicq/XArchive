@@ -183,9 +183,6 @@ public:
  */
 /* Check that the cache buffer has enough bits. */
 #define lzh_br_has(br, n) ((br)->cache_avail >= n)
-/* Get compressed data by bit. */
-#define lzh_br_bits(br, n) (((quint16)((br)->cache_buffer >> ((br)->cache_avail - (n)))) & cache_masks[n])
-#define lzh_br_bits_forced(br, n) (((quint16)((br)->cache_buffer << ((n) - (br)->cache_avail))) & cache_masks[n])
 /* Read ahead to make sure the cache buffer has enough compressed data we
  * will use.
  *  True  : completed, there is enough data in the cache buffer.
@@ -206,6 +203,9 @@ public:
     static qint32 lzh_decode(struct lzh_stream *strm, qint32 last);
     static qint32 lzh_read_blocks(struct lzh_stream *strm, qint32 last);
     static qint32 lzh_decode_blocks(struct lzh_stream *strm, qint32 last);
+    static bool lzh_br_bit_count_is_valid(qint32 n);
+    static quint16 lzh_br_bits(const struct lzh_br *br, qint32 n);
+    static quint16 lzh_br_bits_forced(const struct lzh_br *br, qint32 n);
     static qint32 lzh_br_fillup(struct lzh_stream *strm, struct lzh_br *br);
     static void lzh_emit_window(struct lzh_stream *strm, size_t s);
     static qint32 lzh_decode_huffman_tree(struct lzh_huffman *hf, unsigned rbits, qint32 c);

@@ -47,6 +47,8 @@ protected:
     virtual qint64 writeData(const char *pData, qint64 nMaxSize);
 
 private:
+    void clearData();
+
     QIODevice *m_pOrigDevice;
     SubDevice *m_pSubDevice;
     bool m_bIsValid;

@@ -20,6 +20,9 @@
  */
 #include "xxz.h"
 
+#include <limits>
+#include <new>
+
 XBinary::XCONVERT _TABLE_XXZ_STRUCTID[] = {{XXZ::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                            {XXZ::STRUCTID_STREAM_HEADER, "STREAM_HEADER", QString("Stream Header")},
                                            {XXZ::STRUCTID_BLOCK_HEADER, "BLOCK_HEADER", QString("Block Header")},
@@ -37,37 +40,82 @@ XXZ::~XXZ()
 
 bool XXZ::isValid(PDSTRUCT *pPdStruct)
 {
-    // Check magic bytes
-    qint64 nSize = getSize();
-    if (nSize < 6) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    QByteArray baMagic = read_array_process(0, 6, pPdStruct);
+    // The smallest XZ Stream is a 12-byte Stream Header, an 8-byte empty
+    // Index, and a 12-byte Stream Footer. Streams and Stream Padding are
+    // always four-byte aligned; a magic-only prefix is not an XZ container.
+    const qint64 nSize = getSize();
+    if ((nSize < 32) || (nSize & 3)) return false;
+
+    const QByteArray baHeader = read_array_process(0, 12, pPdStruct);
     static const quint8 XZ_MAGIC[6] = {0xFD, '7', 'z', 'X', 'Z', 0x00};
-    if (memcmp(baMagic.constData(), XZ_MAGIC, 6) != 0) return false;
+    if ((baHeader.size() != 12) ||
+        (memcmp(baHeader.constData(), XZ_MAGIC, sizeof(XZ_MAGIC)) != 0)) {
+        return false;
+    }
 
-    return true;
+    const auto isSupportedFlags = [](const char *pFlags) -> bool {
+        if (!pFlags || ((quint8)pFlags[0] != 0) || (((quint8)pFlags[1] & 0xF0) != 0)) return false;
+        const quint8 nCheckType = (quint8)pFlags[1] & 0x0F;
+        return (nCheckType == 0) || (nCheckType == 1) || (nCheckType == 4) || (nCheckType == 10);
+    };
+    const auto readLE32 = [](const char *pData) -> quint32 {
+        return (quint32)(quint8)pData[0] | ((quint32)(quint8)pData[1] << 8) |
+               ((quint32)(quint8)pData[2] << 16) | ((quint32)(quint8)pData[3] << 24);
+    };
+    const auto crc32 = [this](const char *pData, qint32 nDataSize) -> quint32 {
+        return XBinary::_getCRC32(pData, nDataSize, 0xFFFFFFFF,
+                                  XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
+    };
+
+    if (!isSupportedFlags(baHeader.constData() + 6) ||
+        (crc32(baHeader.constData() + 6, 2) != readLE32(baHeader.constData() + 8))) {
+        return false;
+    }
+
+    // Locate the last Footer while accepting only complete zero Padding
+    // groups. Full Block/Index authentication remains the decoder's job.
+    qint64 nStreamEnd = nSize;
+    while (nStreamEnd >= 4) {
+        const QByteArray baGroup = read_array_process(nStreamEnd - 4, 4, pPdStruct);
+        if (baGroup.size() != 4) return false;
+        if ((baGroup.at(0) != 0) || (baGroup.at(1) != 0) ||
+            (baGroup.at(2) != 0) || (baGroup.at(3) != 0)) {
+            break;
+        }
+        nStreamEnd -= 4;
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    }
+    if (nStreamEnd < 32) return false;
+
+    const qint64 nFooterOffset = nStreamEnd - 12;
+    const QByteArray baFooter = read_array_process(nFooterOffset, 12, pPdStruct);
+    if ((baFooter.size() != 12) || (baFooter.at(10) != 'Y') || (baFooter.at(11) != 'Z') ||
+        !isSupportedFlags(baFooter.constData() + 8) ||
+        (crc32(baFooter.constData() + 4, 6) != readLE32(baFooter.constData()))) {
+        return false;
+    }
+
+    const quint64 nIndexSize = ((quint64)readLE32(baFooter.constData() + 4) + 1) * 4;
+    if ((nIndexSize < 8) || (nIndexSize > (quint64)(nFooterOffset - 12))) return false;
+
+    const QByteArray baIndexIndicator = read_array_process(nFooterOffset - (qint64)nIndexSize, 1, pPdStruct);
+    if ((baIndexIndicator.size() != 1) || (baIndexIndicator.at(0) != 0)) return false;
+
+    return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XXZ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    if (!pDevice || pDevice->isSequential()) return false;
 
-    if (pDevice) {
-        qint64 nCurrentPos = pDevice->pos();
+    const qint64 nCurrentPos = pDevice->pos();
+    if (nCurrentPos < 0) return false;
 
-        pDevice->seek(0);
-
-        quint8 baSignature[6] = {0};
-        if (pDevice->read((char *)baSignature, sizeof(baSignature)) == sizeof(baSignature)) {
-            static const quint8 XZ_MAGIC[6] = {0xFD, '7', 'z', 'X', 'Z', 0x00};
-            if (memcmp(baSignature, XZ_MAGIC, sizeof(baSignature)) == 0) {
-                bResult = true;
-            }
-        }
-
-        pDevice->seek(nCurrentPos);
-    }
-
+    XXZ xz(pDevice);
+    const bool bResult = xz.isValid(pPdStruct);
+    if (!pDevice->seek(nCurrentPos)) return false;
     return bResult;
 }
 
@@ -156,6 +204,8 @@ QList<XBinary::MAPMODE> XXZ::getMapModesList()
 
 XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(mapMode)
+
     _MEMORY_MAP result = {};
     result.fileType = getFileType();
     result.nBinarySize = getSize();
@@ -166,25 +216,40 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     qint32 nIndex = 0;
 
-    // Header
-    _MEMORY_RECORD recordHeader = {};
-    recordHeader.nAddress = -1;
-    recordHeader.nOffset = 0;
-    recordHeader.nSize = 12;  // Stream header size
-    recordHeader.nIndex = nIndex++;
-    recordHeader.filePart = FILEPART_HEADER;
-    recordHeader.sName = tr("Stream Header");
-    result.listRecords.append(recordHeader);
+    const qint64 nSize = getSize();
 
-    // Footer
-    _MEMORY_RECORD recordFooter = {};
-    recordFooter.nAddress = -1;
-    recordFooter.nOffset = getSize() - 12;
-    recordFooter.nSize = 12;  // Stream footer size
-    recordFooter.nIndex = nIndex++;
-    recordFooter.filePart = FILEPART_FOOTER;
-    recordFooter.sName = tr("Stream Footer");
-    result.listRecords.append(recordFooter);
+    if (nSize >= 12) {
+        _MEMORY_RECORD recordHeader = {};
+        recordHeader.nAddress = -1;
+        recordHeader.nOffset = 0;
+        recordHeader.nSize = 12;
+        recordHeader.nIndex = nIndex++;
+        recordHeader.filePart = FILEPART_HEADER;
+        recordHeader.sName = tr("Stream Header");
+        result.listRecords.append(recordHeader);
+    }
+
+    // A valid XZ file may end in complete four-byte Stream Padding groups.
+    // Never publish a negative footer offset for a truncated input.
+    qint64 nStreamEnd = nSize;
+    while ((nStreamEnd >= 4) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const QByteArray baGroup = read_array_process(nStreamEnd - 4, 4, pPdStruct);
+        if ((baGroup.size() != 4) || (baGroup != QByteArray(4, 0))) break;
+        nStreamEnd -= 4;
+    }
+    if (nStreamEnd >= 12) {
+        const QByteArray baFooter = read_array_process(nStreamEnd - 12, 12, pPdStruct);
+        if ((baFooter.size() == 12) && (baFooter.at(10) == 'Y') && (baFooter.at(11) == 'Z')) {
+            _MEMORY_RECORD recordFooter = {};
+            recordFooter.nAddress = -1;
+            recordFooter.nOffset = nStreamEnd - 12;
+            recordFooter.nSize = 12;
+            recordFooter.nIndex = nIndex++;
+            recordFooter.filePart = FILEPART_FOOTER;
+            recordFooter.sName = tr("Stream Footer");
+            result.listRecords.append(recordFooter);
+        }
+    }
 
     // TODO: Parse and add block and index records
 
@@ -388,14 +453,13 @@ XXZ::INDEX XXZ::_read_INDEX(qint64 nOffset)
 quint64 XXZ::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
     // XZ is not a multi-file archive, only one record (the whole decompressed stream)
-    Q_UNUSED(pPdStruct)
-    return 1;
+    return isValid(pPdStruct) ? 1 : 0;
 }
 
 QList<XArchive::RECORD> XXZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> list;
-    if (nLimit == 0) return list;
+    if ((nLimit < -1) || (nLimit == 0)) return list;
 
     if (isValid(pPdStruct)) {
         RECORD record = {};
@@ -404,7 +468,9 @@ QList<XArchive::RECORD> XXZ::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         record.spInfo.nUncompressedSize = -1;  // Determined from the validated Index(es) while decoding.
         record.nDataOffset = 0;
         record.nDataSize = getSize();
-        // TODO: parse uncompressed size, CRC, etc.
+        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, record.spInfo.sRecordName);
+        record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_XZ);
+        record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, record.nDataSize);
         list.append(record);
     }
     return list;
@@ -419,57 +485,49 @@ QMap<XBinary::UNPACK_PROP, QVariant> XXZ::getDefaultUnpackProperties()
 
 bool XXZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState) {
-        pState->mapUnpackProperties = mapProperties;
+    if (!pState) return false;
 
-        // Validate XZ file
-        if (!isValid(pPdStruct)) {
-            return false;
-        }
-
-        // Create and initialize context
-        XXZ_UNPACK_CONTEXT *pContext = new XXZ_UNPACK_CONTEXT;
-
-        // The XZ decoder needs the complete container: Stream Headers, every
-        // Block and Index, Stream Footers, concatenated Streams, and Padding.
-        qint64 nFileSize = getSize();
-
-        pContext->nHeaderSize = 0;
-
-        // Get filename from device
-        pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
-
-        pContext->nCompressedSize = nFileSize;
-        pContext->nUncompressedSize = -1;  // The decoder derives and verifies this from every Index.
-        pContext->nCRC32 = 0;             // XZ integrity is per Stream/Block, not a record CRC32.
-
-        // Initialize state
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 1;  // XZ contains single compressed stream
-        pState->pContext = pContext;
-
-        bResult = true;
+    if (pState->pContext) {
+        delete static_cast<XXZ_UNPACK_CONTEXT *>(pState->pContext);
     }
+    pState->pContext = nullptr;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
 
-    return bResult;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) return false;
+
+    XXZ_UNPACK_CONTEXT *pContext = new (std::nothrow) XXZ_UNPACK_CONTEXT;
+    if (!pContext) return false;
+
+    pContext->nHeaderSize = 0;
+    pContext->sFileName = XBinary::getDeviceFileBaseName(getDevice());
+    pContext->nCompressedSize = getSize();
+    pContext->nUncompressedSize = -1;
+    pContext->nCRC32 = 0;
+
+    pState->mapUnpackProperties = mapProperties;
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = pContext->nCompressedSize;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 1;
+    pState->pContext = pContext;
+    return true;
 }
 
 XBinary::ARCHIVERECORD XXZ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext) {
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return result;
     }
 
@@ -499,7 +557,8 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
 {
     bool bResult = false;
 
-    if (!pState || !pState->pContext || !pDevice) {
+    if (!pState || !pState->pContext || !pDevice || !pDevice->isWritable() ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -508,6 +567,12 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
     }
 
     XXZ_UNPACK_CONTEXT *pContext = (XXZ_UNPACK_CONTEXT *)pState->pContext;
+
+    if (pDevice->isSequential()) {
+        if (pDevice->pos() != 0) return false;
+    } else if (!XBinary::resize(pDevice, 0) || !pDevice->seek(0)) {
+        return false;
+    }
 
     // Keep the complete member so XLZMADecoder can validate container framing,
     // all Block checks and Index records, and concatenated Streams.
@@ -528,34 +593,31 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
         sd.close();
     }
 
+    if (!bResult && !pDevice->isSequential()) {
+        XBinary::resize(pDevice, 0);
+        pDevice->seek(0);
+    }
+
+    if (bResult) pState->nCurrentOffset = pContext->nCompressedSize;
+
     return bResult;
 }
 
 bool XXZ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    bool bResult = false;
-
-    if (!pState || !pState->pContext) {
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
-    // Move to next record
     pState->nCurrentIndex++;
-
-    // XZ has only one record, so moving to next always returns false
-    // This indicates end of archive
-    bResult = false;
-
-    return bResult;
+    pState->nCurrentOffset = pState->nTotalSize;
+    return (pState->nCurrentIndex < pState->nNumberOfRecords);
 }
 
 bool XXZ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
-
-    bool bResult = false;
 
     if (!pState) {
         return false;
@@ -563,11 +625,15 @@ bool XXZ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     if (pState->pContext) {
         delete (XXZ_UNPACK_CONTEXT *)pState->pContext;
-        pState->pContext = nullptr;
-        bResult = true;
     }
-
-    return bResult;
+    pState->pContext = nullptr;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    return true;
 }
 
 QList<QString> XXZ::getSearchSignatures()

@@ -239,25 +239,40 @@ int decode_lzw(LZWSTATE *state, unsigned char *buf, int len)
     return 0;
 }
 
+struct LZW_DEVICE_CONTEXT {
+    XBinary::DATAPROCESS_STATE *pState;
+    XBinary::PDSTRUCT *pPdStruct;
+};
+
 int rdfunc_device(void *user, unsigned char *buf, int len)
 {
-    QIODevice *device = static_cast<QIODevice *>(user);
-    return (device->read(reinterpret_cast<char *>(buf), len) == len) ? 0 : 1;
+    LZW_DEVICE_CONTEXT *pContext = static_cast<LZW_DEVICE_CONTEXT *>(user);
+    if (!pContext || !pContext->pState || !buf || (len <= 0) || !XBinary::isPdStructNotCanceled(pContext->pPdStruct)) {
+        if (pContext && pContext->pState) pContext->pState->bReadError = true;
+        return 1;
+    }
+
+    const qint32 nRequest = Algo_utils::getReadChunkSize(pContext->pState, len);
+    if (nRequest != len || XBinary::_readDevice(reinterpret_cast<char *>(buf), len, pContext->pState) != len) {
+        pContext->pState->bReadError = true;
+        return 1;
+    }
+    return 0;
 }
 
-int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early = -1)
+int lzwDecodeDevice(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct, int early = -1)
 {
-    if (!inputDevice || !outputDevice) {
+    if (!pState || !pState->pDeviceInput || !pState->pDeviceOutput) {
         // qDebug() << "Invalid device pointers";
         return 1;
     }
 
-    if (!inputDevice->isOpen() || !inputDevice->isReadable()) {
+    if (!pState->pDeviceInput->isOpen() || !pState->pDeviceInput->isReadable()) {
         // qDebug() << "Input device is not open or not readable";
         return 2;
     }
 
-    if (!outputDevice->isOpen() || !outputDevice->isWritable()) {
+    if (!pState->pDeviceOutput->isOpen() || !pState->pDeviceOutput->isWritable()) {
         // qDebug() << "Output device is not open or not writable";
         return 3;
     }
@@ -267,7 +282,8 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
     int result = 0;
 
     // Initialize LZW decoder
-    lzw = init_lzw_read(early, rdfunc_device, inputDevice);
+    LZW_DEVICE_CONTEXT context = {pState, pPdStruct};
+    lzw = init_lzw_read(early, rdfunc_device, &context);
     if (!lzw) {
         // qDebug() << "Failed to initialize LZW decoder";
         return 4;
@@ -284,17 +300,23 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
 
     // Decode loop
     while (true) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            pState->bReadError = true;
+            result = 7;
+            break;
+        }
+
         result = decode_lzw(lzw, buffer, BUFFER_SIZE);
 
         if (result > 0) {  // Decoding complete
             int length = result - 1;
             if (length > 0) {
-                if (outputDevice->write(reinterpret_cast<char *>(buffer), length) != length) {
+                if (XBinary::_writeDevice(reinterpret_cast<char *>(buffer), length, pState) != length) {
                     // qDebug() << "Write error:" << outputDevice->errorString();
                     result = 6;
                 }
             }
-            result = 0;  // Success
+            if (result != 6) result = 0;  // Success
             break;
         } else if (result < 0) {
             // qDebug() << "Decoder error:" << result;
@@ -302,7 +324,7 @@ int lzwDecodeDevice(QIODevice *inputDevice, QIODevice *outputDevice, int early =
         }
 
         // Write the full buffer to output device
-        if (outputDevice->write(reinterpret_cast<char *>(buffer), BUFFER_SIZE) != BUFFER_SIZE) {
+        if (XBinary::_writeDevice(reinterpret_cast<char *>(buffer), BUFFER_SIZE, pState) != BUFFER_SIZE) {
             // qDebug() << "Write error:" << outputDevice->errorString();
             result = 6;
             break;
@@ -323,14 +345,16 @@ XLZWDecoder::XLZWDecoder(QObject *parent) : QObject(parent)
 // Streaming PDF LZWDecode implementation.
 bool XLZWDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) return false;
 
-    Algo_utils::seekToStart(pDecompressState);
+    Algo_utils::prepareState(pDecompressState);
+    if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    lzwDecodeDevice(pDecompressState->pDeviceInput, pDecompressState->pDeviceOutput);
+    const int nResult = lzwDecodeDevice(pDecompressState, pPdStruct);
 
-    pDecompressState->nCountOutput = pDecompressState->pDeviceOutput->pos();
+    const bool bConsumedBoundedInput = (pDecompressState->nInputLimit == -1) ||
+                                       (pDecompressState->nCountInput == pDecompressState->nInputLimit);
 
-    return !(pDecompressState->bReadError || pDecompressState->bWriteError);
+    return (nResult == 0) && bConsumedBoundedInput && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }

@@ -20,6 +20,7 @@
  */
 #include "xbrotlidecoder.h"
 #include "algo_utils.h"
+#include <new>
 
 #include "brotlideclib.cpp"
 
@@ -50,13 +51,27 @@ bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 {
     bool bResult = false;
 
-    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput) {
-        qint32 _nBufferSize = XBinary::getBufferSize(pPdStruct);
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput &&
+        (pDecompressState->nInputOffset >= 0) && (pDecompressState->nInputLimit >= -1) &&
+        XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
+        if (nRequestedBufferSize <= 0) return false;
+        const qint32 _nBufferSize = qBound((qint32)0x1000, nRequestedBufferSize, (qint32)0x100000);
 
-        char *bufferIn = new char[_nBufferSize];
-        char *bufferOut = new char[_nBufferSize];
+        char *bufferIn = new (std::nothrow) char[_nBufferSize];
+        if (!bufferIn) return false;
+        char *bufferOut = new (std::nothrow) char[_nBufferSize];
+        if (!bufferOut) {
+            delete[] bufferIn;
+            return false;
+        }
 
-        Algo_utils::seekToStart(pDecompressState);
+        Algo_utils::prepareState(pDecompressState);
+        if (pDecompressState->bReadError || pDecompressState->bWriteError) {
+            delete[] bufferIn;
+            delete[] bufferOut;
+            return false;
+        }
 
         BrotliDecoderState *pState = BrotliDecoderCreateInstance(nullptr, nullptr, nullptr);
 
@@ -123,9 +138,15 @@ bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
             BrotliDecoderDestroyInstance(pState);
 
-            if (ret == BROTLI_DECODER_RESULT_SUCCESS) {
-                bResult = true;
-            }
+            const bool bConsumedInput = (nAvailIn == 0) &&
+                                        ((pDecompressState->nInputLimit == -1) ||
+                                         (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+            const bool bExpectedOutput = !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) ||
+                                         ((pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() >= 0) &&
+                                          (pDecompressState->nCountOutput ==
+                                           pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
+            bResult = (ret == BROTLI_DECODER_RESULT_SUCCESS) && bConsumedInput && bExpectedOutput &&
+                      !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         delete[] bufferIn;

@@ -48,7 +48,7 @@ bool XIPA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XIPA xipa(pDevice);
 
-    return xipa.isValid();
+    return xipa.isValid(pPdStruct);
 }
 
 bool XIPA::handleInternalInfo(PDSTRUCT *pPdStruct)

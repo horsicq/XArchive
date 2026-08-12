@@ -33,9 +33,11 @@ XSEAARC::XSEAARC(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XSEAARC::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
     // ARC archive: starts with 0x1A followed by method byte (1-9)
     // and 13-byte null-terminated filename
@@ -83,7 +85,7 @@ bool XSEAARC::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XSEAARC xseaarc(pDevice);
 
-    return xseaarc.isValid();
+    return xseaarc.isValid(pPdStruct);
 }
 
 qint64 XSEAARC::getFileFormatSize(PDSTRUCT *pPdStruct)
@@ -204,6 +206,12 @@ bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     }
 
     if (pState) {
+        finishUnpack(pState, nullptr);
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return false;
+        }
+
         pState->mapUnpackProperties = mapProperties;
         pState->nCurrentOffset = 0;
         pState->nTotalSize = getSize();
@@ -248,7 +256,10 @@ bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
             nOffset += nHeaderSize + (qint64)nCompressedSize;
         }
 
-        bResult = (pState->nNumberOfRecords > 0);
+        bResult = (pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+        if (!bResult) {
+            finishUnpack(pState, nullptr);
+        }
     }
 
     return bResult;
@@ -256,11 +267,10 @@ bool XSEAARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
 
 XBinary::ARCHIVERECORD XSEAARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         quint8 nMethod = read_uint8(pState->nCurrentOffset + 1);
         qint32 nHeaderSize = _getHeaderSize(nMethod);
         quint32 nCompressedSize = read_uint32(pState->nCurrentOffset + 15, false);
@@ -319,11 +329,10 @@ XBinary::ARCHIVERECORD XSEAARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
 
 bool XSEAARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         quint8 nMethod = read_uint8(pState->nCurrentOffset + 1);
         qint32 nHeaderSize = _getHeaderSize(nMethod);
         quint32 nCompressedSize = read_uint32(pState->nCurrentOffset + 15, false);
@@ -339,8 +348,19 @@ bool XSEAARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XSEAARC::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pState)
     Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = nullptr;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }
@@ -582,15 +602,19 @@ quint32 XSEAARC::ftStringToStructID(const QString &sFtString)
 
 QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     qint64 nFileSize = getSize();
     qint64 nCurrentOffset = 0;
     qint64 nMaxOffset = 0;
 
-    while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((nCurrentOffset < nFileSize) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((nFileSize - nCurrentOffset) < 2) {
             break;
         }
@@ -616,7 +640,7 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
 
         QString sFileName = read_ansiString(nCurrentOffset + 2, 13);
 
-        if (nFileParts & FILEPART_HEADER) {
+        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
             FPART record = {};
 
             record.filePart = FILEPART_HEADER;
@@ -628,7 +652,7 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
             listResult.append(record);
         }
 
-        if (nFileParts & FILEPART_STREAM) {
+        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
             FPART record = {};
 
             record.filePart = FILEPART_STREAM;
@@ -641,7 +665,7 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
             listResult.append(record);
         }
 
-        if (nFileParts & FILEPART_REGION) {
+        if ((nFileParts & FILEPART_REGION) && canAppend()) {
             FPART record = {};
 
             record.filePart = FILEPART_REGION;
@@ -658,7 +682,7 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
     }
 
     // Add overlay if any
-    if ((nFileParts & FILEPART_OVERLAY) && (nMaxOffset < nFileSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nMaxOffset < nFileSize)) {
         FPART record = {};
 
         record.filePart = FILEPART_OVERLAY;

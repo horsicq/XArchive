@@ -19,6 +19,10 @@
  * SOFTWARE.
  */
 #include "xrpm.h"
+
+#include <new>
+#include "subdevice.h"
+#include "xcpio.h"
 #include "xgzip.h"
 
 static XBinary::XCONVERT _TABLE_XRPM_STRUCTID[] = {{XRPM::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -29,27 +33,81 @@ static const qint64 N_RPM_LEAD_SIZE = 96;
 static const qint64 N_RPM_HEADER_INTRO_SIZE = 16;
 static const quint32 N_RPMTAG_PAYLOADCOMPRESSOR = 1125;
 
+namespace {
+XBinary::HANDLE_METHOD rpmCompressorNameToMethod(const QString &sName)
+{
+    const QString sValue = sName.trimmed().toLower();
+    if (sValue == QLatin1String("gzip") || sValue == QLatin1String("gz")) return XBinary::HANDLE_METHOD_DEFLATE;
+    if (sValue == QLatin1String("xz")) return XBinary::HANDLE_METHOD_XZ;
+    if (sValue == QLatin1String("zstd") || sValue == QLatin1String("zst")) return XBinary::HANDLE_METHOD_ZSTD;
+    if (sValue == QLatin1String("bzip2") || sValue == QLatin1String("bzip")) return XBinary::HANDLE_METHOD_BZIP2;
+    if (sValue == QLatin1String("lzma")) return XBinary::HANDLE_METHOD_LZMA;
+    if (sValue == QLatin1String("none") || sValue == QLatin1String("store")) return XBinary::HANDLE_METHOD_STORE;
+    return XBinary::HANDLE_METHOD_UNKNOWN;
+}
+
+bool hasCpioMagic(XBinary *pBinary, qint64 nOffset, qint64 nSize)
+{
+    if (!pBinary || (nOffset < 0) || (nSize < 2)) return false;
+
+    const QByteArray baMagic = pBinary->read_array_process(nOffset, qMin<qint64>(6, nSize), nullptr);
+    if (baMagic.size() >= 6) {
+        const QByteArray baAscii = baMagic.left(6);
+        if ((baAscii == QByteArrayLiteral("070701")) || (baAscii == QByteArrayLiteral("070702")) ||
+            (baAscii == QByteArrayLiteral("070707"))) {
+            return true;
+        }
+    }
+    return (baMagic.size() >= 2) &&
+           ((((quint8)baMagic.at(0) == 0xC7) && ((quint8)baMagic.at(1) == 0x71)) ||
+            (((quint8)baMagic.at(0) == 0x71) && ((quint8)baMagic.at(1) == 0xC7)));
+}
+}  // namespace
+
 XRPM::XRPM(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
 bool XRPM::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    bool bResult = false;
-
-    if (getSize() >= N_RPM_LEAD_SIZE) {
-        // Lead magic ED AB EE DB, major version 3 or 4
-        if ((read_uint8(0) == 0xED) && (read_uint8(1) == 0xAB) && (read_uint8(2) == 0xEE) && (read_uint8(3) == 0xDB)) {
-            quint8 nMajor = read_uint8(4);
-            if ((nMajor == 3) || (nMajor == 4)) {
-                bResult = true;
-            }
-        }
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
     }
 
-    return bResult;
+    if ((getSize() < N_RPM_LEAD_SIZE) || (read_uint8(0) != 0xED) || (read_uint8(1) != 0xAB) ||
+        (read_uint8(2) != 0xEE) || (read_uint8(3) != 0xDB)) {
+        return false;
+    }
+
+    const quint8 nMajor = read_uint8(4);
+    if ((nMajor != 3) && (nMajor != 4)) {
+        return false;
+    }
+
+    const qint64 nPayloadOffset = getPayloadOffset(pPdStruct);
+    if ((nPayloadOffset < 0) || (nPayloadOffset >= getSize()) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    const HANDLE_METHOD method = getPayloadCompression(nPayloadOffset);
+    if (method == HANDLE_METHOD_UNKNOWN) {
+        return false;
+    }
+    if (method == HANDLE_METHOD_STORE) {
+        if (!hasCpioMagic(this, nPayloadOffset, getSize() - nPayloadOffset)) {
+            return false;
+        }
+        SubDevice payloadDevice(getDevice(), nPayloadOffset, getSize() - nPayloadOffset);
+        if (!payloadDevice.open(QIODevice::ReadOnly)) {
+            return false;
+        }
+        XCPIO cpio(&payloadDevice);
+        const bool bValid = cpio.isValid(pPdStruct);
+        payloadDevice.close();
+        return bValid && XBinary::isPdStructNotCanceled(pPdStruct);
+    }
+
+    return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XRPM::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -62,11 +120,14 @@ bool XRPM::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 qint64 XRPM::_readHeaderSize(qint64 nOffset)
 {
     // Header intro: magic(3) 8E AD E8, version(1), reserved(4), nindex(4 BE), hsize(4 BE)
-    if ((nOffset < 0) || (getSize() < nOffset + N_RPM_HEADER_INTRO_SIZE)) {
+    const qint64 nFileSize = getSize();
+    if ((nOffset < 0) || (nOffset > nFileSize) || (N_RPM_HEADER_INTRO_SIZE > (nFileSize - nOffset))) {
         return -1;
     }
 
-    if ((read_uint8(nOffset) != 0x8E) || (read_uint8(nOffset + 1) != 0xAD) || (read_uint8(nOffset + 2) != 0xE8)) {
+    if ((read_uint8(nOffset) != 0x8E) || (read_uint8(nOffset + 1) != 0xAD) ||
+        (read_uint8(nOffset + 2) != 0xE8) || (read_uint8(nOffset + 3) != 1) ||
+        (read_uint32(nOffset + 4, true) != 0)) {
         return -1;
     }
 
@@ -78,37 +139,81 @@ qint64 XRPM::_readHeaderSize(qint64 nOffset)
         return -1;
     }
 
-    return N_RPM_HEADER_INTRO_SIZE + (qint64)nIndexCount * 16 + (qint64)nDataSize;
+    const qint64 nHeaderSize = N_RPM_HEADER_INTRO_SIZE + (qint64)nIndexCount * 16 + (qint64)nDataSize;
+    if (nHeaderSize > (nFileSize - nOffset)) {
+        return -1;
+    }
+
+    const qint64 nIndexStart = nOffset + N_RPM_HEADER_INTRO_SIZE;
+    for (quint32 i = 0; i < nIndexCount; i++) {
+        const qint64 nEntryOffset = nIndexStart + (qint64)i * 16;
+        const quint32 nType = read_uint32(nEntryOffset + 4, true);
+        const quint32 nDataOffset = read_uint32(nEntryOffset + 8, true);
+        const quint32 nCount = read_uint32(nEntryOffset + 12, true);
+        if ((nType > 9) || ((qint64)nDataOffset > nDataSize) || (nCount > 0x1000000)) {
+            return -1;
+        }
+
+        qint64 nElementSize = 0;
+        if ((nType == 1) || (nType == 2)) nElementSize = 1;
+        else if (nType == 3) nElementSize = 2;
+        else if (nType == 4) nElementSize = 4;
+        else if (nType == 5) nElementSize = 8;
+        else if (nType == 7) nElementSize = 1;
+
+        if ((nElementSize > 0) && ((qint64)nCount > (((qint64)nDataSize - nDataOffset) / nElementSize))) {
+            return -1;
+        }
+        if (((nType == 6) || (nType == 8) || (nType == 9)) && (nCount > 0) && ((qint64)nDataOffset >= nDataSize)) {
+            return -1;
+        }
+    }
+
+    return nHeaderSize;
 }
 
-qint64 XRPM::getPayloadOffset(PDSTRUCT *pPdStruct)
+qint64 XRPM::_getMainHeaderOffset()
 {
-    Q_UNUSED(pPdStruct)
-
-    // Signature header starts right after the 96-byte lead.
-    qint64 nSigOffset = N_RPM_LEAD_SIZE;
-    qint64 nSigSize = _readHeaderSize(nSigOffset);
+    const qint64 nSigSize = _readHeaderSize(N_RPM_LEAD_SIZE);
     if (nSigSize < 0) {
         return -1;
     }
 
-    // The signature header is padded to an 8-byte boundary.
-    qint64 nMainOffset = nSigOffset + nSigSize;
-    if (nMainOffset % 8) {
-        nMainOffset += 8 - (nMainOffset % 8);
+    qint64 nMainOffset = N_RPM_LEAD_SIZE + nSigSize;
+    const qint64 nPadding = (8 - (nMainOffset & 7)) & 7;
+    if ((nMainOffset > getSize()) || (nPadding > (getSize() - nMainOffset))) {
+        return -1;
     }
 
-    qint64 nMainSize = _readHeaderSize(nMainOffset);
+    for (qint64 i = 0; i < nPadding; i++) {
+        if (read_uint8(nMainOffset + i) != 0) {
+            return -1;
+        }
+    }
+
+    return nMainOffset + nPadding;
+}
+
+qint64 XRPM::getPayloadOffset(PDSTRUCT *pPdStruct)
+{
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return -1;
+    }
+
+    const qint64 nMainOffset = _getMainHeaderOffset();
+    const qint64 nMainSize = _readHeaderSize(nMainOffset);
     if (nMainSize < 0) {
         return -1;
     }
 
-    return nMainOffset + nMainSize;
+    const qint64 nPayloadOffset = nMainOffset + nMainSize;
+    return XBinary::isPdStructNotCanceled(pPdStruct) ? nPayloadOffset : -1;
 }
 
 QString XRPM::_readPayloadCompressorTag(qint64 nHeaderOffset)
 {
-    if (nHeaderOffset < 0) {
+    const qint64 nHeaderSize = _readHeaderSize(nHeaderOffset);
+    if (nHeaderSize < 0) {
         return QString();
     }
 
@@ -129,11 +234,18 @@ QString XRPM::_readPayloadCompressorTag(qint64 nHeaderOffset)
         if (nTag == N_RPMTAG_PAYLOADCOMPRESSOR) {
             quint32 nType = read_uint32(nEntry + 4, true);
             quint32 nDataOffset = read_uint32(nEntry + 8, true);
+            quint32 nCount = read_uint32(nEntry + 12, true);
 
             // Type 6 = STRING
-            if ((nType == 6) && ((qint64)nDataOffset < nDataSize)) {
-                return read_ansiString(nDataStart + nDataOffset, 32);
+            if ((nType == 6) && (nCount == 1) && ((qint64)nDataOffset < nDataSize)) {
+                const qint64 nAvailable = (qint64)nDataSize - nDataOffset;
+                const QByteArray baValue = read_array_process(nDataStart + nDataOffset, qMin<qint64>(64, nAvailable), nullptr);
+                const qint32 nTerminator = baValue.indexOf('\0');
+                if (nTerminator >= 0) {
+                    return QString::fromLatin1(baValue.constData(), nTerminator);
+                }
             }
+            return QString();
         }
     }
 
@@ -142,28 +254,40 @@ QString XRPM::_readPayloadCompressorTag(qint64 nHeaderOffset)
 
 XBinary::HANDLE_METHOD XRPM::getPayloadCompression(qint64 nPayloadOffset)
 {
-    if (nPayloadOffset < 0) {
+    if ((nPayloadOffset < 0) || (nPayloadOffset > getSize()) || ((getSize() - nPayloadOffset) < 2)) {
         return HANDLE_METHOD_UNKNOWN;
     }
 
     quint8 b0 = read_uint8(nPayloadOffset);
     quint8 b1 = read_uint8(nPayloadOffset + 1);
-    quint8 b2 = read_uint8(nPayloadOffset + 2);
-    quint8 b3 = read_uint8(nPayloadOffset + 3);
+    quint8 b2 = ((getSize() - nPayloadOffset) >= 3) ? read_uint8(nPayloadOffset + 2) : 0;
+    quint8 b3 = ((getSize() - nPayloadOffset) >= 4) ? read_uint8(nPayloadOffset + 3) : 0;
+
+    HANDLE_METHOD sniffedMethod = HANDLE_METHOD_STORE;
 
     if ((b0 == 0x1F) && (b1 == 0x8B)) {
-        return HANDLE_METHOD_DEFLATE;  // gzip; header stripped separately
+        sniffedMethod = HANDLE_METHOD_DEFLATE;  // gzip; header stripped separately
     } else if ((b0 == 0xFD) && (b1 == 0x37) && (b2 == 0x7A) && (b3 == 0x58)) {
-        return HANDLE_METHOD_XZ;
+        sniffedMethod = HANDLE_METHOD_XZ;
     } else if ((b0 == 0x28) && (b1 == 0xB5) && (b2 == 0x2F) && (b3 == 0xFD)) {
-        return HANDLE_METHOD_ZSTD;
+        sniffedMethod = HANDLE_METHOD_ZSTD;
     } else if ((b0 == 0x42) && (b1 == 0x5A) && (b2 == 0x68)) {
-        return HANDLE_METHOD_BZIP2;
+        sniffedMethod = HANDLE_METHOD_BZIP2;
     } else if ((b0 == 0x5D) && (b1 == 0x00) && (b2 == 0x00)) {
-        return HANDLE_METHOD_LZMA;
+        sniffedMethod = HANDLE_METHOD_LZMA;
     }
 
-    return HANDLE_METHOD_STORE;
+    const qint64 nMainOffset = _getMainHeaderOffset();
+    const QString sCompressor = _readPayloadCompressorTag(nMainOffset);
+    const HANDLE_METHOD taggedMethod = sCompressor.isEmpty() ? HANDLE_METHOD_UNKNOWN : rpmCompressorNameToMethod(sCompressor);
+    if (!sCompressor.isEmpty() && (taggedMethod == HANDLE_METHOD_UNKNOWN)) {
+        return HANDLE_METHOD_UNKNOWN;
+    }
+    if (taggedMethod != HANDLE_METHOD_UNKNOWN) {
+        return (taggedMethod == sniffedMethod) ? taggedMethod : HANDLE_METHOD_UNKNOWN;
+    }
+
+    return sniffedMethod;
 }
 
 XBinary::FT XRPM::getFileType()
@@ -230,9 +354,11 @@ QList<XBinary::MAPMODE> XRPM::getMapModesList()
 XBinary::_MEMORY_MAP XRPM::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(mapMode)
-    Q_UNUSED(pPdStruct)
 
     _MEMORY_MAP result = {};
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+        return result;
+    }
     result.fileType = getFileType();
     result.mode = getMode();
     result.endian = getEndian();
@@ -371,13 +497,19 @@ QList<XBinary::XFRECORD> XRPM::getXFRecords(FT fileType, quint32 nStructID, cons
 
 QList<XBinary::FPART> XRPM::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool {
+        return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.size() < nLimit));
+    };
 
     qint64 nPayloadOffset = getPayloadOffset(pPdStruct);
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
@@ -387,7 +519,7 @@ QList<XBinary::FPART> XRPM::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && (nPayloadOffset > 0) && (nPayloadOffset < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && canAppend() && (nPayloadOffset > 0) && (nPayloadOffset < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nPayloadOffset;
@@ -397,12 +529,15 @@ QList<XBinary::FPART> XRPM::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         listResult.append(record);
     }
 
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        listResult.clear();
+    }
     return listResult;
 }
 
 QList<QString> XRPM::getSearchSignatures()
 {
-    return {"'EDABEEDB'"};
+    return {"EDABEEDB"};
 }
 
 XBinary *XRPM::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
@@ -422,47 +557,90 @@ QMap<XBinary::UNPACK_PROP, QVariant> XRPM::getDefaultUnpackProperties()
 
 bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !isValid(pPdStruct)) {
+    if (!pState) {
         return false;
     }
 
-    pState->mapUnpackProperties = mapProperties;
+    finishUnpack(pState, nullptr);
+
+    if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+        return false;
+    }
 
     qint64 nPayloadOffset = getPayloadOffset(pPdStruct);
     if ((nPayloadOffset <= 0) || (nPayloadOffset >= getSize())) {
         return false;
     }
 
-    RPM_UNPACK_CONTEXT *pContext = new RPM_UNPACK_CONTEXT;
+    RPM_UNPACK_CONTEXT *pContext = new (std::nothrow) RPM_UNPACK_CONTEXT;
+    if (!pContext) {
+        return false;
+    }
     pContext->nPayloadOffset = nPayloadOffset;
     pContext->nPayloadSize = getSize() - nPayloadOffset;
+    pContext->nUncompressedSize = -1;
+    pContext->nCRC32 = 0;
+    pContext->bHasCRC32 = false;
     pContext->compressMethod = getPayloadCompression(nPayloadOffset);
+    if ((pContext->compressMethod == HANDLE_METHOD_UNKNOWN) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        delete pContext;
+        finishUnpack(pState, nullptr);
+        return false;
+    }
 
     // For gzip, strip the gzip header so the DEFLATE stream starts cleanly.
     if (pContext->compressMethod == HANDLE_METHOD_DEFLATE) {
-        XGzip xgzip(getDevice());
-        // XGzip reads from offset 0; wrap the payload via a temporary check.
-        quint8 nFlags = read_uint8(nPayloadOffset + 3);
-        qint64 nGzipHeader = 10;
-        // FEXTRA(4), FNAME, FCOMMENT, FHCRC handling
-        if (nFlags & 0x04) {  // FEXTRA
-            quint16 nXlen = read_uint16(nPayloadOffset + nGzipHeader);
-            nGzipHeader += 2 + nXlen;
+        SubDevice payloadDevice(getDevice(), nPayloadOffset, pContext->nPayloadSize);
+        XBinary::UNPACK_STATE gzipState = {};
+        bool bGzipValid = payloadDevice.open(QIODevice::ReadOnly);
+        XGzip gzip(&payloadDevice);
+        if (bGzipValid) {
+            bGzipValid = gzip.initUnpack(&gzipState, gzip.getDefaultUnpackProperties(), pPdStruct);
         }
-        if (nFlags & 0x08) {  // FNAME
-            while ((nPayloadOffset + nGzipHeader < getSize()) && (read_uint8(nPayloadOffset + nGzipHeader) != 0)) nGzipHeader++;
-            nGzipHeader++;
+
+        XBinary::ARCHIVERECORD gzipRecord = {};
+        if (bGzipValid) {
+            gzipRecord = gzip.infoCurrent(&gzipState, pPdStruct);
+            const qint64 nStreamOffset = gzipRecord.nStreamOffset;
+            const qint64 nStreamSize = gzipRecord.nStreamSize;
+            bGzipValid = (nStreamOffset >= 10) && (nStreamSize > 0) &&
+                         (nStreamOffset <= pContext->nPayloadSize) &&
+                         (nStreamSize <= (pContext->nPayloadSize - nStreamOffset)) &&
+                         ((nStreamOffset + nStreamSize) <= (pContext->nPayloadSize - 8));
+            // An RPM gzip payload owns one complete member.  Reject trailing
+            // bytes instead of silently treating a second member or junk as
+            // unauthenticated package data.
+            bGzipValid = bGzipValid && ((nStreamOffset + nStreamSize + 8) == pContext->nPayloadSize);
         }
-        if (nFlags & 0x10) {  // FCOMMENT
-            while ((nPayloadOffset + nGzipHeader < getSize()) && (read_uint8(nPayloadOffset + nGzipHeader) != 0)) nGzipHeader++;
-            nGzipHeader++;
+
+        gzip.finishUnpack(&gzipState, nullptr);
+        payloadDevice.close();
+
+        if (!bGzipValid || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            delete pContext;
+            finishUnpack(pState, nullptr);
+            return false;
         }
-        if (nFlags & 0x02) {  // FHCRC
-            nGzipHeader += 2;
+
+        pContext->nPayloadOffset = nPayloadOffset + gzipRecord.nStreamOffset;
+        pContext->nPayloadSize = gzipRecord.nStreamSize;
+        pContext->nUncompressedSize = gzipRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE, -1).toLongLong();
+        if (gzipRecord.mapProperties.contains(FPART_PROP_RESULTCRC)) {
+            pContext->nCRC32 = gzipRecord.mapProperties.value(FPART_PROP_RESULTCRC).toUInt();
+            pContext->bHasCRC32 = true;
         }
-        Q_UNUSED(xgzip)
-        pContext->nPayloadOffset = nPayloadOffset + nGzipHeader;
-        pContext->nPayloadSize = getSize() - pContext->nPayloadOffset;
+    } else if (pContext->compressMethod == HANDLE_METHOD_STORE) {
+        SubDevice payloadDevice(getDevice(), nPayloadOffset, pContext->nPayloadSize);
+        const bool bOpened = payloadDevice.open(QIODevice::ReadOnly);
+        XCPIO cpio(&payloadDevice);
+        const bool bCpioValid = bOpened && cpio.isValid(pPdStruct);
+        payloadDevice.close();
+        if (!bCpioValid || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            delete pContext;
+            finishUnpack(pState, nullptr);
+            return false;
+        }
+        pContext->nUncompressedSize = pContext->nPayloadSize;
     }
 
     QString sBaseName = XBinary::getDeviceFileBaseName(getDevice());
@@ -476,36 +654,48 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nNumberOfRecords = 1;
     pState->nCurrentOffset = pContext->nPayloadOffset;
     pState->nTotalSize = getSize();
+    pState->mapUnpackProperties = mapProperties;
 
     return true;
 }
 
 XBinary::ARCHIVERECORD XRPM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nTotalSize != getSize())) {
         return result;
     }
 
     RPM_UNPACK_CONTEXT *pContext = (RPM_UNPACK_CONTEXT *)pState->pContext;
+
+    if ((pContext->nPayloadOffset < 0) || (pContext->nPayloadSize < 0) ||
+        (pContext->nPayloadOffset > getSize()) || (pContext->nPayloadSize > (getSize() - pContext->nPayloadOffset)) ||
+        (pContext->compressMethod == HANDLE_METHOD_UNKNOWN)) {
+        return ARCHIVERECORD();
+    }
 
     result.nStreamOffset = pContext->nPayloadOffset;
     result.nStreamSize = pContext->nPayloadSize;
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nPayloadSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, pContext->compressMethod);
+    if (pContext->nUncompressedSize >= 0) {
+        result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+    }
+    if (pContext->bHasCRC32) {
+        result.mapProperties.insert(FPART_PROP_RESULTCRC, pContext->nCRC32);
+        result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
+    }
 
     return result;
 }
 
 bool XRPM::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nTotalSize != getSize())) {
         return false;
     }
 
@@ -527,6 +717,13 @@ bool XRPM::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         delete pContext;
         pState->pContext = nullptr;
     }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

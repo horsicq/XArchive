@@ -79,7 +79,7 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
             qint32 nRead = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
             if (nRead > 0) {
-                XBinary::_writeDevice(bufferIn, nRead, pDecompressState);
+                if (XBinary::_writeDevice(bufferIn, nRead, pDecompressState) != nRead) break;
             } else {
                 break;
             }

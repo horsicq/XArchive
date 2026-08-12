@@ -46,7 +46,7 @@ bool XAPKS::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XAPKS xapks(pDevice);
 
-    return xapks.isValid();
+    return xapks.isValid(pPdStruct);
 }
 
 bool XAPKS::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)

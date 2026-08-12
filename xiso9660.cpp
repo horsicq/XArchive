@@ -21,6 +21,8 @@
 #include "xiso9660.h"
 #include "Algos/xstoredecoder.h"
 
+#include <new>
+
 XBinary::XCONVERT _TABLE_XISO9660_STRUCTID[] = {{XISO9660::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                 {XISO9660::STRUCTID_PVDESC, "PVDESC", QString("Primary Volume Descriptor")},
                                                 {XISO9660::STRUCTID_DIR_RECORD, "DIR_RECORD", QString("Directory Record")}};
@@ -53,7 +55,7 @@ bool XISO9660::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
-    if (getSize() >= 0x8000) {  // At least PVD offset + size
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 0x8000)) {  // At least PVD offset + size
         _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
 
         // ISO 9660 Primary Volume Descriptor is typically at offset 0x8000 (32KB)
@@ -69,7 +71,7 @@ bool XISO9660::isValid(PDSTRUCT *pPdStruct)
 bool XISO9660::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XISO9660 xiso(pDevice);
-    return xiso.isValid();
+    return xiso.isValid(pPdStruct);
 }
 
 XISO9660::ISO9660_PVDESC XISO9660::_readPrimaryVolumeDescriptor(qint64 nOffset)
@@ -423,13 +425,17 @@ QList<XBinary::XFRECORD> XISO9660::getXFRecords(FT fileType, quint32 nStructID, 
 
 QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(nLimit)
-
     QList<FPART> listResult;
+
+    if ((nLimit < -1) || (nLimit == 0)) {
+        return listResult;
+    }
+
+    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
     qint64 nTotalSize = getSize();
     qint64 nFormatSize = getFileFormatSize(pPdStruct);
 
-    if (nFileParts & FILEPART_REGION) {
+    if ((nFileParts & FILEPART_REGION) && canAppend()) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = 0;
@@ -440,7 +446,7 @@ QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, 
         listResult.append(record);
     }
 
-    if (nFileParts & FILEPART_HEADER) {
+    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = _getPrimaryVolumeDescriptorOffset();
@@ -451,7 +457,7 @@ QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, 
         listResult.append(record);
     }
 
-    if (nFileParts & FILEPART_REGION) {
+    if ((nFileParts & FILEPART_REGION) && canAppend()) {
         qint64 nDataOffset = _getPrimaryVolumeDescriptorOffset() + sizeof(ISO9660_PVDESC);
         qint64 nDataSize = (nFormatSize > 0) ? (nFormatSize - nDataOffset) : (nTotalSize - nDataOffset);
 
@@ -467,7 +473,7 @@ QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, 
         }
     }
 
-    if (nFileParts & FILEPART_OVERLAY) {
+    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
         if (nFormatSize > 0 && nTotalSize > nFormatSize) {
             FPART record = {};
             record.filePart = FILEPART_OVERLAY;
@@ -664,14 +670,19 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         return false;
     }
 
-    pState->mapUnpackProperties = mapProperties;
+    finishUnpack(pState, nullptr);
 
-    pState->nCurrentOffset = 0;
-    pState->nTotalSize = getSize();
-    pState->nCurrentIndex = 0;
-    pState->nNumberOfRecords = 0;
+    if (!isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
 
-    ISO9660_UNPACK_CONTEXT *pContext = new ISO9660_UNPACK_CONTEXT;
+    const qint64 nTotalSize = getSize();
+
+    ISO9660_UNPACK_CONTEXT *pContext = new (std::nothrow) ISO9660_UNPACK_CONTEXT;
+    if (!pContext) {
+        finishUnpack(pState, nullptr);
+        return false;
+    }
     pContext->nLogicalBlockSize = _getLogicalBlockSize();
 
     if (pContext->nLogicalBlockSize < 512 || pContext->nLogicalBlockSize > 8192) {
@@ -682,8 +693,9 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     // Read root directory record from PVD at offset 156
     qint64 nRootRecordOffset = 0x8000 + 156;
 
-    if (nRootRecordOffset + 34 > pState->nTotalSize) {
+    if (nRootRecordOffset + 34 > nTotalSize) {
         delete pContext;
+        finishUnpack(pState, nullptr);
         return false;
     }
 
@@ -691,6 +703,7 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
 
     if (nRootRecordLength < 34) {
         delete pContext;
+        finishUnpack(pState, nullptr);
         return false;
     }
 
@@ -700,27 +713,36 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     qint64 nRootOffset = (qint64)nRootExtentLocation * pContext->nLogicalBlockSize;
     qint64 nRootSize = (qint64)nRootDataLength;
 
-    if (nRootOffset <= 0 || nRootSize <= 0 || nRootOffset >= pState->nTotalSize) {
+    if (nRootOffset <= 0 || nRootSize <= 0 || nRootOffset >= nTotalSize) {
         delete pContext;
+        finishUnpack(pState, nullptr);
         return false;
     }
 
     // Build flat list of all records via BFS traversal
     pContext->listAllRecords = _collectAllRecords(nRootOffset, nRootSize, pContext->nLogicalBlockSize, pPdStruct);
 
+    if (!isPdStructNotCanceled(pPdStruct)) {
+        delete pContext;
+        finishUnpack(pState, nullptr);
+        return false;
+    }
+
     pState->nNumberOfRecords = pContext->listAllRecords.count();
     pState->pContext = pContext;
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = nTotalSize;
+    pState->nCurrentIndex = 0;
+    pState->mapUnpackProperties = mapProperties;
 
     return true;
 }
 
 XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     ARCHIVERECORD record = {};
 
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
         return record;
     }
 
@@ -735,9 +757,8 @@ XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
 
 bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    if (!pState || !pState->pContext) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -764,6 +785,13 @@ bool XISO9660::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         delete pContext;
         pState->pContext = nullptr;
     }
+
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
 
     return true;
 }

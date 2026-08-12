@@ -163,7 +163,8 @@ private:
     quint32 _readBinaryUInt32(qint64 nOffset, bool bIsBigEndian);
     CPIO_NEWC_HEADER _readNewcHeader(qint64 nOffset);
     CPIO_ODC_HEADER _readOdcHeader(qint64 nOffset);
-    bool _parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo);
+    bool _parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdStruct = nullptr);
+    bool _scanArchive(qint32 nLimit, QList<RECORD> *pListRecords, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct);
     bool _isTrailerRecord(const QString &sFileName);
 private:
     INTERNAL_INFO m_internalInfo;
