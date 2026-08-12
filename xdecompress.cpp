@@ -209,6 +209,7 @@ static bool decIsValidBufferSize(qint64 nSize)
 }
 
 static const qint64 DEC_CAB_MAX_FOLDER_SIZE = 512LL * 1024 * 1024;
+static const quint16 DEC_CAB_MAX_DATA_BLOCK_SIZE = 0x9800;
 
 static quint32 decCabDataChecksum(const char *pData, qint32 nSize,
                                   quint32 nSeed = 0)
@@ -2007,7 +2008,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             qint64 nPayloadOffset = nOffset + nCFDataHeaderSize + nDataReservedSize;
 
-            if ((nCbData == 0) || (nCbUncomp > 32768) || ((qint64)nCbData > nStreamSize - nPayloadOffset) ||
+            if ((nCbData == 0) ||
+                (nCbData > DEC_CAB_MAX_DATA_BLOCK_SIZE) ||
+                (nCbUncomp > 32768) || ((qint64)nCbData > nStreamSize - nPayloadOffset) ||
                 (((qint64)nCbData < nStreamSize - nPayloadOffset) && (nCbUncomp != 32768)) ||
                 ((qint64)nCbUncomp > nDeclaredFolderSize - nDecodedFolderSize)) {
                 if ((qint64)nCbData > nStreamSize - nPayloadOffset) {
@@ -2145,7 +2148,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             qint64 nPayloadOffset = nOffset + nCFDataHeaderSize + nDataReservedSize;
 
-            if ((nCbData == 0) || (nCbUncomp > 32768) || ((qint64)nCbData > nStreamSize - nPayloadOffset) ||
+            if ((nCbData == 0) ||
+                (nCbData > DEC_CAB_MAX_DATA_BLOCK_SIZE) ||
+                (nCbUncomp > 32768) || ((qint64)nCbData > nStreamSize - nPayloadOffset) ||
                 (((qint64)nCbData < nStreamSize - nPayloadOffset) && (nCbUncomp != 32768)) ||
                 !decIsValidBufferSize((qint64)baCompressedFolder.size() + nCbData) ||
                 ((qint64)baCompressedFolder.size() + nCbData >

@@ -77,6 +77,110 @@ static CAB_DEVICE_CHAIN cabGetDeviceChain(QIODevice *pDevice)
     return result;
 }
 
+static QString cabNormalizedFilePath(const QFile *pFile)
+{
+    if (!pFile || pFile->fileName().isEmpty()) return QString();
+
+    const QFileInfo fileInfo(pFile->fileName());
+    QString sPath = fileInfo.canonicalFilePath();
+    if (sPath.isEmpty()) sPath = QDir::cleanPath(fileInfo.absoluteFilePath());
+    sPath = QDir::fromNativeSeparators(sPath);
+#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
+    sPath = sPath.toCaseFolded();
+#endif
+    return sPath;
+}
+
+static QByteArray cabFilePhysicalIdentity(const QFile *pFile)
+{
+    QByteArray result;
+    if (!pFile || (pFile->handle() < 0)) return result;
+
+#ifdef Q_OS_WIN
+    const intptr_t nHandle = _get_osfhandle(pFile->handle());
+    if (nHandle == -1) return result;
+    BY_HANDLE_FILE_INFORMATION fileInformation = {};
+    if (!GetFileInformationByHandle(reinterpret_cast<HANDLE>(nHandle),
+                                    &fileInformation)) {
+        return result;
+    }
+    result = QByteArray::number(
+                 (qulonglong)fileInformation.dwVolumeSerialNumber, 16) + ':' +
+             QByteArray::number(
+                 (qulonglong)fileInformation.nFileIndexHigh, 16) + ':' +
+             QByteArray::number(
+                 (qulonglong)fileInformation.nFileIndexLow, 16);
+#elif defined(Q_OS_UNIX)
+    struct stat status = {};
+    if (fstat(pFile->handle(), &status) != 0) return result;
+    result = QByteArray::number((qulonglong)status.st_dev, 16) + ':' +
+             QByteArray::number((qulonglong)status.st_ino, 16);
+#endif
+    return result;
+}
+
+static bool cabCaptureBackingIdentity(QIODevice *pDevice,
+                                      QIODevice **ppRootDevice,
+                                      QByteArray *pIdentity)
+{
+    if (ppRootDevice) *ppRootDevice = nullptr;
+    if (pIdentity) pIdentity->clear();
+    if (!pDevice || !ppRootDevice || !pIdentity) return false;
+
+    const CAB_DEVICE_CHAIN chain = cabGetDeviceChain(pDevice);
+    if (chain.listDevices.isEmpty() || chain.bCycle || !chain.pRoot) {
+        return false;
+    }
+
+    QByteArray baIdentity;
+    if (QBuffer *pBuffer = dynamic_cast<QBuffer *>(chain.pRoot)) {
+        baIdentity = QByteArrayLiteral("buffer:") +
+                     QByteArray::number(reinterpret_cast<quintptr>(
+                                            &pBuffer->buffer()),
+                                        16);
+    } else if (QFile *pFile = dynamic_cast<QFile *>(chain.pRoot)) {
+        const QString sPath = cabNormalizedFilePath(pFile);
+        const QByteArray baPhysicalIdentity = cabFilePhysicalIdentity(pFile);
+        if (sPath.isEmpty() && baPhysicalIdentity.isEmpty()) return false;
+        baIdentity = QByteArrayLiteral("file:path:") + sPath.toUtf8() +
+                     QByteArrayLiteral(":id:") + baPhysicalIdentity;
+    } else {
+        baIdentity = QByteArrayLiteral("device:") +
+                     QByteArray::number(reinterpret_cast<quintptr>(chain.pRoot),
+                                        16);
+    }
+
+    *ppRootDevice = chain.pRoot;
+    *pIdentity = baIdentity;
+    return true;
+}
+
+static bool cabSourceSnapshotMatches(const XCab::CAB_UNPACK_CONTEXT *pContext,
+                                     QIODevice *pCurrentDevice)
+{
+    if (!pContext) return false;
+    QIODevice *pSourceDevice = pContext->pSourceDevice.data();
+    if (!pSourceDevice || (pCurrentDevice != pSourceDevice) ||
+        !pSourceDevice->isOpen() || !pSourceDevice->isReadable() ||
+        pSourceDevice->isSequential()) {
+        return false;
+    }
+
+    QIODevice *pRootDevice = nullptr;
+    QByteArray baIdentity;
+    if (!cabCaptureBackingIdentity(pSourceDevice, &pRootDevice, &baIdentity) ||
+        !pContext->pSourceRootDevice ||
+        (pRootDevice != pContext->pSourceRootDevice.data()) ||
+        (baIdentity != pContext->baSourceBackingIdentity) ||
+        (pRootDevice->size() != pContext->nSourceRootSize)) {
+        return false;
+    }
+
+    QBuffer *pBuffer = dynamic_cast<QBuffer *>(pRootDevice);
+    return !pBuffer ||
+           (pBuffer->buffer() == pContext->baSourceBufferSnapshot);
+}
+
 static bool cabDevicesAlias(QIODevice *pSource, QIODevice *pDestination)
 {
     const CAB_DEVICE_CHAIN sourceChain = cabGetDeviceChain(pSource);
@@ -997,6 +1101,12 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         !pSourceDevice->isReadable() || pSourceDevice->isSequential()) {
         return false;
     }
+    QIODevice *pSourceRootDevice = nullptr;
+    QByteArray baSourceBackingIdentity;
+    if (!cabCaptureBackingIdentity(pSourceDevice, &pSourceRootDevice,
+                                   &baSourceBackingIdentity)) {
+        return false;
+    }
 
     qint64 nFileSize = getSize();
 
@@ -1036,6 +1146,14 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pContext->nCbCFData = 0;
     pContext->nMainHeaderSize = 0;
     pContext->pSourceDevice = pSourceDevice;
+    pContext->pSourceRootDevice = pSourceRootDevice;
+    pContext->baSourceBackingIdentity = baSourceBackingIdentity;
+    pContext->nSourceRootSize = pSourceRootDevice->size();
+    if (QBuffer *pSourceBuffer = dynamic_cast<QBuffer *>(pSourceRootDevice)) {
+        // QByteArray is implicitly shared, so the normal unchanged path is
+        // cheap while any subsequent mutation detaches and remains detectable.
+        pContext->baSourceBufferSnapshot = pSourceBuffer->buffer();
+    }
 
     auto fail = [&]() -> bool {
         delete pContext;
@@ -1351,7 +1469,10 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         }
     }
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return fail();
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
+        !cabSourceSnapshotMatches(pContext, getDevice())) {
+        return fail();
+    }
 
     // Initialize state
     pState->nCurrentOffset = cfHeader.coffFiles;
@@ -1379,10 +1500,7 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     }
 
     CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
-    QIODevice *pSourceDevice = pContext->pSourceDevice.data();
-    if (!pSourceDevice || (getDevice() != pSourceDevice) ||
-        !pSourceDevice->isOpen() || !pSourceDevice->isReadable() ||
-        pSourceDevice->isSequential()) {
+    if (!cabSourceSnapshotMatches(pContext, getDevice())) {
         return result;
     }
     if (pState->nCurrentIndex >= pContext->listFiles.size()) return result;
@@ -1448,9 +1566,7 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     CAB_UNPACK_CONTEXT *pContext =
         static_cast<CAB_UNPACK_CONTEXT *>(pState->pContext);
     QIODevice *pSourceDevice = pContext->pSourceDevice.data();
-    if (!pSourceDevice || (getDevice() != pSourceDevice) ||
-        !pSourceDevice->isOpen() || !pSourceDevice->isReadable() ||
-        pSourceDevice->isSequential() ||
+    if (!cabSourceSnapshotMatches(pContext, getDevice()) ||
         cabDevicesAlias(pSourceDevice, pDevice) ||
         (pState->nCurrentIndex >= pContext->listFiles.size())) {
         return false;
@@ -1762,10 +1878,7 @@ bool XCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
-        QIODevice *pSourceDevice = pContext->pSourceDevice.data();
-        if (!pSourceDevice || (getDevice() != pSourceDevice) ||
-            !pSourceDevice->isOpen() || !pSourceDevice->isReadable() ||
-            pSourceDevice->isSequential()) {
+        if (!cabSourceSnapshotMatches(pContext, getDevice())) {
             return false;
         }
 

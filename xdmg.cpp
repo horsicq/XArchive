@@ -895,10 +895,60 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
             addArchiveBase(0);
         }
 
-        const quint64 nDataHashBudget =
-            (nPayloadLimit > ((std::numeric_limits<quint64>::max)() / 4)) ?
-                (std::numeric_limits<quint64>::max)() : nPayloadLimit * 4;
-        quint64 nDataHashCost = 0;
+        QMap<quint64, quint32> mapDataForkPrefixes;
+        bool bDataHashIndexBuilt = false;
+        bool bDataHashIndexValid = false;
+        const auto ensureDataHashIndex = [&]() -> bool {
+            if (bDataHashIndexBuilt) return bDataHashIndexValid;
+            bDataHashIndexBuilt = true;
+
+            // Metadata is checked before this lazy pass.  Once one candidate
+            // is coherent, index every range-valid base in a single ascending
+            // scan.  This preserves the old linear I/O bound without a shared
+            // byte budget that can starve the genuine base after several
+            // checksum-mismatching decoys.
+            for (quint64 nBase : listArchiveBases) {
+                if ((kolyBlock.nDataForkOffset >
+                     (std::numeric_limits<quint64>::max)() - nBase)) {
+                    continue;
+                }
+                const quint64 nStart = nBase + kolyBlock.nDataForkOffset;
+                if (!dmgRangeWithin(nStart, kolyBlock.nDataForkLength,
+                                    nPayloadLimit)) {
+                    continue;
+                }
+                mapDataForkPrefixes.insert(nStart, 0);
+                mapDataForkPrefixes.insert(
+                    nStart + kolyBlock.nDataForkLength, 0);
+            }
+            if (mapDataForkPrefixes.isEmpty()) return false;
+
+            QByteArray baHashBuffer(0x10000, 0);
+            quint64 nCursor = mapDataForkPrefixes.constBegin().key();
+            quint32 nPrefixCRC = 0;
+            for (auto it = mapDataForkPrefixes.begin();
+                 it != mapDataForkPrefixes.end(); ++it) {
+                const quint64 nEnd = it.key();
+                while ((nCursor < nEnd) &&
+                       XBinary::isPdStructNotCanceled(pPdStruct)) {
+                    const qint32 nChunk = (qint32)qMin<quint64>(
+                        (quint64)baHashBuffer.size(), nEnd - nCursor);
+                    if (read_array_process((qint64)nCursor,
+                                           baHashBuffer.data(), nChunk,
+                                           pPdStruct) != nChunk) {
+                        return false;
+                    }
+                    nPrefixCRC = dmgUpdateCRC32(
+                        nPrefixCRC, baHashBuffer.constData(), nChunk);
+                    nCursor += (quint64)nChunk;
+                }
+                if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+                it.value() = nPrefixCRC;
+            }
+
+            bDataHashIndexValid = true;
+            return true;
+        };
         for (quint64 nArchiveBase : listArchiveBases) {
             KOLY_BLOCK candidate = kolyBlock;
             const auto normalizePair = [&](quint64 *pOffset, quint64 nLength) -> bool {
@@ -969,15 +1019,20 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
             // fork.  Search/carving supplies an indexed exact CRC check and
             // disables this duplicate linear pass.
             if (bValidateDataForkCRC && dmgChecksumIsCRC32(candidate.dataChecksum)) {
-                if (candidate.nDataForkLength > nDataHashBudget - nDataHashCost) continue;
-                nDataHashCost += candidate.nDataForkLength;
-                quint32 nDataForkCRC = 0;
-                if (!dmgCalculateCRC32(this, (qint64)candidate.nDataForkOffset,
-                                       (qint64)candidate.nDataForkLength, pPdStruct,
-                                       &nDataForkCRC)) {
+                if (!ensureDataHashIndex()) {
                     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-                    continue;
+                    return false;
                 }
+                const quint64 nDataEnd = candidate.nDataForkOffset +
+                                         candidate.nDataForkLength;
+                const auto itStart = mapDataForkPrefixes.constFind(
+                    candidate.nDataForkOffset);
+                const auto itEnd = mapDataForkPrefixes.constFind(nDataEnd);
+                if ((itStart == mapDataForkPrefixes.constEnd()) ||
+                    (itEnd == mapDataForkPrefixes.constEnd())) continue;
+                const quint32 nDataForkCRC = itEnd.value() ^
+                    dmgCombineCRC32(itStart.value(), 0,
+                                    candidate.nDataForkLength);
                 if (nDataForkCRC != candidate.dataChecksum[2]) continue;
             }
 
@@ -2689,30 +2744,10 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
     qint64 nCrcCheckpointEnd = nCallStart;
     QByteArray baCrcBuffer(0x10000, 0);
     bool bCrcReadFailure = false;
-    quint64 nCrcReadCost = 0;
-    quint64 nCrcBudgetExtent = 0;
-
-    const auto chargeCrcRead = [&](qint64 nRelativeEnd,
-                                   qint64 nReadSize) -> bool {
-        if ((nRelativeEnd < 0) || (nReadSize < 0)) return false;
-        nCrcBudgetExtent = qMax(nCrcBudgetExtent, (quint64)nRelativeEnd);
-        const quint64 nAllowed =
-            (nCrcBudgetExtent >
-             ((std::numeric_limits<quint64>::max)() / 8)) ?
-                (std::numeric_limits<quint64>::max)() :
-                nCrcBudgetExtent * 8;
-        if ((nCrcReadCost > nAllowed) ||
-            ((quint64)nReadSize > nAllowed - nCrcReadCost)) {
-            return false;
-        }
-        nCrcReadCost += (quint64)nReadSize;
-        return true;
-    };
-
-    const auto crcPrefixAt = [&](qint64 nEndOffset, quint32 *pCRC) -> bool {
-        if (pCRC) *pCRC = 0;
-        if (!pCRC || bCrcReadFailure || (nEndOffset < nCallStart) ||
-            (nEndOffset > nRangeEnd) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    const auto ensureCrcCheckpointsTo = [&](qint64 nEndOffset) -> bool {
+        if (bCrcReadFailure || (nEndOffset < nCallStart) ||
+            (nEndOffset > nRangeEnd) ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
 
@@ -2720,11 +2755,6 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
         const qint64 nCheckpointRelative =
             (nRelativeEnd / nCrcCheckpointSize) * nCrcCheckpointSize;
         const qint64 nCheckpointAbsolute = nCallStart + nCheckpointRelative;
-        const qint64 nRequiredRead =
-            qMax<qint64>(0, nCheckpointAbsolute - nCrcCheckpointEnd) +
-            (nEndOffset - nCheckpointAbsolute);
-        if (!chargeCrcRead(nRelativeEnd, nRequiredRead)) return false;
-
         while ((nCrcCheckpointEnd < nCheckpointAbsolute) &&
                XBinary::isPdStructNotCanceled(pPdStruct)) {
             const qint64 nCheckpointAdvance =
@@ -2752,41 +2782,77 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
             listCrcCheckpoints.append(nNextCRC);
             nCrcCheckpointEnd = nNextCheckpoint;
         }
-        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        return XBinary::isPdStructNotCanceled(pPdStruct);
+    };
 
-        const qint64 nCheckpointIndex =
-            nCheckpointRelative / nCrcCheckpointSize;
-        if ((nCheckpointIndex < 0) ||
-            (nCheckpointIndex >= (qint64)listCrcCheckpoints.size())) {
-            bCrcReadFailure = true;
+    const auto crcPrefixesAt = [&](const QList<qint64> &listOffsets,
+                                   QMap<qint64, quint32> *pPrefixes) -> bool {
+        if (pPrefixes) pPrefixes->clear();
+        if (!pPrefixes || bCrcReadFailure ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
 
-        quint32 nCRC = listCrcCheckpoints.at((qint32)nCheckpointIndex);
-        qint64 nTailOffset = nCheckpointAbsolute;
-        while ((nTailOffset < nEndOffset) &&
-               XBinary::isPdStructNotCanceled(pPdStruct)) {
-            const qint32 nTailSize = (qint32)qMin<qint64>(
-                baCrcBuffer.size(), nEndOffset - nTailOffset);
-            if (searchBinary.read_array_process(nTailOffset,
-                                                baCrcBuffer.data(),
-                                                nTailSize, pPdStruct) !=
-                nTailSize) {
-                bCrcReadFailure = true;
-                return false;
-            }
-            nCRC = dmgUpdateCRC32(nCRC, baCrcBuffer.constData(),
-                                  nTailSize);
-            nTailOffset += nTailSize;
+        // Sorting in a map lets every requested tail in one checkpoint be
+        // evaluated by a single forward read.  In particular, thousands of
+        // XML-derived bases cannot exhaust a shared read allowance before the
+        // genuine base is reached.
+        QMap<qint64, quint32> mapRequested;
+        for (qint64 nOffset : listOffsets) {
+            if ((nOffset < nCallStart) || (nOffset > nRangeEnd)) return false;
+            mapRequested.insert(nOffset, 0);
         }
-        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (mapRequested.isEmpty()) return true;
+        auto itLastRequested = mapRequested.constEnd();
+        --itLastRequested;
+        if (!ensureCrcCheckpointsTo(itLastRequested.key())) return false;
 
-        *pCRC = nCRC;
+        qint64 nActiveCheckpoint = -1;
+        qint64 nReadOffset = -1;
+        quint32 nCRC = 0;
+        for (auto it = mapRequested.constBegin();
+             it != mapRequested.constEnd(); ++it) {
+            const qint64 nRelativeEnd = it.key() - nCallStart;
+            const qint64 nCheckpointRelative =
+                (nRelativeEnd / nCrcCheckpointSize) * nCrcCheckpointSize;
+            const qint64 nCheckpointAbsolute =
+                nCallStart + nCheckpointRelative;
+            if (nCheckpointAbsolute != nActiveCheckpoint) {
+                const qint64 nCheckpointIndex =
+                    nCheckpointRelative / nCrcCheckpointSize;
+                if ((nCheckpointIndex < 0) ||
+                    (nCheckpointIndex >=
+                     (qint64)listCrcCheckpoints.size())) {
+                    bCrcReadFailure = true;
+                    return false;
+                }
+                nActiveCheckpoint = nCheckpointAbsolute;
+                nReadOffset = nCheckpointAbsolute;
+                nCRC = listCrcCheckpoints.at((qint32)nCheckpointIndex);
+            }
+
+            while ((nReadOffset < it.key()) &&
+                   XBinary::isPdStructNotCanceled(pPdStruct)) {
+                const qint32 nTailSize = (qint32)qMin<qint64>(
+                    baCrcBuffer.size(), it.key() - nReadOffset);
+                if (searchBinary.read_array_process(
+                        nReadOffset, baCrcBuffer.data(), nTailSize,
+                        pPdStruct) != nTailSize) {
+                    bCrcReadFailure = true;
+                    return false;
+                }
+                nCRC = dmgUpdateCRC32(nCRC, baCrcBuffer.constData(),
+                                      nTailSize);
+                nReadOffset += nTailSize;
+            }
+            if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+            pPrefixes->insert(it.key(), nCRC);
+        }
         return true;
     };
 
     const auto crcRange = [&](qint64 nOffset, qint64 nLength,
-                              quint32 *pCRC) -> bool {
+                               quint32 *pCRC) -> bool {
         if (pCRC) *pCRC = 0;
         if (!pCRC || (nOffset < nCallStart) || (nLength < 0) ||
             (nOffset > nRangeEnd) || (nLength > nRangeEnd - nOffset)) {
@@ -2797,22 +2863,68 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
             return true;
         }
 
-        quint32 nPrefixStart = 0;
-        quint32 nPrefixEnd = 0;
-        if (!crcPrefixAt(nOffset, &nPrefixStart) ||
-            !crcPrefixAt(nOffset + nLength, &nPrefixEnd)) {
+        QMap<qint64, quint32> mapPrefixes;
+        if (!crcPrefixesAt({nOffset, nOffset + nLength}, &mapPrefixes) ||
+            !mapPrefixes.contains(nOffset) ||
+            !mapPrefixes.contains(nOffset + nLength)) {
             return false;
         }
 
         const quint32 nShiftedPrefix =
-            dmgCombineCRC32(nPrefixStart, 0, (quint64)nLength);
-        *pCRC = nPrefixEnd ^ nShiftedPrefix;
+            dmgCombineCRC32(mapPrefixes.value(nOffset), 0,
+                            (quint64)nLength);
+        *pCRC = mapPrefixes.value(nOffset + nLength) ^ nShiftedPrefix;
+        return true;
+    };
+
+    const auto crcRangesForBases = [&](const QList<qint64> &listBases,
+                                       quint64 nRelativeOffset,
+                                       quint64 nLength,
+                                       QMap<qint64, quint32> *pCRCs) -> bool {
+        if (pCRCs) pCRCs->clear();
+        if (!pCRCs ||
+            (nRelativeOffset >
+             (quint64)(std::numeric_limits<qint64>::max)()) ||
+            (nLength > (quint64)(std::numeric_limits<qint64>::max)())) {
+            return false;
+        }
+
+        QList<qint64> listEndpoints;
+        listEndpoints.reserve(listBases.size() * 2);
+        const qint64 nRelative = (qint64)nRelativeOffset;
+        const qint64 nSignedLength = (qint64)nLength;
+        for (qint64 nBase : listBases) {
+            if ((nBase < nCallStart) ||
+                (nRelative > nRangeEnd - nBase)) {
+                return false;
+            }
+            const qint64 nStart = nBase + nRelative;
+            if (nSignedLength > nRangeEnd - nStart) return false;
+            listEndpoints.append(nStart);
+            listEndpoints.append(nStart + nSignedLength);
+        }
+
+        QMap<qint64, quint32> mapPrefixes;
+        if (!crcPrefixesAt(listEndpoints, &mapPrefixes)) return false;
+        for (qint64 nBase : listBases) {
+            const qint64 nStart = nBase + nRelative;
+            const qint64 nEnd = nStart + nSignedLength;
+            if (!mapPrefixes.contains(nStart) ||
+                !mapPrefixes.contains(nEnd)) {
+                return false;
+            }
+            const quint32 nShiftedPrefix = dmgCombineCRC32(
+                mapPrefixes.value(nStart), 0, nLength);
+            pCRCs->insert(nBase,
+                          mapPrefixes.value(nEnd) ^ nShiftedPrefix);
+        }
         return true;
     };
 
     const auto tryExactImage = [&](qint64 nOffset, qint64 nLength,
-                                   const KOLY_BLOCK &rawKoly, bool bFrontKoly,
-                                   FFSEARCH_INFO *pInfo) -> bool {
+                                    const KOLY_BLOCK &rawKoly, bool bFrontKoly,
+                                    const QMap<qint64, quint32> *pDataCRCs,
+                                    FFSEARCH_INFO *pInfo) -> bool {
         if (!pInfo || (nOffset < nCallStart) || (nLength <= 0) ||
             (nOffset > nRangeEnd) || (nLength > nRangeEnd - nOffset)) {
             return false;
@@ -2836,8 +2948,19 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
             const qint64 nDataOffset =
                 nOffset + (qint64)rawKoly.nDataForkOffset;
             quint32 nDataCRC = 0;
-            if (!crcRange(nDataOffset, (qint64)rawKoly.nDataForkLength,
-                          &nDataCRC) ||
+            bool bHaveCRC = false;
+            if (pDataCRCs) {
+                const auto it = pDataCRCs->constFind(nOffset);
+                if (it != pDataCRCs->constEnd()) {
+                    nDataCRC = it.value();
+                    bHaveCRC = true;
+                }
+            } else {
+                bHaveCRC = crcRange(
+                    nDataOffset, (qint64)rawKoly.nDataForkLength,
+                    &nDataCRC);
+            }
+            if (!bHaveCRC ||
                 (nDataCRC != rawKoly.dataChecksum[2])) {
                 return false;
             }
@@ -3011,7 +3134,7 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
                     if ((nTop > 512) &&
                         (nTop <= (quint64)(std::numeric_limits<qint64>::max)()) &&
                         tryExactImage(nHeaderOffset, (qint64)nTop, rawKoly,
-                                      true, &result)) {
+                                      true, nullptr, &result)) {
                         pState->nCurrentOffset = nHeaderOffset + (qint64)nTop;
                         return result;
                     }
@@ -3112,9 +3235,26 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
                 addBase(nCallStart);
             }
 
+            QMap<qint64, quint32> mapCandidateDataCRCs;
+            const QMap<qint64, quint32> *pCandidateDataCRCs = nullptr;
+            if (dmgChecksumIsCRC32(rawKoly.dataChecksum) &&
+                !listBases.isEmpty()) {
+                if (!crcRangesForBases(listBases,
+                                       rawKoly.nDataForkOffset,
+                                       rawKoly.nDataForkLength,
+                                       &mapCandidateDataCRCs)) {
+                    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+                        return FFSEARCH_INFO{};
+                    }
+                    mapCandidateDataCRCs.clear();
+                }
+                pCandidateDataCRCs = &mapCandidateDataCRCs;
+            }
+
             for (qint64 nImageOffset : listBases) {
                 if (tryExactImage(nImageOffset, nImageEnd - nImageOffset,
-                                  rawKoly, false, &result)) {
+                                  rawKoly, false, pCandidateDataCRCs,
+                                  &result)) {
                     pState->nCurrentOffset = nImageEnd;
                     return result;
                 }

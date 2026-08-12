@@ -38,6 +38,35 @@ class XArchive : public XBinary {
 public:
     struct INTERNAL_INFO : XBinary::INTERNAL_INFO {};
 
+    struct SOURCE_DEVICE_CHAIN_ITEM {
+        QPointer<QIODevice> pDevice;
+        bool bIsSubDevice;
+        quint64 nInitLocation;
+        qint64 nSize;
+    };
+
+    enum SOURCE_DEVICE_ROOT_KIND {
+        SOURCE_DEVICE_ROOT_UNKNOWN = 0,
+        SOURCE_DEVICE_ROOT_BUFFER,
+        SOURCE_DEVICE_ROOT_FILE
+    };
+
+    // Immutable description of the device object/backing that was parsed by
+    // initUnpack().  QPointers make destroyed caller-owned devices fail closed;
+    // the complete SubDevice chain prevents an open wrapper from being
+    // retargeted to another range of the same backing object.
+    struct SOURCE_DEVICE_SNAPSHOT {
+        QPointer<QIODevice> pSourceDevice;
+        QPointer<QIODevice> pRootDevice;
+        QList<SOURCE_DEVICE_CHAIN_ITEM> listChain;
+        SOURCE_DEVICE_ROOT_KIND rootKind;
+        qint64 nRootSize;
+        quintptr nBufferBackingIdentity;
+        QByteArray baBufferSnapshot;
+        QString sFilePath;
+        QByteArray baFilePhysicalIdentity;
+    };
+
     bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
     void *getInternalInfo(PDSTRUCT *pPdStruct) override;
     void setInternalInfo(void *pInternalInfo) override;
@@ -101,6 +130,9 @@ public:
 
     static const qint32 COMPRESS_BUFFERSIZE = 0x4000;    // TODO Check mb set/get ???
     static const qint32 DECOMPRESS_BUFFERSIZE = 0x4000;  // TODO Check mb set/get ???
+
+    static bool captureSourceDeviceSnapshot(QIODevice *pDevice, SOURCE_DEVICE_SNAPSHOT *pSnapshot);
+    static bool isSourceDeviceSnapshotCurrent(const SOURCE_DEVICE_SNAPSHOT &snapshot, QIODevice *pCurrentDevice);
 
     explicit XArchive(QIODevice *pDevice = nullptr);
 

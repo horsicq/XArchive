@@ -26,10 +26,61 @@
 #include <limits>
 #include <memory>
 #include <new>
+#include <QBuffer>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QSaveFile>
+#include <QSet>
 #include <QTemporaryFile>
 
+#ifdef Q_OS_WIN
+#include <io.h>
+#include <windows.h>
+#elif defined(Q_OS_UNIX)
+#include <sys/stat.h>
+#endif
+
 namespace {
+static QString archiveNormalizedFilePath(const QFile *pFile)
+{
+    if (!pFile || pFile->fileName().isEmpty()) return QString();
+
+    const QFileInfo fileInfo(pFile->fileName());
+    QString sPath = fileInfo.canonicalFilePath();
+    if (sPath.isEmpty()) sPath = QDir::cleanPath(fileInfo.absoluteFilePath());
+    sPath = QDir::fromNativeSeparators(sPath);
+#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
+    sPath = sPath.toCaseFolded();
+#endif
+    return sPath;
+}
+
+static QByteArray archiveFilePhysicalIdentity(const QFile *pFile)
+{
+    QByteArray result;
+    if (!pFile || (pFile->handle() < 0)) return result;
+
+#ifdef Q_OS_WIN
+    const intptr_t nHandle = _get_osfhandle(pFile->handle());
+    if (nHandle == -1) return result;
+    BY_HANDLE_FILE_INFORMATION fileInformation = {};
+    if (!GetFileInformationByHandle(reinterpret_cast<HANDLE>(nHandle),
+                                    &fileInformation)) {
+        return result;
+    }
+    result = QByteArray::number(fileInformation.dwVolumeSerialNumber, 16) + ':' +
+             QByteArray::number(fileInformation.nFileIndexHigh, 16) + ':' +
+             QByteArray::number(fileInformation.nFileIndexLow, 16);
+#elif defined(Q_OS_UNIX)
+    struct stat status = {};
+    if (fstat(pFile->handle(), &status) != 0) return result;
+    result = QByteArray::number((qulonglong)status.st_dev, 16) + ':' +
+             QByteArray::number((qulonglong)status.st_ino, 16);
+#endif
+    return result;
+}
+
 static qint64 archiveReadWithBoundedProgress(QIODevice *pDevice, char *pBuffer, qint64 nSize);
 
 class ArchiveBoundedReadDevice : public QIODevice {
@@ -245,6 +296,115 @@ static void SzFree(ISzAllocPtr, void *address)
 }
 
 static ISzAlloc g_Alloc = {SzAlloc, SzFree};
+
+bool XArchive::captureSourceDeviceSnapshot(QIODevice *pDevice,
+                                           SOURCE_DEVICE_SNAPSHOT *pSnapshot)
+{
+    if (pSnapshot) *pSnapshot = SOURCE_DEVICE_SNAPSHOT();
+    if (!pDevice || !pSnapshot || !pDevice->isOpen() ||
+        !pDevice->isReadable() || pDevice->isSequential()) {
+        return false;
+    }
+
+    SOURCE_DEVICE_SNAPSHOT snapshot = {};
+    snapshot.pSourceDevice = pDevice;
+    snapshot.rootKind = SOURCE_DEVICE_ROOT_UNKNOWN;
+    snapshot.nRootSize = -1;
+    snapshot.nBufferBackingIdentity = 0;
+
+    QSet<QIODevice *> setVisited;
+    QIODevice *pCurrent = pDevice;
+    while (pCurrent) {
+        if (setVisited.contains(pCurrent) || !pCurrent->isOpen() ||
+            !pCurrent->isReadable() || pCurrent->isSequential() ||
+            (pCurrent->size() < 0)) {
+            return false;
+        }
+        setVisited.insert(pCurrent);
+
+        SOURCE_DEVICE_CHAIN_ITEM item = {};
+        item.pDevice = pCurrent;
+        item.nSize = pCurrent->size();
+
+        SubDevice *pSubDevice = dynamic_cast<SubDevice *>(pCurrent);
+        item.bIsSubDevice = (pSubDevice != nullptr);
+        if (pSubDevice) {
+            item.nInitLocation = pSubDevice->getInitLocation();
+            snapshot.listChain.append(item);
+            pCurrent = pSubDevice->getOrigDevice();
+            if (!pCurrent) return false;
+        } else {
+            snapshot.listChain.append(item);
+            snapshot.pRootDevice = pCurrent;
+            break;
+        }
+    }
+
+    QIODevice *pRootDevice = snapshot.pRootDevice.data();
+    if (!pRootDevice || snapshot.listChain.isEmpty()) return false;
+    snapshot.nRootSize = pRootDevice->size();
+
+    if (QBuffer *pBuffer = dynamic_cast<QBuffer *>(pRootDevice)) {
+        snapshot.rootKind = SOURCE_DEVICE_ROOT_BUFFER;
+        snapshot.nBufferBackingIdentity =
+            reinterpret_cast<quintptr>(&pBuffer->buffer());
+        // This is deliberately an implicit-shared value snapshot: ordinary
+        // QByteArray/QBuffer mutations detach and become detectable without a
+        // second archive-sized allocation.
+        snapshot.baBufferSnapshot = pBuffer->buffer();
+    } else if (QFile *pFile = dynamic_cast<QFile *>(pRootDevice)) {
+        snapshot.rootKind = SOURCE_DEVICE_ROOT_FILE;
+        snapshot.sFilePath = archiveNormalizedFilePath(pFile);
+        snapshot.baFilePhysicalIdentity = archiveFilePhysicalIdentity(pFile);
+        // QFile::open(fd, ...) has no path.  Preserve that supported use case
+        // whenever the platform can identify the opened file physically.
+        if (snapshot.sFilePath.isEmpty() &&
+            snapshot.baFilePhysicalIdentity.isEmpty()) {
+            return false;
+        }
+    }
+
+    *pSnapshot = snapshot;
+    return true;
+}
+
+bool XArchive::isSourceDeviceSnapshotCurrent(
+    const SOURCE_DEVICE_SNAPSHOT &snapshot, QIODevice *pCurrentDevice)
+{
+    // Check the guarded QPointer before inspecting pCurrentDevice: XBinary used
+    // to retain the same now-dangling address after an external QObject died.
+    if (!snapshot.pSourceDevice ||
+        (pCurrentDevice != snapshot.pSourceDevice.data())) {
+        return false;
+    }
+
+    SOURCE_DEVICE_SNAPSHOT current = {};
+    if (!captureSourceDeviceSnapshot(pCurrentDevice, &current) ||
+        (current.pRootDevice.data() != snapshot.pRootDevice.data()) ||
+        (current.listChain.size() != snapshot.listChain.size()) ||
+        (current.rootKind != snapshot.rootKind) ||
+        (current.nRootSize != snapshot.nRootSize) ||
+        (current.nBufferBackingIdentity != snapshot.nBufferBackingIdentity) ||
+        (current.baBufferSnapshot != snapshot.baBufferSnapshot) ||
+        (current.sFilePath != snapshot.sFilePath) ||
+        (current.baFilePhysicalIdentity != snapshot.baFilePhysicalIdentity)) {
+        return false;
+    }
+
+    for (qint32 i = 0; i < snapshot.listChain.size(); ++i) {
+        const SOURCE_DEVICE_CHAIN_ITEM &expected = snapshot.listChain.at(i);
+        const SOURCE_DEVICE_CHAIN_ITEM &actual = current.listChain.at(i);
+        if (!expected.pDevice ||
+            (actual.pDevice.data() != expected.pDevice.data()) ||
+            (actual.bIsSubDevice != expected.bIsSubDevice) ||
+            (actual.nInitLocation != expected.nInitLocation) ||
+            (actual.nSize != expected.nSize)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice)
 {

@@ -116,6 +116,10 @@ public:
         qint64 nMainHeaderSize;                    // CFHEADER plus reserve/link fields
         QList<qint64> listFileEnds;                // End offsets including NUL-terminated names
         QPointer<QIODevice> pSourceDevice;         // Device whose bytes were validated by initUnpack
+        QPointer<QIODevice> pSourceRootDevice;     // Unwrapped backing device captured by initUnpack
+        QByteArray baSourceBackingIdentity;        // Stable backing identity (buffer/file/device)
+        QByteArray baSourceBufferSnapshot;         // Implicit-shared QBuffer value captured by initUnpack
+        qint64 nSourceRootSize;                     // Backing size captured by initUnpack
     };
 
     struct CAB_PACK_CONTEXT {
