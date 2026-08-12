@@ -969,6 +969,11 @@ bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
     WIM_UNPACK_CONTEXT *pContext = (WIM_UNPACK_CONTEXT *)pState->pContext;
 
+    // The parsed context belongs to the source device that was active during
+    // initUnpack().  Reject a later setDevice() replacement before touching
+    // either iterator state or the caller's output device.
+    if (getDevice() != pContext->pSourceDevice) return false;
+
     if (pState->nCurrentIndex >= pContext->listRecords.count()) {
         return false;
     }

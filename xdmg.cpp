@@ -1614,7 +1614,7 @@ QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseBlkxPartitions(const QByteArray &baX
                 break;
             }
 
-            const QStringRef elementName = reader.name();
+            const auto elementName = reader.name();
             if (bWaitingForRootDict) {
                 if (((nDepth - 1) != nPlistDepth) ||
                     (elementName != QLatin1String("dict"))) {
@@ -1812,7 +1812,7 @@ QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseBlkxPartitions(const QByteArray &baX
         } else if (token == QXmlStreamReader::Characters) {
             if (!reader.isWhitespace()) bMalformed = true;
         } else if (token == QXmlStreamReader::EndElement) {
-            const QStringRef elementName = reader.name();
+            const auto elementName = reader.name();
             if ((nPartitionDictDepth == nDepth) && (elementName == QLatin1String("dict"))) {
                 if (bPartitionKeyPending || !bDataSeen || baMishData.isEmpty() ||
                     (listResult.size() >= DMG_MAX_PARTITIONS)) {
