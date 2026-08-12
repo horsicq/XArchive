@@ -89,6 +89,111 @@ bool dmgRangeWithin(quint64 nOffset, quint64 nLength, quint64 nContainerSize)
     return (nOffset <= nContainerSize) && (nLength <= (nContainerSize - nOffset));
 }
 
+class DMGXmlRangeDevice : public QIODevice {
+public:
+    DMGXmlRangeDevice(QIODevice *pDevice, qint64 nOffset, qint64 nLength,
+                      XBinary::PDSTRUCT *pPdStruct)
+        : m_pDevice(pDevice), m_nOffset(nOffset), m_nLength(nLength),
+          m_nPosition(0), m_pPdStruct(pPdStruct)
+    {
+    }
+
+    bool isSequential() const override { return true; }
+
+    qint64 bytesAvailable() const override
+    {
+        return qMax<qint64>(0, m_nLength - m_nPosition) +
+               QIODevice::bytesAvailable();
+    }
+
+protected:
+    qint64 readData(char *pData, qint64 nMaxSize) override
+    {
+        if (!m_pDevice || (nMaxSize < 0) ||
+            ((nMaxSize > 0) && !pData) ||
+            !XBinary::isPdStructNotCanceled(m_pPdStruct)) {
+            return -1;
+        }
+        if ((nMaxSize == 0) || (m_nPosition == m_nLength)) return 0;
+
+        // Keep XML prolog discovery lazy and give cancellation a bounded
+        // polling interval even if QXmlStreamReader asks for a large buffer.
+        const qint64 nReadSize = qMin<qint64>(
+            0x10000, qMin(nMaxSize, m_nLength - m_nPosition));
+        const qint64 nRead = XBinary::read_array_process(
+            m_pDevice, m_nOffset + m_nPosition, pData, nReadSize,
+            m_pPdStruct);
+        if (nRead != nReadSize) return -1;
+        m_nPosition += nRead;
+        return nRead;
+    }
+
+    qint64 writeData(const char *, qint64) override { return -1; }
+
+private:
+    QIODevice *m_pDevice;
+    qint64 m_nOffset;
+    qint64 m_nLength;
+    qint64 m_nPosition;
+    XBinary::PDSTRUCT *m_pPdStruct;
+};
+
+bool dmgHasUnnamespacedPlistRoot(QIODevice *pDevice, qint64 nOffset,
+                                 qint64 nLength,
+                                 XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pDevice || !pDevice->isOpen() || !pDevice->isReadable() ||
+        (nOffset < 0) || (nLength <= 0) ||
+        ((quint64)nLength > DMG_MAX_XML_SIZE) ||
+        (pDevice->size() < 0) || (nOffset > pDevice->size()) ||
+        (nLength > pDevice->size() - nOffset) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    DMGXmlRangeDevice xmlRange(pDevice, nOffset, nLength, pPdStruct);
+    if (!xmlRange.open(QIODevice::ReadOnly)) return false;
+
+    QXmlStreamReader reader(&xmlRange);
+    bool bDtdSeen = false;
+    while (!reader.atEnd() &&
+           XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const QXmlStreamReader::TokenType token = reader.readNext();
+        if (token == QXmlStreamReader::DTD) {
+            const QString sPublicId = reader.dtdPublicId().toString();
+            const QString sSystemId = reader.dtdSystemId().toString();
+            const bool bNoExternalId =
+                sPublicId.isEmpty() && sSystemId.isEmpty();
+            const bool bApplePlistId =
+                ((sPublicId == QLatin1String("-//Apple//DTD PLIST 1.0//EN")) ||
+                 (sPublicId == QLatin1String("-//Apple Computer//DTD PLIST 1.0//EN"))) &&
+                (sSystemId == QLatin1String(
+                    "http://www.apple.com/DTDs/PropertyList-1.0.dtd"));
+            if (bDtdSeen ||
+                (reader.dtdName() != QLatin1String("plist")) ||
+                !reader.entityDeclarations().isEmpty() ||
+                !reader.notationDeclarations().isEmpty() ||
+                (!bNoExternalId && !bApplePlistId)) {
+                return false;
+            }
+            bDtdSeen = true;
+        } else if (token == QXmlStreamReader::StartElement) {
+            return reader.name() == QLatin1String("plist") &&
+                   reader.prefix().isEmpty() &&
+                   reader.namespaceUri().isEmpty();
+        } else if ((token == QXmlStreamReader::Characters) &&
+                   !reader.isWhitespace()) {
+            return false;
+        } else if ((token == QXmlStreamReader::EndElement) ||
+                   (token == QXmlStreamReader::EntityReference) ||
+                   (token == QXmlStreamReader::Invalid)) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 bool dmgChecksumDescriptorValid(const quint32 *pChecksum)
 {
     if (!pChecksum || (pChecksum[1] > 1024)) return false;
@@ -790,11 +895,9 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
             addArchiveBase(0);
         }
 
-        const quint64 nMetadataBudget =
+        const quint64 nDataHashBudget =
             (nPayloadLimit > ((std::numeric_limits<quint64>::max)() / 4)) ?
                 (std::numeric_limits<quint64>::max)() : nPayloadLimit * 4;
-        quint64 nMetadataCost = 0;
-        const quint64 nDataHashBudget = nMetadataBudget;
         quint64 nDataHashCost = 0;
         for (quint64 nArchiveBase : listArchiveBases) {
             KOLY_BLOCK candidate = kolyBlock;
@@ -817,8 +920,19 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
             QList<DMG_PARTITION_INFO> listCandidatePartitions;
             if (candidate.nXmlLength != 0) {
                 if (candidate.nXmlLength > (quint64)(std::numeric_limits<qint32>::max)()) continue;
-                if (candidate.nXmlLength > nMetadataBudget - nMetadataCost) continue;
-                nMetadataCost += candidate.nXmlLength;
+                // A raw declaration can occur inside a wrapper or inside the
+                // genuine document.  Reject those shifted bases by streaming
+                // only as far as the exact range's first element before
+                // allocating and parsing the complete metadata.  The explicit
+                // XML-size and candidate-count caps remain the hard bounds;
+                // one false candidate can no longer consume a shared budget
+                // that makes a later coherent base unreachable.
+                if (!dmgHasUnnamespacedPlistRoot(
+                        getDevice(), (qint64)candidate.nXmlOffset,
+                        (qint64)candidate.nXmlLength, pPdStruct)) {
+                    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+                    continue;
+                }
                 baXml.resize((qint32)candidate.nXmlLength);
                 if ((read_array_process((qint64)candidate.nXmlOffset, baXml.data(), baXml.size(),
                                         pPdStruct) != baXml.size()) ||
@@ -831,8 +945,6 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
                        (candidate.nResourceForkLength <= DMG_MAX_RESOURCE_SIZE) &&
                        (candidate.nResourceForkLength <=
                         (quint64)(std::numeric_limits<qint32>::max)())) {
-                if (candidate.nResourceForkLength > nMetadataBudget - nMetadataCost) continue;
-                nMetadataCost += candidate.nResourceForkLength;
                 QByteArray baResource((qint32)candidate.nResourceForkLength, 0);
                 if ((read_array_process((qint64)candidate.nResourceForkOffset,
                                         baResource.data(), baResource.size(), pPdStruct) ==
@@ -2698,7 +2810,6 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
         return true;
     };
 
-    quint64 nMetadataValidationCost = 0;
     const auto tryExactImage = [&](qint64 nOffset, qint64 nLength,
                                    const KOLY_BLOCK &rawKoly, bool bFrontKoly,
                                    FFSEARCH_INFO *pInfo) -> bool {
@@ -2731,21 +2842,6 @@ XBinary::FFSEARCH_INFO XDMG::searchFFNext(FFSEARCH_STATE *pState, PDSTRUCT *pPdS
                 return false;
             }
         }
-
-        const quint64 nMetadataCost =
-            (rawKoly.nXmlLength != 0) ? rawKoly.nXmlLength :
-            (((rawKoly.nResourceForkLength >= 0x100) &&
-              (rawKoly.nResourceForkLength <= DMG_MAX_RESOURCE_SIZE)) ?
-                 rawKoly.nResourceForkLength : 0);
-        const quint64 nEarnedDistance = (quint64)((nOffset + nLength) - nCallStart);
-        const quint64 nAllowedMetadataCost =
-            (nEarnedDistance > ((std::numeric_limits<quint64>::max)() / 4)) ?
-                (std::numeric_limits<quint64>::max)() : nEarnedDistance * 4;
-        if ((nMetadataValidationCost > nAllowedMetadataCost) ||
-            (nMetadataCost > nAllowedMetadataCost - nMetadataValidationCost)) {
-            return false;
-        }
-        nMetadataValidationCost += nMetadataCost;
 
         SubDevice subdevice(pSearchDevice, nOffset, nLength);
         if (!subdevice.open(QIODevice::ReadOnly)) return false;

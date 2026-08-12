@@ -26,6 +26,7 @@ const qint32 XPRESS_NUM_SYMBOLS = 512;
 const qint32 XPRESS_TABLE_BYTES = 256;  // 512 nibbles
 const qint32 XPRESS_MAX_CODEWORD_LEN = 15;
 const qint32 XPRESS_MIN_MATCH_LEN = 3;
+const qint32 XPRESS_HUFFMAN_MAX_BLOCK_SIZE = 64 * 1024;
 
 // ---- Plain XPRESS LZ77 (MS-XCA 2.1) ----
 //
@@ -403,7 +404,8 @@ bool XXPressDecoder::decompressHuffman(const QByteArray &baCompressed, QByteArra
 {
     if (!pbaUncompressed || (pbaUncompressed == &baCompressed) ||
         !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        (nUncompressedSize <= 0)) {
+        (nUncompressedSize <= 0) ||
+        (nUncompressedSize > XPRESS_HUFFMAN_MAX_BLOCK_SIZE)) {
         return false;
     }
 
