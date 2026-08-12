@@ -31,7 +31,7 @@ XTAR_ZSTD::~XTAR_ZSTD()
 
 bool XTAR_ZSTD::isValid(PDSTRUCT *pPdStruct)
 {
-    return isValid(getDevice());
+    return XTARCOMPRESSED::isValid(pPdStruct);
 }
 
 bool XTAR_ZSTD::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -40,25 +40,9 @@ bool XTAR_ZSTD::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    bool bResult = false;
-    qint64 nOffset = pDevice->pos();
-    pDevice->seek(0);
-
-    QByteArray baMagic = pDevice->read(4);
-
-    if (baMagic.size() == 4) {
-        quint8 nByte0 = (quint8)(uchar)baMagic.at(0);
-        quint8 nByte1 = (quint8)(uchar)baMagic.at(1);
-        quint8 nByte2 = (quint8)(uchar)baMagic.at(2);
-        quint8 nByte3 = (quint8)(uchar)baMagic.at(3);
-
-        // Zstd magic: 0x28 0xB5 0x2F 0xFD
-        bResult = (nByte0 == 0x28) && (nByte1 == 0xB5) && (nByte2 == 0x2F) && (nByte3 == 0xFD);
-    }
-
-    pDevice->seek(nOffset);
-
-    return bResult;
+    if (detectCompressionType(pDevice) != COMPRESSION_ZSTD) return false;
+    XTAR_ZSTD archive(pDevice);
+    return archive.XTARCOMPRESSED::isValid(pPdStruct);
 }
 
 XBinary::FT XTAR_ZSTD::getFileType()

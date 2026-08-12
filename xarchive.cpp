@@ -170,6 +170,12 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> listResult;
 
+    // -1 is the only unbounded sentinel.  Avoid initializing an archive when
+    // the requested result is necessarily empty or the limit is invalid.
+    if (nLimit < -1 || nLimit == 0) {
+        return listResult;
+    }
+
     XBinary::PDSTRUCT pdStructEmpty = {};
 
     if (!pPdStruct) {
@@ -261,7 +267,8 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     }
 
     // Clean up unpacking state
-    finishUnpack(&state, pPdStruct);
+    // Cleanup must not inherit a canceled enumeration token.
+    finishUnpack(&state, nullptr);
 
     return listResult;
 }
@@ -1230,7 +1237,8 @@ bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
 {
     bool bResult = false;
 
-    if (pState && pDevice && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (pState && pDevice && (pState->nCurrentIndex >= 0) && (pState->nNumberOfRecords > 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         XBinary::ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
 
         if (archiveRecord.mapProperties.value(XBinary::FPART_PROP_ISFOLDER).toBool()) {
@@ -1335,6 +1343,10 @@ bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
             }
 
             if (!bResult) {
+                if (!pDevice->isSequential()) {
+                    XBinary::resize(pDevice, 0);
+                    pDevice->seek(0);
+                }
                 XBinary::setPdStructErrorString(pPdStruct, tr("Cannot write unpacked output"));
             }
         }

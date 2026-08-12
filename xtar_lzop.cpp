@@ -31,9 +31,7 @@ XTAR_LZOP::~XTAR_LZOP()
 
 bool XTAR_LZOP::isValid(PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
-    return isValid(getDevice());
+    return XTARCOMPRESSED::isValid(pPdStruct);
 }
 
 bool XTAR_LZOP::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -42,24 +40,9 @@ bool XTAR_LZOP::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    bool bResult = false;
-    qint64 nOffset = pDevice->pos();
-    pDevice->seek(0);
-
-    QByteArray baMagic = pDevice->read(3);
-
-    if (baMagic.size() == 3) {
-        quint8 nByte0 = (quint8)(uchar)baMagic.at(0);
-        quint8 nByte1 = (quint8)(uchar)baMagic.at(1);
-        quint8 nByte2 = (quint8)(uchar)baMagic.at(2);
-
-        // LZOP magic prefix: 89 4C 5A
-        bResult = (nByte0 == 0x89) && (nByte1 == 0x4C) && (nByte2 == 0x5A);
-    }
-
-    pDevice->seek(nOffset);
-
-    return bResult;
+    if (detectCompressionType(pDevice) != COMPRESSION_LZOP) return false;
+    XTAR_LZOP archive(pDevice);
+    return archive.XTARCOMPRESSED::isValid(pPdStruct);
 }
 
 XBinary::FT XTAR_LZOP::getFileType()

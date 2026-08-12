@@ -155,8 +155,8 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
             }
         }
 
-        // Flush remaining output buffer
-        if (bResult && nOutputBufferPos > 0) {
+        // Flush remaining output buffer to preserve partial progress even on controlled failures
+        if (nOutputBufferPos > 0) {
             if (XBinary::_writeDevice(pOutputBuffer, nOutputBufferPos, pDecompressState) != nOutputBufferPos) {
                 pDecompressState->bWriteError = true;
                 bResult = false;

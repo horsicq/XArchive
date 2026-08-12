@@ -36,20 +36,20 @@ public:
         BTYPE_IA64      // IA64 branch bundles
     };
 
-    static void applyBranchDecode(QByteArray &baData, BTYPE type, quint32 nIp = 0);
-    static void applyDeltaDecode(QByteArray &baData, qint32 nDistance);
+    static void applyBranchDecode(QByteArray &baData, BTYPE type, quint32 nIp = 0, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static void applyDeltaDecode(QByteArray &baData, qint32 nDistance, XBinary::PDSTRUCT *pPdStruct = nullptr);
 
     // Whole-buffer stream wrappers for the XDecompress dispatch
-    static bool decompressBranch(XBinary::DATAPROCESS_STATE *pState, BTYPE type, XBinary::PDSTRUCT *pPdStruct);
+    static bool decompressBranch(XBinary::DATAPROCESS_STATE *pState, BTYPE type, XBinary::PDSTRUCT *pPdStruct, quint32 nIp = 0);
     static bool decompressDelta(XBinary::DATAPROCESS_STATE *pState, qint32 nDistance, XBinary::PDSTRUCT *pPdStruct);
 
 private:
-    static void _decodeARM(unsigned char *pData, qint32 nSize, quint32 nIp);
-    static void _decodeARMT(unsigned char *pData, qint32 nSize, quint32 nIp);
-    static void _decodeARM64(unsigned char *pData, qint32 nSize, quint32 nIp);
-    static void _decodePPC(unsigned char *pData, qint32 nSize, quint32 nIp);
-    static void _decodeSPARC(unsigned char *pData, qint32 nSize, quint32 nIp);
-    static void _decodeIA64(unsigned char *pData, qint32 nSize, quint32 nIp);
+    static void _decodeARM(unsigned char *pData, qint32 nSize, quint32 nIp, XBinary::PDSTRUCT *pPdStruct);
+    static void _decodeARMT(unsigned char *pData, qint32 nSize, quint32 nIp, XBinary::PDSTRUCT *pPdStruct);
+    static void _decodeARM64(unsigned char *pData, qint32 nSize, quint32 nIp, XBinary::PDSTRUCT *pPdStruct);
+    static void _decodePPC(unsigned char *pData, qint32 nSize, quint32 nIp, XBinary::PDSTRUCT *pPdStruct);
+    static void _decodeSPARC(unsigned char *pData, qint32 nSize, quint32 nIp, XBinary::PDSTRUCT *pPdStruct);
+    static void _decodeIA64(unsigned char *pData, qint32 nSize, quint32 nIp, XBinary::PDSTRUCT *pPdStruct);
 };
 
 #endif  // XBRANCHDECODER_H

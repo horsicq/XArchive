@@ -161,6 +161,18 @@ static bool decIsValidBufferSize(qint64 nSize)
     return (nSize >= 0) && (nSize <= (std::numeric_limits<qint32>::max)());
 }
 
+static bool decGetBranchStartOffset(const QByteArray &baProperty, quint32 *pnStartOffset)
+{
+    if (!pnStartOffset) return false;
+    *pnStartOffset = 0;
+    if (baProperty.isEmpty()) return true;
+    if (baProperty.size() != 4) return false;
+
+    *pnStartOffset = (quint32)(quint8)baProperty.at(0) | ((quint32)(quint8)baProperty.at(1) << 8) |
+                     ((quint32)(quint8)baProperty.at(2) << 16) | ((quint32)(quint8)baProperty.at(3) << 24);
+    return true;
+}
+
 static bool decReadInputToByteArray(XBinary::DATAPROCESS_STATE *pState, QByteArray *pData)
 {
     if (!pState || !pState->pDeviceInput || !pData) return false;
@@ -685,13 +697,22 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
         return false;
     }
 
-    QString sArchiveMD5 = pState->mapProperties.value(XBinary::FPART_PROP_FILEMD5).toString();
-    if (!sArchiveMD5.isEmpty() && sArchiveMD5 != m_sCurrentArchiveMD5) {
-        clearSolidCache();
-        m_sCurrentArchiveMD5 = sArchiveMD5;
-    }
-
     bool bIsSolid = pState->mapProperties.value(XBinary::FPART_PROP_ISSOLID, false).toBool();
+
+    QString sArchiveMD5 = pState->mapProperties.value(XBinary::FPART_PROP_FILEMD5).toString();
+    if (bIsSolid) {
+        if (sArchiveMD5.isEmpty()) {
+            // A device pointer and compressed extents do not identify mutable
+            // QIODevice contents.  Without an archive digest there is no safe
+            // way to prove that a cached solid block still belongs to the
+            // current bytes, so make the cache invocation-local.
+            clearSolidCache();
+            m_sCurrentArchiveMD5.clear();
+        } else if (sArchiveMD5 != m_sCurrentArchiveMD5) {
+            clearSolidCache();
+            m_sCurrentArchiveMD5 = sArchiveMD5;
+        }
+    }
 
     if (bIsSolid && (m_pCurrentSolidDevice != pState->pDeviceInput)) {
         clearSolidCache();
@@ -1057,27 +1078,36 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             // Optional 4-byte LE start-offset property (ip); absent/0 for standard 7z.
             quint32 nIp = 0;
-            if (baProperty.size() >= 4) {
-                nIp = (quint32)(quint8)baProperty.at(0) | ((quint32)(quint8)baProperty.at(1) << 8) | ((quint32)(quint8)baProperty.at(2) << 16) |
-                      ((quint32)(quint8)baProperty.at(3) << 24);
-            }
+            if (!decGetBranchStartOffset(baProperty, &nIp)) return false;
 
             Algo_utils::applyBCJX86Decode(baData, nIp);
 
             bResult = XBinary::_writeDevice(baData.constData(), baData.size(), pState) == baData.size();
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARM64_BCJ) {
-        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARM64, pPdStruct);
+        quint32 nIp = 0;
+        bResult = decGetBranchStartOffset(baProperty, &nIp) &&
+                  XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARM64, pPdStruct, nIp);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARM_BCJ) {
-        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARM, pPdStruct);
+        quint32 nIp = 0;
+        bResult = decGetBranchStartOffset(baProperty, &nIp) &&
+                  XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARM, pPdStruct, nIp);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARMT_BCJ) {
-        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARMT, pPdStruct);
+        quint32 nIp = 0;
+        bResult = decGetBranchStartOffset(baProperty, &nIp) &&
+                  XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_ARMT, pPdStruct, nIp);
     } else if (compressMethod == XBinary::HANDLE_METHOD_PPC_BCJ) {
-        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_PPC, pPdStruct);
+        quint32 nIp = 0;
+        bResult = decGetBranchStartOffset(baProperty, &nIp) &&
+                  XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_PPC, pPdStruct, nIp);
     } else if (compressMethod == XBinary::HANDLE_METHOD_SPARC_BCJ) {
-        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_SPARC, pPdStruct);
+        quint32 nIp = 0;
+        bResult = decGetBranchStartOffset(baProperty, &nIp) &&
+                  XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_SPARC, pPdStruct, nIp);
     } else if (compressMethod == XBinary::HANDLE_METHOD_IA64_BCJ) {
-        bResult = XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_IA64, pPdStruct);
+        quint32 nIp = 0;
+        bResult = decGetBranchStartOffset(baProperty, &nIp) &&
+                  XBranchDecoder::decompressBranch(pState, XBranchDecoder::BTYPE_IA64, pPdStruct, nIp);
     } else if (compressMethod == XBinary::HANDLE_METHOD_DELTA) {
         // Property byte holds distance - 1 (7z and XZ delta filter convention)
         qint32 nDistance = baProperty.isEmpty() ? 1 : ((qint32)(quint8)baProperty.at(0) + 1);

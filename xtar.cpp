@@ -20,6 +20,8 @@
  */
 #include "xtar.h"
 
+#include <limits>
+
 XTAR::XCONVERT _TABLE_XTAR_STRUCTID[] = {{XTAR::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                          {XTAR::STRUCTID_POSIX_HEADER, "posix_header", QString("posix_header")}};
 
@@ -36,24 +38,21 @@ bool XTAR::isValid(PDSTRUCT *pPdStruct)
 
 bool XTAR::_isValid(_MEMORY_MAP *pMemoryMap, qint64 nOffset, PDSTRUCT *pPdStruct)
 {
-    // TODO more checks
-    bool bResult = false;
-
-    if ((getSize() - nOffset) >= 0x200)  // TODO const
-    {
-        if (compareSignature(pMemoryMap, "00'ustar'", nOffset + 0x100, pPdStruct)) {
-            bResult = true;
-        }
+    if (!pMemoryMap || !isOffsetAndSizeValid(pMemoryMap, nOffset, 512)) {
+        return false;
     }
 
-    return bResult;
+    qint32 nNumberOfRecords = 0;
+    qint64 nEndOffset = 0;
+
+    return _scanArchive(nOffset, getSize(), &nNumberOfRecords, &nEndOffset, pPdStruct);
 }
 
 bool XTAR::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     XTAR xtar(pDevice);
 
-    return xtar.isValid();
+    return xtar.isValid(pPdStruct);
 }
 
 QString XTAR::getFileFormatExt()
@@ -109,18 +108,10 @@ quint32 XTAR::ftStringToStructID(const QString &sFtString)
 qint32 XTAR::_getNumberOf_posix_headers(qint64 nOffset, PDSTRUCT *pPdStruct)
 {
     qint32 nResult = 0;
+    qint64 nEndOffset = 0;
 
-    while (isPdStructNotCanceled(pPdStruct)) {
-        XTAR::posix_header header = read_posix_header(nOffset);
-
-        if (!compareMemory(header.magic, "ustar", 5)) {
-            break;
-        }
-
-        nResult++;
-
-        nOffset += (0x200);
-        nOffset += align_up(_getSize(header), 0x200);
+    if (!_scanArchive(nOffset, getSize(), &nResult, &nEndOffset, pPdStruct)) {
+        nResult = 0;
     }
 
     return nResult;
@@ -245,15 +236,33 @@ QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 {
     QList<XBinary::FPART> listResult;
 
+    const qint64 nTotalSize = getSize();
+    qint32 nNumberOfRecords = 0;
+    qint64 nArchiveEnd = 0;
+
+    if (!_scanArchive(0, nTotalSize, &nNumberOfRecords, &nArchiveEnd, pPdStruct)) {
+        return listResult;
+    }
+
     qint64 nOffset = 0;
     qint32 nCount = 0;
 
-    while (isPdStructNotCanceled(pPdStruct)) {
-        XTAR::posix_header header = read_posix_header(nOffset);
+    while ((nCount < nNumberOfRecords) && isPdStructNotCanceled(pPdStruct)) {
+        XTAR::posix_header header = {};
+        qint64 nRawSize = 0;
+        qint64 nRecordSize = 0;
+        bool bIsZeroBlock = false;
 
-        if (!compareMemory(header.magic, "ustar", 5)) {
-            break;
+        if (!_readRecord(nOffset, nTotalSize, &header, &nRawSize, &nRecordSize, &bIsZeroBlock) || bIsZeroBlock) {
+            return QList<XBinary::FPART>();
         }
+
+        QByteArray baName(header.name, sizeof(header.name));
+        const qint32 nNullPosition = baName.indexOf('\0');
+        if (nNullPosition != -1) {
+            baName.truncate(nNullPosition);
+        }
+        const QString sName = QString::fromUtf8(baName);
 
         if (nFileParts & FILEPART_HEADER) {
             XBinary::FPART record = {};
@@ -266,44 +275,53 @@ QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         }
 
         if (nFileParts & FILEPART_STREAM) {
-            qint64 nRawSize = _getSize(header);
-            qint64 nAlignedSize = align_up(nRawSize, 0x200);
+            const qint64 nAlignedSize = nRecordSize - 512;
 
             XBinary::FPART record = {};
             record.filePart = FILEPART_STREAM;
-            record.nFileOffset = nOffset + 0x200;
+            record.nFileOffset = nOffset + 512;
             record.nFileSize = nAlignedSize;  // Padded size in archive
             record.nVirtualAddress = -1;
-            record.sName = header.name;
+            record.sName = sName;
             record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE);
             record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nAlignedSize);
             record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nRawSize);  // Actual file size
-            record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, QString(header.name));
+            record.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sName);
             // TODO Checksum
             listResult.append(record);
         }
 
-        nOffset += (0x200);
-        nOffset += align_up(_getSize(header), 0x200);
-
+        nOffset += nRecordSize;
         nCount++;
+
+        if ((nLimit != -1) && (nCount >= nLimit)) {
+            break;
+        }
+    }
+
+    if (!isPdStructNotCanceled(pPdStruct)) {
+        return QList<XBinary::FPART>();
+    }
+
+    if ((nLimit == -1) && (nOffset != nArchiveEnd)) {
+        return QList<XBinary::FPART>();
     }
 
     if (nFileParts & FILEPART_DATA) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_DATA;
         record.nFileOffset = 0;
-        record.nFileSize = nOffset;  // Total size of the file
+        record.nFileSize = nOffset;  // Total size represented by this result
         record.nVirtualAddress = -1;
         record.sName = tr("Data");
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && (nOffset < getSize())) {
+    if ((nFileParts & FILEPART_OVERLAY) && (nOffset < nTotalSize)) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_OVERLAY;
         record.nFileOffset = nOffset;
-        record.nFileSize = getSize() - nOffset;
+        record.nFileSize = nTotalSize - nOffset;
         record.nVirtualAddress = -1;
         record.sName = tr("Overlay");
         listResult.append(record);
@@ -358,11 +376,207 @@ XTAR::posix_header XTAR::read_posix_header(qint64 nOffset)
 
 qint64 XTAR::_getSize(const posix_header &header)
 {
-    // Parse size field - trim whitespace as some tar implementations pad with leading zeros and trailing spaces
-    // Standard format: null-terminated octal string
-    // Some implementations: "00000000400 " (11 digits + space)
-    QString sSizeField = QString(QByteArray(header.size, 12)).trimmed();
-    return sSizeField.toULongLong(0, 8);
+    qint64 nResult = -1;
+    _parseNumber(header.size, sizeof(header.size), &nResult);
+
+    return nResult;
+}
+
+bool XTAR::_parseNumber(const char *pData, qint32 nSize, qint64 *pValue)
+{
+    if (!pData || !pValue || (nSize <= 0)) {
+        return false;
+    }
+
+    const quint8 *pBytes = reinterpret_cast<const quint8 *>(pData);
+
+    // GNU/POSIX base-256 extension.  File sizes are non-negative; reject the
+    // signed form and values that cannot be represented by the public qint64
+    // archive API.
+    if (pBytes[0] & 0x80) {
+        if (pBytes[0] & 0x40) {
+            return false;
+        }
+
+        quint64 nValue = pBytes[0] & 0x7f;
+        const quint64 nMaximum = static_cast<quint64>((std::numeric_limits<qint64>::max)());
+
+        for (qint32 i = 1; i < nSize; i++) {
+            if (nValue > ((nMaximum - pBytes[i]) / 256)) {
+                return false;
+            }
+
+            nValue = (nValue * 256) + pBytes[i];
+        }
+
+        *pValue = static_cast<qint64>(nValue);
+        return true;
+    }
+
+    qint32 nIndex = 0;
+    while ((nIndex < nSize) && ((pBytes[nIndex] == 0) || (pBytes[nIndex] == ' '))) {
+        nIndex++;
+    }
+
+    bool bHasDigit = false;
+    quint64 nValue = 0;
+    const quint64 nMaximum = static_cast<quint64>((std::numeric_limits<qint64>::max)());
+
+    for (; nIndex < nSize; nIndex++) {
+        const quint8 nByte = pBytes[nIndex];
+
+        if ((nByte == 0) || (nByte == ' ')) {
+            for (; nIndex < nSize; nIndex++) {
+                if ((pBytes[nIndex] != 0) && (pBytes[nIndex] != ' ')) {
+                    return false;
+                }
+            }
+            break;
+        }
+
+        if ((nByte < '0') || (nByte > '7')) {
+            return false;
+        }
+
+        const quint64 nDigit = nByte - '0';
+        if (nValue > ((nMaximum - nDigit) / 8)) {
+            return false;
+        }
+
+        nValue = (nValue * 8) + nDigit;
+        bHasDigit = true;
+    }
+
+    if (!bHasDigit) {
+        return false;
+    }
+
+    *pValue = static_cast<qint64>(nValue);
+    return true;
+}
+
+bool XTAR::_readRecord(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader, qint64 *pFileSize, qint64 *pRecordSize, bool *pIsZeroBlock)
+{
+    if (!pHeader || !pFileSize || !pRecordSize || !pIsZeroBlock || (nOffset < 0) || (nTotalSize < 0) ||
+        (nOffset > nTotalSize) || ((nTotalSize - nOffset) < 512)) {
+        return false;
+    }
+
+    QByteArray baHeader(512, 0);
+    if (read_array(nOffset, baHeader.data(), baHeader.size()) != baHeader.size()) {
+        return false;
+    }
+
+    bool bIsZeroBlock = true;
+    for (qint32 i = 0; i < baHeader.size(); i++) {
+        if (baHeader.at(i) != 0) {
+            bIsZeroBlock = false;
+            break;
+        }
+    }
+
+    *pIsZeroBlock = bIsZeroBlock;
+    *pFileSize = 0;
+    *pRecordSize = 512;
+    memset(pHeader, 0, sizeof(posix_header));
+
+    if (bIsZeroBlock) {
+        return true;
+    }
+
+    memcpy(pHeader, baHeader.constData(), sizeof(posix_header));
+
+    if ((pHeader->name[0] == 0) || (memcmp(pHeader->magic, "ustar", 5) != 0)) {
+        return false;
+    }
+
+    qint64 nStoredChecksum = 0;
+    if (!_parseNumber(pHeader->chksum, sizeof(pHeader->chksum), &nStoredChecksum)) {
+        return false;
+    }
+
+    quint64 nUnsignedChecksum = 0;
+    qint64 nSignedChecksum = 0;
+    for (qint32 i = 0; i < baHeader.size(); i++) {
+        const quint8 nUnsignedByte = ((i >= 148) && (i < 156)) ? static_cast<quint8>(' ') : static_cast<quint8>(baHeader.at(i));
+        const qint8 nSignedByte = ((i >= 148) && (i < 156)) ? static_cast<qint8>(' ') : static_cast<qint8>(baHeader.at(i));
+        nUnsignedChecksum += nUnsignedByte;
+        nSignedChecksum += nSignedByte;
+    }
+
+    if ((static_cast<quint64>(nStoredChecksum) != nUnsignedChecksum) &&
+        ((nSignedChecksum < 0) || (nStoredChecksum != nSignedChecksum))) {
+        return false;
+    }
+
+    qint64 nFileSize = 0;
+    if (!_parseNumber(pHeader->size, sizeof(pHeader->size), &nFileSize)) {
+        return false;
+    }
+
+    const qint64 nMaximum = (std::numeric_limits<qint64>::max)();
+    if (nFileSize > (nMaximum - 511)) {
+        return false;
+    }
+
+    const qint64 nAlignedFileSize = ((nFileSize + 511) / 512) * 512;
+    if (nAlignedFileSize > (nMaximum - 512)) {
+        return false;
+    }
+
+    const qint64 nCurrentRecordSize = 512 + nAlignedFileSize;
+    if (nCurrentRecordSize > (nTotalSize - nOffset)) {
+        return false;
+    }
+
+    *pFileSize = nFileSize;
+    *pRecordSize = nCurrentRecordSize;
+
+    return true;
+}
+
+bool XTAR::_scanArchive(qint64 nOffset, qint64 nTotalSize, qint32 *pNumberOfRecords, qint64 *pEndOffset, PDSTRUCT *pPdStruct)
+{
+    if (!pNumberOfRecords || !pEndOffset || (nOffset < 0) || (nTotalSize < 0) || (nOffset > nTotalSize)) {
+        return false;
+    }
+
+    *pNumberOfRecords = 0;
+    *pEndOffset = nOffset;
+
+    const qint32 N_MAX_RECORDS = 1000000;
+    qint64 nCurrentOffset = nOffset;
+    bool bTerminated = false;
+
+    while (nCurrentOffset < nTotalSize) {
+        if (!isPdStructNotCanceled(pPdStruct) || (*pNumberOfRecords >= N_MAX_RECORDS)) {
+            return false;
+        }
+
+        posix_header header = {};
+        qint64 nFileSize = 0;
+        qint64 nRecordSize = 0;
+        bool bIsZeroBlock = false;
+
+        if (!_readRecord(nCurrentOffset, nTotalSize, &header, &nFileSize, &nRecordSize, &bIsZeroBlock)) {
+            return false;
+        }
+
+        if (bIsZeroBlock) {
+            bTerminated = true;
+            break;
+        }
+
+        nCurrentOffset += nRecordSize;
+        (*pNumberOfRecords)++;
+    }
+
+    *pEndOffset = nCurrentOffset;
+
+    // Tolerate an archive ending exactly after its last padded record as many
+    // producers omit the conventional two zero blocks.  Any trailing bytes,
+    // however, must be separated from the archive by a complete zero block.
+    return (*pNumberOfRecords > 0) && (bTerminated || (nCurrentOffset == nTotalSize));
 }
 
 XTAR::posix_header XTAR::createHeader(const QString &sFileName, const QString &sBasePath, qint64 nFileSize, quint32 nMode, qint64 nMTime)
@@ -452,56 +666,52 @@ QMap<XBinary::UNPACK_PROP, QVariant> XTAR::getDefaultUnpackProperties()
 
 bool XTAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
 
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
     }
 
-    if (pState) {
-        pState->mapUnpackProperties = mapProperties;
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 0;
-        pState->pContext = nullptr;
-
-        // Count total number of records
-        qint64 nOffset = 0;
-        qint64 nTotalSize = pState->nTotalSize;
-
-        while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            posix_header header = read_posix_header(nOffset);
-
-            // Check for end of archive (empty header)
-            if (header.name[0] == 0) {
-                break;
-            }
-
-            qint64 nFileSize = _getSize(header);
-            qint64 nRecordSize = 512 + ((nFileSize + 511) / 512) * 512;
-
-            pState->nNumberOfRecords++;
-            nOffset += nRecordSize;
-        }
-
-        bResult = (pState->nNumberOfRecords > 0);
+    if (!pState) {
+        return false;
     }
 
-    return bResult;
+    pState->mapUnpackProperties = mapProperties;
+    pState->mapArchiveProperties.clear();
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = getSize();
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = nullptr;
+
+    qint64 nArchiveEnd = 0;
+    if (!_scanArchive(0, pState->nTotalSize, &pState->nNumberOfRecords, &nArchiveEnd, pPdStruct)) {
+        pState->nTotalSize = 0;
+        pState->nNumberOfRecords = 0;
+        return false;
+    }
+
+    Q_UNUSED(nArchiveEnd)
+
+    return true;
 }
 
 XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     XBinary::ARCHIVERECORD result = {};
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        posix_header header = read_posix_header(pState->nCurrentOffset);
-        qint64 nFileSize = _getSize(header);
+    if (pState && isPdStructNotCanceled(pPdStruct) && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords) && (pState->nCurrentOffset >= 0)) {
+        posix_header header = {};
+        qint64 nFileSize = 0;
+        qint64 nRecordSize = 0;
+        bool bIsZeroBlock = false;
+
+        if (!_readRecord(pState->nCurrentOffset, getSize(), &header, &nFileSize, &nRecordSize, &bIsZeroBlock) || bIsZeroBlock) {
+            return result;
+        }
+
+        Q_UNUSED(nRecordSize)
 
         result.nStreamOffset = pState->nCurrentOffset + 512;
         result.nStreamSize = nFileSize;
@@ -622,14 +832,21 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XTAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
-
     bool bResult = false;
 
-    if (pState && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        posix_header header = read_posix_header(pState->nCurrentOffset);
-        qint64 nFileSize = _getSize(header);
-        qint64 nRecordSize = 512 + ((nFileSize + 511) / 512) * 512;
+    if (pState && isPdStructNotCanceled(pPdStruct) && (pState->nCurrentIndex >= 0) &&
+        (pState->nCurrentIndex < pState->nNumberOfRecords) && (pState->nCurrentOffset >= 0)) {
+        posix_header header = {};
+        qint64 nFileSize = 0;
+        qint64 nRecordSize = 0;
+        bool bIsZeroBlock = false;
+
+        if (!_readRecord(pState->nCurrentOffset, getSize(), &header, &nFileSize, &nRecordSize, &bIsZeroBlock) || bIsZeroBlock) {
+            return false;
+        }
+
+        Q_UNUSED(header)
+        Q_UNUSED(nFileSize)
 
         pState->nCurrentOffset += nRecordSize;
         pState->nCurrentIndex++;
@@ -638,6 +855,25 @@ bool XTAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     return bResult;
+}
+
+bool XTAR::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    Q_UNUSED(pPdStruct)
+
+    if (!pState) {
+        return false;
+    }
+
+    pState->mapUnpackProperties.clear();
+    pState->mapArchiveProperties.clear();
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->pContext = nullptr;
+
+    return true;
 }
 
 QList<XBinary::FPART_PROP> XTAR::getAvailableFPARTProperties()

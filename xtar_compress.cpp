@@ -31,7 +31,7 @@ XTAR_COMPRESS::~XTAR_COMPRESS()
 
 bool XTAR_COMPRESS::isValid(PDSTRUCT *pPdStruct)
 {
-    return isValid(getDevice());
+    return XTARCOMPRESSED::isValid(pPdStruct);
 }
 
 bool XTAR_COMPRESS::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -40,23 +40,9 @@ bool XTAR_COMPRESS::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    bool bResult = false;
-    qint64 nOffset = pDevice->pos();
-    pDevice->seek(0);
-
-    QByteArray baMagic = pDevice->read(2);
-
-    if (baMagic.size() == 2) {
-        quint8 nByte0 = (quint8)(uchar)baMagic.at(0);
-        quint8 nByte1 = (quint8)(uchar)baMagic.at(1);
-
-        // Compress magic: 0x1F 0x9D
-        bResult = (nByte0 == 0x1F) && (nByte1 == 0x9D);
-    }
-
-    pDevice->seek(nOffset);
-
-    return bResult;
+    if (detectCompressionType(pDevice) != COMPRESSION_COMPRESS) return false;
+    XTAR_COMPRESS archive(pDevice);
+    return archive.XTARCOMPRESSED::isValid(pPdStruct);
 }
 
 XBinary::FT XTAR_COMPRESS::getFileType()

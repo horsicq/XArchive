@@ -96,6 +96,7 @@ public:
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
     // Streaming packing API
@@ -108,6 +109,9 @@ private:
     posix_header read_posix_header(qint64 nOffset);
     qint32 _getNumberOf_posix_headers(qint64 nOffset, PDSTRUCT *pPdStruct);
     qint64 _getSize(const posix_header &header);
+    static bool _parseNumber(const char *pData, qint32 nSize, qint64 *pValue);
+    bool _readRecord(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader, qint64 *pFileSize, qint64 *pRecordSize, bool *pIsZeroBlock);
+    bool _scanArchive(qint64 nOffset, qint64 nTotalSize, qint32 *pNumberOfRecords, qint64 *pEndOffset, PDSTRUCT *pPdStruct);
     static posix_header createHeader(const QString &sFileName, const QString &sBasePath, qint64 nFileSize, quint32 nMode, qint64 nMTime);
     static quint32 calculateChecksum(const posix_header &header);
     static void writeOctal(char *pDest, qint32 nSize, qint64 nValue);

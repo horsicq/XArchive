@@ -31,7 +31,7 @@ XTAR_XZ::~XTAR_XZ()
 
 bool XTAR_XZ::isValid(PDSTRUCT *pPdStruct)
 {
-    return isValid(getDevice());
+    return XTARCOMPRESSED::isValid(pPdStruct);
 }
 
 bool XTAR_XZ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -40,27 +40,9 @@ bool XTAR_XZ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    bool bResult = false;
-    qint64 nOffset = pDevice->pos();
-    pDevice->seek(0);
-
-    QByteArray baMagic = pDevice->read(6);
-
-    if (baMagic.size() == 6) {
-        quint8 nByte0 = (quint8)(uchar)baMagic.at(0);
-        quint8 nByte1 = (quint8)(uchar)baMagic.at(1);
-        quint8 nByte2 = (quint8)(uchar)baMagic.at(2);
-        quint8 nByte3 = (quint8)(uchar)baMagic.at(3);
-        quint8 nByte4 = (quint8)(uchar)baMagic.at(4);
-        quint8 nByte5 = (quint8)(uchar)baMagic.at(5);
-
-        // XZ magic: 0xFD 0x37 0x7A 0x58 0x5A 0x00 (".7zXZ\0")
-        bResult = (nByte0 == 0xFD) && (nByte1 == 0x37) && (nByte2 == 0x7A) && (nByte3 == 0x58) && (nByte4 == 0x5A) && (nByte5 == 0x00);
-    }
-
-    pDevice->seek(nOffset);
-
-    return bResult;
+    if (detectCompressionType(pDevice) != COMPRESSION_XZ) return false;
+    XTAR_XZ archive(pDevice);
+    return archive.XTARCOMPRESSED::isValid(pPdStruct);
 }
 
 XBinary::FT XTAR_XZ::getFileType()
