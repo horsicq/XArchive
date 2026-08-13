@@ -438,21 +438,42 @@ bool dmgWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBinary::P
 {
     if (!pDevice || (nSize < 0) || ((nSize > 0) && !pData)) return false;
 
+    QPointer<QIODevice> guardedDevice(pDevice);
+    if (!guardedDevice) return false;
+    const bool bSeekable = !guardedDevice->isSequential();
+    if (!guardedDevice) return false;
+    const qint64 nStart = bSeekable ? guardedDevice->pos() : -1;
+    const qint64 nMax = (std::numeric_limits<qint64>::max)();
+    if (!guardedDevice || (bSeekable && (nStart < 0))) return false;
+
     qint64 nDone = 0;
     while ((nDone < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        const qint64 nWritten = pDevice->write(pData + nDone, nSize - nDone);
+        if (!guardedDevice ||
+            (bSeekable &&
+             ((nDone > nMax - nStart) ||
+              !guardedDevice->seek(nStart + nDone)))) return false;
+        const qint64 nWritten = guardedDevice->write(
+            pData + nDone, nSize - nDone);
+        if (!guardedDevice) return false;
         if ((nWritten <= 0) || (nWritten > (nSize - nDone))) return false;
         nDone += nWritten;
     }
-    return (nDone == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+    if (!guardedDevice || (nDone != nSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (bSeekable &&
+        ((nSize > nMax - nStart) ||
+         !guardedDevice->seek(nStart + nSize))) return false;
+    return true;
 }
 
 void dmgRollbackWrite(QIODevice *pDevice, qint64 nStartPosition)
 {
-    if (pDevice && !pDevice->isSequential() && (nStartPosition >= 0) &&
-        XBinary::isResizeEnable(pDevice)) {
-        XBinary::resize(pDevice, nStartPosition);
-        pDevice->seek(nStartPosition);
+    QPointer<QIODevice> guardedDevice(pDevice);
+    if (guardedDevice && !guardedDevice->isSequential() && guardedDevice &&
+        (nStartPosition >= 0) &&
+        XBinary::isResizeEnable(guardedDevice.data()) && guardedDevice) {
+        XBinary::resize(guardedDevice.data(), nStartPosition);
+        if (guardedDevice) guardedDevice->seek(nStartPosition);
     }
 }
 
@@ -963,6 +984,39 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
                 continue;
             }
 
+            // Every required UDIF fork owns a distinct physical extent.  A
+            // range can be individually in-bounds yet overlap another fork,
+            // yielding contradictory metadata/file-part ownership.  Front
+            // KOLY images also reserve their leading 512-byte header.
+            QList<QPair<quint64, quint64>> listRequiredRanges;
+            const auto addDisjointRange =
+                [&listRequiredRanges](quint64 nStart, quint64 nLength) -> bool {
+                if (nLength == 0) return true;
+                if (nStart >
+                    (std::numeric_limits<quint64>::max)() - nLength) {
+                    return false;
+                }
+                const quint64 nEnd = nStart + nLength;
+                for (const QPair<quint64, quint64> &range :
+                     listRequiredRanges) {
+                    if ((nStart < range.second) &&
+                        (range.first < nEnd)) {
+                        return false;
+                    }
+                }
+                listRequiredRanges.append(qMakePair(nStart, nEnd));
+                return true;
+            };
+            if ((bFrontKoly && !addDisjointRange(0, 512)) ||
+                !addDisjointRange(candidate.nDataForkOffset,
+                                  candidate.nDataForkLength) ||
+                !addDisjointRange(candidate.nResourceForkOffset,
+                                  candidate.nResourceForkLength) ||
+                !addDisjointRange(candidate.nXmlOffset,
+                                  candidate.nXmlLength)) {
+                continue;
+            }
+
             // A candidate base is accepted only when it leads to coherent
             // partition metadata.  Range checks alone are ambiguous in a
             // carrier that happens to contain a false XML marker.
@@ -1039,7 +1093,9 @@ bool XDMG::_loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bR
             const bool bUseCodeSignature =
                 (candidate.nCodeSignatureLength != 0) &&
                 normalizePair(&candidate.nCodeSignatureOffset,
-                              candidate.nCodeSignatureLength);
+                              candidate.nCodeSignatureLength) &&
+                addDisjointRange(candidate.nCodeSignatureOffset,
+                                 candidate.nCodeSignatureLength);
             if (!bUseCodeSignature) {
                 // Several old writers left garbage in this optional pair.  It
                 // is non-authoritative and cannot weaken required-fork checks.
@@ -1512,44 +1568,63 @@ QMap<XBinary::UNPACK_PROP, QVariant> XDMG::getDefaultUnpackProperties()
 
 bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapOptions, PDSTRUCT *pPdStruct)
 {
-    if (!pState) return false;
-    finishUnpack(pState, nullptr);
+    QPointer<XDMG> guardedThis(this);
+    if (!pState || m_bUnpackOperationInProgress) return false;
+    const bool bFinished = guardedThis->finishUnpack(pState, nullptr);
+    if (!guardedThis || !bFinished) return false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
     if (!isPdStructNotCanceled(pPdStruct)) return false;
+    const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
+    if (!guardedThis || !bBound) return false;
+    const auto failSource = [&guardedThis, pState]() -> bool {
+        if (!guardedThis) return false;
+        guardedThis->releaseUnpackSource(pState);
+        return false;
+    };
 
-    pState->mapUnpackProperties = mapOptions;
-    pState->nCurrentOffset = 0;
-    pState->nTotalSize = getSize();
+    SOURCE_DEVICE_SNAPSHOT sourceSnapshot = {};
+    if (!guardedThis->getBoundUnpackSourceSnapshot(pState, &sourceSnapshot))
+        return failSource();
 
     KOLY_BLOCK kolyBlock = {};
     QList<DMG_PARTITION_INFO> listPartitions;
-    if (!_loadPartitionMetadata(&kolyBlock, &listPartitions, pPdStruct)) {
-        finishUnpack(pState, nullptr);
-        return false;
+    const bool bMetadata = guardedThis->_loadPartitionMetadata(
+        &kolyBlock, &listPartitions, pPdStruct);
+    if (!guardedThis) return false;
+    if (!bMetadata) {
+        return failSource();
     }
 
     QList<MISH_BLOCK> listMishBlocks;
     QList<QList<BLOCK_DATA>> listStripes;
     QList<QString> listPartitionNames;
-    if (!_parseAllPartitions(listPartitions, kolyBlock, &listMishBlocks, &listStripes, pPdStruct)) {
-        finishUnpack(pState, nullptr);
-        return false;
+    const bool bPartitions = guardedThis->_parseAllPartitions(
+        listPartitions, kolyBlock, &listMishBlocks, &listStripes,
+        pPdStruct);
+    if (!guardedThis) return false;
+    if (!bPartitions) {
+        return failSource();
     }
     for (qint32 i = 0; i < listPartitions.size(); i++) {
         listPartitionNames.append(listPartitions.at(i).sName);
     }
 
     if (!isPdStructNotCanceled(pPdStruct) || listMishBlocks.isEmpty()) {
-        finishUnpack(pState, nullptr);
-        return false;
+        return failSource();
     }
+
+    const bool bSnapshotCurrent = guardedThis->isSourceDeviceSnapshotCurrent(
+        sourceSnapshot, guardedThis->getDevice(), pPdStruct);
+    if (!guardedThis) return false;
+    if (!bSnapshotCurrent) return failSource();
 
     DMG_UNPACK_CONTEXT *pContext = new (std::nothrow) DMG_UNPACK_CONTEXT;
     if (!pContext) {
-        finishUnpack(pState, nullptr);
-        return false;
+        return failSource();
     }
 
-    pContext->pSourceDevice = getDevice();
+    pContext->sourceSnapshot = sourceSnapshot;
     pContext->baXmlData.clear();
     pContext->nDataForkOffset = (qint64)kolyBlock.nDataForkOffset;
     pContext->nDataForkLength = (qint64)kolyBlock.nDataForkLength;
@@ -1561,18 +1636,49 @@ bool XDMG::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pContext->nCurrentFileIndex = 0;
     pContext->sCurrentFileName.clear();
 
+    pState->mapUnpackProperties = mapOptions;
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = guardedThis->getSize();
     pState->nNumberOfRecords = listMishBlocks.size();
     pState->nCurrentIndex = 0;
     pState->pContext = pContext;
+    if (!guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
+        if (!guardedThis) return false;
+        pState->pContext = nullptr;
+        guardedThis->releaseUnpackSource(pState);
+        delete pContext;
+        pState->nCurrentOffset = 0;
+        pState->nTotalSize = 0;
+        pState->nCurrentIndex = 0;
+        pState->nNumberOfRecords = 0;
+        pState->mapUnpackProperties.clear();
+        pState->mapArchiveProperties.clear();
+        return false;
+    }
     return true;
 }
 
 XArchive::ARCHIVERECORD XDMG::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XDMG> guardedThis(this);
     ARCHIVERECORD result = {};
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return result;
 
     if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext) {
+        const bool bSourceCurrent =
+            guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+        if (!guardedThis || !bSourceCurrent) return result;
         DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
+
+        const bool bSnapshotCurrent =
+            guardedThis->isSourceDeviceSnapshotCurrent(
+                pContext->sourceSnapshot, guardedThis->getDevice(),
+                pPdStruct);
+        if (!guardedThis || !bSnapshotCurrent) {
+            return result;
+        }
 
         if ((pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pContext->listMishBlocks.size())) {
             QString sPartitionName;
@@ -1615,25 +1721,39 @@ XArchive::ARCHIVERECORD XDMG::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         result.nStreamSize = 0;
     }
 
+    if (pState && pState->pContext) {
+        const bool bFinalSourceCurrent =
+            guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+        if (!guardedThis || !bFinalSourceCurrent)
+            return ARCHIVERECORD();
+    }
     return result;
 }
 
 bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
+    QPointer<XDMG> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    QPointer<QIODevice> guardedOutput(pDevice);
     if (!pState) return false;
-    if (!pState->pContext) {
-        pState->nCurrentOffset = 0;
-        return false;
-    }
+    if (!pState->pContext) return false;
 
     DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
     // The parsed context is bound to one exact source device.  Reject a public
     // setDevice() replacement before resetting state or touching an output.
-    if (pContext->pSourceDevice.isNull() ||
-        (getDevice() != pContext->pSourceDevice.data())) return false;
+    const bool bSourceCurrent =
+        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return false;
+    const bool bSnapshotCurrent = guardedThis->isSourceDeviceSnapshotCurrent(
+        pContext->sourceSnapshot, guardedThis->getDevice(), pPdStruct);
+    if (!guardedThis || !bSnapshotCurrent) return false;
 
-    pState->nCurrentOffset = 0;
-    if (!pDevice || !pDevice->isOpen() || !pDevice->isWritable() ||
+    if (!guardedOutput) return false;
+    const bool bOutputSupported =
+        guardedThis->isUnpackOutputSupported(guardedOutput.data());
+    if (!guardedThis || !guardedOutput || !bOutputSupported ||
         !isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -1642,62 +1762,59 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         (pState->nCurrentIndex >= pContext->listMishBlocks.size())) {
         return false;
     }
-    if (dmgDevicesAlias(pContext->pSourceDevice.data(), pDevice)) return false;
+    if (!guardedOutput) return false;
+    const bool bAliases = dmgDevicesAlias(
+        pContext->sourceSnapshot.pSourceDevice.data(), guardedOutput.data());
+    if (!guardedThis || !guardedOutput || bAliases) return false;
 
-    // A valid extraction attempt owns the destination from this point on.
-    // Clear random-access output before staging so every later failure leaves
-    // the same exact empty rollback state, even when no staged byte was ever
-    // eligible for publication.
-    qint64 nStartPosition = -1;
-    if (!pDevice->isSequential()) {
-        if (!XBinary::isResizeEnable(pDevice) || !XBinary::resize(pDevice, 0) || !pDevice->seek(0)) {
-            return false;
-        }
-        nStartPosition = 0;
-    }
+    const bool bSecondSnapshotCurrent =
+        guardedThis->isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, guardedThis->getDevice(), pPdStruct);
+    if (!guardedThis || !bSecondSnapshotCurrent) return false;
 
     const MISH_BLOCK mishBlock = pContext->listMishBlocks.at(pState->nCurrentIndex);
     const QList<BLOCK_DATA> listCurrentStripes = pContext->listStripes.at(pState->nCurrentIndex);
-    const qint64 nExpectedOutput = (qint64)(mishBlock.nSectorCount * DMG_SECTOR_SIZE);
+    if (mishBlock.nSectorCount >
+        (quint64)(std::numeric_limits<qint64>::max)() /
+            (quint64)DMG_SECTOR_SIZE) return false;
+    const qint64 nExpectedOutput =
+        (qint64)(mishBlock.nSectorCount * (quint64)DMG_SECTOR_SIZE);
     const bool bCheckCRC = XBinary::isUnpackCRCEnabled(
         pState->mapUnpackProperties, XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
     QTemporaryFile staging;
     if (!staging.open()) return false;
     bool bResult = true;
 
-    for (qint32 i = 0; (i < listCurrentStripes.size()) && bResult && isPdStructNotCanceled(pPdStruct); i++) {
-        bResult = _decompressStripe(listCurrentStripes.at(i), pContext->nDataForkOffset,
-                                    pContext->nDataForkLength, (qint64)mishBlock.nDataOffset,
-                                    &staging, pPdStruct);
+    for (qint32 i = 0; (i < listCurrentStripes.size()) && bResult &&
+                         isPdStructNotCanceled(pPdStruct); i++) {
+        bResult = guardedThis->_decompressStripe(
+            listCurrentStripes.at(i), pContext->nDataForkOffset,
+            pContext->nDataForkLength, (qint64)mishBlock.nDataOffset,
+            &staging, pPdStruct);
+        if (!guardedThis) return false;
     }
 
     bResult = bResult && isPdStructNotCanceled(pPdStruct) &&
-              (staging.size() == nExpectedOutput) &&
-              (!bCheckCRC || _validatePartitionCRC(&staging, mishBlock, listCurrentStripes, pPdStruct)) &&
-              staging.seek(0);
-
-    if (bResult && !pDevice->isSequential()) {
-        bResult = (pDevice->size() == 0) && pDevice->seek(0);
+              (staging.size() == nExpectedOutput);
+    if (bResult && bCheckCRC) {
+        bResult = guardedThis->_validatePartitionCRC(
+            &staging, mishBlock, listCurrentStripes, pPdStruct);
+        if (!guardedThis) return false;
     }
+    bResult = bResult && staging.seek(0);
 
-    QByteArray baBuffer(0x10000, 0);
-    qint64 nRemaining = nExpectedOutput;
-    while (bResult && (nRemaining > 0) && isPdStructNotCanceled(pPdStruct)) {
-        const qint64 nRequest = qMin<qint64>(nRemaining, baBuffer.size());
-        const qint64 nRead = staging.read(baBuffer.data(), nRequest);
-        if ((nRead <= 0) || (nRead > nRequest) ||
-            !dmgWriteAll(pDevice, baBuffer.constData(), nRead, pPdStruct)) {
-            bResult = false;
-            break;
-        }
-        nRemaining -= nRead;
-    }
-    bResult = bResult && (nRemaining == 0) && isPdStructNotCanceled(pPdStruct);
+    if (!bResult) return false;
+    const bool bFinalSourceCurrent =
+        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !guardedOutput || !bFinalSourceCurrent) return false;
+    const bool bFinalSnapshotCurrent =
+        guardedThis->isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, guardedThis->getDevice(), pPdStruct);
+    if (!guardedThis || !guardedOutput || !bFinalSnapshotCurrent) return false;
 
-    if (!bResult) {
-        dmgRollbackWrite(pDevice, nStartPosition);
-        return false;
-    }
+    const bool bPublished = guardedThis->publishUnpackOutput(
+        &staging, guardedOutput.data(), pState, pPdStruct);
+    if (!guardedThis || !bPublished) return false;
 
     pState->nCurrentOffset = nExpectedOutput;
     return true;
@@ -1705,11 +1822,23 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
 bool XDMG::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XDMG> guardedThis(this);
     bool bResult = false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
     if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
+
+        const bool bSourceCurrent =
+            guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+        if (!guardedThis || !bSourceCurrent) return false;
+        const bool bSnapshotCurrent =
+            guardedThis->isSourceDeviceSnapshotCurrent(
+                pContext->sourceSnapshot, guardedThis->getDevice(),
+                pPdStruct);
+        if (!guardedThis || !bSnapshotCurrent) return false;
 
         pContext->nCurrentFileIndex++;
         pState->nCurrentIndex++;
@@ -1724,17 +1853,25 @@ bool XDMG::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XDMG::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XDMG> guardedThis(this);
     Q_UNUSED(pPdStruct)
+
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
     if (!pState) {
         return false;
     }
 
-    if (pState->pContext) {
-        DMG_UNPACK_CONTEXT *pContext = (DMG_UNPACK_CONTEXT *)pState->pContext;
-        delete pContext;
-        pState->pContext = nullptr;
-    }
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedThis->ownsUnpackSource(pState)) return false;
+    DMG_UNPACK_CONTEXT *pContext =
+        static_cast<DMG_UNPACK_CONTEXT *>(pState->pContext);
+    pState->pContext = nullptr;
+    guardedThis->releaseUnpackSource(pState);
+    if (!guardedThis) return false;
+    delete pContext;
+    if (!guardedThis) return false;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

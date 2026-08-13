@@ -26,6 +26,8 @@
 #include "xgzip.h"
 #include "xdecompress.h"
 
+#include <QPointer>
+
 class XCompressedDevice : public XIODevice {
     Q_OBJECT
 
@@ -49,11 +51,11 @@ protected:
 private:
     void clearData();
 
-    QIODevice *m_pOrigDevice;
-    SubDevice *m_pSubDevice;
+    QPointer<QIODevice> m_pOrigDevice;
+    QPointer<SubDevice> m_pSubDevice;
     bool m_bIsValid;
-    QIODevice *m_pCurrentDevice;
-    QIODevice *m_pBufferDevice;
+    QPointer<QIODevice> m_pCurrentDevice;
+    QPointer<QIODevice> m_pBufferDevice;
 };
 
 #endif  // XCOMPRESSEDDEVICE_H

@@ -156,53 +156,79 @@ QMap<XBinary::UNPACK_PROP, QVariant> XFREEARC::getDefaultUnpackProperties()
 
 bool XFREEARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    if (m_bUnpackOperationInProgress) {
+        return false;
+    }
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XFREEARC> guardedArchive(this);
+
     Q_UNUSED(mapProperties)
-    Q_UNUSED(pPdStruct)
+
+    if (!pState) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedArchive->ownsUnpackSource(pState)) return false;
+    guardedArchive->releaseUnpackSource(pState);
+    *pState = UNPACK_STATE();
+    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
+    if (!guardedArchive || !bBound) return false;
 
     // TODO: FreeARC unpacking requires parsing the directory block,
     // which is itself compressed (typically with LZMA).
     // For now, return false to indicate unpacking is not yet supported.
-    if (pState) {
-        finishUnpack(pState, nullptr);
+    // Complete the source-session handshake even on this currently
+    // unsupported path, then immediately release it with the failed state.
+    (void)guardedArchive->validateAndFinalizeUnpackSource(
+        pState, pPdStruct);
+    if (!guardedArchive) {
+        *pState = UNPACK_STATE();
+        return false;
     }
+    guardedArchive->releaseUnpackSource(pState);
+    *pState = UNPACK_STATE();
 
     return false;
 }
 
 XBinary::ARCHIVERECORD XFREEARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pState)
-    Q_UNUSED(pPdStruct)
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     // TODO: implement when directory block parsing is available
     XBinary::ARCHIVERECORD result = {};
+
+    if (!pState || !isUnpackSourceCurrent(pState, pPdStruct)) return result;
 
     return result;
 }
 
 bool XFREEARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pState)
-    Q_UNUSED(pPdStruct)
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    if (!pState || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
 
     return false;
 }
 
 bool XFREEARC::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    pState->nCurrentOffset = 0;
-    pState->nTotalSize = 0;
-    pState->nCurrentIndex = 0;
-    pState->nNumberOfRecords = 0;
-    pState->pContext = nullptr;
-    pState->mapUnpackProperties.clear();
-    pState->mapArchiveProperties.clear();
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !ownsUnpackSource(pState)) return false;
+    releaseUnpackSource(pState);
+    *pState = UNPACK_STATE();
 
     return true;
 }

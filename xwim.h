@@ -132,8 +132,10 @@ private:
     static const qint32 WIM_DIR_ENTRY_SIZE_OLD = 0x3E;
 
     enum RESOURCE_FLAG {
+        RESOURCE_FLAG_FREE = 1 << 0,
         RESOURCE_FLAG_METADATA = 1 << 1,
         RESOURCE_FLAG_COMPRESSED = 1 << 2,
+        RESOURCE_FLAG_SPANNED = 1 << 3,
         RESOURCE_FLAG_SOLID = 1 << 4
     };
 
@@ -168,7 +170,7 @@ private:
 
     struct WIM_UNPACK_CONTEXT {
         QList<WIM_RECORD> listRecords;
-        QIODevice *pSourceDevice;
+        SOURCE_DEVICE_SNAPSHOT sourceSnapshot;
         bool bLegacy;
         quint32 nHeaderFlags;
         quint32 nChunkSize;

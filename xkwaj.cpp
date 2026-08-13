@@ -295,66 +295,104 @@ QMap<XBinary::UNPACK_PROP, QVariant> XKWAJ::getDefaultUnpackProperties()
 
 bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    QPointer<XKWAJ> guardedThis(this);
+    if (m_bUnpackOperationInProgress) {
+        return false;
+    }
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     if (!pState) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
-
-    if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedThis->ownsUnpackSource(pState)) {
+        return false;
+    }
+    KWAJ_UNPACK_CONTEXT *pOldContext =
+        static_cast<KWAJ_UNPACK_CONTEXT *>(pState->pContext);
+    guardedThis->releaseUnpackSource(pState);
+    pState->pContext = nullptr;
+    delete pOldContext;
+    *pState = UNPACK_STATE();
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
+    const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
+    if (!guardedThis || !bBound) {
         return false;
     }
 
-    quint16 nCompType = read_uint16(offsetof(KWAJ_HEADER, comp_type));
-    qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
-    quint16 nHeaderFlags = read_uint16(offsetof(KWAJ_HEADER, header_flags));
+    const bool bValid = guardedThis->isValid(pPdStruct);
+    if (!guardedThis) return false;
+    if (!bValid) {
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    quint16 nCompType = guardedThis->read_uint16(offsetof(KWAJ_HEADER, comp_type));
+    if (!guardedThis) return false;
+    qint64 nDataOffset = guardedThis->read_uint16(offsetof(KWAJ_HEADER, data_offset));
+    if (!guardedThis) return false;
+    quint16 nHeaderFlags = guardedThis->read_uint16(offsetof(KWAJ_HEADER, header_flags));
+    if (!guardedThis) return false;
 
     if ((nDataOffset <= 0) || (nDataOffset > getSize())) {
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
 
-    KWAJ_UNPACK_CONTEXT *pContext = new (std::nothrow) KWAJ_UNPACK_CONTEXT;
-    if (!pContext) {
-        return false;
-    }
-    pContext->nDataOffset = nDataOffset;
-    pContext->nDataSize = getSize() - nDataOffset;
-    pContext->compressMethod = _compTypeToMethod(nCompType);
-    pContext->nUncompressedSize = 0;
+    qint64 nUncompressedSize = 0;
 
     // Parse the optional header extension for the uncompressed length and filename.
     qint64 nExtOffset = sizeof(KWAJ_HEADER);
 
     if (nHeaderFlags & HDR_FLAG_HASLENGTH) {
-        pContext->nUncompressedSize = read_uint32(nExtOffset);
+        nUncompressedSize = guardedThis->read_uint32(nExtOffset);
+        if (!guardedThis) return false;
         nExtOffset += 4;
     }
     if (nHeaderFlags & HDR_FLAG_HASUNKNOWN1) {
         nExtOffset += 2;
     }
     if (nHeaderFlags & HDR_FLAG_HASUNKNOWN2) {
-        quint16 nLen = read_uint16(nExtOffset);
+        quint16 nLen = guardedThis->read_uint16(nExtOffset);
+        if (!guardedThis) return false;
         nExtOffset += 2 + nLen;
     }
 
     QString sName;
     if (nHeaderFlags & HDR_FLAG_HASFILENAME) {
-        sName = read_ansiString(nExtOffset, 256);
+        sName = guardedThis->read_ansiString(nExtOffset, 256);
+        if (!guardedThis) return false;
         nExtOffset += sName.length() + 1;
     }
     if (nHeaderFlags & HDR_FLAG_HASFILEEXT) {
-        QString sExt = read_ansiString(nExtOffset, 256);
+        QString sExt = guardedThis->read_ansiString(nExtOffset, 256);
+        if (!guardedThis) return false;
         if (!sExt.isEmpty()) {
             sName += QString(".") + sExt;
         }
     }
 
     if (sName.isEmpty()) {
-        sName = XBinary::getDeviceFileBaseName(getDevice());
+        sName = XBinary::getDeviceFileBaseName(guardedThis->getDevice());
         if (sName.isEmpty()) {
             sName = "kwaj_data";
         }
     }
+
+    KWAJ_UNPACK_CONTEXT *pContext = new (std::nothrow) KWAJ_UNPACK_CONTEXT;
+    if (!pContext) {
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+    pContext->nDataOffset = nDataOffset;
+    pContext->nDataSize = guardedThis->getSize() - nDataOffset;
+    pContext->compressMethod = guardedThis->_compTypeToMethod(nCompType);
+    pContext->nUncompressedSize = nUncompressedSize;
     pContext->sFileName = sName;
 
     pState->pContext = pContext;
@@ -364,14 +402,30 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->nTotalSize = getSize();
     pState->mapUnpackProperties = mapProperties;
 
+    if (!guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
+        if (!guardedThis) return false;
+        pState->pContext = nullptr;
+        guardedThis->releaseUnpackSource(pState);
+        delete pContext;
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
     return true;
 }
 
 XBinary::ARCHIVERECORD XKWAJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XKWAJ> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+
     ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+    if (!pState || !pState->pContext) return result;
+    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
@@ -392,7 +446,13 @@ XBinary::ARCHIVERECORD XKWAJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
 bool XKWAJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+    QPointer<XKWAJ> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    if (!pState || !pState->pContext) return false;
+    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -404,17 +464,25 @@ bool XKWAJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XKWAJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XKWAJ> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    if (pState->pContext) {
-        KWAJ_UNPACK_CONTEXT *pContext = (KWAJ_UNPACK_CONTEXT *)pState->pContext;
-        delete pContext;
-        pState->pContext = nullptr;
-    }
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedThis->ownsUnpackSource(pState)) return false;
+    KWAJ_UNPACK_CONTEXT *pContext =
+        static_cast<KWAJ_UNPACK_CONTEXT *>(pState->pContext);
+    pState->pContext = nullptr;
+    guardedThis->releaseUnpackSource(pState);
+    if (!guardedThis) return false;
+    delete pContext;
+    if (!guardedThis) return false;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

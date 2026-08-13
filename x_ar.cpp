@@ -143,19 +143,24 @@ bool X_Ar::isPackStateConsistent(const PACK_STATE *pState, const AR_PACK_CONTEXT
 
 bool X_Ar::isValid(PDSTRUCT *pPdStruct)
 {
+    QPointer<X_Ar> guardedArchive(this);
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    const qint64 nTotalSize = getSize();
-    if (nTotalSize < 8) return false;
+    const qint64 nTotalSize = guardedArchive->getSize();
+    if (!guardedArchive || (nTotalSize < 8)) return false;
 
-    _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
-    if (!compareSignature(&memoryMap, "'!<arch>'0a", 0, pPdStruct)) return false;
+    _MEMORY_MAP memoryMap = guardedArchive->XBinary::getSimpleMemoryMap();
+    if (!guardedArchive) return false;
+    const bool bHasSignature = guardedArchive->compareSignature(
+        &memoryMap, "'!<arch>'0a", 0, pPdStruct);
+    if (!guardedArchive || !bHasSignature) return false;
 
     qint64 nOffset = 8;
     while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((nTotalSize - nOffset) < (qint64)sizeof(FRECORD)) return false;
 
-        const FRECORD frecord = readFRECORD(nOffset);
+        const FRECORD frecord = guardedArchive->readFRECORD(nOffset);
+        if (!guardedArchive) return false;
         if ((frecord.endChar[0] != 0x60) || (frecord.endChar[1] != 0x0a)) return false;
 
         qint64 nDataSize = 0;
@@ -495,13 +500,11 @@ X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
 {
     FRECORD record = {};
 
-    read_array(nOffset + offsetof(FRECORD, fileId), record.fileId, sizeof(record.fileId));
-    read_array(nOffset + offsetof(FRECORD, fileMod), record.fileMod, sizeof(record.fileMod));
-    read_array(nOffset + offsetof(FRECORD, ownerId), record.ownerId, sizeof(record.ownerId));
-    read_array(nOffset + offsetof(FRECORD, groupId), record.groupId, sizeof(record.groupId));
-    read_array(nOffset + offsetof(FRECORD, fileMode), record.fileMode, sizeof(record.fileMode));
-    read_array(nOffset + offsetof(FRECORD, fileSize), record.fileSize, sizeof(record.fileSize));
-    read_array(nOffset + offsetof(FRECORD, endChar), record.endChar, sizeof(record.endChar));
+    // Read the fixed header in one callback boundary.  Besides being cheaper,
+    // this prevents a hostile QIODevice from deleting the archive between
+    // field reads and leaving this method to dereference a dead owner.
+    (void)read_array(nOffset, reinterpret_cast<char *>(&record),
+                     sizeof(record));
 
     return record;
 }
@@ -989,27 +992,57 @@ QMap<XBinary::UNPACK_PROP, QVariant> X_Ar::getDefaultUnpackProperties()
 
 bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    if (m_bUnpackOperationInProgress) {
+        return false;
+    }
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<X_Ar> guardedArchive(this);
+
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) pPdStruct = &pdStructEmpty;
     if (!pState) return false;
 
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedArchive->ownsUnpackSource(pState)) return false;
+    guardedArchive->releaseUnpackSource(pState);
     *pState = UNPACK_STATE();
-    if (!isValid(pPdStruct)) return false;
+    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
+    if (!guardedArchive || !bBound) return false;
+    const bool bValid = guardedArchive->isValid(pPdStruct);
+    if (!guardedArchive) {
+        *pState = UNPACK_STATE();
+        return false;
+    }
+    if (!bValid) {
+        guardedArchive->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
 
     pState->mapUnpackProperties = mapProperties;
     pState->nCurrentOffset = 8;
-    pState->nTotalSize = getSize();
+    pState->nTotalSize = guardedArchive->getSize();
+    if (!guardedArchive) {
+        *pState = UNPACK_STATE();
+        return false;
+    }
     pState->nCurrentIndex = 0;
     pState->pContext = nullptr;
 
     qint64 nOffset = 8;
     while ((nOffset < pState->nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((pState->nTotalSize - nOffset) < (qint64)sizeof(FRECORD)) {
+            guardedArchive->releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
             return false;
         }
 
-        const FRECORD header = readFRECORD(nOffset);
+        const FRECORD header = guardedArchive->readFRECORD(nOffset);
+        if (!guardedArchive) {
+            *pState = UNPACK_STATE();
+            return false;
+        }
         qint64 nFileSize = 0;
         qint64 nRecordSize = 0;
         qint32 nBsdNameLength = 0;
@@ -1019,6 +1052,7 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             !arGetBsdNameLength(header.fileId, sizeof(header.fileId), nFileSize, &nBsdNameLength) ||
             (nRecordSize > (pState->nTotalSize - nOffset)) ||
             (pState->nNumberOfRecords == (std::numeric_limits<qint32>::max)())) {
+            guardedArchive->releaseUnpackSource(pState);
             *pState = UNPACK_STATE();
             return false;
         }
@@ -1027,6 +1061,19 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if ((nOffset != pState->nTotalSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        guardedArchive->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    const bool bFinalized = guardedArchive->validateAndFinalizeUnpackSource(
+        pState, pPdStruct);
+    if (!guardedArchive) {
+        *pState = UNPACK_STATE();
+        return false;
+    }
+    if (!bFinalized) {
+        guardedArchive->releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
@@ -1036,13 +1083,23 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+    QPointer<X_Ar> guardedArchive(this);
+
     XBinary::ARCHIVERECORD result = {};
 
-    if (pState && XBinary::isPdStructNotCanceled(pPdStruct) &&
+    if (pState && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive &&
         (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords) &&
-        (pState->nCurrentOffset >= 8) && (pState->nTotalSize == getSize()) &&
-        (pState->nCurrentOffset <= (pState->nTotalSize - (qint64)sizeof(FRECORD)))) {
-        const FRECORD header = readFRECORD(pState->nCurrentOffset);
+        (pState->nCurrentOffset >= 8)) {
+        const qint64 nCurrentSize = guardedArchive->getSize();
+        if (!guardedArchive || (pState->nTotalSize != nCurrentSize) ||
+            (pState->nCurrentOffset > (pState->nTotalSize - (qint64)sizeof(FRECORD)))) {
+            return result;
+        }
+        const FRECORD header = guardedArchive->readFRECORD(pState->nCurrentOffset);
+        if (!guardedArchive) return XBinary::ARCHIVERECORD();
         qint64 nFileSize = 0;
         qint64 nRecordSize = 0;
         qint32 nFileNameLength = 0;
@@ -1061,7 +1118,9 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // Handle BSD-style long names
         if (nFileNameLength > 0) {
-            const QByteArray baEmbeddedName = read_array(pState->nCurrentOffset + sizeof(FRECORD), nFileNameLength);
+            const QByteArray baEmbeddedName = guardedArchive->read_array(
+                pState->nCurrentOffset + sizeof(FRECORD), nFileNameLength);
+            if (!guardedArchive) return XBinary::ARCHIVERECORD();
             if (baEmbeddedName.size() != nFileNameLength) return XBinary::ARCHIVERECORD();
             sFileName = QString::fromUtf8(baEmbeddedName);
             result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD) + nFileNameLength;
@@ -1112,14 +1171,22 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<X_Ar> guardedArchive(this);
+
+    if (!pState || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
         (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
-        (pState->nCurrentOffset < 8) || (pState->nTotalSize != getSize()) ||
-        (pState->nCurrentOffset > (pState->nTotalSize - (qint64)sizeof(FRECORD)))) {
+        (pState->nCurrentOffset < 8)) {
         return false;
     }
 
-    const FRECORD header = readFRECORD(pState->nCurrentOffset);
+    const qint64 nCurrentSize = guardedArchive->getSize();
+    if (!guardedArchive || (pState->nTotalSize != nCurrentSize) ||
+        (pState->nCurrentOffset > (pState->nTotalSize - (qint64)sizeof(FRECORD)))) return false;
+
+    const FRECORD header = guardedArchive->readFRECORD(pState->nCurrentOffset);
+    if (!guardedArchive) return false;
     qint64 nFileSize = 0;
     qint64 nRecordSize = 0;
     if ((header.endChar[0] != 0x60) || (header.endChar[1] != 0x0a) ||
@@ -1137,16 +1204,22 @@ bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool X_Ar::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !ownsUnpackSource(pState)) return false;
     // AR enumeration has no heap context, but it still owns all public cursor
     // and property state.  XArchive::getRecords() treats cleanup failure as an
     // incomplete enumeration, so the inherited false-returning stub used to
     // discard every otherwise valid AR/DEB record list.
+    releaseUnpackSource(pState);
     *pState = UNPACK_STATE();
     return true;
 }

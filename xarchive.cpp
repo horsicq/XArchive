@@ -27,12 +27,15 @@
 #include <memory>
 #include <new>
 #include <QBuffer>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QSaveFile>
 #include <QSet>
 #include <QTemporaryFile>
+#include <QUuid>
 
 #ifdef Q_OS_WIN
 #include <io.h>
@@ -42,11 +45,14 @@
 #endif
 
 namespace {
-static QString archiveNormalizedFilePath(const QFile *pFile)
+static QString archiveNormalizedFilePath(QFile *pFile)
 {
-    if (!pFile || pFile->fileName().isEmpty()) return QString();
+    QPointer<QFile> guardedFile(pFile);
+    if (!guardedFile) return QString();
+    const QString sFileName = guardedFile->fileName();
+    if (!guardedFile || sFileName.isEmpty()) return QString();
 
-    const QFileInfo fileInfo(pFile->fileName());
+    const QFileInfo fileInfo(sFileName);
     QString sPath = fileInfo.canonicalFilePath();
     if (sPath.isEmpty()) sPath = QDir::cleanPath(fileInfo.absoluteFilePath());
     sPath = QDir::fromNativeSeparators(sPath);
@@ -56,27 +62,80 @@ static QString archiveNormalizedFilePath(const QFile *pFile)
     return sPath;
 }
 
-static QByteArray archiveFilePhysicalIdentity(const QFile *pFile)
+static QByteArray archiveFilePhysicalIdentity(QFile *pFile)
 {
     QByteArray result;
-    if (!pFile || (pFile->handle() < 0)) return result;
+    QPointer<QFile> guardedFile(pFile);
+    if (!guardedFile) return result;
+    const qintptr nFileHandle = guardedFile->handle();
+    if (!guardedFile || (nFileHandle < 0)) return result;
 
 #ifdef Q_OS_WIN
-    const intptr_t nHandle = _get_osfhandle(pFile->handle());
+    const intptr_t nHandle = _get_osfhandle((int)nFileHandle);
     if (nHandle == -1) return result;
     BY_HANDLE_FILE_INFORMATION fileInformation = {};
     if (!GetFileInformationByHandle(reinterpret_cast<HANDLE>(nHandle),
                                     &fileInformation)) {
         return result;
     }
-    result = QByteArray::number(fileInformation.dwVolumeSerialNumber, 16) + ':' +
-             QByteArray::number(fileInformation.nFileIndexHigh, 16) + ':' +
-             QByteArray::number(fileInformation.nFileIndexLow, 16);
+    result = QByteArray::number(
+                 (qulonglong)fileInformation.dwVolumeSerialNumber, 16) + ':' +
+             QByteArray::number(
+                 (qulonglong)fileInformation.nFileIndexHigh, 16) + ':' +
+             QByteArray::number(
+                 (qulonglong)fileInformation.nFileIndexLow, 16);
 #elif defined(Q_OS_UNIX)
     struct stat status = {};
-    if (fstat(pFile->handle(), &status) != 0) return result;
+    if (fstat((int)nFileHandle, &status) != 0) return result;
     result = QByteArray::number((qulonglong)status.st_dev, 16) + ':' +
              QByteArray::number((qulonglong)status.st_ino, 16);
+#endif
+    return result;
+}
+
+static QByteArray archiveFileMutationIdentity(QFile *pFile)
+{
+    QByteArray result;
+    QPointer<QFile> guardedFile(pFile);
+    if (!guardedFile) return result;
+    const qintptr nFileHandle = guardedFile->handle();
+    if (!guardedFile || (nFileHandle < 0)) return result;
+
+#ifdef Q_OS_WIN
+    const intptr_t nHandle = _get_osfhandle((int)nFileHandle);
+    if (nHandle == -1) return result;
+    FILE_BASIC_INFO basicInformation = {};
+    FILE_STANDARD_INFO standardInformation = {};
+    if (!GetFileInformationByHandleEx(
+            reinterpret_cast<HANDLE>(nHandle), FileBasicInfo,
+            &basicInformation, sizeof(basicInformation)) ||
+        !GetFileInformationByHandleEx(
+            reinterpret_cast<HANDLE>(nHandle), FileStandardInfo,
+            &standardInformation, sizeof(standardInformation))) {
+        return result;
+    }
+    result = QByteArray::number(
+                 (qlonglong)basicInformation.LastWriteTime.QuadPart, 16) + ':' +
+             QByteArray::number(
+                 (qlonglong)basicInformation.ChangeTime.QuadPart, 16) + ':' +
+             QByteArray::number(
+                 (qlonglong)standardInformation.EndOfFile.QuadPart, 16);
+#elif defined(Q_OS_UNIX)
+    struct stat status = {};
+    if (fstat((int)nFileHandle, &status) != 0) return result;
+#if defined(Q_OS_MAC)
+    result = QByteArray::number((qlonglong)status.st_mtimespec.tv_sec, 16) + ':' +
+             QByteArray::number((qlonglong)status.st_mtimespec.tv_nsec, 16) + ':' +
+             QByteArray::number((qlonglong)status.st_ctimespec.tv_sec, 16) + ':' +
+             QByteArray::number((qlonglong)status.st_ctimespec.tv_nsec, 16) + ':' +
+             QByteArray::number((qlonglong)status.st_size, 16);
+#else
+    result = QByteArray::number((qlonglong)status.st_mtim.tv_sec, 16) + ':' +
+             QByteArray::number((qlonglong)status.st_mtim.tv_nsec, 16) + ':' +
+             QByteArray::number((qlonglong)status.st_ctim.tv_sec, 16) + ':' +
+             QByteArray::number((qlonglong)status.st_ctim.tv_nsec, 16) + ':' +
+             QByteArray::number((qlonglong)status.st_size, 16);
+#endif
 #endif
     return result;
 }
@@ -86,8 +145,20 @@ static qint64 archiveReadWithBoundedProgress(QIODevice *pDevice, char *pBuffer, 
 class ArchiveBoundedReadDevice : public QIODevice {
 public:
     ArchiveBoundedReadDevice(QIODevice *pSource, qint64 nLimit)
-        : m_pSource(pSource), m_nLimit(nLimit), m_nRead(0), m_bError(false)
+        : m_pSource(pSource), m_nLimit(nLimit), m_nRead(0),
+          m_bSourceSeekable(false), m_nSourceStart(-1),
+          m_bError(false)
     {
+        if (m_pSource) {
+            const bool bSequential = m_pSource->isSequential();
+            if (m_pSource && !bSequential) {
+                const qint64 nPosition = m_pSource->pos();
+                if (m_pSource && (nPosition >= 0)) {
+                    m_bSourceSeekable = true;
+                    m_nSourceStart = nPosition;
+                }
+            }
+        }
     }
 
     bool isSequential() const override { return true; }
@@ -105,6 +176,21 @@ protected:
         const qint64 nRemaining = m_nLimit - m_nRead;
         if ((nMaximumSize == 0) || (nRemaining == 0)) {
             return 0;
+        }
+
+        const qint64 nMax = (std::numeric_limits<qint64>::max)();
+        if (!m_pSource || (m_bSourceSeekable &&
+            ((m_nSourceStart < 0) ||
+             (m_nRead > nMax - m_nSourceStart)))) {
+            m_bError = true;
+            return -1;
+        }
+        if (m_bSourceSeekable) {
+            const bool bSeeked = m_pSource->seek(m_nSourceStart + m_nRead);
+            if (!m_pSource || !bSeeked) {
+                m_bError = true;
+                return -1;
+            }
         }
 
         const qint64 nRequest = (std::min)(nMaximumSize, nRemaining);
@@ -125,17 +211,31 @@ protected:
     qint64 writeData(const char *, qint64) override { return -1; }
 
 private:
-    QIODevice *m_pSource;
+    QPointer<QIODevice> m_pSource;
     qint64 m_nLimit;
     qint64 m_nRead;
+    bool m_bSourceSeekable;
+    qint64 m_nSourceStart;
     bool m_bError;
 };
 
 class ArchiveWindowWriteDevice : public QIODevice {
 public:
     ArchiveWindowWriteDevice(QIODevice *pDestination, qint64 nOffset, qint64 nSize)
-        : m_pDestination(pDestination), m_nOffset(nOffset), m_nSize(nSize), m_nProduced(0), m_nWritten(0), m_bError(false)
+        : m_pDestination(pDestination), m_nOffset(nOffset), m_nSize(nSize),
+          m_nProduced(0), m_nWritten(0),
+          m_nDestinationStart(-1),
+          m_bError(false)
     {
+        if (m_pDestination) {
+            const bool bSequential = m_pDestination->isSequential();
+            if (m_pDestination && !bSequential) {
+                const qint64 nPosition = m_pDestination->pos();
+                if (m_pDestination && (nPosition >= 0)) {
+                    m_nDestinationStart = nPosition;
+                }
+            }
+        }
     }
 
     bool isSequential() const override { return true; }
@@ -165,12 +265,65 @@ protected:
             const qint64 nWriteSize = nWriteEnd - nWriteStart;
             qint64 nDone = 0;
             while (nDone < nWriteSize) {
+                if (!m_pDestination) {
+                    m_bError = true;
+                    return -1;
+                }
+                const bool bSequential = m_pDestination->isSequential();
+                if (!m_pDestination) {
+                    m_bError = true;
+                    return -1;
+                }
+                if (!bSequential) {
+                    const qint64 nPositionMax =
+                        (std::numeric_limits<qint64>::max)();
+                    if ((m_nDestinationStart < 0) ||
+                        (m_nWritten > nPositionMax - m_nDestinationStart) ||
+                        (nDone > nPositionMax - m_nDestinationStart - m_nWritten)) {
+                        m_bError = true;
+                        return -1;
+                    }
+                    const bool bSeeked = m_pDestination->seek(
+                        m_nDestinationStart + m_nWritten + nDone);
+                    if (!m_pDestination || !bSeeked) {
+                        m_bError = true;
+                        return -1;
+                    }
+                }
                 const qint64 nResult = m_pDestination->write(pData + nSkip + nDone, nWriteSize - nDone);
-                if ((nResult <= 0) || (nResult > (nWriteSize - nDone))) {
+                if (!m_pDestination || (nResult <= 0) ||
+                    (nResult > (nWriteSize - nDone))) {
                     m_bError = true;
                     return -1;
                 }
                 nDone += nResult;
+            }
+            if (!m_pDestination) {
+                m_bError = true;
+                return -1;
+            }
+            const bool bSequential = m_pDestination->isSequential();
+            if (!m_pDestination) {
+                m_bError = true;
+                return -1;
+            }
+            if (!bSequential &&
+                ((m_nWritten > nMax - m_nDestinationStart) ||
+                 (nDone > nMax - m_nDestinationStart - m_nWritten))) {
+                // writeData() may synchronously re-enter code that moves the
+                // destination even when it accepted the complete request.
+                // Restore the final absolute continuation point before the
+                // wrapper reports success to its caller.
+                m_bError = true;
+                return -1;
+            }
+            if (!bSequential) {
+                const bool bSeeked = m_pDestination->seek(
+                    m_nDestinationStart + m_nWritten + nDone);
+                if (!m_pDestination || !bSeeked) {
+                    m_bError = true;
+                    return -1;
+                }
             }
             m_nWritten += nDone;
         }
@@ -180,11 +333,12 @@ protected:
     }
 
 private:
-    QIODevice *m_pDestination;
+    QPointer<QIODevice> m_pDestination;
     qint64 m_nOffset;
     qint64 m_nSize;
     qint64 m_nProduced;
     qint64 m_nWritten;
+    qint64 m_nDestinationStart;
     bool m_bError;
 };
 
@@ -192,27 +346,89 @@ static qint64 archiveReadWithBoundedProgress(QIODevice *pDevice, char *pBuffer, 
 {
     if (!pDevice || (nSize < 0) || ((nSize > 0) && !pBuffer)) return -1;
 
+    QPointer<QIODevice> guardedDevice(pDevice);
+    if (!guardedDevice) return -1;
+    const bool bSequential = guardedDevice->isSequential();
+    if (!guardedDevice) return -1;
+    const bool bSeekable = !bSequential;
+    const qint64 nStart = bSeekable ? guardedDevice->pos() : -1;
+    const qint64 nMax = (std::numeric_limits<qint64>::max)();
+    if (!guardedDevice || (bSeekable && (nStart < 0))) return -1;
+
     for (qint32 i = 0; i < 3; i++) {
-        const qint64 nRead = pDevice->read(pBuffer, nSize);
-        if ((nRead != 0) || (nSize == 0) || pDevice->atEnd()) return nRead;
-        if (i != 2) pDevice->waitForReadyRead(10);
+        if (!guardedDevice) return -1;
+        if (bSeekable) {
+            const bool bSeeked = guardedDevice->seek(nStart);
+            if (!guardedDevice || !bSeeked) return -1;
+        }
+        const qint64 nRead = guardedDevice->read(pBuffer, nSize);
+        if (!guardedDevice) return -1;
+        if ((nRead < 0) || (nRead > nSize)) return -1;
+        bool bAtEnd = false;
+        if ((nRead == 0) && (nSize != 0)) {
+            bAtEnd = guardedDevice->atEnd();
+            if (!guardedDevice) return -1;
+        }
+        if ((nRead != 0) || (nSize == 0) || bAtEnd) {
+            if (bSeekable) {
+                if (nRead > nMax - nStart) return -1;
+                const bool bSeeked = guardedDevice->seek(nStart + nRead);
+                if (!guardedDevice || !bSeeked) return -1;
+            }
+            return nRead;
+        }
+        if (i != 2) {
+            guardedDevice->waitForReadyRead(10);
+            if (!guardedDevice) return -1;
+        }
     }
 
-    return pDevice->atEnd() ? 0 : -1;
+    if (!guardedDevice) return -1;
+    const bool bAtEnd = guardedDevice->atEnd();
+    if (!guardedDevice || !bAtEnd) return -1;
+    if (bSeekable) {
+        const bool bSeeked = guardedDevice->seek(nStart);
+        if (!guardedDevice || !bSeeked) return -1;
+    }
+    return 0;
 }
 
 static bool archiveWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDevice || (nSize < 0) || ((nSize > 0) && !pData) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
+    QPointer<QIODevice> guardedDevice(pDevice);
+    if (!guardedDevice) return false;
+    const bool bSequential = guardedDevice->isSequential();
+    if (!guardedDevice) return false;
+    const bool bSeekable = !bSequential;
+    const qint64 nStart = bSeekable ? guardedDevice->pos() : -1;
+    const qint64 nMax = (std::numeric_limits<qint64>::max)();
+    if (!guardedDevice || (bSeekable && (nStart < 0))) return false;
+
     qint64 nWrittenTotal = 0;
     while ((nWrittenTotal < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        const qint64 nWritten = pDevice->write(pData + nWrittenTotal, nSize - nWrittenTotal);
+        if (!guardedDevice) return false;
+        if (bSeekable) {
+            if (nWrittenTotal > nMax - nStart) return false;
+            const bool bSeeked = guardedDevice->seek(nStart + nWrittenTotal);
+            if (!guardedDevice || !bSeeked) return false;
+        }
+        const qint64 nWritten = guardedDevice->write(
+            pData + nWrittenTotal, nSize - nWrittenTotal);
+        if (!guardedDevice) return false;
         if ((nWritten <= 0) || (nWritten > (nSize - nWrittenTotal))) return false;
         nWrittenTotal += nWritten;
     }
 
-    return (nWrittenTotal == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+    if (!guardedDevice || (nWrittenTotal != nSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (bSeekable) {
+        if (nSize > nMax - nStart) return false;
+        const bool bSeeked = guardedDevice->seek(nStart + nSize);
+        if (!guardedDevice || !bSeeked) return false;
+    }
+    return true;
 }
 
 static bool archiveGetSafeRelativePath(const QString &sPath, QString *pNormalizedPath)
@@ -270,7 +486,121 @@ static bool archivePathHasUnsafeLink(const QString &sCanonicalRoot, const QStrin
 
     return false;
 }
+
+class ArchiveSourceSessionRegistry : public QObject {
+public:
+    struct SESSION {
+        XArchive::SOURCE_DEVICE_SNAPSHOT snapshot;
+        void *pContext;
+        const XBinary::UNPACK_STATE *pOwnerState;
+        bool bFinalized;
+    };
+
+    ArchiveSourceSessionRegistry()
+        : QObject(nullptr)
+    {
+    }
+
+    QHash<QByteArray, SESSION> mapSessions;
+};
+
+static bool archiveFingerprintSource(
+    XArchive *pOwner,
+    const XArchive::SOURCE_DEVICE_SNAPSHOT &snapshot,
+    QByteArray *pFingerprint, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (pFingerprint) pFingerprint->clear();
+    if (!pOwner || !pFingerprint || !snapshot.pSourceDevice ||
+        snapshot.listChain.isEmpty() ||
+        (snapshot.listChain.constFirst().nSize < 0)) {
+        return false;
+    }
+
+    // Establish the owner guard before the first caller-controlled device
+    // callback.  Constructing a QPointer from pOwner after isOpen(), pos(), or
+    // another virtual call has deleted the archive would itself dereference a
+    // dangling QObject address.
+    QPointer<XArchive> guardedOwner(pOwner);
+
+    QList<qint64> listPositions;
+    listPositions.reserve(snapshot.listChain.size());
+    for (const XArchive::SOURCE_DEVICE_CHAIN_ITEM &item : snapshot.listChain) {
+        QPointer<QIODevice> guardedDevice(item.pDevice);
+        if (!guardedOwner || !guardedDevice) return false;
+        const bool bOpen = guardedDevice->isOpen();
+        if (!guardedOwner || !guardedDevice || !bOpen) return false;
+        const bool bReadable = guardedDevice->isReadable();
+        if (!guardedOwner || !guardedDevice || !bReadable) return false;
+        const bool bSequential = guardedDevice->isSequential();
+        if (!guardedOwner || !guardedDevice || bSequential) return false;
+        const QIODevice::OpenMode openMode = guardedDevice->openMode();
+        if (!guardedOwner || !guardedDevice ||
+            openMode.testFlag(QIODevice::Text)) return false;
+        const qint64 nPosition = guardedDevice->pos();
+        if (!guardedOwner || !guardedDevice || (nPosition < 0)) return false;
+        listPositions.append(nPosition);
+    }
+
+    const auto restorePositions = [&snapshot, &listPositions]() {
+        bool bRestored = true;
+        // Restore the outer view first and the physical root last.  Seeking a
+        // SubDevice also seeks its backing device, so this order preserves the
+        // independent logical positions of the complete chain.
+        for (qint32 i = 0; i < snapshot.listChain.size(); ++i) {
+            QPointer<QIODevice> guardedDevice(
+                snapshot.listChain.at(i).pDevice);
+            if (!guardedDevice) {
+                bRestored = false;
+                continue;
+            }
+            const bool bSeeked = guardedDevice->seek(listPositions.at(i));
+            if (!guardedDevice || !bSeeked) bRestored = false;
+        }
+        return bRestored;
+    };
+
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    QByteArray baBuffer(0x100000, 0);
+    QPointer<QIODevice> guardedSource(snapshot.pSourceDevice.data());
+    qint64 nOffset = 0;
+    qint64 nRemaining = snapshot.listChain.constFirst().nSize;
+    bool bResult = true;
+
+    while (bResult && (nRemaining > 0) &&
+           XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint64 nChunkSize = qMin(nRemaining, (qint64)baBuffer.size());
+        if (!guardedSource || !guardedOwner) {
+            bResult = false;
+            break;
+        }
+        const qint64 nRead = guardedOwner->safeReadData(
+            guardedSource.data(), nOffset, baBuffer.data(), nChunkSize,
+            pPdStruct);
+        if (!guardedSource || !guardedOwner || (nRead != nChunkSize)) {
+            bResult = false;
+            break;
+        }
+        hash.addData(baBuffer.constData(), (int)nRead);
+        nOffset += nRead;
+        nRemaining -= nRead;
+    }
+
+    const bool bRestored = restorePositions();
+    if (!bResult || !bRestored || !guardedSource || !guardedOwner ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    *pFingerprint = hash.result();
+    return true;
+}
 }  // namespace
+
+QObject *XArchive::getArchiveSourceSessionRegistry(bool bCreate) const
+{
+    if (!m_pArchiveSourceSessionRegistry && bCreate) {
+        m_pArchiveSourceSessionRegistry =
+            new (std::nothrow) ArchiveSourceSessionRegistry;
+    }
+    return m_pArchiveSourceSessionRegistry;
+}
 
 #if defined(_MSC_VER)
 #if _MSC_VER > 1800                                   // TODO Check !!!
@@ -301,8 +631,10 @@ bool XArchive::captureSourceDeviceSnapshot(QIODevice *pDevice,
                                            SOURCE_DEVICE_SNAPSHOT *pSnapshot)
 {
     if (pSnapshot) *pSnapshot = SOURCE_DEVICE_SNAPSHOT();
-    if (!pDevice || !pSnapshot || !pDevice->isOpen() ||
-        !pDevice->isReadable() || pDevice->isSequential()) {
+    QPointer<XArchive> guardedArchive(this);
+    const quint64 nDeviceGeneration = getDeviceGeneration();
+    if (!guardedArchive || !pDevice ||
+        (pDevice != guardedArchive->getDevice()) || !pSnapshot) {
         return false;
     }
 
@@ -311,38 +643,65 @@ bool XArchive::captureSourceDeviceSnapshot(QIODevice *pDevice,
     snapshot.rootKind = SOURCE_DEVICE_ROOT_UNKNOWN;
     snapshot.nRootSize = -1;
     snapshot.nBufferBackingIdentity = 0;
+    snapshot.bContentFingerprintRequired = false;
+    snapshot.nOwnerDeviceGeneration = nDeviceGeneration;
 
     QSet<QIODevice *> setVisited;
     QIODevice *pCurrent = pDevice;
     while (pCurrent) {
-        if (setVisited.contains(pCurrent) || !pCurrent->isOpen() ||
-            !pCurrent->isReadable() || pCurrent->isSequential() ||
-            (pCurrent->size() < 0)) {
-            return false;
-        }
-        setVisited.insert(pCurrent);
+        QPointer<QIODevice> guardedCurrent(pCurrent);
+        if (!guardedCurrent || setVisited.contains(pCurrent)) return false;
+        const bool bOpen = guardedCurrent->isOpen();
+        if (!guardedArchive || !guardedCurrent || !bOpen) return false;
+        const bool bReadable = guardedCurrent->isReadable();
+        if (!guardedArchive || !guardedCurrent || !bReadable) return false;
+        const QIODevice::OpenMode openMode = guardedCurrent->openMode();
+        if (!guardedArchive || !guardedCurrent ||
+            openMode.testFlag(QIODevice::Text)) return false;
+        const bool bSequential = guardedCurrent->isSequential();
+        if (!guardedArchive || !guardedCurrent || bSequential) return false;
+        const qint64 nCurrentSize = guardedCurrent->size();
+        if (!guardedArchive || !guardedCurrent ||
+            (nCurrentSize < 0)) return false;
+        const bool bStillSequential = guardedCurrent->isSequential();
+        if (!guardedArchive || !guardedCurrent || bStillSequential) return false;
+        const bool bStillOpen = guardedCurrent->isOpen();
+        if (!guardedArchive || !guardedCurrent || !bStillOpen) return false;
+        const bool bStillReadable = guardedCurrent->isReadable();
+        if (!guardedArchive || !guardedCurrent || !bStillReadable) return false;
+        const QIODevice::OpenMode finalOpenMode = guardedCurrent->openMode();
+        if (!guardedArchive || !guardedCurrent ||
+            finalOpenMode.testFlag(QIODevice::Text)) return false;
+        setVisited.insert(guardedCurrent.data());
 
         SOURCE_DEVICE_CHAIN_ITEM item = {};
-        item.pDevice = pCurrent;
-        item.nSize = pCurrent->size();
+        item.pDevice = guardedCurrent;
+        item.nSize = nCurrentSize;
 
-        SubDevice *pSubDevice = dynamic_cast<SubDevice *>(pCurrent);
+        SubDevice *pSubDevice = dynamic_cast<SubDevice *>(guardedCurrent.data());
         item.bIsSubDevice = (pSubDevice != nullptr);
         if (pSubDevice) {
             item.nInitLocation = pSubDevice->getInitLocation();
+            if (!guardedArchive || !guardedCurrent) return false;
             snapshot.listChain.append(item);
             pCurrent = pSubDevice->getOrigDevice();
-            if (!pCurrent) return false;
+            if (!guardedArchive || !guardedCurrent || !pCurrent) return false;
         } else {
             snapshot.listChain.append(item);
-            snapshot.pRootDevice = pCurrent;
+            snapshot.pRootDevice = guardedCurrent;
             break;
         }
     }
 
     QIODevice *pRootDevice = snapshot.pRootDevice.data();
     if (!pRootDevice || snapshot.listChain.isEmpty()) return false;
-    snapshot.nRootSize = pRootDevice->size();
+    // XBinary caches the logical source size when setDevice() binds a device.
+    // Do not combine a freshly observed snapshot with stale bounds from an
+    // earlier binding generation; rebinding the same device refreshes both.
+    if (!guardedArchive ||
+        (snapshot.listChain.constFirst().nSize !=
+         guardedArchive->getSize())) return false;
+    snapshot.nRootSize = snapshot.listChain.constLast().nSize;
 
     if (QBuffer *pBuffer = dynamic_cast<QBuffer *>(pRootDevice)) {
         snapshot.rootKind = SOURCE_DEVICE_ROOT_BUFFER;
@@ -352,16 +711,45 @@ bool XArchive::captureSourceDeviceSnapshot(QIODevice *pDevice,
         // QByteArray/QBuffer mutations detach and become detectable without a
         // second archive-sized allocation.
         snapshot.baBufferSnapshot = pBuffer->buffer();
+        // QByteArray implicit sharing detects ordinary mutation, while a
+        // retained full hash additionally catches writes through a raw data()
+        // pointer acquired before initialization.
+        snapshot.bContentFingerprintRequired = true;
     } else if (QFile *pFile = dynamic_cast<QFile *>(pRootDevice)) {
         snapshot.rootKind = SOURCE_DEVICE_ROOT_FILE;
         snapshot.sFilePath = archiveNormalizedFilePath(pFile);
         snapshot.baFilePhysicalIdentity = archiveFilePhysicalIdentity(pFile);
+        snapshot.baFileMutationIdentity = archiveFileMutationIdentity(pFile);
         // QFile::open(fd, ...) has no path.  Preserve that supported use case
         // whenever the platform can identify the opened file physically.
-        if (snapshot.sFilePath.isEmpty() &&
-            snapshot.baFilePhysicalIdentity.isEmpty()) {
+        if ((snapshot.sFilePath.isEmpty() &&
+             snapshot.baFilePhysicalIdentity.isEmpty()) ||
+            snapshot.baFileMutationIdentity.isEmpty()) {
             return false;
         }
+    } else {
+        // Generic seekable devices have no backing-store identity or mutation
+        // generation.  Their complete logical contents are therefore hashed
+        // by bindUnpackSource() and on every retained-state validation.
+        snapshot.rootKind = SOURCE_DEVICE_ROOT_GENERIC;
+        snapshot.bContentFingerprintRequired = true;
+    }
+
+    if (!guardedArchive ||
+        (guardedArchive->getDeviceGeneration() != nDeviceGeneration) ||
+        (guardedArchive->getDevice() != pDevice)) {
+        return false;
+    }
+    for (const SOURCE_DEVICE_CHAIN_ITEM &item : snapshot.listChain) {
+        QPointer<QIODevice> guardedChainDevice(item.pDevice);
+        if (!guardedChainDevice) return false;
+        const bool bOpen = guardedChainDevice->isOpen();
+        if (!guardedArchive || !guardedChainDevice || !bOpen) return false;
+        const bool bReadable = guardedChainDevice->isReadable();
+        if (!guardedArchive || !guardedChainDevice || !bReadable) return false;
+        const QIODevice::OpenMode openMode = guardedChainDevice->openMode();
+        if (!guardedArchive || !guardedChainDevice ||
+            openMode.testFlag(QIODevice::Text)) return false;
     }
 
     *pSnapshot = snapshot;
@@ -369,36 +757,86 @@ bool XArchive::captureSourceDeviceSnapshot(QIODevice *pDevice,
 }
 
 bool XArchive::isSourceDeviceSnapshotCurrent(
-    const SOURCE_DEVICE_SNAPSHOT &snapshot, QIODevice *pCurrentDevice)
+    const SOURCE_DEVICE_SNAPSHOT &snapshot, QIODevice *pCurrentDevice,
+    PDSTRUCT *pPdStruct)
 {
+    QPointer<XArchive> guardedArchive(this);
     // Check the guarded QPointer before inspecting pCurrentDevice: XBinary used
     // to retain the same now-dangling address after an external QObject died.
-    if (!snapshot.pSourceDevice ||
+    if (!guardedArchive ||
+        (snapshot.nOwnerDeviceGeneration !=
+         guardedArchive->getDeviceGeneration()) ||
+        !snapshot.pSourceDevice ||
         (pCurrentDevice != snapshot.pSourceDevice.data())) {
         return false;
     }
 
+    const auto matchesStructure = [&snapshot](
+        const SOURCE_DEVICE_SNAPSHOT &candidate) -> bool {
+        if ((candidate.pRootDevice.data() != snapshot.pRootDevice.data()) ||
+            (candidate.listChain.size() != snapshot.listChain.size()) ||
+            (candidate.rootKind != snapshot.rootKind) ||
+            (candidate.nRootSize != snapshot.nRootSize) ||
+            (candidate.nBufferBackingIdentity !=
+             snapshot.nBufferBackingIdentity) ||
+            (candidate.baBufferSnapshot != snapshot.baBufferSnapshot) ||
+            (candidate.sFilePath != snapshot.sFilePath) ||
+            (candidate.baFilePhysicalIdentity !=
+             snapshot.baFilePhysicalIdentity) ||
+            (candidate.baFileMutationIdentity !=
+             snapshot.baFileMutationIdentity) ||
+            (candidate.bContentFingerprintRequired !=
+             snapshot.bContentFingerprintRequired) ||
+            (candidate.nOwnerDeviceGeneration !=
+             snapshot.nOwnerDeviceGeneration)) {
+            return false;
+        }
+
+        for (qint32 i = 0; i < snapshot.listChain.size(); ++i) {
+            const SOURCE_DEVICE_CHAIN_ITEM &expected =
+                snapshot.listChain.at(i);
+            const SOURCE_DEVICE_CHAIN_ITEM &actual =
+                candidate.listChain.at(i);
+            if (!expected.pDevice ||
+                (actual.pDevice.data() != expected.pDevice.data()) ||
+                (actual.bIsSubDevice != expected.bIsSubDevice) ||
+                (actual.nInitLocation != expected.nInitLocation) ||
+                (actual.nSize != expected.nSize)) {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
     SOURCE_DEVICE_SNAPSHOT current = {};
-    if (!captureSourceDeviceSnapshot(pCurrentDevice, &current) ||
-        (current.pRootDevice.data() != snapshot.pRootDevice.data()) ||
-        (current.listChain.size() != snapshot.listChain.size()) ||
-        (current.rootKind != snapshot.rootKind) ||
-        (current.nRootSize != snapshot.nRootSize) ||
-        (current.nBufferBackingIdentity != snapshot.nBufferBackingIdentity) ||
-        (current.baBufferSnapshot != snapshot.baBufferSnapshot) ||
-        (current.sFilePath != snapshot.sFilePath) ||
-        (current.baFilePhysicalIdentity != snapshot.baFilePhysicalIdentity)) {
+    if (!guardedArchive ||
+        !guardedArchive->captureSourceDeviceSnapshot(pCurrentDevice,
+                                                     &current) ||
+        !guardedArchive ||
+        !matchesStructure(current)) {
         return false;
     }
 
-    for (qint32 i = 0; i < snapshot.listChain.size(); ++i) {
-        const SOURCE_DEVICE_CHAIN_ITEM &expected = snapshot.listChain.at(i);
-        const SOURCE_DEVICE_CHAIN_ITEM &actual = current.listChain.at(i);
-        if (!expected.pDevice ||
-            (actual.pDevice.data() != expected.pDevice.data()) ||
-            (actual.bIsSubDevice != expected.bIsSubDevice) ||
-            (actual.nInitLocation != expected.nInitLocation) ||
-            (actual.nSize != expected.nSize)) {
+    if (snapshot.bContentFingerprintRequired) {
+        QByteArray baCurrentFingerprint;
+        if (!archiveFingerprintSource(guardedArchive.data(), current,
+                                      &baCurrentFingerprint,
+                                      pPdStruct) ||
+            !guardedArchive ||
+            (baCurrentFingerprint != snapshot.baContentFingerprint)) {
+            return false;
+        }
+
+        // Hashing calls untrusted QIODevice virtual methods.  Re-capture the
+        // complete chain afterwards so a callback cannot move/resize/rebind a
+        // SubDevice after its bytes have already been authenticated.
+        SOURCE_DEVICE_SNAPSHOT afterFingerprint = {};
+        if (!guardedArchive ||
+            !guardedArchive->captureSourceDeviceSnapshot(
+                pCurrentDevice, &afterFingerprint) ||
+            !guardedArchive ||
+            !matchesStructure(afterFingerprint)) {
             return false;
         }
     }
@@ -406,18 +844,309 @@ bool XArchive::isSourceDeviceSnapshotCurrent(
     return true;
 }
 
-XArchive::XArchive(QIODevice *pDevice) : XBinary(pDevice)
+bool XArchive::bindUnpackSource(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    QPointer<XArchive> guardedArchive(this);
+
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedArchive->ownsUnpackSource(pState)) return false;
+
+    releaseUnpackSource(pState);
+    SOURCE_DEVICE_SNAPSHOT snapshot = {};
+    if (!guardedArchive ||
+        !guardedArchive->captureSourceDeviceSnapshot(
+            guardedArchive->getDevice(), &snapshot) ||
+        !guardedArchive) return false;
+
+    // Backings without a trustworthy mutation generation get a complete
+    // content fingerprint.  QFile uses its physical identity plus kernel
+    // last-write/change metadata so repeated state validation stays O(1).
+    // QBuffer still needs the hash to catch same-backing raw-pointer writes.
+    QByteArray baFingerprint;
+    if (snapshot.bContentFingerprintRequired &&
+        (!archiveFingerprintSource(guardedArchive.data(), snapshot,
+                                   &baFingerprint, pPdStruct) ||
+         !guardedArchive || baFingerprint.isEmpty())) {
+        return false;
+    }
+    snapshot.baContentFingerprint = baFingerprint;
+
+    // Assign the expected digest before validation.  This intentionally hashes
+    // a QBuffer/generic source once more: the first pass establishes the
+    // baseline; the second proves no raw-pointer callback changed it between
+    // capture and session publication.  QFile validation is metadata-only.
+    if (!guardedArchive->isSourceDeviceSnapshotCurrent(
+            snapshot, guardedArchive->getDevice(), pPdStruct) ||
+        !guardedArchive || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    ArchiveSourceSessionRegistry *pRegistry =
+        static_cast<ArchiveSourceSessionRegistry *>(
+            guardedArchive->getArchiveSourceSessionRegistry(true));
+    if (!pRegistry) return false;
+
+    QByteArray baToken;
+    do {
+        baToken = QUuid::createUuid().toRfc4122();
+    } while (baToken.isEmpty() || pRegistry->mapSessions.contains(baToken));
+
+    ArchiveSourceSessionRegistry::SESSION session = {};
+    session.snapshot = snapshot;
+    session.pContext = nullptr;
+    session.pOwnerState = pState;
+    session.bFinalized = false;
+    pRegistry->mapSessions.insert(baToken, session);
+    pState->baUnpackSourceToken = baToken;
+    return true;
+}
+
+bool XArchive::isUnpackSourceCurrent(const UNPACK_STATE *pState,
+                                     PDSTRUCT *pPdStruct)
+{
+    if (!pState || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    const QByteArray baToken = pState->baUnpackSourceToken;
+    const void *pExpectedContext = pState->pContext;
+    QPointer<XArchive> guardedArchive(this);
+    if (baToken.isEmpty()) return false;
+
+    ArchiveSourceSessionRegistry *pRegistry =
+        static_cast<ArchiveSourceSessionRegistry *>(
+            guardedArchive->getArchiveSourceSessionRegistry(false));
+    if (!pRegistry) return false;
+    const auto it = pRegistry->mapSessions.constFind(baToken);
+    if (it == pRegistry->mapSessions.constEnd() ||
+        (it->pOwnerState != pState) ||
+        (it->bFinalized && (it->pContext != pExpectedContext))) return false;
+
+    // Never retain a QHash value reference across source callbacks.  A direct
+    // caller need not hold an operation guard, and a re-entrant finish can
+    // remove the registry entry while snapshot validation is in progress.
+    const ArchiveSourceSessionRegistry::SESSION session = *it;
+    QPointer<ArchiveSourceSessionRegistry> guardedRegistry(pRegistry);
+    const bool bSnapshotCurrent = guardedArchive &&
+        guardedArchive->isSourceDeviceSnapshotCurrent(
+            session.snapshot, guardedArchive->getDevice(), pPdStruct);
+    if (!bSnapshotCurrent || !guardedArchive || !guardedRegistry || !pState ||
+        (pState->baUnpackSourceToken != baToken) ||
+        (pState->pContext != pExpectedContext) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    const auto currentIt = guardedRegistry->mapSessions.constFind(baToken);
+    return (currentIt != guardedRegistry->mapSessions.constEnd()) &&
+           (currentIt->pOwnerState == pState) &&
+           (currentIt->bFinalized == session.bFinalized) &&
+           (currentIt->pContext == session.pContext) &&
+           (!currentIt->bFinalized ||
+            (currentIt->pContext == pExpectedContext));
+}
+
+bool XArchive::getBoundUnpackSourceSnapshot(
+    const UNPACK_STATE *pState,
+    SOURCE_DEVICE_SNAPSHOT *pSnapshot) const
+{
+    if (pSnapshot) *pSnapshot = SOURCE_DEVICE_SNAPSHOT();
+    if (!pState || !pSnapshot ||
+        pState->baUnpackSourceToken.isEmpty()) {
+        return false;
+    }
+
+    ArchiveSourceSessionRegistry *pRegistry =
+        static_cast<ArchiveSourceSessionRegistry *>(
+            getArchiveSourceSessionRegistry(false));
+    if (!pRegistry) return false;
+    const auto it = pRegistry->mapSessions.constFind(
+        pState->baUnpackSourceToken);
+    if ((it == pRegistry->mapSessions.constEnd()) ||
+        (it->pOwnerState != pState) ||
+        (it->bFinalized && (it->pContext != pState->pContext))) {
+        return false;
+    }
+
+    *pSnapshot = it->snapshot;
+    return true;
+}
+
+bool XArchive::validateAndFinalizeUnpackSource(
+    UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    QPointer<XArchive> guardedArchive(this);
+    if (!guardedArchive ||
+        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
+        !guardedArchive) return false;
+    const QByteArray baToken = pState->baUnpackSourceToken;
+    ArchiveSourceSessionRegistry *pRegistry =
+        static_cast<ArchiveSourceSessionRegistry *>(
+            guardedArchive->getArchiveSourceSessionRegistry(false));
+    if (!pRegistry) return false;
+    auto it = pRegistry->mapSessions.find(baToken);
+    if (it == pRegistry->mapSessions.end() ||
+        (it->pOwnerState != pState) || it->bFinalized) return false;
+
+    // isUnpackSourceCurrent() above performs the complete structural/content
+    // validation after parsing.  No caller-controlled operation occurs before
+    // the context identity is committed below, so a redundant second/third
+    // full-file hash would add cost without closing another race boundary.
+    it->pContext = pState->pContext;
+    it->bFinalized = true;
+    return true;
+}
+
+bool XArchive::registerUnpackContextCleanup(
+    UNPACK_STATE *pState, void *pContext,
+    UNPACK_GUARD_STATE::CONTEXT_DELETER pDeleter)
+{
+    if (!pState || !pContext || !pDeleter ||
+        (pState->pContext != pContext) ||
+        !m_pUnpackGuardState || !m_pUnpackGuardState->bOwnerAlive) {
+        return false;
+    }
+
+    ArchiveSourceSessionRegistry *pRegistry =
+        static_cast<ArchiveSourceSessionRegistry *>(
+            getArchiveSourceSessionRegistry(false));
+    if (!pRegistry || pState->baUnpackSourceToken.isEmpty()) return false;
+    auto sessionIt = pRegistry->mapSessions.find(
+        pState->baUnpackSourceToken);
+    if ((sessionIt == pRegistry->mapSessions.end()) ||
+        (sessionIt->pOwnerState != pState) || sessionIt->bFinalized) {
+        return false;
+    }
+
+    for (const UNPACK_GUARD_STATE::CONTEXT_CLEANUP &cleanup :
+        m_pUnpackGuardState->listContexts) {
+        if (cleanup.pContext == pContext) {
+            if (cleanup.pDeleter != pDeleter) return false;
+            sessionIt->pContext = pContext;
+            return true;
+        }
+    }
+
+    UNPACK_GUARD_STATE::CONTEXT_CLEANUP cleanup = {};
+    cleanup.pContext = pContext;
+    cleanup.pDeleter = pDeleter;
+    try {
+        m_pUnpackGuardState->listContexts.append(cleanup);
+    } catch (const std::bad_alloc &) {
+        return false;
+    }
+    // Retain the provisional context identity in the private session before
+    // final source validation.  If validation fails while the owner survives,
+    // releaseUnpackSource() can then unregister the deferred deleter even when
+    // the format has already cleared the public state's pContext field.
+    sessionIt->pContext = pContext;
+    return true;
+}
+
+void XArchive::unregisterUnpackContextCleanup(void *pContext)
+{
+    if (!pContext || !m_pUnpackGuardState) return;
+    for (qint32 i = m_pUnpackGuardState->listContexts.size() - 1;
+         i >= 0; --i) {
+        if (m_pUnpackGuardState->listContexts.at(i).pContext == pContext) {
+            m_pUnpackGuardState->listContexts.removeAt(i);
+        }
+    }
+}
+
+bool XArchive::ownsUnpackSource(const UNPACK_STATE *pState)
+{
+    if (!pState || pState->baUnpackSourceToken.isEmpty()) return false;
+    ArchiveSourceSessionRegistry *pRegistry =
+        static_cast<ArchiveSourceSessionRegistry *>(
+            getArchiveSourceSessionRegistry(false));
+    if (!pRegistry) return false;
+    const auto it = pRegistry->mapSessions.constFind(
+        pState->baUnpackSourceToken);
+    return (it != pRegistry->mapSessions.constEnd()) && it->bFinalized &&
+           (it->pOwnerState == pState) &&
+           (it->pContext == pState->pContext);
+}
+
+void XArchive::releaseUnpackSource(UNPACK_STATE *pState)
+{
+    if (!pState) return;
+    const QByteArray baToken = pState->baUnpackSourceToken;
+    ArchiveSourceSessionRegistry *pRegistry =
+        static_cast<ArchiveSourceSessionRegistry *>(
+            getArchiveSourceSessionRegistry(false));
+    if (pRegistry && !baToken.isEmpty()) {
+        const auto it = pRegistry->mapSessions.constFind(baToken);
+        // A copied public state must not remove the real owner's session or
+        // make its copied token look legitimately finalized/cleared.
+        if ((it == pRegistry->mapSessions.constEnd()) ||
+            (it->pOwnerState != pState)) return;
+        unregisterUnpackContextCleanup(it->pContext);
+        pRegistry->mapSessions.remove(baToken);
+    }
+    pState->baUnpackSourceToken.clear();
+}
+
+bool XArchive::transferUnpackSourceOwnership(UNPACK_STATE *pFromState,
+                                             UNPACK_STATE *pToState)
+{
+    if (!pFromState || !pToState || (pFromState == pToState) ||
+        pFromState->baUnpackSourceToken.isEmpty() ||
+        !pToState->baUnpackSourceToken.isEmpty() || pToState->pContext) {
+        return false;
+    }
+
+    ArchiveSourceSessionRegistry *pRegistry =
+        static_cast<ArchiveSourceSessionRegistry *>(
+            getArchiveSourceSessionRegistry(false));
+    if (!pRegistry) return false;
+    auto it = pRegistry->mapSessions.find(
+        pFromState->baUnpackSourceToken);
+    if ((it == pRegistry->mapSessions.end()) ||
+        (it->pOwnerState != pFromState) ||
+        (it->bFinalized && (it->pContext != pFromState->pContext))) {
+        return false;
+    }
+
+    // Preserve every streaming field while changing only the exact owner
+    // address.  The destination precondition makes this a genuine move, not
+    // authorization of a pre-populated public copy.
+    UNPACK_STATE movedState = *pFromState;
+    *pToState = movedState;
+    it->pOwnerState = pToState;
+    *pFromState = UNPACK_STATE();
+    return true;
+}
+
+XArchive::XArchive(QIODevice *pDevice)
+    : XBinary(pDevice),
+      m_pArchiveSourceSessionRegistry(nullptr),
+      m_pUnpackGuardState(new UNPACK_GUARD_STATE),
+      m_bUnpackOperationInProgress(m_pUnpackGuardState, false),
+      m_bNestedUnpackInfoAuthorized(m_pUnpackGuardState, true)
+{
+}
+
+XArchive::~XArchive()
+{
+    if (m_pUnpackGuardState) {
+        m_pUnpackGuardState->bOwnerAlive = false;
+        if (!m_pUnpackGuardState->bOperationInProgress) {
+            m_pUnpackGuardState->cleanupContexts();
+        }
+    }
+    QObject *pRegistry = m_pArchiveSourceSessionRegistry;
+    m_pArchiveSourceSessionRegistry = nullptr;
+    delete pRegistry;
 }
 
 quint64 XArchive::getNumberOfRecords(PDSTRUCT *pPdStruct)
 {
-    return getNumberOfArchiveRecords(pPdStruct);
+    QPointer<XArchive> guardedArchive(this);
+    const quint64 nResult = guardedArchive->getNumberOfArchiveRecords(pPdStruct);
+    return guardedArchive ? nResult : 0;
 }
 
 QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<RECORD> listResult;
+    QPointer<XArchive> guardedArchive(this);
 
     // -1 is the only unbounded sentinel.  Avoid initializing an archive when
     // the requested result is necessarily empty or the limit is invalid.
@@ -441,25 +1170,41 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     // Initialize unpacking state
     UNPACK_STATE state = {};
 
-    if (!initUnpack(&state, mapProperties, pPdStruct)) {
+    if (!guardedArchive ||
+        !guardedArchive->initUnpack(&state, mapProperties, pPdStruct) ||
+        !guardedArchive) {
         return listResult;
     }
+
+    const qint32 nNumberOfRecords = state.nNumberOfRecords;
 
     // Iterate through records using streaming API.  A successful initializer
     // must expose a sane cursor; otherwise calling infoCurrent() with a
     // negative index is undefined for most format implementations.
     qint32 nIndex = 0;
-    bool bEnumerationValid = (state.nCurrentIndex >= 0) && (state.nNumberOfRecords >= 0) &&
-                             (state.nCurrentIndex <= state.nNumberOfRecords);
+    bool bEnumerationValid = (state.nCurrentIndex == 0) &&
+                             (nNumberOfRecords >= 0) &&
+                             (state.nCurrentIndex <= nNumberOfRecords);
 
-    while (bEnumerationValid && (state.nCurrentIndex < state.nNumberOfRecords) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while (bEnumerationValid &&
+           (state.nCurrentIndex < nNumberOfRecords) &&
+           XBinary::isPdStructNotCanceled(pPdStruct)) {
         // Get current record info
-        ARCHIVERECORD archiveRecord = infoCurrent(&state, pPdStruct);
+        const qint32 nExpectedIndex = state.nCurrentIndex;
+        ARCHIVERECORD archiveRecord =
+            guardedArchive->infoCurrent(&state, pPdStruct);
 
         // A callback or parser is allowed to cancel during infoCurrent().  Do
         // not publish the record that was being assembled when that happened.
-        if (!XBinary::isPdStructNotCanceled(pPdStruct) || (state.nCurrentIndex < 0) || (state.nNumberOfRecords < 0)) {
-            if ((state.nCurrentIndex < 0) || (state.nNumberOfRecords < 0)) bEnumerationValid = false;
+        if (!guardedArchive || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+            archiveRecord.mapProperties.isEmpty() ||
+            (archiveRecord.nStreamOffset < 0) ||
+            (archiveRecord.nStreamSize < 0) ||
+            (state.nCurrentIndex < 0) || (state.nNumberOfRecords < 0) ||
+            (state.nCurrentIndex != nExpectedIndex) ||
+            (state.nNumberOfRecords != nNumberOfRecords) ||
+            (state.nCurrentIndex >= nNumberOfRecords)) {
+            bEnumerationValid = false;
             break;
         }
 
@@ -527,8 +1272,12 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
         // Move to next record
         const qint32 nPreviousIndex = state.nCurrentIndex;
-        const bool bMoved = moveToNext(&state, pPdStruct);
-        if ((state.nCurrentIndex < 0) || (state.nNumberOfRecords < 0)) {
+        const bool bMoved = guardedArchive->moveToNext(&state, pPdStruct);
+        if (!guardedArchive ||
+            !XBinary::isPdStructNotCanceled(pPdStruct) ||
+            (state.nCurrentIndex < 0) || (state.nNumberOfRecords < 0) ||
+            (state.nNumberOfRecords != nNumberOfRecords) ||
+            (state.nCurrentIndex > nNumberOfRecords)) {
             bEnumerationValid = false;
             break;
         }
@@ -536,12 +1285,16 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
             // Returning false is normal after the last declared record.  It is
             // corruption when records are still outstanding, and a partial
             // prefix must not be published as a complete enumeration.
-            if ((nPreviousIndex + 1) < state.nNumberOfRecords) {
+            if ((nPreviousIndex + 1) < nNumberOfRecords) {
+                bEnumerationValid = false;
+            } else if ((state.nCurrentIndex != nPreviousIndex) &&
+                       (state.nCurrentIndex != nNumberOfRecords)) {
                 bEnumerationValid = false;
             }
             break;
         }
-        if (state.nCurrentIndex <= nPreviousIndex) {
+        if ((state.nCurrentIndex != (nPreviousIndex + 1)) ||
+            (state.nCurrentIndex >= nNumberOfRecords)) {
             bEnumerationValid = false;
             break;
         }
@@ -549,7 +1302,8 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 
     // Clean up unpacking state
     // Cleanup must not inherit a canceled enumeration token.
-    const bool bFinished = finishUnpack(&state, nullptr);
+    const bool bFinished = guardedArchive &&
+        guardedArchive->finishUnpack(&state, nullptr) && guardedArchive;
     if (!bEnumerationValid || !bFinished || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         listResult.clear();
     }
@@ -1102,17 +1856,21 @@ XArchive::COMPRESS_RESULT XArchive::_compress_deflate(QIODevice *pSourceDevice, 
 QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedLimit)
 {
     QByteArray result;
+    QPointer<XArchive> guardedArchive(this);
+    QPointer<QIODevice> guardedSourceDevice(getDevice());
+
+    if (!guardedSourceDevice) return result;
 
     QBuffer buffer;
     buffer.setBuffer(&result);
 
     if (buffer.open(QIODevice::WriteOnly)) {
-        const bool bDecompressed = _decompressRecord(pRecord, getDevice(), &buffer, pPdStruct, nDecompressedOffset, nDecompressedLimit);
+        const bool bDecompressed = _decompressRecord(pRecord, guardedSourceDevice.data(), &buffer, pPdStruct, nDecompressedOffset, nDecompressedLimit);
         buffer.close();
 
         // A QByteArray return value must never expose a valid-looking prefix
         // from a failed or canceled decode.
-        if (!bDecompressed || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!guardedArchive || !guardedSourceDevice || !bDecompressed || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             result.clear();
         }
     }
@@ -1137,13 +1895,16 @@ QByteArray XArchive::decompress(QList<XArchive::RECORD> *pListArchive, const QSt
 
 QByteArray XArchive::decompress(const QString &sRecordFileName, PDSTRUCT *pPdStruct)
 {
-    QList<XArchive::RECORD> listArchive = getRecords(-1, pPdStruct);
+    QPointer<XArchive> guardedArchive(this);
+    QList<XArchive::RECORD> listArchive = guardedArchive->getRecords(-1, pPdStruct);
+    if (!guardedArchive) return QByteArray();
 
-    return decompress(&listArchive, sRecordFileName, pPdStruct);
+    return guardedArchive->decompress(&listArchive, sRecordFileName, pPdStruct);
 }
 
 bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
+    QPointer<XArchive> guardedArchive(this);
     if (!pRecord || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -1152,8 +1913,8 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
         return XBinary::createDirectory(sResultFileName) && XBinary::isPdStructNotCanceled(pPdStruct);
     }
 
-    QIODevice *pSourceDevice = getDevice();
-    if (!pSourceDevice || !pSourceDevice->isReadable()) {
+    QPointer<QIODevice> guardedSourceDevice(getDevice());
+    if (!guardedSourceDevice || !guardedSourceDevice->isReadable()) {
         return false;
     }
 
@@ -1175,9 +1936,9 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
     // A zero packed size is not proof of a valid empty member.  The selected
     // codec must still validate its terminator, declared output size, password,
     // and checksum contract.
-    const bool bResult = _decompressRecord(pRecord, pSourceDevice, &workFile, pPdStruct, 0, -1);
+    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), &workFile, pPdStruct, 0, -1);
 
-    if (!bResult || !XBinary::isPdStructNotCanceled(pPdStruct) || !workFile.seek(0)) {
+    if (!guardedArchive || !guardedSourceDevice || !bResult || !XBinary::isPdStructNotCanceled(pPdStruct) || !workFile.seek(0)) {
         return false;
     }
 
@@ -1208,12 +1969,19 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
 
 bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
 {
-    return _decompressRecord(pRecord, getDevice(), pDestDevice, pPdStruct, 0, -1);
+    QPointer<XArchive> guardedArchive(this);
+    QPointer<QIODevice> guardedSourceDevice(getDevice());
+    QPointer<QIODevice> guardedDestDevice(pDestDevice);
+    if (!guardedSourceDevice || !guardedDestDevice) return false;
+
+    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), guardedDestDevice.data(), pPdStruct, 0, -1);
+    return guardedArchive && guardedSourceDevice && guardedDestDevice && bResult;
 }
 
 bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
+    QPointer<XArchive> guardedArchive(this);
 
     if (!pListArchive) return false;
 
@@ -1221,10 +1989,10 @@ bool XArchive::decompressToFile(QList<XArchive::RECORD> *pListArchive, const QSt
 
     if (record.spInfo.sRecordName != "")  // TODO bIsValid
     {
-        bResult = decompressToFile(&record, sResultFileName, pPdStruct);
+        bResult = guardedArchive->decompressToFile(&record, sResultFileName, pPdStruct);
     }
 
-    return bResult;
+    return guardedArchive && bResult;
 }
 
 bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultPathName, PDSTRUCT *pPdStruct)
@@ -1233,6 +2001,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
 
     bool bResult = true;
     bool bMatched = false;
+    QPointer<XArchive> guardedArchive(this);
 
     const QString sRawRecordFileName = QDir::fromNativeSeparators(sRecordFileName);
     const bool bSelectorWasProvided = !sRawRecordFileName.isEmpty();
@@ -1323,35 +2092,55 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
                 continue;
             }
 
-            if (!bIsFolder && !decompressToFile(&record, sResultFileName, pPdStruct)) {
+            if (!bIsFolder &&
+                (!guardedArchive ||
+                 !guardedArchive->decompressToFile(
+                     &record, sResultFileName, pPdStruct) ||
+                 !guardedArchive)) {
                 bResult = false;
             }
         }
     }
     // TODO emits
 
-    return bResult && XBinary::isPdStructNotCanceled(pPdStruct) && (bExtractAll || bMatched);
+    return guardedArchive && bResult &&
+           XBinary::isPdStructNotCanceled(pPdStruct) &&
+           (bExtractAll || bMatched);
 }
 
 bool XArchive::decompressToFile(const QString &sArchiveFileName, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
+    QPointer<XArchive> guardedArchive(this);
 
     QFile file;
     file.setFileName(sArchiveFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        QIODevice *pOriginalDevice = getDevice();
-        setDevice(&file);
+        QPointer<QIODevice> guardedOriginalDevice(
+            guardedArchive ? guardedArchive->getDevice() : nullptr);
+        if (!guardedArchive) {
+            file.close();
+            return false;
+        }
+        guardedArchive->setDevice(&file);
 
-        if (isValid(pPdStruct)) {
-            QList<RECORD> listRecords = getRecords(-1, pPdStruct);
+        if (guardedArchive && guardedArchive->isValid(pPdStruct) &&
+            guardedArchive) {
+            QList<RECORD> listRecords =
+                guardedArchive->getRecords(-1, pPdStruct);
 
-            bResult = decompressToFile(&listRecords, sRecordFileName, sResultFileName, pPdStruct);
+            if (guardedArchive) {
+                bResult = guardedArchive->decompressToFile(
+                    &listRecords, sRecordFileName, sResultFileName,
+                    pPdStruct);
+            }
         }
 
         // Never leave the archive pointing at this stack-local QFile.
-        setDevice(pOriginalDevice);
+        if (guardedArchive) {
+            guardedArchive->setDevice(guardedOriginalDevice.data());
+        }
         file.close();
     }
 
@@ -1360,6 +2149,7 @@ bool XArchive::decompressToFile(const QString &sArchiveFileName, const QString &
 
 bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruct)
 {
+    QPointer<XArchive> guardedArchive(this);
     PDSTRUCT pdStructEmpty = {};
     if (!pPdStruct) {
         pdStructEmpty = XBinary::createPdStruct();
@@ -1374,13 +2164,37 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
 
     UNPACK_STATE state = {};
     QMap<UNPACK_PROP, QVariant> mapProperties;
-    if (!initUnpack(&state, mapProperties, pPdStruct)) return false;
+    if (!guardedArchive ||
+        !guardedArchive->initUnpack(&state, mapProperties, pPdStruct) ||
+        !guardedArchive) return false;
 
-    bool bResult = state.nNumberOfRecords > 0;
-    bool bEnumerationValid = true;
+    const qint32 nNumberOfRecords = state.nNumberOfRecords;
 
-    while (bEnumerationValid && (state.nCurrentIndex < state.nNumberOfRecords) && isPdStructNotCanceled(pPdStruct)) {
-        const ARCHIVERECORD archiveRecord = infoCurrent(&state, pPdStruct);
+    bool bEnumerationValid = (state.nCurrentIndex == 0) &&
+                             (nNumberOfRecords >= 0) &&
+                             (state.nCurrentIndex <=
+                              nNumberOfRecords);
+    bool bResult = bEnumerationValid;
+
+    while (bEnumerationValid &&
+           (state.nCurrentIndex < nNumberOfRecords) &&
+           isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nExpectedIndex = state.nCurrentIndex;
+        const ARCHIVERECORD archiveRecord =
+            guardedArchive->infoCurrent(&state, pPdStruct);
+        if (!guardedArchive ||
+            !isPdStructNotCanceled(pPdStruct) ||
+            archiveRecord.mapProperties.isEmpty() ||
+            (archiveRecord.nStreamOffset < 0) ||
+            (archiveRecord.nStreamSize < 0) ||
+            (state.nCurrentIndex < 0) ||
+            (state.nCurrentIndex != nExpectedIndex) ||
+            (state.nNumberOfRecords != nNumberOfRecords) ||
+            (state.nCurrentIndex >= nNumberOfRecords)) {
+            bResult = false;
+            bEnumerationValid = false;
+            break;
+        }
         QString sRecordName = QDir::fromNativeSeparators(archiveRecord.mapProperties.value(FPART_PROP_ORIGINALNAME).toString());
         QString sSafeRecordPath;
 
@@ -1398,43 +2212,123 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
                        archivePathHasUnsafeLink(sCanonicalRoot, sSafeRecordPath)) {
                 bResult = false;
             } else {
-                QFile fileResult(sResultFileName);
-                if (!fileResult.open(QIODevice::ReadWrite | QIODevice::Truncate) ||
-                    !unpackCurrent(&state, &fileResult, pPdStruct)) {
+                const QString sOutputDirectory =
+                    QFileInfo(sResultFileName).absolutePath();
+                QTemporaryFile stagedFile(
+                    QDir(sOutputDirectory).filePath(
+                        QLatin1String(".xarchive-XXXXXX")));
+                if (!stagedFile.open() ||
+                    !guardedArchive->unpackCurrent(&state, &stagedFile,
+                                                   pPdStruct) ||
+                    !guardedArchive ||
+                    (state.nCurrentIndex != nExpectedIndex) ||
+                    (state.nNumberOfRecords != nNumberOfRecords) ||
+                    !isPdStructNotCanceled(pPdStruct) ||
+                    !stagedFile.seek(0) ||
+                    archivePathHasUnsafeLink(sCanonicalRoot,
+                                             sSafeRecordPath)) {
                     bResult = false;
+                } else {
+                    QSaveFile outputFile(sResultFileName);
+                    bool bPublished = outputFile.open(QIODevice::WriteOnly);
+                    QByteArray baBuffer(0x4000, 0);
+                    qint64 nRemaining = stagedFile.size();
+                    bPublished = bPublished && (nRemaining >= 0);
+
+                    while (bPublished && (nRemaining > 0) &&
+                           isPdStructNotCanceled(pPdStruct)) {
+                        const qint64 nRead = archiveReadWithBoundedProgress(
+                            &stagedFile, baBuffer.data(),
+                            (std::min)(nRemaining,
+                                       (qint64)baBuffer.size()));
+                        if ((nRead <= 0) || (nRead > nRemaining) ||
+                            !archiveWriteAll(&outputFile,
+                                             baBuffer.constData(), nRead,
+                                             pPdStruct)) {
+                            bPublished = false;
+                            break;
+                        }
+                        nRemaining -= nRead;
+                    }
+
+                    if (!bPublished || (nRemaining != 0) ||
+                        !isPdStructNotCanceled(pPdStruct) ||
+                        (outputFile.error() != QFile::NoError)) {
+                        outputFile.cancelWriting();
+                        bResult = false;
+                    } else {
+                        bResult = outputFile.commit();
+                    }
                 }
-                fileResult.close();
             }
         }
 
+        // A later successful record must never mask an earlier extraction,
+        // path, or publication failure.
+        if (!bResult) break;
+
         const qint32 nPreviousIndex = state.nCurrentIndex;
-        if (!moveToNext(&state, pPdStruct)) break;
-        if (state.nCurrentIndex <= nPreviousIndex) bEnumerationValid = false;
+        const bool bMoved = guardedArchive->moveToNext(&state, pPdStruct);
+        if (!guardedArchive || !isPdStructNotCanceled(pPdStruct) ||
+            (state.nCurrentIndex < 0) ||
+            (state.nNumberOfRecords != nNumberOfRecords) ||
+            (state.nCurrentIndex > nNumberOfRecords)) {
+            bEnumerationValid = false;
+            break;
+        }
+        if (!bMoved) {
+            if ((nPreviousIndex + 1) < nNumberOfRecords) {
+                bEnumerationValid = false;
+            } else if ((state.nCurrentIndex != nPreviousIndex) &&
+                       (state.nCurrentIndex != nNumberOfRecords)) {
+                bEnumerationValid = false;
+            }
+            break;
+        }
+        if ((state.nCurrentIndex != (nPreviousIndex + 1)) ||
+            (state.nCurrentIndex >= nNumberOfRecords))
+            bEnumerationValid = false;
     }
 
-    const bool bFinished = finishUnpack(&state, nullptr);
-    return bResult && bEnumerationValid && bFinished && isPdStructNotCanceled(pPdStruct);
+    const bool bFinished = guardedArchive &&
+        guardedArchive->finishUnpack(&state, nullptr);
+    return guardedArchive && bResult && bEnumerationValid && bFinished &&
+           isPdStructNotCanceled(pPdStruct);
 }
 
 bool XArchive::decompressToPath(const QString &sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
+    QPointer<XArchive> guardedArchive(this);
 
     QFile file;
     file.setFileName(sArchiveFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        QIODevice *pOriginalDevice = getDevice();
-        setDevice(&file);
+        QPointer<QIODevice> guardedOriginalDevice(
+            guardedArchive ? guardedArchive->getDevice() : nullptr);
+        if (!guardedArchive) {
+            file.close();
+            return false;
+        }
+        guardedArchive->setDevice(&file);
 
-        if (isValid(pPdStruct)) {
-            QList<RECORD> listRecords = getRecords(-1, pPdStruct);
+        if (guardedArchive && guardedArchive->isValid(pPdStruct) &&
+            guardedArchive) {
+            QList<RECORD> listRecords =
+                guardedArchive->getRecords(-1, pPdStruct);
 
-            bResult = decompressToPath(&listRecords, sRecordPathName, sResultPathName, pPdStruct);
+            if (guardedArchive) {
+                bResult = guardedArchive->decompressToPath(
+                    &listRecords, sRecordPathName, sResultPathName,
+                    pPdStruct);
+            }
         }
 
         // Never leave the archive pointing at this stack-local QFile.
-        setDevice(pOriginalDevice);
+        if (guardedArchive) {
+            guardedArchive->setDevice(guardedOriginalDevice.data());
+        }
         file.close();
     }
 
@@ -1492,9 +2386,11 @@ XArchive::RECORD XArchive::getArchiveRecordByUUID(const QString &sUUID, QList<RE
 
 bool XArchive::isArchiveRecordPresent(const QString &sRecordFileName, PDSTRUCT *pPdStruct)
 {
-    QList<XArchive::RECORD> listRecords = getRecords(-1, pPdStruct);
+    QPointer<XArchive> guardedArchive(this);
+    QList<XArchive::RECORD> listRecords = guardedArchive->getRecords(-1, pPdStruct);
+    if (!guardedArchive) return false;
 
-    return isArchiveRecordPresent(sRecordFileName, &listRecords, pPdStruct);
+    return XArchive::isArchiveRecordPresent(sRecordFileName, &listRecords, pPdStruct);
 }
 
 bool XArchive::isArchiveRecordPresent(const QString &sRecordFileName, QList<XArchive::RECORD> *pListRecords, PDSTRUCT *pPdStruct)
@@ -1694,130 +2590,256 @@ QMap<XBinary::UNPACK_PROP, QVariant> XArchive::getDefaultUnpackProperties()
     return result;
 }
 
+bool XArchive::isUnpackOutputSupported(QIODevice *pDevice) const
+{
+    QPointer<XArchive> guardedArchive(const_cast<XArchive *>(this));
+    QPointer<QIODevice> guardedDevice(pDevice);
+    if (!guardedDevice) return false;
+    const bool bOpen = guardedDevice->isOpen();
+    if (!guardedArchive || !guardedDevice || !bOpen) return false;
+    const bool bWritable = guardedDevice->isWritable();
+    if (!guardedArchive || !guardedDevice || !bWritable) return false;
+    const bool bSequential = guardedDevice->isSequential();
+    if (!guardedArchive || !guardedDevice || bSequential) return false;
+    const QIODevice::OpenMode openMode = guardedDevice->openMode();
+    if (!guardedArchive || !guardedDevice ||
+        (openMode & (QIODevice::Append | QIODevice::Text))) return false;
+    return guardedArchive && guardedDevice &&
+           XBinary::isResizeEnable(guardedDevice.data()) && guardedDevice;
+}
+
+bool XArchive::publishUnpackOutput(QIODevice *pStageDevice,
+                                   QIODevice *pOutputDevice,
+                                   const UNPACK_STATE *pState,
+                                   PDSTRUCT *pPdStruct)
+{
+    QPointer<XArchive> guardedArchive(this);
+    QPointer<QIODevice> guardedStage(pStageDevice);
+    QPointer<QIODevice> guardedOutput(pOutputDevice);
+    QPointer<QIODevice> guardedSource(
+        guardedArchive ? guardedArchive->getDevice() : nullptr);
+    if (!guardedArchive || !guardedStage || !guardedOutput ||
+        !guardedSource || !pState) {
+        return false;
+    }
+    const bool bStageOpen = guardedStage->isOpen();
+    if (!guardedArchive || !guardedStage || !bStageOpen) return false;
+    const bool bStageReadable = guardedStage->isReadable();
+    if (!guardedArchive || !guardedStage || !bStageReadable) return false;
+    const bool bStageSequential = guardedStage->isSequential();
+    if (!guardedArchive || !guardedStage || bStageSequential ||
+        !guardedArchive->isUnpackOutputSupported(guardedOutput.data()) ||
+        !guardedArchive || !guardedOutput ||
+        !guardedSource ||
+        XBinary::devicesAlias(guardedStage.data(), guardedOutput.data()) ||
+        !guardedStage || !guardedOutput || !guardedSource ||
+        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
+        !guardedStage || !guardedOutput || !guardedSource ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) || !guardedArchive ||
+        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
+        !guardedArchive || !guardedStage ||
+        !guardedOutput || !guardedSource) return false;
+
+    const qint64 nStageSize = guardedStage->size();
+    if (!guardedArchive || !guardedStage) return false;
+    const qint64 nOriginalPosition = guardedOutput->pos();
+    if (!guardedArchive || !guardedOutput || (nStageSize < 0) ||
+        (nOriginalPosition < 0)) {
+        return false;
+    }
+    const bool bStageSeeked = guardedStage->seek(0);
+    if (!guardedArchive || !guardedStage || !bStageSeeked) return false;
+
+    // Allocate every fallible private resource before touching caller-owned
+    // bytes.  A decoder failure therefore leaves both bytes and cursor intact.
+    QByteArray baBuffer;
+    try {
+        baBuffer.resize(0x10000);
+    } catch (const std::bad_alloc &) {
+        return false;
+    }
+    if (baBuffer.size() != 0x10000) return false;
+
+    bool bOutputCleared = false;
+    const auto failPublication = [&]() -> bool {
+        if (guardedOutput && bOutputCleared) {
+            XBinary::resize(guardedOutput.data(), 0);
+            if (guardedOutput) guardedOutput->seek(0);
+        } else if (guardedOutput && (nOriginalPosition >= 0)) {
+            guardedOutput->seek(nOriginalPosition);
+        }
+        return false;
+    };
+
+    const bool bOutputSeeked = guardedOutput->seek(0);
+    if (!guardedArchive || !guardedOutput || !bOutputSeeked) return false;
+    if (!guardedOutput || !XBinary::resize(guardedOutput.data(), 0)) {
+        if (guardedOutput) guardedOutput->seek(nOriginalPosition);
+        return false;
+    }
+    bOutputCleared = true;
+    if (!guardedOutput ||
+        !XBinary::resize(guardedOutput.data(), nStageSize) ||
+        !guardedArchive || !guardedOutput || !guardedOutput->seek(0) ||
+        !guardedArchive) {
+        return failPublication();
+    }
+
+    qint64 nPublished = 0;
+    while (nPublished < nStageSize) {
+        if (!guardedArchive || !guardedStage || !guardedOutput ||
+            !guardedSource ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return failPublication();
+        }
+        const bool bStageSeeked = guardedStage->seek(nPublished);
+        if (!guardedArchive || !guardedStage || !guardedOutput ||
+            !guardedSource || !bStageSeeked) return failPublication();
+        const qint64 nRequest = qMin<qint64>(baBuffer.size(),
+                                             nStageSize - nPublished);
+        const qint64 nRead = archiveReadWithBoundedProgress(
+            guardedStage.data(), baBuffer.data(), nRequest);
+        if ((nRead <= 0) || (nRead > nRequest) || !guardedArchive ||
+            !guardedOutput ||
+            (guardedArchive->safeWriteData(
+                 guardedOutput.data(), nPublished, baBuffer.constData(),
+                 nRead, pPdStruct) != nRead) || !guardedArchive ||
+            !guardedOutput) {
+            return failPublication();
+        }
+        nPublished += nRead;
+    }
+
+    if (!guardedArchive || !guardedOutput || !guardedSource ||
+        !guardedArchive->isUnpackOutputSupported(guardedOutput.data()) ||
+        !guardedArchive || !guardedOutput ||
+        !guardedSource) return failPublication();
+    const qint64 nPublishedSize = guardedOutput->size();
+    if (!guardedArchive || !guardedOutput || !guardedSource ||
+        (nPublishedSize != nPublished)) {
+        return failPublication();
+    }
+    const bool bFinalSeek = guardedOutput->seek(nPublished);
+    if (!guardedArchive || !guardedOutput || !guardedSource || !bFinalSeek ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return failPublication();
+    }
+
+    // Source authentication is deliberately the final untrusted operation.
+    // No output callback may mutate the source after this validation and still
+    // allow success to escape.
+    if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
+        !guardedArchive || !guardedOutput || !guardedSource) {
+        return failPublication();
+    }
+
+    return true;
+}
+
 bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    if (pState && pDevice && (pState->nCurrentIndex >= 0) && (pState->nNumberOfRecords > 0) &&
-        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        XBinary::ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
-
-        if (archiveRecord.mapProperties.value(XBinary::FPART_PROP_ISFOLDER).toBool()) {
-            if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-            if (pDevice->isSequential()) return pDevice->pos() == 0;
-
-            const bool bReset = pDevice->seek(0) && ((pDevice->size() == 0) || XBinary::resize(pDevice, 0));
-            return bReset && XBinary::isPdStructNotCanceled(pPdStruct);  // Directory
-        }
-
-        XBinary::CRC_TYPE crcType =
-            (XBinary::CRC_TYPE)archiveRecord.mapProperties.value(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_UNKNOWN).toUInt();
-        bool bCheckCRC = XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, crcType) && (crcType != XBinary::CRC_TYPE_UNKNOWN) &&
-                         archiveRecord.mapProperties.contains(XBinary::FPART_PROP_RESULTCRC);
-        QIODevice *pWorkDevice = pDevice;
-        QIODevice *pCRCBuffer = nullptr;
-
-        if (bCheckCRC && !pDevice->isReadable()) {
-            qint64 nExpectedSize = archiveRecord.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong();
-            pCRCBuffer = XBinary::createFileBuffer(qMax((qint64)0, nExpectedSize), pPdStruct);
-            pWorkDevice = pCRCBuffer;
-
-            if (!pWorkDevice) {
-                XBinary::setPdStructErrorString(pPdStruct, tr("Cannot create CRC verification buffer"));
-                return false;
-            }
-        }
-
-        // Decoder writes start at offset zero, so make the destination an
-        // exact new result rather than leaving a stale tail from earlier
-        // contents.  For an unsupported random-access QIODevice, fail instead
-        // of silently returning a mixture of old and new bytes.
-        if (!pWorkDevice->isSequential()) {
-            bool bOutputReset = pWorkDevice->seek(0);
-
-            if (bOutputReset && (pWorkDevice->size() != 0)) {
-                bOutputReset = XBinary::resize(pWorkDevice, 0);
-            }
-
-            if (!bOutputReset) {
-                XBinary::setPdStructErrorString(pPdStruct, tr("Cannot clear unpacked output"));
-                XBinary::freeFileBuffer(&pCRCBuffer);
-                return false;
-            }
-        }
-
-        // A zero output size is not proof that the compressed stream is valid.
-        // Run it through the normal pipeline so decoders can consume stream
-        // terminators and encryption layers can authenticate empty payloads.
-        XDecompress xDecompress;
-        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
-        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
-
-        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pWorkDevice, pState->mapUnpackProperties, pPdStruct);
-
-        if (bResult && pCRCBuffer) {
-            bResult = pCRCBuffer->seek(0);
-
-            if (bResult && !pDevice->isSequential()) {
-                bResult = pDevice->seek(0);
-
-                // The verified buffer is the complete result.  Remove any
-                // previous caller data before copying it, including the
-                // zero-byte case where the copy loop performs no writes.
-                if (bResult && (pDevice->size() != 0)) {
-                    bResult = XBinary::resize(pDevice, 0);
-                }
-            } else if (bResult && pDevice->isSequential() && (pCRCBuffer->size() == 0)) {
-                bResult = (pDevice->pos() == 0);
-            }
-
-            QByteArray baBuffer(XBinary::getBufferSize(pPdStruct), 0);
-            qint64 nRemaining = pCRCBuffer->size();
-
-            while (bResult && (nRemaining > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                qint64 nChunkSize = qMin(nRemaining, (qint64)baBuffer.size());
-                qint64 nRead = pCRCBuffer->read(baBuffer.data(), nChunkSize);
-
-                if (nRead != nChunkSize) {
-                    bResult = false;
-                    break;
-                }
-
-                qint64 nWritten = 0;
-                while ((nWritten < nRead) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                    qint64 nResult = pDevice->write(baBuffer.constData() + nWritten, nRead - nWritten);
-
-                    if ((nResult <= 0) || (nResult > (nRead - nWritten))) {
-                        bResult = false;
-                        break;
-                    }
-
-                    nWritten += nResult;
-                }
-
-                if (!bResult || (nWritten != nRead)) {
-                    bResult = false;
-                    break;
-                }
-
-                nRemaining -= nRead;
-            }
-
-            if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-                bResult = false;
-            }
-
-            if (!bResult) {
-                if (!pDevice->isSequential()) {
-                    XBinary::resize(pDevice, 0);
-                    pDevice->seek(0);
-                }
-                XBinary::setPdStructErrorString(pPdStruct, tr("Cannot write unpacked output"));
-            }
-        }
-
-        XBinary::freeFileBuffer(&pCRCBuffer);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    QPointer<XArchive> guardedArchive(this);
+    if (!operationGuard.isAcquired() || !pState || !pDevice ||
+        !guardedArchive ||
+        !guardedArchive->isUnpackOutputSupported(pDevice) ||
+        !guardedArchive ||
+        (pState->nCurrentIndex < 0) ||
+        (pState->nNumberOfRecords <= 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
     }
+
+    QPointer<QIODevice> guardedOutput(pDevice);
+    QPointer<QIODevice> guardedSource(
+        guardedArchive ? guardedArchive->getDevice() : nullptr);
+    if (!guardedArchive || !guardedSource ||
+        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
+        !guardedArchive ||
+        !guardedOutput ||
+        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data())) {
+        return false;
+    }
+
+    SOURCE_DEVICE_SNAPSHOT sourceSnapshot;
+    if (!guardedArchive || !guardedSource ||
+        !guardedArchive->getBoundUnpackSourceSnapshot(
+            pState, &sourceSnapshot) || !guardedArchive) {
+        return false;
+    }
+
+    UNPACK_INFO_AUTHORIZATION infoAuthorization(
+        guardedArchive->m_pUnpackGuardState);
+    if (!infoAuthorization.isAuthorized()) return false;
+    const XBinary::ARCHIVERECORD archiveRecord =
+        guardedArchive->infoCurrent(pState, pPdStruct);
+    if (!guardedArchive || !guardedOutput ||
+        !guardedArchive->isUnpackOutputSupported(guardedOutput.data()) ||
+        !guardedArchive ||
+        !guardedArchive->isSourceDeviceSnapshotCurrent(
+            sourceSnapshot, guardedArchive->getDevice(), pPdStruct) ||
+        !guardedArchive ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    if (archiveRecord.mapProperties
+            .value(XBinary::FPART_PROP_ISFOLDER)
+            .toBool()) {
+        QBuffer emptyStage;
+        const bool bStageOpen = emptyStage.open(QIODevice::ReadWrite);
+        return guardedArchive && bStageOpen && guardedOutput &&
+               guardedArchive->isSourceDeviceSnapshotCurrent(
+                   sourceSnapshot, guardedArchive->getDevice(), pPdStruct) &&
+               guardedArchive &&
+               guardedArchive->publishUnpackOutput(
+                   &emptyStage, guardedOutput.data(), pState, pPdStruct);
+    }
+
+    // Decode and authenticate into private storage first.  Caller-owned
+    // destinations are published only after the complete record succeeds, so
+    // decoder, CRC, cancellation and source-mutation failures cannot expose a
+    // partial result.
+    const qint64 nExpectedSize = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0)
+        .toLongLong();
+    if (nExpectedSize < 0) return false;
+    QIODevice *pWorkDevice = XBinary::createFileBuffer(
+        nExpectedSize, pPdStruct);
+    if (!pWorkDevice) {
+        XBinary::setPdStructErrorString(
+            pPdStruct, tr("Cannot create unpack verification buffer"));
+        return false;
+    }
+
+    XDecompress xDecompress;
+    connect(&xDecompress, &XDecompress::errorMessage,
+            this, &XBinary::errorMessage);
+    connect(&xDecompress, &XDecompress::infoMessage,
+            this, &XBinary::infoMessage);
+
+    bool bResult = xDecompress.decompressArchiveRecord(
+        archiveRecord, guardedSource.data(), pWorkDevice,
+        pState->mapUnpackProperties, pPdStruct);
+    bResult = bResult && guardedArchive && guardedOutput && guardedSource;
+    if (bResult) {
+        bResult = guardedArchive->isSourceDeviceSnapshotCurrent(
+            sourceSnapshot, guardedArchive->getDevice(), pPdStruct);
+    }
+    if (bResult) {
+        bResult = guardedArchive &&
+                  guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) &&
+                  guardedArchive &&
+                  XBinary::isPdStructNotCanceled(pPdStruct);
+    }
+
+    if (bResult && guardedArchive) {
+        bResult = guardedArchive->publishUnpackOutput(
+            pWorkDevice, guardedOutput.data(), pState, pPdStruct);
+    }
+
+    XBinary::freeFileBuffer(&pWorkDevice);
 
     return bResult;
 }

@@ -108,7 +108,7 @@ public:
     };
 
     struct DMG_UNPACK_CONTEXT {
-        QPointer<QIODevice> pSourceDevice;
+        SOURCE_DEVICE_SNAPSHOT sourceSnapshot;
         QByteArray baXmlData;
         qint64 nDataForkOffset;
         qint64 nDataForkLength;

@@ -32,6 +32,7 @@
 #include <QSet>
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 #ifdef Q_OS_WIN
 #include <io.h>
@@ -75,110 +76,6 @@ static CAB_DEVICE_CHAIN cabGetDeviceChain(QIODevice *pDevice)
     }
 
     return result;
-}
-
-static QString cabNormalizedFilePath(const QFile *pFile)
-{
-    if (!pFile || pFile->fileName().isEmpty()) return QString();
-
-    const QFileInfo fileInfo(pFile->fileName());
-    QString sPath = fileInfo.canonicalFilePath();
-    if (sPath.isEmpty()) sPath = QDir::cleanPath(fileInfo.absoluteFilePath());
-    sPath = QDir::fromNativeSeparators(sPath);
-#if defined(Q_OS_WIN) || defined(Q_OS_MAC)
-    sPath = sPath.toCaseFolded();
-#endif
-    return sPath;
-}
-
-static QByteArray cabFilePhysicalIdentity(const QFile *pFile)
-{
-    QByteArray result;
-    if (!pFile || (pFile->handle() < 0)) return result;
-
-#ifdef Q_OS_WIN
-    const intptr_t nHandle = _get_osfhandle(pFile->handle());
-    if (nHandle == -1) return result;
-    BY_HANDLE_FILE_INFORMATION fileInformation = {};
-    if (!GetFileInformationByHandle(reinterpret_cast<HANDLE>(nHandle),
-                                    &fileInformation)) {
-        return result;
-    }
-    result = QByteArray::number(
-                 (qulonglong)fileInformation.dwVolumeSerialNumber, 16) + ':' +
-             QByteArray::number(
-                 (qulonglong)fileInformation.nFileIndexHigh, 16) + ':' +
-             QByteArray::number(
-                 (qulonglong)fileInformation.nFileIndexLow, 16);
-#elif defined(Q_OS_UNIX)
-    struct stat status = {};
-    if (fstat(pFile->handle(), &status) != 0) return result;
-    result = QByteArray::number((qulonglong)status.st_dev, 16) + ':' +
-             QByteArray::number((qulonglong)status.st_ino, 16);
-#endif
-    return result;
-}
-
-static bool cabCaptureBackingIdentity(QIODevice *pDevice,
-                                      QIODevice **ppRootDevice,
-                                      QByteArray *pIdentity)
-{
-    if (ppRootDevice) *ppRootDevice = nullptr;
-    if (pIdentity) pIdentity->clear();
-    if (!pDevice || !ppRootDevice || !pIdentity) return false;
-
-    const CAB_DEVICE_CHAIN chain = cabGetDeviceChain(pDevice);
-    if (chain.listDevices.isEmpty() || chain.bCycle || !chain.pRoot) {
-        return false;
-    }
-
-    QByteArray baIdentity;
-    if (QBuffer *pBuffer = dynamic_cast<QBuffer *>(chain.pRoot)) {
-        baIdentity = QByteArrayLiteral("buffer:") +
-                     QByteArray::number(reinterpret_cast<quintptr>(
-                                            &pBuffer->buffer()),
-                                        16);
-    } else if (QFile *pFile = dynamic_cast<QFile *>(chain.pRoot)) {
-        const QString sPath = cabNormalizedFilePath(pFile);
-        const QByteArray baPhysicalIdentity = cabFilePhysicalIdentity(pFile);
-        if (sPath.isEmpty() && baPhysicalIdentity.isEmpty()) return false;
-        baIdentity = QByteArrayLiteral("file:path:") + sPath.toUtf8() +
-                     QByteArrayLiteral(":id:") + baPhysicalIdentity;
-    } else {
-        baIdentity = QByteArrayLiteral("device:") +
-                     QByteArray::number(reinterpret_cast<quintptr>(chain.pRoot),
-                                        16);
-    }
-
-    *ppRootDevice = chain.pRoot;
-    *pIdentity = baIdentity;
-    return true;
-}
-
-static bool cabSourceSnapshotMatches(const XCab::CAB_UNPACK_CONTEXT *pContext,
-                                     QIODevice *pCurrentDevice)
-{
-    if (!pContext) return false;
-    QIODevice *pSourceDevice = pContext->pSourceDevice.data();
-    if (!pSourceDevice || (pCurrentDevice != pSourceDevice) ||
-        !pSourceDevice->isOpen() || !pSourceDevice->isReadable() ||
-        pSourceDevice->isSequential()) {
-        return false;
-    }
-
-    QIODevice *pRootDevice = nullptr;
-    QByteArray baIdentity;
-    if (!cabCaptureBackingIdentity(pSourceDevice, &pRootDevice, &baIdentity) ||
-        !pContext->pSourceRootDevice ||
-        (pRootDevice != pContext->pSourceRootDevice.data()) ||
-        (baIdentity != pContext->baSourceBackingIdentity) ||
-        (pRootDevice->size() != pContext->nSourceRootSize)) {
-        return false;
-    }
-
-    QBuffer *pBuffer = dynamic_cast<QBuffer *>(pRootDevice);
-    return !pBuffer ||
-           (pBuffer->buffer() == pContext->baSourceBufferSnapshot);
 }
 
 static bool cabDevicesAlias(QIODevice *pSource, QIODevice *pDestination)
@@ -319,11 +216,12 @@ XCab::CFFILE XCab::readCFFILE(qint64 nOffset, PDSTRUCT *pPdStruct)
 
 bool XCab::_readCFFILEExact(qint64 nOffset, CFFILE *pResult, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCab> guardedThis(this);
     if (!pResult) return false;
     *pResult = {};
     QByteArray baData(sizeof(CFFILE), 0);
     if (read_array_process(nOffset, baData.data(), baData.size(), pPdStruct) !=
-            baData.size() ||
+            baData.size() || !guardedThis ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -354,11 +252,12 @@ XCab::CFHEADER XCab::readCFHeader(qint64 nOffset, PDSTRUCT *pPdStruct)
 
 bool XCab::_readCFHeaderExact(qint64 nOffset, CFHEADER *pResult, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCab> guardedThis(this);
     if (!pResult) return false;
     *pResult = {};
     QByteArray baData(sizeof(CFHEADER), 0);
     if (read_array_process(nOffset, baData.data(), baData.size(), pPdStruct) !=
-            baData.size() ||
+            baData.size() || !guardedThis ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -403,11 +302,12 @@ XCab::CFFOLDER XCab::readCFFolder(qint64 nOffset, PDSTRUCT *pPdStruct)
 
 bool XCab::_readCFFolderExact(qint64 nOffset, CFFOLDER *pResult, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCab> guardedThis(this);
     if (!pResult) return false;
     *pResult = {};
     QByteArray baData(sizeof(CFFOLDER), 0);
     if (read_array_process(nOffset, baData.data(), baData.size(), pPdStruct) !=
-            baData.size() ||
+            baData.size() || !guardedThis ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -429,11 +329,12 @@ XCab::CFDATA XCab::readCFData(qint64 nOffset, PDSTRUCT *pPdStruct)
 
 bool XCab::_readCFDataExact(qint64 nOffset, CFDATA *pResult, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCab> guardedThis(this);
     if (!pResult) return false;
     *pResult = {};
     QByteArray baData(sizeof(CFDATA), 0);
     if (read_array_process(nOffset, baData.data(), baData.size(), pPdStruct) !=
-            baData.size() ||
+            baData.size() || !guardedThis ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -449,6 +350,7 @@ bool XCab::_readCFDataExact(qint64 nOffset, CFDATA *pResult, PDSTRUCT *pPdStruct
 qint64 XCab::_getStreamSize(qint64 nOffset, qint32 nCount, qint32 nReservedSize, qint64 nCabinetSize, qint64 *pUncompressedSize,
                             PDSTRUCT *pPdStruct)
 {
+    QPointer<XCab> guardedThis(this);
     if ((nOffset < 0) || (nCount < 0) || (nReservedSize < 0) || (nCabinetSize < 0) || (nOffset > nCabinetSize) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return -1;
@@ -467,7 +369,9 @@ qint64 XCab::_getStreamSize(qint64 nOffset, qint32 nCount, qint32 nReservedSize,
         }
 
         CFDATA cfData = {};
-        if (!_readCFDataExact(nCurrentOffset, &cfData, pPdStruct)) {
+        const bool bDataRead =
+            _readCFDataExact(nCurrentOffset, &cfData, pPdStruct);
+        if (!guardedThis || !bDataRead) {
             return -1;
         }
         qint64 nBlockSize = (qint64)sizeof(CFDATA) + nReservedSize + (qint64)cfData.cbData;
@@ -1081,44 +985,59 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCab::getDefaultUnpackProperties()
 
 bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCab> guardedThis(this);
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
     }
 
-    if (!pState) {
+    if (!pState || m_bUnpackOperationInProgress) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
+    const bool bFinished = finishUnpack(pState, nullptr);
+    if (!guardedThis || !bFinished) return false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    QIODevice *pSourceDevice = getDevice();
-    if (!pSourceDevice || !pSourceDevice->isOpen() ||
-        !pSourceDevice->isReadable() || pSourceDevice->isSequential()) {
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
+    const bool bOpen = guardedSource->isOpen();
+    if (!guardedThis || !guardedSource || !bOpen) return false;
+    const bool bReadable = guardedSource->isReadable();
+    if (!guardedThis || !guardedSource || !bReadable) return false;
+    const bool bSequential = guardedSource->isSequential();
+    if (!guardedThis || !guardedSource || bSequential) return false;
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!guardedThis || !bBound) return false;
+    const auto failSource = [&]() -> bool {
+        if (!guardedThis) return false;
+        releaseUnpackSource(pState);
         return false;
-    }
-    QIODevice *pSourceRootDevice = nullptr;
-    QByteArray baSourceBackingIdentity;
-    if (!cabCaptureBackingIdentity(pSourceDevice, &pSourceRootDevice,
-                                   &baSourceBackingIdentity)) {
-        return false;
+    };
+    SOURCE_DEVICE_SNAPSHOT sourceSnapshot = {};
+    if (!getBoundUnpackSourceSnapshot(pState, &sourceSnapshot)) {
+        return failSource();
     }
 
     qint64 nFileSize = getSize();
+    if (!guardedThis) return false;
 
     if (nFileSize < (qint64)sizeof(CFHEADER)) {
-        return false;
+        return failSource();
     }
 
     // Read CAB header
     CFHEADER cfHeader = {};
-    if (!_readCFHeaderExact(0, &cfHeader, pPdStruct)) return false;
+    const bool bHeaderRead = _readCFHeaderExact(0, &cfHeader, pPdStruct);
+    if (!guardedThis) return false;
+    if (!bHeaderRead) return failSource();
     if (cfHeader.signature[0] != 'M' || cfHeader.signature[1] != 'S' || cfHeader.signature[2] != 'C' || cfHeader.signature[3] != 'F') {
-        return false;  // Invalid CAB signature
+        return failSource();  // Invalid CAB signature
     }
 
     // cbCabinet is the authoritative end of the cabinet.  A PE resource may
@@ -1132,32 +1051,37 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         (cfHeader.cFolders == 0) || (cfHeader.cFiles == 0) ||
         (nCabinetSize <= (qint64)sizeof(CFHEADER)) ||
         (nCabinetSize > 0x7FFFFFFFLL) || (nCabinetSize > nFileSize)) {
-        return false;
+        return failSource();
     }
 
     // Create unpack context
     CAB_UNPACK_CONTEXT *pContext = new (std::nothrow) CAB_UNPACK_CONTEXT;
     if (!pContext) {
-        return false;
+        return failSource();
     }
     pContext->nCurrentFileIndex = 0;
     pContext->nCbCFHeader = 0;
     pContext->nCbCFFolder = 0;
     pContext->nCbCFData = 0;
     pContext->nMainHeaderSize = 0;
-    pContext->pSourceDevice = pSourceDevice;
-    pContext->pSourceRootDevice = pSourceRootDevice;
-    pContext->baSourceBackingIdentity = baSourceBackingIdentity;
-    pContext->nSourceRootSize = pSourceRootDevice->size();
-    if (QBuffer *pSourceBuffer = dynamic_cast<QBuffer *>(pSourceRootDevice)) {
-        // QByteArray is implicitly shared, so the normal unchanged path is
-        // cheap while any subsequent mutation detaches and remains detectable.
-        pContext->baSourceBufferSnapshot = pSourceBuffer->buffer();
+    pContext->sourceSnapshot = sourceSnapshot;
+
+    pState->pContext = pContext;
+    if (!registerUnpackContextCleanup(
+            pState, pContext,
+            &deleteUnpackContext<CAB_UNPACK_CONTEXT>)) {
+        pState->pContext = nullptr;
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        delete pContext;
+        return false;
     }
 
     auto fail = [&]() -> bool {
+        if (!guardedThis) return false;
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         delete pContext;
-        finishUnpack(pState, nullptr);
         return false;
     };
 
@@ -1173,7 +1097,8 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         qint32 nMaximum = (qint32)qMin<qint64>(nMaximumFieldSize,
                                                nCabinetSize - *pOffset);
         QByteArray baValue = read_array_process(*pOffset, nMaximum, pPdStruct);
-        if ((baValue.size() != nMaximum) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!guardedThis || (baValue.size() != nMaximum) ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
 
@@ -1198,6 +1123,7 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         if ((read_array_process(nFolderOffset, baReserveSizes.data(),
                                 baReserveSizes.size(), pPdStruct) !=
              baReserveSizes.size()) ||
+            !guardedThis ||
             !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return fail();
         }
@@ -1319,9 +1245,12 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
             if (cfData.csum != 0) {
                 QByteArray baHeaderAndReserve = read_array_process(nBlockOffset + 4, 4 + pContext->nCbCFData, pPdStruct);
+                if (!guardedThis) return false;
                 QByteArray baPayload =
                     read_array_process(nBlockOffset + (qint64)sizeof(CFDATA) + pContext->nCbCFData, cfData.cbData, pPdStruct);
-                if ((baHeaderAndReserve.size() != 4 + pContext->nCbCFData) || (baPayload.size() != cfData.cbData) ||
+                if (!guardedThis ||
+                    (baHeaderAndReserve.size() != 4 + pContext->nCbCFData) ||
+                    (baPayload.size() != cfData.cbData) ||
                     !XBinary::isPdStructNotCanceled(pPdStruct)) {
                     return fail();
                 }
@@ -1354,6 +1283,10 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     quint32 nPreviousLogicalFolder = 0;
     quint32 nPreviousFolderOffset = 0;
     bool bHavePreviousFile = false;
+    quint32 nPreviousNonemptyLogicalFolder = 0;
+    quint64 nPreviousNonemptyStart = 0;
+    quint64 nPreviousNonemptyEnd = 0;
+    bool bHavePreviousNonemptyFile = false;
     for (quint16 i = 0; i < cfHeader.cFiles; i++) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             return fail();
@@ -1412,8 +1345,26 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         if (bHavePreviousFile &&
             ((nLogicalFolder < nPreviousLogicalFolder) ||
              ((nLogicalFolder == nPreviousLogicalFolder) &&
-              (cfFile.uoffFolderStart < nPreviousFolderOffset)))) {
+               (cfFile.uoffFolderStart < nPreviousFolderOffset)))) {
             return fail();
+        }
+        if (cfFile.cbFile != 0) {
+            const quint64 nCurrentStart = cfFile.uoffFolderStart;
+            const quint64 nCurrentEnd = nCurrentStart + cfFile.cbFile;
+            if (bHavePreviousNonemptyFile &&
+                (nLogicalFolder == nPreviousNonemptyLogicalFolder) &&
+                (nCurrentStart < nPreviousNonemptyEnd) &&
+                ((nCurrentStart != nPreviousNonemptyStart) ||
+                 (nCurrentEnd != nPreviousNonemptyEnd))) {
+                // CAB permits duplicate file entries to alias one exact
+                // logical range, but a partial overlap makes extraction order
+                // ambiguous and is rejected by established CAB readers.
+                return fail();
+            }
+            nPreviousNonemptyLogicalFolder = nLogicalFolder;
+            nPreviousNonemptyStart = nCurrentStart;
+            nPreviousNonemptyEnd = nCurrentEnd;
+            bHavePreviousNonemptyFile = true;
         }
         bool bEarlierIsNormalOrNext = false;
         if (i > 0) {
@@ -1469,38 +1420,52 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         }
     }
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !cabSourceSnapshotMatches(pContext, getDevice())) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return fail();
+    const bool bSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+        pContext->sourceSnapshot, getDevice(), pPdStruct);
+    if (!guardedThis) return false;
+    if (!bSnapshotCurrent) {
         return fail();
     }
-
     // Initialize state
     pState->nCurrentOffset = cfHeader.coffFiles;
     pState->nTotalSize = nCabinetSize;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = cfHeader.cFiles;
-    pState->pContext = pContext;
     pState->mapUnpackProperties = mapProperties;
+
+    if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
+        if (!guardedThis) return false;
+        return fail();
+    }
 
     return true;
 }
 
 XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pPdStruct)
+    QPointer<XCab> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     XBinary::ARCHIVERECORD result = {};
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState ||
+        !pState->pContext) {
         return result;
     }
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return result;
 
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
     CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
-    if (!cabSourceSnapshotMatches(pContext, getDevice())) {
+    const bool bSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+        pContext->sourceSnapshot, getDevice(), pPdStruct);
+    if (!guardedThis || !bSnapshotCurrent) {
         return result;
     }
     if (pState->nCurrentIndex >= pContext->listFiles.size()) return result;
@@ -1550,27 +1515,47 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         }
     }
 
+    const bool bFinalSourceCurrent =
+        isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bFinalSourceCurrent) {
+        return XBinary::ARCHIVERECORD();
+    }
     return result;
 }
 
 bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                          PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pContext || !pDevice || !pDevice->isOpen() ||
-        !pDevice->isWritable() || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+    QPointer<XCab> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    QPointer<QIODevice> guardedOutput(pDevice);
+    if (!pState || !pState->pContext || !guardedOutput ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
+    const bool bOutputSupported =
+        isUnpackOutputSupported(guardedOutput.data());
+    if (!guardedThis || !guardedOutput || !bOutputSupported) return false;
 
     CAB_UNPACK_CONTEXT *pContext =
         static_cast<CAB_UNPACK_CONTEXT *>(pState->pContext);
-    QIODevice *pSourceDevice = pContext->pSourceDevice.data();
-    if (!cabSourceSnapshotMatches(pContext, getDevice()) ||
-        cabDevicesAlias(pSourceDevice, pDevice) ||
-        (pState->nCurrentIndex >= pContext->listFiles.size())) {
-        return false;
-    }
+    QPointer<QIODevice> guardedSource(
+        pContext->sourceSnapshot.pSourceDevice.data());
+    if (!guardedSource || !guardedOutput) return false;
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return false;
+    const bool bSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+        pContext->sourceSnapshot, getDevice(), pPdStruct);
+    if (!guardedThis || !bSnapshotCurrent || !guardedSource ||
+        !guardedOutput) return false;
+    const bool bAliases =
+        cabDevicesAlias(guardedSource.data(), guardedOutput.data());
+    if (!guardedThis || !guardedSource || !guardedOutput || bAliases ||
+        (pState->nCurrentIndex >= pContext->listFiles.size())) return false;
 
     const CFFILE cfFile = pContext->listFiles.at(pState->nCurrentIndex);
     if ((cfFile.iFolder >= 0xFFFD) ||
@@ -1580,22 +1565,17 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         return false;
     }
 
-    if (pDevice->isSequential() && (pDevice->pos() != 0)) return false;
+    const bool bRecordSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+        pContext->sourceSnapshot, getDevice(), pPdStruct);
+    if (!guardedThis || !bRecordSnapshotCurrent) return false;
 
-    pState->nCurrentOffset = 0;
-    if (!pDevice->isSequential() &&
-        (!pDevice->seek(0) ||
-         ((pDevice->size() != 0) && !XBinary::resize(pDevice, 0)))) {
+    const bool bRecordSourceCurrent =
+        isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bRecordSourceCurrent) return false;
+    const bool bSecondSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+        pContext->sourceSnapshot, getDevice(), pPdStruct);
+    if (!guardedThis || !bSecondSnapshotCurrent || !guardedOutput)
         return false;
-    }
-    const auto failOutput = [&]() -> bool {
-        pState->nCurrentOffset = 0;
-        if (!pDevice->isSequential()) {
-            XBinary::resize(pDevice, 0);
-            pDevice->seek(0);
-        }
-        return false;
-    };
 
     const quint16 nFolderIndex = cfFile.iFolder;
     if (!pContext->mapFolderCache.contains(nFolderIndex)) {
@@ -1605,7 +1585,7 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         const qint64 nFolderSize =
             pContext->mapFolderDataSizes.value(nFolderIndex, -1);
         if ((nStreamSize < 0) || (nFolderSize < 0) ||
-            (nFolderSize > CAB_MAX_FOLDER_SIZE)) return failOutput();
+            (nFolderSize > CAB_MAX_FOLDER_SIZE)) return false;
 
         FPART streamPart = {};
         streamPart.filePart = FILEPART_STREAM;
@@ -1633,19 +1613,25 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
                 FPART_PROP_WINDOWSIZE,
                 (qint64)((folder.typeCompress >> 8) & 0x1F));
         } else {
-            return failOutput();
+            return false;
         }
 
         QByteArray baFolderData;
         QBuffer folderBuffer(&baFolderData);
-        if (!folderBuffer.open(QIODevice::ReadWrite)) return failOutput();
+        if (!folderBuffer.open(QIODevice::ReadWrite)) return false;
         XDecompress decompressor;
         const bool bDecoded = decompressor.decompressFPART(
-            streamPart, pSourceDevice, &folderBuffer, pPdStruct);
+            streamPart, guardedSource.data(), &folderBuffer, pPdStruct);
         folderBuffer.close();
-        if (!bDecoded || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        if (!guardedThis || !guardedSource || !bDecoded ||
+            !XBinary::isPdStructNotCanceled(pPdStruct) ||
             (baFolderData.size() != nFolderSize)) {
-            return failOutput();
+            return false;
+        }
+        const bool bDecodedSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, getDevice(), pPdStruct);
+        if (!guardedThis || !bDecodedSnapshotCurrent) {
+            return false;
         }
         // Retain only the active solid folder.  CFFILE entries are ordered by
         // folder, so this prevents aggregate cache growth without re-decoding
@@ -1661,11 +1647,28 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     if ((nSubstreamOffset < 0) || (nSubstreamSize < 0) ||
         (nSubstreamOffset > baFolderData.size()) ||
         (nSubstreamSize > baFolderData.size() - nSubstreamOffset)) {
-        return failOutput();
+        return false;
     }
+    // A callback/custom source can mutate or rebind the archive after the
+    // initial preflight.  Never publish cached or freshly decoded bytes from a
+    // stale context.
+    const bool bPreStageSourceCurrent =
+        isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bPreStageSourceCurrent) return false;
+    const bool bPreStageSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+        pContext->sourceSnapshot, getDevice(), pPdStruct);
+    if (!guardedThis || !bPreStageSnapshotCurrent || !guardedOutput)
+        return false;
 
+    std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
+        nSubstreamSize, pPdStruct));
+    if (!guardedThis || !pStage || !guardedOutput || !guardedSource)
+        return false;
+    const bool bStageSourceCurrent =
+        isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bStageSourceCurrent) return false;
     DATAPROCESS_STATE writeState = {};
-    writeState.pDeviceOutput = pDevice;
+    writeState.pDeviceOutput = pStage.get();
     writeState.nProcessedLimit = -1;
     qint64 nWritten = 0;
     while ((nWritten < nSubstreamSize) &&
@@ -1675,14 +1678,25 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         const qint32 nResult = XBinary::_writeDevice(
             baFolderData.constData() + nSubstreamOffset + nWritten,
             nChunk, &writeState);
-        if (nResult != nChunk) break;
+        if (!guardedOutput || (nResult != nChunk)) break;
         nWritten += nResult;
     }
-    const bool bResult = (nWritten == nSubstreamSize) &&
-                         XBinary::isPdStructNotCanceled(pPdStruct);
-    if (!bResult) return failOutput();
-    pState->nCurrentOffset = bResult ? nSubstreamSize : 0;
-    return bResult;
+    if ((nWritten != nSubstreamSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+    const bool bFinalSourceCurrent =
+        isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bFinalSourceCurrent) return false;
+    const bool bFinalSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+        pContext->sourceSnapshot, getDevice(), pPdStruct);
+    if (!guardedThis || !bFinalSnapshotCurrent || !guardedOutput)
+        return false;
+    const bool bPublished = publishUnpackOutput(
+        pStage.get(), guardedOutput.data(), pState, pPdStruct);
+    if (!guardedThis || !bPublished) return false;
+    pState->nCurrentOffset = nSubstreamSize;
+    return true;
 }
 
 // bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -1873,14 +1887,20 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
 
 bool XCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCab> guardedThis(this);
     bool bResult = false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
     if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
-        if (!cabSourceSnapshotMatches(pContext, getDevice())) {
-            return false;
-        }
+        const bool bSourceCurrent =
+            isUnpackSourceCurrent(pState, pPdStruct);
+        if (!guardedThis || !bSourceCurrent) return false;
+        const bool bSnapshotCurrent = isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, getDevice(), pPdStruct);
+        if (!guardedThis || !bSnapshotCurrent) return false;
 
         pState->nCurrentIndex++;
 
@@ -1895,22 +1915,22 @@ bool XCab::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XCab::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCab> guardedThis(this);
     Q_UNUSED(pPdStruct)
+
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
     if (!pState) {
         return false;
     }
 
-    if (pState->pContext) {
-        CAB_UNPACK_CONTEXT *pContext = (CAB_UNPACK_CONTEXT *)pState->pContext;
-        pContext->mapFolderCache.clear();
-        pContext->mapFolderUncompressedSizes.clear();
-        pContext->mapFolderStreamSizes.clear();
-        pContext->mapFolderDataSizes.clear();
-        pContext->mapFolderDataOffsets.clear();
-        delete pContext;
-        pState->pContext = nullptr;
-    }
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !ownsUnpackSource(pState)) return false;
+    CAB_UNPACK_CONTEXT *pContext =
+        static_cast<CAB_UNPACK_CONTEXT *>(pState->pContext);
+    releaseUnpackSource(pState);
+    pState->pContext = nullptr;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
@@ -1919,6 +1939,8 @@ bool XCab::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->mapUnpackProperties.clear();
     pState->mapArchiveProperties.clear();
 
+    delete pContext;
+    Q_UNUSED(guardedThis)
     return true;
 }
 

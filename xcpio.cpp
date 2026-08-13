@@ -55,9 +55,11 @@ bool XCPIO::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 XCPIO::CPIO_FORMAT XCPIO::_detectFormat(qint64 nOffset)
 {
+    QPointer<XCPIO> guardedThis(this);
     CPIO_FORMAT result = CPIO_FORMAT_UNKNOWN;
 
     const qint64 nTotalSize = getSize();
+    if (!guardedThis) return result;
     if ((nOffset < 0) || (nOffset > nTotalSize)) {
         return result;
     }
@@ -72,6 +74,7 @@ XCPIO::CPIO_FORMAT XCPIO::_detectFormat(qint64 nOffset)
         if (read_array_process(nOffset, szMagic, 6, nullptr) != 6) {
             return result;
         }
+        if (!guardedThis) return result;
 
         QString sMagic = QString::fromLatin1(szMagic, 6);
 
@@ -84,9 +87,14 @@ XCPIO::CPIO_FORMAT XCPIO::_detectFormat(qint64 nOffset)
         }
     }
 
-    if (read_uint16(nOffset) == 0x71C7) {
+    const quint16 nMagicLE = read_uint16(nOffset);
+    if (!guardedThis) return result;
+    if (nMagicLE == 0x71C7) {
         result = CPIO_FORMAT_BINARY_LE;
-    } else if (read_uint16(nOffset, true) == 0x71C7) {
+    } else {
+        const quint16 nMagicBE = read_uint16(nOffset, true);
+        if (!guardedThis) return result;
+        if (nMagicBE == 0x71C7)
         result = CPIO_FORMAT_BINARY_BE;
     }
 
@@ -148,8 +156,11 @@ quint16 XCPIO::_readBinaryUInt16(qint64 nOffset, bool bIsBigEndian)
 
 quint32 XCPIO::_readBinaryUInt32(qint64 nOffset, bool bIsBigEndian)
 {
+    QPointer<XCPIO> guardedThis(this);
     quint32 nHigh = _readBinaryUInt16(nOffset, bIsBigEndian);
+    if (!guardedThis) return 0;
     quint32 nLow = _readBinaryUInt16(nOffset + 2, bIsBigEndian);
+    if (!guardedThis) return 0;
 
     return (nHigh << 16) | nLow;
 }
@@ -170,12 +181,14 @@ XCPIO::CPIO_ODC_HEADER XCPIO::_readOdcHeader(qint64 nOffset)
 
 bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCPIO> guardedThis(this);
     if ((!pInfo) || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     *pInfo = {};
     pInfo->format = _detectFormat(nOffset);
+    if (!guardedThis) return false;
     pInfo->nHeaderOffset = nOffset;
 
     if (pInfo->format == CPIO_FORMAT_UNKNOWN) {
@@ -183,6 +196,7 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdS
     }
 
     const qint64 nTotalSize = getSize();
+    if (!guardedThis) return false;
     qint64 nNameSize = 0;
     qint64 nDataSize = 0;
     qint64 nExpectedCheck = -1;
@@ -193,6 +207,7 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdS
         }
 
         CPIO_NEWC_HEADER header = _readNewcHeader(nOffset);
+        if (!guardedThis) return false;
 
         const char *pFields[] = {header.ino,       header.mode,      header.uid,      header.gid,   header.nlink,
                                  header.mtime,     header.filesize,  header.devmajor, header.devminor,
@@ -218,6 +233,7 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdS
         }
 
         CPIO_ODC_HEADER header = _readOdcHeader(nOffset);
+        if (!guardedThis) return false;
 
         if ((_readOctValue(header.dev, 6) < 0) || (_readOctValue(header.ino, 6) < 0) ||
             (_readOctValue(header.mode, 6) < 0) || (_readOctValue(header.uid, 6) < 0) ||
@@ -245,13 +261,21 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdS
 
         pInfo->nHeaderSize = sizeof(CPIO_BINARY_HEADER);
         nNameSize = _readBinaryUInt16(nOffset + offsetof(CPIO_BINARY_HEADER, namesize), bIsBigEndian);
+        if (!guardedThis) return false;
         nDataSize = _readBinaryUInt32(nOffset + offsetof(CPIO_BINARY_HEADER, filesizeHigh), bIsBigEndian);
+        if (!guardedThis) return false;
         pInfo->nMode = _readBinaryUInt16(nOffset + offsetof(CPIO_BINARY_HEADER, mode), bIsBigEndian);
+        if (!guardedThis) return false;
         pInfo->nUID = _readBinaryUInt16(nOffset + offsetof(CPIO_BINARY_HEADER, uid), bIsBigEndian);
+        if (!guardedThis) return false;
         pInfo->nGID = _readBinaryUInt16(nOffset + offsetof(CPIO_BINARY_HEADER, gid), bIsBigEndian);
+        if (!guardedThis) return false;
         pInfo->nNLink = _readBinaryUInt16(nOffset + offsetof(CPIO_BINARY_HEADER, nlink), bIsBigEndian);
+        if (!guardedThis) return false;
         pInfo->nRDev = _readBinaryUInt16(nOffset + offsetof(CPIO_BINARY_HEADER, rdev), bIsBigEndian);
+        if (!guardedThis) return false;
         pInfo->nMTime = _readBinaryUInt32(nOffset + offsetof(CPIO_BINARY_HEADER, mtimeHigh), bIsBigEndian);
+        if (!guardedThis) return false;
     }
 
     if ((nNameSize <= 0) || (nNameSize > 0x10000) || (nDataSize < 0) ||
@@ -269,6 +293,7 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdS
     const qint64 nNameEnd = nNameOffset + nNameSize;
 
     QByteArray baName = read_array_process(nNameOffset, nNameSize, pPdStruct);
+    if (!guardedThis) return false;
 
     if ((baName.size() != nNameSize) || baName.isEmpty() || (baName.back() != '\0')) {
         return false;
@@ -335,7 +360,9 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdS
 
         while ((nRemaining > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
             const qint32 nChunkSize = (qint32)qMin<qint64>(nBufferCapacity, nRemaining);
-            if (read_array_process(nCurrentOffset, pBuffer.get(), nChunkSize, pPdStruct) != nChunkSize) {
+            const qint64 nRead = read_array_process(
+                nCurrentOffset, pBuffer.get(), nChunkSize, pPdStruct);
+            if (!guardedThis || (nRead != nChunkSize)) {
                 return false;
             }
             for (qint32 i = 0; i < nChunkSize; i++) {
@@ -356,6 +383,7 @@ bool XCPIO::_parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdS
 
 bool XCPIO::_scanArchive(qint32 nLimit, QList<RECORD> *pListRecords, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCPIO> guardedThis(this);
     if (pListRecords) {
         pListRecords->clear();
     }
@@ -368,12 +396,15 @@ bool XCPIO::_scanArchive(qint32 nLimit, QList<RECORD> *pListRecords, qint64 *pAr
 
     qint64 nOffset = 0;
     const qint64 nTotalSize = getSize();
+    if (!guardedThis) return false;
     qint32 nRecordCount = 0;
     bool bSawTrailer = false;
 
     while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         CPIO_RECORD_INFO info = {};
-        if (!_parseRecord(nOffset, &info, pPdStruct)) {
+        const bool bParsed = _parseRecord(nOffset, &info, pPdStruct);
+        if (!guardedThis) return false;
+        if (!bParsed) {
             break;
         }
 
@@ -847,65 +878,114 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCPIO::getDefaultUnpackProperties()
 
 bool XCPIO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCPIO> guardedThis(this);
+    if (m_bUnpackOperationInProgress) {
+        return false;
+    }
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     if (!pState) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
-
-    if (!isPdStructNotCanceled(pPdStruct)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !ownsUnpackSource(pState)) {
         return false;
     }
+    CPIO_UNPACK_CONTEXT *pOldContext =
+        static_cast<CPIO_UNPACK_CONTEXT *>(pState->pContext);
+    releaseUnpackSource(pState);
+    pState->pContext = nullptr;
+    *pState = UNPACK_STATE();
+    delete pOldContext;
+    if (!guardedThis || !isPdStructNotCanceled(pPdStruct)) return false;
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!guardedThis || !bBound) return false;
 
     pState->mapUnpackProperties = mapProperties;
 
-    CPIO_UNPACK_CONTEXT *pContext = new (std::nothrow) CPIO_UNPACK_CONTEXT;
-    if (!pContext) {
-        finishUnpack(pState, nullptr);
-        return false;
-    }
-    pContext->format = _detectFormat(0);
-    if ((pContext->format == CPIO_FORMAT_NEWC) || (pContext->format == CPIO_FORMAT_CRC)) {
-        pContext->nHeaderSize = sizeof(CPIO_NEWC_HEADER);
-    } else if (pContext->format == CPIO_FORMAT_ODC) {
-        pContext->nHeaderSize = sizeof(CPIO_ODC_HEADER);
-    } else if ((pContext->format == CPIO_FORMAT_BINARY_LE) || (pContext->format == CPIO_FORMAT_BINARY_BE)) {
-        pContext->nHeaderSize = sizeof(CPIO_BINARY_HEADER);
+    const CPIO_FORMAT format = _detectFormat(0);
+    if (!guardedThis) return false;
+    qint64 nHeaderSize = 0;
+    if ((format == CPIO_FORMAT_NEWC) || (format == CPIO_FORMAT_CRC)) {
+        nHeaderSize = sizeof(CPIO_NEWC_HEADER);
+    } else if (format == CPIO_FORMAT_ODC) {
+        nHeaderSize = sizeof(CPIO_ODC_HEADER);
+    } else if ((format == CPIO_FORMAT_BINARY_LE) ||
+               (format == CPIO_FORMAT_BINARY_BE)) {
+        nHeaderSize = sizeof(CPIO_BINARY_HEADER);
     } else {
-        delete pContext;
-        finishUnpack(pState, nullptr);
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
-    if (!_scanArchive(-1, &pContext->listRecords, nullptr, pPdStruct)) {
-        delete pContext;
-        finishUnpack(pState, nullptr);
+
+    QList<RECORD> listRecords;
+    const bool bScanned =
+        _scanArchive(-1, &listRecords, nullptr, pPdStruct);
+    if (!guardedThis) return false;
+    if (!bScanned) {
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
-    pContext->nCurrentRecord = 0;
 
     if (!isPdStructNotCanceled(pPdStruct)) {
-        delete pContext;
-        finishUnpack(pState, nullptr);
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
+
+    const qint64 nTotalSize = getSize();
+    if (!guardedThis) return false;
+    CPIO_UNPACK_CONTEXT *pContext =
+        new (std::nothrow) CPIO_UNPACK_CONTEXT;
+    if (!pContext) {
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+    pContext->format = format;
+    pContext->nHeaderSize = nHeaderSize;
+    pContext->listRecords = listRecords;
+    pContext->nCurrentRecord = 0;
 
     pState->pContext = pContext;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = pContext->listRecords.count();
     pState->nCurrentOffset = (pState->nNumberOfRecords > 0) ? pContext->listRecords.at(0).nHeaderOffset : 0;
-    pState->nTotalSize = getSize();
+    pState->nTotalSize = nTotalSize;
+
+    if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
+        if (!guardedThis) return false;
+        pState->pContext = nullptr;
+        releaseUnpackSource(pState);
+        delete pContext;
+        *pState = UNPACK_STATE();
+        return false;
+    }
 
     return true;
 }
 
 XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCPIO> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+
     ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext ||
-        (pState->nTotalSize != getSize()) || (pState->nNumberOfRecords < 0)) {
+    if (!pState || !pState->pContext) {
         return result;
     }
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return result;
+    const qint64 nCurrentSize = getSize();
+    if (!guardedThis || (pState->nTotalSize != nCurrentSize) ||
+        (pState->nNumberOfRecords < 0)) return result;
 
     CPIO_UNPACK_CONTEXT *pContext = (CPIO_UNPACK_CONTEXT *)pState->pContext;
 
@@ -913,7 +993,10 @@ XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
         const RECORD &record = pContext->listRecords.at(pState->nCurrentIndex);
         CPIO_RECORD_INFO info = {};
 
-        if (!_parseRecord(record.nHeaderOffset, &info, pPdStruct) ||
+        const bool bParsed =
+            _parseRecord(record.nHeaderOffset, &info, pPdStruct);
+        if (!guardedThis) return ARCHIVERECORD();
+        if (!bParsed ||
             (info.nHeaderOffset != record.nHeaderOffset) || (info.nHeaderSize != record.nHeaderSize) ||
             (info.nDataOffset != record.nDataOffset) || (info.nDataSize != record.nDataSize) ||
             (info.sFileName != record.spInfo.sRecordName)) {
@@ -946,10 +1029,19 @@ XArchive::ARCHIVERECORD XCPIO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
 
 bool XCPIO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nTotalSize != getSize())) {
+    QPointer<XCPIO> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    if (!pState || !pState->pContext) {
         return false;
     }
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return false;
+    const qint64 nCurrentSize = getSize();
+    if (!guardedThis || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
+        (pState->nTotalSize != nCurrentSize)) return false;
 
     CPIO_UNPACK_CONTEXT *pContext = (CPIO_UNPACK_CONTEXT *)pState->pContext;
 
@@ -966,17 +1058,22 @@ bool XCPIO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XCPIO::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCPIO> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    if (pState->pContext) {
-        CPIO_UNPACK_CONTEXT *pContext = (CPIO_UNPACK_CONTEXT *)pState->pContext;
-        delete pContext;
-        pState->pContext = nullptr;
-    }
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !ownsUnpackSource(pState)) return false;
+    CPIO_UNPACK_CONTEXT *pContext =
+        static_cast<CPIO_UNPACK_CONTEXT *>(pState->pContext);
+    releaseUnpackSource(pState);
+    pState->pContext = nullptr;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;
@@ -985,6 +1082,8 @@ bool XCPIO::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     pState->mapUnpackProperties.clear();
     pState->mapArchiveProperties.clear();
 
+    delete pContext;
+    Q_UNUSED(guardedThis)
     return true;
 }
 

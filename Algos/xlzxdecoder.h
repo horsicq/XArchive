@@ -21,6 +21,8 @@
 #ifndef XLZXDECODER_H
 #define XLZXDECODER_H
 
+#include <QList>
+
 #include "xbinary.h"
 
 // LZX decoder implemented from the documented Microsoft LZX format
@@ -34,6 +36,16 @@ public:
     // baCompressed: concatenated compressed folder stream (CFDATA payloads joined)
     static bool decompressCABFolder(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint64 nUncompressedSize, qint32 nWindowBits,
                                     XBinary::PDSTRUCT *pPdStruct = nullptr);
+
+    // Decode ordered, independently framed CAB CFDATA payloads.  The two lists
+    // must have the same non-zero size and every uncompressed size must be the
+    // exact positive cbUncomp value for the corresponding payload.  Dictionary,
+    // repeat-offset, block and Huffman state are retained between entries while
+    // the LZX bit reader is reset and exactly consumed for every entry.
+    static bool decompressCABDataBlocks(const QList<QByteArray> &listCompressedBlocks,
+                                        const QList<qint32> &listUncompressedSizes,
+                                        QByteArray *pbaUncompressed, qint32 nWindowBits,
+                                        XBinary::PDSTRUCT *pPdStruct = nullptr);
 
     // One independent WIM chunk. nWindowBits is log2 of the WIM header chunk size.
     static bool decompressWIMChunk(const QByteArray &baCompressed, QByteArray *pbaUncompressed,

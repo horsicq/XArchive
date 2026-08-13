@@ -834,6 +834,16 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
         return false;
     }
 
+    // Destination reset is destructive.  Reject every known view of the
+    // source first (including nested SubDevices, shared QBuffer storage and
+    // QFile aliases/hard links) so an in-place request leaves the archive
+    // byte-for-byte intact.
+    if (pState->pDeviceInput &&
+        XBinary::devicesAlias(pState->pDeviceInput,
+                              pState->pDeviceOutput)) {
+        return false;
+    }
+
     // Extraction has exact-replacement semantics.  Clearing up front also
     // guarantees that cancellation, CRC failure, or an unsupported method
     // cannot leave bytes from an earlier use of the destination behind.
@@ -1162,6 +1172,11 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     // source is missing, and never let a format branch dereference null.
     if (!pState->pDeviceOutput) {
         pState->bWriteError = true;
+        return false;
+    }
+    if (pState->pDeviceInput &&
+        XBinary::devicesAlias(pState->pDeviceInput,
+                              pState->pDeviceOutput)) {
         return false;
     }
     if (!decClearOutputDevice(pState->pDeviceOutput)) {
@@ -2008,7 +2023,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             qint64 nPayloadOffset = nOffset + nCFDataHeaderSize + nDataReservedSize;
 
-            if ((nCbData == 0) ||
+            if ((nCbData == 0) || (nCbUncomp == 0) ||
                 (nCbData > DEC_CAB_MAX_DATA_BLOCK_SIZE) ||
                 (nCbUncomp > 32768) || ((qint64)nCbData > nStreamSize - nPayloadOffset) ||
                 (((qint64)nCbData < nStreamSize - nPayloadOffset) && (nCbUncomp != 32768)) ||
@@ -2091,15 +2106,18 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                        nUncompressedSize, pState, pPdStruct);
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZX_CAB) {
-        // CAB LZX: gather every CFDATA payload into one folder stream, then LZX-decode the whole folder.
-        // The window bits are carried in FPART_PROP_WINDOWSIZE (extracted from CFFOLDER.typeCompress).
+        // CAB LZX keeps dictionary state across CFDATA records, but every
+        // payload has its own compressed boundary and exact cbUncomp result.
+        // The window bits come from CFFOLDER.typeCompress.
         qint64 nSubstreamOffset = pState->mapProperties.value(XBinary::FPART_PROP_SUBSTREAMOFFSET, 0).toLongLong();
         qint64 nDataReservedSize = pState->mapProperties.value(XBinary::FPART_PROP_OPTHEADER_SIZE, 0).toLongLong();
         qint32 nWindowBits = (qint32)pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toInt();
         qint64 nStreamSize = pState->nInputLimit;
         const qint64 nCFDataHeaderSize = 8;
 
-        QByteArray baCompressedFolder;
+        QList<QByteArray> listCompressedBlocks;
+        QList<qint32> listUncompressedBlockSizes;
+        qint64 nCompressedFolderSize = 0;
         bool bFolderSizeValid = (nSubstreamOffset >= 0) && (nUncompressedSize >= 0) &&
                                 (nUncompressedSize <= (std::numeric_limits<qint64>::max)() - nSubstreamOffset);
         qint64 nMinimumFolderSize = bFolderSizeValid ? (nSubstreamOffset + nUncompressedSize) : -1;
@@ -2148,12 +2166,12 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             qint64 nPayloadOffset = nOffset + nCFDataHeaderSize + nDataReservedSize;
 
-            if ((nCbData == 0) ||
+            if ((nCbData == 0) || (nCbUncomp == 0) ||
                 (nCbData > DEC_CAB_MAX_DATA_BLOCK_SIZE) ||
                 (nCbUncomp > 32768) || ((qint64)nCbData > nStreamSize - nPayloadOffset) ||
                 (((qint64)nCbData < nStreamSize - nPayloadOffset) && (nCbUncomp != 32768)) ||
-                !decIsValidBufferSize((qint64)baCompressedFolder.size() + nCbData) ||
-                ((qint64)baCompressedFolder.size() + nCbData >
+                !decIsValidBufferSize(nCompressedFolderSize + nCbData) ||
+                (nCompressedFolderSize + nCbData >
                  DEC_CAB_MAX_FOLDER_SIZE) ||
                 ((qint64)nCbUncomp > nFolderUncompressed - nDeclaredBlockOutput)) {
                 if ((qint64)nCbData > nStreamSize - nPayloadOffset) {
@@ -2201,7 +2219,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 }
             }
 
-            baCompressedFolder.append(baPayload);
+            listCompressedBlocks.append(baPayload);
+            listUncompressedBlockSizes.append((qint32)nCbUncomp);
+            nCompressedFolderSize += nCbData;
             nDeclaredBlockOutput += nCbUncomp;
             nOffset = nPayloadOffset + nCbData;
         }
@@ -2213,12 +2233,14 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         if (bResult) pState->nCountInput = nStreamSize;
         if (bResult && (nFolderUncompressed == 0)) {
             bResult = (nUncompressedSize == 0) && (nSubstreamOffset == 0) &&
-                      baCompressedFolder.isEmpty() &&
+                      listCompressedBlocks.isEmpty() &&
                       decEmitByteArray(QByteArray(), 0, 0, pState,
                                        pPdStruct);
         } else if (bResult) {
             QByteArray baFolderData;
-            bResult = XLZXDecoder::decompressCABFolder(baCompressedFolder, &baFolderData, nFolderUncompressed, nWindowBits, pPdStruct);
+            bResult = XLZXDecoder::decompressCABDataBlocks(
+                listCompressedBlocks, listUncompressedBlockSizes,
+                &baFolderData, nWindowBits, pPdStruct);
 
             if (bResult && (baFolderData.size() == nFolderUncompressed)) {
                 bResult = decEmitByteArray(baFolderData, nSubstreamOffset,

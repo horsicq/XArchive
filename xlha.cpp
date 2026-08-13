@@ -27,6 +27,28 @@ XBinary::XCONVERT _TABLE_XLHA_STRUCTID[] = {
     {XLHA::STRUCTID_RECORD, "RECORD", QString("Record")},
 };
 
+static quint16 lhaReadLe16(const QByteArray &baData, qint32 nOffset)
+{
+    if ((nOffset < 0) || ((nOffset + 2) > baData.size())) return 0;
+    return static_cast<quint16>(
+        static_cast<quint8>(baData.at(nOffset)) |
+        (static_cast<quint16>(static_cast<quint8>(
+             baData.at(nOffset + 1))) << 8));
+}
+
+static quint32 lhaReadLe32(const QByteArray &baData, qint32 nOffset)
+{
+    if ((nOffset < 0) || ((nOffset + 4) > baData.size())) return 0;
+    return static_cast<quint32>(
+        static_cast<quint8>(baData.at(nOffset)) |
+        (static_cast<quint32>(static_cast<quint8>(
+             baData.at(nOffset + 1))) << 8) |
+        (static_cast<quint32>(static_cast<quint8>(
+             baData.at(nOffset + 2))) << 16) |
+        (static_cast<quint32>(static_cast<quint8>(
+             baData.at(nOffset + 3))) << 24));
+}
+
 XLHA::XLHA(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
@@ -37,14 +59,20 @@ XLHA::XLHA(QIODevice *pDevice) : XArchive(pDevice)
 // Returns the total byte count occupied by extended headers.
 qint64 XLHA::_getLevel1ExtHeadersSize(qint64 nOffset, qint64 nBaseHeaderSize)
 {
+    QPointer<XLHA> guardedArchive(this);
     qint64 nExtTotal = 0;
-    qint64 nFnLen = (qint64)read_uint8(nOffset + 21);
-    qint64 nNextHdrSize = (qint64)read_uint16(nOffset + 25 + nFnLen, false);
+    qint64 nFnLen = (qint64)guardedArchive->read_uint8(nOffset + 21);
+    if (!guardedArchive) return -1;
+    qint64 nNextHdrSize =
+        (qint64)guardedArchive->read_uint16(nOffset + 25 + nFnLen, false);
+    if (!guardedArchive) return -1;
     qint64 nExtOffset = nOffset + nBaseHeaderSize;
     while (nNextHdrSize > 0) {
         nExtTotal += nNextHdrSize;
         nExtOffset += nNextHdrSize;
-        nNextHdrSize = (qint64)read_uint16(nExtOffset - 2, false);
+        nNextHdrSize =
+            (qint64)guardedArchive->read_uint16(nExtOffset - 2, false);
+        if (!guardedArchive) return -1;
     }
     return nExtTotal;
 }
@@ -174,6 +202,13 @@ QMap<XBinary::UNPACK_PROP, QVariant> XLHA::getDefaultUnpackProperties()
 
 bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    if (m_bUnpackOperationInProgress) {
+        return false;
+    }
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XLHA> guardedArchive(this);
+
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -183,31 +218,48 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (pState) {
-        finishUnpack(pState, nullptr);
-
-        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-            return false;
-        }
+        if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+            !guardedArchive->ownsUnpackSource(pState)) return false;
+        guardedArchive->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        const bool bBound = guardedArchive->bindUnpackSource(
+            pState, pPdStruct);
+        if (!guardedArchive || !bBound) return false;
 
         pState->mapUnpackProperties = mapProperties;
         pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
+        pState->nTotalSize = guardedArchive->getSize();
+        if (!guardedArchive) {
+            *pState = UNPACK_STATE();
+            return false;
+        }
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = 0;
         pState->pContext = nullptr;
-
-        // Count total number of records
-        _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
         qint64 nOffset = 0;
         qint64 nFileSize = pState->nTotalSize;
 
         while ((nFileSize > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            if (compareSignature(&memoryMap, "....'-lh'..2d", nOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nOffset) ||
-                compareSignature(&memoryMap, "....'-pm'..2d", nOffset)) {
-                quint8 nLevel = read_uint8(nOffset + 20);
-                qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(nOffset) : (qint64)(read_uint8(nOffset) + 2);
-                qint64 nCompressedSize = read_uint32(nOffset + 7);
+            if (nFileSize < 21) break;
+            const QByteArray baHeader = guardedArchive->read_array(
+                nOffset, 21);
+            if (!guardedArchive) {
+                *pState = UNPACK_STATE();
+                return false;
+            }
+            if (baHeader.size() != 21) break;
+            const QByteArray baMethodPrefix = baHeader.mid(2, 3);
+            if (((baMethodPrefix == "-lh") ||
+                 (baMethodPrefix == "-lz") ||
+                 (baMethodPrefix == "-pm")) &&
+                (baHeader.at(6) == '-')) {
+                quint8 nLevel = static_cast<quint8>(baHeader.at(20));
+                qint64 nHeaderSize = (nLevel == 2)
+                    ? (qint64)lhaReadLe16(baHeader, 0)
+                    : (qint64)(static_cast<quint8>(baHeader.at(0)) + 2);
+                qint64 nCompressedSize = lhaReadLe32(baHeader, 7);
 
                 if (nHeaderSize < 21) {
                     break;
@@ -228,8 +280,17 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         }
 
         bResult = (pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+        if (bResult) {
+            bResult = guardedArchive->validateAndFinalizeUnpackSource(
+                pState, pPdStruct);
+            if (!guardedArchive) {
+                *pState = UNPACK_STATE();
+                return false;
+            }
+        }
         if (!bResult) {
-            finishUnpack(pState, nullptr);
+            guardedArchive->releaseUnpackSource(pState);
+            *pState = UNPACK_STATE();
         }
     }
 
@@ -238,20 +299,49 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+    QPointer<XLHA> guardedArchive(this);
+
     XBinary::ARCHIVERECORD result = {};
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && (pState->nCurrentIndex >= 0) &&
+    if (pState && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        quint8 nLevel = read_uint8(pState->nCurrentOffset + 20);
-        qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(pState->nCurrentOffset) : (qint64)(read_uint8(pState->nCurrentOffset) + 2);
-        qint64 nSkipSize = (qint64)(quint32)read_uint32(pState->nCurrentOffset + 7);
-        qint64 nUncompressedSize = read_uint32(pState->nCurrentOffset + 11);
-        QString sFileName = read_ansiString(pState->nCurrentOffset + 22, read_uint8(pState->nCurrentOffset + 21));
+        const QByteArray baPrefix = guardedArchive->read_array(
+            pState->nCurrentOffset, 22);
+        if (!guardedArchive || (baPrefix.size() != 22)) {
+            return XBinary::ARCHIVERECORD();
+        }
+        quint8 nLevel = static_cast<quint8>(baPrefix.at(20));
+        qint64 nHeaderSize = (nLevel == 2)
+            ? (qint64)lhaReadLe16(baPrefix, 0)
+            : (qint64)(static_cast<quint8>(baPrefix.at(0)) + 2);
+        if (nHeaderSize < 22) return result;
+        const QByteArray baHeader = guardedArchive->read_array(
+            pState->nCurrentOffset, nHeaderSize);
+        if (!guardedArchive || (baHeader.size() != nHeaderSize)) {
+            return XBinary::ARCHIVERECORD();
+        }
+        qint64 nSkipSize = (qint64)lhaReadLe32(baHeader, 7);
+        qint64 nUncompressedSize = lhaReadLe32(baHeader, 11);
+        const qint32 nFileNameLength =
+            static_cast<quint8>(baHeader.at(21));
+        if ((22 + nFileNameLength) > baHeader.size()) return result;
+        QString sFileName = QString::fromLatin1(
+            baHeader.constData() + 22, nFileNameLength);
         sFileName = sFileName.replace("\\", "/");
 
         // For Level 1: skip_sz = ext_headers + compressed_data; resolve actual offset/size.
-        qint64 nExtSize = (nLevel == 1) ? _getLevel1ExtHeadersSize(pState->nCurrentOffset, nHeaderSize) : 0;
+        qint64 nExtSize = (nLevel == 1)
+            ? guardedArchive->_getLevel1ExtHeadersSize(
+                  pState->nCurrentOffset, nHeaderSize)
+            : 0;
+        if (!guardedArchive || (nExtSize < 0)) {
+            return XBinary::ARCHIVERECORD();
+        }
         qint64 nCompressedSize = nSkipSize - nExtSize;
+        if (nCompressedSize < 0) return result;
 
         result.nStreamOffset = pState->nCurrentOffset + nHeaderSize + nExtSize;
         result.nStreamSize = nCompressedSize;
@@ -261,7 +351,7 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_ORIGINALNAME, sFileName);
 
         // Get compression method
-        QString sMethod = read_ansiString(pState->nCurrentOffset + 2, 5);
+        QString sMethod = QString::fromLatin1(baHeader.constData() + 2, 5);
         XBinary::HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
 
         if ((sMethod == "-lh0-") || (sMethod == "-lz4-") || (sMethod == "-lhd-")) {
@@ -283,10 +373,14 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         // Level 0/1 place the data CRC after the filename; level 2 keeps it
         // in the fixed header. Expose LHA's stored CRC-16 independently from
         // the SEA ARC-specific option, although both use the same polynomial.
-        qint64 nCRCOffset = pState->nCurrentOffset + ((nLevel == 2) ? 21 : (22 + read_uint8(pState->nCurrentOffset + 21)));
+        qint64 nCRCOffsetInHeader =
+            (nLevel == 2) ? 21 : (22 + nFileNameLength);
 
-        if ((nCRCOffset + 2) <= (pState->nCurrentOffset + nHeaderSize)) {
-            result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC, (quint32)read_uint16(nCRCOffset, false));
+        if ((nCRCOffsetInHeader + 2) <= baHeader.size()) {
+            result.mapProperties.insert(XBinary::FPART_PROP_RESULTCRC,
+                                        (quint32)lhaReadLe16(
+                                            baHeader,
+                                            nCRCOffsetInHeader));
             result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_CRC16);
         }
     }
@@ -296,13 +390,22 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XLHA::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XLHA> guardedArchive(this);
+
     bool bResult = false;
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && (pState->nCurrentIndex >= 0) &&
+    if (pState && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) && guardedArchive && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
-        quint8 nLevel = read_uint8(pState->nCurrentOffset + 20);
-        qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(pState->nCurrentOffset) : (qint64)(read_uint8(pState->nCurrentOffset) + 2);
-        qint64 nCompressedSize = read_uint32(pState->nCurrentOffset + 7);
+        const QByteArray baHeader = guardedArchive->read_array(
+            pState->nCurrentOffset, 21);
+        if (!guardedArchive || (baHeader.size() != 21)) return false;
+        quint8 nLevel = static_cast<quint8>(baHeader.at(20));
+        qint64 nHeaderSize = (nLevel == 2)
+            ? (qint64)lhaReadLe16(baHeader, 0)
+            : (qint64)(static_cast<quint8>(baHeader.at(0)) + 2);
+        qint64 nCompressedSize = lhaReadLe32(baHeader, 7);
 
         pState->nCurrentOffset += (nHeaderSize + nCompressedSize);
         pState->nCurrentIndex++;
@@ -315,19 +418,19 @@ bool XLHA::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XLHA::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    pState->nCurrentOffset = 0;
-    pState->nTotalSize = 0;
-    pState->nCurrentIndex = 0;
-    pState->nNumberOfRecords = 0;
-    pState->pContext = nullptr;
-    pState->mapUnpackProperties.clear();
-    pState->mapArchiveProperties.clear();
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !ownsUnpackSource(pState)) return false;
+    releaseUnpackSource(pState);
+    *pState = UNPACK_STATE();
 
     return true;
 }

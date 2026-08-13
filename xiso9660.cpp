@@ -504,6 +504,7 @@ QString XISO9660::_cleanFileName(const QString &sFileName)
 
 QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, qint64 nSize, qint32 nBlockSize, const QString &sParentPath, PDSTRUCT *pPdStruct)
 {
+    QPointer<XISO9660> guardedThis(this);
     QList<ARCHIVERECORD> listResult;
 
     qint64 nFileSize = getSize();
@@ -522,7 +523,8 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
         qint64 nBlockEnd = qMin(nNextBlockStart, nEndOffset);
 
         while (nCurrentOffset < nBlockEnd && isPdStructNotCanceled(pPdStruct)) {
-            quint8 nRecordLength = read_uint8(nCurrentOffset);
+            quint8 nRecordLength = guardedThis->read_uint8(nCurrentOffset);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
 
             if (nRecordLength == 0) {
                 // Zero-padding to next logical block
@@ -535,16 +537,22 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
                 break;
             }
 
-            quint8 nExtAttrLength = read_uint8(nCurrentOffset + 1);
-            quint32 nExtentLocation = read_uint32(nCurrentOffset + 2);
-            quint32 nDataLength = read_uint32(nCurrentOffset + 10);
-            quint8 nFileFlags = read_uint8(nCurrentOffset + 25);
-            quint8 nFileNameLength = read_uint8(nCurrentOffset + 32);
+            quint8 nExtAttrLength = guardedThis->read_uint8(nCurrentOffset + 1);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint32 nExtentLocation = guardedThis->read_uint32(nCurrentOffset + 2);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint32 nDataLength = guardedThis->read_uint32(nCurrentOffset + 10);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint8 nFileFlags = guardedThis->read_uint8(nCurrentOffset + 25);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint8 nFileNameLength = guardedThis->read_uint8(nCurrentOffset + 32);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
 
             QString sFileName;
 
             if (nFileNameLength > 0 && nCurrentOffset + 33 + nFileNameLength <= nBlockEnd) {
-                QByteArray baFileName = read_array(nCurrentOffset + 33, nFileNameLength);
+                QByteArray baFileName = guardedThis->read_array(nCurrentOffset + 33, nFileNameLength);
+                if (!guardedThis) return QList<ARCHIVERECORD>();
                 sFileName = QString::fromLatin1(baFileName);
             }
 
@@ -558,7 +566,7 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
             record.nStreamOffset = (qint64)nExtentLocation * nBlockSize + (qint64)nExtAttrLength * nBlockSize;
             record.nStreamSize = nDataLength;
 
-            QString sCleanName = _cleanFileName(sFileName);
+            QString sCleanName = guardedThis->_cleanFileName(sFileName);
             QString sFullPath;
 
             if (sParentPath.isEmpty()) {
@@ -581,12 +589,18 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
             }
 
             // Read recording date/time from directory record
-            quint8 nYear = read_uint8(nCurrentOffset + 18);
-            quint8 nMonth = read_uint8(nCurrentOffset + 19);
-            quint8 nDay = read_uint8(nCurrentOffset + 20);
-            quint8 nHour = read_uint8(nCurrentOffset + 21);
-            quint8 nMinute = read_uint8(nCurrentOffset + 22);
-            quint8 nSecond = read_uint8(nCurrentOffset + 23);
+            quint8 nYear = guardedThis->read_uint8(nCurrentOffset + 18);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint8 nMonth = guardedThis->read_uint8(nCurrentOffset + 19);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint8 nDay = guardedThis->read_uint8(nCurrentOffset + 20);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint8 nHour = guardedThis->read_uint8(nCurrentOffset + 21);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint8 nMinute = guardedThis->read_uint8(nCurrentOffset + 22);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
+            quint8 nSecond = guardedThis->read_uint8(nCurrentOffset + 23);
+            if (!guardedThis) return QList<ARCHIVERECORD>();
 
             if (nYear > 0 && nMonth >= 1 && nMonth <= 12 && nDay >= 1 && nDay <= 31) {
                 QDateTime dt(QDate(1900 + nYear, nMonth, nDay), QTime(nHour, nMinute, nSecond));
@@ -606,6 +620,7 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
 
 QList<XBinary::ARCHIVERECORD> XISO9660::_collectAllRecords(qint64 nRootOffset, qint64 nRootSize, qint32 nBlockSize, PDSTRUCT *pPdStruct)
 {
+    QPointer<XISO9660> guardedThis(this);
     QList<ARCHIVERECORD> listResult;
 
     // BFS: queue of (dirOffset, dirSize, parentPath)
@@ -629,7 +644,10 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_collectAllRecords(qint64 nRootOffset, q
     while (!listDirQueue.isEmpty() && isPdStructNotCanceled(pPdStruct)) {
         DirEntry dirInfo = listDirQueue.takeFirst();
 
-        QList<ARCHIVERECORD> listDirRecords = _parseDirectoryEntries(dirInfo.nOffset, dirInfo.nSize, nBlockSize, dirInfo.sPath, pPdStruct);
+        QList<ARCHIVERECORD> listDirRecords = guardedThis->_parseDirectoryEntries(
+            dirInfo.nOffset, dirInfo.nSize, nBlockSize, dirInfo.sPath,
+            pPdStruct);
+        if (!guardedThis) return QList<ARCHIVERECORD>();
 
         for (qint32 i = 0; i < listDirRecords.count() && isPdStructNotCanceled(pPdStruct); i++) {
             ARCHIVERECORD record = listDirRecords.at(i);
@@ -666,27 +684,39 @@ QMap<XBinary::UNPACK_PROP, QVariant> XISO9660::getDefaultUnpackProperties()
 
 bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    QPointer<XISO9660> guardedThis(this);
+    if (m_bUnpackOperationInProgress) {
+        return false;
+    }
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     if (!pState) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
-
-    if (!isPdStructNotCanceled(pPdStruct)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedThis->ownsUnpackSource(pState)) {
         return false;
     }
+    ISO9660_UNPACK_CONTEXT *pOldContext =
+        static_cast<ISO9660_UNPACK_CONTEXT *>(pState->pContext);
+    guardedThis->releaseUnpackSource(pState);
+    pState->pContext = nullptr;
+    delete pOldContext;
+    if (!guardedThis) return false;
+    *pState = UNPACK_STATE();
+    if (!isPdStructNotCanceled(pPdStruct)) return false;
+    const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
+    if (!guardedThis || !bBound) return false;
 
-    const qint64 nTotalSize = getSize();
+    const qint64 nTotalSize = guardedThis->getSize();
+    const qint32 nLogicalBlockSize = guardedThis->_getLogicalBlockSize();
+    if (!guardedThis) return false;
 
-    ISO9660_UNPACK_CONTEXT *pContext = new (std::nothrow) ISO9660_UNPACK_CONTEXT;
-    if (!pContext) {
-        finishUnpack(pState, nullptr);
-        return false;
-    }
-    pContext->nLogicalBlockSize = _getLogicalBlockSize();
-
-    if (pContext->nLogicalBlockSize < 512 || pContext->nLogicalBlockSize > 8192) {
-        delete pContext;
+    if (nLogicalBlockSize < 512 || nLogicalBlockSize > 8192) {
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
 
@@ -694,57 +724,86 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     qint64 nRootRecordOffset = 0x8000 + 156;
 
     if (nRootRecordOffset + 34 > nTotalSize) {
-        delete pContext;
-        finishUnpack(pState, nullptr);
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
 
-    quint8 nRootRecordLength = read_uint8(nRootRecordOffset);
+    quint8 nRootRecordLength = guardedThis->read_uint8(nRootRecordOffset);
+    if (!guardedThis) return false;
 
     if (nRootRecordLength < 34) {
-        delete pContext;
-        finishUnpack(pState, nullptr);
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
 
-    quint32 nRootExtentLocation = read_uint32(nRootRecordOffset + 2);
-    quint32 nRootDataLength = read_uint32(nRootRecordOffset + 10);
+    quint32 nRootExtentLocation = guardedThis->read_uint32(nRootRecordOffset + 2);
+    if (!guardedThis) return false;
+    quint32 nRootDataLength = guardedThis->read_uint32(nRootRecordOffset + 10);
+    if (!guardedThis) return false;
 
-    qint64 nRootOffset = (qint64)nRootExtentLocation * pContext->nLogicalBlockSize;
+    qint64 nRootOffset = (qint64)nRootExtentLocation * nLogicalBlockSize;
     qint64 nRootSize = (qint64)nRootDataLength;
 
     if (nRootOffset <= 0 || nRootSize <= 0 || nRootOffset >= nTotalSize) {
-        delete pContext;
-        finishUnpack(pState, nullptr);
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
 
     // Build flat list of all records via BFS traversal
-    pContext->listAllRecords = _collectAllRecords(nRootOffset, nRootSize, pContext->nLogicalBlockSize, pPdStruct);
+    QList<ARCHIVERECORD> listAllRecords = guardedThis->_collectAllRecords(
+        nRootOffset, nRootSize, nLogicalBlockSize, pPdStruct);
+    if (!guardedThis) return false;
 
     if (!isPdStructNotCanceled(pPdStruct)) {
-        delete pContext;
-        finishUnpack(pState, nullptr);
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         return false;
     }
 
-    pState->nNumberOfRecords = pContext->listAllRecords.count();
+    ISO9660_UNPACK_CONTEXT *pContext =
+        new (std::nothrow) ISO9660_UNPACK_CONTEXT;
+    if (!pContext) {
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+    pContext->nLogicalBlockSize = nLogicalBlockSize;
+    pContext->listAllRecords = listAllRecords;
+
+    pState->nNumberOfRecords = listAllRecords.count();
     pState->pContext = pContext;
     pState->nCurrentOffset = 0;
     pState->nTotalSize = nTotalSize;
     pState->nCurrentIndex = 0;
     pState->mapUnpackProperties = mapProperties;
 
+    if (!guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
+        if (!guardedThis) return false;
+        pState->pContext = nullptr;
+        guardedThis->releaseUnpackSource(pState);
+        delete pContext;
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
     return true;
 }
 
 XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XISO9660> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+
     ARCHIVERECORD record = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
-        return record;
-    }
+    if (!pState || !pState->pContext) return record;
+    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return record;
 
     ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
 
@@ -757,7 +816,13 @@ XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
 
 bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+    QPointer<XISO9660> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    if (!pState || !pState->pContext) return false;
+    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -771,20 +836,25 @@ bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XISO9660::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XISO9660> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    if (pState->pContext) {
-        ISO9660_UNPACK_CONTEXT *pContext = (ISO9660_UNPACK_CONTEXT *)pState->pContext;
-
-        pContext->listAllRecords.clear();
-
-        delete pContext;
-        pState->pContext = nullptr;
-    }
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedThis->ownsUnpackSource(pState)) return false;
+    ISO9660_UNPACK_CONTEXT *pContext =
+        static_cast<ISO9660_UNPACK_CONTEXT *>(pState->pContext);
+    pState->pContext = nullptr;
+    guardedThis->releaseUnpackSource(pState);
+    if (!guardedThis) return false;
+    delete pContext;
+    if (!guardedThis) return false;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

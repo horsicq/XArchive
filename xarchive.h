@@ -31,6 +31,7 @@
 #include "Algos/xbzip2decoder.h"
 #include "Algos/xlzmadecoder.h"
 #include "Algos/xlzssdecoder.h"
+#include <QSharedPointer>
 
 class XArchive : public XBinary {
     Q_OBJECT
@@ -48,13 +49,16 @@ public:
     enum SOURCE_DEVICE_ROOT_KIND {
         SOURCE_DEVICE_ROOT_UNKNOWN = 0,
         SOURCE_DEVICE_ROOT_BUFFER,
-        SOURCE_DEVICE_ROOT_FILE
+        SOURCE_DEVICE_ROOT_FILE,
+        SOURCE_DEVICE_ROOT_GENERIC
     };
 
     // Immutable description of the device object/backing that was parsed by
     // initUnpack().  QPointers make destroyed caller-owned devices fail closed;
     // the complete SubDevice chain prevents an open wrapper from being
-    // retargeted to another range of the same backing object.
+    // retargeted to another range of the same backing object.  The content
+    // fingerprint also covers same-sized changes, including writes through a
+    // QBuffer raw pointer acquired before the snapshot.
     struct SOURCE_DEVICE_SNAPSHOT {
         QPointer<QIODevice> pSourceDevice;
         QPointer<QIODevice> pRootDevice;
@@ -65,6 +69,10 @@ public:
         QByteArray baBufferSnapshot;
         QString sFilePath;
         QByteArray baFilePhysicalIdentity;
+        QByteArray baFileMutationIdentity;
+        QByteArray baContentFingerprint;
+        bool bContentFingerprintRequired;
+        quint64 nOwnerDeviceGeneration;
     };
 
     bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
@@ -131,10 +139,271 @@ public:
     static const qint32 COMPRESS_BUFFERSIZE = 0x4000;    // TODO Check mb set/get ???
     static const qint32 DECOMPRESS_BUFFERSIZE = 0x4000;  // TODO Check mb set/get ???
 
-    static bool captureSourceDeviceSnapshot(QIODevice *pDevice, SOURCE_DEVICE_SNAPSHOT *pSnapshot);
-    static bool isSourceDeviceSnapshotCurrent(const SOURCE_DEVICE_SNAPSHOT &snapshot, QIODevice *pCurrentDevice);
+    bool captureSourceDeviceSnapshot(QIODevice *pDevice, SOURCE_DEVICE_SNAPSHOT *pSnapshot);
+    bool isSourceDeviceSnapshotCurrent(const SOURCE_DEVICE_SNAPSHOT &snapshot,
+                                       QIODevice *pCurrentDevice,
+                                       PDSTRUCT *pPdStruct = nullptr);
 
+    // Bind a successful streaming initialization to both the source it parsed
+    // and the exact UNPACK_STATE object that owns the live context.  Bitwise
+    // state copies are never authorized to traverse or destroy that context.
+    bool bindUnpackSource(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr);
+    bool getBoundUnpackSourceSnapshot(
+        const UNPACK_STATE *pState,
+        SOURCE_DEVICE_SNAPSHOT *pSnapshot) const;
+    bool validateAndFinalizeUnpackSource(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr);
+    template <typename T>
+    bool validateAndFinalizeUnpackSource(UNPACK_STATE *pState,
+                                         T *pContext,
+                                         PDSTRUCT *pPdStruct = nullptr)
+    {
+        if (!pState || !pContext ||
+            (pState->pContext != static_cast<void *>(pContext))) {
+            return false;
+        }
+
+        QPointer<XArchive> guardedArchive(this);
+        if (!registerUnpackContextCleanup(pState, pContext,
+                                          &deleteUnpackContext<T>)) {
+            return false;
+        }
+
+        const bool bValidated =
+            validateAndFinalizeUnpackSource(pState, pPdStruct);
+        if (!guardedArchive) {
+            // Archive destruction transfers the registered context to the
+            // shared operation guard.  The caller must not touch it.
+            return false;
+        }
+        if (!bValidated) {
+            // A failed final source callback must not leave the provisional
+            // deleter armed.  releaseUnpackSource() normally performs the
+            // same removal, but this keeps the template safe if validation
+            // failed before the caller reaches its common cleanup path.
+            guardedArchive->unregisterUnpackContextCleanup(pContext);
+        }
+        return bValidated;
+    }
+    bool isUnpackSourceCurrent(const UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr);
+    bool ownsUnpackSource(const UNPACK_STATE *pState);
+    void releaseUnpackSource(UNPACK_STATE *pState);
+    bool transferUnpackSourceOwnership(UNPACK_STATE *pFromState,
+                                       UNPACK_STATE *pToState);
+
+protected:
+    struct UNPACK_GUARD_STATE {
+        typedef void (*CONTEXT_DELETER)(void *);
+
+        struct CONTEXT_CLEANUP {
+            void *pContext;
+            CONTEXT_DELETER pDeleter;
+        };
+
+        UNPACK_GUARD_STATE()
+            : bOperationInProgress(false), bNestedInfoAuthorized(false),
+              bOwnerAlive(true)
+        {
+        }
+
+        ~UNPACK_GUARD_STATE() { cleanupContexts(); }
+
+        void cleanupContexts()
+        {
+            QList<CONTEXT_CLEANUP> listCleanup;
+            listCleanup.swap(listContexts);
+            for (const CONTEXT_CLEANUP &cleanup : listCleanup) {
+                if (cleanup.pContext && cleanup.pDeleter) {
+                    cleanup.pDeleter(cleanup.pContext);
+                }
+            }
+        }
+
+        bool bOperationInProgress;
+        bool bNestedInfoAuthorized;
+        bool bOwnerAlive;
+        QList<CONTEXT_CLEANUP> listContexts;
+    };
+
+    template <typename T>
+    static void deleteUnpackContext(void *pContext)
+    {
+        delete static_cast<T *>(pContext);
+    }
+
+    bool registerUnpackContextCleanup(
+        UNPACK_STATE *pState, void *pContext,
+        UNPACK_GUARD_STATE::CONTEXT_DELETER pDeleter);
+    void unregisterUnpackContextCleanup(void *pContext);
+
+    // Compatibility facade for existing format callsites.  Taking the
+    // address of this object no longer exposes archive-owned storage: guards
+    // copy the shared heap state before any caller-controlled callback.
+    class UNPACK_GUARD_FLAG {
+    public:
+        UNPACK_GUARD_FLAG() : m_bNestedAuthorization(false) {}
+        UNPACK_GUARD_FLAG(
+            const QSharedPointer<UNPACK_GUARD_STATE> &pState,
+            bool bNestedAuthorization)
+            : m_pState(pState),
+              m_bNestedAuthorization(bNestedAuthorization)
+        {
+        }
+
+        operator bool() const
+        {
+            return m_pState && (m_bNestedAuthorization
+                ? m_pState->bNestedInfoAuthorized
+                : m_pState->bOperationInProgress);
+        }
+
+        const QSharedPointer<UNPACK_GUARD_STATE> &state() const
+        {
+            return m_pState;
+        }
+
+        bool isNestedAuthorization() const
+        {
+            return m_bNestedAuthorization;
+        }
+
+    private:
+        QSharedPointer<UNPACK_GUARD_STATE> m_pState;
+        bool m_bNestedAuthorization;
+    };
+
+    // Custom archive implementations must decode into a private device and
+    // use this publication path.  It rejects destinations for which exact
+    // replacement/rollback cannot be guaranteed and leaves an empty,
+    // position-zero destination if publication itself fails.
+    bool isUnpackOutputSupported(QIODevice *pDevice) const;
+    bool publishUnpackOutput(QIODevice *pStageDevice, QIODevice *pOutputDevice,
+                             const UNPACK_STATE *pState,
+                             PDSTRUCT *pPdStruct = nullptr);
+
+    bool isDeviceReplacementAllowed() const override
+    {
+        return !m_pUnpackGuardState ||
+               !m_pUnpackGuardState->bOperationInProgress;
+    }
+
+    // QIODevice implementations are caller-controlled and may re-enter an
+    // archive while size/seek/read/write is in progress.  Streaming methods
+    // use this guard before retaining context pointers or record references
+    // across any such virtual call.
+    class UNPACK_OPERATION_GUARD {
+    public:
+        explicit UNPACK_OPERATION_GUARD(
+            const QSharedPointer<UNPACK_GUARD_STATE> &pState,
+            bool bInfoOperation = false)
+            : m_pState(pState), m_bAcquired(false), m_bAllowed(false)
+        {
+            if (!m_pState) return;
+            if (!m_pState->bOperationInProgress) {
+                m_pState->bOperationInProgress = true;
+                m_bAcquired = true;
+                m_bAllowed = true;
+            } else if (bInfoOperation &&
+                       m_pState->bNestedInfoAuthorized) {
+                m_pState->bNestedInfoAuthorized = false;
+                m_bAllowed = true;
+            }
+        }
+
+        explicit UNPACK_OPERATION_GUARD(
+            UNPACK_GUARD_FLAG *pBusy,
+            UNPACK_GUARD_FLAG *pNestedInfoAuthorization = nullptr)
+            : UNPACK_OPERATION_GUARD(
+                  pBusy ? pBusy->state()
+                        : QSharedPointer<UNPACK_GUARD_STATE>(),
+                  pBusy && pNestedInfoAuthorization &&
+                      !pBusy->isNestedAuthorization() &&
+                      pNestedInfoAuthorization->isNestedAuthorization() &&
+                      (pBusy->state() ==
+                       pNestedInfoAuthorization->state()))
+        {
+        }
+
+        ~UNPACK_OPERATION_GUARD()
+        {
+            release();
+        }
+
+        bool isAcquired() const { return m_bAcquired; }
+        bool isAllowed() const { return m_bAllowed; }
+
+        // A guarded initializer may need to delegate terminal cleanup to its
+        // public finishUnpack() implementation.  Release first so that the
+        // cleanup method can acquire the same guard for the duration of the
+        // delete/reset operation.  Callers must not continue guarded work
+        // after releasing it.
+        void release()
+        {
+            if (m_pState && m_bAcquired) {
+                m_pState->bOperationInProgress = false;
+                m_bAcquired = false;
+                if (!m_pState->bOwnerAlive) {
+                    m_pState->cleanupContexts();
+                }
+            }
+        }
+
+    private:
+        QSharedPointer<UNPACK_GUARD_STATE> m_pState;
+        bool m_bAcquired;
+        bool m_bAllowed;
+    };
+
+    class UNPACK_INFO_AUTHORIZATION {
+    public:
+        explicit UNPACK_INFO_AUTHORIZATION(
+            const QSharedPointer<UNPACK_GUARD_STATE> &pState)
+            : m_pState((pState && pState->bOperationInProgress &&
+                        !pState->bNestedInfoAuthorized)
+                           ? pState
+                           : QSharedPointer<UNPACK_GUARD_STATE>())
+        {
+            if (m_pState) m_pState->bNestedInfoAuthorized = true;
+        }
+
+        UNPACK_INFO_AUTHORIZATION(
+            UNPACK_GUARD_FLAG *pBusy,
+            UNPACK_GUARD_FLAG *pNestedInfoAuthorization)
+            : UNPACK_INFO_AUTHORIZATION(
+                  (pBusy && pNestedInfoAuthorization &&
+                   !pBusy->isNestedAuthorization() &&
+                   pNestedInfoAuthorization->isNestedAuthorization() &&
+                   (pBusy->state() ==
+                    pNestedInfoAuthorization->state()))
+                      ? pBusy->state()
+                      : QSharedPointer<UNPACK_GUARD_STATE>())
+        {
+        }
+
+        ~UNPACK_INFO_AUTHORIZATION()
+        {
+            // The nested info guard normally consumes the permission.  Clear
+            // an unused permission when a call returns before entering it.
+            if (m_pState) m_pState->bNestedInfoAuthorized = false;
+        }
+
+        bool isAuthorized() const { return !m_pState.isNull(); }
+
+    private:
+        QSharedPointer<UNPACK_GUARD_STATE> m_pState;
+    };
+
+    QObject *getArchiveSourceSessionRegistry(bool bCreate) const;
+
+    // Deliberately not a QObject child: QObject::children() is public and
+    // must not expose authorization/session bookkeeping to caller callbacks.
+    mutable QObject *m_pArchiveSourceSessionRegistry;
+    QSharedPointer<UNPACK_GUARD_STATE> m_pUnpackGuardState;
+    UNPACK_GUARD_FLAG m_bUnpackOperationInProgress;
+    UNPACK_GUARD_FLAG m_bNestedUnpackInfoAuthorized;
+
+public:
     explicit XArchive(QIODevice *pDevice = nullptr);
+    ~XArchive() override;
 
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);               // Depricated
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);  // Depricated

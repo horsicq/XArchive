@@ -20,7 +20,9 @@
  */
 #include "xminidump.h"
 
+#include <memory>
 #include <new>
+#include <QPointer>
 #include "xdecompress.h"
 
 XBinary::XCONVERT _TABLE_XMINIDUMP_STRUCTID[] = {
@@ -515,16 +517,24 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
 
 XMiniDump::MINIDUMP_HEADER XMiniDump::read_MINIDUMP_HEADER()
 {
+    QPointer<XMiniDump> guardedThis(this);
     MINIDUMP_HEADER result = {};
 
-    if (getSize() >= (qint64)sizeof(MINIDUMP_HEADER)) {
-        result.Signature = read_uint32(offsetof(MINIDUMP_HEADER, Signature));
-        result.Version = read_uint32(offsetof(MINIDUMP_HEADER, Version));
-        result.NumberOfStreams = read_uint32(offsetof(MINIDUMP_HEADER, NumberOfStreams));
-        result.StreamDirectoryRva = read_uint32(offsetof(MINIDUMP_HEADER, StreamDirectoryRva));
-        result.CheckSum = read_uint32(offsetof(MINIDUMP_HEADER, CheckSum));
-        result.TimeDateStamp = read_uint32(offsetof(MINIDUMP_HEADER, TimeDateStamp));
-        result.Flags = read_uint64(offsetof(MINIDUMP_HEADER, Flags));
+    if (guardedThis->getSize() >= (qint64)sizeof(MINIDUMP_HEADER)) {
+        result.Signature = guardedThis->read_uint32(offsetof(MINIDUMP_HEADER, Signature));
+        if (!guardedThis) return MINIDUMP_HEADER();
+        result.Version = guardedThis->read_uint32(offsetof(MINIDUMP_HEADER, Version));
+        if (!guardedThis) return MINIDUMP_HEADER();
+        result.NumberOfStreams = guardedThis->read_uint32(offsetof(MINIDUMP_HEADER, NumberOfStreams));
+        if (!guardedThis) return MINIDUMP_HEADER();
+        result.StreamDirectoryRva = guardedThis->read_uint32(offsetof(MINIDUMP_HEADER, StreamDirectoryRva));
+        if (!guardedThis) return MINIDUMP_HEADER();
+        result.CheckSum = guardedThis->read_uint32(offsetof(MINIDUMP_HEADER, CheckSum));
+        if (!guardedThis) return MINIDUMP_HEADER();
+        result.TimeDateStamp = guardedThis->read_uint32(offsetof(MINIDUMP_HEADER, TimeDateStamp));
+        if (!guardedThis) return MINIDUMP_HEADER();
+        result.Flags = guardedThis->read_uint64(offsetof(MINIDUMP_HEADER, Flags));
+        if (!guardedThis) return MINIDUMP_HEADER();
     }
 
     return result;
@@ -532,25 +542,30 @@ XMiniDump::MINIDUMP_HEADER XMiniDump::read_MINIDUMP_HEADER()
 
 XMiniDump::MINIDUMP_DIRECTORY XMiniDump::read_MINIDUMP_DIRECTORY(qint32 nIndex)
 {
+    QPointer<XMiniDump> guardedThis(this);
     MINIDUMP_DIRECTORY result = {};
 
     if (nIndex < 0) {
         return result;
     }
 
-    MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
+    MINIDUMP_HEADER header = guardedThis->read_MINIDUMP_HEADER();
+    if (!guardedThis) return MINIDUMP_DIRECTORY();
 
     if ((quint32)nIndex >= header.NumberOfStreams) {
         return result;
     }
 
     qint64 nOffset = (qint64)header.StreamDirectoryRva + (qint64)nIndex * (qint64)sizeof(MINIDUMP_DIRECTORY);
-    qint64 nFileSize = getSize();
+    qint64 nFileSize = guardedThis->getSize();
 
     if ((nOffset >= 0) && (nOffset + (qint64)sizeof(MINIDUMP_DIRECTORY) <= nFileSize)) {
-        result.StreamType = read_uint32(nOffset + offsetof(MINIDUMP_DIRECTORY, StreamType));
-        result.DataSize = read_uint32(nOffset + offsetof(MINIDUMP_DIRECTORY, DataSize));
-        result.LocationRva = read_uint32(nOffset + offsetof(MINIDUMP_DIRECTORY, LocationRva));
+        result.StreamType = guardedThis->read_uint32(nOffset + offsetof(MINIDUMP_DIRECTORY, StreamType));
+        if (!guardedThis) return MINIDUMP_DIRECTORY();
+        result.DataSize = guardedThis->read_uint32(nOffset + offsetof(MINIDUMP_DIRECTORY, DataSize));
+        if (!guardedThis) return MINIDUMP_DIRECTORY();
+        result.LocationRva = guardedThis->read_uint32(nOffset + offsetof(MINIDUMP_DIRECTORY, LocationRva));
+        if (!guardedThis) return MINIDUMP_DIRECTORY();
     }
 
     return result;
@@ -558,13 +573,16 @@ XMiniDump::MINIDUMP_DIRECTORY XMiniDump::read_MINIDUMP_DIRECTORY(qint32 nIndex)
 
 QList<XMiniDump::MINIDUMP_DIRECTORY> XMiniDump::read_MINIDUMP_DIRECTORY_list(PDSTRUCT *pPdStruct)
 {
+    QPointer<XMiniDump> guardedThis(this);
     QList<MINIDUMP_DIRECTORY> listResult;
 
-    MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
+    MINIDUMP_HEADER header = guardedThis->read_MINIDUMP_HEADER();
+    if (!guardedThis) return QList<MINIDUMP_DIRECTORY>();
     qint32 nNumberOfStreams = header.NumberOfStreams;
 
     for (qint32 i = 0; (i < nNumberOfStreams) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-        MINIDUMP_DIRECTORY directory = read_MINIDUMP_DIRECTORY(i);
+        MINIDUMP_DIRECTORY directory = guardedThis->read_MINIDUMP_DIRECTORY(i);
+        if (!guardedThis) return QList<MINIDUMP_DIRECTORY>();
         listResult.append(directory);
     }
 
@@ -853,6 +871,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XMiniDump::getDefaultUnpackProperties()
 
 bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    QPointer<XMiniDump> guardedThis(this);
     bool bResult = false;
 
     XBinary::PDSTRUCT pdStructEmpty = {};
@@ -862,81 +881,102 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         pPdStruct = &pdStructEmpty;
     }
 
-    if (!pState) {
+    if (!pState || m_bUnpackOperationInProgress) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
+    const bool bFinished = guardedThis->finishUnpack(pState, nullptr);
+    if (!guardedThis || !bFinished) return false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     pState->mapUnpackProperties = mapProperties;
+    const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
+    if (!guardedThis || !bBound) return false;
+    const auto failSource = [&guardedThis, pState]() -> bool {
+        if (!guardedThis) return false;
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    };
 
-    qint64 nFileSize = getSize();
+    qint64 nFileSize = guardedThis->getSize();
 
     if (nFileSize < (qint64)sizeof(MINIDUMP_HEADER)) {
-        finishUnpack(pState, nullptr);
-        return false;
+        return failSource();
     }
 
-    MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
+    MINIDUMP_HEADER header = guardedThis->read_MINIDUMP_HEADER();
+    if (!guardedThis) return false;
 
     // Validate header
     if (header.Signature != 0x504D444D) {
-        finishUnpack(pState, nullptr);
-        return false;
+        return failSource();
     }
-
-    // Create and initialize context
-    MINIDUMP_UNPACK_CONTEXT *pContext = new (std::nothrow) MINIDUMP_UNPACK_CONTEXT;
-    if (!pContext) {
-        finishUnpack(pState, nullptr);
-        return false;
-    }
-
-    // Initialize state
-    pState->nCurrentOffset = (qint64)sizeof(MINIDUMP_HEADER);
-    pState->nTotalSize = nFileSize;
-    pState->nCurrentIndex = 0;
-    pState->nNumberOfRecords = 0;
-    pState->pContext = pContext;
 
     // Read all directory entries
-    pContext->listDirectories = read_MINIDUMP_DIRECTORY_list(pPdStruct);
+    QList<MINIDUMP_DIRECTORY> listDirectories =
+        guardedThis->read_MINIDUMP_DIRECTORY_list(pPdStruct);
+    if (!guardedThis) return false;
+    QList<qint64> listStreamOffsets;
+    QList<qint32> listValidDirectoryIndexes;
+    qint32 nNumberOfRecords = 0;
+    qint64 nCurrentOffset = (qint64)sizeof(MINIDUMP_HEADER);
 
     // Pre-compute stream offsets and count valid streams
-    for (qint32 i = 0; (i < pContext->listDirectories.count()) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
-        MINIDUMP_DIRECTORY directory = pContext->listDirectories.at(i);
+    for (qint32 i = 0; (i < listDirectories.count()) &&
+                         XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        MINIDUMP_DIRECTORY directory = listDirectories.at(i);
 
         // Validate stream is within file bounds
         qint64 nStreamOffset = (qint64)directory.LocationRva;
         qint64 nStreamSize = (qint64)directory.DataSize;
 
         if ((nStreamOffset >= 0) && (nStreamSize >= 0) && (nStreamOffset < nFileSize) && (nStreamOffset + nStreamSize <= nFileSize)) {
-            pContext->listStreamOffsets.append(nStreamOffset);
-            pContext->listValidDirectoryIndexes.append(i);
-            pState->nNumberOfRecords++;
+            listStreamOffsets.append(nStreamOffset);
+            listValidDirectoryIndexes.append(i);
+            nNumberOfRecords++;
         } else {
             // Invalid stream, add -1 as placeholder
-            pContext->listStreamOffsets.append(-1);
+            listStreamOffsets.append(-1);
         }
     }
 
     // Reset to first valid stream
-    if ((pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint32 nDirectoryIndex = pContext->listValidDirectoryIndexes.first();
-        pState->nCurrentIndex = 0;
-        pState->nCurrentOffset = pContext->listStreamOffsets.at(nDirectoryIndex);
+    if ((nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qint32 nDirectoryIndex = listValidDirectoryIndexes.first();
+        nCurrentOffset = listStreamOffsets.at(nDirectoryIndex);
         bResult = true;
     }
 
     // Clean up if no valid streams found
+    if (!bResult) return failSource();
+
+    MINIDUMP_UNPACK_CONTEXT *pContext =
+        new (std::nothrow) MINIDUMP_UNPACK_CONTEXT;
+    if (!pContext) return failSource();
+    pContext->listDirectories = listDirectories;
+    pContext->listStreamOffsets = listStreamOffsets;
+    pContext->listValidDirectoryIndexes = listValidDirectoryIndexes;
+
+    pState->nCurrentOffset = nCurrentOffset;
+    pState->nTotalSize = nFileSize;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = nNumberOfRecords;
+    pState->pContext = pContext;
+
+    bResult = guardedThis->validateAndFinalizeUnpackSource(
+        pState, pContext, pPdStruct);
+    if (!guardedThis) return false;
     if (!bResult) {
-        delete pContext;
         pState->pContext = nullptr;
-        finishUnpack(pState, nullptr);
+        const bool bFailed = failSource();
+        delete pContext;
+        return bFailed;
     }
 
     return bResult;
@@ -944,11 +984,20 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
 XBinary::ARCHIVERECORD XMiniDump::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XMiniDump> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+
     XBinary::ARCHIVERECORD result = {};
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState ||
+        !pState->pContext) {
         return result;
     }
+    const bool bSourceCurrent =
+        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return result;
 
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
@@ -978,34 +1027,86 @@ XBinary::ARCHIVERECORD XMiniDump::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
     result.nStreamSize = (qint64)directory.DataSize;
 
     // Set properties
-    QString sStreamName = streamTypeToString(directory.StreamType);
+    QString sStreamName = guardedThis->streamTypeToString(directory.StreamType);
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, sStreamName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, (qint64)directory.DataSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)directory.DataSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE);
 
+    const bool bFinalSourceCurrent =
+        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bFinalSourceCurrent) {
+        return XBinary::ARCHIVERECORD();
+    }
     return result;
 }
 
 bool XMiniDump::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    QPointer<XMiniDump> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
-    if (pState && pState->pContext && pDevice && (pState->nCurrentIndex < (qint32)pState->nNumberOfRecords)) {
-        ARCHIVERECORD archiveRecord = infoCurrent(pState, pPdStruct);
+    QPointer<QIODevice> guardedOutput(pDevice);
+    QPointer<QIODevice> guardedSource(guardedThis->getDevice());
 
-        XDecompress xDecompress;
-        connect(&xDecompress, &XDecompress::errorMessage, this, &XBinary::errorMessage);
-        connect(&xDecompress, &XDecompress::infoMessage, this, &XBinary::infoMessage);
+    if (!pState || !pState->pContext || !guardedSource ||
+        !guardedOutput) return false;
+    const bool bOutputSupported =
+        guardedThis->isUnpackOutputSupported(guardedOutput.data());
+    if (!guardedThis || !guardedSource || !guardedOutput ||
+        !bOutputSupported) return false;
+    const bool bSourceCurrent =
+        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !guardedSource || !guardedOutput ||
+        !bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= (qint32)pState->nNumberOfRecords)) return false;
+    const bool bAliases =
+        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data());
+    if (!guardedThis || !guardedSource || !guardedOutput || bAliases) return false;
 
-        bResult = xDecompress.decompressArchiveRecord(archiveRecord, getDevice(), pDevice, pState->mapUnpackProperties, pPdStruct);
-    }
+    UNPACK_INFO_AUTHORIZATION infoAuthorization(m_pUnpackGuardState);
+    if (!infoAuthorization.isAuthorized()) return false;
+    const ARCHIVERECORD archiveRecord =
+        guardedThis->infoCurrent(pState, pPdStruct);
+    if (!guardedThis) return false;
+    const qint64 nExpectedSize = archiveRecord.mapProperties
+        .value(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    if (nExpectedSize < 0) return false;
 
-    return bResult;
+    std::unique_ptr<QIODevice> pStage(
+        XBinary::createFileBuffer(nExpectedSize, pPdStruct));
+    if (!guardedThis || !pStage || !guardedSource || !guardedOutput) return false;
+    const bool bStageSourceCurrent =
+        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bStageSourceCurrent) return false;
+
+    XDecompress xDecompress;
+    connect(&xDecompress, &XDecompress::errorMessage,
+            guardedThis.data(), &XBinary::errorMessage);
+    connect(&xDecompress, &XDecompress::infoMessage,
+            guardedThis.data(), &XBinary::infoMessage);
+
+    const bool bResult = xDecompress.decompressArchiveRecord(
+        archiveRecord, guardedSource.data(), pStage.get(),
+        pState->mapUnpackProperties, pPdStruct);
+    if (!guardedThis || !bResult || !guardedSource || !guardedOutput) return false;
+    const bool bFinalSourceCurrent =
+        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !guardedSource || !guardedOutput ||
+        !bFinalSourceCurrent) return false;
+    const bool bPublished = guardedThis->publishUnpackOutput(
+        pStage.get(), guardedOutput.data(), pState, pPdStruct);
+    return guardedThis && bPublished;
 }
 
 bool XMiniDump::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XMiniDump> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     bool bResult = false;
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
@@ -1013,7 +1114,11 @@ bool XMiniDump::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    MINIDUMP_UNPACK_CONTEXT *pContext = static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
+    const bool bSourceCurrent =
+        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return false;
+    MINIDUMP_UNPACK_CONTEXT *pContext =
+        static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
 
     qint32 nNextIndex = pState->nCurrentIndex + 1;
     if (nNextIndex < pContext->listValidDirectoryIndexes.count()) {
@@ -1030,18 +1135,25 @@ bool XMiniDump::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XMiniDump::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XMiniDump> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    // Delete format-specific context
-    if (pState->pContext) {
-        MINIDUMP_UNPACK_CONTEXT *pContext = static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
-        delete pContext;
-        pState->pContext = nullptr;
-    }
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedThis->ownsUnpackSource(pState)) return false;
+    MINIDUMP_UNPACK_CONTEXT *pContext =
+        static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
+    pState->pContext = nullptr;
+    guardedThis->releaseUnpackSource(pState);
+    if (!guardedThis) return false;
+    delete pContext;
+    if (!guardedThis) return false;
 
     // Reset state fields
     pState->nCurrentOffset = 0;

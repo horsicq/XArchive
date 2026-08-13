@@ -42,17 +42,30 @@ bool XXAR::isValid(PDSTRUCT *pPdStruct)
         return false;
     }
 
-    const qint64 nFileSize = getSize();
-    if ((nFileSize < (qint64)sizeof(XAR_HEADER)) || (read_uint8(0) != 0x78) || (read_uint8(1) != 0x61) ||
-        (read_uint8(2) != 0x72) || (read_uint8(3) != 0x21)) {
+    QPointer<XXAR> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
+
+    const qint64 nFileSize = guardedSource->size();
+    if (!guardedArchive || !guardedSource ||
+        (nFileSize < (qint64)sizeof(XAR_HEADER))) {
         return false;
     }
 
-    const quint16 nHeaderSize = read_uint16(4, true);
-    const quint16 nVersion = read_uint16(6, true);
-    const quint64 nTocCompressed = read_uint64(8, true);
-    const quint64 nTocUncompressed = read_uint64(16, true);
-    const quint32 nChecksumAlgorithm = read_uint32(24, true);
+    QByteArray baHeader = XBinary::read_array_process(
+        guardedSource.data(), 0, sizeof(XAR_HEADER), pPdStruct);
+    if (!guardedArchive || !guardedSource ||
+        (baHeader.size() != (qint64)sizeof(XAR_HEADER)) ||
+        (memcmp(baHeader.constData(), "xar!", 4) != 0)) {
+        return false;
+    }
+
+    char *pHeader = baHeader.data();
+    const quint16 nHeaderSize = XBinary::_read_uint16(pHeader + 4, true);
+    const quint16 nVersion = XBinary::_read_uint16(pHeader + 6, true);
+    const quint64 nTocCompressed = XBinary::_read_uint64(pHeader + 8, true);
+    const quint64 nTocUncompressed = XBinary::_read_uint64(pHeader + 16, true);
+    const quint32 nChecksumAlgorithm = XBinary::_read_uint32(pHeader + 24, true);
 
     if ((nHeaderSize < (quint16)sizeof(XAR_HEADER)) || (nHeaderSize > 1024) || (nVersion > 1) ||
         (nTocCompressed < 6) || (nTocCompressed > 0x4000000ULL) ||
@@ -76,9 +89,22 @@ bool XXAR::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 qint64 XXAR::_getHeapOffset()
 {
-    const quint16 nHeaderSize = read_uint16(4, true);
-    const quint64 nTocCompressed = read_uint64(8, true);
-    const quint64 nFileSize = (getSize() >= 0) ? (quint64)getSize() : 0;
+    QPointer<XXAR> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return -1;
+    const qint64 nSignedFileSize = guardedSource->size();
+    if (!guardedArchive || !guardedSource ||
+        (nSignedFileSize < (qint64)sizeof(XAR_HEADER))) return -1;
+
+    QByteArray baHeader = XBinary::read_array(
+        guardedSource.data(), 0, sizeof(XAR_HEADER));
+    if (!guardedArchive || !guardedSource ||
+        (baHeader.size() != (qint64)sizeof(XAR_HEADER))) return -1;
+    const quint16 nHeaderSize = XBinary::_read_uint16(
+        baHeader.data() + 4, true);
+    const quint64 nTocCompressed = XBinary::_read_uint64(
+        baHeader.data() + 8, true);
+    const quint64 nFileSize = (quint64)nSignedFileSize;
     if ((quint64)nHeaderSize > nFileSize || nTocCompressed > (nFileSize - nHeaderSize) ||
         nTocCompressed > (quint64)(std::numeric_limits<qint64>::max)() - nHeaderSize) {
         return -1;
@@ -90,15 +116,25 @@ qint64 XXAR::_getHeapOffset()
 QByteArray XXAR::_readTOC(PDSTRUCT *pPdStruct)
 {
     QByteArray baResult;
+    QPointer<XXAR> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
 
-    if (!isValid(pPdStruct)) {
+    if (!guardedSource || !guardedArchive->isValid(pPdStruct) ||
+        !guardedArchive || !guardedSource) {
         return baResult;
     }
 
-    const quint16 nHeaderSize = read_uint16(4, true);
-    const quint64 nTocCompressed = read_uint64(8, true);
-    const quint64 nTocUncompressed = read_uint64(16, true);
-    const quint32 nChecksumAlgorithm = read_uint32(24, true);
+    QByteArray baHeader = XBinary::read_array_process(
+        guardedSource.data(), 0, sizeof(XAR_HEADER), pPdStruct);
+    if (!guardedArchive || !guardedSource ||
+        (baHeader.size() != (qint64)sizeof(XAR_HEADER))) {
+        return QByteArray();
+    }
+    char *pHeader = baHeader.data();
+    const quint16 nHeaderSize = XBinary::_read_uint16(pHeader + 4, true);
+    const quint64 nTocCompressed = XBinary::_read_uint64(pHeader + 8, true);
+    const quint64 nTocUncompressed = XBinary::_read_uint64(pHeader + 16, true);
+    const quint32 nChecksumAlgorithm = XBinary::_read_uint32(pHeader + 24, true);
 
     if (nChecksumAlgorithm != 0) {
         QCryptographicHash::Algorithm algorithm = QCryptographicHash::Sha1;
@@ -124,7 +160,10 @@ QByteArray XXAR::_readTOC(PDSTRUCT *pPdStruct)
         qint64 nRemaining = (qint64)nTocCompressed;
         while ((nRemaining > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
             const qint32 nChunkSize = (qint32)qMin<qint64>(nBufferCapacity, nRemaining);
-            if (read_array_process(nCurrentOffset, pBuffer.get(), nChunkSize, pPdStruct) != nChunkSize) {
+            if (XBinary::read_array_process(guardedSource.data(), nCurrentOffset,
+                                            pBuffer.get(), nChunkSize,
+                                            pPdStruct) != nChunkSize ||
+                !guardedArchive || !guardedSource) {
                 return QByteArray();
             }
             hash.addData(pBuffer.get(), nChunkSize);
@@ -132,9 +171,12 @@ QByteArray XXAR::_readTOC(PDSTRUCT *pPdStruct)
             nRemaining -= nChunkSize;
         }
 
-        const qint64 nHeapOffset = _getHeapOffset();
-        const QByteArray baExpectedDigest = read_array_process(nHeapOffset, nDigestSize, pPdStruct);
-        if (!XBinary::isPdStructNotCanceled(pPdStruct) || (nRemaining != 0) ||
+        const qint64 nHeapOffset = (qint64)nHeaderSize +
+                                   (qint64)nTocCompressed;
+        const QByteArray baExpectedDigest = XBinary::read_array_process(
+            guardedSource.data(), nHeapOffset, nDigestSize, pPdStruct);
+        if (!guardedArchive || !guardedSource ||
+            !XBinary::isPdStructNotCanceled(pPdStruct) || (nRemaining != 0) ||
             (baExpectedDigest.size() != nDigestSize) || (hash.result() != baExpectedDigest)) {
             return QByteArray();
         }
@@ -149,7 +191,7 @@ QByteArray XXAR::_readTOC(PDSTRUCT *pPdStruct)
     }
 
     XBinary::DATAPROCESS_STATE state = {};
-    state.pDeviceInput = getDevice();
+    state.pDeviceInput = guardedSource.data();
     state.pDeviceOutput = &bufferOut;
     state.nInputOffset = nHeaderSize;
     state.nInputLimit = (qint64)nTocCompressed;
@@ -161,7 +203,8 @@ QByteArray XXAR::_readTOC(PDSTRUCT *pPdStruct)
 
     bufferOut.close();
 
-    if (!bDecompressed || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+    if (!guardedArchive || !guardedSource || !bDecompressed ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (state.nCountInput != (qint64)nTocCompressed) || (state.nCountOutput != (qint64)nTocUncompressed) ||
         (baResult.size() != (qint64)nTocUncompressed)) {
         baResult.clear();
@@ -687,51 +730,100 @@ QMap<XBinary::UNPACK_PROP, QVariant> XXAR::getDefaultUnpackProperties()
 
 bool XXAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    if (!pState) {
+    QPointer<XXAR> guardedArchive(this);
+    if (!pState || m_bUnpackOperationInProgress ||
+        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
+        return false;
+    }
+    if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    if (!isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
+    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
+    if (!guardedArchive || !bBound) return false;
 
-    if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+    const bool bValid = guardedArchive->isValid(pPdStruct);
+    if (!guardedArchive) return false;
+    if (!bValid) {
+        guardedArchive->releaseUnpackSource(pState);
         return false;
     }
 
-    QByteArray baTOC = _readTOC(pPdStruct);
+    QByteArray baTOC = guardedArchive->_readTOC(pPdStruct);
+    if (!guardedArchive) return false;
     if (baTOC.isEmpty()) {
+        guardedArchive->releaseUnpackSource(pState);
         return false;
     }
 
     XAR_UNPACK_CONTEXT *pContext = new (std::nothrow) XAR_UNPACK_CONTEXT;
     if (!pContext) {
-        finishUnpack(pState, nullptr);
+        guardedArchive->releaseUnpackSource(pState);
         return false;
     }
 
-    if (!_parseTOC(baTOC, _getHeapOffset(), &(pContext->listRecords), pPdStruct) || !isPdStructNotCanceled(pPdStruct)) {
+    const qint64 nHeapOffset = guardedArchive->_getHeapOffset();
+    if (!guardedArchive) {
         delete pContext;
-        finishUnpack(pState, nullptr);
+        return false;
+    }
+    const bool bParsed = guardedArchive->_parseTOC(
+        baTOC, nHeapOffset, &(pContext->listRecords), pPdStruct);
+    if (!guardedArchive) {
+        delete pContext;
+        return false;
+    }
+    if (!bParsed || !isPdStructNotCanceled(pPdStruct)) {
+        guardedArchive->releaseUnpackSource(pState);
+        delete pContext;
         return false;
     }
 
     pState->pContext = pContext;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = pContext->listRecords.count();
-    pState->nTotalSize = getSize();
+    pState->nTotalSize = guardedArchive->getSize();
+    if (!guardedArchive) {
+        delete pContext;
+        *pState = UNPACK_STATE();
+        return false;
+    }
     pState->nCurrentOffset = 0;
     pState->mapUnpackProperties = mapProperties;
+
+    if (!guardedArchive->validateAndFinalizeUnpackSource(
+            pState, pContext, pPdStruct)) {
+        if (!guardedArchive) return false;
+        pState->pContext = nullptr;
+        guardedArchive->releaseUnpackSource(pState);
+        delete pContext;
+        *pState = UNPACK_STATE();
+        return false;
+    }
 
     return true;
 }
 
 XBinary::ARCHIVERECORD XXAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+    QPointer<XXAR> guardedArchive(this);
+
     ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nTotalSize != getSize())) {
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+        (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
+    const qint64 nCurrentSize = guardedArchive->getSize();
+    if (!guardedArchive || (pState->nTotalSize != nCurrentSize)) return result;
 
     XAR_UNPACK_CONTEXT *pContext = (XAR_UNPACK_CONTEXT *)pState->pContext;
 
@@ -741,8 +833,8 @@ XBinary::ARCHIVERECORD XXAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
     const XAR_RECORD &record = pContext->listRecords.at(pState->nCurrentIndex);
 
-    if ((record.nOffset < 0) || (record.nLength < 0) || (record.nOffset > getSize()) ||
-        (record.nLength > (getSize() - record.nOffset)) || (record.nSize < 0) ||
+    if ((record.nOffset < 0) || (record.nLength < 0) || (record.nOffset > nCurrentSize) ||
+        (record.nLength > (nCurrentSize - record.nOffset)) || (record.nSize < 0) ||
         (record.compressMethod == HANDLE_METHOD_UNKNOWN)) {
         return ARCHIVERECORD();
     }
@@ -763,10 +855,17 @@ XBinary::ARCHIVERECORD XXAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XXAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords) || (pState->nTotalSize != getSize())) {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XXAR> guardedArchive(this);
+
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+        (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
+    const qint64 nCurrentSize = guardedArchive->getSize();
+    if (!guardedArchive || (pState->nTotalSize != nCurrentSize)) return false;
 
     pState->nCurrentIndex++;
 
@@ -775,17 +874,24 @@ bool XXAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XXAR::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XXAR> guardedArchive(this);
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    if (pState->pContext) {
-        XAR_UNPACK_CONTEXT *pContext = (XAR_UNPACK_CONTEXT *)pState->pContext;
-        delete pContext;
-        pState->pContext = nullptr;
-    }
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+
+    XAR_UNPACK_CONTEXT *pContext =
+        static_cast<XAR_UNPACK_CONTEXT *>(pState->pContext);
+    guardedArchive->releaseUnpackSource(pState);
+    pState->pContext = nullptr;
+    delete pContext;
+    if (!guardedArchive) return false;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

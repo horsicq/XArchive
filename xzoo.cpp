@@ -28,22 +28,46 @@ static XBinary::XCONVERT _TABLE_XZOO_STRUCTID[] = {{XZOO::STRUCTID_UNKNOWN, "Unk
 static const qint64 N_ZOO_MAGIC_OFFSET = 20;
 static const qint64 N_ZOO_ENTRY_FIXED_SIZE = 51;  // fixed part up to and including the 13-byte short name
 
+static quint16 zooReadLe16(const QByteArray &baData, qint32 nOffset)
+{
+    if ((nOffset < 0) || ((nOffset + 2) > baData.size())) return 0;
+    return static_cast<quint16>(
+        static_cast<quint8>(baData.at(nOffset)) |
+        (static_cast<quint16>(static_cast<quint8>(baData.at(nOffset + 1))) << 8));
+}
+
+static quint32 zooReadLe32(const QByteArray &baData, qint32 nOffset)
+{
+    if ((nOffset < 0) || ((nOffset + 4) > baData.size())) return 0;
+    return static_cast<quint32>(
+        static_cast<quint8>(baData.at(nOffset)) |
+        (static_cast<quint32>(static_cast<quint8>(baData.at(nOffset + 1))) << 8) |
+        (static_cast<quint32>(static_cast<quint8>(baData.at(nOffset + 2))) << 16) |
+        (static_cast<quint32>(static_cast<quint8>(baData.at(nOffset + 3))) << 24));
+}
+
 XZOO::XZOO(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
 bool XZOO::isValid(PDSTRUCT *pPdStruct)
 {
+    QPointer<XZOO> guardedArchive(this);
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     bool bResult = false;
 
-    if (getSize() >= 34) {
-        if (read_uint32(N_ZOO_MAGIC_OFFSET) == ZOO_MAGIC) {
-            qint64 nPosEnt = read_uint32(24);
-            if ((nPosEnt > 0) && (nPosEnt < getSize())) {
+    const qint64 nSize = guardedArchive->getSize();
+    if (!guardedArchive) return false;
+    if (nSize >= 34) {
+        const QByteArray baHeader = guardedArchive->read_array(20, 8);
+        if (!guardedArchive) return false;
+        if ((baHeader.size() == 8) &&
+            (zooReadLe32(baHeader, 0) == ZOO_MAGIC)) {
+            qint64 nPosEnt = zooReadLe32(baHeader, 4);
+            if ((nPosEnt > 0) && (nPosEnt < nSize)) {
                 bResult = true;
             }
         }
@@ -71,8 +95,13 @@ XBinary::HANDLE_METHOD XZOO::_methodToHandle(quint8 nMethod)
 
 bool XZOO::_parseEntries(QList<ZOO_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    qint64 nPos = read_uint32(24);  // posent
-    qint64 nFileSize = getSize();
+    QPointer<XZOO> guardedArchive(this);
+    if (!pListRecords) return false;
+    const QByteArray baPosition = guardedArchive->read_array(24, 4);
+    if (!guardedArchive || (baPosition.size() != 4)) return false;
+    qint64 nPos = zooReadLe32(baPosition, 0);
+    qint64 nFileSize = guardedArchive->getSize();
+    if (!guardedArchive) return false;
     qint32 nGuard = 0;
 
     while ((nPos > 0) && (nPos + N_ZOO_ENTRY_FIXED_SIZE <= nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -80,30 +109,49 @@ bool XZOO::_parseEntries(QList<ZOO_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
             break;  // corrupt/looping chain
         }
 
-        if (read_uint32(nPos) != ZOO_MAGIC) {
+        const QByteArray baEntry = guardedArchive->read_array(
+            nPos, N_ZOO_ENTRY_FIXED_SIZE);
+        if (!guardedArchive ||
+            (baEntry.size() != N_ZOO_ENTRY_FIXED_SIZE)) return false;
+        if (zooReadLe32(baEntry, 0) != ZOO_MAGIC) {
             break;
         }
 
-        quint8 nType = read_uint8(nPos + 4);
-        quint8 nMethod = read_uint8(nPos + 5);
-        qint64 nPosNext = read_uint32(nPos + 6);
-        qint64 nPosData = read_uint32(nPos + 10);
-        quint16 nDosDate = read_uint16(nPos + 14);
-        quint16 nDosTime = read_uint16(nPos + 16);
-        qint64 nSizeOrig = read_uint32(nPos + 20);
-        qint64 nSizeNow = read_uint32(nPos + 24);
-        quint8 nMajVer = read_uint8(nPos + 28);
-        quint8 nDeleted = read_uint8(nPos + 30);
+        quint8 nType = static_cast<quint8>(baEntry.at(4));
+        quint8 nMethod = static_cast<quint8>(baEntry.at(5));
+        qint64 nPosNext = zooReadLe32(baEntry, 6);
+        qint64 nPosData = zooReadLe32(baEntry, 10);
+        quint16 nDosDate = zooReadLe16(baEntry, 14);
+        quint16 nDosTime = zooReadLe16(baEntry, 16);
+        qint64 nSizeOrig = zooReadLe32(baEntry, 20);
+        qint64 nSizeNow = zooReadLe32(baEntry, 24);
+        quint8 nMajVer = static_cast<quint8>(baEntry.at(28));
+        quint8 nDeleted = static_cast<quint8>(baEntry.at(30));
 
-        QString sName = read_ansiString(nPos + 38, 13);
+        const QByteArray baShortName = baEntry.mid(38, 13);
+        const qint32 nShortEnd = baShortName.indexOf('\0');
+        QString sName = QString::fromLatin1(
+            baShortName.constData(),
+            (nShortEnd >= 0) ? nShortEnd : baShortName.size());
 
         // Version 2+ entries may carry a long-name field in the variable part.
         if (nMajVer >= 2) {
-            quint16 nLVar = read_uint16(nPos + 51);
+            const QByteArray baVariablePrefix = guardedArchive->read_array(
+                nPos + N_ZOO_ENTRY_FIXED_SIZE, 7);
+            if (!guardedArchive) return false;
+            if (baVariablePrefix.size() != 7) break;
+            quint16 nLVar = zooReadLe16(baVariablePrefix, 0);
             if (nLVar > 0) {
-                quint8 nLNamU = read_uint8(nPos + 56);
+                quint8 nLNamU = static_cast<quint8>(
+                    baVariablePrefix.at(5));
                 if ((nLNamU > 0) && (nLNamU < 256)) {
-                    QString sLongName = read_ansiString(nPos + 58, nLNamU);
+                    const QByteArray baLongName = guardedArchive->read_array(
+                        nPos + 58, nLNamU);
+                    if (!guardedArchive) return false;
+                    const qint32 nLongEnd = baLongName.indexOf('\0');
+                    QString sLongName = QString::fromLatin1(
+                        baLongName.constData(),
+                        (nLongEnd >= 0) ? nLongEnd : baLongName.size());
                     if (!sLongName.isEmpty()) {
                         sName = sLongName;
                     }
@@ -383,43 +431,83 @@ QMap<XBinary::UNPACK_PROP, QVariant> XZOO::getDefaultUnpackProperties()
 
 bool XZOO::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    if (!pState) {
+    QPointer<XZOO> guardedArchive(this);
+    if (!pState || m_bUnpackOperationInProgress ||
+        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
+        return false;
+    }
+    if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    if (!isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
+    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
+    if (!guardedArchive || !bBound) return false;
 
-    if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+    const bool bValid = guardedArchive->isValid(pPdStruct);
+    if (!guardedArchive) return false;
+    if (!bValid) {
+        guardedArchive->releaseUnpackSource(pState);
         return false;
     }
 
     ZOO_UNPACK_CONTEXT *pContext = new (std::nothrow) ZOO_UNPACK_CONTEXT;
     if (!pContext) {
-        finishUnpack(pState, nullptr);
+        guardedArchive->releaseUnpackSource(pState);
         return false;
     }
 
-    if (!_parseEntries(&(pContext->listRecords), pPdStruct) || !isPdStructNotCanceled(pPdStruct)) {
+    const bool bParsed = guardedArchive->_parseEntries(
+        &(pContext->listRecords), pPdStruct);
+    if (!guardedArchive) {
         delete pContext;
-        finishUnpack(pState, nullptr);
+        return false;
+    }
+    if (!bParsed || !isPdStructNotCanceled(pPdStruct)) {
+        guardedArchive->releaseUnpackSource(pState);
+        delete pContext;
         return false;
     }
 
     pState->pContext = pContext;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = pContext->listRecords.count();
-    pState->nTotalSize = getSize();
+    pState->nTotalSize = guardedArchive->getSize();
+    if (!guardedArchive) {
+        *pState = UNPACK_STATE();
+        delete pContext;
+        return false;
+    }
     pState->nCurrentOffset = 0;
     pState->mapUnpackProperties = mapProperties;
+
+    if (!guardedArchive->validateAndFinalizeUnpackSource(
+            pState, pContext, pPdStruct)) {
+        if (!guardedArchive) return false;
+        pState->pContext = nullptr;
+        guardedArchive->releaseUnpackSource(pState);
+        delete pContext;
+        *pState = UNPACK_STATE();
+        return false;
+    }
 
     return true;
 }
 
 XBinary::ARCHIVERECORD XZOO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+    QPointer<XZOO> guardedArchive(this);
+
     ARCHIVERECORD result = {};
 
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+        (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
@@ -448,7 +536,12 @@ XBinary::ARCHIVERECORD XZOO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
 bool XZOO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XZOO> guardedArchive(this);
+
+    if (!isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+        (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
@@ -460,17 +553,24 @@ bool XZOO::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XZOO::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XZOO> guardedArchive(this);
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
-    if (pState->pContext) {
-        ZOO_UNPACK_CONTEXT *pContext = (ZOO_UNPACK_CONTEXT *)pState->pContext;
-        delete pContext;
-        pState->pContext = nullptr;
-    }
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+
+    ZOO_UNPACK_CONTEXT *pContext =
+        static_cast<ZOO_UNPACK_CONTEXT *>(pState->pContext);
+    guardedArchive->releaseUnpackSource(pState);
+    pState->pContext = nullptr;
+    delete pContext;
+    if (!guardedArchive) return false;
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

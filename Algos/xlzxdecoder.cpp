@@ -514,7 +514,12 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
                 pState->R2 = pState->R0;
                 pState->R0 = nMatchOffset;
             } else {
-                if (nPosSlot >= pState->nPositionSlots) {
+                const qint32 nPositionTableSize =
+                    (qint32)(sizeof(pState->extraBits) /
+                             sizeof(pState->extraBits[0]));
+                if ((nPosSlot < 0) ||
+                    (nPosSlot >= pState->nPositionSlots) ||
+                    (nPosSlot >= nPositionTableSize)) {
                     return false;
                 }
 
@@ -598,6 +603,336 @@ bool lzx_decompressStream(LZX_STATE *pState, QByteArray *pbaOut, qint64 nUncompr
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
+// CAB frames every CFDATA payload independently, but the LZX dictionary,
+// repeated offsets, Huffman lengths and the current block all survive across
+// entries.  In particular, an uncompressed LZX block may continue as raw bytes
+// in the next CFDATA, and its odd-byte padding can be the first byte of that
+// next entry.  Keep this path separate from lzx_decompressStream() so the
+// legacy concatenated-CAB and WIM entry points retain their established
+// behaviour.
+bool lzx_decompressCABFramedBlocks(const QList<QByteArray> &listCompressedBlocks,
+                                   const QList<qint32> &listUncompressedSizes,
+                                   QByteArray *pbaOut, qint64 nUncompressedSize,
+                                   qint32 nWindowBits, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    LZX_STATE state = {};
+    state.nWindowSize = (quint32)1 << nWindowBits;
+    state.baWindow.resize((int)state.nWindowSize);
+    state.baWindow.fill(0);
+    state.nWindowPos = 0;
+    state.R0 = state.R1 = state.R2 = 1;
+    lzx_initPositionSlots(&state, nWindowBits);
+
+    state.nMainSymbols = 256 + state.nPositionSlots * 8;
+    memset(state.mainLens, 0, sizeof(state.mainLens));
+    memset(state.lengthLens, 0, sizeof(state.lengthLens));
+
+    pbaOut->clear();
+    pbaOut->reserve((int)nUncompressedSize);
+
+    qint32 nIntelFileSize = 0;
+    qint64 nOutCount = 0;
+    qint64 nNextFrame = LZX_FRAME_SIZE;
+    qint64 nBlockRemaining = 0;
+    qint32 nBlockType = 0;
+    bool bUncompressedBlockOdd = false;
+    bool bUncompressedPadPending = false;
+
+    for (qint32 nEntry = 0; nEntry < listCompressedBlocks.size(); nEntry++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+            return false;
+        }
+
+        const QByteArray &baCompressed = listCompressedBlocks.at(nEntry);
+        const qint64 nEntryUncompressed = listUncompressedSizes.at(nEntry);
+        const qint64 nEntryOutStart = nOutCount;
+        qint64 nEntryOutCount = 0;
+
+        // Discard only the prior entry's bit-reader framing.  All dictionary,
+        // tree, repeat-offset and current-block fields above remain intact.
+        lzx_initBitReader(&state, reinterpret_cast<const quint8 *>(baCompressed.constData()), baCompressed.size());
+
+        if (nEntry == 0) {
+            // CAB stream header: 1-bit Intel E8 flag, then optional 32-bit size.
+            if (lzx_readBits(&state, 1)) {
+                quint32 nHigh = lzx_readBits(&state, 16);
+                quint32 nLow = lzx_readBits(&state, 16);
+                nIntelFileSize = (qint32)((nHigh << 16) | nLow);
+            }
+            if (state.bError) {
+                return false;
+            }
+        }
+
+        // 7-Zip accepts the zero pad for a final odd uncompressed block either
+        // in the entry that ended the block or at the start of the next entry.
+        if (bUncompressedPadPending) {
+            if ((state.nInSize <= 0) || (state.pIn[0] != 0)) {
+                return false;
+            }
+            state.nInPos = 1;
+            bUncompressedPadPending = false;
+        }
+
+        while ((nEntryOutCount < nEntryUncompressed) && !state.bError &&
+               XBinary::isPdStructNotCanceled(pPdStruct)) {
+            if (nBlockRemaining == 0) {
+                nBlockType = (qint32)lzx_readBits(&state, 3);
+                qint64 nBlockSize = lzx_readBits(&state, 24);
+
+                if (state.bError || (nBlockSize <= 0) ||
+                    (nBlockSize > nUncompressedSize - nOutCount)) {
+                    return false;
+                }
+
+                nBlockRemaining = nBlockSize;
+                bUncompressedBlockOdd = false;
+
+                if (nBlockType == LZX_BLOCK_ALIGNED) {
+                    quint8 alignedLens[LZX_ALIGNED_SYMBOLS];
+                    for (qint32 i = 0; i < LZX_ALIGNED_SYMBOLS; i++) {
+                        alignedLens[i] = (quint8)lzx_readBits(&state, 3);
+                    }
+                    if (!lzx_buildHuff(&state.alignedTree, alignedLens, LZX_ALIGNED_SYMBOLS, LZX_HUFF_FULL)) {
+                        return false;
+                    }
+                }
+
+                if ((nBlockType == LZX_BLOCK_VERBATIM) || (nBlockType == LZX_BLOCK_ALIGNED)) {
+                    if (!lzx_readLengths(&state, state.mainLens, 0, 256) ||
+                        !lzx_readLengths(&state, state.mainLens, 256, state.nMainSymbols) ||
+                        !lzx_buildHuff(&state.mainTree, state.mainLens, state.nMainSymbols, LZX_HUFF_FULL) ||
+                        !lzx_readLengths(&state, state.lengthLens, 0, LZX_LENGTH_SYMBOLS) ||
+                        !lzx_buildHuff(&state.lengthTree, state.lengthLens, LZX_LENGTH_SYMBOLS,
+                                       LZX_HUFF_FULL_OR_EMPTY)) {
+                        return false;
+                    }
+                } else if (nBlockType == LZX_BLOCK_UNCOMPRESSED) {
+                    // Align by 1..16 zero bits, then read the three raw LE32
+                    // repeat offsets.  Byte mode may continue into later entries.
+                    if (!lzx_align16(&state, true)) {
+                        return false;
+                    }
+
+                    qint64 nRawPos = lzx_rawPosition(&state);
+                    state.nBitBuf = 0;
+                    state.nBitCount = 0;
+
+                    if ((nRawPos < 0) || (nRawPos + 12 > state.nInSize)) {
+                        return false;
+                    }
+
+                    const quint8 *p = state.pIn + nRawPos;
+                    state.R0 = (quint32)p[0] | ((quint32)p[1] << 8) | ((quint32)p[2] << 16) | ((quint32)p[3] << 24);
+                    state.R1 = (quint32)p[4] | ((quint32)p[5] << 8) | ((quint32)p[6] << 16) | ((quint32)p[7] << 24);
+                    state.R2 = (quint32)p[8] | ((quint32)p[9] << 8) | ((quint32)p[10] << 16) | ((quint32)p[11] << 24);
+                    nRawPos += 12;
+
+                    const quint32 nMaxRepeatOffset = state.nWindowSize - 3;
+                    if ((state.R0 == 0) || (state.R0 > nMaxRepeatOffset) ||
+                        (state.R1 == 0) || (state.R1 > nMaxRepeatOffset) ||
+                        (state.R2 == 0) || (state.R2 > nMaxRepeatOffset)) {
+                        return false;
+                    }
+
+                    state.nInPos = nRawPos;
+                    bUncompressedBlockOdd = (nBlockSize & 1) != 0;
+                } else {
+                    return false;
+                }
+            }
+
+            if (nBlockType == LZX_BLOCK_UNCOMPRESSED) {
+                qint64 nRawPos = lzx_rawPosition(&state);
+                const qint64 nCopySize = qMin(nBlockRemaining, nEntryUncompressed - nEntryOutCount);
+
+                if ((nCopySize <= 0) || (nRawPos < 0) ||
+                    (nCopySize > state.nInSize - nRawPos)) {
+                    return false;
+                }
+
+                for (qint64 i = 0; i < nCopySize; i++) {
+                    if (((i & 0x3FFF) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
+                        return false;
+                    }
+                    lzx_outputByte(&state, pbaOut, state.pIn[nRawPos + i]);
+                }
+
+                nRawPos += nCopySize;
+                nBlockRemaining -= nCopySize;
+                nOutCount += nCopySize;
+                nEntryOutCount += nCopySize;
+                state.nInPos = nRawPos;
+
+                if (nBlockRemaining == 0) {
+                    if (bUncompressedBlockOdd) {
+                        if (nRawPos < state.nInSize) {
+                            if (state.pIn[nRawPos] != 0) {
+                                return false;
+                            }
+                            nRawPos++;
+                            state.nInPos = nRawPos;
+                        } else {
+                            bUncompressedPadPending = true;
+                        }
+                    }
+                    bUncompressedBlockOdd = false;
+                }
+
+                while (nOutCount >= nNextFrame) {
+                    nNextFrame += LZX_FRAME_SIZE;
+                }
+                continue;
+            }
+
+            qint32 nMainSym = lzx_decodeHuff(&state, &state.mainTree);
+            if (state.bError || (nMainSym < 0)) {
+                return false;
+            }
+
+            if (nMainSym < 256) {
+                if ((nBlockRemaining <= 0) || (nOutCount >= nUncompressedSize) ||
+                    (nEntryOutCount >= nEntryUncompressed)) {
+                    return false;
+                }
+                lzx_outputByte(&state, pbaOut, (quint8)nMainSym);
+                nOutCount++;
+                nEntryOutCount++;
+                nBlockRemaining--;
+            } else {
+                nMainSym -= 256;
+                qint32 nLenHeader = nMainSym & 7;
+                qint32 nPosSlot = nMainSym >> 3;
+
+                qint32 nMatchLen = nLenHeader + 2;
+                if (nLenHeader == 7) {
+                    qint32 nLenSym = lzx_decodeHuff(&state, &state.lengthTree);
+                    if (state.bError || (nLenSym < 0)) {
+                        return false;
+                    }
+                    nMatchLen = nLenSym + 9;
+                }
+
+                quint32 nMatchOffset = 0;
+                if (nPosSlot == 0) {
+                    nMatchOffset = state.R0;
+                } else if (nPosSlot == 1) {
+                    nMatchOffset = state.R1;
+                    state.R1 = state.R0;
+                    state.R0 = nMatchOffset;
+                } else if (nPosSlot == 2) {
+                    nMatchOffset = state.R2;
+                    state.R2 = state.R0;
+                    state.R0 = nMatchOffset;
+                } else {
+                    const qint32 nPositionTableSize =
+                        (qint32)(sizeof(state.extraBits) /
+                                 sizeof(state.extraBits[0]));
+                    if ((nPosSlot < 0) ||
+                        (nPosSlot >= state.nPositionSlots) ||
+                        (nPosSlot >= nPositionTableSize)) {
+                        return false;
+                    }
+
+                    qint32 nExtra = state.extraBits[nPosSlot];
+                    quint32 nVerbatim = 0;
+                    if ((nBlockType == LZX_BLOCK_ALIGNED) && (nExtra >= 3)) {
+                        nVerbatim = lzx_readBits(&state, nExtra - 3);
+                        qint32 nAlignedSym = lzx_decodeHuff(&state, &state.alignedTree);
+                        if (state.bError || (nAlignedSym < 0)) {
+                            return false;
+                        }
+                        nMatchOffset = state.positionBase[nPosSlot] - 2 +
+                                       (nVerbatim << 3) + (quint32)nAlignedSym;
+                    } else {
+                        if (nExtra) {
+                            nVerbatim = lzx_readBits(&state, nExtra);
+                        }
+                        nMatchOffset = state.positionBase[nPosSlot] - 2 + nVerbatim;
+                    }
+
+                    state.R2 = state.R1;
+                    state.R1 = state.R0;
+                    state.R0 = nMatchOffset;
+                }
+
+                if ((nMatchOffset == 0) || (nMatchOffset > state.nWindowSize) ||
+                    ((quint64)nMatchOffset > qMin<quint64>((quint64)nOutCount, state.nWindowSize)) ||
+                    ((qint64)nMatchLen > nBlockRemaining) ||
+                    ((qint64)nMatchLen > nUncompressedSize - nOutCount) ||
+                    ((qint64)nMatchLen > nEntryUncompressed - nEntryOutCount) ||
+                    ((qint64)nMatchLen > nNextFrame - nOutCount)) {
+                    return false;
+                }
+
+                quint32 nSrc = (state.nWindowPos + state.nWindowSize - nMatchOffset) &
+                               (state.nWindowSize - 1);
+                for (qint32 i = 0; i < nMatchLen; i++) {
+                    lzx_outputByte(&state, pbaOut, (quint8)state.baWindow.at((int)nSrc));
+                    nSrc = (nSrc + 1) & (state.nWindowSize - 1);
+                }
+
+                nOutCount += nMatchLen;
+                nEntryOutCount += nMatchLen;
+                nBlockRemaining -= nMatchLen;
+            }
+
+            if (nBlockRemaining < 0) {
+                return false;
+            }
+
+            while (nOutCount >= nNextFrame) {
+                if (!lzx_align16(&state, false)) {
+                    return false;
+                }
+                nNextFrame += LZX_FRAME_SIZE;
+            }
+        }
+
+        if (state.bError || state.nOverrun ||
+            (nEntryOutCount != nEntryUncompressed) ||
+            (nOutCount - nEntryOutStart != nEntryUncompressed)) {
+            return false;
+        }
+
+        // A compressed entry may finish before a folder-wide 32 KiB frame only
+        // for the final short CFDATA.  Its remaining 0..15 padding bits must be
+        // zero.  Raw uncompressed continuations are already byte-aligned.
+        if (nBlockType != LZX_BLOCK_UNCOMPRESSED) {
+            if (!lzx_align16(&state, false)) {
+                return false;
+            }
+        }
+
+        if (state.bError || state.nOverrun || (state.nBitBuf != 0) ||
+            (state.nBitCount != 0) || (lzx_rawPosition(&state) != state.nInSize)) {
+            return false;
+        }
+    }
+
+    if ((nOutCount != nUncompressedSize) || (nBlockRemaining != 0) ||
+        (pbaOut->size() != nUncompressedSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    if (nIntelFileSize != 0) {
+        for (qint64 nFrame = 0; nFrame < nUncompressedSize; nFrame += LZX_FRAME_SIZE) {
+            if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+                return false;
+            }
+            qint64 nFrameSize = qMin((qint64)LZX_FRAME_SIZE, nUncompressedSize - nFrame);
+            lzx_undoE8(*pbaOut, nFrame, nFrameSize, nFrame, nIntelFileSize);
+        }
+    }
+
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
 }  // namespace
 
 bool XLZXDecoder::decompressCABFolder(const QByteArray &baCompressed, QByteArray *pbaUncompressed, qint64 nUncompressedSize, qint32 nWindowBits,
@@ -614,6 +949,38 @@ bool XLZXDecoder::decompressCABFolder(const QByteArray &baCompressed, QByteArray
     lzx_initBitReader(&state, reinterpret_cast<const quint8 *>(baCompressed.constData()), baCompressed.size());
 
     return lzx_decompressStream(&state, pbaUncompressed, nUncompressedSize, nWindowBits, false, pPdStruct);
+}
+
+bool XLZXDecoder::decompressCABDataBlocks(const QList<QByteArray> &listCompressedBlocks,
+                                          const QList<qint32> &listUncompressedSizes,
+                                          QByteArray *pbaUncompressed, qint32 nWindowBits,
+                                          XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pbaUncompressed || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+        listCompressedBlocks.isEmpty() ||
+        (listCompressedBlocks.size() != listUncompressedSizes.size()) ||
+        (nWindowBits < 15) || (nWindowBits > 21)) {
+        return false;
+    }
+
+    qint64 nUncompressedSize = 0;
+    for (qint32 i = 0; i < listCompressedBlocks.size(); i++) {
+        const QByteArray &baCompressed = listCompressedBlocks.at(i);
+        const qint32 nBlockSize = listUncompressedSizes.at(i);
+
+        if ((pbaUncompressed == &baCompressed) || baCompressed.isEmpty() ||
+            (nBlockSize <= 0) || (nBlockSize > LZX_FRAME_SIZE) ||
+            ((i + 1 < listCompressedBlocks.size()) && (nBlockSize != LZX_FRAME_SIZE)) ||
+            (nUncompressedSize > (std::numeric_limits<qint32>::max)() -
+                                     LZX_MAX_MATCH_LENGTH - nBlockSize)) {
+            return false;
+        }
+        nUncompressedSize += nBlockSize;
+    }
+
+    return lzx_decompressCABFramedBlocks(listCompressedBlocks, listUncompressedSizes,
+                                         pbaUncompressed, nUncompressedSize,
+                                         nWindowBits, pPdStruct);
 }
 
 bool XLZXDecoder::decompressWIMChunk(const QByteArray &baCompressed, QByteArray *pbaUncompressed,

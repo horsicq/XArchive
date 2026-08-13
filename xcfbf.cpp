@@ -23,9 +23,11 @@
 #include <new>
 
 #include <QtEndian>
+#include <QPointer>
 #include <QSet>
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 XBinary::XCONVERT _TABLE_CFBF_STRUCTID[] = {
     {XCFBF::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -46,13 +48,23 @@ XCFBF::~XCFBF()
 
 bool XCFBF::isValid(PDSTRUCT *pPdStruct)
 {
+    QPointer<XCFBF> guardedThis(this);
     bool bResult = false;
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 512)) {
+    const qint64 nSize = getSize();
+    if (!guardedThis) return false;
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (nSize >= 512)) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
+        if (!guardedThis) return false;
 
-        if (compareSignature(&memoryMap, "D0CF11E0A1B11AE100000000000000000000000000000000", 0, pPdStruct)) {
+        const bool bSignature = compareSignature(
+            &memoryMap,
+            "D0CF11E0A1B11AE100000000000000000000000000000000",
+            0, pPdStruct);
+        if (!guardedThis) return false;
+        if (bSignature) {
             StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
+            if (!guardedThis) return false;
 
             bResult = (ssh._uByteOrder == 0xFFFE) && (ssh._uMiniSectorShift == 6) && (ssh._usReserved == 0) && (ssh._ulReserved1 == 0) &&
                       (ssh._ulMiniSectorCutoff == 4096) &&
@@ -805,45 +817,61 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCFBF::getDefaultUnpackProperties()
 
 bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCFBF> guardedThis(this);
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
     if (!pPdStruct) {
         pPdStruct = &pdStructEmpty;
     }
 
-    if (!pState) {
+    if (!pState || m_bUnpackOperationInProgress) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
+    const bool bFinished = finishUnpack(pState, nullptr);
+    if (!guardedThis || !bFinished) return false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
+    const bool bBound = bindUnpackSource(pState, pPdStruct);
+    if (!guardedThis || !bBound) return false;
+    const auto failSource = [&]() -> bool {
+        if (!guardedThis) return false;
+        releaseUnpackSource(pState);
+        return false;
+    };
+    const bool bValid = isValid(pPdStruct);
+    if (!guardedThis) return false;
+    if (!bValid) return failSource();
 
     const qint64 nFileSize = getSize();
+    if (!guardedThis) return false;
     const StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
+    if (!guardedThis) return false;
     const qint64 nSectorSize = (ssh._uSectorShift == 12) ? 4096 : 512;
     const qint64 nMiniSectorSize = (qint64)1 << ssh._uMiniSectorShift;
     if ((nFileSize < nSectorSize) || (ssh._sectDirStart == 0xFFFFFFFF) || (ssh._sectDirStart == 0xFFFFFFFE)) {
-        return false;
+        return failSource();
     }
 
     const quint64 nPhysicalSectors = (quint64)((nFileSize - nSectorSize) / nSectorSize);
     if ((quint64)ssh._sectDirStart >= nPhysicalSectors) {
-        return false;
+        return failSource();
     }
 
     qint64 nDirectorySize = -1;
     if (ssh._uDllVersion == 4) {
         if ((ssh._csectDir == 0) || ((quint64)ssh._csectDir * (quint64)nSectorSize > (quint64)(std::numeric_limits<qint32>::max)())) {
-            return false;
+            return failSource();
         }
         nDirectorySize = (qint64)ssh._csectDir * nSectorSize;
     }
 
     CFBF_UNPACK_CONTEXT *pContext = new (std::nothrow) CFBF_UNPACK_CONTEXT;
     if (!pContext) {
-        return false;
+        return failSource();
     }
     pContext->nSectorSize = nSectorSize;
     pContext->nMiniSectorSize = nMiniSectorSize;
@@ -853,18 +881,34 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pContext->nRootStartSector = 0xFFFFFFFF;
     pContext->nRootStreamSize = 0;
 
-    auto fail = [&]() -> bool {
+    pState->pContext = pContext;
+    if (!registerUnpackContextCleanup(
+            pState, pContext,
+            &deleteUnpackContext<CFBF_UNPACK_CONTEXT>)) {
+        pState->pContext = nullptr;
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
         delete pContext;
-        finishUnpack(pState, nullptr);
+        return false;
+    }
+
+    auto fail = [&]() -> bool {
+        if (!guardedThis) return false;
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        delete pContext;
         return false;
     };
 
-    pContext->listFAT = _readFAT(ssh, pPdStruct);
+    const QList<quint32> listFAT = _readFAT(ssh, pPdStruct);
+    if (!guardedThis) return false;
+    pContext->listFAT = listFAT;
     if (pContext->listFAT.isEmpty()) {
         return fail();
     }
 
     QByteArray baDirData = _readStreamBySectorChain(pContext->listFAT, ssh._sectDirStart, nSectorSize, nDirectorySize, pPdStruct);
+    if (!guardedThis) return false;
     if (baDirData.isEmpty() || (baDirData.size() % nSectorSize) || (baDirData.size() % 128)) {
         return fail();
     }
@@ -959,6 +1003,7 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
         const qint64 nMiniFATSize = (qint64)nMiniFATSize64;
         QByteArray baMiniFAT = _readStreamBySectorChain(pContext->listFAT, ssh._sectMiniFatStart, nSectorSize, nMiniFATSize, pPdStruct);
+        if (!guardedThis) return false;
         if (baMiniFAT.size() != nMiniFATSize) {
             return fail();
         }
@@ -976,8 +1021,11 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             ((quint64)pContext->nRootStartSector >= nPhysicalSectors)) {
             return fail();
         }
-        pContext->baRootMiniStream =
-            _readStreamBySectorChain(pContext->listFAT, pContext->nRootStartSector, nSectorSize, (qint64)pContext->nRootStreamSize, pPdStruct);
+        const QByteArray baRootMiniStream = _readStreamBySectorChain(
+            pContext->listFAT, pContext->nRootStartSector, nSectorSize,
+            (qint64)pContext->nRootStreamSize, pPdStruct);
+        if (!guardedThis) return false;
+        pContext->baRootMiniStream = baRootMiniStream;
         if ((quint64)pContext->baRootMiniStream.size() != pContext->nRootStreamSize) {
             return fail();
         }
@@ -987,8 +1035,14 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
     for (qint64 nEntryOffset : pContext->listRecordOffsets) {
         const quint32 nStartSector = read_uint32(nEntryOffset + 116, false);
-        const quint64 nStreamSize =
-            (ssh._uDllVersion == 3) ? (quint64)read_uint32(nEntryOffset + 120, false) : read_uint64(nEntryOffset + 120, false);
+        if (!guardedThis) return false;
+        quint64 nStreamSize = 0;
+        if (ssh._uDllVersion == 3) {
+            nStreamSize = read_uint32(nEntryOffset + 120, false);
+        } else {
+            nStreamSize = read_uint64(nEntryOffset + 120, false);
+        }
+        if (!guardedThis) return false;
 
         if (nStreamSize == 0) {
             if ((nStartSector != 0xFFFFFFFF) && (nStartSector != 0xFFFFFFFE)) {
@@ -1006,23 +1060,33 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     if (!XBinary::isPdStructNotCanceled(pPdStruct) || pContext->listRecordOffsets.isEmpty()) {
         return fail();
     }
-
     pState->nNumberOfRecords = pContext->listRecordOffsets.size();
     pState->nCurrentOffset = pContext->listRecordOffsets.first();
     pState->nCurrentIndex = 0;
-    pState->nTotalSize = getSize();
+    pState->nTotalSize = nFileSize;
     pState->mapUnpackProperties = mapProperties;
-    pState->pContext = pContext;
+    if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
+        if (!guardedThis) return false;
+        return fail();
+    }
     return true;
 }
 
 XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCFBF> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+
     XBinary::ARCHIVERECORD result = {};
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState ||
+        !pState->pContext) {
         return result;
     }
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return result;
 
     if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
@@ -1030,22 +1094,31 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
 
     CFBF_UNPACK_CONTEXT *pContext = (CFBF_UNPACK_CONTEXT *)pState->pContext;
     qint64 nEntryOffset = pState->nCurrentOffset;
-    if ((nEntryOffset < pContext->nSectorSize) || (nEntryOffset > (getSize() - 128))) {
+    const qint64 nFileSize = getSize();
+    if (!guardedThis || (nEntryOffset < pContext->nSectorSize) ||
+        (nEntryOffset > (nFileSize - 128))) {
         return result;
     }
 
     // Read directory entry fields from the file
-    QByteArray baName = read_array(nEntryOffset + 0, 64);
-    quint16 nNameLength = read_uint16(nEntryOffset + 64, false);
-    quint8 nObjectType = read_uint8(nEntryOffset + 66);
-    quint32 nStartSector = read_uint32(nEntryOffset + 116, false);
-    quint64 nStreamSize = (pContext->nDllVersion == 3) ? read_uint32(nEntryOffset + 120, false) : read_uint64(nEntryOffset + 120, false);
-    quint64 nModifiedTime = read_uint64(nEntryOffset + 108, false);
+    const QByteArray baEntry = read_array(nEntryOffset, 128);
+    if (!guardedThis || (baEntry.size() != 128)) return result;
+    const uchar *pEntry =
+        reinterpret_cast<const uchar *>(baEntry.constData());
+    const QByteArray baName = baEntry.left(64);
+    const quint16 nNameLength = qFromLittleEndian<quint16>(pEntry + 64);
+    const quint8 nObjectType = pEntry[66];
+    const quint32 nStartSector = qFromLittleEndian<quint32>(pEntry + 116);
+    const quint64 nStreamSize = (pContext->nDllVersion == 3)
+                                    ? (quint64)qFromLittleEndian<quint32>(pEntry + 120)
+                                    : qFromLittleEndian<quint64>(pEntry + 120);
+    const quint64 nModifiedTime = qFromLittleEndian<quint64>(pEntry + 108);
 
     // Parse name (UTF-16LE)
     QString sName;
     if ((baName.size() != 64) || (nObjectType != 2) || (nNameLength < 2) || (nNameLength > 64) || (nNameLength & 1) ||
-        (read_uint16(nEntryOffset + nNameLength - 2, false) != 0) || (nStreamSize > (quint64)(std::numeric_limits<qint64>::max)())) {
+        (qFromLittleEndian<quint16>(pEntry + nNameLength - 2) != 0) ||
+        (nStreamSize > (quint64)(std::numeric_limits<qint64>::max)())) {
         return result;
     }
 
@@ -1087,46 +1160,90 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         }
     }
 
+    const bool bFinalSourceCurrent =
+        isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bFinalSourceCurrent) {
+        return XBinary::ARCHIVERECORD();
+    }
     return result;
 }
 
 bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pContext || !pDevice || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    QPointer<XCFBF> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
+    QPointer<QIODevice> guardedOutput(pDevice);
+    if (!pState || !pState->pContext || !guardedOutput ||
+        (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
+    const bool bOutputSupported =
+        isUnpackOutputSupported(guardedOutput.data());
+    if (!guardedThis || !guardedOutput || !bOutputSupported) return false;
 
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return false;
     CFBF_UNPACK_CONTEXT *pContext = static_cast<CFBF_UNPACK_CONTEXT *>(pState->pContext);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource || !guardedOutput) return false;
+    const bool bAliases =
+        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data());
+    if (!guardedThis || !guardedSource || !guardedOutput || bAliases) {
+        return false;
+    }
     const qint64 nEntryOffset = pState->nCurrentOffset;
-    const quint32 nStartSector = read_uint32(nEntryOffset + 116, false);
-    const quint64 nStreamSize =
-        (pContext->nDllVersion == 3) ? (quint64)read_uint32(nEntryOffset + 120, false) : read_uint64(nEntryOffset + 120, false);
+    const QByteArray baStreamEntry = read_array(nEntryOffset + 116, 12);
+    if (!guardedThis || (baStreamEntry.size() != 12)) return false;
+    const uchar *pStreamEntry =
+        reinterpret_cast<const uchar *>(baStreamEntry.constData());
+    const quint32 nStartSector =
+        qFromLittleEndian<quint32>(pStreamEntry);
+    const quint64 nStreamSize = (pContext->nDllVersion == 3)
+                                    ? (quint64)qFromLittleEndian<quint32>(pStreamEntry + 4)
+                                    : qFromLittleEndian<quint64>(pStreamEntry + 4);
     const bool bIsMini = (nStreamSize < pContext->nMiniCutoff) && (pContext->nRootStartSector != 0xFFFFFFFF);
 
     if (nStreamSize > (quint64)(std::numeric_limits<qint64>::max)()) {
         return false;
     }
 
-    if (!pDevice->isSequential()) {
-        if (!pDevice->seek(0) || ((pDevice->size() != 0) && !XBinary::resize(pDevice, 0))) {
-            return false;
-        }
-    }
+    std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
+        (qint64)nStreamSize, pPdStruct));
+    if (!guardedThis || !pStage || !guardedOutput || !guardedSource)
+        return false;
+    const bool bStageSourceCurrent =
+        isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bStageSourceCurrent) return false;
+    QPointer<QIODevice> guardedStage(pStage.get());
+    qint64 nStaged = 0;
 
-    auto writeAll = [pDevice](const char *pData, qint64 nSize) -> bool {
+    auto writeAll = [&guardedStage, &nStaged](const char *pData,
+                                              qint64 nSize) -> bool {
         qint64 nWritten = 0;
         while (nWritten < nSize) {
-            qint64 nResult = pDevice->write(pData + nWritten, nSize - nWritten);
-            if (nResult <= 0) {
+            if (!guardedStage || !guardedStage->seek(nStaged + nWritten)) return false;
+            qint64 nResult = guardedStage->write(
+                pData + nWritten, nSize - nWritten);
+            if (!guardedStage || nResult <= 0 || nResult > (nSize - nWritten)) {
                 return false;
             }
             nWritten += nResult;
         }
+        nStaged += nWritten;
         return true;
     };
 
     if (nStreamSize == 0) {
-        return true;
+        const bool bEmptySourceCurrent =
+            isUnpackSourceCurrent(pState, pPdStruct);
+        if (!guardedThis || !bEmptySourceCurrent || !guardedOutput)
+            return false;
+        const bool bPublished = publishUnpackOutput(
+            pStage.get(), guardedOutput.data(), pState, pPdStruct);
+        return guardedThis && bPublished;
     }
 
     quint32 nCurrentSector = nStartSector;
@@ -1164,6 +1281,7 @@ bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     } else {
         const qint32 nMaxChain = pContext->listFAT.size();
         const qint64 nFileSize = getSize();
+        if (!guardedThis) return false;
         const quint64 nRequiredSectors = (nStreamSize + (quint64)pContext->nSectorSize - 1) / (quint64)pContext->nSectorSize;
         if (nRequiredSectors > (quint64)nMaxChain) {
             return false;
@@ -1184,7 +1302,8 @@ bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
             }
 
             QByteArray baChunk = read_array((qint64)nOffset, nChunkSize);
-            if ((baChunk.size() != nChunkSize) || !writeAll(baChunk.constData(), nChunkSize)) {
+            if (!guardedThis || (baChunk.size() != nChunkSize) ||
+                !writeAll(baChunk.constData(), nChunkSize)) {
                 return false;
             }
 
@@ -1193,11 +1312,24 @@ bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         }
     }
 
-    return (nBytesRemaining == 0) && (nCurrentSector == 0xFFFFFFFE) && XBinary::isPdStructNotCanceled(pPdStruct);
+    if ((nBytesRemaining != 0) || (nCurrentSector != 0xFFFFFFFE) ||
+        (nStaged != (qint64)nStreamSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    const bool bFinalSourceCurrent =
+        isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bFinalSourceCurrent || !guardedOutput)
+        return false;
+    const bool bPublished = publishUnpackOutput(
+        pStage.get(), guardedOutput.data(), pState, pPdStruct);
+    return guardedThis && bPublished;
 }
 
 bool XCFBF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCFBF> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     bool bResult = false;
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
@@ -1206,6 +1338,8 @@ bool XCFBF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     CFBF_UNPACK_CONTEXT *pContext = (CFBF_UNPACK_CONTEXT *)pState->pContext;
+    const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent) return false;
 
     pState->nCurrentIndex++;
 
@@ -1219,45 +1353,42 @@ bool XCFBF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XCFBF::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCFBF> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
-    bool bResult = false;
+    if (!pState) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !ownsUnpackSource(pState)) return false;
 
-    if (pState) {
-        if (pState->pContext) {
-            CFBF_UNPACK_CONTEXT *pContext = (CFBF_UNPACK_CONTEXT *)pState->pContext;
-
-            // Release cached data
-            pContext->listFAT.clear();
-            pContext->listMiniFAT.clear();
-            pContext->baRootMiniStream.clear();
-            pContext->listRecordOffsets.clear();
-
-            delete pContext;
-            pState->pContext = nullptr;
-        }
-
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = 0;
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = 0;
+    CFBF_UNPACK_CONTEXT *pContext =
+        static_cast<CFBF_UNPACK_CONTEXT *>(pState->pContext);
+    releaseUnpackSource(pState);
+    pState->pContext = nullptr;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = 0;
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = 0;
     pState->mapUnpackProperties.clear();
     pState->mapArchiveProperties.clear();
 
-        bResult = true;
-    }
-
-    return bResult;
+    delete pContext;
+    Q_UNUSED(guardedThis)
+    return true;
 }
 
 QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCFBF> guardedThis(this);
     QList<quint32> listResult;
 
     const qint64 nSectorSize = (ssh._uSectorShift == 12) ? 4096 : 512;
     const qint32 nEntriesPerSector = (qint32)(nSectorSize / 4);
     const qint32 nDIFATEntriesPerSector = nEntriesPerSector - 1;
     const qint64 nFileSize = getSize();
+    if (!guardedThis) return listResult;
 
     if ((nFileSize < nSectorSize) || (ssh._csectFat == 0)) {
         return listResult;
@@ -1323,7 +1454,7 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
 
             const qint64 nOffset = nSectorSize + (qint64)nDIFATSector * nSectorSize;
             QByteArray baSector = read_array(nOffset, nSectorSize);
-            if (baSector.size() != nSectorSize) {
+            if (!guardedThis || (baSector.size() != nSectorSize)) {
                 return QList<quint32>();
             }
 
@@ -1360,7 +1491,8 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
     for (quint32 nFATSector : listFATSectors) {
         const qint64 nOffset = nSectorSize + (qint64)nFATSector * nSectorSize;
         QByteArray baSector = read_array(nOffset, nSectorSize);
-        if ((baSector.size() != nSectorSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!guardedThis || (baSector.size() != nSectorSize) ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return QList<quint32>();
         }
 
@@ -1401,9 +1533,11 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
 
 QByteArray XCFBF::_readStreamBySectorChain(const QList<quint32> &listFAT, quint32 nStartSector, qint64 nSectorSize, qint64 nStreamSize, PDSTRUCT *pPdStruct)
 {
+    QPointer<XCFBF> guardedThis(this);
     QByteArray baResult;
 
     const qint64 nFileSize = getSize();
+    if (!guardedThis) return baResult;
     const bool bKnownSize = nStreamSize >= 0;
     if (((nSectorSize != 512) && (nSectorSize != 4096)) || (nFileSize < nSectorSize) || listFAT.isEmpty() || (nStreamSize < -1) ||
         (bKnownSize && (nStreamSize > (qint64)(std::numeric_limits<qint32>::max)()))) {
@@ -1440,7 +1574,7 @@ QByteArray XCFBF::_readStreamBySectorChain(const QList<quint32> &listFAT, quint3
 
         const qint64 nOffset = nSectorSize + (qint64)nCurrentSector * nSectorSize;
         QByteArray baSector = read_array(nOffset, nSectorSize);
-        if (baSector.size() != nSectorSize) {
+        if (!guardedThis || (baSector.size() != nSectorSize)) {
             return QByteArray();
         }
 

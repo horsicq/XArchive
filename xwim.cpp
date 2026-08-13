@@ -55,14 +55,33 @@ static bool wimWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBi
 {
     if (!pDevice || (nSize < 0) || ((nSize > 0) && !pData)) return false;
 
+    QPointer<QIODevice> guardedDevice(pDevice);
+    if (!guardedDevice) return false;
+    const bool bSeekable = !guardedDevice->isSequential();
+    if (!guardedDevice) return false;
+    const qint64 nStart = bSeekable ? guardedDevice->pos() : -1;
+    const qint64 nMax = (std::numeric_limits<qint64>::max)();
+    if (!guardedDevice || (bSeekable && (nStart < 0))) return false;
+
     qint64 nDone = 0;
     while ((nDone < nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        const qint64 nWritten = pDevice->write(pData + nDone, nSize - nDone);
+        if (!guardedDevice ||
+            (bSeekable &&
+             ((nDone > nMax - nStart) ||
+              !guardedDevice->seek(nStart + nDone)))) return false;
+        const qint64 nWritten = guardedDevice->write(
+            pData + nDone, nSize - nDone);
+        if (!guardedDevice) return false;
         if ((nWritten <= 0) || (nWritten > (nSize - nDone))) return false;
         nDone += nWritten;
     }
 
-    return (nDone == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+    if (!guardedDevice || (nDone != nSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (bSeekable &&
+        ((nSize > nMax - nStart) ||
+         !guardedDevice->seek(nStart + nSize))) return false;
+    return true;
 }
 
 static QByteArray wimSha1(const QByteArray &baData, XBinary::PDSTRUCT *pPdStruct)
@@ -76,21 +95,6 @@ static QByteArray wimSha1(const QByteArray &baData, XBinary::PDSTRUCT *pPdStruct
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return QByteArray();
     return hash.result();
-}
-
-static bool wimResetOutput(QIODevice *pDevice)
-{
-    if (!pDevice || !pDevice->isOpen() || !pDevice->isWritable()) return false;
-    if (pDevice->isSequential()) return true;
-    return XBinary::isResizeEnable(pDevice) && XBinary::resize(pDevice, 0) && pDevice->seek(0);
-}
-
-static void wimRollbackOutput(QIODevice *pDevice)
-{
-    if (pDevice && !pDevice->isSequential() && XBinary::isResizeEnable(pDevice)) {
-        XBinary::resize(pDevice, 0);
-        pDevice->seek(0);
-    }
 }
 
 static QIODevice *wimUnwrapDevice(QIODevice *pDevice)
@@ -243,6 +247,42 @@ static bool isWimSameResource(const XWIM::RESOURCE_INFO &resourceInfo1,
            (resourceInfo1.nOffset == resourceInfo2.nOffset) &&
            (resourceInfo1.nUnpackSize == resourceInfo2.nUnpackSize) &&
            (resourceInfo1.nFlags == resourceInfo2.nFlags);
+}
+
+static bool insertWimResourceRange(QMap<quint64, quint64> *pRanges,
+                                   quint64 nStart, quint64 nSize)
+{
+    if (!pRanges) return false;
+    if (nSize == 0) return true;
+    if (nStart > (std::numeric_limits<quint64>::max)() - nSize) return false;
+
+    const quint64 nEnd = nStart + nSize;
+    QMap<quint64, quint64>::const_iterator it = pRanges->lowerBound(nStart);
+    if ((it != pRanges->constEnd()) && (nEnd > it.key())) return false;
+    if (it != pRanges->constBegin()) {
+        --it;
+        if (it.value() > nStart) return false;
+    }
+    pRanges->insert(nStart, nEnd);
+    return true;
+}
+
+static bool isWimResourceDescriptorSupported(
+    const XWIM::RESOURCE_INFO &resourceInfo, quint32 nVersion,
+    bool bLiveResource)
+{
+    static const quint8 WIM_RESOURCE_KNOWN_FLAGS = 0x1F;
+    if (resourceInfo.nFlags & ~WIM_RESOURCE_KNOWN_FLAGS) return false;
+    if ((resourceInfo.nFlags & 0x10) &&
+        ((nVersion != 0x00000E00) || bLiveResource)) {
+        return false;
+    }
+    if (!(resourceInfo.nFlags & 0x10) &&
+        (((resourceInfo.nUnpackSize == 0) && (resourceInfo.nPackSize != 0)) ||
+         ((resourceInfo.nUnpackSize != 0) && (resourceInfo.nPackSize == 0)))) {
+        return false;
+    }
+    return true;
 }
 
 static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE_METHOD hm1 = XBinary::HANDLE_METHOD_UNKNOWN,
@@ -694,6 +734,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XWIM::getDefaultUnpackProperties()
 
 bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
+    QPointer<XWIM> guardedArchive(this);
     bool bResult = false;
 
     PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
@@ -701,41 +742,77 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pPdStruct = &pdStructEmpty;
     }
 
-    if (!pState) {
+    if (!pState || m_bUnpackOperationInProgress) {
         return false;
     }
 
-    finishUnpack(pState, nullptr);
+    if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
+    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
+    if (!guardedArchive || !bBound) return false;
+    const auto failSource = [&]() -> bool {
+        if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
+        return false;
+    };
+    SOURCE_DEVICE_SNAPSHOT sourceSnapshot = {};
+    if (!guardedArchive->getBoundUnpackSourceSnapshot(pState, &sourceSnapshot)) {
+        return failSource();
+    }
+    const bool bValid = guardedArchive->isValid(pPdStruct);
+    if (!guardedArchive) return false;
+    if (!bValid) {
+        return failSource();
+    }
 
-    WIM_HEADER header = readWIMHeader();
+    WIM_HEADER header = guardedArchive->readWIMHeader();
+    if (!guardedArchive) return false;
     // This class has no sibling-volume resolver.  Accepting a split WIM here
     // would make foreign-part resources look like extents in the current file.
     if ((header.nPartNumber != 1) || (header.nNumberOfParts != 1)) {
-        return false;
+        return failSource();
     }
+    const qint64 nFileSize = guardedArchive->getSize();
+    if (!guardedArchive) return false;
     if (!_isCompressionConfigurationValid(header.nFlags, header.nChunkSize, true) ||
-        !isWimResourceExtentValid(header.offsetTableResource, getSize()) ||
-        !isWimResourceExtentValid(header.xmlResource, getSize()) ||
-        !isWimResourceExtentValid(header.bootMetadataResource, getSize()) ||
-        !isWimResourceExtentValid(header.integrityResource, getSize())) {
-        return false;
+        !isWimResourceExtentValid(header.offsetTableResource, nFileSize) ||
+        !isWimResourceExtentValid(header.xmlResource, nFileSize) ||
+        !isWimResourceExtentValid(header.bootMetadataResource, nFileSize) ||
+        !isWimResourceExtentValid(header.integrityResource, nFileSize) ||
+        !isWimResourceDescriptorSupported(header.offsetTableResource,
+                                          header.nVersion, true) ||
+        !isWimResourceDescriptorSupported(header.xmlResource,
+                                          header.nVersion,
+                                          header.xmlResource.nPackSize != 0) ||
+        !isWimResourceDescriptorSupported(header.bootMetadataResource,
+                                          header.nVersion,
+                                          header.bootMetadataResource.nPackSize != 0) ||
+        !isWimResourceDescriptorSupported(header.integrityResource,
+                                          header.nVersion,
+                                          header.integrityResource.nPackSize != 0)) {
+        return failSource();
     }
 
     WIM_UNPACK_CONTEXT *pContext = new (std::nothrow) WIM_UNPACK_CONTEXT;
     if (!pContext) {
-        return false;
+        return failSource();
     }
-    pContext->pSourceDevice = getDevice();
+    pContext->sourceSnapshot = sourceSnapshot;
     pContext->bLegacy = (header.nHeaderSize == WIM_HEADER_SIZE_OLD);
     pContext->nHeaderFlags = header.nFlags;
     pContext->nChunkSize = header.nChunkSize;
     pContext->compressedHandleMethod = _getCompressionHandleMethod(header.nFlags);
     bool bStreamListOk = false;
-    QList<STREAM_INFO> listStreams = _readStreamInfoList(header, &bStreamListOk, pPdStruct);
+    QList<STREAM_INFO> listStreams = guardedArchive->_readStreamInfoList(
+        header, &bStreamListOk, pPdStruct);
+    if (!guardedArchive) {
+        delete pContext;
+        return false;
+    }
     QMap<QByteArray, STREAM_INFO> mapStreamsByHash;
     QMap<quint32, STREAM_INFO> mapStreamsById;
     QMap<QByteArray, quint64> mapActualHashRefCounts;
@@ -784,8 +861,13 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
                 bStreamListOk = false;
                 break;
             }
-            QByteArray baMetadata = _readResource(streamInfo.resourceInfo, header.nFlags, header.nChunkSize,
-                                                  WIM_MAX_BUFFERED_RESOURCE_SIZE, pPdStruct);
+            QByteArray baMetadata = guardedArchive->_readResource(
+                streamInfo.resourceInfo, header.nFlags, header.nChunkSize,
+                WIM_MAX_BUFFERED_RESOURCE_SIZE, pPdStruct);
+            if (!guardedArchive) {
+                delete pContext;
+                return false;
+            }
             QList<WIM_RECORD> listMetadataRecords;
             const QByteArray baMetadataDigest = wimSha1(baMetadata, pPdStruct);
             const bool bMetadataHashMatches = (streamInfo.baHash.size() == WIM_HASH_SIZE) &&
@@ -793,10 +875,16 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
             if (!XBinary::isPdStructNotCanceled(pPdStruct) || baMetadata.isEmpty() ||
                 (!bMetadataHashMatches && !(bLegacy && _isEmptyHash(streamInfo.baHash))) ||
-                !_parseMetadata(baMetadata, mapStreamsByHash, mapStreamsById, header, &listMetadataRecords,
-                                &mapActualHashRefCounts, &mapActualIdRefCounts, pPdStruct)) {
+                !guardedArchive->_parseMetadata(
+                    baMetadata, mapStreamsByHash, mapStreamsById, header,
+                    &listMetadataRecords, &mapActualHashRefCounts,
+                    &mapActualIdRefCounts, pPdStruct)) {
                 bStreamListOk = false;
                 break;
+            }
+            if (!guardedArchive) {
+                delete pContext;
+                return false;
             }
 
             QSet<QString> stImageNames;
@@ -908,18 +996,34 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (bStreamListOk && bMetadataFound && bMetadataParsed &&
-        XBinary::isPdStructNotCanceled(pPdStruct)) {
+        XBinary::isPdStructNotCanceled(pPdStruct) &&
+        guardedArchive->isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, guardedArchive->getDevice(),
+            pPdStruct)) {
+        if (!guardedArchive) return false;
         pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
+        pState->nTotalSize = nFileSize;
         pState->nCurrentIndex = 0;
         pState->nNumberOfRecords = pContext->listRecords.count();
         pState->mapUnpackProperties = mapProperties;
         pState->pContext = pContext;
-
-        bResult = true;
+        bResult = guardedArchive->validateAndFinalizeUnpackSource(
+            pState, pContext, pPdStruct);
+        if (!guardedArchive) return false;
+        if (!bResult) {
+            pState->pContext = nullptr;
+            guardedArchive->releaseUnpackSource(pState);
+            delete pContext;
+            pState->nCurrentOffset = 0;
+            pState->nTotalSize = 0;
+            pState->nCurrentIndex = 0;
+            pState->nNumberOfRecords = 0;
+            pState->mapUnpackProperties.clear();
+            pState->mapArchiveProperties.clear();
+        }
     } else {
+        guardedArchive->releaseUnpackSource(pState);
         delete pContext;
-        finishUnpack(pState, nullptr);
     }
 
     return bResult;
@@ -928,13 +1032,26 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 XBinary::ARCHIVERECORD XWIM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     ARCHIVERECORD result = {};
+    UNPACK_OPERATION_GUARD operationGuard(
+        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return result;
+    QPointer<XWIM> guardedArchive(this);
 
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext ||
+        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return result;
     }
 
     WIM_UNPACK_CONTEXT *pContext = (WIM_UNPACK_CONTEXT *)pState->pContext;
+
+    QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
+    if (!guardedArchive || !guardedSource ||
+        !guardedArchive->isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, guardedSource.data(), pPdStruct) ||
+        !guardedArchive || !guardedSource) {
+        return result;
+    }
 
     if (pState->nCurrentIndex >= pContext->listRecords.count()) {
         return result;
@@ -957,11 +1074,20 @@ XBinary::ARCHIVERECORD XWIM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(FPART_PROP_DATETIME, record.mtDateTime);
     }
 
+    if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
+        !guardedArchive || !guardedSource) {
+        return ARCHIVERECORD();
+    }
     return result;
 }
 
 bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XWIM> guardedArchive(this);
+
+    QPointer<QIODevice> guardedOutput(pDevice);
     if (!pState || !pState->pContext) return false;
 
     WIM_UNPACK_CONTEXT *pContext = (WIM_UNPACK_CONTEXT *)pState->pContext;
@@ -969,12 +1095,24 @@ bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     // The parsed context belongs to the source device that was active during
     // initUnpack().  Reject a later setDevice() replacement before touching
     // either iterator state or the caller's output device.
-    if (getDevice() != pContext->pSourceDevice) return false;
+    QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
+    if (!guardedArchive || !guardedSource ||
+        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+        !guardedArchive->isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, guardedSource.data(), pPdStruct) ||
+        !guardedArchive || !guardedSource) return false;
 
-    if (!pDevice || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+    // Archive payloads are byte streams.  Text mode can transparently
+    // translate CR/LF on Windows while still reporting successful writes.
+    if (!guardedOutput ||
+        !guardedArchive->isUnpackOutputSupported(guardedOutput.data()) ||
+        !guardedArchive) {
+        return false;
+    }
+
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
         (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
-        pState->nCurrentOffset = 0;
         return false;
     }
 
@@ -983,73 +1121,93 @@ bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     }
 
     const WIM_RECORD &record = pContext->listRecords.at(pState->nCurrentIndex);
-    if (wimDevicesAlias(pContext->pSourceDevice, pDevice)) return false;
-    pState->nCurrentOffset = 0;
-    if (!wimResetOutput(pDevice)) return false;
+    if (!guardedOutput || wimDevicesAlias(
+            pContext->sourceSnapshot.pSourceDevice.data(),
+            guardedOutput.data())) return false;
+
+    if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+        !guardedArchive->isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, guardedSource.data(), pPdStruct) ||
+        !guardedArchive || !guardedSource) {
+        return false;
+    }
 
     if (record.nUncompressedSize < 0) {
-        wimRollbackOutput(pDevice);
         return false;
     }
     if (record.nUncompressedSize == 0) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
             (record.resourceInfo.nUnpackSize != 0) || (record.resourceInfo.nPackSize != 0) ||
             (record.resourceInfo.nFlags & RESOURCE_FLAG_SOLID) ||
-            !isWimResourceExtentValid(record.resourceInfo, getSize()) ||
+            !isWimResourceExtentValid(record.resourceInfo,
+                                      guardedArchive->getSize()) ||
+            !guardedArchive ||
             (!record.baHash.isEmpty() && (record.baHash.size() != WIM_HASH_SIZE)) ||
-            ((record.baHash.size() == WIM_HASH_SIZE) && !_isEmptyHash(record.baHash) &&
-             (wimSha1(QByteArray(), pPdStruct) != record.baHash))) {
-            wimRollbackOutput(pDevice);
+             ((record.baHash.size() == WIM_HASH_SIZE) && !_isEmptyHash(record.baHash) &&
+              (wimSha1(QByteArray(), pPdStruct) != record.baHash))) {
             return false;
         }
-        return true;
+        if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+            !guardedArchive->isSourceDeviceSnapshotCurrent(
+                pContext->sourceSnapshot, guardedSource.data(), pPdStruct) ||
+            !guardedArchive || !guardedSource || !guardedOutput) {
+            return false;
+        }
+        QBuffer emptyStage;
+        return emptyStage.open(QIODevice::ReadWrite) &&
+               guardedArchive->publishUnpackOutput(
+                   &emptyStage, guardedOutput.data(), pState, pPdStruct);
     }
 
     QTemporaryFile stageFile;
     if (!stageFile.open()) {
-        wimRollbackOutput(pDevice);
         return false;
     }
 
     QByteArray baDigest;
     const bool bDigestRequired = !(pContext->bLegacy && _isEmptyHash(record.baHash));
-    if (!_stageResource(record, *pContext, &stageFile, &baDigest, pPdStruct) ||
-        (bDigestRequired && (baDigest != record.baHash)) || !stageFile.seek(0)) {
-        wimRollbackOutput(pDevice);
+    if (!guardedArchive->_stageResource(
+            record, *pContext, &stageFile, &baDigest, pPdStruct) ||
+        !guardedArchive || !guardedSource || !guardedOutput ||
+        (bDigestRequired && (baDigest != record.baHash)) ||
+        (stageFile.size() != record.nUncompressedSize) ||
+        !stageFile.seek(0)) {
+        return false;
+    }
+    if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+        !guardedArchive->isSourceDeviceSnapshotCurrent(
+            pContext->sourceSnapshot, guardedSource.data(), pPdStruct) ||
+        !guardedArchive || !guardedSource || !guardedOutput) {
         return false;
     }
 
-    QByteArray baBuffer(1 << 20, 0);
-    qint64 nPublished = 0;
-    while ((nPublished < record.nUncompressedSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
-        const qint32 nChunk = (qint32)qMin<qint64>(baBuffer.size(),
-                                                   record.nUncompressedSize - nPublished);
-        const qint64 nRead = stageFile.read(baBuffer.data(), nChunk);
-        if ((nRead != nChunk) ||
-            !wimWriteAll(pDevice, baBuffer.constData(), nChunk, pPdStruct)) {
-            wimRollbackOutput(pDevice);
-            return false;
-        }
-        nPublished += nChunk;
-    }
+    if (!guardedArchive->publishUnpackOutput(
+            &stageFile, guardedOutput.data(), pState, pPdStruct) ||
+        !guardedArchive) return false;
 
-    if ((nPublished != record.nUncompressedSize) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        wimRollbackOutput(pDevice);
-        return false;
-    }
-
-    pState->nCurrentOffset = nPublished;
+    pState->nCurrentOffset = record.nUncompressedSize;
     return true;
 }
 
 bool XWIM::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XWIM> guardedArchive(this);
 
     if (XBinary::isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+        WIM_UNPACK_CONTEXT *pContext = (WIM_UNPACK_CONTEXT *)pState->pContext;
+        QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
+        if (!guardedArchive || !guardedSource ||
+            !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+            !guardedArchive->isSourceDeviceSnapshotCurrent(
+                pContext->sourceSnapshot, guardedSource.data(), pPdStruct) ||
+            !guardedArchive || !guardedSource) {
+            return false;
+        }
+
         pState->nCurrentIndex++;
         bResult = (pState->nCurrentIndex < pState->nNumberOfRecords);
     }
@@ -1061,14 +1219,23 @@ bool XWIM::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
 
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+    QPointer<XWIM> guardedArchive(this);
+
     if (!pState) {
         return false;
     }
 
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
+        !guardedArchive->ownsUnpackSource(pState)) return false;
+    guardedArchive->releaseUnpackSource(pState);
+
     if (pState->pContext) {
         WIM_UNPACK_CONTEXT *pContext = (WIM_UNPACK_CONTEXT *)pState->pContext;
-        delete pContext;
         pState->pContext = nullptr;
+        delete pContext;
+        if (!guardedArchive) return false;
     }
 
     pState->nCurrentOffset = 0;
@@ -1523,7 +1690,39 @@ QList<XWIM::STREAM_INFO> XWIM::_readStreamInfoList(const WIM_HEADER &header, boo
     if (!pOk || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         (header.nPartNumber == 0) || (header.nNumberOfParts == 0) ||
         (header.nPartNumber > header.nNumberOfParts) ||
-        !isWimResourceExtentValid(header.offsetTableResource, getSize())) {
+        !isWimResourceExtentValid(header.offsetTableResource, getSize()) ||
+        !isWimResourceExtentValid(header.xmlResource, getSize()) ||
+        !isWimResourceExtentValid(header.bootMetadataResource, getSize()) ||
+        !isWimResourceExtentValid(header.integrityResource, getSize()) ||
+        !isWimResourceDescriptorSupported(header.offsetTableResource,
+                                          header.nVersion, true) ||
+        !isWimResourceDescriptorSupported(header.xmlResource,
+                                          header.nVersion,
+                                          header.xmlResource.nPackSize != 0) ||
+        !isWimResourceDescriptorSupported(header.bootMetadataResource,
+                                          header.nVersion,
+                                          header.bootMetadataResource.nPackSize != 0) ||
+        !isWimResourceDescriptorSupported(header.integrityResource,
+                                          header.nVersion,
+                                          header.integrityResource.nPackSize != 0)) {
+        return listResult;
+    }
+
+    // The boot descriptor is intentionally omitted: when present it must
+    // exactly alias one live metadata entry and is checked after metadata is
+    // parsed.  Every other control resource and retained lookup descriptor
+    // owns a unique physical range outside the header.
+    QMap<quint64, quint64> mapResourceRanges;
+    if (!insertWimResourceRange(&mapResourceRanges, 0, header.nHeaderSize) ||
+        !insertWimResourceRange(&mapResourceRanges,
+                                header.offsetTableResource.nOffset,
+                                header.offsetTableResource.nPackSize) ||
+        !insertWimResourceRange(&mapResourceRanges,
+                                header.xmlResource.nOffset,
+                                header.xmlResource.nPackSize) ||
+        !insertWimResourceRange(&mapResourceRanges,
+                                header.integrityResource.nOffset,
+                                header.integrityResource.nPackSize)) {
         return listResult;
     }
 
@@ -1547,7 +1746,6 @@ QList<XWIM::STREAM_INFO> XWIM::_readStreamInfoList(const WIM_HEADER &header, boo
 
     QSet<quint32> stLegacyIds;
     QSet<QByteArray> stModernHashes;
-    QMap<quint64, quint64> mapResourceRanges;
 
     for (qint32 i = 0; (i < nNumberOfStreams) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         const qint64 nOffset = (qint64)i * nStreamInfoSize;
@@ -1569,9 +1767,13 @@ QList<XWIM::STREAM_INFO> XWIM::_readStreamInfoList(const WIM_HEADER &header, boo
             streamInfo.baHash = baOffsetTable.mid(nOffset + 30, WIM_HASH_SIZE);
         }
 
+        const bool bLiveResource = streamInfo.nRefCount != 0;
         if ((streamInfo.baHash.size() != WIM_HASH_SIZE) ||
             (streamInfo.resourceInfo.nUnpackSize > (quint64)(std::numeric_limits<qint64>::max)()) ||
             (streamInfo.nPartNumber == 0) || (streamInfo.nPartNumber > header.nNumberOfParts) ||
+            !isWimResourceDescriptorSupported(streamInfo.resourceInfo,
+                                              header.nVersion,
+                                              bLiveResource) ||
             ((streamInfo.nPartNumber == header.nPartNumber) &&
              !isWimResourceExtentValid(streamInfo.resourceInfo, getSize()))) {
             listResult.clear();
@@ -1579,11 +1781,6 @@ QList<XWIM::STREAM_INFO> XWIM::_readStreamInfoList(const WIM_HEADER &header, boo
         }
 
         const bool bDataStream = !(streamInfo.resourceInfo.nFlags & RESOURCE_FLAG_METADATA);
-        if (!(streamInfo.resourceInfo.nFlags & RESOURCE_FLAG_SOLID) &&
-            (((streamInfo.resourceInfo.nUnpackSize == 0) && (streamInfo.resourceInfo.nPackSize != 0)) ||
-             ((streamInfo.resourceInfo.nUnpackSize != 0) && (streamInfo.resourceInfo.nPackSize == 0)))) {
-            return QList<STREAM_INFO>();
-        }
 
         if (bLegacy && bDataStream) {
             if (stLegacyIds.contains(streamInfo.nId)) return QList<STREAM_INFO>();
@@ -1600,20 +1797,21 @@ QList<XWIM::STREAM_INFO> XWIM::_readStreamInfoList(const WIM_HEADER &header, boo
             stModernHashes.insert(streamInfo.baHash);
         }
 
-        // Every physical data-stream descriptor must own a unique, disjoint
-        // extent, including deleted descriptors.  Metadata resources are kept
-        // separate because the boot descriptor legitimately aliases one of them.
+        // Retain all local non-metadata ranges, including FREE/deleted data,
+        // because they still describe physical bytes.  Deleted metadata is a
+        // compatibility exception used by real WAIK images.  A dead SOLID
+        // descriptor in pipable v0xE00 is similarly ignored because this
+        // reader cannot interpret its solid-resource framing.
+        const bool bDeletedMetadata = !bDataStream && !bLiveResource;
+        const bool bIgnoredDeadSolid =
+            !bLiveResource && (header.nVersion == 0x00000E00) &&
+            (streamInfo.resourceInfo.nFlags & RESOURCE_FLAG_SOLID);
         if ((streamInfo.nPartNumber == header.nPartNumber) &&
-            bDataStream && (streamInfo.resourceInfo.nPackSize != 0)) {
-            const quint64 nStart = streamInfo.resourceInfo.nOffset;
-            const quint64 nEnd = nStart + streamInfo.resourceInfo.nPackSize;
-            QMap<quint64, quint64>::const_iterator it = mapResourceRanges.lowerBound(nStart);
-            if ((it != mapResourceRanges.constEnd()) && (nEnd > it.key())) return QList<STREAM_INFO>();
-            if (it != mapResourceRanges.constBegin()) {
-                --it;
-                if (it.value() > nStart) return QList<STREAM_INFO>();
-            }
-            mapResourceRanges.insert(nStart, nEnd);
+            !bDeletedMetadata && !bIgnoredDeadSolid &&
+            !insertWimResourceRange(&mapResourceRanges,
+                                    streamInfo.resourceInfo.nOffset,
+                                    streamInfo.resourceInfo.nPackSize)) {
+            return QList<STREAM_INFO>();
         }
         listResult.append(streamInfo);
     }
