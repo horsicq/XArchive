@@ -216,6 +216,11 @@ QList<XBinary::XFRECORD> XSquashfs::getXFRecords(FT fileType, quint32 nStructID,
 //     return listResult;
 // }
 
+static bool _squashfsCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XSquashfs::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -226,26 +231,25 @@ QList<XBinary::FPART> XSquashfs::getFileParts(quint32 nFileParts, qint32 nLimit,
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
     qint64 nTotalSize = getSize();
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && _squashfsCanAppend(nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
         record.nFileSize = sizeof(SQUASHFS_HEADER);
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Header");
 
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && canAppend()) {
+    if ((nFileParts & FILEPART_REGION) && _squashfsCanAppend(nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = sizeof(SQUASHFS_HEADER);
         record.nFileSize = nTotalSize - sizeof(SQUASHFS_HEADER);
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Data");
 
         listResult.append(record);
@@ -273,22 +277,30 @@ XBinary *XSquashfs::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
 bool XSquashfs::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XSquashfs> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XSquashfs::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XSquashfs> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XSquashfs::setInternalInfo(void *pInternalInfo)

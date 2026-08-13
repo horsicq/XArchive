@@ -51,6 +51,7 @@ bool XAPKS::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XAPKS::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pListRecords)
     Q_UNUSED(pPdStruct)
 
     // // APKS is an APK with additional metadata, check for BundleConfig.pb file
@@ -94,22 +95,30 @@ XBinary::FT XAPKS::getFileType()
 
 bool XAPKS::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XAPKS> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XAPK::handleInternalInfo(pPdStruct);
-        static_cast<XAPK::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XAPK::INTERNAL_INFO *>(XAPK::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XAPK::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XAPK::INTERNAL_INFO *pInfo =
+            static_cast<XAPK::INTERNAL_INFO *>(
+                guardedThis->XAPK::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XAPK::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XAPKS::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XAPKS> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XAPKS::setInternalInfo(void *pInternalInfo)

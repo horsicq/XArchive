@@ -498,6 +498,45 @@ qint64 XCFBF::getImageSize()
     return getSize();
 }
 
+static bool _cfbfCanAppend(XBinary::PDSTRUCT *pPdStruct, qint32 nLimit, const QList<XBinary::FPART> *pListResult)
+{
+    return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (pListResult->count() < nLimit));
+}
+
+static bool _cfbfLimitReached(qint32 nLimit, const QList<XBinary::FPART> *pListResult)
+{
+    return (nLimit > 0) && (pListResult->count() >= nLimit);
+}
+
+static bool _cfbfGetSectorOffset(quint64 nSectorSize64, qint64 nFileSize, quint32 nSector, qint64 *pnOffset)
+{
+    if (!pnOffset || (nSector > (((std::numeric_limits<quint64>::max)() - nSectorSize64) / nSectorSize64))) {
+        return false;
+    }
+    const quint64 nOffset64 = nSectorSize64 + (quint64)nSector * nSectorSize64;
+    if ((nOffset64 > (quint64)(std::numeric_limits<qint64>::max)()) || (nOffset64 >= (quint64)nFileSize)) {
+        return false;
+    }
+    *pnOffset = (qint64)nOffset64;
+    return true;
+}
+
+static bool _cfbfGetSectorRange(quint64 nSectorSize64, qint64 nFileSize, quint32 nSector, quint64 nCount, qint64 *pnOffset, qint64 *pnSize)
+{
+    qint64 nOffset = -1;
+    if (!pnOffset || !pnSize || (nCount == 0) || !_cfbfGetSectorOffset(nSectorSize64, nFileSize, nSector, &nOffset) ||
+        (nCount > (quint64)(std::numeric_limits<qint64>::max)() / nSectorSize64)) {
+        return false;
+    }
+    const qint64 nSize = (qint64)(nCount * nSectorSize64);
+    if ((nSize <= 0) || (nSize > nFileSize - nOffset)) {
+        return false;
+    }
+    *pnOffset = nOffset;
+    *pnSize = nSize;
+    return true;
+}
+
 QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -505,11 +544,6 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return listResult;
     }
-
-    auto canAppend = [&]() -> bool {
-        return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.count() < nLimit));
-    };
-    auto limitReached = [&]() -> bool { return (nLimit > 0) && (listResult.count() >= nLimit); };
 
     const qint64 fileSize = getSize();
     if (fileSize < 512) return listResult;
@@ -519,41 +553,16 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     StructuredStorageHeader ssh = read_StructuredStorageHeader(0, pPdStruct);
     const qint64 sectorSize = (ssh._uSectorShift == 12) ? 4096 : 512;
     const quint64 nSectorSize64 = (quint64)sectorSize;
-    auto getSectorOffset = [&](quint32 nSector, qint64 *pnOffset) -> bool {
-        if (!pnOffset || (nSector > (((std::numeric_limits<quint64>::max)() - nSectorSize64) / nSectorSize64))) {
-            return false;
-        }
-        const quint64 nOffset64 = nSectorSize64 + (quint64)nSector * nSectorSize64;
-        if ((nOffset64 > (quint64)(std::numeric_limits<qint64>::max)()) || (nOffset64 >= (quint64)fileSize)) {
-            return false;
-        }
-        *pnOffset = (qint64)nOffset64;
-        return true;
-    };
-    auto getSectorRange = [&](quint32 nSector, quint64 nCount, qint64 *pnOffset, qint64 *pnSize) -> bool {
-        qint64 nOffset = -1;
-        if (!pnOffset || !pnSize || (nCount == 0) || !getSectorOffset(nSector, &nOffset) ||
-            (nCount > (quint64)(std::numeric_limits<qint64>::max)() / nSectorSize64)) {
-            return false;
-        }
-        const qint64 nSize = (qint64)(nCount * nSectorSize64);
-        if ((nSize <= 0) || (nSize > fileSize - nOffset)) {
-            return false;
-        }
-        *pnOffset = nOffset;
-        *pnSize = nSize;
-        return true;
-    };
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && _cfbfCanAppend(pPdStruct, nLimit, &listResult)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
         header.nFileSize = (std::min)(sectorSize, fileSize);
-        header.nVirtualAddress = -1;
+        header.nVirtualAddress = XADDR_MAX;
         header.sName = tr("Header");
         listResult.append(header);
-        if (limitReached()) return listResult;
+        if (_cfbfLimitReached(nLimit, &listResult)) return listResult;
     }
 
     nMaxOffset = (std::max)(nMaxOffset, sectorSize);
@@ -572,10 +581,10 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             if (firstFatSect != 0xFFFFFFFF) {
                 qint64 fatOffset = -1;
                 qint64 totalFat = 0;
-                if (getSectorRange(firstFatSect, ssh._csectFat, &fatOffset, &totalFat)) {
-                    if ((nFileParts & FILEPART_REGION) && canAppend()) {
+                if (_cfbfGetSectorRange(nSectorSize64, fileSize, firstFatSect, ssh._csectFat, &fatOffset, &totalFat)) {
+                    if ((nFileParts & FILEPART_REGION) && _cfbfCanAppend(pPdStruct, nLimit, &listResult)) {
                         _addRegion(&listResult, fileSize, fatOffset, totalFat, QString("%1").arg("FAT"));
-                        if (limitReached()) return listResult;
+                        if (_cfbfLimitReached(nLimit, &listResult)) return listResult;
                     }
                     nMaxOffset = (std::max)(nMaxOffset, fatOffset + totalFat);
                 }
@@ -586,10 +595,10 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         if (ssh._sectMiniFatStart != 0xFFFFFFFF && ssh._csectMiniFat) {
             qint64 miniFatOffset = -1;
             qint64 miniFatSize = 0;
-            if (getSectorRange(ssh._sectMiniFatStart, ssh._csectMiniFat, &miniFatOffset, &miniFatSize)) {
-                if ((nFileParts & FILEPART_REGION) && canAppend()) {
+            if (_cfbfGetSectorRange(nSectorSize64, fileSize, ssh._sectMiniFatStart, ssh._csectMiniFat, &miniFatOffset, &miniFatSize)) {
+                if ((nFileParts & FILEPART_REGION) && _cfbfCanAppend(pPdStruct, nLimit, &listResult)) {
                     _addRegion(&listResult, fileSize, miniFatOffset, miniFatSize, QString("%1").arg("MiniFAT"));
-                    if (limitReached()) return listResult;
+                    if (_cfbfLimitReached(nLimit, &listResult)) return listResult;
                 }
                 nMaxOffset = (std::max)(nMaxOffset, miniFatOffset + miniFatSize);
             }
@@ -599,10 +608,10 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         if (ssh._sectDifStart != 0xFFFFFFFF && ssh._csectDif) {
             qint64 difatOffset = -1;
             qint64 difatSize = 0;
-            if (getSectorRange(ssh._sectDifStart, ssh._csectDif, &difatOffset, &difatSize)) {
-                if ((nFileParts & FILEPART_REGION) && canAppend()) {
+            if (_cfbfGetSectorRange(nSectorSize64, fileSize, ssh._sectDifStart, ssh._csectDif, &difatOffset, &difatSize)) {
+                if ((nFileParts & FILEPART_REGION) && _cfbfCanAppend(pPdStruct, nLimit, &listResult)) {
                     _addRegion(&listResult, fileSize, difatOffset, difatSize, QString("%1").arg("DIFAT"));
-                    if (limitReached()) return listResult;
+                    if (_cfbfLimitReached(nLimit, &listResult)) return listResult;
                 }
                 nMaxOffset = (std::max)(nMaxOffset, difatOffset + difatSize);
             }
@@ -619,10 +628,10 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         qint64 dirTotalSize = 0;
         if (ssh._sectDirStart != 0xFFFFFFFF) {
             if (ssh._csectDir) {
-                if (!getSectorRange(ssh._sectDirStart, ssh._csectDir, &dirBaseOffset, &dirTotalSize)) {
+                if (!_cfbfGetSectorRange(nSectorSize64, fileSize, ssh._sectDirStart, ssh._csectDir, &dirBaseOffset, &dirTotalSize)) {
                     dirBaseOffset = -1;
                 }
-            } else if (getSectorOffset(ssh._sectDirStart, &dirBaseOffset)) {
+            } else if (_cfbfGetSectorOffset(nSectorSize64, fileSize, ssh._sectDirStart, &dirBaseOffset)) {
                 dirTotalSize = fileSize - dirBaseOffset;
             }
         }
@@ -660,9 +669,9 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
 
             nMaxOffset = (std::max)(nMaxOffset, dirBaseOffset + nFixedSize);
 
-            if ((nFileParts & FILEPART_REGION) && canAppend()) {
+            if ((nFileParts & FILEPART_REGION) && _cfbfCanAppend(pPdStruct, nLimit, &listResult)) {
                 _addRegion(&listResult, fileSize, dirBaseOffset, nFixedSize, QString("%1").arg("Directory"));
-                if (limitReached()) return listResult;
+                if (_cfbfLimitReached(nLimit, &listResult)) return listResult;
             }
 
             // Mini stream parameters
@@ -670,11 +679,11 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             const quint64 miniCutoff = ssh._ulMiniSectorCutoff ? ssh._ulMiniSectorCutoff : 4096;
             qint64 miniBaseOffset = -1;
             if (bHaveRoot) {
-                getSectorOffset(nRootStartSector, &miniBaseOffset);
+                _cfbfGetSectorOffset(nSectorSize64, fileSize, nRootStartSector, &miniBaseOffset);
             }
 
             // Second pass: emit streams
-            for (qint32 i = 0; (i < maxEntries) && isPdStructNotCanceled(pPdStruct) && canAppend(); i++) {
+            for (qint32 i = 0; (i < maxEntries) && isPdStructNotCanceled(pPdStruct) && _cfbfCanAppend(pPdStruct, nLimit, &listResult); i++) {
                 qint64 entryOffset = dirBaseOffset + (qint64)i * entrySize;
                 if (!isOffsetValid(entryOffset + entrySize - 1)) {
                     break;
@@ -708,7 +717,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                         streamOffset = miniBaseOffset + (qint64)nRelativeOffset;
                     }
                 } else {
-                    getSectorOffset(nStartSector, &streamOffset);
+                    _cfbfGetSectorOffset(nSectorSize64, fileSize, nStartSector, &streamOffset);
                 }
 
                 if (!isOffsetValid(streamOffset)) {
@@ -721,7 +730,7 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                 }
                 const qint64 clampedSize = (qint64)nStreamSize;
 
-                if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+                if ((nFileParts & FILEPART_STREAM) && _cfbfCanAppend(pPdStruct, nLimit, &listResult)) {
                     // Read name
                     QByteArray baName = read_array(entryOffset + 0, 64);
                     quint16 nNameLength = read_uint16(entryOffset + 64, false);
@@ -734,10 +743,10 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                     part.filePart = FILEPART_STREAM;
                     part.nFileOffset = streamOffset;
                     part.nFileSize = clampedSize;
-                    part.nVirtualAddress = -1;
+                    part.nVirtualAddress = XADDR_MAX;
                     part.sName = sName;
                     listResult.append(part);
-                    if (limitReached()) return listResult;
+                    if (_cfbfLimitReached(nLimit, &listResult)) return listResult;
                 }
 
                 nMaxOffset = (std::max)(nMaxOffset, streamOffset + clampedSize);
@@ -757,27 +766,27 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         nMaxOffset = fileSize;
     }
 
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && _cfbfCanAppend(pPdStruct, nLimit, &listResult)) {
         const qint64 nDataEnd = (std::min)(nMaxOffset, fileSize);
         if (nDataEnd > sectorSize) {
             FPART data = {};
             data.filePart = FILEPART_DATA;
             data.nFileOffset = sectorSize;
             data.nFileSize = nDataEnd - sectorSize;
-            data.nVirtualAddress = -1;
+            data.nVirtualAddress = XADDR_MAX;
             data.sName = tr("Data");
             listResult.append(data);
-            if (limitReached()) return listResult;
+            if (_cfbfLimitReached(nLimit, &listResult)) return listResult;
         }
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && _cfbfCanAppend(pPdStruct, nLimit, &listResult)) {
         if (nMaxOffset < fileSize) {
             FPART overlay = {};
             overlay.filePart = FILEPART_OVERLAY;
             overlay.nFileOffset = nMaxOffset;
             overlay.nFileSize = fileSize - nMaxOffset;
-            overlay.nVirtualAddress = -1;
+            overlay.nVirtualAddress = XADDR_MAX;
             overlay.sName = tr("Overlay");
             listResult.append(overlay);
         }
@@ -803,7 +812,7 @@ void XCFBF::_addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset
     part.filePart = FILEPART_REGION;
     part.nFileOffset = offset;
     part.nFileSize = size;
-    part.nVirtualAddress = -1;
+    part.nVirtualAddress = XADDR_MAX;
     part.sName = name;
     pListResult->append(part);
 }
@@ -813,6 +822,23 @@ QMap<XBinary::UNPACK_PROP, QVariant> XCFBF::getDefaultUnpackProperties()
     QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
 
     return result;
+}
+
+static bool _cfbfFailUnpackSource(QPointer<XCFBF> *pGuardedThis, XBinary::UNPACK_STATE *pState)
+{
+    if (pGuardedThis->isNull()) return false;
+    (*pGuardedThis)->releaseUnpackSource(pState);
+    return false;
+}
+
+template <typename T>
+static bool _cfbfFailUnpackInit(QPointer<XCFBF> *pGuardedThis, XBinary::UNPACK_STATE *pState, T *pContext)
+{
+    if (pGuardedThis->isNull()) return false;
+    (*pGuardedThis)->releaseUnpackSource(pState);
+    *pState = XBinary::UNPACK_STATE();
+    delete pContext;
+    return false;
 }
 
 bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
@@ -837,14 +863,9 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
     const bool bBound = bindUnpackSource(pState, pPdStruct);
     if (!guardedThis || !bBound) return false;
-    const auto failSource = [&]() -> bool {
-        if (!guardedThis) return false;
-        releaseUnpackSource(pState);
-        return false;
-    };
     const bool bValid = isValid(pPdStruct);
     if (!guardedThis) return false;
-    if (!bValid) return failSource();
+    if (!bValid) return _cfbfFailUnpackSource(&guardedThis, pState);
 
     const qint64 nFileSize = getSize();
     if (!guardedThis) return false;
@@ -853,25 +874,25 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     const qint64 nSectorSize = (ssh._uSectorShift == 12) ? 4096 : 512;
     const qint64 nMiniSectorSize = (qint64)1 << ssh._uMiniSectorShift;
     if ((nFileSize < nSectorSize) || (ssh._sectDirStart == 0xFFFFFFFF) || (ssh._sectDirStart == 0xFFFFFFFE)) {
-        return failSource();
+        return _cfbfFailUnpackSource(&guardedThis, pState);
     }
 
     const quint64 nPhysicalSectors = (quint64)((nFileSize - nSectorSize) / nSectorSize);
     if ((quint64)ssh._sectDirStart >= nPhysicalSectors) {
-        return failSource();
+        return _cfbfFailUnpackSource(&guardedThis, pState);
     }
 
     qint64 nDirectorySize = -1;
     if (ssh._uDllVersion == 4) {
         if ((ssh._csectDir == 0) || ((quint64)ssh._csectDir * (quint64)nSectorSize > (quint64)(std::numeric_limits<qint32>::max)())) {
-            return failSource();
+            return _cfbfFailUnpackSource(&guardedThis, pState);
         }
         nDirectorySize = (qint64)ssh._csectDir * nSectorSize;
     }
 
     CFBF_UNPACK_CONTEXT *pContext = new (std::nothrow) CFBF_UNPACK_CONTEXT;
     if (!pContext) {
-        return failSource();
+        return _cfbfFailUnpackSource(&guardedThis, pState);
     }
     pContext->nSectorSize = nSectorSize;
     pContext->nMiniSectorSize = nMiniSectorSize;
@@ -892,25 +913,17 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
 
-    auto fail = [&]() -> bool {
-        if (!guardedThis) return false;
-        releaseUnpackSource(pState);
-        *pState = UNPACK_STATE();
-        delete pContext;
-        return false;
-    };
-
     const QList<quint32> listFAT = _readFAT(ssh, pPdStruct);
     if (!guardedThis) return false;
     pContext->listFAT = listFAT;
     if (pContext->listFAT.isEmpty()) {
-        return fail();
+        return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
     }
 
     QByteArray baDirData = _readStreamBySectorChain(pContext->listFAT, ssh._sectDirStart, nSectorSize, nDirectorySize, pPdStruct);
     if (!guardedThis) return false;
     if (baDirData.isEmpty() || (baDirData.size() % nSectorSize) || (baDirData.size() % 128)) {
-        return fail();
+        return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
     }
 
     // Reconstruct the exact physical directory chain.  Directory entry offsets
@@ -924,7 +937,7 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     for (qint32 i = 0; i < nDirectorySectors; i++) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct) || ((quint64)nDirectorySector >= nPhysicalSectors) ||
             (nDirectorySector >= (quint32)pContext->listFAT.size()) || setDirSectors.contains(nDirectorySector)) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
 
         setDirSectors.insert(nDirectorySector);
@@ -933,7 +946,7 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
 
     if (nDirectorySector != 0xFFFFFFFE) {
-        return fail();
+        return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
     }
 
     const qint32 nEntrySize = 128;
@@ -942,7 +955,7 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
     for (qint32 i = 0; i < nMaxEntries; i++) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
 
         const qint64 nEntryLocalOffset = (qint64)i * nEntrySize;
@@ -953,17 +966,17 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             continue;
         }
         if ((nObjectType != 1) && (nObjectType != 2) && (nObjectType != 5)) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
 
         const quint16 nNameLength = qFromLittleEndian<quint16>(pEntry + 64);
         if ((nNameLength < 2) || (nNameLength > 64) || (nNameLength & 1) || (qFromLittleEndian<quint16>(pEntry + nNameLength - 2) != 0)) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
 
         if (nObjectType == 5) {
             if ((i != 0) || (++nRootEntries != 1)) {
-                return fail();
+                return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
             }
             pContext->nRootStartSector = qFromLittleEndian<quint32>(pEntry + 116);
             pContext->nRootStreamSize =
@@ -973,39 +986,39 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
                 (ssh._uDllVersion == 3) ? (quint64)qFromLittleEndian<quint32>(pEntry + 120) : qFromLittleEndian<quint64>(pEntry + 120);
 
             if (nStreamSize > (quint64)(std::numeric_limits<qint64>::max)()) {
-                return fail();
+                return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
             }
 
             const qint64 nSectorIndex = nEntryLocalOffset / nSectorSize;
             const qint64 nOffsetInSector = nEntryLocalOffset % nSectorSize;
             if ((nSectorIndex < 0) || (nSectorIndex >= listDirSectorOffsets.size())) {
-                return fail();
+                return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
             }
             pContext->listRecordOffsets.append(listDirSectorOffsets.at((qint32)nSectorIndex) + nOffsetInSector);
         }
     }
 
     if (nRootEntries != 1) {
-        return fail();
+        return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
     }
 
     // The MiniFAT declaration is all-or-nothing and its known-size chain must
     // be exact.
     if (ssh._csectMiniFat == 0) {
         if ((ssh._sectMiniFatStart != 0xFFFFFFFF) && (ssh._sectMiniFatStart != 0xFFFFFFFE)) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
     } else {
         const quint64 nMiniFATSize64 = (quint64)ssh._csectMiniFat * (quint64)nSectorSize;
         if ((nMiniFATSize64 > (quint64)(std::numeric_limits<qint32>::max)()) || ((quint64)ssh._sectMiniFatStart >= nPhysicalSectors)) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
 
         const qint64 nMiniFATSize = (qint64)nMiniFATSize64;
         QByteArray baMiniFAT = _readStreamBySectorChain(pContext->listFAT, ssh._sectMiniFatStart, nSectorSize, nMiniFATSize, pPdStruct);
         if (!guardedThis) return false;
         if (baMiniFAT.size() != nMiniFATSize) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
 
         const uchar *pMiniFAT = reinterpret_cast<const uchar *>(baMiniFAT.constData());
@@ -1019,7 +1032,7 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     if (pContext->nRootStreamSize > 0) {
         if ((pContext->nRootStreamSize > (quint64)(std::numeric_limits<qint32>::max)()) ||
             ((quint64)pContext->nRootStartSector >= nPhysicalSectors)) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
         const QByteArray baRootMiniStream = _readStreamBySectorChain(
             pContext->listFAT, pContext->nRootStartSector, nSectorSize,
@@ -1027,10 +1040,10 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         if (!guardedThis) return false;
         pContext->baRootMiniStream = baRootMiniStream;
         if ((quint64)pContext->baRootMiniStream.size() != pContext->nRootStreamSize) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
     } else if ((pContext->nRootStartSector != 0xFFFFFFFF) && (pContext->nRootStartSector != 0xFFFFFFFE)) {
-        return fail();
+        return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
     }
 
     for (qint64 nEntryOffset : pContext->listRecordOffsets) {
@@ -1046,19 +1059,19 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 
         if (nStreamSize == 0) {
             if ((nStartSector != 0xFFFFFFFF) && (nStartSector != 0xFFFFFFFE)) {
-                return fail();
+                return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
             }
         } else if (nStreamSize < pContext->nMiniCutoff) {
             if ((nStartSector >= (quint32)pContext->listMiniFAT.size()) || pContext->baRootMiniStream.isEmpty()) {
-                return fail();
+                return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
             }
         } else if (((quint64)nStartSector >= nPhysicalSectors) || (nStartSector >= (quint32)pContext->listFAT.size())) {
-            return fail();
+            return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
         }
     }
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct) || pContext->listRecordOffsets.isEmpty()) {
-        return fail();
+        return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
     }
     pState->nNumberOfRecords = pContext->listRecordOffsets.size();
     pState->nCurrentOffset = pContext->listRecordOffsets.first();
@@ -1067,7 +1080,7 @@ bool XCFBF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     pState->mapUnpackProperties = mapProperties;
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
         if (!guardedThis) return false;
-        return fail();
+        return _cfbfFailUnpackInit(&guardedThis, pState, pContext);
     }
     return true;
 }
@@ -1168,6 +1181,22 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     return result;
 }
 
+static bool _cfbfStageWriteAll(QPointer<QIODevice> *pGuardedStage, qint64 *pnStaged, const char *pData, qint64 nSize)
+{
+    qint64 nWritten = 0;
+    while (nWritten < nSize) {
+        if (pGuardedStage->isNull() || !(*pGuardedStage)->seek(*pnStaged + nWritten)) return false;
+        qint64 nResult = (*pGuardedStage)->write(
+            pData + nWritten, nSize - nWritten);
+        if (pGuardedStage->isNull() || nResult <= 0 || nResult > (nSize - nWritten)) {
+            return false;
+        }
+        nWritten += nResult;
+    }
+    *pnStaged += nWritten;
+    return true;
+}
+
 bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     QPointer<XCFBF> guardedThis(this);
@@ -1220,22 +1249,6 @@ bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     QPointer<QIODevice> guardedStage(pStage.get());
     qint64 nStaged = 0;
 
-    auto writeAll = [&guardedStage, &nStaged](const char *pData,
-                                              qint64 nSize) -> bool {
-        qint64 nWritten = 0;
-        while (nWritten < nSize) {
-            if (!guardedStage || !guardedStage->seek(nStaged + nWritten)) return false;
-            qint64 nResult = guardedStage->write(
-                pData + nWritten, nSize - nWritten);
-            if (!guardedStage || nResult <= 0 || nResult > (nSize - nWritten)) {
-                return false;
-            }
-            nWritten += nResult;
-        }
-        nStaged += nWritten;
-        return true;
-    };
-
     if (nStreamSize == 0) {
         const bool bEmptySourceCurrent =
             isUnpackSourceCurrent(pState, pPdStruct);
@@ -1271,7 +1284,7 @@ bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
 
             const qint64 nChunkSize = (qint64)(std::min)((quint64)pContext->nMiniSectorSize, nBytesRemaining);
             if ((nOffset + (quint64)nChunkSize) > (quint64)pContext->baRootMiniStream.size() ||
-                !writeAll(pContext->baRootMiniStream.constData() + (qint64)nOffset, nChunkSize)) {
+                !_cfbfStageWriteAll(&guardedStage, &nStaged, pContext->baRootMiniStream.constData() + (qint64)nOffset, nChunkSize)) {
                 return false;
             }
 
@@ -1303,7 +1316,7 @@ bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
 
             QByteArray baChunk = read_array((qint64)nOffset, nChunkSize);
             if (!guardedThis || (baChunk.size() != nChunkSize) ||
-                !writeAll(baChunk.constData(), nChunkSize)) {
+                !_cfbfStageWriteAll(&guardedStage, &nStaged, baChunk.constData(), nChunkSize)) {
                 return false;
             }
 
@@ -1379,6 +1392,23 @@ bool XCFBF::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     return true;
 }
 
+static bool _cfbfIsPhysicalSector(quint64 nPhysicalSectors, quint32 nSector)
+{
+    return (quint64)nSector < nPhysicalSectors;
+}
+
+static bool _cfbfAppendFATSector(quint64 nPhysicalSectors, quint32 nFATCount, QSet<quint32> *pSetFATSectors, const QSet<quint32> *pSetDIFATSectors,
+                                 QList<quint32> *pListFATSectors, quint32 nSector)
+{
+    if (!_cfbfIsPhysicalSector(nPhysicalSectors, nSector) || pSetFATSectors->contains(nSector) || pSetDIFATSectors->contains(nSector) ||
+        (pListFATSectors->size() >= (qint32)nFATCount)) {
+        return false;
+    }
+    pSetFATSectors->insert(nSector);
+    pListFATSectors->append(nSector);
+    return true;
+}
+
 QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPdStruct)
 {
     QPointer<XCFBF> guardedThis(this);
@@ -1407,21 +1437,9 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
         return listResult;
     }
 
-    auto isPhysicalSector = [nPhysicalSectors](quint32 nSector) -> bool { return (quint64)nSector < nPhysicalSectors; };
-
     QList<quint32> listFATSectors;
     QSet<quint32> setFATSectors;
     QSet<quint32> setDIFATSectors;
-
-    auto appendFATSector = [&](quint32 nSector) -> bool {
-        if (!isPhysicalSector(nSector) || setFATSectors.contains(nSector) || setDIFATSectors.contains(nSector) ||
-            (listFATSectors.size() >= (qint32)ssh._csectFat)) {
-            return false;
-        }
-        setFATSectors.insert(nSector);
-        listFATSectors.append(nSector);
-        return true;
-    };
 
     // The header DIFAT supplies up to 109 FAT-sector IDs.
     for (qint32 i = 0; i < 109; i++) {
@@ -1429,7 +1447,7 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
         if (nSector == 0xFFFFFFFF) {
             continue;
         }
-        if ((nSector == 0xFFFFFFFE) || (listFATSectors.size() >= (qint32)ssh._csectFat) || !appendFATSector(nSector)) {
+        if ((nSector == 0xFFFFFFFE) || (listFATSectors.size() >= (qint32)ssh._csectFat) || !_cfbfAppendFATSector(nPhysicalSectors, ssh._csectFat, &setFATSectors, &setDIFATSectors, &listFATSectors, nSector)) {
             return QList<quint32>();
         }
     }
@@ -1440,13 +1458,13 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
             return QList<quint32>();
         }
     } else {
-        if ((ssh._csectDif > nPhysicalSectors) || !isPhysicalSector(ssh._sectDifStart)) {
+        if ((ssh._csectDif > nPhysicalSectors) || !_cfbfIsPhysicalSector(nPhysicalSectors, ssh._sectDifStart)) {
             return QList<quint32>();
         }
 
         quint32 nDIFATSector = ssh._sectDifStart;
         for (quint32 i = 0; i < ssh._csectDif; i++) {
-            if (!XBinary::isPdStructNotCanceled(pPdStruct) || !isPhysicalSector(nDIFATSector) || setDIFATSectors.contains(nDIFATSector) ||
+            if (!XBinary::isPdStructNotCanceled(pPdStruct) || !_cfbfIsPhysicalSector(nPhysicalSectors, nDIFATSector) || setDIFATSectors.contains(nDIFATSector) ||
                 setFATSectors.contains(nDIFATSector)) {
                 return QList<quint32>();
             }
@@ -1464,7 +1482,7 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
                 if (nSector == 0xFFFFFFFF) {
                     continue;
                 }
-                if ((nSector == 0xFFFFFFFE) || (listFATSectors.size() >= (qint32)ssh._csectFat) || !appendFATSector(nSector)) {
+                if ((nSector == 0xFFFFFFFE) || (listFATSectors.size() >= (qint32)ssh._csectFat) || !_cfbfAppendFATSector(nPhysicalSectors, ssh._csectFat, &setFATSectors, &setDIFATSectors, &listFATSectors, nSector)) {
                     return QList<quint32>();
                 }
             }
@@ -1475,7 +1493,7 @@ QList<quint32> XCFBF::_readFAT(const StructuredStorageHeader &ssh, PDSTRUCT *pPd
                     return QList<quint32>();
                 }
             } else {
-                if (!isPhysicalSector(nNextDIFAT) || setDIFATSectors.contains(nNextDIFAT) || setFATSectors.contains(nNextDIFAT)) {
+                if (!_cfbfIsPhysicalSector(nPhysicalSectors, nNextDIFAT) || setDIFATSectors.contains(nNextDIFAT) || setFATSectors.contains(nNextDIFAT)) {
                     return QList<quint32>();
                 }
                 nDIFATSector = nNextDIFAT;
@@ -1621,22 +1639,30 @@ XBinary *XCFBF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XCFBF::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XCFBF> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XCFBF::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XCFBF> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XCFBF::setInternalInfo(void *pInternalInfo)

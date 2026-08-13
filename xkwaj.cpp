@@ -145,7 +145,7 @@ XBinary::_MEMORY_MAP XKWAJ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
 
     _MEMORY_RECORD recHeader = {};
-    recHeader.nAddress = -1;
+    recHeader.nAddress = XADDR_MAX;
     recHeader.nOffset = 0;
     recHeader.nSize = (nDataOffset > 0 && nDataOffset <= getSize()) ? nDataOffset : (qint64)sizeof(KWAJ_HEADER);
     recHeader.nIndex = nIndex++;
@@ -155,7 +155,7 @@ XBinary::_MEMORY_MAP XKWAJ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if ((nDataOffset > 0) && (nDataOffset < getSize())) {
         _MEMORY_RECORD recData = {};
-        recData.nAddress = -1;
+        recData.nAddress = XADDR_MAX;
         recData.nOffset = nDataOffset;
         recData.nSize = getSize() - nDataOffset;
         recData.nIndex = nIndex++;
@@ -233,6 +233,11 @@ QList<XBinary::XFRECORD> XKWAJ::getXFRecords(FT fileType, quint32 nStructID, con
     return listResult;
 }
 
+static bool kwajCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XKWAJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -243,29 +248,27 @@ QList<XBinary::FPART> XKWAJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     qint64 nDataOffset = read_uint16(offsetof(KWAJ_HEADER, data_offset));
     if ((nDataOffset <= 0) || (nDataOffset > getSize())) {
         nDataOffset = sizeof(KWAJ_HEADER);
     }
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && kwajCanAppendPart(nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
         record.nFileSize = nDataOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Header");
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && canAppend() && (nDataOffset < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && kwajCanAppendPart(nLimit, listResult) && (nDataOffset < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nDataOffset;
         record.nFileSize = getSize() - nDataOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Compressed Data");
         listResult.append(record);
     }
@@ -496,22 +499,30 @@ bool XKWAJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XKWAJ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XKWAJ> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XKWAJ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XKWAJ> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XKWAJ::setInternalInfo(void *pInternalInfo)

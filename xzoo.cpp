@@ -278,7 +278,7 @@ XBinary::_MEMORY_MAP XZOO::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     qint64 nPosEnt = read_uint32(24);
 
     _MEMORY_RECORD recHeader = {};
-    recHeader.nAddress = -1;
+    recHeader.nAddress = XADDR_MAX;
     recHeader.nOffset = 0;
     recHeader.nSize = (nPosEnt > 0 && nPosEnt <= getSize()) ? nPosEnt : 34;
     recHeader.nIndex = nIndex++;
@@ -288,7 +288,7 @@ XBinary::_MEMORY_MAP XZOO::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if ((nPosEnt > 0) && (nPosEnt < getSize())) {
         _MEMORY_RECORD recData = {};
-        recData.nAddress = -1;
+        recData.nAddress = XADDR_MAX;
         recData.nOffset = nPosEnt;
         recData.nSize = getSize() - nPosEnt;
         recData.nIndex = nIndex++;
@@ -368,6 +368,11 @@ QList<XBinary::XFRECORD> XZOO::getXFRecords(FT fileType, quint32 nStructID, cons
     return listResult;
 }
 
+static bool zooCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XZOO::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -378,29 +383,27 @@ QList<XBinary::FPART> XZOO::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     qint64 nPosEnt = read_uint32(24);
     if ((nPosEnt <= 0) || (nPosEnt > getSize())) {
         nPosEnt = 34;
     }
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && zooCanAppend(nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
         record.nFileSize = nPosEnt;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Header");
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && canAppend() && (nPosEnt < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && zooCanAppend(nLimit, listResult) && (nPosEnt < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nPosEnt;
         record.nFileSize = getSize() - nPosEnt;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Entries");
         listResult.append(record);
     }
@@ -584,22 +587,30 @@ bool XZOO::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XZOO::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XZOO> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XZOO::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XZOO> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XZOO::setInternalInfo(void *pInternalInfo)

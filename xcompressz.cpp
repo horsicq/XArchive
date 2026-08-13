@@ -264,6 +264,11 @@ QList<XBinary::XFRECORD> XCompressZ::getXFRecords(FT fileType, quint32 nStructID
     return listResult;
 }
 
+static bool compresszCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XCompressZ::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -272,17 +277,15 @@ QList<XBinary::FPART> XCompressZ::getFileParts(quint32 nFileParts, qint32 nLimit
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     const qint64 nFileSize = getSize();
     if (nFileSize <= 0) return listResult;
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && compresszCanAppendPart(nLimit, listResult)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
         header.nFileSize = qMin<qint64>(3, nFileSize);
-        header.nVirtualAddress = -1;
+        header.nVirtualAddress = XADDR_MAX;
         header.sName = tr("Header");
         listResult.append(header);
     }
@@ -304,12 +307,12 @@ QList<XBinary::FPART> XCompressZ::getFileParts(quint32 nFileParts, qint32 nLimit
                 if (XCompressDecoder::decompress(&decompressState, pPdStruct)) {
                     nMaxOffset = decompressState.nCountInput;
 
-                    if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+                    if ((nFileParts & FILEPART_STREAM) && compresszCanAppendPart(nLimit, listResult)) {
                         FPART region = {};
                         region.filePart = FILEPART_STREAM;
                         region.nFileOffset = 0;
                         region.nFileSize = nMaxOffset;
-                        region.nVirtualAddress = -1;
+                        region.nVirtualAddress = XADDR_MAX;
                         region.sName = tr("Stream");
                         region.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_COMPRESS);
                         region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, decompressState.nCountOutput);
@@ -326,23 +329,23 @@ QList<XBinary::FPART> XCompressZ::getFileParts(quint32 nFileParts, qint32 nLimit
         }
     }
 
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && compresszCanAppendPart(nLimit, listResult)) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 0;
         data.nFileSize = nMaxOffset;
-        data.nVirtualAddress = -1;
+        data.nVirtualAddress = XADDR_MAX;
         data.sName = tr("Data");
         listResult.append(data);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && compresszCanAppendPart(nLimit, listResult)) {
         if (nMaxOffset < nFileSize) {
             FPART ov = {};
             ov.filePart = FILEPART_OVERLAY;
             ov.nFileOffset = nMaxOffset;
             ov.nFileSize = nFileSize - nMaxOffset;
-            ov.nVirtualAddress = -1;
+            ov.nVirtualAddress = XADDR_MAX;
             ov.sName = tr("Overlay");
             listResult.append(ov);
         }
@@ -651,22 +654,30 @@ XBinary *XCompressZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMo
 
 bool XCompressZ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XCompressZ> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XCompressZ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XCompressZ> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XCompressZ::setInternalInfo(void *pInternalInfo)

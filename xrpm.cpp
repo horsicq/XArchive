@@ -369,7 +369,7 @@ XBinary::_MEMORY_MAP XRPM::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     qint32 nIndex = 0;
 
     _MEMORY_RECORD recLead = {};
-    recLead.nAddress = -1;
+    recLead.nAddress = XADDR_MAX;
     recLead.nOffset = 0;
     recLead.nSize = N_RPM_LEAD_SIZE;
     recLead.nIndex = nIndex++;
@@ -382,7 +382,7 @@ XBinary::_MEMORY_MAP XRPM::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if (nSigSize > 0) {
         _MEMORY_RECORD recSig = {};
-        recSig.nAddress = -1;
+        recSig.nAddress = XADDR_MAX;
         recSig.nOffset = nSigOffset;
         recSig.nSize = nSigSize;
         recSig.nIndex = nIndex++;
@@ -399,7 +399,7 @@ XBinary::_MEMORY_MAP XRPM::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
         if (nMainSize > 0) {
             _MEMORY_RECORD recMain = {};
-            recMain.nAddress = -1;
+            recMain.nAddress = XADDR_MAX;
             recMain.nOffset = nMainOffset;
             recMain.nSize = nMainSize;
             recMain.nIndex = nIndex++;
@@ -411,7 +411,7 @@ XBinary::_MEMORY_MAP XRPM::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
             if (nPayloadOffset < getSize()) {
                 _MEMORY_RECORD recPayload = {};
-                recPayload.nAddress = -1;
+                recPayload.nAddress = XADDR_MAX;
                 recPayload.nOffset = nPayloadOffset;
                 recPayload.nSize = getSize() - nPayloadOffset;
                 recPayload.nIndex = nIndex++;
@@ -495,6 +495,11 @@ QList<XBinary::XFRECORD> XRPM::getXFRecords(FT fileType, quint32 nStructID, cons
     return listResult;
 }
 
+static bool _rpmCanAppend(XBinary::PDSTRUCT *pPdStruct, qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.size() < nLimit));
+}
+
 QList<XBinary::FPART> XRPM::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -503,28 +508,24 @@ QList<XBinary::FPART> XRPM::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool {
-        return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.size() < nLimit));
-    };
-
     qint64 nPayloadOffset = getPayloadOffset(pPdStruct);
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && _rpmCanAppend(pPdStruct, nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
         record.nFileSize = (nPayloadOffset > 0) ? nPayloadOffset : N_RPM_LEAD_SIZE;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Header");
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && canAppend() && (nPayloadOffset > 0) && (nPayloadOffset < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && _rpmCanAppend(pPdStruct, nLimit, listResult) && (nPayloadOffset > 0) && (nPayloadOffset < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nPayloadOffset;
         record.nFileSize = getSize() - nPayloadOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Payload");
         listResult.append(record);
     }
@@ -835,22 +836,30 @@ bool XRPM::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XRPM::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XRPM> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XRPM::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XRPM> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XRPM::setInternalInfo(void *pInternalInfo)

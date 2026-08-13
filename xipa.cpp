@@ -53,22 +53,30 @@ bool XIPA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XIPA::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XIPA> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XJAR::handleInternalInfo(pPdStruct);
-        static_cast<XJAR::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XJAR::INTERNAL_INFO *>(XJAR::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XJAR::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XJAR::INTERNAL_INFO *pInfo =
+            static_cast<XJAR::INTERNAL_INFO *>(
+                guardedThis->XJAR::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XJAR::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XIPA::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XIPA> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XIPA::setInternalInfo(void *pInternalInfo)

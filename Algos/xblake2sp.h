@@ -50,8 +50,8 @@ public:
     static QByteArray hash(const QByteArray &baData);
 
 private:
-    static void _blake2sInit(Blake2sState *pState, quint32 nOutLen, const quint8 *pParams);
-    static void _blake2sCompress(Blake2sState *pState, const quint8 *pBlock, bool bLast);
+    static void _blake2sInit(Blake2sState *pState, const quint8 *pParams);
+    static void _blake2sCompress(Blake2sState *pState, const quint8 *pBlock);
     static void _blake2sFinal(Blake2sState *pState, quint8 *pDigest, quint32 nOutLen);
     static void _blake2sUpdate(Blake2sState *pState, const quint8 *pData, quint32 nSize);
 

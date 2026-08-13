@@ -270,7 +270,9 @@ bool XArjDecoder::makeTable(ArjDecodeState *pState, qint32 nChar, quint8 *pBitLe
 
     quint32 nPos = arrStart[nTableBits + 1] >> nJutBits;
 
-    if (nPos != (quint16)(1 << 16) >> nJutBits) {
+    // arrStart stores 16-bit canonical-code positions, so the complete-tree
+    // sentinel (1 << 16) is represented by zero after truncation.
+    if (nPos != 0U) {
         quint32 nEnd = 1U << nTableBits;
 
         while (nPos < nEnd) {

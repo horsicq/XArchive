@@ -775,6 +775,11 @@ QList<XBinary::XFRECORD> XCPIO::getXFRecords(FT fileType, quint32 nStructID, con
     return listResult;
 }
 
+static bool cpioCanAppendPart(XBinary::PDSTRUCT *pPdStruct, qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.count() < nLimit));
+}
+
 QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -789,9 +794,6 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     qint32 nRecordCount = 0;
     bool bSawTrailer = false;
     bool bParseError = false;
-    auto canAppend = [&]() -> bool {
-        return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.count() < nLimit));
-    };
 
     while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         CPIO_RECORD_INFO info = {};
@@ -810,22 +812,22 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
             }
             nRecordCount++;
 
-            if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+            if ((nFileParts & FILEPART_HEADER) && cpioCanAppendPart(pPdStruct, nLimit, listResult)) {
                 FPART header = {};
                 header.filePart = FILEPART_HEADER;
                 header.nFileOffset = info.nHeaderOffset;
                 header.nFileSize = info.nHeaderSize;
-                header.nVirtualAddress = -1;
+                header.nVirtualAddress = XADDR_MAX;
                 header.sName = info.sFileName.isEmpty() ? tr("Header") : QString("%1 (%2)").arg(info.sFileName).arg(tr("Header"));
                 listResult.append(header);
             }
 
-            if ((nFileParts & FILEPART_REGION) && canAppend()) {
+            if ((nFileParts & FILEPART_REGION) && cpioCanAppendPart(pPdStruct, nLimit, listResult)) {
                 FPART region = {};
                 region.filePart = FILEPART_REGION;
                 region.nFileOffset = info.nDataOffset;
                 region.nFileSize = info.nDataSize;
-                region.nVirtualAddress = -1;
+                region.nVirtualAddress = XADDR_MAX;
                 region.sName = info.sFileName;
                 listResult.append(region);
             }
@@ -835,12 +837,12 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                 bParseError = true;
                 break;
             }
-            if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+            if ((nFileParts & FILEPART_HEADER) && cpioCanAppendPart(pPdStruct, nLimit, listResult)) {
                 FPART trailer = {};
                 trailer.filePart = FILEPART_HEADER;
                 trailer.nFileOffset = info.nHeaderOffset;
                 trailer.nFileSize = info.nHeaderSize;
-                trailer.nVirtualAddress = -1;
+                trailer.nVirtualAddress = XADDR_MAX;
                 trailer.sName = tr("Trailer");
                 listResult.append(trailer);
             }
@@ -851,12 +853,12 @@ QList<XBinary::FPART> XCPIO::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         nOffset = info.nNextOffset;
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && bSawTrailer && (nArchiveEnd < nTotalSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && cpioCanAppendPart(pPdStruct, nLimit, listResult) && bSawTrailer && (nArchiveEnd < nTotalSize)) {
         FPART record = {};
         record.filePart = FILEPART_OVERLAY;
         record.nFileOffset = nArchiveEnd;
         record.nFileSize = nTotalSize - nArchiveEnd;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Overlay");
 
         listResult.append(record);
@@ -1089,22 +1091,30 @@ bool XCPIO::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XCPIO::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XCPIO> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XCPIO::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XCPIO> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XCPIO::setInternalInfo(void *pInternalInfo)

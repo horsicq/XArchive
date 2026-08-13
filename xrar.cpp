@@ -30,6 +30,53 @@ namespace {
 const qint64 XRAR_MAX_RAR5_HEADER_SIZE = 4 * 1024 * 1024;
 const qint32 XRAR_MAX_RECORDS = 1000000;
 const quint8 XRAR_MAX_KDF_COUNT = 24;
+
+quint16 xrarReadLe16(const QByteArray &baData, qint32 nOffset)
+{
+    return (quint16)(quint8)baData.at(nOffset) |
+           ((quint16)(quint8)baData.at(nOffset + 1) << 8);
+}
+
+quint32 xrarReadLe32(const QByteArray &baData, qint32 nOffset)
+{
+    return (quint32)(quint8)baData.at(nOffset) |
+           ((quint32)(quint8)baData.at(nOffset + 1) << 8) |
+           ((quint32)(quint8)baData.at(nOffset + 2) << 16) |
+           ((quint32)(quint8)baData.at(nOffset + 3) << 24);
+}
+
+bool xrarReadVInt(const QByteArray &baData, qint64 *pOffset,
+                  qint64 nEndOffset, qint32 nMaxBytes, quint64 *pValue)
+{
+    if (!pOffset || !pValue || (*pOffset < 0) ||
+        (nEndOffset < *pOffset) || (nEndOffset > baData.size()) ||
+        (nMaxBytes <= 0) || (nMaxBytes > 10)) {
+        return false;
+    }
+
+    quint64 nValue = 0;
+    qint64 nCurrentOffset = *pOffset;
+
+    for (qint32 i = 0;
+         (i < nMaxBytes) && (nCurrentOffset < nEndOffset); i++) {
+        const quint8 nByte = (quint8)baData.at((qint32)nCurrentOffset++);
+
+        if ((i == 9) && (nByte & 0xFE)) {
+            *pOffset = nCurrentOffset;
+            return false;
+        }
+
+        nValue |= (quint64)(nByte & 0x7F) << (i * 7);
+        *pOffset = nCurrentOffset;
+
+        if ((nByte & 0x80) == 0) {
+            *pValue = nValue;
+            return true;
+        }
+    }
+
+    return false;
+}
 }
 
 static XBinary::XCONVERT _TABLE_XRAR_STRUCTID[] = {{XRar::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -60,13 +107,21 @@ bool XRar::isValid(PDSTRUCT *pPdStruct)
 {
     UNPACK_STATE state = {};
     QMap<UNPACK_PROP, QVariant> properties;
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
 
-    if (!initUnpack(&state, properties, pPdStruct)) {
+    const bool bInitialized = guardedArchive->initUnpack(
+        &state, properties, pPdStruct);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        !bInitialized) {
         return false;
     }
 
-    finishUnpack(&state, pPdStruct);
-    return true;
+    const bool bFinished = guardedArchive->finishUnpack(&state, pPdStruct);
+    return guardedArchive && guardedSource &&
+           (guardedArchive->getDevice() == guardedSource.data()) && bFinished;
 }
 
 bool XRar::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -84,15 +139,28 @@ QString XRar::getVersion()
 bool XRar::isEncrypted()
 {
     const qint64 nGenericBlock4Size = 7;
-    qint32 nVersion = getInternVersion(nullptr);
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
+
+    const qint32 nVersion = guardedArchive->getInternVersion(nullptr);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
+        return false;
+    }
     qint64 nCurrentOffset = (nVersion == 1) ? 4 : ((nVersion == 4) ? 7 : 8);
-    qint64 nTotalSize = getSize();
+    const qint64 nTotalSize = guardedArchive->getSize();
 
     if (nVersion == 1) {
         nCurrentOffset = 4;
 
         while (nCurrentOffset < nTotalSize) {
-            FILEBLOCK14 fileBlock = readFileBlock14(nCurrentOffset);
+            const FILEBLOCK14 fileBlock = guardedArchive->readFileBlock14(
+                nCurrentOffset);
+            if (!guardedArchive || !guardedSource ||
+                (guardedArchive->getDevice() != guardedSource.data())) {
+                return false;
+            }
             if (fileBlock.nHeaderSize == 0) {
                 break;
             }
@@ -110,7 +178,12 @@ bool XRar::isEncrypted()
         }
     } else if (nVersion == 4) {
         while ((nCurrentOffset >= 0) && ((nCurrentOffset + nGenericBlock4Size) <= nTotalSize)) {
-            GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+            const GENERICBLOCK4 genericBlock = guardedArchive->readGenericBlock4(
+                nCurrentOffset);
+            if (!guardedArchive || !guardedSource ||
+                (guardedArchive->getDevice() != guardedSource.data())) {
+                return false;
+            }
 
             if (((qint64)genericBlock.nHeaderSize < nGenericBlock4Size) || (genericBlock.nType < BLOCKTYPE4_MARKER) ||
                 (genericBlock.nType > BLOCKTYPE4_END) || ((qint64)genericBlock.nHeaderSize > (nTotalSize - nCurrentOffset))) {
@@ -124,7 +197,12 @@ bool XRar::isEncrypted()
             quint64 nDataSize = 0;
 
             if ((genericBlock.nType == BLOCKTYPE4_FILE) || (genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW)) {
-                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                const FILEBLOCK4 fileBlock = guardedArchive->readFileBlock4(
+                    nCurrentOffset);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return false;
+                }
 
                 if (fileBlock.genericBlock4.nFlags & RAR4_FILE_PASSWORD) {
                     return true;
@@ -136,7 +214,12 @@ bool XRar::isEncrypted()
                     nDataSize |= (quint64)fileBlock.highPackSize << 32;
                 }
             } else if ((genericBlock.nFlags & RAR4_LONG_BLOCK) && ((qint64)genericBlock.nHeaderSize >= (nGenericBlock4Size + 4))) {
-                nDataSize = read_uint32(nCurrentOffset + nGenericBlock4Size);
+                nDataSize = guardedArchive->read_uint32(
+                    nCurrentOffset + nGenericBlock4Size);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return false;
+                }
             }
 
             qint64 nDataOffset = nCurrentOffset + genericBlock.nHeaderSize;
@@ -153,7 +236,12 @@ bool XRar::isEncrypted()
         }
     } else if (nVersion == 5) {
         while ((nCurrentOffset >= 0) && ((nCurrentOffset + 5) <= nTotalSize)) {
-            GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+            const GENERICHEADER5 genericHeader = guardedArchive->readGenericHeader5(
+                nCurrentOffset);
+            if (!guardedArchive || !guardedSource ||
+                (guardedArchive->getDevice() != guardedSource.data())) {
+                return false;
+            }
 
             if ((genericHeader.nHeaderSize == 0) || (genericHeader.nHeaderSize > (quint64)(nTotalSize - nCurrentOffset))) {
                 break;
@@ -164,9 +252,15 @@ bool XRar::isEncrypted()
             }
 
             if ((genericHeader.nType == HEADERTYPE5_FILE) || (genericHeader.nType == HEADERTYPE5_SERVICE)) {
-                FILEHEADER5 fileHeader = readFileHeader5(nCurrentOffset);
+                const FILEHEADER5 fileHeader = guardedArchive->readFileHeader5(
+                    nCurrentOffset);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return false;
+                }
 
-                if (_readProperties(fileHeader).value(FPART_PROP_ENCRYPTED).toBool()) {
+                if (guardedArchive->_readProperties(fileHeader)
+                        .value(FPART_PROP_ENCRYPTED).toBool()) {
                     return true;
                 }
             }
@@ -191,8 +285,15 @@ bool XRar::isEncrypted()
 bool XRar::isCommentPresent()
 {
     bool bResult = false;
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
 
-    qint32 nVersion = getInternVersion(nullptr);
+    const qint32 nVersion = guardedArchive->getInternVersion(nullptr);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
+        return false;
+    }
 
     if (nVersion == 4) {
         // RAR4: scan blocks for BLOCKTYPE4_COMMENT (0x75) or BLOCKTYPE4_SUBBLOCK_NEW (0x7A) with "CMT" name
@@ -201,7 +302,12 @@ bool XRar::isCommentPresent()
 
         qint32 nBlockCount = 0;
         while ((nCurrentOffset < nTotalSize) && (nBlockCount < XRAR_MAX_RECORDS)) {
-            GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+            const GENERICBLOCK4 genericBlock = guardedArchive->readGenericBlock4(
+                nCurrentOffset);
+            if (!guardedArchive || !guardedSource ||
+                (guardedArchive->getDevice() != guardedSource.data())) {
+                return false;
+            }
 
             if (genericBlock.nHeaderSize == 0 || genericBlock.nType < 0x72 || genericBlock.nType > 0x7B) {
                 break;
@@ -213,7 +319,12 @@ bool XRar::isCommentPresent()
             }
 
             if (genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW) {
-                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                const FILEBLOCK4 fileBlock = guardedArchive->readFileBlock4(
+                    nCurrentOffset);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return false;
+                }
                 if (fileBlock.sFileName == "CMT") {
                     bResult = true;
                     break;
@@ -226,7 +337,12 @@ bool XRar::isCommentPresent()
 
             quint64 nDataSize = 0;
             if (genericBlock.nType == BLOCKTYPE4_FILE || genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW) {
-                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                const FILEBLOCK4 fileBlock = guardedArchive->readFileBlock4(
+                    nCurrentOffset);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return false;
+                }
                 if (fileBlock.genericBlock4.nHeaderSize == 0) break;
                 nDataSize = (quint64)fileBlock.packSize;
                 if (fileBlock.genericBlock4.nFlags & RAR4_FILE_LARGE) {
@@ -234,7 +350,11 @@ bool XRar::isCommentPresent()
                 }
             } else if (genericBlock.nFlags & RAR4_LONG_BLOCK) {
                 if (genericBlock.nHeaderSize < 11) break;
-                nDataSize = read_uint32(nCurrentOffset + 7);
+                nDataSize = guardedArchive->read_uint32(nCurrentOffset + 7);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return false;
+                }
             }
 
             quint64 nBlockSize = (quint64)genericBlock.nHeaderSize + nDataSize;
@@ -249,7 +369,12 @@ bool XRar::isCommentPresent()
 
         qint32 nHeaderCount = 0;
         while ((nCurrentOffset < nTotalSize) && (nHeaderCount < XRAR_MAX_RECORDS)) {
-            GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+            const GENERICHEADER5 genericHeader = guardedArchive->readGenericHeader5(
+                nCurrentOffset);
+            if (!guardedArchive || !guardedSource ||
+                (guardedArchive->getDevice() != guardedSource.data())) {
+                return false;
+            }
 
             if ((genericHeader.nHeaderSize == 0) ||
                 (genericHeader.nDataSize > (quint64)(nTotalSize - nCurrentOffset - (qint64)genericHeader.nHeaderSize))) {
@@ -257,7 +382,12 @@ bool XRar::isCommentPresent()
             }
 
             if (genericHeader.nType == HEADERTYPE5_SERVICE) {
-                FILEHEADER5 fileHeader = readFileHeader5(nCurrentOffset);
+                const FILEHEADER5 fileHeader = guardedArchive->readFileHeader5(
+                    nCurrentOffset);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return false;
+                }
                 if (fileHeader.nHeaderSize == 0) break;
                 if (fileHeader.sFileName == "CMT") {
                     bResult = true;
@@ -280,8 +410,15 @@ bool XRar::isCommentPresent()
 QString XRar::getComment()
 {
     QString sResult;
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return sResult;
 
-    qint32 nVersion = getInternVersion(nullptr);
+    const qint32 nVersion = guardedArchive->getInternVersion(nullptr);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
+        return QString();
+    }
 
     if (nVersion == 4) {
         // RAR4: find COMMENT block (0x75) or SUBBLOCK_NEW (0x7A) with "CMT" name
@@ -290,7 +427,12 @@ QString XRar::getComment()
 
         qint32 nBlockCount = 0;
         while ((nCurrentOffset < nTotalSize) && (nBlockCount < XRAR_MAX_RECORDS)) {
-            GENERICBLOCK4 genericBlock = readGenericBlock4(nCurrentOffset);
+            const GENERICBLOCK4 genericBlock = guardedArchive->readGenericBlock4(
+                nCurrentOffset);
+            if (!guardedArchive || !guardedSource ||
+                (guardedArchive->getDevice() != guardedSource.data())) {
+                return QString();
+            }
 
             if (genericBlock.nHeaderSize == 0 || genericBlock.nType < 0x72 || genericBlock.nType > 0x7B) {
                 break;
@@ -307,21 +449,35 @@ QString XRar::getComment()
                     break;
                 }
 
-                qint64 nBodyOffset = nCurrentOffset + 7;
-                quint16 nUnpSize = read_uint16(nBodyOffset);
+                const QByteArray baHeader = guardedArchive->readBlock4Snapshot(
+                    nCurrentOffset);
+                GENERICBLOCK4 checkedBlock = {};
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data()) ||
+                    !parseGenericBlock4Snapshot(baHeader, &checkedBlock) ||
+                    (checkedBlock.nCRC16 != genericBlock.nCRC16) ||
+                    (checkedBlock.nType != genericBlock.nType) ||
+                    (checkedBlock.nFlags != genericBlock.nFlags) ||
+                    (checkedBlock.nHeaderSize != genericBlock.nHeaderSize)) {
+                    return QString();
+                }
+
+                qint32 nBodyOffset = 7;
+                const quint16 nUnpSize = xrarReadLe16(baHeader,
+                                                      nBodyOffset);
                 nBodyOffset += 2;
-                quint8 nUnpVer = read_uint8(nBodyOffset);
-                nBodyOffset += 1;
-                quint8 nMethod = read_uint8(nBodyOffset);
-                nBodyOffset += 1;
+                const quint8 nUnpVer = (quint8)baHeader.at(nBodyOffset++);
+                const quint8 nMethod = (quint8)baHeader.at(nBodyOffset++);
 
                 Q_UNUSED(nUnpVer)
 
                 if (nMethod == RAR_METHOD_STORE) {
                     nBodyOffset += 2;  // Skip CRC16
-                    qint64 nCommentDataSize = genericBlock.nHeaderSize - (nBodyOffset - nCurrentOffset);
+                    const qint64 nCommentDataSize =
+                        genericBlock.nHeaderSize - nBodyOffset;
                     if (nCommentDataSize > 0 && nCommentDataSize <= nUnpSize) {
-                        QByteArray baComment = read_array(nBodyOffset, nCommentDataSize);
+                        const QByteArray baComment = baHeader.mid(
+                            nBodyOffset, (qint32)nCommentDataSize);
                         if (baComment.size() == nCommentDataSize) {
                             sResult = QString::fromUtf8(baComment);
                         }
@@ -332,7 +488,12 @@ QString XRar::getComment()
             }
 
             if (genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW) {
-                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                const FILEBLOCK4 fileBlock = guardedArchive->readFileBlock4(
+                    nCurrentOffset);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return QString();
+                }
                 if (fileBlock.genericBlock4.nHeaderSize == 0) break;
                 if (fileBlock.sFileName == "CMT") {
                     // RAR3/4 new-style comment sub-block (same structure as FILE block)
@@ -348,7 +509,12 @@ QString XRar::getComment()
                     }
 
                     if (fileBlock.method == RAR_METHOD_STORE && nPackSize > 0) {
-                        QByteArray baComment = read_array(nDataOffset, (qint64)nPackSize);
+                        const QByteArray baComment = guardedArchive->read_array(
+                            nDataOffset, (qint64)nPackSize);
+                        if (!guardedArchive || !guardedSource ||
+                            (guardedArchive->getDevice() != guardedSource.data())) {
+                            return QString();
+                        }
                         if ((quint64)baComment.size() == nPackSize) {
                             sResult = QString::fromUtf8(baComment);
                         }
@@ -364,7 +530,12 @@ QString XRar::getComment()
 
             quint64 nDataSize = 0;
             if (genericBlock.nType == BLOCKTYPE4_FILE || genericBlock.nType == BLOCKTYPE4_SUBBLOCK_NEW) {
-                FILEBLOCK4 fileBlock = readFileBlock4(nCurrentOffset);
+                const FILEBLOCK4 fileBlock = guardedArchive->readFileBlock4(
+                    nCurrentOffset);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return QString();
+                }
                 if (fileBlock.genericBlock4.nHeaderSize == 0) break;
                 nDataSize = (quint64)fileBlock.packSize;
                 if (fileBlock.genericBlock4.nFlags & RAR4_FILE_LARGE) {
@@ -372,7 +543,11 @@ QString XRar::getComment()
                 }
             } else if (genericBlock.nFlags & RAR4_LONG_BLOCK) {
                 if (genericBlock.nHeaderSize < 11) break;
-                nDataSize = read_uint32(nCurrentOffset + 7);
+                nDataSize = guardedArchive->read_uint32(nCurrentOffset + 7);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return QString();
+                }
             }
 
             quint64 nBlockSize = (quint64)genericBlock.nHeaderSize + nDataSize;
@@ -387,7 +562,12 @@ QString XRar::getComment()
 
         qint32 nHeaderCount = 0;
         while ((nCurrentOffset < nTotalSize) && (nHeaderCount < XRAR_MAX_RECORDS)) {
-            GENERICHEADER5 genericHeader = readGenericHeader5(nCurrentOffset);
+            const GENERICHEADER5 genericHeader = guardedArchive->readGenericHeader5(
+                nCurrentOffset);
+            if (!guardedArchive || !guardedSource ||
+                (guardedArchive->getDevice() != guardedSource.data())) {
+                return QString();
+            }
 
             if ((genericHeader.nHeaderSize == 0) ||
                 (genericHeader.nDataSize > (quint64)(nTotalSize - nCurrentOffset - (qint64)genericHeader.nHeaderSize))) {
@@ -395,7 +575,12 @@ QString XRar::getComment()
             }
 
             if (genericHeader.nType == HEADERTYPE5_SERVICE) {
-                FILEHEADER5 fileHeader = readFileHeader5(nCurrentOffset);
+                const FILEHEADER5 fileHeader = guardedArchive->readFileHeader5(
+                    nCurrentOffset);
+                if (!guardedArchive || !guardedSource ||
+                    (guardedArchive->getDevice() != guardedSource.data())) {
+                    return QString();
+                }
                 if (fileHeader.nHeaderSize == 0) break;
                 if (fileHeader.sFileName == "CMT" && fileHeader.nDataSize > 0) {
                     // RAR5 comment data area follows the header
@@ -404,7 +589,12 @@ QString XRar::getComment()
 
                     if ((nMethod == 0) && (fileHeader.nDataSize <= (quint64)XRAR_MAX_RAR5_HEADER_SIZE)) {
                         // Store method (version 0) — read directly
-                        QByteArray baComment = read_array(nDataOffset, (qint64)fileHeader.nDataSize);
+                        const QByteArray baComment = guardedArchive->read_array(
+                            nDataOffset, (qint64)fileHeader.nDataSize);
+                        if (!guardedArchive || !guardedSource ||
+                            (guardedArchive->getDevice() != guardedSource.data())) {
+                            return QString();
+                        }
                         if ((quint64)baComment.size() == fileHeader.nDataSize) {
                             sResult = QString::fromUtf8(baComment);
                         }
@@ -719,6 +909,11 @@ QList<XBinary::XFRECORD> XRar::getXFRecords(FT fileType, quint32 nStructID, cons
 //     return nResult;
 // }
 
+static bool rarCanAppend(qint32 nLimit, const QList<XBinary::FPART> *pListResult)
+{
+    return (nLimit == -1) || (pListResult->size() < nLimit);
+}
+
 QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::FPART> listResult;
@@ -744,14 +939,13 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     const qint64 nSignatureSize = (nInternVersion == 1) ? 4 : ((nInternVersion == 4) ? 7 : 8);
     const qint64 nTotalSize = getSize();
     const qint64 nMaxOffset = qMin(pContext->nArchiveEnd, nTotalSize);
-    auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
-    if ((nFileParts & FILEPART_SIGNATURE) && canAppend()) {
+    if ((nFileParts & FILEPART_SIGNATURE) && rarCanAppend(nLimit, &listResult)) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_SIGNATURE;
         record.nFileOffset = 0;
         record.nFileSize = nSignatureSize;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Signature");
 
         listResult.append(record);
@@ -759,12 +953,12 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
     if (nFileParts & FILEPART_HEADER) {
         if (nInternVersion == 1) {
-            for (qint32 i = 0; (i < pContext->listFileOffsets.count()) && canAppend() && isPdStructNotCanceled(pPdStruct); i++) {
+            for (qint32 i = 0; (i < pContext->listFileOffsets.count()) && rarCanAppend(nLimit, &listResult) && isPdStructNotCanceled(pPdStruct); i++) {
                 XBinary::FPART record = {};
                 record.filePart = FILEPART_HEADER;
                 record.nFileOffset = pContext->listFileOffsets.at(i);
                 record.nFileSize = pContext->listFileBlocks14.at(i).nHeaderSize;
-                record.nVirtualAddress = -1;
+                record.nVirtualAddress = XADDR_MAX;
                 record.sName = tr("File header");
                 listResult.append(record);
             }
@@ -772,7 +966,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             qint64 nCurrentOffset = nSignatureSize;
             qint32 nHeaderCount = 0;
 
-            while ((nCurrentOffset < nMaxOffset) && canAppend() && isPdStructNotCanceled(pPdStruct) &&
+            while ((nCurrentOffset < nMaxOffset) && rarCanAppend(nLimit, &listResult) && isPdStructNotCanceled(pPdStruct) &&
                    (nHeaderCount < XRAR_MAX_RECORDS)) {
                 qint64 nBlockSize = 0;
                 QString sName;
@@ -803,7 +997,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                     record.filePart = FILEPART_HEADER;
                     record.nFileOffset = nCurrentOffset;
                     record.nFileSize = genericBlock.nHeaderSize;
-                    record.nVirtualAddress = -1;
+                    record.nVirtualAddress = XADDR_MAX;
                     record.sName = sName;
                     listResult.append(record);
 
@@ -822,7 +1016,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                     record.filePart = FILEPART_HEADER;
                     record.nFileOffset = nCurrentOffset;
                     record.nFileSize = genericHeader.nHeaderSize;
-                    record.nVirtualAddress = -1;
+                    record.nVirtualAddress = XADDR_MAX;
                     record.sName = sName;
                     listResult.append(record);
 
@@ -837,7 +1031,7 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     }
 
     if (nFileParts & FILEPART_STREAM) {
-        for (qint32 i = 0; (i < state.nNumberOfRecords) && canAppend() && isPdStructNotCanceled(pPdStruct); i++) {
+        for (qint32 i = 0; (i < state.nNumberOfRecords) && rarCanAppend(nLimit, &listResult) && isPdStructNotCanceled(pPdStruct); i++) {
             state.nCurrentIndex = i;
             ARCHIVERECORD archiveRecord = infoCurrent(&state, pPdStruct);
 
@@ -845,29 +1039,29 @@ QList<XBinary::FPART> XRar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             record.filePart = FILEPART_STREAM;
             record.nFileOffset = archiveRecord.nStreamOffset;
             record.nFileSize = archiveRecord.nStreamSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = "Stream";
             record.mapProperties = archiveRecord.mapProperties;
             listResult.append(record);
         }
     }
 
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && rarCanAppend(nLimit, &listResult)) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_DATA;
         record.nFileOffset = 0;
         record.nFileSize = nMaxOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Data");
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nMaxOffset < nTotalSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && rarCanAppend(nLimit, &listResult) && (nMaxOffset < nTotalSize)) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_OVERLAY;
         record.nFileOffset = nMaxOffset;
         record.nFileSize = nTotalSize - nMaxOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Overlay");
         listResult.append(record);
     }
@@ -1134,20 +1328,38 @@ XBinary::FILEFORMATINFO XRar::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
 qint32 XRar::getInternVersion(PDSTRUCT *pPdStruct)
 {
-    qint32 nResult = 0;
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return 0;
 
     _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
 
-    // TODO more
-    if (compareSignature(&memoryMap, "'RE~^'", 0, pPdStruct)) {
-        nResult = 1;  // "1.4";
-    } else if (compareSignature(&memoryMap, "'Rar!'1A0700", 0, pPdStruct)) {
-        nResult = 4;  // "1.5-4.X";
-    } else if (compareSignature(&memoryMap, "'Rar!'1A070100", 0, pPdStruct)) {
-        nResult = 5;  // "5.X-7.X";
+    // Each signature probe can enter a caller-provided QIODevice. Check both
+    // the parser and the exact bound source before attempting the next probe.
+    const bool bRar14 = guardedArchive->compareSignature(
+        &memoryMap, "'RE~^'", 0, pPdStruct);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
+        return 0;
+    }
+    if (bRar14) return 1;
+
+    const bool bRar4 = guardedArchive->compareSignature(
+        &memoryMap, "'Rar!'1A0700", 0, pPdStruct);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
+        return 0;
+    }
+    if (bRar4) return 4;
+
+    const bool bRar5 = guardedArchive->compareSignature(
+        &memoryMap, "'Rar!'1A070100", 0, pPdStruct);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
+        return 0;
     }
 
-    return nResult;
+    return bRar5 ? 5 : 0;
 }
 
 bool XRar::readVIntBounded(qint64 *pOffset, qint64 nEndOffset, qint32 nMaxBytes, quint64 *pValue)
@@ -1156,64 +1368,253 @@ bool XRar::readVIntBounded(qint64 *pOffset, qint64 nEndOffset, qint32 nMaxBytes,
         return false;
     }
 
-    quint64 nValue = 0;
+    const qint64 nStartOffset = *pOffset;
+    const qint64 nReadSize = qMin<qint64>(nMaxBytes, nEndOffset - nStartOffset);
+    if (nReadSize <= 0) return false;
 
-    for (qint32 i = 0; (i < nMaxBytes) && (*pOffset < nEndOffset); i++) {
-        quint8 nByte = read_uint8(*pOffset);
-        (*pOffset)++;
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
 
-        if ((i == 9) && (nByte & 0xFE)) {
-            return false;
-        }
-
-        nValue |= (quint64)(nByte & 0x7F) << (i * 7);
-
-        if ((nByte & 0x80) == 0) {
-            *pValue = nValue;
-            return true;
-        }
+    const QByteArray baVInt = guardedArchive->read_array(nStartOffset, nReadSize);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (baVInt.size() != nReadSize)) {
+        return false;
     }
 
-    return false;
+    qint64 nLocalOffset = 0;
+    const bool bResult = xrarReadVInt(baVInt, &nLocalOffset,
+                                     baVInt.size(), nMaxBytes, pValue);
+    *pOffset = nStartOffset + nLocalOffset;
+    return bResult;
 }
 
 bool XRar::isRangeValid(qint64 nOffset, quint64 nSize)
 {
-    const qint64 nTotalSize = getSize();
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
 
-    return (nOffset >= 0) && (nOffset <= nTotalSize) && (nSize <= (quint64)(nTotalSize - nOffset));
+    const qint64 nTotalSize = getSize();
+    return guardedArchive && guardedSource &&
+           (guardedArchive->getDevice() == guardedSource.data()) &&
+           (nOffset >= 0) && (nOffset <= nTotalSize) &&
+           (nSize <= (quint64)(nTotalSize - nOffset));
 }
 
 bool XRar::isHeaderCRCValid4(qint64 nOffset, qint64 nHeaderSize, quint16 nExpectedCRC)
 {
-    if ((nHeaderSize < 7) || (nHeaderSize > 0xFFFF) || !isRangeValid(nOffset, (quint64)nHeaderSize)) {
+    if ((nHeaderSize < 7) || (nHeaderSize > 0xFFFF)) return false;
+
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
+
+    const QByteArray baHeader = guardedArchive->read_array(
+        nOffset + 2, nHeaderSize - 2);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (baHeader.size() != (nHeaderSize - 2))) {
         return false;
     }
 
-    QByteArray baHeader = read_array(nOffset + 2, nHeaderSize - 2);
-
-    if (baHeader.size() != (nHeaderSize - 2)) {
-        return false;
-    }
-
-    quint32 nCRC = XBinary::_getCRC32(baHeader, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
+    const quint32 nCRC = XBinary::_getCRC32(
+        baHeader, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^
+        0xFFFFFFFF;
     return (quint16)nCRC == nExpectedCRC;
 }
 
 bool XRar::isHeaderCRCValid5(qint64 nOffset, qint64 nHeaderSize, quint32 nExpectedCRC)
 {
-    if ((nHeaderSize < 7) || (nHeaderSize > XRAR_MAX_RAR5_HEADER_SIZE) || !isRangeValid(nOffset, (quint64)nHeaderSize)) {
+    if ((nHeaderSize < 7) || (nHeaderSize > XRAR_MAX_RAR5_HEADER_SIZE))
+        return false;
+
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
+
+    const QByteArray baHeader = guardedArchive->read_array(
+        nOffset + 4, nHeaderSize - 4);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (baHeader.size() != (nHeaderSize - 4))) {
         return false;
     }
 
-    QByteArray baHeader = read_array(nOffset + 4, nHeaderSize - 4);
-
-    if (baHeader.size() != (nHeaderSize - 4)) {
-        return false;
-    }
-
-    quint32 nCRC = XBinary::_getCRC32(baHeader, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
+    const quint32 nCRC = XBinary::_getCRC32(
+        baHeader, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^
+        0xFFFFFFFF;
     return nCRC == nExpectedCRC;
+}
+
+QByteArray XRar::readBlock4Snapshot(qint64 nOffset)
+{
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource || (nOffset < 0)) return QByteArray();
+
+    const QByteArray baFixed = guardedArchive->read_array(nOffset, 7);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (baFixed.size() != 7)) {
+        return QByteArray();
+    }
+
+    const quint16 nHeaderSize = xrarReadLe16(baFixed, 5);
+    if (nHeaderSize < 7) return QByteArray();
+    if (nHeaderSize == 7) return baFixed;
+
+    const QByteArray baHeader = guardedArchive->read_array(
+        nOffset, nHeaderSize);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (baHeader.size() != nHeaderSize)) {
+        return QByteArray();
+    }
+
+    return baHeader;
+}
+
+QByteArray XRar::readHeader5Snapshot(qint64 nOffset)
+{
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource || (nOffset < 0)) return QByteArray();
+
+    const qint64 nTotalSize = guardedArchive->getSize();
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (nOffset > nTotalSize) || ((nTotalSize - nOffset) < 7)) {
+        return QByteArray();
+    }
+
+    const qint64 nPrefixSize = qMin<qint64>(14, nTotalSize - nOffset);
+    const QByteArray baPrefix = guardedArchive->read_array(
+        nOffset, nPrefixSize);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (baPrefix.size() != nPrefixSize)) {
+        return QByteArray();
+    }
+
+    qint64 nCurrentOffset = 4;
+    quint64 nHeaderDataSize = 0;
+    if (!xrarReadVInt(baPrefix, &nCurrentOffset, baPrefix.size(), 10,
+                      &nHeaderDataSize) ||
+        (nHeaderDataSize < 2) ||
+        (nHeaderDataSize > (quint64)XRAR_MAX_RAR5_HEADER_SIZE)) {
+        return QByteArray();
+    }
+
+    const quint64 nTotalHeaderSize =
+        4 + (quint64)(nCurrentOffset - 4) + nHeaderDataSize;
+    if ((nTotalHeaderSize > (quint64)XRAR_MAX_RAR5_HEADER_SIZE) ||
+        (nTotalHeaderSize > (quint64)(nTotalSize - nOffset))) {
+        return QByteArray();
+    }
+
+    if (nTotalHeaderSize <= (quint64)baPrefix.size()) {
+        return baPrefix.left((qint32)nTotalHeaderSize);
+    }
+
+    const QByteArray baHeader = guardedArchive->read_array(
+        nOffset, (qint64)nTotalHeaderSize);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        ((quint64)baHeader.size() != nTotalHeaderSize)) {
+        return QByteArray();
+    }
+
+    return baHeader;
+}
+
+bool XRar::parseGenericBlock4Snapshot(const QByteArray &baHeader,
+                                      GENERICBLOCK4 *pResult)
+{
+    if (!pResult || (baHeader.size() < 7) ||
+        (baHeader.size() > 0xFFFF)) {
+        return false;
+    }
+
+    GENERICBLOCK4 parsed = {};
+    parsed.nCRC16 = xrarReadLe16(baHeader, 0);
+    parsed.nType = (quint8)baHeader.at(2);
+    parsed.nFlags = xrarReadLe16(baHeader, 3);
+    parsed.nHeaderSize = xrarReadLe16(baHeader, 5);
+    if (parsed.nHeaderSize != baHeader.size()) return false;
+
+    const QByteArray baCrcData = baHeader.mid(2);
+    const quint32 nCRC = XBinary::_getCRC32(
+        baCrcData, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^
+        0xFFFFFFFF;
+    if ((quint16)nCRC != parsed.nCRC16) return false;
+
+    *pResult = parsed;
+    return true;
+}
+
+bool XRar::parseGenericHeader5Snapshot(const QByteArray &baHeader,
+                                       GENERICHEADER5 *pResult,
+                                       qint64 *pBodyOffset)
+{
+    if (!pResult || (baHeader.size() < 7) ||
+        (baHeader.size() > XRAR_MAX_RAR5_HEADER_SIZE)) {
+        return false;
+    }
+
+    GENERICHEADER5 parsed = {};
+    parsed.nCRC32 = xrarReadLe32(baHeader, 0);
+
+    qint64 nCurrentOffset = 4;
+    quint64 nHeaderDataSize = 0;
+    if (!xrarReadVInt(baHeader, &nCurrentOffset, baHeader.size(), 10,
+                      &nHeaderDataSize) ||
+        (nHeaderDataSize < 2) ||
+        (nHeaderDataSize > (quint64)XRAR_MAX_RAR5_HEADER_SIZE)) {
+        return false;
+    }
+
+    const quint64 nTotalHeaderSize =
+        4 + (quint64)(nCurrentOffset - 4) + nHeaderDataSize;
+    if (nTotalHeaderSize != (quint64)baHeader.size()) return false;
+
+    parsed._nHeaderSize = nHeaderDataSize;
+    parsed.nHeaderSize = nTotalHeaderSize;
+    if (!xrarReadVInt(baHeader, &nCurrentOffset, baHeader.size(), 10,
+                      &parsed.nType) ||
+        !xrarReadVInt(baHeader, &nCurrentOffset, baHeader.size(), 10,
+                      &parsed.nFlags)) {
+        return false;
+    }
+
+    if (parsed.nFlags & 0x0001) {
+        if (!xrarReadVInt(baHeader, &nCurrentOffset, baHeader.size(), 10,
+                          &parsed.nExtraAreaSize)) {
+            return false;
+        }
+    }
+    if (parsed.nFlags & 0x0002) {
+        if (!xrarReadVInt(baHeader, &nCurrentOffset, baHeader.size(), 10,
+                          &parsed.nDataSize)) {
+            return false;
+        }
+    }
+
+    if (parsed.nExtraAreaSize >
+        (quint64)(baHeader.size() - nCurrentOffset)) {
+        return false;
+    }
+
+    const QByteArray baCrcData = baHeader.mid(4);
+    const quint32 nCRC = XBinary::_getCRC32(
+        baCrcData, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^
+        0xFFFFFFFF;
+    if (nCRC != parsed.nCRC32) return false;
+
+    *pResult = parsed;
+    if (pBodyOffset) *pBodyOffset = nCurrentOffset;
+    return true;
 }
 
 bool XRar::isMainOrEndHeader5Valid(qint64 nOffset, const GENERICHEADER5 &genericHeader)
@@ -1222,32 +1623,45 @@ bool XRar::isMainOrEndHeader5Valid(qint64 nOffset, const GENERICHEADER5 &generic
         return false;
     }
 
-    qint64 nHeaderEnd = nOffset + (qint64)genericHeader.nHeaderSize;
-    qint64 nBodyEnd = nHeaderEnd - (qint64)genericHeader.nExtraAreaSize;
-    qint64 nCurrentOffset = nOffset + 4;
-    quint64 nValue = 0;
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return false;
 
-    if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue) ||
-        !readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue) ||
-        !readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue)) {
+    const QByteArray baHeader = guardedArchive->readHeader5Snapshot(nOffset);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
         return false;
     }
 
-    if (genericHeader.nFlags & 0x0001) {
-        if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue)) return false;
-    }
-    if (genericHeader.nFlags & 0x0002) {
-        if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue)) return false;
+    GENERICHEADER5 checkedHeader = {};
+    qint64 nCurrentOffset = 0;
+    if (!parseGenericHeader5Snapshot(baHeader, &checkedHeader,
+                                     &nCurrentOffset) ||
+        (checkedHeader.nCRC32 != genericHeader.nCRC32) ||
+        (checkedHeader._nHeaderSize != genericHeader._nHeaderSize) ||
+        (checkedHeader.nHeaderSize != genericHeader.nHeaderSize) ||
+        (checkedHeader.nType != genericHeader.nType) ||
+        (checkedHeader.nFlags != genericHeader.nFlags) ||
+        (checkedHeader.nExtraAreaSize != genericHeader.nExtraAreaSize) ||
+        (checkedHeader.nDataSize != genericHeader.nDataSize)) {
+        return false;
     }
 
+    const qint64 nBodyEnd =
+        baHeader.size() - (qint64)checkedHeader.nExtraAreaSize;
+
     quint64 nArchiveFlags = 0;
-    if (!readVIntBounded(&nCurrentOffset, nBodyEnd, 10, &nArchiveFlags)) {
+    if (!xrarReadVInt(baHeader, &nCurrentOffset, nBodyEnd, 10,
+                      &nArchiveFlags)) {
         return false;
     }
 
     // MAIN_HEAD stores the volume number only when MHFL_VOLNUMBER is set.
-    if ((genericHeader.nType == HEADERTYPE5_MAIN) && (nArchiveFlags & 0x0002)) {
-        if (!readVIntBounded(&nCurrentOffset, nBodyEnd, 10, &nValue)) {
+    if ((checkedHeader.nType == HEADERTYPE5_MAIN) &&
+        (nArchiveFlags & 0x0002)) {
+        quint64 nValue = 0;
+        if (!xrarReadVInt(baHeader, &nCurrentOffset, nBodyEnd, 10,
+                          &nValue)) {
             return false;
         }
     }
@@ -1258,34 +1672,30 @@ bool XRar::isMainOrEndHeader5Valid(qint64 nOffset, const GENERICHEADER5 &generic
 XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
 {
     FILEHEADER5 result = {};
-    GENERICHEADER5 genericHeader = readGenericHeader5(nOffset);
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return result;
+
+    const QByteArray baHeader = guardedArchive->readHeader5Snapshot(nOffset);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
+        return result;
+    }
+
+    GENERICHEADER5 genericHeader = {};
+    qint64 nCurrentOffset = 0;
+    if (!parseGenericHeader5Snapshot(baHeader, &genericHeader,
+                                     &nCurrentOffset)) {
+        return result;
+    }
 
     if ((genericHeader.nHeaderSize == 0) ||
         ((genericHeader.nType != HEADERTYPE5_FILE) && (genericHeader.nType != HEADERTYPE5_SERVICE))) {
         return result;
     }
 
-    qint64 nHeaderEnd = nOffset + (qint64)genericHeader.nHeaderSize;
-    qint64 nBodyEnd = nHeaderEnd - (qint64)genericHeader.nExtraAreaSize;
-    qint64 nCurrentOffset = nOffset + 4;
-    quint64 nValue = 0;
-
-    if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue) || !readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue) ||
-        !readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue)) {
-        return result;
-    }
-
-    if (genericHeader.nFlags & 0x0001) {
-        if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue)) {
-            return result;
-        }
-    }
-
-    if (genericHeader.nFlags & 0x0002) {
-        if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &nValue)) {
-            return result;
-        }
-    }
+    const qint64 nBodyEnd =
+        baHeader.size() - (qint64)genericHeader.nExtraAreaSize;
 
     FILEHEADER5 parsed = {};
     parsed.nCRC32 = genericHeader.nCRC32;
@@ -1296,9 +1706,12 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
     parsed.nExtraAreaSize = genericHeader.nExtraAreaSize;
     parsed.nDataSize = genericHeader.nDataSize;
 
-    if (!readVIntBounded(&nCurrentOffset, nBodyEnd, 10, &parsed.nFileFlags) ||
-        !readVIntBounded(&nCurrentOffset, nBodyEnd, 10, &parsed.nUnpackedSize) ||
-        !readVIntBounded(&nCurrentOffset, nBodyEnd, 10, &parsed.nAttributes)) {
+    if (!xrarReadVInt(baHeader, &nCurrentOffset, nBodyEnd, 10,
+                      &parsed.nFileFlags) ||
+        !xrarReadVInt(baHeader, &nCurrentOffset, nBodyEnd, 10,
+                      &parsed.nUnpackedSize) ||
+        !xrarReadVInt(baHeader, &nCurrentOffset, nBodyEnd, 10,
+                      &parsed.nAttributes)) {
         return result;
     }
 
@@ -1306,7 +1719,7 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
         if ((nBodyEnd - nCurrentOffset) < 4) {
             return result;
         }
-        parsed.nMTime = read_uint32(nCurrentOffset);
+        parsed.nMTime = xrarReadLe32(baHeader, (qint32)nCurrentOffset);
         nCurrentOffset += 4;
     }
 
@@ -1314,18 +1727,23 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
         if ((nBodyEnd - nCurrentOffset) < 4) {
             return result;
         }
-        parsed.nDataCRC32 = read_uint32(nCurrentOffset);
+        parsed.nDataCRC32 = xrarReadLe32(baHeader,
+                                        (qint32)nCurrentOffset);
         nCurrentOffset += 4;
     }
 
-    if (!readVIntBounded(&nCurrentOffset, nBodyEnd, 10, &parsed.nCompInfo) ||
-        !readVIntBounded(&nCurrentOffset, nBodyEnd, 10, &parsed.nHostOS) ||
-        !readVIntBounded(&nCurrentOffset, nBodyEnd, 10, &parsed.nNameLength) ||
+    if (!xrarReadVInt(baHeader, &nCurrentOffset, nBodyEnd, 10,
+                      &parsed.nCompInfo) ||
+        !xrarReadVInt(baHeader, &nCurrentOffset, nBodyEnd, 10,
+                      &parsed.nHostOS) ||
+        !xrarReadVInt(baHeader, &nCurrentOffset, nBodyEnd, 10,
+                      &parsed.nNameLength) ||
         (parsed.nNameLength > (quint64)(nBodyEnd - nCurrentOffset))) {
         return result;
     }
 
-    QByteArray baName = read_array(nCurrentOffset, (qint64)parsed.nNameLength);
+    const QByteArray baName = baHeader.mid(
+        (qint32)nCurrentOffset, (qint32)parsed.nNameLength);
     if ((quint64)baName.size() != parsed.nNameLength) {
         return result;
     }
@@ -1339,7 +1757,8 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
     }
 
     if (parsed.nExtraAreaSize > 0) {
-        parsed.baExtraArea = read_array(nBodyEnd, (qint64)parsed.nExtraAreaSize);
+        parsed.baExtraArea = baHeader.mid(
+            (qint32)nBodyEnd, (qint32)parsed.nExtraAreaSize);
         if ((quint64)parsed.baExtraArea.size() != parsed.nExtraAreaSize) {
             return result;
         }
@@ -1351,38 +1770,48 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
 XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
 {
     FILEBLOCK4 result = {};
-    GENERICBLOCK4 genericBlock = readGenericBlock4(nOffset);
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return result;
+
+    const QByteArray baHeader = guardedArchive->readBlock4Snapshot(nOffset);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data())) {
+        return result;
+    }
+
+    GENERICBLOCK4 genericBlock = {};
+    if (!parseGenericBlock4Snapshot(baHeader, &genericBlock)) return result;
 
     if ((genericBlock.nHeaderSize < 32) ||
         ((genericBlock.nType != BLOCKTYPE4_FILE) && (genericBlock.nType != BLOCKTYPE4_SUBBLOCK_NEW))) {
         return result;
     }
 
-    qint64 nCurrentOffset = nOffset;
-    const qint64 nHeaderEnd = nOffset + genericBlock.nHeaderSize;
+    qint64 nCurrentOffset = 7;
+    const qint64 nHeaderEnd = baHeader.size();
 
     // Read header fields
     result.genericBlock4 = genericBlock;
-    nCurrentOffset += 7;
 
     // Continue reading file block specific fields
-    result.packSize = read_uint32(nCurrentOffset);
+    result.packSize = xrarReadLe32(baHeader, (qint32)nCurrentOffset);
     nCurrentOffset += 4;
-    result.unpSize = read_uint32(nCurrentOffset);
+    result.unpSize = xrarReadLe32(baHeader, (qint32)nCurrentOffset);
     nCurrentOffset += 4;
-    result.hostOS = read_uint8(nCurrentOffset);
+    result.hostOS = (quint8)baHeader.at((qint32)nCurrentOffset);
     nCurrentOffset++;
-    result.fileCRC = read_uint32(nCurrentOffset);
+    result.fileCRC = xrarReadLe32(baHeader, (qint32)nCurrentOffset);
     nCurrentOffset += 4;
-    result.fileTime = read_uint32(nCurrentOffset);
+    result.fileTime = xrarReadLe32(baHeader, (qint32)nCurrentOffset);
     nCurrentOffset += 4;
-    result.unpVer = read_uint8(nCurrentOffset);
+    result.unpVer = (quint8)baHeader.at((qint32)nCurrentOffset);
     nCurrentOffset++;
-    result.method = read_uint8(nCurrentOffset);
+    result.method = (quint8)baHeader.at((qint32)nCurrentOffset);
     nCurrentOffset++;
-    result.nameSize = read_uint16(nCurrentOffset);
+    result.nameSize = xrarReadLe16(baHeader, (qint32)nCurrentOffset);
     nCurrentOffset += 2;
-    result.fileAttr = read_uint32(nCurrentOffset);
+    result.fileAttr = xrarReadLe32(baHeader, (qint32)nCurrentOffset);
     nCurrentOffset += 4;
 
     // Read high bits of pack/unpack size if large file flag is set
@@ -1390,9 +1819,11 @@ XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
         if ((nHeaderEnd - nCurrentOffset) < 8) {
             return FILEBLOCK4();
         }
-        result.highPackSize = read_uint32(nCurrentOffset);
+        result.highPackSize = xrarReadLe32(baHeader,
+                                          (qint32)nCurrentOffset);
         nCurrentOffset += 4;
-        result.highUnpSize = read_uint32(nCurrentOffset);
+        result.highUnpSize = xrarReadLe32(baHeader,
+                                         (qint32)nCurrentOffset);
         nCurrentOffset += 4;
     } else {
         result.highPackSize = 0;
@@ -1405,7 +1836,8 @@ XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
     }
 
     if (result.nameSize > 0) {
-        QByteArray nameData = read_array(nCurrentOffset, result.nameSize);
+        const QByteArray nameData = baHeader.mid(
+            (qint32)nCurrentOffset, result.nameSize);
         if (nameData.size() != result.nameSize) {
             return FILEBLOCK4();
         }
@@ -1427,23 +1859,14 @@ XRar::FILEBLOCK4 XRar::readFileBlock4(qint64 nOffset)
 XRar::GENERICBLOCK4 XRar::readGenericBlock4(qint64 nOffset)
 {
     GENERICBLOCK4 result = {};
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return result;
 
-    if (!isRangeValid(nOffset, 7)) {
-        return result;
-    }
-
-    qint64 nCurrentOffset = nOffset;
-
-    result.nCRC16 = read_uint16(nCurrentOffset);
-    nCurrentOffset += 2;
-    result.nType = read_uint8(nCurrentOffset);
-    nCurrentOffset++;
-    result.nFlags = read_uint16(nCurrentOffset);
-    nCurrentOffset += 2;
-    result.nHeaderSize = read_uint16(nCurrentOffset);
-
-    if ((result.nHeaderSize < 7) || !isRangeValid(nOffset, result.nHeaderSize) ||
-        !isHeaderCRCValid4(nOffset, result.nHeaderSize, result.nCRC16)) {
+    const QByteArray baHeader = guardedArchive->readBlock4Snapshot(nOffset);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        !parseGenericBlock4Snapshot(baHeader, &result)) {
         return GENERICBLOCK4();
     }
 
@@ -1453,52 +1876,67 @@ XRar::GENERICBLOCK4 XRar::readGenericBlock4(qint64 nOffset)
 XRar::FILEBLOCK14 XRar::readFileBlock14(qint64 nOffset)
 {
     FILEBLOCK14 result = {};
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource || (nOffset < 0)) return result;
 
-    if (!isRangeValid(nOffset, 24)) {
+    const QByteArray baFixed = guardedArchive->read_array(nOffset, 24);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (baFixed.size() != 24) || ((quint8)baFixed.at(0) != 0x07) ||
+        ((quint8)baFixed.at(1) != 0x00)) {
         return result;
     }
 
-    QByteArray baFixed = read_array(nOffset, 24);
-    if ((baFixed.size() != 24) || ((quint8)baFixed.at(0) != 0x07) || ((quint8)baFixed.at(1) != 0x00)) {
-        return result;
+    const quint8 nNameLen = (quint8)baFixed.at(22);
+    const qint64 nHeaderSize = 24 + (qint64)nNameLen;
+    QByteArray baHeader = baFixed;
+    if (nHeaderSize > baFixed.size()) {
+        baHeader = guardedArchive->read_array(nOffset, nHeaderSize);
+        if (!guardedArchive || !guardedSource ||
+            (guardedArchive->getDevice() != guardedSource.data()) ||
+            (baHeader.size() != nHeaderSize)) {
+            return result;
+        }
     }
 
-    qint64 nCurrentOffset = nOffset;
+    qint32 nCurrentOffset = 0;
 
     /* byte [0]: unknown byte (0x07 in all known samples) */
     nCurrentOffset += 1;
     /* byte [1]: unknown byte (0x00 in all known samples) */
     nCurrentOffset += 1;
-    result.nFlags = read_uint8(nCurrentOffset);  // flags (bit 0x08 = solid)
+    result.nFlags = (quint8)baHeader.at(nCurrentOffset);  // flags (bit 0x08 = solid)
     nCurrentOffset += 1;
-    result.nPackSize = read_uint32(nCurrentOffset);  // packed size
+    result.nPackSize = xrarReadLe32(baHeader, nCurrentOffset);  // packed size
     nCurrentOffset += 4;
-    result.nUnpSize = read_uint32(nCurrentOffset);  // unpacked size
+    result.nUnpSize = xrarReadLe32(baHeader, nCurrentOffset);  // unpacked size
     nCurrentOffset += 4;
-    result.nFileCRC16 = read_uint16(nCurrentOffset);  // RAR 1.4 checksum of unpacked data
+    result.nFileCRC16 = xrarReadLe16(baHeader, nCurrentOffset);  // RAR 1.4 checksum of unpacked data
     nCurrentOffset += 2;
-    result.nFileTime = read_uint32(nCurrentOffset);  // DOS date/time
+    result.nFileTime = xrarReadLe32(baHeader, nCurrentOffset);  // DOS date/time
     nCurrentOffset += 4;
     /* bytes [17-18]: additional time / unknown (2 bytes) */
     nCurrentOffset += 2;
-    result.nFileAttr = read_uint16(nCurrentOffset);  // file attributes
+    result.nFileAttr = xrarReadLe16(baHeader, nCurrentOffset);  // file attributes
     nCurrentOffset += 2;
     /* byte [21]: unknown byte (0x02 in all known samples) */
     nCurrentOffset += 1;
-    result.nNameLen = read_uint8(nCurrentOffset);  // filename length
+    result.nNameLen = (quint8)baHeader.at(nCurrentOffset);  // filename length
     nCurrentOffset += 1;
-    result.nMethod = read_uint8(nCurrentOffset);  // packing method (0=store, 1-5=compress)
+    result.nMethod = (quint8)baHeader.at(nCurrentOffset);  // packing method (0=store, 1-5=compress)
     nCurrentOffset += 1;
 
-    result.nHeaderSize = 24 + (qint64)result.nNameLen;
+    result.nHeaderSize = nHeaderSize;
 
-    if ((result.nMethod > 5) || !isRangeValid(nOffset, (quint64)result.nHeaderSize)) {
+    if ((result.nNameLen != nNameLen) || (result.nMethod > 5)) {
         result.nHeaderSize = 0;
         return result;
     }
 
     if (result.nNameLen > 0) {
-        QByteArray nameData = read_array(nCurrentOffset, result.nNameLen);
+        const QByteArray nameData = baHeader.mid(nCurrentOffset,
+                                                 result.nNameLen);
         if (nameData.size() != result.nNameLen) {
             result.nHeaderSize = 0;
             return result;
@@ -1677,6 +2115,29 @@ QMap<XBinary::UNPACK_PROP, QVariant> XRar::getDefaultUnpackProperties()
     return result;
 }
 
+bool XRar::_initUnpackFail(QPointer<XRar> *pGuardedArchive, XBinary::UNPACK_STATE *pUnpackState, RAR_UNPACK_CONTEXT *pContext)
+{
+    if (pUnpackState->pContext == pContext) {
+        pUnpackState->pContext = nullptr;
+    }
+    if (*pGuardedArchive) {
+        (*pGuardedArchive)->releaseUnpackSource(pUnpackState);
+    }
+    delete pContext;
+    if (!(*pGuardedArchive)) {
+        *pUnpackState = UNPACK_STATE();
+        return false;
+    }
+    pUnpackState->nCurrentOffset = 0;
+    pUnpackState->nCurrentIndex = 0;
+    pUnpackState->nNumberOfRecords = 0;
+    pUnpackState->nTotalSize = 0;
+    pUnpackState->mapUnpackProperties.clear();
+    pUnpackState->mapArchiveProperties.clear();
+    pUnpackState->pContext = nullptr;
+    return false;
+}
+
 bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XRar> guardedArchive(this);
@@ -1720,30 +2181,8 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
     pContext->bHeadersEncrypted = false;
     pContext->nArchiveEnd = 0;
 
-    auto fail = [&]() -> bool {
-        if (pUnpackState->pContext == pContext) {
-            pUnpackState->pContext = nullptr;
-        }
-        if (guardedArchive) {
-            guardedArchive->releaseUnpackSource(pUnpackState);
-        }
-        delete pContext;
-        if (!guardedArchive) {
-            *pUnpackState = UNPACK_STATE();
-            return false;
-        }
-        pUnpackState->nCurrentOffset = 0;
-        pUnpackState->nCurrentIndex = 0;
-        pUnpackState->nNumberOfRecords = 0;
-        pUnpackState->nTotalSize = 0;
-        pUnpackState->mapUnpackProperties.clear();
-        pUnpackState->mapArchiveProperties.clear();
-        pUnpackState->pContext = nullptr;
-        return false;
-    };
-
     if ((pContext->nVersion == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return fail();
+        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
     }
 
     const qint64 nTotalSize = pUnpackState->nTotalSize;
@@ -1754,7 +2193,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
         while (nCurrentOffset < nTotalSize) {
             if (!XBinary::isPdStructNotCanceled(pPdStruct) || (nBlockCount >= XRAR_MAX_RECORDS)) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
 
             FILEBLOCK14 fileBlock = guardedArchive->readFileBlock14(
@@ -1766,12 +2205,12 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
             }
 
             if (fileBlock.nHeaderSize == 0) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
 
             quint64 nRecordSize = (quint64)fileBlock.nHeaderSize + (quint64)fileBlock.nPackSize;
             if ((nCurrentOffset > nTotalSize) || (nRecordSize > (quint64)(nTotalSize - nCurrentOffset))) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
 
             pContext->listFileOffsets.append(nCurrentOffset);
@@ -1783,7 +2222,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
         }
 
         if (!XBinary::isPdStructNotCanceled(pPdStruct) || (nCurrentOffset != nTotalSize) || pContext->listFileBlocks14.isEmpty()) {
-            return fail();
+            return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
         }
 
         pContext->nArchiveEnd = nCurrentOffset;
@@ -1806,7 +2245,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
         }
 
         if ((archiveBlock.nType != BLOCKTYPE4_ARCHIVE) || (archiveBlock.nHeaderSize < 13)) {
-            return fail();
+            return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
         }
 
         pContext->bArchiveIsSolid = (archiveBlock.nFlags & 0x0008) != 0;
@@ -1817,7 +2256,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
         // archive without pretending that encrypted bytes are normal headers.
         if (archiveBlock.nFlags & RAR4_ARCHIVE_PASSWORD) {
             if (nCurrentOffset >= nTotalSize) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
             pContext->bHeadersEncrypted = true;
             pContext->nArchiveEnd = nTotalSize;
@@ -1827,7 +2266,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
             while (nCurrentOffset < nTotalSize) {
                 if (!XBinary::isPdStructNotCanceled(pPdStruct) || (nBlockCount >= XRAR_MAX_RECORDS)) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
 
                 GENERICBLOCK4 genericBlock = guardedArchive->readGenericBlock4(
@@ -1838,7 +2277,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     return false;
                 }
                 if ((genericBlock.nHeaderSize == 0) || (genericBlock.nType < BLOCKTYPE4_MARKER) || (genericBlock.nType > BLOCKTYPE4_END)) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
 
                 quint64 nDataSize = 0;
@@ -1852,7 +2291,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                         return false;
                     }
                     if (fileBlock.genericBlock4.nHeaderSize == 0) {
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
 
                     nDataSize = (quint64)fileBlock.packSize;
@@ -1862,7 +2301,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
                     if (genericBlock.nType == BLOCKTYPE4_FILE) {
                         if (pUnpackState->nNumberOfRecords >= XRAR_MAX_RECORDS) {
-                            return fail();
+                            return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                         }
                         pContext->listFileOffsets.append(nCurrentOffset);
                         pContext->listFileBlocks4.append(fileBlock);
@@ -1870,7 +2309,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     }
                 } else if (genericBlock.nFlags & RAR4_LONG_BLOCK) {
                     if (genericBlock.nHeaderSize < 11) {
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
                     nDataSize = guardedArchive->read_uint32(
                         nCurrentOffset + 7);
@@ -1883,7 +2322,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
                 quint64 nBlockSize = (quint64)genericBlock.nHeaderSize + nDataSize;
                 if (nBlockSize > (quint64)(nTotalSize - nCurrentOffset)) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
 
                 nCurrentOffset += (qint64)nBlockSize;
@@ -1896,19 +2335,19 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
             }
 
             if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
 
             // Early RAR generations can end exactly after the last complete
             // data block. Newer archives normally carry ENDARC_HEAD.
             if (!bReachedEnd) {
                 if ((nCurrentOffset != nTotalSize) || pContext->listFileBlocks4.isEmpty()) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
 
                 for (qint32 i = 0; i < pContext->listFileBlocks4.count(); i++) {
                     if (pContext->listFileBlocks4.at(i).unpVer >= 29) {
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
                 }
             }
@@ -1931,7 +2370,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
         while (nCurrentOffset < nTotalSize) {
             if (!XBinary::isPdStructNotCanceled(pPdStruct) || (nHeaderCount >= XRAR_MAX_RECORDS)) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
 
             GENERICHEADER5 genericHeader = guardedArchive->readGenericHeader5(
@@ -1942,25 +2381,25 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                 return false;
             }
             if (genericHeader.nHeaderSize == 0) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
 
             qint64 nHeaderEnd = nCurrentOffset + (qint64)genericHeader.nHeaderSize;
             if ((genericHeader.nDataSize > (quint64)(nTotalSize - nHeaderEnd)) ||
                 ((genericHeader.nType > HEADERTYPE5_ENDARC) && ((genericHeader.nFlags & 0x0004) == 0)) ||
                 (genericHeader.nType == 0)) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
 
             if (genericHeader.nType == HEADERTYPE5_MAIN) {
                 if (bSawMainHeader || (nHeaderCount != 0) || (genericHeader.nDataSize != 0) ||
                     !guardedArchive->isMainOrEndHeader5Valid(
                         nCurrentOffset, genericHeader) || !guardedArchive) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
                 bSawMainHeader = true;
             } else if (!bSawMainHeader && !((genericHeader.nType == HEADERTYPE5_ENCRYPTION) && (nHeaderCount == 0))) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             } else if (genericHeader.nType == HEADERTYPE5_FILE) {
                 FILEHEADER5 fileHeader = guardedArchive->readFileHeader5(
                     nCurrentOffset);
@@ -1970,10 +2409,10 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     return false;
                 }
                 if (fileHeader.nHeaderSize == 0) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
                 if (pUnpackState->nNumberOfRecords >= XRAR_MAX_RECORDS) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
                 pContext->listFileOffsets.append(nCurrentOffset);
                 pContext->listFileHeaders5.append(fileHeader);
@@ -1987,7 +2426,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     return false;
                 }
                 if (checkedHeader.nHeaderSize == 0) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
             } else if (genericHeader.nType == HEADERTYPE5_ENCRYPTION) {
                 qint64 nBodyOffset = nCurrentOffset + 4;
@@ -1999,15 +2438,15 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     !guardedArchive ||
                     !guardedArchive->readVIntBounded(&nBodyOffset, nHeaderEnd, 10, &nValue) ||
                     !guardedArchive) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
                 if (genericHeader.nFlags & 0x0001) {
                     if (!guardedArchive->readVIntBounded(&nBodyOffset, nHeaderEnd, 10, &nValue) ||
-                        !guardedArchive) return fail();
+                        !guardedArchive) return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
                 if (genericHeader.nFlags & 0x0002) {
                     if (!guardedArchive->readVIntBounded(&nBodyOffset, nHeaderEnd, 10, &nValue) ||
-                        !guardedArchive) return fail();
+                        !guardedArchive) return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
 
                 qint64 nBodyEnd = nHeaderEnd - (qint64)genericHeader.nExtraAreaSize;
@@ -2017,7 +2456,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     !guardedArchive ||
                     !guardedArchive->readVIntBounded(&nBodyOffset, nBodyEnd, 10, &nEncFlags) ||
                     !guardedArchive || ((nBodyEnd - nBodyOffset) < 17)) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
 
                 quint8 nKdfCount = guardedArchive->read_uint8(nBodyOffset);
@@ -2039,7 +2478,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                 qint64 nExpectedTailSize = (nEncFlags & 0x0001) ? 12 : 0;
                 if ((baSalt.size() != 16) || (nEncVersion != 0) || (nEncFlags & ~((quint64)0x0001)) ||
                     (nKdfCount > XRAR_MAX_KDF_COUNT) || ((nBodyEnd - nBodyOffset) != nExpectedTailSize)) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
 
                 pContext->bHeadersEncrypted = true;
@@ -2048,7 +2487,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
                 if (sPassword.isEmpty()) {
                     if (nCurrentOffset >= nTotalSize) {
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
                     pContext->nArchiveEnd = nTotalSize;
                     bStoppedAtEncryptedHeaders = true;
@@ -2057,7 +2496,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
                 QByteArray baHeaderAesKey = XAESDecoder::deriveRar5HeaderKey(sPassword, baSalt, nKdfCount);
                 if (baHeaderAesKey.isEmpty()) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
 
                 qint32 nEncryptedHeaderCount = 0;
@@ -2066,7 +2505,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                 while (nCurrentOffset < nTotalSize) {
                     if (!XBinary::isPdStructNotCanceled(pPdStruct) || (nHeaderCount >= XRAR_MAX_RECORDS)) {
                         baHeaderAesKey.fill(0);
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
 
                     qint64 nConsumed = 0;
@@ -2080,13 +2519,13 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     }
                     if (baDecHeader.isEmpty() || (nConsumed <= 0)) {
                         baHeaderAesKey.fill(0);
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
 
                     QBuffer bufHeader(&baDecHeader);
                     if (!bufHeader.open(QIODevice::ReadOnly)) {
                         baHeaderAesKey.fill(0);
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
 
                     XRar rarTemp(&bufHeader);
@@ -2095,37 +2534,37 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                         ((decGeneric.nType > HEADERTYPE5_ENDARC) && ((decGeneric.nFlags & 0x0004) == 0)) ||
                         (decGeneric.nType == 0) || (decGeneric.nType == HEADERTYPE5_ENCRYPTION)) {
                         baHeaderAesKey.fill(0);
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
 
                     if ((quint64)nConsumed > (quint64)(nTotalSize - nCurrentOffset)) {
                         baHeaderAesKey.fill(0);
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
                     qint64 nDataOffset = nCurrentOffset + nConsumed;
                     if (decGeneric.nDataSize > (quint64)(nTotalSize - nDataOffset)) {
                         baHeaderAesKey.fill(0);
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
 
                     if (decGeneric.nType == HEADERTYPE5_MAIN) {
                         if (bSawEncryptedMainHeader || (nEncryptedHeaderCount != 0) || (decGeneric.nDataSize != 0)) {
                             baHeaderAesKey.fill(0);
-                            return fail();
+                            return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                         }
                         if (!rarTemp.isMainOrEndHeader5Valid(0, decGeneric)) {
                             baHeaderAesKey.fill(0);
-                            return fail();
+                            return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                         }
                         bSawEncryptedMainHeader = true;
                     } else if (!bSawEncryptedMainHeader) {
                         baHeaderAesKey.fill(0);
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     } else if (decGeneric.nType == HEADERTYPE5_FILE) {
                         FILEHEADER5 fileHeader = rarTemp.readFileHeader5(0);
                         if (fileHeader.nHeaderSize == 0) {
                             baHeaderAesKey.fill(0);
-                            return fail();
+                            return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                         }
                         fileHeader.nHeaderSize = nConsumed;
                         pContext->listFileOffsets.append(nCurrentOffset);
@@ -2134,12 +2573,12 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     } else if (decGeneric.nType == HEADERTYPE5_SERVICE) {
                         if (rarTemp.readFileHeader5(0).nHeaderSize == 0) {
                             baHeaderAesKey.fill(0);
-                            return fail();
+                            return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                         }
                     } else if ((decGeneric.nType == HEADERTYPE5_ENDARC) &&
                                !rarTemp.isMainOrEndHeader5Valid(0, decGeneric)) {
                         baHeaderAesKey.fill(0);
-                        return fail();
+                        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                     }
 
                     nCurrentOffset = nDataOffset + (qint64)decGeneric.nDataSize;
@@ -2155,7 +2594,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
 
                 baHeaderAesKey.fill(0);
                 if (!bReachedEnd) {
-                    return fail();
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
                 break;
             }
@@ -2164,7 +2603,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                 (!guardedArchive->isMainOrEndHeader5Valid(
                      nCurrentOffset, genericHeader) ||
                  !guardedArchive)) {
-                return fail();
+                return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
             }
 
             nCurrentOffset = nHeaderEnd + (qint64)genericHeader.nDataSize;
@@ -2178,7 +2617,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
         }
 
         if (!XBinary::isPdStructNotCanceled(pPdStruct) || (!bReachedEnd && !bStoppedAtEncryptedHeaders)) {
-            return fail();
+            return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
         }
 
         for (qint32 i = 0; i < pContext->listFileHeaders5.count(); i++) {
@@ -2207,7 +2646,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
     if (!guardedArchive->validateAndFinalizeUnpackSource(
             pUnpackState, pContext, pPdStruct)) {
         if (!guardedArchive) return false;
-        return fail();
+        return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
     }
 
     return true;
@@ -2550,6 +2989,28 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEBLOCK4 &file
     return mapResult;
 }
 
+static bool rarReadExtraVInt(const char *pExtraData, qint64 nExtraSize, qint64 *pOffset, qint64 nEndOffset, quint64 *pValue)
+{
+    if (!pOffset || !pValue || (*pOffset < 0) || (nEndOffset < *pOffset) || (nEndOffset > nExtraSize)) {
+        return false;
+    }
+
+    quint64 nValue = 0;
+    for (qint32 i = 0; (i < 10) && (*pOffset < nEndOffset); i++) {
+        quint8 nByte = (quint8)pExtraData[*pOffset];
+        (*pOffset)++;
+        if ((i == 9) && (nByte & 0xFE)) {
+            return false;
+        }
+        nValue |= (quint64)(nByte & 0x7F) << (i * 7);
+        if ((nByte & 0x80) == 0) {
+            *pValue = nValue;
+            return true;
+        }
+    }
+    return false;
+}
+
 QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fileHeader5)
 {
     QMap<XBinary::FPART_PROP, QVariant> mapResult;
@@ -2620,37 +3081,16 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
         qint64 nExtraSize = fileHeader5.baExtraArea.size();
         const char *pExtraData = fileHeader5.baExtraArea.constData();
 
-        auto readExtraVInt = [&](qint64 *pOffset, qint64 nEndOffset, quint64 *pValue) -> bool {
-            if (!pOffset || !pValue || (*pOffset < 0) || (nEndOffset < *pOffset) || (nEndOffset > nExtraSize)) {
-                return false;
-            }
-
-            quint64 nValue = 0;
-            for (qint32 i = 0; (i < 10) && (*pOffset < nEndOffset); i++) {
-                quint8 nByte = (quint8)pExtraData[*pOffset];
-                (*pOffset)++;
-                if ((i == 9) && (nByte & 0xFE)) {
-                    return false;
-                }
-                nValue |= (quint64)(nByte & 0x7F) << (i * 7);
-                if ((nByte & 0x80) == 0) {
-                    *pValue = nValue;
-                    return true;
-                }
-            }
-            return false;
-        };
-
         while (nExtraOffset < nExtraSize) {
             quint64 nRecSize = 0;
-            if (!readExtraVInt(&nExtraOffset, nExtraSize, &nRecSize) || (nRecSize == 0) ||
+            if (!rarReadExtraVInt(pExtraData, nExtraSize, &nExtraOffset, nExtraSize, &nRecSize) || (nRecSize == 0) ||
                 (nRecSize > (quint64)(nExtraSize - nExtraOffset))) {
                 break;
             }
 
             qint64 nRecEnd = nExtraOffset + (qint64)nRecSize;
             quint64 nRecId = 0;
-            if (!readExtraVInt(&nExtraOffset, nRecEnd, &nRecId)) {
+            if (!rarReadExtraVInt(pExtraData, nExtraSize, &nExtraOffset, nRecEnd, &nRecId)) {
                 break;
             }
 
@@ -2659,8 +3099,8 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
                 quint64 nCryptoVersion = 0;
                 quint64 nCryptoFlags = 0;
 
-                if (readExtraVInt(&nExtraOffset, nRecEnd, &nCryptoVersion) && (nCryptoVersion == 0) &&
-                    readExtraVInt(&nExtraOffset, nRecEnd, &nCryptoFlags) && ((nCryptoFlags & ~((quint64)0x0003)) == 0)) {
+                if (rarReadExtraVInt(pExtraData, nExtraSize, &nExtraOffset, nRecEnd, &nCryptoVersion) && (nCryptoVersion == 0) &&
+                    rarReadExtraVInt(pExtraData, nExtraSize, &nExtraOffset, nRecEnd, &nCryptoFlags) && ((nCryptoFlags & ~((quint64)0x0003)) == 0)) {
                     bool bHasPswCheck = (nCryptoFlags & 0x0001) != 0;  // flag bit 0 = password check present
 
                     if (((nRecEnd - nExtraOffset) >= (1 + 16 + 16)) &&
@@ -2757,23 +3197,24 @@ QByteArray XRar::decryptRar5HeaderBlock(qint64 nOffset, const QByteArray &baAesK
     }
 
     *pConsumedSize = 0;
-    if (!isRangeValid(nOffset, 32)) {
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource || (nOffset < 0)) {
         return QByteArray();
     }
 
-    // Read 16-byte IV
-    QByteArray baIV = read_array(nOffset, 16);
-
-    if (baIV.size() != 16) {
+    // Capture the IV and the first encrypted block atomically from the parser's
+    // point of view. A caller-controlled device may synchronously delete or
+    // rebind the archive during the read callback.
+    const QByteArray baPrefix = guardedArchive->read_array(nOffset, 32);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (baPrefix.size() != 32)) {
         return QByteArray();
     }
 
-    // Read first AES block (16 bytes) of encrypted header
-    QByteArray baFirstCipher = read_array(nOffset + 16, 16);
-
-    if (baFirstCipher.size() != 16) {
-        return QByteArray();
-    }
+    const QByteArray baIV = baPrefix.left(16);
+    const QByteArray baFirstCipher = baPrefix.mid(16, 16);
 
     // Decrypt first block to get CRC and headerSize
     QByteArray baFirstPlain(16, 0);
@@ -2810,7 +3251,11 @@ QByteArray XRar::decryptRar5HeaderBlock(qint64 nOffset, const QByteArray &baAesK
 
     quint64 nEncSize = ((nPlainSize + 15) / 16) * 16;
 
-    if (!isRangeValid(nOffset, 16 + nEncSize)) {
+    const qint64 nTotalSize = guardedArchive->getSize();
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        (nOffset > nTotalSize) ||
+        ((16 + nEncSize) > (quint64)(nTotalSize - nOffset))) {
         return QByteArray();
     }
 
@@ -2820,12 +3265,17 @@ QByteArray XRar::decryptRar5HeaderBlock(qint64 nOffset, const QByteArray &baAesK
         return baFirstPlain.left((qint32)nPlainSize);
     }
 
-    // Need more data — read full encrypted buffer and re-decrypt from scratch
-    QByteArray baAllCipher = read_array(nOffset + 16, (qint32)nEncSize);
-
-    if ((quint64)baAllCipher.size() != nEncSize) {
+    // Need more data — capture the IV and complete encrypted header together,
+    // then re-decrypt from that single bounded snapshot.
+    const QByteArray baEncrypted = guardedArchive->read_array(
+        nOffset, (qint64)(16 + nEncSize));
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        ((quint64)baEncrypted.size() != (16 + nEncSize)) ||
+        (baEncrypted.left(16) != baIV)) {
         return QByteArray();
     }
+    const QByteArray baAllCipher = baEncrypted.mid(16);
 
     QByteArray baAllPlain((qint32)nEncSize, 0);
 
@@ -2840,56 +3290,18 @@ QByteArray XRar::decryptRar5HeaderBlock(qint64 nOffset, const QByteArray &baAesK
 XRar::GENERICHEADER5 XRar::readGenericHeader5(qint64 nOffset)
 {
     GENERICHEADER5 result = {};
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedSource) return result;
 
-    if (!isRangeValid(nOffset, 7)) {
-        return result;
+    const QByteArray baHeader = guardedArchive->readHeader5Snapshot(nOffset);
+    if (!guardedArchive || !guardedSource ||
+        (guardedArchive->getDevice() != guardedSource.data()) ||
+        !parseGenericHeader5Snapshot(baHeader, &result)) {
+        return GENERICHEADER5();
     }
 
-    GENERICHEADER5 parsed = {};
-    parsed.nCRC32 = read_uint32(nOffset);
-
-    qint64 nCurrentOffset = nOffset + 4;
-    quint64 nHeaderDataSize = 0;
-
-    if (!readVIntBounded(&nCurrentOffset, getSize(), 10, &nHeaderDataSize) || (nHeaderDataSize < 2) ||
-        (nHeaderDataSize > (quint64)XRAR_MAX_RAR5_HEADER_SIZE)) {
-        return result;
-    }
-
-    qint64 nSizeFieldLength = nCurrentOffset - (nOffset + 4);
-    quint64 nTotalHeaderSize = 4 + (quint64)nSizeFieldLength + nHeaderDataSize;
-
-    if ((nTotalHeaderSize > (quint64)XRAR_MAX_RAR5_HEADER_SIZE) || !isRangeValid(nOffset, nTotalHeaderSize)) {
-        return result;
-    }
-
-    qint64 nHeaderEnd = nOffset + (qint64)nTotalHeaderSize;
-    parsed._nHeaderSize = nHeaderDataSize;
-    parsed.nHeaderSize = nTotalHeaderSize;
-
-    if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &parsed.nType) ||
-        !readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &parsed.nFlags)) {
-        return result;
-    }
-
-    if (parsed.nFlags & 0x0001) {
-        if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &parsed.nExtraAreaSize)) {
-            return result;
-        }
-    }
-
-    if (parsed.nFlags & 0x0002) {
-        if (!readVIntBounded(&nCurrentOffset, nHeaderEnd, 10, &parsed.nDataSize)) {
-            return result;
-        }
-    }
-
-    if ((parsed.nExtraAreaSize > (quint64)(nHeaderEnd - nCurrentOffset)) ||
-        !isHeaderCRCValid5(nOffset, (qint64)parsed.nHeaderSize, parsed.nCRC32)) {
-        return result;
-    }
-
-    return parsed;
+    return result;
 }
 
 QList<QString> XRar::getSearchSignatures()
@@ -2914,22 +3326,37 @@ XBinary *XRar::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XRar::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XRar> guardedThis(this);
     bool bResult = true;
 
-    if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+    if (!guardedThis->isInternalInfoHandled()) {
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!bResult || !guardedThis) {
+            return false;
+        }
+
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) {
+            return false;
+        }
+
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) =
+            *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XRar::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XRar> guardedThis(this);
+    if (!guardedThis->handleInternalInfo(pPdStruct) || !guardedThis) {
+        return nullptr;
+    }
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XRar::setInternalInfo(void *pInternalInfo)

@@ -637,8 +637,10 @@ static BROTLI_INLINE void BROTLI_UNALIGNED_STORE_PTR(void* p, const void* v)
 
 #if BROTLI_GNUC_HAS_BUILTIN(__builtin_constant_p, 3, 0, 1) || BROTLI_INTEL_VERSION_CHECK(16, 0, 0)
 #define BROTLI_IS_CONSTANT(x) (!!__builtin_constant_p(x))
+#define BROTLI_HAS_IS_CONSTANT 1
 #else
 #define BROTLI_IS_CONSTANT(x) (!!0)
+#define BROTLI_HAS_IS_CONSTANT 0
 #endif
 
 #if defined(BROTLI_TARGET_ARMV7) || defined(BROTLI_TARGET_ARMV8_ANY)
@@ -5812,7 +5814,9 @@ static BROTLI_INLINE brotli_reg_t BrotliBitReaderLoadBits(brotli_reg_t val, brot
 
 static BROTLI_INLINE void BrotliFillBitWindow(BrotliBitReader* const br, brotli_reg_t n_bits)
 {
+    BROTLI_UNUSED(n_bits);
 #if (BROTLI_64_BITS)
+#if BROTLI_UNALIGNED_READ_FAST && BROTLI_HAS_IS_CONSTANT
     if (BROTLI_UNALIGNED_READ_FAST && BROTLI_IS_CONSTANT(n_bits) && (n_bits <= 8)) {
         brotli_reg_t bit_pos = br->bit_pos_;
         if (bit_pos <= 8) {
@@ -5827,7 +5831,9 @@ static BROTLI_INLINE void BrotliFillBitWindow(BrotliBitReader* const br, brotli_
             br->bit_pos_ = bit_pos + 48;
             br->next_in += 6;
         }
-    } else {
+    } else
+#endif
+    {
         brotli_reg_t bit_pos = br->bit_pos_;
         if (bit_pos <= 32) {
             br->val_ = BrotliBitReaderLoadBits(br->val_, (uint64_t)BROTLI_UNALIGNED_LOAD32LE(br->next_in), 32, bit_pos);
@@ -5836,6 +5842,7 @@ static BROTLI_INLINE void BrotliFillBitWindow(BrotliBitReader* const br, brotli_
         }
     }
 #else
+#if BROTLI_UNALIGNED_READ_FAST && BROTLI_HAS_IS_CONSTANT
     if (BROTLI_UNALIGNED_READ_FAST && BROTLI_IS_CONSTANT(n_bits) && (n_bits <= 8)) {
         brotli_reg_t bit_pos = br->bit_pos_;
         if (bit_pos <= 8) {
@@ -5843,7 +5850,9 @@ static BROTLI_INLINE void BrotliFillBitWindow(BrotliBitReader* const br, brotli_
             br->bit_pos_ = bit_pos + 24;
             br->next_in += 3;
         }
-    } else {
+    } else
+#endif
+    {
         brotli_reg_t bit_pos = br->bit_pos_;
         if (bit_pos <= 16) {
             br->val_ = BrotliBitReaderLoadBits(br->val_, (uint32_t)BROTLI_UNALIGNED_LOAD16LE(br->next_in), 16, bit_pos);
@@ -5930,7 +5939,13 @@ static BROTLI_INLINE void BrotliTakeBits(BrotliBitReader* const br, brotli_reg_t
 static BROTLI_INLINE brotli_reg_t BrotliReadBits24(BrotliBitReader* const br, brotli_reg_t n_bits)
 {
     BROTLI_DCHECK(n_bits <= 24);
-    if (BROTLI_64_BITS || (n_bits <= 16)) {
+#if BROTLI_64_BITS
+    brotli_reg_t val;
+    BrotliFillBitWindow(br, n_bits);
+    BrotliTakeBits(br, n_bits, &val);
+    return val;
+#else
+    if (n_bits <= 16) {
         brotli_reg_t val;
         BrotliFillBitWindow(br, n_bits);
         BrotliTakeBits(br, n_bits, &val);
@@ -5944,12 +5959,19 @@ static BROTLI_INLINE brotli_reg_t BrotliReadBits24(BrotliBitReader* const br, br
         BrotliTakeBits(br, n_bits - 16, &high_val);
         return low_val | (high_val << 16);
     }
+#endif
 }
 
 static BROTLI_INLINE brotli_reg_t BrotliReadBits32(BrotliBitReader* const br, brotli_reg_t n_bits)
 {
     BROTLI_DCHECK(n_bits <= 32);
-    if (BROTLI_64_BITS || (n_bits <= 16)) {
+#if BROTLI_64_BITS
+    brotli_reg_t val;
+    BrotliFillBitWindow(br, n_bits);
+    BrotliTakeBits(br, n_bits, &val);
+    return val;
+#else
+    if (n_bits <= 16) {
         brotli_reg_t val;
         BrotliFillBitWindow(br, n_bits);
         BrotliTakeBits(br, n_bits, &val);
@@ -5963,6 +5985,7 @@ static BROTLI_INLINE brotli_reg_t BrotliReadBits32(BrotliBitReader* const br, br
         BrotliTakeBits(br, n_bits - 16, &high_val);
         return low_val | (high_val << 16);
     }
+#endif
 }
 
 static BROTLI_INLINE BROTLI_BOOL BrotliSafeReadBits(BrotliBitReader* const br, brotli_reg_t n_bits, brotli_reg_t* val)
@@ -5980,7 +6003,16 @@ static BROTLI_INLINE BROTLI_BOOL BrotliSafeReadBits(BrotliBitReader* const br, b
 static BROTLI_INLINE BROTLI_BOOL BrotliSafeReadBits32(BrotliBitReader* const br, brotli_reg_t n_bits, brotli_reg_t* val)
 {
     BROTLI_DCHECK(n_bits <= 32);
-    if (BROTLI_64_BITS || (n_bits <= 24)) {
+#if BROTLI_64_BITS
+    while (BrotliGetAvailableBits(br) < n_bits) {
+        if (!BrotliPullByte(br)) {
+            return BROTLI_FALSE;
+        }
+    }
+    BrotliTakeBits(br, n_bits, val);
+    return BROTLI_TRUE;
+#else
+    if (n_bits <= 24) {
         while (BrotliGetAvailableBits(br) < n_bits) {
             if (!BrotliPullByte(br)) {
                 return BROTLI_FALSE;
@@ -5991,6 +6023,7 @@ static BROTLI_INLINE BROTLI_BOOL BrotliSafeReadBits32(BrotliBitReader* const br,
     } else {
         return BrotliSafeReadBits32Slow(br, n_bits, val);
     }
+#endif
 }
 
 static BROTLI_INLINE BROTLI_BOOL BrotliJumpToByteBoundary(BrotliBitReader* br)

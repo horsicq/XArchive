@@ -21,6 +21,8 @@
 
 #include "xblake2sp.h"
 
+#include <QPointer>
+
 #include <algorithm>
 #include <cstring>
 
@@ -77,7 +79,7 @@ void XBlake2sp::_store32le(quint8 *pDst, quint32 nValue)
         BLAKE2S_G(r, 7, v[3], v[4], v[9], v[14]);  \
     } while (0)
 
-void XBlake2sp::_blake2sCompress(Blake2sState *pState, const quint8 *pBlock, bool bLast)
+void XBlake2sp::_blake2sCompress(Blake2sState *pState, const quint8 *pBlock)
 {
     quint32 m[16];
     quint32 v[16];
@@ -115,7 +117,7 @@ void XBlake2sp::_blake2sCompress(Blake2sState *pState, const quint8 *pBlock, boo
     }
 }
 
-void XBlake2sp::_blake2sInit(Blake2sState *pState, quint32 nOutLen, const quint8 *pParams)
+void XBlake2sp::_blake2sInit(Blake2sState *pState, const quint8 *pParams)
 {
     memset(pState, 0, sizeof(Blake2sState));
 
@@ -147,7 +149,7 @@ void XBlake2sp::_blake2sUpdate(Blake2sState *pState, const quint8 *pData, quint3
                 pState->t[1]++;
             }
 
-            _blake2sCompress(pState, pState->buf, false);
+            _blake2sCompress(pState, pState->buf);
             pState->bufLen = 0;
         } else {
             memcpy(pState->buf + pState->bufLen, pData, nSize);
@@ -173,7 +175,7 @@ void XBlake2sp::_blake2sFinal(Blake2sState *pState, quint8 *pDigest, quint32 nOu
         memset(pState->buf + pState->bufLen, 0, BLOCK_SIZE - pState->bufLen);
     }
 
-    _blake2sCompress(pState, pState->buf, true);
+    _blake2sCompress(pState, pState->buf);
 
     // Output digest
     quint8 buffer[32];
@@ -186,12 +188,13 @@ void XBlake2sp::_blake2sFinal(Blake2sState *pState, quint8 *pDigest, quint32 nOu
 
 XBlake2sp::XBlake2sp()
 {
-    m_nBufLen = 0;
+    init();
 }
 
 void XBlake2sp::init()
 {
     m_nBufLen = 0;
+    memset(m_buf, 0, sizeof(m_buf));
 
     // Initialize 8 leaf nodes for BLAKE2sp
     // Parameter block for BLAKE2sp leaf:
@@ -222,12 +225,14 @@ void XBlake2sp::init()
         params[14] = 0;            // node depth = 0 (leaf level)
         params[15] = DIGEST_SIZE;  // inner length = 32
 
-        _blake2sInit(&m_states[i], DIGEST_SIZE, params);
+        _blake2sInit(&m_states[i], params);
     }
 }
 
 void XBlake2sp::update(const quint8 *pData, qint64 nSize)
 {
+    if (!pData || (nSize <= 0)) return;
+
     // Buffer data and distribute full 512-byte blocks to the 8 leaf nodes
     // Each leaf gets 64 bytes per 512-byte block (round-robin distribution)
 
@@ -256,14 +261,21 @@ void XBlake2sp::update(const quint8 *pData, qint64 nSize)
 
 void XBlake2sp::final(quint8 *pDigest)
 {
+    if (!pDigest) return;
+
+    // Finalization mutates counters and chaining state.  Work on a snapshot so
+    // repeated final() calls are idempotent and callers can continue updating
+    // the live stream after observing an intermediate digest.
+    XBlake2sp snapshot = *this;
+
     // Distribute any remaining buffered data to the leaf nodes
     // The remaining data is distributed in 64-byte chunks to respective leaves
-    qint64 nRemaining = m_nBufLen;
+    qint64 nRemaining = snapshot.m_nBufLen;
     qint32 nLeafIdx = 0;
 
     while (nRemaining > 0) {
         qint64 nChunk = (std::min)((qint64)BLOCK_SIZE, nRemaining);
-        _blake2sUpdate(&m_states[nLeafIdx], m_buf + (m_nBufLen - nRemaining), (quint32)nChunk);
+        _blake2sUpdate(&snapshot.m_states[nLeafIdx], snapshot.m_buf + (snapshot.m_nBufLen - nRemaining), (quint32)nChunk);
         nRemaining -= nChunk;
         nLeafIdx++;
     }
@@ -272,7 +284,11 @@ void XBlake2sp::final(quint8 *pDigest)
     quint8 leafDigests[PARALLEL_DEGREE][DIGEST_SIZE];
 
     for (qint32 i = 0; i < PARALLEL_DEGREE; i++) {
-        _blake2sFinal(&m_states[i], leafDigests[i], DIGEST_SIZE);
+        if (i == PARALLEL_DEGREE - 1) {
+            // BLAKE2 tree mode marks the rightmost node at each level.
+            snapshot.m_states[i].f[1] = 0xFFFFFFFFUL;
+        }
+        _blake2sFinal(&snapshot.m_states[i], leafDigests[i], DIGEST_SIZE);
     }
 
     // Initialize root node
@@ -300,17 +316,15 @@ void XBlake2sp::final(quint8 *pDigest)
     rootParams[14] = 1;            // node depth = 1 (root)
     rootParams[15] = DIGEST_SIZE;  // inner length = 32
 
-    _blake2sInit(&rootState, DIGEST_SIZE, rootParams);
+    _blake2sInit(&rootState, rootParams);
 
     // Feed each leaf digest into the root
     for (qint32 i = 0; i < PARALLEL_DEGREE; i++) {
-        if (i == PARALLEL_DEGREE - 1) {
-            // Last leaf: set the last node flag before final compress
-            rootState.f[1] = 0xFFFFFFFFUL;  // last node
-        }
         _blake2sUpdate(&rootState, leafDigests[i], DIGEST_SIZE);
     }
 
+    // The root is the rightmost node at its tree level.
+    rootState.f[1] = 0xFFFFFFFFUL;
     _blake2sFinal(&rootState, pDigest, DIGEST_SIZE);
 }
 
@@ -318,38 +332,90 @@ QByteArray XBlake2sp::hash(QIODevice *pDevice)
 {
     QByteArray baResult;
 
-    if (pDevice && pDevice->isReadable()) {
-        XBlake2sp blake;
-        blake.init();
+    QPointer<QIODevice> guardedDevice(pDevice);
+    if (!guardedDevice) return baResult;
 
-        qint64 nPos = pDevice->pos();
-        bool bSuccess = pDevice->seek(0);
+    const bool bReadable = guardedDevice->isReadable();
+    if (!guardedDevice || !bReadable) return baResult;
 
-        const qint32 nBufSize = 4096;
-        quint8 buf[4096];
+    const bool bSequential = guardedDevice->isSequential();
+    if (!guardedDevice || bSequential || (guardedDevice->openMode() & QIODevice::Text)) return baResult;
 
-        if (bSuccess) {
-            while (!pDevice->atEnd()) {
-                qint64 nRead = pDevice->read((char *)buf, nBufSize);
-                if (nRead > 0) {
-                    blake.update(buf, nRead);
-                } else if (nRead < 0) {
-                    bSuccess = false;
-                    break;
-                } else {
-                    break;
-                }
+    const qint64 nOriginalPosition = guardedDevice->pos();
+    if (!guardedDevice || (nOriginalPosition < 0)) return baResult;
+
+    const qint64 nInputSize = guardedDevice->size();
+    if (!guardedDevice || (nInputSize < 0)) return baResult;
+
+    XBlake2sp blake;
+    blake.init();
+
+    const qint32 nBufSize = 4096;
+    const qint32 nMaxZeroProgressAttempts = 3;
+    quint8 buf[nBufSize];
+    qint64 nOffset = 0;
+    qint32 nZeroProgressAttempts = 0;
+    bool bSuccess = guardedDevice->seek(0);
+    bSuccess = guardedDevice && bSuccess;
+    if (bSuccess) {
+        const qint64 nPosition = guardedDevice->pos();
+        bSuccess = guardedDevice && (nPosition == 0);
+    }
+
+    while (bSuccess && (nOffset < nInputSize)) {
+        // A custom QIODevice can re-enter application code from readData() and
+        // move its own cursor.  Anchor every read to the exact logical offset
+        // so a short read cannot make us repeat or skip input.
+        const bool bSeeked = guardedDevice->seek(nOffset);
+        if (!guardedDevice || !bSeeked) {
+            bSuccess = false;
+            break;
+        }
+        const qint64 nPosition = guardedDevice->pos();
+        if (!guardedDevice || (nPosition != nOffset)) {
+            bSuccess = false;
+            break;
+        }
+
+        const qint64 nRequest = (std::min)((qint64)nBufSize, nInputSize - nOffset);
+        const qint64 nRead = guardedDevice->read((char *)buf, nRequest);
+        if (!guardedDevice || (nRead < 0) || (nRead > nRequest)) {
+            bSuccess = false;
+            break;
+        }
+        if (nRead == 0) {
+            if (++nZeroProgressAttempts >= nMaxZeroProgressAttempts) {
+                bSuccess = false;
             }
-
-            bSuccess = pDevice->seek(nPos) && bSuccess;
+            continue;
         }
 
-        if (bSuccess) {
-            quint8 digest[DIGEST_SIZE];
-            blake.final(digest);
+        blake.update(buf, nRead);
+        nOffset += nRead;
+        nZeroProgressAttempts = 0;
+    }
 
-            baResult = QByteArray((const char *)digest, DIGEST_SIZE);
+    if (bSuccess) {
+        const qint64 nFinalSize = guardedDevice->size();
+        bSuccess = guardedDevice && (nFinalSize == nInputSize);
+    }
+
+    if (guardedDevice) {
+        const bool bRestored = guardedDevice->seek(nOriginalPosition);
+        bSuccess = guardedDevice && bRestored && bSuccess;
+        if (guardedDevice && bRestored) {
+            const qint64 nRestoredPosition = guardedDevice->pos();
+            bSuccess = guardedDevice && (nRestoredPosition == nOriginalPosition) && bSuccess;
         }
+    } else {
+        bSuccess = false;
+    }
+
+    if (bSuccess) {
+        quint8 digest[DIGEST_SIZE];
+        blake.final(digest);
+
+        baResult = QByteArray((const char *)digest, DIGEST_SIZE);
     }
 
     return baResult;
@@ -358,7 +424,6 @@ QByteArray XBlake2sp::hash(QIODevice *pDevice)
 QByteArray XBlake2sp::hash(const QByteArray &baData)
 {
     XBlake2sp blake;
-    blake.init();
     blake.update((const quint8 *)baData.constData(), baData.size());
 
     quint8 digest[DIGEST_SIZE];

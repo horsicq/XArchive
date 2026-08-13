@@ -254,7 +254,7 @@ XBinary::_MEMORY_MAP XASAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     _readHeader(&nJsonOffset, &nJsonSize, &nBlobOffset);
 
     _MEMORY_RECORD recHeader = {};
-    recHeader.nAddress = -1;
+    recHeader.nAddress = XADDR_MAX;
     recHeader.nOffset = 0;
     recHeader.nSize = (nBlobOffset > 0) ? nBlobOffset : 16;
     recHeader.nIndex = nIndex++;
@@ -264,7 +264,7 @@ XBinary::_MEMORY_MAP XASAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if ((nBlobOffset > 0) && (nBlobOffset < getSize())) {
         _MEMORY_RECORD recData = {};
-        recData.nAddress = -1;
+        recData.nAddress = XADDR_MAX;
         recData.nOffset = nBlobOffset;
         recData.nSize = getSize() - nBlobOffset;
         recData.nIndex = nIndex++;
@@ -342,6 +342,11 @@ QList<XBinary::XFRECORD> XASAR::getXFRecords(FT fileType, quint32 nStructID, con
     return listResult;
 }
 
+static bool asarCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XASAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -352,30 +357,28 @@ QList<XBinary::FPART> XASAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     qint64 nJsonOffset = 0;
     qint64 nJsonSize = 0;
     qint64 nBlobOffset = 0;
 
     _readHeader(&nJsonOffset, &nJsonSize, &nBlobOffset);
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && asarCanAppendPart(nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
         record.nFileSize = (nBlobOffset > 0) ? nBlobOffset : 16;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Header");
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && canAppend() && (nBlobOffset > 0) && (nBlobOffset < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && asarCanAppendPart(nLimit, listResult) && (nBlobOffset > 0) && (nBlobOffset < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nBlobOffset;
         record.nFileSize = getSize() - nBlobOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Files");
         listResult.append(record);
     }
@@ -607,22 +610,30 @@ bool XASAR::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XASAR::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XASAR> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XASAR::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XASAR> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XASAR::setInternalInfo(void *pInternalInfo)

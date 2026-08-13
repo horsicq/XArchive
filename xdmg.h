@@ -25,6 +25,8 @@
 #include "xarchive.h"
 #include <QPointer>
 
+struct XDMG_SEARCH_CRC_CTX;
+
 class XDMG : public XArchive {
     Q_OBJECT
 
@@ -176,6 +178,15 @@ private:
                          qint64 *pArchiveBase = nullptr,
                          bool bAllowEmbeddedBase = true,
                          bool bValidateDataForkCRC = true);
+    bool _tryKolyCandidate(qint64 nSize, bool bRequireXml, bool bAllowEmbeddedBase,
+                           bool bValidateDataForkCRC, qint64 *pSelectedArchiveBase,
+                           PDSTRUCT *pPdStruct, qint64 nKolyOffset, bool bFrontKoly,
+                           KOLY_BLOCK *pCandidate, QByteArray *pCandidateXml);
+    qint64 _getKolyHeaderOffset(PDSTRUCT *pPdStruct);
+    static bool _searchTryExactImage(XDMG_SEARCH_CRC_CTX *pCtx, qint64 nOffset, qint64 nLength,
+                                     const KOLY_BLOCK &rawKoly, bool bFrontKoly,
+                                     const QMap<qint64, quint32> *pDataCRCs,
+                                     FFSEARCH_INFO *pInfo);
     bool _loadPartitionMetadata(KOLY_BLOCK *pKolyBlock, QList<DMG_PARTITION_INFO> *pPartitions,
                                 PDSTRUCT *pPdStruct);
     bool _parsePartition(const DMG_PARTITION_INFO &partitionInfo, const KOLY_BLOCK &kolyBlock,

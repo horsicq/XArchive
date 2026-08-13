@@ -426,7 +426,7 @@ XBinary::FPART createFilePart(XBinary::FILEPART filePart, qint64 nOffset, qint64
     result.filePart = filePart;
     result.nFileOffset = nOffset;
     result.nFileSize = nSize;
-    result.nVirtualAddress = -1;
+    result.nVirtualAddress = XADDR_MAX;
     result.sName = sName;
 
     return result;
@@ -892,6 +892,11 @@ QList<XBinary::XFRECORD> XARJ::getXFRecords(FT fileType, quint32 nStructID, cons
     return listResult;
 }
 
+static bool arjCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -900,31 +905,29 @@ QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     qint64 nFileSize = getSize();
     qint64 nCurrentOffset = firstFileRecordOffset(this);
     qint64 nMaxOffset = 0;
 
-    while ((nCurrentOffset < nFileSize) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((nCurrentOffset < nFileSize) && arjCanAppendPart(nLimit, listResult) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         ARJ_ENTRY_INFO info = {};
 
         if (!readEntryInfo(this, nCurrentOffset, &info) || info.bEndOfArchive) {
             break;
         }
 
-        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+        if ((nFileParts & FILEPART_HEADER) && arjCanAppendPart(nLimit, listResult)) {
             listResult.append(createFilePart(FILEPART_HEADER, nCurrentOffset, info.nHeaderSize, tr("Header")));
         }
 
-        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+        if ((nFileParts & FILEPART_STREAM) && arjCanAppendPart(nLimit, listResult)) {
             FPART record = createFilePart(FILEPART_STREAM, entryStreamOffset(info), info.nCompressedSize, info.sFileName);
             record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)info.nOriginalSize);
 
             listResult.append(record);
         }
 
-        if ((nFileParts & FILEPART_REGION) && canAppend()) {
+        if ((nFileParts & FILEPART_REGION) && arjCanAppendPart(nLimit, listResult)) {
             listResult.append(createFilePart(FILEPART_REGION, nCurrentOffset, info.nHeaderSize + info.nCompressedSize, info.sFileName));
         }
 
@@ -932,7 +935,7 @@ QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         nCurrentOffset = nMaxOffset;
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && arjCanAppendPart(nLimit, listResult)) {
         if (nMaxOffset < nFileSize) {
             listResult.append(createFilePart(FILEPART_OVERLAY, nMaxOffset, nFileSize - nMaxOffset, tr("Overlay")));
         }
@@ -978,22 +981,30 @@ XBinary *XARJ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XARJ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XARJ> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XARJ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XARJ> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XARJ::setInternalInfo(void *pInternalInfo)

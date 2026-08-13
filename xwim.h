@@ -195,6 +195,9 @@ private:
     bool _isCompressionConfigurationValid(quint32 nHeaderFlags, quint32 nChunkSize,
                                           bool bRequireImplemented) const;
     void _appendResourcePart(QList<FPART> *pListResult, quint32 nFileParts, const RESOURCE_INFO &resourceInfo, const QString &sName, qint32 nLimit);
+    bool _processResourceFilePart(QList<FPART> *pListResult, quint32 nFileParts, qint32 nLimit, qint64 nFileSize, qint64 *pnMaxKnownEnd,
+                                  QMap<quint64, QSet<quint64> > *pMapKnownResourceExtents, const RESOURCE_INFO &resourceInfo, const QString &sName,
+                                  PDSTRUCT *pPdStruct);
     bool _isResourceStored(const RESOURCE_INFO &resourceInfo) const;
     QByteArray _readStoredResource(const RESOURCE_INFO &resourceInfo, PDSTRUCT *pPdStruct);
     WIM_COMPRESSION _getCompressionType(quint32 nHeaderFlags) const;
@@ -222,6 +225,7 @@ private:
                                              const WIM_METADATA_CONTEXT &context);
     QString _readUTF16LEString(const QByteArray &baData, qint64 nOffset, qint32 nSize);
     static bool _isEmptyHash(const QByteArray &baHash);
+    static void _countStreamReference(WIM_METADATA_CONTEXT *pContext, const WIM_RECORD &streamRecord);
 private:
     INTERNAL_INFO m_internalInfo;
 };

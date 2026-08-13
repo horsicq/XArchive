@@ -93,6 +93,7 @@ private:
         // I/O
         QIODevice *pInput;
         XBinary::PDSTRUCT *pPdStruct;
+        const XBinary::PDSTRUCTLIFETIME *pProgressLifetime;
         qint64     nInputBytesRead;
         qint64     nInputLimit;  // compressed bytes available
 
@@ -123,7 +124,9 @@ private:
     static qint32 decompressBlk(AceDecodeState *pState, char *pBuf, qint32 nLen);
 
     // Internal entry: decompress nOrigSize bytes to pOutput
-    static bool decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressState, QIODevice *pOutput, XBinary::PDSTRUCT *pPdStruct);
+    static bool decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressState, QIODevice *pOutput,
+                                   XBinary::PDSTRUCT *pPdStruct,
+                                   const XBinary::PDSTRUCTLIFETIME &progressLifetime);
 };
 
 #endif  // XACEDECODER_H

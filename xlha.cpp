@@ -700,6 +700,11 @@ QList<XBinary::XFRECORD> XLHA::getXFRecords(FT fileType, quint32 nStructID, cons
 //     return listResult;
 // }
 
+static bool lhaCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -708,15 +713,13 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     qint64 nFileSize = getSize();
     qint64 nCurrentOffset = 0;
     qint64 nMaxOffset = 0;
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap();
 
     // Iterate through all records and create file parts
-    while ((nFileSize > 0) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((nFileSize > 0) && lhaCanAppendPart(nLimit, listResult) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (compareSignature(&memoryMap, "....'-lh'..2d", nCurrentOffset) || compareSignature(&memoryMap, "....'-lz'..2d", nCurrentOffset) ||
             compareSignature(&memoryMap, "....'-pm'..2d", nCurrentOffset)) {
             quint8 nLevel = read_uint8(nCurrentOffset + 20);
@@ -731,26 +734,26 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             }
 
             // Header part
-            if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+            if ((nFileParts & FILEPART_HEADER) && lhaCanAppendPart(nLimit, listResult)) {
                 FPART record = {};
 
                 record.filePart = FILEPART_HEADER;
                 record.nFileOffset = nCurrentOffset;
                 record.nFileSize = nHeaderSize;
-                record.nVirtualAddress = -1;
+                record.nVirtualAddress = XADDR_MAX;
                 record.sName = tr("Header");
 
                 listResult.append(record);
             }
 
             // Data/Stream part
-            if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+            if ((nFileParts & FILEPART_STREAM) && lhaCanAppendPart(nLimit, listResult)) {
                 FPART record = {};
 
                 record.filePart = FILEPART_STREAM;
                 record.nFileOffset = nCurrentOffset + nHeaderSize + nExtSize;
                 record.nFileSize = nDataSize;
-                record.nVirtualAddress = -1;
+                record.nVirtualAddress = XADDR_MAX;
                 record.sName = sFileName;
                 record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, read_uint32(nCurrentOffset + 11));
 
@@ -758,13 +761,13 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             }
 
             // Region part (header + data)
-            if ((nFileParts & FILEPART_REGION) && canAppend()) {
+            if ((nFileParts & FILEPART_REGION) && lhaCanAppendPart(nLimit, listResult)) {
                 FPART record = {};
 
                 record.filePart = FILEPART_REGION;
                 record.nFileOffset = nCurrentOffset;
                 record.nFileSize = nHeaderSize + nSkipSize;
-                record.nVirtualAddress = -1;
+                record.nVirtualAddress = XADDR_MAX;
                 record.sName = sFileName;
 
                 listResult.append(record);
@@ -779,27 +782,27 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     }
 
     // Data part (all archive data)
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && lhaCanAppendPart(nLimit, listResult)) {
         FPART record = {};
 
         record.filePart = FILEPART_DATA;
         record.nFileOffset = 0;
         record.nFileSize = nMaxOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Data");
 
         listResult.append(record);
     }
 
     // Overlay part (any trailing data)
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && lhaCanAppendPart(nLimit, listResult)) {
         if (nMaxOffset < getSize()) {
             FPART record = {};
 
             record.filePart = FILEPART_OVERLAY;
             record.nFileOffset = nMaxOffset;
             record.nFileSize = getSize() - nMaxOffset;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Overlay");
 
             listResult.append(record);
@@ -830,22 +833,30 @@ XBinary *XLHA::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XLHA::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XLHA> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XLHA::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XLHA> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XLHA::setInternalInfo(void *pInternalInfo)

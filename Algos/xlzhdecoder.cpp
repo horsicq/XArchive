@@ -1237,14 +1237,10 @@ struct Lzhuf {
         for (int i = 0; i < N - LZF; i++) textBuf[i] = ' ';
         int r = N - LZF;
         qint64 count = 0;
-        try {
-            // Allocate the exact result once. Besides making allocation failure
-            // explicit, this avoids growth reallocations while decoding.
-            pOut->resize((int)nTextSize);
-        } catch (const std::bad_alloc &) {
-            pOut->clear();
-            return false;
-        }
+        // Allocate the exact result once. nTextSize is validated above against
+        // LH1_MAX_UNPACKED_BUFFER_SIZE, so the allocation size is bounded.
+        // This also avoids growth reallocations while decoding.
+        pOut->resize((int)nTextSize);
         while (count < nTextSize) {
             if (((count & 0x3FFF) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
                 return false;
@@ -1305,12 +1301,10 @@ bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     // -lh1- files use a 4 KiB window. Read the bounded compressed member with
     // exact short-read handling before running the adaptive decoder.
     QByteArray baIn;
-    try {
-        if (pDecompressState->nInputLimit > 0) {
-            baIn.reserve((int)pDecompressState->nInputLimit);
-        }
-    } catch (const std::bad_alloc &) {
-        return false;
+    // nInputLimit is validated above against LH1_MAX_PACKED_BUFFER_SIZE, so the
+    // reservation size is bounded.
+    if (pDecompressState->nInputLimit > 0) {
+        baIn.reserve((int)pDecompressState->nInputLimit);
     }
     std::unique_ptr<char[]> pReadBuffer(new (std::nothrow) char[LH1_READ_BUFFER_SIZE]);
     if (!pReadBuffer) {
@@ -1340,11 +1334,8 @@ bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XB
         if ((qint64)nRead > (LH1_MAX_PACKED_BUFFER_SIZE - baIn.size())) {
             return false;
         }
-        try {
-            baIn.append(pReadBuffer.get(), nRead);
-        } catch (const std::bad_alloc &) {
-            return false;
-        }
+        // The check above keeps baIn within LH1_MAX_PACKED_BUFFER_SIZE.
+        baIn.append(pReadBuffer.get(), nRead);
     }
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct) || pDecompressState->bReadError ||

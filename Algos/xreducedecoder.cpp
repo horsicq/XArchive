@@ -167,6 +167,8 @@ static OZUR_UINT8 ozur_bitreader_getbits(ozur_ctx *ozur, unsigned int nbits)
 // Assumes 1 <= x <= 32.
 static OZUR_UINT8 ozur_func_B(ozur_ctx *ozur, OZUR_UINT8 x)
 {
+    Q_UNUSED(ozur)
+
     if (x <= 2) return 1;
     if (x <= 4) return 2;
     if (x <= 8) return 3;

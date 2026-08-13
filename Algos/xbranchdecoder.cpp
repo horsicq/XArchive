@@ -293,11 +293,9 @@ bool readTransformInput(XBinary::DATAPROCESS_STATE *pState, QByteArray *pData, X
     Algo_utils::prepareState(pState);
     if (pState->bReadError || pState->bWriteError) return false;
 
-    try {
-        pData->resize((qint32)nInputSize);
-    } catch (const std::bad_alloc &) {
-        return false;
-    }
+    // nInputSize is pre-validated above: non-negative and bounded by
+    // BRANCH_MAX_BUFFERED_SIZE, so the allocation size is attacker-limited.
+    pData->resize((qint32)nInputSize);
 
     qint64 nReadTotal = 0;
     while ((nReadTotal < nInputSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {

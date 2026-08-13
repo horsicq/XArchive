@@ -286,6 +286,11 @@ QList<XBinary::XFRECORD> XZstd::getXFRecords(FT fileType, quint32 nStructID, con
     return listResult;
 }
 
+static bool zstdCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XZstd::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -294,21 +299,19 @@ QList<XBinary::FPART> XZstd::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     const qint64 nFileSize = getSize();
     if (nFileSize <= 0) return listResult;
 
     // Header: fixed 4 bytes (magic number)
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && zstdCanAppend(nLimit, listResult)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
         header.nFileSize = qMin<qint64>(4, nFileSize);
-        header.nVirtualAddress = -1;
+        header.nVirtualAddress = XADDR_MAX;
         header.sName = tr("Header");
         listResult.append(header);
-        if (!canAppend()) return listResult;
+        if (!zstdCanAppend(nLimit, listResult)) return listResult;
     }
 
     if (!(nFileParts & (FILEPART_STREAM | FILEPART_DATA | FILEPART_OVERLAY))) return listResult;
@@ -317,12 +320,12 @@ QList<XBinary::FPART> XZstd::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     qint64 nUncompressedSize = 0;
     if (!measureZstdStream(getDevice(), nFileSize, &nCompressedSize, &nUncompressedSize, pPdStruct)) return listResult;
 
-    if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+    if ((nFileParts & FILEPART_STREAM) && zstdCanAppend(nLimit, listResult)) {
         FPART region = {};
         region.filePart = FILEPART_STREAM;
         region.nFileOffset = 0;
         region.nFileSize = nCompressedSize;
-        region.nVirtualAddress = -1;
+        region.nVirtualAddress = XADDR_MAX;
         region.sName = tr("Stream");
         region.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_ZSTD);
         region.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
@@ -331,24 +334,24 @@ QList<XBinary::FPART> XZstd::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     }
 
     // Data: entire file
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && zstdCanAppend(nLimit, listResult)) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 0;
         data.nFileSize = nCompressedSize;
-        data.nVirtualAddress = -1;
+        data.nVirtualAddress = XADDR_MAX;
         data.sName = tr("Data");
         listResult.append(data);
     }
 
     // Overlay: any trailing bytes
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && zstdCanAppend(nLimit, listResult)) {
         if (nCompressedSize < nFileSize) {
             FPART ov = {};
             ov.filePart = FILEPART_OVERLAY;
             ov.nFileOffset = nCompressedSize;
             ov.nFileSize = nFileSize - nCompressedSize;
-            ov.nVirtualAddress = -1;
+            ov.nVirtualAddress = XADDR_MAX;
             ov.sName = tr("Overlay");
             listResult.append(ov);
         }
@@ -612,22 +615,30 @@ XBinary *XZstd::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XZstd::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XZstd> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XZstd::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XZstd> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XZstd::setInternalInfo(void *pInternalInfo)

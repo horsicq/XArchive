@@ -197,6 +197,18 @@ private:
     QList<ARCHIVERECORD> _parseFileSystem(qint32 nBlockSize, PDSTRUCT *pPdStruct);
     QString _cleanFileName(const QString &sFileName);
 
+    // Every QIODevice operation is an external callback boundary.  These
+    // helpers report archive/source destruction to callers instead of leaving
+    // them to continue through a dangling this/device pointer.
+    bool _readExact(qint64 nOffset, char *pData, qint64 nSize);
+    bool _readTag(qint64 nOffset, UDF_TAG *pTag);
+    bool _readAnchorVolumeDescriptor(qint64 nOffset, UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER *pDescriptor);
+    bool _readPrimaryVolumeDescriptor(qint64 nOffset, UDF_PRIMARY_VOLUME_DESCRIPTOR *pDescriptor);
+    bool _readUInt8(qint64 nOffset, quint8 *pValue);
+    bool _readUInt16(qint64 nOffset, quint16 *pValue);
+    bool _readUInt32(qint64 nOffset, quint32 *pValue);
+    bool _readUInt64(qint64 nOffset, quint64 *pValue);
+
     QString m_sVolumeIdentifier;
     QString m_sVolumeSetIdentifier;
 private:

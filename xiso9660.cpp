@@ -423,6 +423,11 @@ QList<XBinary::XFRECORD> XISO9660::getXFRecords(FT fileType, quint32 nStructID, 
     return listResult;
 }
 
+static bool isoCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -431,33 +436,32 @@ QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, 
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
     qint64 nTotalSize = getSize();
     qint64 nFormatSize = getFileFormatSize(pPdStruct);
 
-    if ((nFileParts & FILEPART_REGION) && canAppend()) {
+    if ((nFileParts & FILEPART_REGION) && isoCanAppendPart(nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = 0;
         record.nFileSize = _getPrimaryVolumeDescriptorOffset();
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Reserved");
 
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && isoCanAppendPart(nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = _getPrimaryVolumeDescriptorOffset();
         record.nFileSize = sizeof(ISO9660_PVDESC);
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Primary Volume Descriptor");
 
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && canAppend()) {
+    if ((nFileParts & FILEPART_REGION) && isoCanAppendPart(nLimit, listResult)) {
         qint64 nDataOffset = _getPrimaryVolumeDescriptorOffset() + sizeof(ISO9660_PVDESC);
         qint64 nDataSize = (nFormatSize > 0) ? (nFormatSize - nDataOffset) : (nTotalSize - nDataOffset);
 
@@ -466,20 +470,20 @@ QList<XBinary::FPART> XISO9660::getFileParts(quint32 nFileParts, qint32 nLimit, 
             record.filePart = FILEPART_REGION;
             record.nFileOffset = nDataOffset;
             record.nFileSize = nDataSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Data");
 
             listResult.append(record);
         }
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && isoCanAppendPart(nLimit, listResult)) {
         if (nFormatSize > 0 && nTotalSize > nFormatSize) {
             FPART record = {};
             record.filePart = FILEPART_OVERLAY;
             record.nFileOffset = nFormatSize;
             record.nFileSize = nTotalSize - nFormatSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Overlay");
 
             listResult.append(record);
@@ -948,22 +952,30 @@ XBinary *XISO9660::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModu
 
 bool XISO9660::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XISO9660> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XISO9660::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XISO9660> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XISO9660::setInternalInfo(void *pInternalInfo)

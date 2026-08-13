@@ -509,6 +509,11 @@ X_Ar::FRECORD X_Ar::readFRECORD(qint64 nOffset)
     return record;
 }
 
+static bool arCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -517,18 +522,17 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return listResult;
     }
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 fileSize = getSize();
     qint64 nOffset = 8;
 
     // Header magic
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && arCanAppendPart(nLimit, listResult)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
         header.nFileSize = 8;
-        header.nVirtualAddress = -1;
+        header.nVirtualAddress = XADDR_MAX;
         header.sName = tr("Header");
         listResult.append(header);
     }
@@ -562,22 +566,22 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) return QList<FPART>();
 
-        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+        if ((nFileParts & FILEPART_HEADER) && arCanAppendPart(nLimit, listResult)) {
             FPART h = {};
             h.filePart = FILEPART_HEADER;
             h.nFileOffset = nOffset;
             h.nFileSize = (qint64)sizeof(FRECORD) + (qint64)nFileNameLength;  // FRECORD + optional BSD filename
-            h.nVirtualAddress = -1;
+            h.nVirtualAddress = XADDR_MAX;
             h.sName = tr("Header");
             listResult.append(h);
         }
 
-        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+        if ((nFileParts & FILEPART_STREAM) && arCanAppendPart(nLimit, listResult)) {
             FPART part = {};
             part.filePart = FILEPART_STREAM;
             part.nFileOffset = dataOffset;
             part.nFileSize = dataSize;
-            part.nVirtualAddress = -1;
+            part.nVirtualAddress = XADDR_MAX;
             part.sName = tr("Record") + QString(" %1").arg(nIndex);
             part.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
             // Properties: ar stores raw bytes, no compression
@@ -602,12 +606,12 @@ QList<XBinary::FPART> X_Ar::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return QList<FPART>();
 
     // Total parsed data area
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && arCanAppendPart(nLimit, listResult)) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 8;
         data.nFileSize = nOffset - 8;
-        data.nVirtualAddress = -1;
+        data.nVirtualAddress = XADDR_MAX;
         data.sName = tr("Data");
         listResult.append(data);
     }
@@ -690,6 +694,20 @@ bool X_Ar::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP
     return true;
 }
 
+bool X_Ar::failAddFileWrite(PACK_STATE *pState, AR_PACK_CONTEXT *pContext, qint64 nStartPosition, qint64 nRecordWritten)
+{
+    if (arRollbackWrite(pState->pDevice, nStartPosition)) return false;
+
+    if ((nRecordWritten > 0) || !pState->pDevice->isSequential()) {
+        pContext->bFailed = true;
+        if (nRecordWritten <= ((std::numeric_limits<qint64>::max)() - nStartPosition)) {
+            pContext->nCurrentOffset = nStartPosition + nRecordWritten;
+            pState->nCurrentOffset = pContext->nCurrentOffset;
+        }
+    }
+    return false;
+}
+
 bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdStruct)
 {
     if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
@@ -705,18 +723,6 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
 
     const qint64 nStartPosition = pContext->nCurrentOffset;
     qint64 nRecordWritten = 0;
-    const auto failWrite = [pState, pContext, nStartPosition, &nRecordWritten]() -> bool {
-        if (arRollbackWrite(pState->pDevice, nStartPosition)) return false;
-
-        if ((nRecordWritten > 0) || !pState->pDevice->isSequential()) {
-            pContext->bFailed = true;
-            if (nRecordWritten <= ((std::numeric_limits<qint64>::max)() - nStartPosition)) {
-                pContext->nCurrentOffset = nStartPosition + nRecordWritten;
-                pState->nCurrentOffset = pContext->nCurrentOffset;
-            }
-        }
-        return false;
-    };
 
     // Check if file exists and is readable
     QFileInfo fileInfo(sFilePath);
@@ -780,7 +786,7 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     if (!arWriteAll(pState->pDevice, reinterpret_cast<const char *>(&header), sizeof(FRECORD), pPdStruct, &nWritten)) {
         nRecordWritten += nWritten;
         file.close();
-        return failWrite();
+        return failAddFileWrite(pState, pContext, nStartPosition, nRecordWritten);
     }
     nRecordWritten += nWritten;
 
@@ -790,7 +796,7 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
         if (!arWriteAll(pState->pDevice, baFileName.constData(), baFileName.size(), pPdStruct, &nWritten)) {
             nRecordWritten += nWritten;
             file.close();
-            return failWrite();
+            return failAddFileWrite(pState, pContext, nStartPosition, nRecordWritten);
         }
         nRecordWritten += nWritten;
     }
@@ -803,14 +809,14 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
 
         if (baBuffer.isEmpty()) {
             file.close();
-            return failWrite();
+            return failAddFileWrite(pState, pContext, nStartPosition, nRecordWritten);
         }
 
         nWritten = 0;
         if (!arWriteAll(pState->pDevice, baBuffer.constData(), baBuffer.size(), pPdStruct, &nWritten)) {
             nRecordWritten += nWritten;
             file.close();
-            return failWrite();
+            return failAddFileWrite(pState, pContext, nStartPosition, nRecordWritten);
         }
 
         nRecordWritten += nWritten;
@@ -820,7 +826,7 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     file.close();
 
     if ((nBytesWritten != nFileSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return failWrite();
+        return failAddFileWrite(pState, pContext, nStartPosition, nRecordWritten);
     }
 
     // Add padding if total size (filename + file content for BSD, or just file content for standard) is odd
@@ -829,13 +835,13 @@ bool X_Ar::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
         nWritten = 0;
         if (!arWriteAll(pState->pDevice, &cPadding, 1, pPdStruct, &nWritten)) {
             nRecordWritten += nWritten;
-            return failWrite();
+            return failAddFileWrite(pState, pContext, nStartPosition, nRecordWritten);
         }
         nRecordWritten += nWritten;
     }
 
     // Update state
-    if ((nRecordWritten != nRecordSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) return failWrite();
+    if ((nRecordWritten != nRecordSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) return failAddFileWrite(pState, pContext, nStartPosition, nRecordWritten);
 
     pContext->nCurrentOffset = nStartPosition + nRecordSize;
     pContext->nNumberOfRecords++;
@@ -1243,22 +1249,30 @@ XBinary *X_Ar::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool X_Ar::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<X_Ar> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *X_Ar::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<X_Ar> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void X_Ar::setInternalInfo(void *pInternalInfo)

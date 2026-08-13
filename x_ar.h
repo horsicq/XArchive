@@ -103,6 +103,7 @@ private:
     };
 
     static bool isPackStateConsistent(const PACK_STATE *pState, const AR_PACK_CONTEXT *pContext);
+    static bool failAddFileWrite(PACK_STATE *pState, AR_PACK_CONTEXT *pContext, qint64 nStartPosition, qint64 nRecordWritten);
     FRECORD readFRECORD(qint64 nOffset);
     static FRECORD createHeader(const QString &sFileName, qint64 nFileSize, quint32 nMode, qint64 nMTime);
 private:

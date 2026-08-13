@@ -279,6 +279,11 @@ QList<XBinary::XFRECORD> XTAR::getXFRecords(FT fileType, quint32 nStructID, cons
     return listResult;
 }
 
+static bool tarCanAppend(qint32 nLimit, const QList<XBinary::FPART> *pListResult)
+{
+    return (nLimit == -1) || (pListResult->size() < nLimit);
+}
+
 QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::FPART> listResult;
@@ -286,8 +291,6 @@ QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     if ((nLimit < -1) || (nLimit == 0)) {
         return listResult;
     }
-
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 nTotalSize = getSize();
     qint32 nNumberOfRecords = 0;
@@ -300,36 +303,38 @@ QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     qint64 nOffset = 0;
     qint32 nCount = 0;
 
-    while ((nCount < nNumberOfRecords) && canAppend() && isPdStructNotCanceled(pPdStruct)) {
+    while ((nCount < nNumberOfRecords) && tarCanAppend(nLimit, &listResult) && isPdStructNotCanceled(pPdStruct)) {
         XTAR::posix_header header = {};
         qint64 nRawSize = 0;
         qint64 nRecordSize = 0;
         bool bIsZeroBlock = false;
 
-        if (!_readRecord(nOffset, nTotalSize, &header, &nRawSize, &nRecordSize, &bIsZeroBlock) || bIsZeroBlock) {
+        if (!_readRecord(nOffset, nTotalSize, &header, &nRawSize,
+                         &nRecordSize, &bIsZeroBlock, pPdStruct) ||
+            bIsZeroBlock) {
             return QList<XBinary::FPART>();
         }
 
         const QString sName = _getRecordPath(header);
 
-        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+        if ((nFileParts & FILEPART_HEADER) && tarCanAppend(nLimit, &listResult)) {
             XBinary::FPART record = {};
             record.filePart = FILEPART_HEADER;
             record.nFileOffset = nOffset;
             record.nFileSize = 0x200;  // TODO const
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Header");
             listResult.append(record);
         }
 
-        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+        if ((nFileParts & FILEPART_STREAM) && tarCanAppend(nLimit, &listResult)) {
             const qint64 nAlignedSize = nRecordSize - 512;
 
             XBinary::FPART record = {};
             record.filePart = FILEPART_STREAM;
             record.nFileOffset = nOffset + 512;
             record.nFileSize = nAlignedSize;  // Padded size in archive
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = sName;
             record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE);
             record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nAlignedSize);
@@ -349,26 +354,26 @@ QList<XBinary::FPART> XTAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return QList<XBinary::FPART>();
     }
 
-    if (canAppend() && (nOffset != nArchiveEnd)) {
+    if (tarCanAppend(nLimit, &listResult) && (nOffset != nArchiveEnd)) {
         return QList<XBinary::FPART>();
     }
 
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && tarCanAppend(nLimit, &listResult)) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_DATA;
         record.nFileOffset = 0;
         record.nFileSize = nArchiveEnd;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Data");
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nArchiveEnd < nTotalSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && tarCanAppend(nLimit, &listResult) && (nArchiveEnd < nTotalSize)) {
         XBinary::FPART record = {};
         record.filePart = FILEPART_OVERLAY;
         record.nFileOffset = nArchiveEnd;
         record.nFileSize = nTotalSize - nArchiveEnd;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Overlay");
         listResult.append(record);
     }
@@ -501,7 +506,10 @@ bool XTAR::_parseNumber(const char *pData, qint32 nSize, qint64 *pValue)
     return true;
 }
 
-bool XTAR::_readRecord(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader, qint64 *pFileSize, qint64 *pRecordSize, bool *pIsZeroBlock)
+bool XTAR::_readRecord(qint64 nOffset, qint64 nTotalSize,
+                       posix_header *pHeader, qint64 *pFileSize,
+                       qint64 *pRecordSize, bool *pIsZeroBlock,
+                       PDSTRUCT *pPdStruct)
 {
     QPointer<XTAR> guardedArchive(this);
     if (!pHeader || !pFileSize || !pRecordSize || !pIsZeroBlock || (nOffset < 0) || (nTotalSize < 0) ||
@@ -510,8 +518,12 @@ bool XTAR::_readRecord(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader,
     }
 
     QByteArray baHeader(512, 0);
-    const qint64 nRead = guardedArchive->read_array(
-        nOffset, baHeader.data(), baHeader.size());
+    // A random-access QIODevice may legally satisfy a read in multiple short
+    // chunks.  Drain the complete header through the guarded helper so TAR
+    // parsing observes the same short-I/O contract as retained-source
+    // fingerprinting and honors cancellation while doing so.
+    const qint64 nRead = guardedArchive->read_array_process(
+        nOffset, baHeader.data(), baHeader.size(), pPdStruct);
     if (!guardedArchive || (nRead != baHeader.size())) {
         return false;
     }
@@ -610,7 +622,7 @@ bool XTAR::_scanArchive(qint64 nOffset, qint64 nTotalSize, qint32 *pNumberOfReco
 
         const bool bRead = guardedArchive->_readRecord(
             nCurrentOffset, nTotalSize, &header, &nFileSize,
-            &nRecordSize, &bIsZeroBlock);
+            &nRecordSize, &bIsZeroBlock, pPdStruct);
         if (!guardedArchive || !bRead) {
             return false;
         }
@@ -831,7 +843,7 @@ XBinary::ARCHIVERECORD XTAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         if (!guardedArchive) return XBinary::ARCHIVERECORD();
         const bool bRead = guardedArchive->_readRecord(
             pState->nCurrentOffset, nCurrentSize, &header, &nFileSize,
-            &nRecordSize, &bIsZeroBlock);
+            &nRecordSize, &bIsZeroBlock, pPdStruct);
         if (!guardedArchive || !bRead || bIsZeroBlock) {
             return result;
         }
@@ -973,7 +985,7 @@ bool XTAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         if (!guardedArchive) return false;
         const bool bRead = guardedArchive->_readRecord(
             pState->nCurrentOffset, nCurrentSize, &header, &nFileSize,
-            &nRecordSize, &bIsZeroBlock);
+            &nRecordSize, &bIsZeroBlock, pPdStruct);
         if (!guardedArchive || !bRead || bIsZeroBlock) {
             return false;
         }
@@ -1049,6 +1061,12 @@ bool XTAR::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP
     return true;
 }
 
+static bool tarFailWrite(XBinary::PACK_STATE *pState, qint64 nStartPosition)
+{
+    tarRollbackWrite(pState->pDevice, nStartPosition);
+    return false;
+}
+
 bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdStruct)
 {
     if (!pState || !pState->pDevice || !pState->pDevice->isWritable() ||
@@ -1058,10 +1076,6 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
 
     const qint64 nStartPosition = pState->pDevice->pos();
     if (nStartPosition < 0) return false;
-    const auto failWrite = [pState, nStartPosition]() -> bool {
-        tarRollbackWrite(pState->pDevice, nStartPosition);
-        return false;
-    };
 
     QFileInfo fileInfo(sFileName);
 
@@ -1121,7 +1135,7 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
 
     // Write header (500 bytes)
     if (!tarWriteAll(pState->pDevice, reinterpret_cast<const char *>(&header), sizeof(posix_header), pPdStruct)) {
-        return failWrite();
+        return tarFailWrite(pState, nStartPosition);
     }
 
     // Pad header to 512 bytes
@@ -1129,7 +1143,7 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     if (nHeaderPadding > 0) {
         QByteArray baHeaderPadding(nHeaderPadding, 0);
         if (!tarWriteAll(pState->pDevice, baHeaderPadding.constData(), nHeaderPadding, pPdStruct)) {
-            return failWrite();
+            return tarFailWrite(pState, nStartPosition);
         }
     }
 
@@ -1137,7 +1151,7 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     QFile file(sFileName);
 
     if (!file.open(QIODevice::ReadOnly)) {
-        return failWrite();
+        return tarFailWrite(pState, nStartPosition);
     }
 
     qint64 nBytesWritten = 0;
@@ -1147,12 +1161,12 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
 
         if (baBuffer.isEmpty()) {
             file.close();
-            return failWrite();
+            return tarFailWrite(pState, nStartPosition);
         }
 
         if (!tarWriteAll(pState->pDevice, baBuffer.constData(), baBuffer.size(), pPdStruct)) {
             file.close();
-            return failWrite();
+            return tarFailWrite(pState, nStartPosition);
         }
 
         nBytesWritten += baBuffer.size();
@@ -1161,7 +1175,7 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     file.close();
 
     if ((nBytesWritten != nFileSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return failWrite();
+        return tarFailWrite(pState, nStartPosition);
     }
 
     // Pad file data to 512-byte boundary
@@ -1171,7 +1185,7 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
         QByteArray baPadding(nPadding, 0);
 
         if (!tarWriteAll(pState->pDevice, baPadding.constData(), nPadding, pPdStruct)) {
-            return failWrite();
+            return tarFailWrite(pState, nStartPosition);
         }
     }
 
@@ -1180,6 +1194,16 @@ bool XTAR::addFile(PACK_STATE *pState, const QString &sFileName, PDSTRUCT *pPdSt
     pState->nNumberOfRecords++;
 
     return true;
+}
+
+static void tarRestoreBasePath(XBinary::PACK_STATE *pState, bool bRestoreBasePath, bool bHadBasePath, const QVariant &originalBasePath)
+{
+    if (!bRestoreBasePath) return;
+    if (bHadBasePath) {
+        pState->mapProperties.insert(XBinary::PACK_PROP_BASEPATH, originalBasePath);
+    } else {
+        pState->mapProperties.remove(XBinary::PACK_PROP_BASEPATH);
+    }
 }
 
 bool XTAR::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct)
@@ -1214,17 +1238,8 @@ bool XTAR::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
     QList<QString> listFiles;
     XBinary::findFiles(sDirectoryPath, &listFiles, true, 0, pPdStruct);
 
-    const auto restoreBasePath = [pState, bRestoreBasePath, bHadBasePath, originalBasePath]() {
-        if (!bRestoreBasePath) return;
-        if (bHadBasePath) {
-            pState->mapProperties.insert(PACK_PROP_BASEPATH, originalBasePath);
-        } else {
-            pState->mapProperties.remove(PACK_PROP_BASEPATH);
-        }
-    };
-
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-        restoreBasePath();
+        tarRestoreBasePath(pState, bRestoreBasePath, bHadBasePath, originalBasePath);
         return false;
     }
 
@@ -1242,13 +1257,13 @@ bool XTAR::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
 
         // Add file to archive
         if (!addFile(pState, sFilePath, pPdStruct)) {
-            restoreBasePath();
+            tarRestoreBasePath(pState, bRestoreBasePath, bHadBasePath, originalBasePath);
             return false;
         }
     }
 
     // Restore original base path if we changed it
-    restoreBasePath();
+    tarRestoreBasePath(pState, bRestoreBasePath, bHadBasePath, originalBasePath);
 
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
@@ -1294,22 +1309,30 @@ XBinary *XTAR::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XTAR::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XTAR> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XTAR::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XTAR> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XTAR::setInternalInfo(void *pInternalInfo)

@@ -21,6 +21,7 @@
 #include "xrardecoder.h"
 
 #include <limits>
+#include <new>
 
 #define STARTL1 2
 static uint DecL1[] = {0x8000, 0xa000, 0xc000, 0xd000, 0xe000, 0xea00, 0xee00, 0xf000, 0xf200, 0xf200, 0xffff};
@@ -60,6 +61,11 @@ static_assert(sizeof(RARPPM_CONTEXT) <= std::numeric_limits<uint>::max(), "RAR P
 static_assert(sizeof(RARPPM_MEM_BLK) <= std::numeric_limits<uint>::max(), "RAR PPM memory block size does not fit in uint");
 static const uint UNIT_SIZE = static_cast<uint>(qMax(sizeof(RARPPM_CONTEXT), sizeof(RARPPM_MEM_BLK)));
 static const uint FIXED_UNIT_SIZE = 12;
+
+static bool rar_size_t_is_32_bits()
+{
+    return sizeof(size_t) == 4;
+}
 
 static uint crc_tables[16][256];  // Tables for Slicing-by-16.
 
@@ -166,7 +172,7 @@ void rar_Unpack::Unpack5(bool Solid, XBinary::PDSTRUCT *pPdStruct)
                     // fit into dictionary after truncating upper 32-bits. Replace such
                     // invalid distances with -1, so CopyString sets 0 data for them.
                     // DBits>=30 also as DistSlot>=62 indicate distances >=0x80000001.
-                    if (sizeof(Distance) == 4 && DBits >= 30) Distance = (size_t)-1;
+                    if (rar_size_t_is_32_bits() && DBits >= 30) Distance = (size_t)-1;
                 } else {
                     Distance += Inp.getbits() >> (16 - DBits);
                     Inp.addbits(DBits);
@@ -495,7 +501,7 @@ bool rar_Unpack::WriteOutput(const quint8 *pData, size_t nSize)
     return true;
 }
 
-uint rar_Unpack::SlotToLength(BitInput &Inp, uint Slot)
+uint rar_Unpack::SlotToLength(BitInput &input, uint Slot)
 {
     uint LBits, Length = 2;
     if (Slot < 8) {
@@ -507,8 +513,8 @@ uint rar_Unpack::SlotToLength(BitInput &Inp, uint Slot)
     }
 
     if (LBits > 0) {
-        Length += Inp.getbits() >> (16 - LBits);
-        Inp.addbits(LBits);
+        Length += input.getbits() >> (16 - LBits);
+        input.addbits(LBits);
     }
     return Length;
 }
@@ -518,16 +524,16 @@ void rar_Unpack::UnpInitData50(bool Solid)
     if (!Solid) TablesRead5 = false;
 }
 
-bool rar_Unpack::ReadBlockHeader(BitInput &Inp, UnpackBlockHeader &Header)
+bool rar_Unpack::ReadBlockHeader(BitInput &input, UnpackBlockHeader &Header)
 {
     Header.HeaderSize = 0;
 
-    if (!Inp.ExternalBuffer && Inp.InAddr > ReadTop - 7)
+    if (!input.ExternalBuffer && input.InAddr > ReadTop - 7)
         if (!UnpReadBuf()) return false;
-    Inp.faddbits((8 - Inp.InBit) & 7);
+    input.faddbits((8 - input.InBit) & 7);
 
-    quint8 BlockFlags = quint8(Inp.fgetbits() >> 8);
-    Inp.faddbits(8);
+    quint8 BlockFlags = quint8(input.fgetbits() >> 8);
+    input.faddbits(8);
     uint ByteCount = ((BlockFlags >> 3) & 3) + 1;  // Block size byte count.
 
     if (ByteCount == 4) return false;
@@ -536,13 +542,13 @@ bool rar_Unpack::ReadBlockHeader(BitInput &Inp, UnpackBlockHeader &Header)
 
     Header.BlockBitSize = (BlockFlags & 7) + 1;
 
-    quint8 SavedCheckSum = Inp.fgetbits() >> 8;
-    Inp.faddbits(8);
+    quint8 SavedCheckSum = input.fgetbits() >> 8;
+    input.faddbits(8);
 
     int BlockSize = 0;
     for (uint I = 0; I < ByteCount; I++) {
-        BlockSize += (Inp.fgetbits() >> 8) << (I * 8);
-        Inp.addbits(8);
+        BlockSize += (input.fgetbits() >> 8) << (I * 8);
+        input.addbits(8);
     }
 
     Header.BlockSize = BlockSize;
@@ -555,7 +561,7 @@ bool rar_Unpack::ReadBlockHeader(BitInput &Inp, UnpackBlockHeader &Header)
     // seem to issue such zero length blocks.
     if (CheckSum != SavedCheckSum) return false;
 
-    Header.BlockStart = Inp.InAddr;
+    Header.BlockStart = input.InAddr;
 
     // We called Inp.faddbits(8) above, thus Header.BlockStart can't be 0 here.
     // So there is no overflow even if Header.BlockSize is 0.
@@ -567,20 +573,20 @@ bool rar_Unpack::ReadBlockHeader(BitInput &Inp, UnpackBlockHeader &Header)
     return true;
 }
 
-bool rar_Unpack::ReadTables(BitInput &Inp, UnpackBlockHeader &Header, UnpackBlockTables &Tables)
+bool rar_Unpack::ReadTables(BitInput &input, UnpackBlockHeader &Header, UnpackBlockTables &Tables)
 {
     if (!Header.TablePresent) return true;
 
-    if (!Inp.ExternalBuffer && Inp.InAddr > ReadTop - 25)
+    if (!input.ExternalBuffer && input.InAddr > ReadTop - 25)
         if (!UnpReadBuf()) return false;
 
     quint8 BitLength[BC];
     for (uint I = 0; I < BC; I++) {
-        uint Length = (quint8)(Inp.fgetbits() >> 12);
-        Inp.faddbits(4);
+        uint Length = (quint8)(input.fgetbits() >> 12);
+        input.faddbits(4);
         if (Length == 15) {
-            uint ZeroCount = (quint8)(Inp.fgetbits() >> 12);
-            Inp.faddbits(4);
+            uint ZeroCount = (quint8)(input.fgetbits() >> 12);
+            input.faddbits(4);
             if (ZeroCount == 0) BitLength[I] = 15;
             else {
                 ZeroCount += 2;
@@ -595,20 +601,20 @@ bool rar_Unpack::ReadTables(BitInput &Inp, UnpackBlockHeader &Header, UnpackBloc
     quint8 Table[HUFF_TABLE_SIZEX];
     const uint TableSize = ExtraDist ? HUFF_TABLE_SIZEX : HUFF_TABLE_SIZEB;
     for (uint I = 0; I < TableSize;) {
-        if (!Inp.ExternalBuffer && Inp.InAddr > ReadTop - 5)
+        if (!input.ExternalBuffer && input.InAddr > ReadTop - 5)
             if (!UnpReadBuf()) return false;
-        uint Number = DecodeNumber(Inp, &Tables.BD);
+        uint Number = DecodeNumber(input, &Tables.BD);
         if (Number < 16) {
             Table[I] = Number;
             I++;
         } else if (Number < 18) {
             uint N;
             if (Number == 16) {
-                N = (Inp.fgetbits() >> 13) + 3;
-                Inp.faddbits(3);
+                N = (input.fgetbits() >> 13) + 3;
+                input.faddbits(3);
             } else {
-                N = (Inp.fgetbits() >> 9) + 11;
-                Inp.faddbits(7);
+                N = (input.fgetbits() >> 9) + 11;
+                input.faddbits(7);
             }
             if (I == 0) {
                 // We cannot have "repeat previous" code at the first position.
@@ -625,17 +631,17 @@ bool rar_Unpack::ReadTables(BitInput &Inp, UnpackBlockHeader &Header, UnpackBloc
         } else {
             uint N;
             if (Number == 18) {
-                N = (Inp.fgetbits() >> 13) + 3;
-                Inp.faddbits(3);
+                N = (input.fgetbits() >> 13) + 3;
+                input.faddbits(3);
             } else {
-                N = (Inp.fgetbits() >> 9) + 11;
-                Inp.faddbits(7);
+                N = (input.fgetbits() >> 9) + 11;
+                input.faddbits(7);
             }
             while (N-- > 0 && I < TableSize) Table[I++] = 0;
         }
     }
     TablesRead5 = true;
-    if (!Inp.ExternalBuffer && Inp.InAddr > ReadTop) return false;
+    if (!input.ExternalBuffer && input.InAddr > ReadTop) return false;
     MakeDecodeTables(&Table[0], &Tables.LD, NC);
     uint DCodes = ExtraDist ? DCX : DCB;
     MakeDecodeTables(&Table[NC], &Tables.DD, DCodes);
@@ -773,14 +779,14 @@ void rar_Unpack::MakeDecodeTables(quint8 *LengthTable, DecodeTable *Dec, uint Si
     }
 }
 
-uint rar_Unpack::DecodeNumber(BitInput &Inp, DecodeTable *Dec)
+uint rar_Unpack::DecodeNumber(BitInput &input, DecodeTable *Dec)
 {
     // Left aligned 15 bit length raw bit field.
-    uint BitField = Inp.getbits() & 0xfffe;
+    uint BitField = input.getbits() & 0xfffe;
 
     if (BitField < Dec->DecodeLen[Dec->QuickBits]) {
         uint Code = BitField >> (16 - Dec->QuickBits);
-        Inp.addbits(Dec->QuickLen[Code]);
+        input.addbits(Dec->QuickLen[Code]);
         return Dec->QuickNum[Code];
     }
 
@@ -792,7 +798,7 @@ uint rar_Unpack::DecodeNumber(BitInput &Inp, DecodeTable *Dec)
             break;
         }
 
-    Inp.addbits(Bits);
+    input.addbits(Bits);
 
     // Calculate the distance from the start code for current bit length.
     uint Dist = BitField - Dec->DecodeLen[Bits - 1];
@@ -946,34 +952,34 @@ void rar_Unpack::CopyString(uint Length, size_t Distance)
         }
 }
 
-uint rar_Unpack::ReadFilterData(BitInput &Inp)
+uint rar_Unpack::ReadFilterData(BitInput &input)
 {
-    quint8 ByteCount = (Inp.fgetbits() >> 14) + 1;
-    Inp.addbits(2);
+    quint8 ByteCount = (input.fgetbits() >> 14) + 1;
+    input.addbits(2);
 
     uint Data = 0;
     for (uint I = 0; I < ByteCount; I++) {
-        Data += (Inp.fgetbits() >> 8) << (I * 8);
-        Inp.addbits(8);
+        Data += (input.fgetbits() >> 8) << (I * 8);
+        input.addbits(8);
     }
     return Data;
 }
 
-bool rar_Unpack::ReadFilter(BitInput &Inp, UnpackFilter &Filter)
+bool rar_Unpack::ReadFilter(BitInput &input, UnpackFilter &Filter)
 {
-    if (!Inp.ExternalBuffer && Inp.InAddr > ReadTop - 16)
+    if (!input.ExternalBuffer && input.InAddr > ReadTop - 16)
         if (!UnpReadBuf()) return false;
 
-    Filter.BlockStart = ReadFilterData(Inp);
-    Filter.BlockLength = ReadFilterData(Inp);
+    Filter.BlockStart = ReadFilterData(input);
+    Filter.BlockLength = ReadFilterData(input);
     if (Filter.BlockLength > MAX_FILTER_BLOCK_SIZE) Filter.BlockLength = 0;
 
-    Filter.Type = Inp.fgetbits() >> 13;
-    Inp.faddbits(3);
+    Filter.Type = input.fgetbits() >> 13;
+    input.faddbits(3);
 
     if (Filter.Type == FILTER_DELTA) {
-        Filter.Channels = (Inp.fgetbits() >> 11) + 1;
-        Inp.faddbits(5);
+        Filter.Channels = (input.fgetbits() >> 11) + 1;
+        input.faddbits(5);
     }
 
     return true;
@@ -2388,18 +2394,15 @@ qint32 rar_Unpack::Init(quint64 WinSize, bool Solid)
     Alloc.delete_l<quint8>(Window);  // delete Window;
     Window = nullptr;
 
-    try {
-        if (!Fragmented) Window = Alloc.new_l<quint8>((size_t)WinSize, false);  // Window=new byte[(size_t)WinSize];
-    } catch (std::bad_alloc)                                                    // Use the fragmented window in this case.
-    {
-    }
+    // Use the fragmented window if the allocation fails and Window stays nullptr.
+    if (!Fragmented) Window = new (std::nothrow) quint8[(size_t)WinSize];  // Window=new byte[(size_t)WinSize];
 
     if (Window == nullptr) {
         if (WinSize < 0x1000000) return -1;  // Exclude RAR4 and small dictionaries.
 #if QT_POINTER_SIZE > 4
         return -1;  // Fragmented windows are only a 32-bit allocation fallback.
 #else
-        if (WinSize > FragWindow.GetWinSize()) FragWindow.Init((size_t)WinSize);
+        if (WinSize > FragWindow.GetWinSize() && !FragWindow.Init((size_t)WinSize)) return -1;
         Fragmented = true;
 #endif
     }
@@ -3035,7 +3038,7 @@ FragmentedWindow::~FragmentedWindow()
     Reset();
 }
 
-void FragmentedWindow::Init(size_t WinSize)
+bool FragmentedWindow::Init(size_t WinSize)
 {
     Reset();
 
@@ -3056,7 +3059,7 @@ void FragmentedWindow::Init(size_t WinSize)
             if (NewMem != NULL) break;
             Size -= Size / 32;
         }
-        if (NewMem == NULL) throw std::bad_alloc();
+        if (NewMem == NULL) return false;
 
         // Clean the window to generate the same output when unpacking corrupt
         // RAR files, which may access to unused areas of sliding dictionary.
@@ -3068,8 +3071,9 @@ void FragmentedWindow::Init(size_t WinSize)
         BlockNum++;
     }
     if (TotalSize < WinSize)  // Not found enough free blocks.
-        throw std::bad_alloc();
+        return false;
     LastAllocated = WinSize;
+    return true;
 }
 
 quint8 &FragmentedWindow::operator[](size_t Item)
@@ -3114,19 +3118,19 @@ size_t FragmentedWindow::GetBlockSize(size_t StartPos, size_t RequiredSize)
     return 0;  // Must never be here.
 }
 
-void ModelPPM::RestartModelRare()
+bool ModelPPM::RestartModelRare()
 {
     int i, k, m;
     memset(CharMask, 0, sizeof(CharMask));
     SubAlloc.InitSubAllocator();
     InitRL = -(MaxOrder < 12 ? MaxOrder : 12) - 1;
     MinContext = MaxContext = (RARPPM_CONTEXT *)SubAlloc.AllocContext();
-    if (MinContext == nullptr) throw std::bad_alloc();
+    if (MinContext == nullptr) return false;
     MinContext->Suffix = nullptr;
     OrderFall = MaxOrder;
     MinContext->U.SummFreq = (MinContext->NumStats = 256) + 1;
     FoundState = MinContext->U.Stats = (RARPPM_STATE *)SubAlloc.AllocUnits(256 / 2);
-    if (FoundState == nullptr) throw std::bad_alloc();
+    if (FoundState == nullptr) return false;
     for (RunLength = InitRL, PrevSuccess = i = 0; i < 256; i++) {
         MinContext->U.Stats[i].Symbol = i;
         MinContext->U.Stats[i].Freq = 1;
@@ -3140,9 +3144,10 @@ void ModelPPM::RestartModelRare()
             for (m = 0; m < 64; m += 8) BinSumm[i][k + m] = BIN_SCALE - InitBinEsc[k] / (i + 2);
     for (i = 0; i < 25; i++)
         for (k = 0; k < 16; k++) SEE2Cont[i][k].init(5 * i + 10);
+    return true;
 }
 
-void ModelPPM::StartModelRare(int MaxOrder)
+bool ModelPPM::StartModelRare(int maxOrder)
 {
     int i, k, m, Step;
     EscCount = 1;
@@ -3163,8 +3168,8 @@ void ModelPPM::StartModelRare(int MaxOrder)
   else
 */
     {
-        ModelPPM::MaxOrder = MaxOrder;
-        RestartModelRare();
+        ModelPPM::MaxOrder = maxOrder;
+        if (!RestartModelRare()) return false;
         NS2BSIndx[0] = 2 * 0;
         NS2BSIndx[1] = 2 * 1;
         memset(NS2BSIndx + 2, 2 * 2, 9);
@@ -3181,6 +3186,7 @@ void ModelPPM::StartModelRare(int MaxOrder)
         memset(HB2Flag + 0x40, 0x08, 0x100 - 0x40);
         DummySEE2Cont.Shift = PERIOD_BITS;
     }
+    return true;
 }
 
 RARPPM_CONTEXT *ModelPPM::CreateSuccessors(bool Skip, RARPPM_STATE *p1)
@@ -3319,7 +3325,7 @@ void ModelPPM::UpdateModel()
     MaxContext = MinContext = fs.Successor;
     return;
 RESTART_MODEL:
-    RestartModelRare();
+    if (!RestartModelRare()) return;
     EscCount = 0;
 }
 
@@ -3347,9 +3353,7 @@ void ModelPPM::CleanUp()
 
     if (!SubAlloc.StartSubAllocator(1)) return;
 
-    try {
-        StartModelRare(2);
-    } catch (const std::bad_alloc &) {
+    if (!StartModelRare(2)) {
         SubAlloc.StopSubAllocator();
         MinContext = nullptr;
         MaxContext = nullptr;
@@ -3360,18 +3364,18 @@ void ModelPPM::CleanUp()
 
 bool ModelPPM::DecodeInit(rar_Unpack *UnpackRead, int &EscChar)
 {
-    int MaxOrder = UnpackRead->GetChar();
-    bool Reset = (MaxOrder & 0x20) != 0;
+    int maxOrder = UnpackRead->GetChar();
+    bool Reset = (maxOrder & 0x20) != 0;
 
     int MaxMB = 0;
     if (Reset) MaxMB = UnpackRead->GetChar();
     else if (SubAlloc.GetAllocatedMemory() == 0) return false;
-    if (MaxOrder & 0x40) EscChar = UnpackRead->GetChar();
+    if (maxOrder & 0x40) EscChar = UnpackRead->GetChar();
     Coder.InitDecoder(UnpackRead);
     if (Reset) {
-        MaxOrder = (MaxOrder & 0x1f) + 1;
-        if (MaxOrder > 16) MaxOrder = 16 + (MaxOrder - 16) * 3;
-        if (MaxOrder == 1) {
+        maxOrder = (maxOrder & 0x1f) + 1;
+        if (maxOrder > 16) maxOrder = 16 + (maxOrder - 16) * 3;
+        if (maxOrder == 1) {
             SubAlloc.StopSubAllocator();
             return false;
         }
@@ -3383,7 +3387,14 @@ bool ModelPPM::DecodeInit(rar_Unpack *UnpackRead, int &EscChar)
             return false;
         }
         try {
-            StartModelRare(MaxOrder);
+            if (!StartModelRare(maxOrder)) {
+                SubAlloc.StopSubAllocator();
+                MinContext = nullptr;
+                MaxContext = nullptr;
+                MedContext = nullptr;
+                FoundState = nullptr;
+                return false;
+            }
         } catch (const std::bad_alloc &) {
             SubAlloc.StopSubAllocator();
             MinContext = nullptr;
@@ -3426,12 +3437,16 @@ int ModelPPM::DecodeChar()
 
 void *LargePageAlloc::new_large(size_t Size)
 {
+    Q_UNUSED(Size)
+
     void *Allocated = nullptr;
     return Allocated;
 }
 
 bool LargePageAlloc::delete_large(void *Addr)
 {
+    Q_UNUSED(Addr)
+
     return false;
 }
 
@@ -3445,9 +3460,9 @@ void LargePageAlloc::AllowLargePages(bool Allow)
     Q_UNUSED(Allow)
 }
 
-void RangeCoder::InitDecoder(rar_Unpack *UnpackRead)
+void RangeCoder::InitDecoder(rar_Unpack *pUnpackRead)
 {
-    RangeCoder::UnpackRead = UnpackRead;
+    RangeCoder::UnpackRead = pUnpackRead;
 
     low = code = 0;
     range = 0xffffffff;

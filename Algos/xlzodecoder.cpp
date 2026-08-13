@@ -174,6 +174,11 @@ bool lzoIsExactInputEnd(XBinary::DATAPROCESS_STATE *pState)
 // Based on the public LZO1X decompression algorithm
 #define LZO_M2_MAX_OFFSET 0x0800
 
+static quint64 lzoBytesAvailable(const quint8 *pCurrent, const quint8 *pEnd)
+{
+    return (quint64)(pEnd - pCurrent);
+}
+
 bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint8 *pOutput, qint64 nOutputSize, qint64 *pnBytesWritten)
 {
     if (pnBytesWritten) *pnBytesWritten = 0;
@@ -190,15 +195,12 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
 
     quint64 t = 0;
 
-    const auto hasInput = [&]() -> quint64 { return (quint64)(ip_end - ip); };
-    const auto hasOutput = [&]() -> quint64 { return (quint64)(op_end - op); };
-
     if (*ip > 17) {
         t = *ip++ - 17;
         if (t < 4) {
             goto match_next;
         }
-        if ((t > hasOutput()) || (t > hasInput())) return false;
+        if ((t > lzoBytesAvailable(op, op_end)) || (t > lzoBytesAvailable(ip, ip_end))) return false;
         memcpy(op, ip, (size_t)t);
         op += (qint64)t;
         ip += (qint64)t;
@@ -228,7 +230,7 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
         {
             if (t > ((std::numeric_limits<quint64>::max)() - 3U)) return false;
             const quint64 nLitLen = t + 3;
-            if ((nLitLen > hasOutput()) || (nLitLen > hasInput())) return false;
+            if ((nLitLen > lzoBytesAvailable(op, op_end)) || (nLitLen > lzoBytesAvailable(ip, ip_end))) return false;
             memcpy(op, ip, (size_t)nLitLen);
             op += (qint64)nLitLen;
             ip += (qint64)nLitLen;
@@ -246,7 +248,7 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
         {
             if (ip >= ip_end) return false;
             quint32 nDist = 1 + LZO_M2_MAX_OFFSET + (quint32)(t >> 2) + ((quint32)*ip++ << 2);
-            if ((qint64)(op - pOutput) < (qint64)nDist || hasOutput() < 3) return false;
+            if ((qint64)(op - pOutput) < (qint64)nDist || lzoBytesAvailable(op, op_end) < 3) return false;
             const quint8 *pRef = op - nDist;
             *op++ = *pRef++;
             *op++ = *pRef++;
@@ -261,7 +263,7 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
                 if (ip >= ip_end) return false;
                 quint32 nDist = 1 + (quint32)((t >> 2) & 7) + ((quint32)*ip++ << 3);
                 quint64 nLen = (t >> 5) - 1 + 2;  // -1 because we copy 2 initial + t loop
-                if ((qint64)(op - pOutput) < (qint64)nDist || nLen > hasOutput()) return false;
+                if ((qint64)(op - pOutput) < (qint64)nDist || nLen > lzoBytesAvailable(op, op_end)) return false;
                 const quint8 *pRef = op - nDist;
                 *op++ = *pRef++;
                 *op++ = *pRef++;
@@ -283,10 +285,10 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
                 }
                 if (nLen > ((std::numeric_limits<quint64>::max)() - 2U)) return false;
                 nLen += 2;
-                if (hasInput() < 2) return false;
+                if (lzoBytesAvailable(ip, ip_end) < 2) return false;
                 quint32 nDist = 1 + ((ip[0] >> 2) + ((quint32)ip[1] << 6));
                 ip += 2;
-                if ((qint64)(op - pOutput) < (qint64)nDist || nLen > hasOutput()) return false;
+                if ((qint64)(op - pOutput) < (qint64)nDist || nLen > lzoBytesAvailable(op, op_end)) return false;
                 const quint8 *pRef = op - nDist;
                 for (quint64 i = 0; i < nLen; i++) {
                     *op++ = *pRef++;
@@ -307,7 +309,7 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
                 }
                 if (nLen > ((std::numeric_limits<quint64>::max)() - 2U)) return false;
                 nLen += 2;
-                if (hasInput() < 2) return false;
+                if (lzoBytesAvailable(ip, ip_end) < 2) return false;
                 quint32 nDistLo = (ip[0] >> 2) + ((quint32)ip[1] << 6);
                 ip += 2;
                 quint32 nDist = nDistHi + nDistLo;
@@ -315,7 +317,7 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
                     goto eof_found;
                 }
                 nDist += 0x4000;
-                if ((qint64)(op - pOutput) < (qint64)nDist || nLen > hasOutput()) return false;
+                if ((qint64)(op - pOutput) < (qint64)nDist || nLen > lzoBytesAvailable(op, op_end)) return false;
                 const quint8 *pRef = op - nDist;
                 for (quint64 i = 0; i < nLen; i++) {
                     *op++ = *pRef++;
@@ -334,7 +336,7 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
             }
 
         match_next:
-            if ((t < 1) || (t > 3) || (t > hasOutput()) || ((t + 1) > hasInput())) return false;
+            if ((t < 1) || (t > 3) || (t > lzoBytesAvailable(op, op_end)) || ((t + 1) > lzoBytesAvailable(ip, ip_end))) return false;
             *op++ = *ip++;
             if (t > 1) {
                 *op++ = *ip++;

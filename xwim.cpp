@@ -129,8 +129,17 @@ static bool wimDevicesAlias(QIODevice *pSource, QIODevice *pDestination)
     QFile *pDestinationFile = dynamic_cast<QFile *>(pDestination);
     if (!pSourceFile || !pDestinationFile) return false;
 
-    const QFileInfo sourceInfo(pSourceFile->fileName());
-    const QFileInfo destinationInfo(pDestinationFile->fileName());
+    QPointer<QFile> guardedSourceFile(pSourceFile);
+    QPointer<QFile> guardedDestinationFile(pDestinationFile);
+    if (!guardedSourceFile || !guardedDestinationFile) return true;
+
+    const QString sSourceFileName = guardedSourceFile->fileName();
+    if (!guardedSourceFile || !guardedDestinationFile) return true;
+    const QString sDestinationFileName = guardedDestinationFile->fileName();
+    if (!guardedSourceFile || !guardedDestinationFile) return true;
+
+    const QFileInfo sourceInfo(sSourceFileName);
+    const QFileInfo destinationInfo(sDestinationFileName);
     QString sSourcePath = sourceInfo.canonicalFilePath();
     QString sDestinationPath = destinationInfo.canonicalFilePath();
     if (sSourcePath.isEmpty()) sSourcePath = QDir::cleanPath(sourceInfo.absoluteFilePath());
@@ -146,10 +155,14 @@ static bool wimDevicesAlias(QIODevice *pSource, QIODevice *pDestination)
         return true;
     }
 
-    if ((pSourceFile->handle() < 0) || (pDestinationFile->handle() < 0)) return false;
+    const int nSourceDescriptor = guardedSourceFile->handle();
+    if (!guardedSourceFile || !guardedDestinationFile) return true;
+    const int nDestinationDescriptor = guardedDestinationFile->handle();
+    if (!guardedSourceFile || !guardedDestinationFile) return true;
+    if ((nSourceDescriptor < 0) || (nDestinationDescriptor < 0)) return false;
 #ifdef Q_OS_WIN
-    const intptr_t nSourceHandle = _get_osfhandle(pSourceFile->handle());
-    const intptr_t nDestinationHandle = _get_osfhandle(pDestinationFile->handle());
+    const intptr_t nSourceHandle = _get_osfhandle(nSourceDescriptor);
+    const intptr_t nDestinationHandle = _get_osfhandle(nDestinationDescriptor);
     if ((nSourceHandle == -1) || (nDestinationHandle == -1)) return false;
     BY_HANDLE_FILE_INFORMATION sourceFileInformation = {};
     BY_HANDLE_FILE_INFORMATION destinationFileInformation = {};
@@ -161,8 +174,8 @@ static bool wimDevicesAlias(QIODevice *pSource, QIODevice *pDestination)
 #elif defined(Q_OS_UNIX)
     struct stat sourceStatus = {};
     struct stat destinationStatus = {};
-    return (fstat(pSourceFile->handle(), &sourceStatus) == 0) &&
-           (fstat(pDestinationFile->handle(), &destinationStatus) == 0) &&
+    return (fstat(nSourceDescriptor, &sourceStatus) == 0) &&
+           (fstat(nDestinationDescriptor, &destinationStatus) == 0) &&
            (sourceStatus.st_dev == destinationStatus.st_dev) &&
            (sourceStatus.st_ino == destinationStatus.st_ino);
 #else
@@ -617,6 +630,31 @@ QList<XBinary::XFRECORD> XWIM::getXFRecords(FT fileType, quint32 nStructID, cons
 //     return listResult;
 // }
 
+static bool wimCanAppend(XBinary::PDSTRUCT *pPdStruct, qint32 nLimit, const QList<XBinary::FPART> *pListResult)
+{
+    return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (pListResult->count() < nLimit));
+}
+
+bool XWIM::_processResourceFilePart(QList<FPART> *pListResult, quint32 nFileParts, qint32 nLimit, qint64 nFileSize, qint64 *pnMaxKnownEnd,
+                                    QMap<quint64, QSet<quint64> > *pMapKnownResourceExtents, const RESOURCE_INFO &resourceInfo, const QString &sName,
+                                    PDSTRUCT *pPdStruct)
+{
+    if (!isWimResourceExtentValid(resourceInfo, nFileSize)) return false;
+    if (resourceInfo.nPackSize == 0) return true;
+
+    const quint64 nEnd = resourceInfo.nOffset + resourceInfo.nPackSize;
+    *pnMaxKnownEnd = qMax<qint64>(*pnMaxKnownEnd, (qint64)nEnd);
+
+    QSet<quint64> &stSizes = (*pMapKnownResourceExtents)[resourceInfo.nOffset];
+    if (stSizes.contains(resourceInfo.nPackSize)) return true;
+    stSizes.insert(resourceInfo.nPackSize);
+
+    if (wimCanAppend(pPdStruct, nLimit, pListResult)) {
+        _appendResourcePart(pListResult, nFileParts, resourceInfo, sName, nLimit);
+    }
+    return true;
+}
+
 QList<XBinary::FPART> XWIM::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -624,10 +662,6 @@ QList<XBinary::FPART> XWIM::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return listResult;
     }
-
-    auto canAppend = [&]() -> bool {
-        return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.count() < nLimit));
-    };
 
     qint64 nFileSize = getSize();
 
@@ -645,64 +679,51 @@ QList<XBinary::FPART> XWIM::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     qint64 nMaxKnownEnd = nHeaderSize;
     QMap<quint64, QSet<quint64> > mapKnownResourceExtents;
 
-    const auto processResource = [&](const RESOURCE_INFO &resourceInfo, const QString &sName) -> bool {
-        if (!isWimResourceExtentValid(resourceInfo, nFileSize)) return false;
-        if (resourceInfo.nPackSize == 0) return true;
-
-        const quint64 nEnd = resourceInfo.nOffset + resourceInfo.nPackSize;
-        nMaxKnownEnd = qMax<qint64>(nMaxKnownEnd, (qint64)nEnd);
-
-        QSet<quint64> &stSizes = mapKnownResourceExtents[resourceInfo.nOffset];
-        if (stSizes.contains(resourceInfo.nPackSize)) return true;
-        stSizes.insert(resourceInfo.nPackSize);
-
-        if (canAppend()) {
-            _appendResourcePart(&listResult, nFileParts, resourceInfo, sName, nLimit);
-        }
-        return true;
-    };
-
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && wimCanAppend(pPdStruct, nLimit, &listResult)) {
         FPART part = {};
         part.filePart = FILEPART_HEADER;
         part.nFileOffset = 0;
         part.nFileSize = nHeaderSize;
-        part.nVirtualAddress = -1;
+        part.nVirtualAddress = XADDR_MAX;
         part.sName = tr("Header");
         listResult.append(part);
     }
 
-    processResource(header.offsetTableResource, tr("Offset Table"));
-    processResource(header.xmlResource, tr("XML Data"));
-    processResource(header.bootMetadataResource, tr("Boot Metadata"));
-    processResource(header.integrityResource, tr("Integrity"));
+    _processResourceFilePart(&listResult, nFileParts, nLimit, nFileSize, &nMaxKnownEnd, &mapKnownResourceExtents, header.offsetTableResource, tr("Offset Table"),
+                             pPdStruct);
+    _processResourceFilePart(&listResult, nFileParts, nLimit, nFileSize, &nMaxKnownEnd, &mapKnownResourceExtents, header.xmlResource, tr("XML Data"), pPdStruct);
+    _processResourceFilePart(&listResult, nFileParts, nLimit, nFileSize, &nMaxKnownEnd, &mapKnownResourceExtents, header.bootMetadataResource,
+                             tr("Boot Metadata"), pPdStruct);
+    _processResourceFilePart(&listResult, nFileParts, nLimit, nFileSize, &nMaxKnownEnd, &mapKnownResourceExtents, header.integrityResource, tr("Integrity"),
+                             pPdStruct);
 
     // Lookup-table entries describe the remaining physical WIM resources.  Use
     // the same validated parser as extraction and expose each local extent at
     // most once; the boot-metadata header commonly aliases one of these entries.
-    if (canAppend() && (nFileParts & (FILEPART_REGION | FILEPART_OVERLAY))) {
+    if (wimCanAppend(pPdStruct, nLimit, &listResult) && (nFileParts & (FILEPART_REGION | FILEPART_OVERLAY))) {
         bool bStreamListOk = false;
         const QList<STREAM_INFO> listStreams = _readStreamInfoList(header, &bStreamListOk, pPdStruct);
 
         if (bStreamListOk) {
-            for (qint32 i = 0; (i < listStreams.count()) && canAppend(); i++) {
+            for (qint32 i = 0; (i < listStreams.count()) && wimCanAppend(pPdStruct, nLimit, &listResult); i++) {
                 const STREAM_INFO &streamInfo = listStreams.at(i);
                 if (streamInfo.nPartNumber != header.nPartNumber) continue;
 
                 const QString sName = (streamInfo.resourceInfo.nFlags & RESOURCE_FLAG_METADATA)
                                           ? tr("Metadata Resource %1").arg(i + 1)
                                           : tr("Data Resource %1").arg(i + 1);
-                processResource(streamInfo.resourceInfo, sName);
+                _processResourceFilePart(&listResult, nFileParts, nLimit, nFileSize, &nMaxKnownEnd, &mapKnownResourceExtents, streamInfo.resourceInfo, sName,
+                                         pPdStruct);
             }
         }
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nMaxKnownEnd < nFileSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && wimCanAppend(pPdStruct, nLimit, &listResult) && (nMaxKnownEnd < nFileSize)) {
         FPART part = {};
         part.filePart = FILEPART_OVERLAY;
         part.nFileOffset = nMaxKnownEnd;
         part.nFileSize = nFileSize - nMaxKnownEnd;
-        part.nVirtualAddress = -1;
+        part.nVirtualAddress = XADDR_MAX;
         part.sName = tr("Overlay");
         listResult.append(part);
     }
@@ -732,6 +753,12 @@ QMap<XBinary::UNPACK_PROP, QVariant> XWIM::getDefaultUnpackProperties()
     return result;
 }
 
+static bool wimFailSource(QPointer<XWIM> *pGuardedArchive, XBinary::UNPACK_STATE *pState)
+{
+    if (*pGuardedArchive) (*pGuardedArchive)->releaseUnpackSource(pState);
+    return false;
+}
+
 bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XWIM> guardedArchive(this);
@@ -755,18 +782,14 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
     const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
     if (!guardedArchive || !bBound) return false;
-    const auto failSource = [&]() -> bool {
-        if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
-        return false;
-    };
     SOURCE_DEVICE_SNAPSHOT sourceSnapshot = {};
     if (!guardedArchive->getBoundUnpackSourceSnapshot(pState, &sourceSnapshot)) {
-        return failSource();
+        return wimFailSource(&guardedArchive, pState);
     }
     const bool bValid = guardedArchive->isValid(pPdStruct);
     if (!guardedArchive) return false;
     if (!bValid) {
-        return failSource();
+        return wimFailSource(&guardedArchive, pState);
     }
 
     WIM_HEADER header = guardedArchive->readWIMHeader();
@@ -774,7 +797,7 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // This class has no sibling-volume resolver.  Accepting a split WIM here
     // would make foreign-part resources look like extents in the current file.
     if ((header.nPartNumber != 1) || (header.nNumberOfParts != 1)) {
-        return failSource();
+        return wimFailSource(&guardedArchive, pState);
     }
     const qint64 nFileSize = guardedArchive->getSize();
     if (!guardedArchive) return false;
@@ -794,12 +817,12 @@ bool XWIM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         !isWimResourceDescriptorSupported(header.integrityResource,
                                           header.nVersion,
                                           header.integrityResource.nPackSize != 0)) {
-        return failSource();
+        return wimFailSource(&guardedArchive, pState);
     }
 
     WIM_UNPACK_CONTEXT *pContext = new (std::nothrow) WIM_UNPACK_CONTEXT;
     if (!pContext) {
-        return failSource();
+        return wimFailSource(&guardedArchive, pState);
     }
     pContext->sourceSnapshot = sourceSnapshot;
     pContext->bLegacy = (header.nHeaderSize == WIM_HEADER_SIZE_OLD);
@@ -1437,7 +1460,7 @@ void XWIM::_appendResourcePart(QList<FPART> *pListResult, quint32 nFileParts, co
             part.filePart = FILEPART_REGION;
             part.nFileOffset = (qint64)resourceInfo.nOffset;
             part.nFileSize = nPartSize;
-            part.nVirtualAddress = -1;
+            part.nVirtualAddress = XADDR_MAX;
             part.sName = sName;
             part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nPartSize);
             part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)resourceInfo.nUnpackSize);
@@ -1909,6 +1932,18 @@ bool XWIM::_reserveMetadataRange(WIM_METADATA_CONTEXT *pContext, qint64 nOffset,
     return true;
 }
 
+void XWIM::_countStreamReference(WIM_METADATA_CONTEXT *pContext, const WIM_RECORD &streamRecord)
+{
+    if (pContext->bLegacy) {
+        if (streamRecord.nStreamId != 0) {
+            (*pContext->pIdReferenceCounts)[streamRecord.nStreamId]++;
+        }
+    } else if ((streamRecord.baHash.size() == WIM_HASH_SIZE) &&
+               !XWIM::_isEmptyHash(streamRecord.baHash)) {
+        (*pContext->pHashReferenceCounts)[streamRecord.baHash]++;
+    }
+}
+
 bool XWIM::_parseMetadataDir(const QByteArray &baMetadata, qint64 nOffset, const QString &sParent,
                              WIM_METADATA_CONTEXT *pContext, qint32 nDepth)
 {
@@ -2068,20 +2103,10 @@ bool XWIM::_parseMetadataDir(const QByteArray &baMetadata, qint64 nOffset, const
 
         if (!record.bValid) return false;
 
-        const auto countReference = [pContext](const WIM_RECORD &streamRecord) {
-            if (pContext->bLegacy) {
-                if (streamRecord.nStreamId != 0) {
-                    (*pContext->pIdReferenceCounts)[streamRecord.nStreamId]++;
-                }
-            } else if ((streamRecord.baHash.size() == WIM_HASH_SIZE) &&
-                       !XWIM::_isEmptyHash(streamRecord.baHash)) {
-                (*pContext->pHashReferenceCounts)[streamRecord.baHash]++;
-            }
-        };
-        countReference(record);
+        _countStreamReference(pContext, record);
         for (qint32 i = 0; (i < listAltRecords.count()) &&
                               XBinary::isPdStructNotCanceled(pContext->pPdStruct); i++) {
-            countReference(listAltRecords.at(i));
+            _countStreamReference(pContext, listAltRecords.at(i));
         }
         if (!XBinary::isPdStructNotCanceled(pContext->pPdStruct)) return false;
 
@@ -2235,22 +2260,30 @@ XBinary *XWIM::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XWIM::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XWIM> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XWIM::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XWIM> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XWIM::setInternalInfo(void *pInternalInfo)

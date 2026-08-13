@@ -382,6 +382,11 @@ bool Algo_utils::xzReadVarInt(const QByteArray &baData, qint32 &nPos, quint64 &n
     return false;
 }
 
+static bool bcjTest86MSByte(quint8 b)
+{
+    return (((quint32)b + 1) & 0xFE) == 0;  // b == 0x00 || b == 0xFF
+}
+
 void Algo_utils::applyBCJX86Decode(QByteArray &baData, quint32 nIp)
 {
     // 7-Zip x86 BCJ inverse filter. Byte-exact port of the reference x86_Convert
@@ -397,8 +402,6 @@ void Algo_utils::applyBCJX86Decode(QByteArray &baData, quint32 nIp)
     if (nSize < 5) {
         return;
     }
-
-    auto Test86MSByte = [](quint8 b) -> bool { return (((quint32)b + 1) & 0xFE) == 0; };  // b == 0x00 || b == 0xFF
 
     unsigned char *data = reinterpret_cast<unsigned char *>(baData.data());
     const qint64 nLimit = nSize - 4;
@@ -425,7 +428,7 @@ void Algo_utils::applyBCJX86Decode(QByteArray &baData, quint32 nIp)
                 mask = 0;
             } else {
                 mask >>= (unsigned)d;
-                if (mask != 0 && (mask > 4 || mask == 3 || Test86MSByte(p[(mask >> 1) + 1]))) {
+                if (mask != 0 && (mask > 4 || mask == 3 || bcjTest86MSByte(p[(mask >> 1) + 1]))) {
                     mask = (mask >> 1) | 4;
                     pos++;
                     continue;
@@ -433,14 +436,14 @@ void Algo_utils::applyBCJX86Decode(QByteArray &baData, quint32 nIp)
             }
         }
 
-        if (Test86MSByte(p[4])) {
+        if (bcjTest86MSByte(p[4])) {
             quint32 v = (quint32)p[1] | ((quint32)p[2] << 8) | ((quint32)p[3] << 16) | ((quint32)p[4] << 24);
             const quint32 cur = ip + (quint32)pos;
             pos += 5;
             v -= cur;  // decode: absolute -> relative
             if (mask != 0) {
                 const unsigned sh = (mask & 6) << 2;
-                if (Test86MSByte((quint8)(v >> sh))) {
+                if (bcjTest86MSByte((quint8)(v >> sh))) {
                     v ^= (((quint32)0x100 << sh) - 1);
                     v -= cur;
                 }

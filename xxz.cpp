@@ -23,6 +23,7 @@
 #include <limits>
 #include <memory>
 #include <new>
+#include <QTemporaryFile>
 
 XBinary::XCONVERT _TABLE_XXZ_STRUCTID[] = {{XXZ::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                            {XXZ::STRUCTID_STREAM_HEADER, "STREAM_HEADER", QString("Stream Header")},
@@ -30,6 +31,25 @@ XBinary::XCONVERT _TABLE_XXZ_STRUCTID[] = {{XXZ::STRUCTID_UNKNOWN, "Unknown", QO
                                            {XXZ::STRUCTID_INDEX, "INDEX", QString("Index")},
                                            {XXZ::STRUCTID_STREAM_FOOTER, "STREAM_FOOTER", QString("Stream Footer")},
                                            {XXZ::STRUCTID_RECORD, "RECORD", QString("Record")}};
+
+static bool xzIsSupportedFlags(const char *pFlags)
+{
+    if (!pFlags || ((quint8)pFlags[0] != 0) || (((quint8)pFlags[1] & 0xF0) != 0)) return false;
+    const quint8 nCheckType = (quint8)pFlags[1] & 0x0F;
+    return (nCheckType == 0) || (nCheckType == 1) || (nCheckType == 4) || (nCheckType == 10);
+}
+
+static quint32 xzReadLE32(const char *pData)
+{
+    return (quint32)(quint8)pData[0] | ((quint32)(quint8)pData[1] << 8) |
+           ((quint32)(quint8)pData[2] << 16) | ((quint32)(quint8)pData[3] << 24);
+}
+
+static quint32 xzCrc32(const char *pData, qint32 nDataSize)
+{
+    return XBinary::_getCRC32(pData, nDataSize, 0xFFFFFFFF,
+                              XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
+}
 
 XXZ::XXZ(QIODevice *pDevice) : XArchive(pDevice)
 {
@@ -56,22 +76,8 @@ bool XXZ::isValid(PDSTRUCT *pPdStruct)
         return false;
     }
 
-    const auto isSupportedFlags = [](const char *pFlags) -> bool {
-        if (!pFlags || ((quint8)pFlags[0] != 0) || (((quint8)pFlags[1] & 0xF0) != 0)) return false;
-        const quint8 nCheckType = (quint8)pFlags[1] & 0x0F;
-        return (nCheckType == 0) || (nCheckType == 1) || (nCheckType == 4) || (nCheckType == 10);
-    };
-    const auto readLE32 = [](const char *pData) -> quint32 {
-        return (quint32)(quint8)pData[0] | ((quint32)(quint8)pData[1] << 8) |
-               ((quint32)(quint8)pData[2] << 16) | ((quint32)(quint8)pData[3] << 24);
-    };
-    const auto crc32 = [this](const char *pData, qint32 nDataSize) -> quint32 {
-        return XBinary::_getCRC32(pData, nDataSize, 0xFFFFFFFF,
-                                  XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
-    };
-
-    if (!isSupportedFlags(baHeader.constData() + 6) ||
-        (crc32(baHeader.constData() + 6, 2) != readLE32(baHeader.constData() + 8))) {
+    if (!xzIsSupportedFlags(baHeader.constData() + 6) ||
+        (xzCrc32(baHeader.constData() + 6, 2) != xzReadLE32(baHeader.constData() + 8))) {
         return false;
     }
 
@@ -93,12 +99,12 @@ bool XXZ::isValid(PDSTRUCT *pPdStruct)
     const qint64 nFooterOffset = nStreamEnd - 12;
     const QByteArray baFooter = read_array_process(nFooterOffset, 12, pPdStruct);
     if ((baFooter.size() != 12) || (baFooter.at(10) != 'Y') || (baFooter.at(11) != 'Z') ||
-        !isSupportedFlags(baFooter.constData() + 8) ||
-        (crc32(baFooter.constData() + 4, 6) != readLE32(baFooter.constData()))) {
+        !xzIsSupportedFlags(baFooter.constData() + 8) ||
+        (xzCrc32(baFooter.constData() + 4, 6) != xzReadLE32(baFooter.constData()))) {
         return false;
     }
 
-    const quint64 nIndexSize = ((quint64)readLE32(baFooter.constData() + 4) + 1) * 4;
+    const quint64 nIndexSize = ((quint64)xzReadLE32(baFooter.constData() + 4) + 1) * 4;
     if ((nIndexSize < 8) || (nIndexSize > (quint64)(nFooterOffset - 12))) return false;
 
     const QByteArray baIndexIndicator = read_array_process(nFooterOffset - (qint64)nIndexSize, 1, pPdStruct);
@@ -168,6 +174,8 @@ QString XXZ::getFileFormatExtsString()
 
 qint64 XXZ::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     return getSize();
 }
 
@@ -221,7 +229,7 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if (nSize >= 12) {
         _MEMORY_RECORD recordHeader = {};
-        recordHeader.nAddress = -1;
+        recordHeader.nAddress = XADDR_MAX;
         recordHeader.nOffset = 0;
         recordHeader.nSize = 12;
         recordHeader.nIndex = nIndex++;
@@ -242,7 +250,7 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         const QByteArray baFooter = read_array_process(nStreamEnd - 12, 12, pPdStruct);
         if ((baFooter.size() == 12) && (baFooter.at(10) == 'Y') && (baFooter.at(11) == 'Z')) {
             _MEMORY_RECORD recordFooter = {};
-            recordFooter.nAddress = -1;
+            recordFooter.nAddress = XADDR_MAX;
             recordFooter.nOffset = nStreamEnd - 12;
             recordFooter.nSize = 12;
             recordFooter.nIndex = nIndex++;
@@ -267,7 +275,7 @@ XBinary::_MEMORY_MAP XXZ::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         }
         if (nMaxRecordOffset < nMaxOffset) {
             _MEMORY_RECORD recordOverlay = {};
-            recordOverlay.nAddress = -1;
+            recordOverlay.nAddress = XADDR_MAX;
             recordOverlay.nOffset = nMaxRecordOffset;
             recordOverlay.nSize = nMaxOffset - nMaxRecordOffset;
             recordOverlay.nIndex = nIndex++;
@@ -612,13 +620,16 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
     }
 
     XXZ_UNPACK_CONTEXT *pContext = (XXZ_UNPACK_CONTEXT *)pState->pContext;
-    if ((pContext->nCompressedSize < 0) ||
-        (pContext->nUncompressedSize < 0)) return false;
+    if (pContext->nCompressedSize < 0) return false;
     const qint64 nCompressedSize = pContext->nCompressedSize;
-    const qint64 nUncompressedSize = pContext->nUncompressedSize;
-    std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
-        nUncompressedSize, pPdStruct));
-    if (!guardedArchive || !pStage || !guardedOutput || !guardedSource ||
+    // The authoritative uncompressed total lives in the validated XZ
+    // Index(es), which decompressXZ walks before decoding any Block.  Stage in
+    // a growable temporary file rather than rejecting the still-unknown size
+    // or trusting an unauthenticated estimate.
+    std::unique_ptr<QTemporaryFile> pStage(
+        new (std::nothrow) QTemporaryFile());
+    if (!guardedArchive || !pStage || !pStage->open() || !guardedOutput ||
+        !guardedSource ||
         !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) return false;
 
     // Keep the complete member so XLZMADecoder can validate container framing,
@@ -639,7 +650,12 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
         bResult = XLZMADecoder::decompressXZ(&state, pPdStruct) &&
                   guardedArchive && guardedOutput && guardedSource &&
                   (state.nCountInput == nCompressedSize) &&
-                  (state.nCountOutput == nUncompressedSize);
+                  (state.nCountOutput >= 0) &&
+                  (pStage->size() == state.nCountOutput);
+
+        if (bResult) {
+            pContext->nUncompressedSize = state.nCountOutput;
+        }
 
         sd.close();
     }
@@ -719,22 +735,30 @@ XBinary *XXZ::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAdd
 
 bool XXZ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XXZ> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XXZ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XXZ> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XXZ::setInternalInfo(void *pInternalInfo)

@@ -213,7 +213,7 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     }
 
     _MEMORY_RECORD recHeader = {};
-    recHeader.nAddress = -1;
+    recHeader.nAddress = XADDR_MAX;
     recHeader.nOffset = 0;
     recHeader.nSize = nHeaderSize;
     recHeader.nIndex = nIndex++;
@@ -241,7 +241,7 @@ XBinary::_MEMORY_MAP XSZDD::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         _MEMORY_RECORD memoryRecord = {};
 
         memoryRecord.nOffset = nHeaderSize;
-        memoryRecord.nAddress = -1;
+        memoryRecord.nAddress = XADDR_MAX;
         memoryRecord.nSize = state.nCountInput;
         memoryRecord.filePart = FILEPART_REGION;
 
@@ -362,6 +362,11 @@ QList<XBinary::XFRECORD> XSZDD::getXFRecords(FT fileType, quint32 nStructID, con
 //     return listResult;
 // }
 
+static bool szddCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -372,21 +377,19 @@ QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     if (nFileParts == 0) {
         return listResult;
     }
 
     const qint64 nHeaderSize = _getHeaderSize();
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && szddCanAppend(nLimit, listResult)) {
         FPART record = {};
 
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
         record.nFileSize = nHeaderSize;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Header");
 
         listResult.append(record);
@@ -398,14 +401,14 @@ QList<XBinary::FPART> XSZDD::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     }
     qint64 nDataOffset = nHeaderSize;
 
-    if ((nFileParts & FILEPART_REGION) && canAppend()) {
+    if ((nFileParts & FILEPART_REGION) && szddCanAppend(nLimit, listResult)) {
         if (nDataOffset < nTotalSize) {
             FPART record = {};
 
             record.filePart = FILEPART_REGION;
             record.nFileOffset = nDataOffset;
             record.nFileSize = nTotalSize - nDataOffset;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Compressed Data");
 
             listResult.append(record);
@@ -671,22 +674,30 @@ XBinary *XSZDD::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XSZDD::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XSZDD> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XSZDD::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XSZDD> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XSZDD::setInternalInfo(void *pInternalInfo)

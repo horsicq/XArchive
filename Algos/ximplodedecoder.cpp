@@ -590,6 +590,8 @@ done:
    list of the tables it made. */
 static void ui6a_huft_free(ui6a_ctx *ui6a, struct ui6a_htable *tbl)
 {
+    Q_UNUSED(ui6a)
+
     struct ui6a_huftarray *p;
 
     p = tbl->first_array;
@@ -884,6 +886,8 @@ XImplodeDecoder::XImplodeDecoder(QObject *parent) : QObject(parent)
 
 bool XImplodeDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, bool b8kdict, bool b3trees, XBinary::PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     Algo_utils::seekToStart(pDecompressState);
 
     bool bResult = true;

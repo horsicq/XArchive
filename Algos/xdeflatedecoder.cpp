@@ -75,6 +75,11 @@ typedef unsigned short ush;
 typedef ush FAR ushf;
 typedef unsigned long ulg;
 
+static bool zlib_size_at_most(size_t actual, size_t maximum)
+{
+    return actual <= maximum;
+}
+
 extern z_const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
@@ -1933,7 +1938,7 @@ local void scan_tree(deflate_state *s, ct_data *tree, int max_code)
         if (++count < max_count && curlen == nextlen) {
             continue;
         } else if (count < min_count) {
-            s->bl_tree[curlen].Freq += count;
+            s->bl_tree[curlen].Freq = (ush)(s->bl_tree[curlen].Freq + count);
         } else if (curlen != 0) {
             if (curlen != prevlen) s->bl_tree[curlen].Freq++;
             s->bl_tree[REP_3_6].Freq++;
@@ -7417,7 +7422,7 @@ local void fill_window(deflate_state *s)
         more = (unsigned)(s->window_size - (ulg)s->lookahead - (ulg)s->strstart);
 
         /* Deal with !@#$% 64K limit: */
-        if (sizeof(int) <= 2) {
+        if (zlib_size_at_most(sizeof(int), 2)) {
             if (more == 0 && s->strstart == 0 && s->lookahead == 0) {
                 more = wsize;
 
@@ -7601,10 +7606,10 @@ local block_state deflate_stored(deflate_state *s, int flush)
         _tr_stored_block(s, (char *)0, 0L, last);
 
         /* Replace the lengths in the dummy stored block with len. */
-        s->pending_buf[s->pending - 4] = len;
-        s->pending_buf[s->pending - 3] = len >> 8;
-        s->pending_buf[s->pending - 2] = ~len;
-        s->pending_buf[s->pending - 1] = ~len >> 8;
+        s->pending_buf[s->pending - 4] = (z_Bytef)len;
+        s->pending_buf[s->pending - 3] = (z_Bytef)(len >> 8);
+        s->pending_buf[s->pending - 2] = (z_Bytef)(~len);
+        s->pending_buf[s->pending - 1] = (z_Bytef)(~len >> 8);
 
         /* Write the stored block header bytes. */
         flush_pending(s->strm);
@@ -8733,7 +8738,7 @@ unsigned long ZEXPORT crc32_z(unsigned long crc, const unsigned char FAR *buf, z
 #endif /* DYNAMIC_CRC_TABLE */
 
 #ifdef BYFOUR
-    if (sizeof(void *) == sizeof(ptrdiff_t)) {
+    if (zlib_size_at_most(sizeof(void *), sizeof(ptrdiff_t)) && zlib_size_at_most(sizeof(ptrdiff_t), sizeof(void *))) {
         z_crc_t endian;
 
         endian = 1;
@@ -9471,9 +9476,30 @@ uLong ZEXPORT adler32_combine64(uLong adler1, uLong adler2, z_off64_t len2)
 #endif
 
 #include "xdeflatedecoder.h"
+#include <QPointer>
 #include <limits>
 #include "algo_utils.h"
 #include "xalgo_local.h"
+
+namespace {
+struct DeflateAdlerProgressBridge {
+    XBinary::PDSTRUCT *pOriginal;
+    XBinary::PDSTRUCTLIFETIME originalLifetime;
+};
+
+void deflateAdlerProgressCallback(void *pUserData,
+                                  XBinary::PDSTRUCT *pLocalProgress)
+{
+    DeflateAdlerProgressBridge *pBridge =
+        static_cast<DeflateAdlerProgressBridge *>(pUserData);
+    if (!pBridge || !pLocalProgress) return;
+
+    if (!XBinary::isPdStructLifetimeAlive(pBridge->originalLifetime) ||
+        !XBinary::isPdStructNotCanceled(pBridge->pOriginal)) {
+        XBinary::setPdStructStopped(pLocalProgress);
+    }
+}
+}  // namespace
 
 #ifdef deflate
 #undef deflate
@@ -10063,8 +10089,8 @@ int inflateBack9(z_stream *strm, in_func in, void *in_desc, out_func out, void *
     unsigned char *from;                    /* where to copy match bytes from */
     code const *lencode;                    /* starting table for length/literal codes */
     code const *distcode;                   /* starting table for distance codes */
-    unsigned lenbits;                       /* index bits for lencode */
-    unsigned distbits;                      /* index bits for distcode */
+    unsigned lenbits = 0;                   /* index bits for lencode */
+    unsigned distbits = 0;                  /* index bits for distcode */
     code here;                              /* current decoding table entry */
     code last;                              /* parent table entry */
     unsigned len;                           /* length to copy for repeats, bits to drop */
@@ -10481,6 +10507,8 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
 bool XDeflateDecoder::decompress64(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     Algo_utils::seekToStart(pDecompressState);
 
     bool bResult = false;
@@ -10512,6 +10540,23 @@ bool XDeflateDecoder::decompress64(XBinary::DATAPROCESS_STATE *pDecompressState,
     return bResult;
 }
 
+static bool zlibReadExactAt(XBinary::DATAPROCESS_STATE *pDecompressState, qint64 nOffset, char *pData, qint32 nSize)
+{
+    if (!pData || (nOffset < 0) || (nSize <= 0) || !pDecompressState->pDeviceInput->seek(nOffset)) {
+        return false;
+    }
+
+    qint32 nTotal = 0;
+    while (nTotal < nSize) {
+        const qint64 nRead = pDecompressState->pDeviceInput->read(pData + nTotal, nSize - nTotal);
+        if ((nRead <= 0) || (nRead > (nSize - nTotal))) {
+            return false;
+        }
+        nTotal += (qint32)nRead;
+    }
+    return true;
+}
+
 bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
@@ -10521,20 +10566,29 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
         return false;
     }
 
+    QPointer<QIODevice> guardedInput(pDecompressState->pDeviceInput);
+    QPointer<QIODevice> guardedOutput(pDecompressState->pDeviceOutput);
+    const XBinary::PDSTRUCTLIFETIME progressLifetime =
+        pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
+
     Algo_utils::prepareState(pDecompressState);
+    if (!guardedInput || !guardedOutput) return false;
     if (pDecompressState->bReadError || pDecompressState->bWriteError) {
         return false;
     }
 
-    const auto readExactAt = [pDecompressState](qint64 nOffset, char *pData, qint32 nSize) -> bool {
-        if (!pData || (nOffset < 0) || (nSize <= 0) || !pDecompressState->pDeviceInput->seek(nOffset)) {
+    const auto readExactAt = [&guardedInput](qint64 nOffset, char *pData, qint32 nSize) -> bool {
+        if (!guardedInput || !pData || (nOffset < 0) || (nSize <= 0)) {
             return false;
         }
 
+        const bool bSeeked = guardedInput->seek(nOffset);
+        if (!guardedInput || !bSeeked) return false;
+
         qint32 nTotal = 0;
         while (nTotal < nSize) {
-            const qint64 nRead = pDecompressState->pDeviceInput->read(pData + nTotal, nSize - nTotal);
-            if ((nRead <= 0) || (nRead > (nSize - nTotal))) {
+            const qint64 nRead = guardedInput->read(pData + nTotal, nSize - nTotal);
+            if (!guardedInput || (nRead <= 0) || (nRead > (nSize - nTotal))) {
                 return false;
             }
             nTotal += (qint32)nRead;
@@ -10547,6 +10601,7 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     const qint64 nFooterOffset = pDecompressState->nInputOffset + pDecompressState->nInputLimit - 4;
     if (!readExactAt(pDecompressState->nInputOffset, aHeader, sizeof(aHeader)) ||
         !readExactAt(nFooterOffset, aFooter, sizeof(aFooter))) {
+        if (!guardedInput) return false;
         pDecompressState->bReadError = true;
         return false;
     }
@@ -10574,6 +10629,10 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     decompressState.nCountOutput = 0;
 
     bool bResult = decompress(&decompressState, pPdStruct);
+    if (!guardedInput || !guardedOutput ||
+        (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) {
+        return false;
+    }
     pDecompressState->bReadError = decompressState.bReadError;
     pDecompressState->bWriteError = decompressState.bWriteError;
     pDecompressState->nCountInput = 2 + decompressState.nCountInput;
@@ -10593,8 +10652,21 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     }
 
     if (bResult) {
-        const quint32 nActualAdler = XBinary::getAdler32(pDecompressState->pDeviceOutput, pPdStruct);
-        bResult = XBinary::isPdStructNotCanceled(pPdStruct) && (nActualAdler == nExpectedAdler);
+        DeflateAdlerProgressBridge adlerBridge = {pPdStruct, progressLifetime};
+        XBinary::PDSTRUCT adlerProgress = XBinary::getPdStructSnapshot(pPdStruct);
+        if (pPdStruct) {
+            XBinary::setPdStructCallback(&adlerProgress,
+                                         deflateAdlerProgressCallback,
+                                         &adlerBridge);
+        }
+        const quint32 nActualAdler =
+            XBinary::getAdler32(guardedOutput.data(), &adlerProgress);
+        if (!guardedOutput ||
+            (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) {
+            return false;
+        }
+        bResult = XBinary::isPdStructNotCanceled(pPdStruct) &&
+                  (nActualAdler == nExpectedAdler);
     }
 
     if (!bResult) {
@@ -10603,7 +10675,10 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     }
 
     pDecompressState->nCountInput = pDecompressState->nInputLimit;
-    if (!pDecompressState->pDeviceInput->seek(pDecompressState->nInputOffset + pDecompressState->nInputLimit)) {
+    const qint64 nEndOffset = pDecompressState->nInputOffset + pDecompressState->nInputLimit;
+    const bool bSeeked = guardedInput->seek(nEndOffset);
+    if (!guardedInput) return false;
+    if (!bSeeked) {
         pDecompressState->bReadError = true;
         return false;
     }

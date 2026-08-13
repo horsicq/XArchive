@@ -35,7 +35,6 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
         // LZSS parameters for SZDD format
         const qint32 N_WINDOW_SIZE = 4096;     // Size of sliding window
         const qint32 N_MATCH_MIN_LENGTH = 3;   // Minimum match length
-        const qint32 N_MATCH_MAX_LENGTH = 16;  // Maximum match length in MS LZSS
         const qint32 N_MATCH_BIAS = 16;        // MS LZSS copy offset bias
 
         const qint64 nOutputLimit = pDecompressState->nProcessedLimit;

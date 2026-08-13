@@ -231,6 +231,10 @@ private:
     bool isRangeValid(qint64 nOffset, quint64 nSize);
     bool isHeaderCRCValid4(qint64 nOffset, qint64 nHeaderSize, quint16 nExpectedCRC);
     bool isHeaderCRCValid5(qint64 nOffset, qint64 nHeaderSize, quint32 nExpectedCRC);
+    QByteArray readBlock4Snapshot(qint64 nOffset);
+    QByteArray readHeader5Snapshot(qint64 nOffset);
+    static bool parseGenericBlock4Snapshot(const QByteArray &baHeader, GENERICBLOCK4 *pResult);
+    static bool parseGenericHeader5Snapshot(const QByteArray &baHeader, GENERICHEADER5 *pResult, qint64 *pBodyOffset = nullptr);
     bool isMainOrEndHeader5Valid(qint64 nOffset, const GENERICHEADER5 &genericHeader);
     GENERICHEADER5 readGenericHeader5(qint64 nOffset);
     GENERICBLOCK4 readGenericBlock4(qint64 nOffset);
@@ -239,6 +243,7 @@ private:
     FILEHEADER5 readFileHeader5(qint64 nOffset);
     static bool decodeRar4UnicodeName(const QByteArray &nameData, QString *pResult);
     static bool decodeRar5Name(const QByteArray &nameData, QString *pResult);
+    static bool _initUnpackFail(QPointer<XRar> *pGuardedArchive, XBinary::UNPACK_STATE *pUnpackState, RAR_UNPACK_CONTEXT *pContext);
 
     // Decrypt a single RAR5 encrypted header block (IV + AES-CBC data)
     // Returns decrypted header bytes; sets *pConsumedSize to total bytes consumed from file

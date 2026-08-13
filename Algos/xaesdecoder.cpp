@@ -936,6 +936,13 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QStr
     return encrypt(pCompressState, sPassword.toUtf8(), cryptoMethod, pPdStruct);
 }
 
+static void clearZipAesKeys(QByteArray *pbaAESKey, QByteArray *pbaHMACKey, QByteArray *pbaPasswordVerify)
+{
+    pbaAESKey->fill('\0');
+    pbaHMACKey->fill('\0');
+    pbaPasswordVerify->fill('\0');
+}
+
 bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByteArray &baPassword, XBinary::HANDLE_METHOD cryptoMethod, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
@@ -988,30 +995,25 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
         QByteArray baAESKey;
         QByteArray baHMACKey;
         QByteArray baPasswordVerify;
-        auto clearZipKeys = [&]() {
-            baAESKey.fill('\0');
-            baHMACKey.fill('\0');
-            baPasswordVerify.fill('\0');
-        };
 
         if (!deriveKeys(baPassword, baSalt, nKeySize, baAESKey, baPasswordVerify, baHMACKey, pPdStruct)) {
-            clearZipKeys();
+            clearZipAesKeys(&baAESKey, &baHMACKey, &baPasswordVerify);
             return false;
         }
 
         if (XBinary::_writeDevice((char *)baSalt.constData(), nSaltSize, pCompressState) != nSaltSize) {
-            clearZipKeys();
+            clearZipAesKeys(&baAESKey, &baHMACKey, &baPasswordVerify);
             return false;
         }
 
         if (XBinary::_writeDevice((char *)baPasswordVerify.constData(), N_PASSWORD_VERIFY_SIZE, pCompressState) != N_PASSWORD_VERIFY_SIZE) {
-            clearZipKeys();
+            clearZipAesKeys(&baAESKey, &baHMACKey, &baPasswordVerify);
             return false;
         }
 
         qint64 nPlainDataSize = pCompressState->nInputLimit;
         if (nPlainDataSize <= 0) {
-            clearZipKeys();
+            clearZipAesKeys(&baAESKey, &baHMACKey, &baPasswordVerify);
             return false;
         }
 
@@ -1023,14 +1025,14 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
             qint32 nRead = XBinary::_readDevice(baPlainData.data() + nReadTotal, nToRead, pCompressState);
             if (nRead <= 0) {
                 pCompressState->bReadError = true;
-                clearZipKeys();
+                clearZipAesKeys(&baAESKey, &baHMACKey, &baPasswordVerify);
                 return false;
             }
             nReadTotal += nRead;
         }
         if ((nReadTotal != nPlainDataSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             pCompressState->bReadError = true;
-            clearZipKeys();
+            clearZipAesKeys(&baAESKey, &baHMACKey, &baPasswordVerify);
             return false;
         }
 
@@ -1050,7 +1052,7 @@ bool XAESDecoder::encrypt(XBinary::DATAPROCESS_STATE *pCompressState, const QByt
 
         bResult = bResult && !pCompressState->bReadError && !pCompressState->bWriteError &&
                   XBinary::isPdStructNotCanceled(pPdStruct);
-        clearZipKeys();
+        clearZipAesKeys(&baAESKey, &baHMACKey, &baPasswordVerify);
     }
 
     return bResult;

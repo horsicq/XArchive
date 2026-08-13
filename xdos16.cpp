@@ -183,6 +183,11 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     return listResult;
 }
 
+static bool dos16CanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -190,8 +195,6 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     if ((nLimit < -1) || (nLimit == 0)) {
         return listResult;
     }
-
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 nFileSize = getSize();
 
@@ -206,12 +209,12 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     nSignatureOffset = qBound<qint64>(0, nSignatureOffset, nFileSize);
 
     // Optional: header part (loader before first signature)
-    if ((nFileParts & FILEPART_HEADER) && canAppend() && (nSignatureOffset > 0)) {
+    if ((nFileParts & FILEPART_HEADER) && dos16CanAppendPart(nLimit, listResult) && (nSignatureOffset > 0)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
         header.nFileSize = qMin<qint64>(nSignatureOffset, nFileSize);
-        header.nVirtualAddress = -1;
+        header.nVirtualAddress = XADDR_MAX;
         header.sName = tr("Header");
         listResult.append(header);
     }
@@ -220,7 +223,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     qint32 nIndex = 0;
     qint64 nCur = nSignatureOffset;
     if (nFileSize > nCur) {
-        while (canAppend() && isPdStructNotCanceled(pPdStruct)) {
+        while (dos16CanAppendPart(nLimit, listResult) && isPdStructNotCanceled(pPdStruct)) {
             if (!isOffsetValid(nCur + 1)) break;
             quint16 nSig = read_uint16(nCur);
 
@@ -229,12 +232,12 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
                 QString sName = read_ansiString(nCur + offsetof(XMSDOS_DEF::dos16m_exe_header, EXP_path));
                 if ((nNext <= 0) || (nNext > nFileSize)) nNext = nFileSize;  // clamp
 
-                if ((nFileParts & FILEPART_REGION) && canAppend()) {
+                if ((nFileParts & FILEPART_REGION) && dos16CanAppendPart(nLimit, listResult)) {
                     FPART part = {};
                     part.filePart = FILEPART_REGION;
                     part.nFileOffset = nCur;
                     part.nFileSize = qMax<qint64>(0, nNext - nCur);
-                    part.nVirtualAddress = -1;
+                    part.nVirtualAddress = XADDR_MAX;
                     part.sName = sName.isEmpty() ? (tr("Segment") + QString(" %1")).arg(nIndex) : sName;
                     listResult.append(part);
                 }
@@ -245,12 +248,12 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
                 qint64 nSkip = read_uint32(nCur + 2);
                 nCur += qMax<qint64>(0, nSkip);
             } else if (nSig == 0x5A4D) {  // MZ payload
-                if ((nFileParts & (FILEPART_REGION | FILEPART_DATA)) && canAppend()) {
+                if ((nFileParts & (FILEPART_REGION | FILEPART_DATA)) && dos16CanAppendPart(nLimit, listResult)) {
                     FPART data = {};
                     data.filePart = (nFileParts & FILEPART_DATA) ? FILEPART_DATA : FILEPART_REGION;
                     data.nFileOffset = nCur;
                     data.nFileSize = qMax<qint64>(0, nFileSize - nCur);
-                    data.nVirtualAddress = -1;
+                    data.nVirtualAddress = XADDR_MAX;
                     data.sName = (data.filePart == FILEPART_DATA) ? tr("Data") : tr("Payload");
                     listResult.append(data);
                 }
@@ -262,7 +265,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
     }
 
     // Overlay: any tail not covered by the above when not using DATA-only
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && !listResult.isEmpty()) {
+    if ((nFileParts & FILEPART_OVERLAY) && dos16CanAppendPart(nLimit, listResult) && !listResult.isEmpty()) {
         qint64 nCoveredEnd = 0;
         for (qint32 nI = 0; nI < listResult.size(); nI++) {
             const FPART &record = listResult.at(nI);
@@ -275,7 +278,7 @@ QList<XBinary::FPART> XDOS16::getFileParts(quint32 nFileParts, qint32 nLimit, PD
             ov.filePart = FILEPART_OVERLAY;
             ov.nFileOffset = nCoveredEnd;
             ov.nFileSize = nFileSize - nCoveredEnd;
-            ov.nVirtualAddress = -1;
+            ov.nVirtualAddress = XADDR_MAX;
             ov.sName = tr("Overlay");
             listResult.append(ov);
         }
@@ -363,7 +366,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
             _MEMORY_RECORD record = {};
             record.nSize = nSignatureOffset;
             record.nOffset = 0;
-            record.nAddress = -1;
+            record.nAddress = XADDR_MAX;
             record.filePart = FILEPART_REGION;
             record.sName = tr("Loader");
             record.nIndex = nIndex++;
@@ -384,7 +387,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
                     _MEMORY_RECORD record = {};
                     record.nSize = nNewSignatureOffset - nSignatureOffset;
                     record.nOffset = nSignatureOffset;
-                    record.nAddress = -1;
+                    record.nAddress = XADDR_MAX;
                     record.filePart = FILEPART_REGION;
                     record.sName = sName;
                     record.nIndex = nIndex++;
@@ -399,7 +402,7 @@ XBinary::_MEMORY_MAP XDOS16::getMemoryMap(XBinary::MAPMODE mapMode, PDSTRUCT *pP
                     _MEMORY_RECORD record = {};
                     record.nSize = nSize - nSignatureOffset;
                     record.nOffset = nSignatureOffset;
-                    record.nAddress = -1;
+                    record.nAddress = XADDR_MAX;
                     record.filePart = FILEPART_REGION;
                     record.sName = tr("Data");
                     record.nIndex = nIndex++;
@@ -651,22 +654,30 @@ XBinary *XDOS16::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModule
 
 bool XDOS16::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XDOS16> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XDOS16::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XDOS16> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XDOS16::setInternalInfo(void *pInternalInfo)

@@ -131,22 +131,30 @@ quint32 XNPM::ftStringToStructID(const QString &sFtString)
 
 bool XNPM::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XNPM> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XTAR_GZ::handleInternalInfo(pPdStruct);
-        static_cast<XTAR_GZ::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XTAR_GZ::INTERNAL_INFO *>(XTAR_GZ::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XTAR_GZ::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XTAR_GZ::INTERNAL_INFO *pInfo =
+            static_cast<XTAR_GZ::INTERNAL_INFO *>(
+                guardedThis->XTAR_GZ::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XTAR_GZ::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XNPM::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XNPM> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XNPM::setInternalInfo(void *pInternalInfo)

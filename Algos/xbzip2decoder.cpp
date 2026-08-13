@@ -499,22 +499,31 @@ extern void BZ2_hbCreateDecodeTables(Int32 *, Int32 *, Int32 *, UChar *, Int32, 
 }
 
 /* Local copy of the bzip2 decompression entry points used by this decoder. */
+static int X_bz_size_matches(size_t actual, size_t expected)
+{
+    return actual == expected;
+}
+
 static int X_bz_config_ok(void)
 {
-    if (sizeof(int) != 4) return 0;
-    if (sizeof(short) != 2) return 0;
-    if (sizeof(char) != 1) return 0;
+    if (!X_bz_size_matches(sizeof(int), 4)) return 0;
+    if (!X_bz_size_matches(sizeof(short), 2)) return 0;
+    if (!X_bz_size_matches(sizeof(char), 1)) return 0;
     return 1;
 }
 
 static void *X_default_bzalloc(void *opaque, Int32 items, Int32 size)
 {
+    Q_UNUSED(opaque)
+
     void *v = malloc(items * size);
     return v;
 }
 
 static void X_default_bzfree(void *opaque, void *addr)
 {
+    Q_UNUSED(opaque)
+
     if (addr != NULL) free(addr);
 }
 

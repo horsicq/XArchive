@@ -412,6 +412,11 @@ QList<XBinary::XFRECORD> XMiniDump::getXFRecords(FT fileType, quint32 nStructID,
     return listResult;
 }
 
+static bool _minidumpCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -420,8 +425,6 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     qint64 nFileSize = getSize();
 
     if (nFileSize < (qint64)sizeof(MINIDUMP_HEADER)) {
@@ -429,13 +432,13 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
     }
 
     // Add header
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && _minidumpCanAppend(nLimit, listResult)) {
         FPART record = {};
 
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
         record.nFileSize = sizeof(MINIDUMP_HEADER);
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Header");
 
         listResult.append(record);
@@ -444,13 +447,13 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
     MINIDUMP_HEADER header = read_MINIDUMP_HEADER();
 
     // Add directory
-    if ((nFileParts & FILEPART_REGION) && canAppend()) {
+    if ((nFileParts & FILEPART_REGION) && _minidumpCanAppend(nLimit, listResult)) {
         FPART record = {};
 
         record.filePart = FILEPART_REGION;
         record.nFileOffset = header.StreamDirectoryRva;
         record.nFileSize = header.NumberOfStreams * sizeof(MINIDUMP_DIRECTORY);
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Directory");
 
         listResult.append(record);
@@ -459,7 +462,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
     // Add streams
     QList<MINIDUMP_DIRECTORY> listDirectories = read_MINIDUMP_DIRECTORY_list(pPdStruct);
 
-    for (qint32 i = 0; (i < listDirectories.count()) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+    for (qint32 i = 0; (i < listDirectories.count()) && _minidumpCanAppend(nLimit, listResult) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         MINIDUMP_DIRECTORY directory = listDirectories.at(i);
 
         // Validate stream is within file bounds
@@ -467,13 +470,13 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
             continue;
         }
 
-        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+        if ((nFileParts & FILEPART_STREAM) && _minidumpCanAppend(nLimit, listResult)) {
             FPART record = {};
 
             record.filePart = FILEPART_STREAM;
             record.nFileOffset = directory.LocationRva;
             record.nFileSize = directory.DataSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = streamTypeToString(directory.StreamType);
 
             listResult.append(record);
@@ -481,7 +484,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
     }
 
     // Check for overlay
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && _minidumpCanAppend(nLimit, listResult)) {
         // Find the maximum offset + size from all streams and directory
         qint64 nMaxOffset = sizeof(MINIDUMP_HEADER);
         qint64 nDirectoryEnd = header.StreamDirectoryRva + header.NumberOfStreams * sizeof(MINIDUMP_DIRECTORY);
@@ -505,7 +508,7 @@ QList<XBinary::FPART> XMiniDump::getFileParts(quint32 nFileParts, qint32 nLimit,
             record.filePart = FILEPART_OVERLAY;
             record.nFileOffset = nMaxOffset;
             record.nFileSize = nFileSize - nMaxOffset;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Overlay");
 
             listResult.append(record);
@@ -869,6 +872,14 @@ QMap<XBinary::UNPACK_PROP, QVariant> XMiniDump::getDefaultUnpackProperties()
     return result;
 }
 
+static bool _minidumpFailSource(QPointer<XMiniDump> *pGuardedThis, XBinary::UNPACK_STATE *pState)
+{
+    if (pGuardedThis->isNull()) return false;
+    (*pGuardedThis)->releaseUnpackSource(pState);
+    *pState = XBinary::UNPACK_STATE();
+    return false;
+}
+
 bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XMiniDump> guardedThis(this);
@@ -897,17 +908,10 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     pState->mapUnpackProperties = mapProperties;
     const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
     if (!guardedThis || !bBound) return false;
-    const auto failSource = [&guardedThis, pState]() -> bool {
-        if (!guardedThis) return false;
-        guardedThis->releaseUnpackSource(pState);
-        *pState = UNPACK_STATE();
-        return false;
-    };
-
     qint64 nFileSize = guardedThis->getSize();
 
     if (nFileSize < (qint64)sizeof(MINIDUMP_HEADER)) {
-        return failSource();
+        return _minidumpFailSource(&guardedThis, pState);
     }
 
     MINIDUMP_HEADER header = guardedThis->read_MINIDUMP_HEADER();
@@ -915,7 +919,7 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
     // Validate header
     if (header.Signature != 0x504D444D) {
-        return failSource();
+        return _minidumpFailSource(&guardedThis, pState);
     }
 
     // Read all directory entries
@@ -954,11 +958,11 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     }
 
     // Clean up if no valid streams found
-    if (!bResult) return failSource();
+    if (!bResult) return _minidumpFailSource(&guardedThis, pState);
 
     MINIDUMP_UNPACK_CONTEXT *pContext =
         new (std::nothrow) MINIDUMP_UNPACK_CONTEXT;
-    if (!pContext) return failSource();
+    if (!pContext) return _minidumpFailSource(&guardedThis, pState);
     pContext->listDirectories = listDirectories;
     pContext->listStreamOffsets = listStreamOffsets;
     pContext->listValidDirectoryIndexes = listValidDirectoryIndexes;
@@ -974,7 +978,7 @@ bool XMiniDump::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
     if (!guardedThis) return false;
     if (!bResult) {
         pState->pContext = nullptr;
-        const bool bFailed = failSource();
+        const bool bFailed = _minidumpFailSource(&guardedThis, pState);
         delete pContext;
         return bFailed;
     }
@@ -1181,22 +1185,30 @@ XBinary *XMiniDump::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
 bool XMiniDump::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XMiniDump> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XMiniDump::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XMiniDump> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XMiniDump::setInternalInfo(void *pInternalInfo)

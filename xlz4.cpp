@@ -235,6 +235,11 @@ QList<XBinary::XFRECORD> XLZ4::getXFRecords(FT fileType, quint32 nStructID, cons
     return listResult;
 }
 
+static bool lz4CanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XLZ4::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
@@ -245,25 +250,24 @@ QList<XBinary::FPART> XLZ4::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
     qint64 nFileSize = getSize();
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend() && (nFileSize > 0)) {
+    if ((nFileParts & FILEPART_HEADER) && lz4CanAppend(nLimit, listResult) && (nFileSize > 0)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
         header.nFileSize = qMin<qint64>((qint64)sizeof(LZ4_FRAME_HEADER), nFileSize);
-        header.nVirtualAddress = -1;
+        header.nVirtualAddress = XADDR_MAX;
         header.sName = tr("Header");
         listResult.append(header);
     }
 
-    if ((nFileParts & FILEPART_STREAM) && canAppend() && (nFileSize > (qint64)sizeof(LZ4_FRAME_HEADER))) {
+    if ((nFileParts & FILEPART_STREAM) && lz4CanAppend(nLimit, listResult) && (nFileSize > (qint64)sizeof(LZ4_FRAME_HEADER))) {
         FPART stream = {};
         stream.filePart = FILEPART_STREAM;
         stream.nFileOffset = sizeof(LZ4_FRAME_HEADER);
         stream.nFileSize = nFileSize - sizeof(LZ4_FRAME_HEADER);
-        stream.nVirtualAddress = -1;
+        stream.nVirtualAddress = XADDR_MAX;
         stream.sName = tr("Stream");
         listResult.append(stream);
     }
@@ -290,22 +294,30 @@ XBinary *XLZ4::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XLZ4::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XLZ4> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XLZ4::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XLZ4> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XLZ4::setInternalInfo(void *pInternalInfo)

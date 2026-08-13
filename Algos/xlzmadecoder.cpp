@@ -81,22 +81,25 @@ quint32 xzCRC32(const char *pData, qint32 nSize)
     return XBinary::_getCRC32(pData, nSize, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
 }
 
+std::array<quint64, 256> xzBuildCRC64Table()
+{
+    const quint64 XZ_CRC64_POLYNOMIAL = Q_UINT64_C(0xC96C5795D7870F42);
+    std::array<quint64, 256> result = {};
+    quint64 nTableIndex = 0;
+    for (quint64 &nTableEntry : result) {
+        quint64 nEntry = nTableIndex++;
+        for (qint32 nBit = 0; nBit < 8; nBit++) {
+            const quint64 nMask = (quint64)0 - (nEntry & 1);
+            nEntry = (nEntry >> 1) ^ (XZ_CRC64_POLYNOMIAL & nMask);
+        }
+        nTableEntry = nEntry;
+    }
+    return result;
+}
+
 quint64 xzCRC64Update(quint64 nCRC, const char *pData, qint32 nSize)
 {
-    static const quint64 XZ_CRC64_POLYNOMIAL = Q_UINT64_C(0xC96C5795D7870F42);
-    static const std::array<quint64, 256> XZ_CRC64_TABLE = []() {
-        std::array<quint64, 256> result = {};
-        quint64 nTableIndex = 0;
-        for (quint64 &nTableEntry : result) {
-            quint64 nEntry = nTableIndex++;
-            for (qint32 nBit = 0; nBit < 8; nBit++) {
-                const quint64 nMask = (quint64)0 - (nEntry & 1);
-                nEntry = (nEntry >> 1) ^ (XZ_CRC64_POLYNOMIAL & nMask);
-            }
-            nTableEntry = nEntry;
-        }
-        return result;
-    }();
+    static const std::array<quint64, 256> XZ_CRC64_TABLE = xzBuildCRC64Table();
 
     for (qint32 i = 0; i < nSize; i++) {
         const quint8 nTableIndex = (quint8)(nCRC ^ (quint8)pData[i]);
@@ -470,6 +473,49 @@ bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState,
     return bResult;
 }
 
+static bool xzGetCheckSize(quint8 nCheckType, qint32 *pnCheckSize)
+{
+    if (!pnCheckSize) return false;
+    if (nCheckType == 0) {
+        *pnCheckSize = 0;
+    } else if (nCheckType == 1) {
+        *pnCheckSize = 4;
+    } else if (nCheckType == 4) {
+        *pnCheckSize = 8;
+    } else if (nCheckType == 10) {
+        *pnCheckSize = 32;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+static bool xzStripStreamPadding(XBinary::DATAPROCESS_STATE *pDecompressState, qint64 nOffset, qint64 nContainerEnd, XBinary::PDSTRUCT *pPdStruct, qint64 *pnEnd)
+{
+    if (!pnEnd || (*pnEnd < nOffset) || (*pnEnd > nContainerEnd)) return false;
+
+    while ((*pnEnd - nOffset) >= 4) {
+        qint64 nAvailable = *pnEnd - nOffset;
+        qint32 nReadSize = (qint32)(std::min)(nAvailable - (nAvailable & 3), (qint64)0x10000);
+        if (nReadSize < 4) break;
+
+        QByteArray baTail;
+        if (!readExactAt(pDecompressState, *pnEnd - nReadSize, nReadSize, &baTail)) return false;
+
+        qint32 nPos = nReadSize;
+        while (nPos >= 4) {
+            const char *pGroup = baTail.constData() + nPos - 4;
+            if (pGroup[0] || pGroup[1] || pGroup[2] || pGroup[3]) return true;
+            nPos -= 4;
+            *pnEnd -= 4;
+        }
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    }
+
+    return true;
+}
+
 bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
@@ -503,53 +549,12 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     static const quint8 XZ_MAGIC[6] = {0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00};
     const qint64 nContainerEnd = nOffset + nTotalSize;
 
-    const auto getCheckSize = [](quint8 nCheckType, qint32 *pnCheckSize) -> bool {
-        if (!pnCheckSize) return false;
-        if (nCheckType == 0) {
-            *pnCheckSize = 0;
-        } else if (nCheckType == 1) {
-            *pnCheckSize = 4;
-        } else if (nCheckType == 4) {
-            *pnCheckSize = 8;
-        } else if (nCheckType == 10) {
-            *pnCheckSize = 32;
-        } else {
-            return false;
-        }
-        return true;
-    };
-
     // Work backwards from each Stream Footer. This makes the Index authoritative
     // for all Block extents and naturally supports concatenated Streams and
     // Stream Padding without scanning compressed bytes for magic values.
-    const auto stripStreamPadding = [&](qint64 *pnEnd) -> bool {
-        if (!pnEnd || (*pnEnd < nOffset) || (*pnEnd > nContainerEnd)) return false;
-
-        while ((*pnEnd - nOffset) >= 4) {
-            qint64 nAvailable = *pnEnd - nOffset;
-            qint32 nReadSize = (qint32)(std::min)(nAvailable - (nAvailable & 3), (qint64)0x10000);
-            if (nReadSize < 4) break;
-
-            QByteArray baTail;
-            if (!readExactAt(pDecompressState, *pnEnd - nReadSize, nReadSize, &baTail)) return false;
-
-            qint32 nPos = nReadSize;
-            while (nPos >= 4) {
-                const char *pGroup = baTail.constData() + nPos - 4;
-                if (pGroup[0] || pGroup[1] || pGroup[2] || pGroup[3]) return true;
-                nPos -= 4;
-                *pnEnd -= 4;
-            }
-
-            if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-        }
-
-        return true;
-    };
-
     QList<XZStreamDescriptor> listStreams;
     qint64 nStreamEnd = nContainerEnd;
-    if (!stripStreamPadding(&nStreamEnd) || (nStreamEnd == nOffset)) return false;
+    if (!xzStripStreamPadding(pDecompressState, nOffset, nContainerEnd, pPdStruct, &nStreamEnd) || (nStreamEnd == nOffset)) return false;
 
     qint64 nTotalExpectedOutput = 0;
     while (nStreamEnd > nOffset) {
@@ -565,7 +570,7 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
         const quint8 nCheckType = (quint8)baStreamFooter.at(9) & 0x0F;
         qint32 nCheckSize = 0;
-        if (!getCheckSize(nCheckType, &nCheckSize)) return false;
+        if (!xzGetCheckSize(nCheckType, &nCheckSize)) return false;
 
         const quint64 nIndexSize64 = ((quint64)readLE32(baStreamFooter.constData() + 4) + 1) * 4;
         if ((nIndexSize64 < 8) || (nIndexSize64 > (quint64)XZ_MAX_INDEX_SIZE) ||
@@ -748,7 +753,7 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
         nStreamEnd = nStreamStart;
         if (nStreamEnd == nOffset) break;
         const qint64 nBeforePadding = nStreamEnd;
-        if (!stripStreamPadding(&nStreamEnd)) return false;
+        if (!xzStripStreamPadding(pDecompressState, nOffset, nContainerEnd, pPdStruct, &nStreamEnd)) return false;
         // Padding is valid only after a preceding Stream, never before the
         // first Stream in the container.
         if ((nStreamEnd == nOffset) && (nBeforePadding != nStreamEnd)) return false;
@@ -808,13 +813,10 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
                     return false;
                 }
 
+                // nUncompressedSize is pre-validated above against
+                // XZ_MAX_PREFILTER_OUTPUT_SIZE, so the allocation size is bounded.
                 QByteArray baIntermediate;
-                try {
-                    baIntermediate.resize((qint32)blockDescriptor.nUncompressedSize);
-                } catch (const std::bad_alloc &) {
-                    compressedDevice.close();
-                    return false;
-                }
+                baIntermediate.resize((qint32)blockDescriptor.nUncompressedSize);
 
                 QBuffer intermediateBuffer(&baIntermediate);
                 if (!intermediateBuffer.open(QIODevice::WriteOnly)) {

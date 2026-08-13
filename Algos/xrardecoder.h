@@ -468,7 +468,7 @@ private:
 public:
     FragmentedWindow();
     ~FragmentedWindow();
-    void Init(size_t WinSize);
+    bool Init(size_t WinSize);
     quint8 &operator[](size_t Item);
     void CopyString(uint Length, size_t Distance, size_t &UnpPtr, bool FirstWinDone, size_t MaxWinSize);
     void CopyData(quint8 *Dest, size_t WinPos, size_t Size);
@@ -601,8 +601,8 @@ private:
     RangeCoder Coder;
     SubAllocator SubAlloc;
 
-    void RestartModelRare();
-    void StartModelRare(int MaxOrder);
+    bool RestartModelRare();
+    bool StartModelRare(int MaxOrder);
     inline RARPPM_CONTEXT *CreateSuccessors(bool Skip, RARPPM_STATE *p1);
 
     inline void UpdateModel();
@@ -822,9 +822,9 @@ public:
         FileExtracted = false;
         WriteError = false;
     }
-    void SetSuspended(bool Suspended)
+    void SetSuspended(bool bSuspended)
     {
-        rar_Unpack::Suspended = Suspended;
+        Suspended = bSuspended;
     }
 
     quint64 AllocWinSize;

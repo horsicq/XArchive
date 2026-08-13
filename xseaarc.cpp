@@ -693,6 +693,11 @@ quint32 XSEAARC::ftStringToStructID(const QString &sFtString)
 //     return listResult;
 // }
 
+static bool seaCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -701,13 +706,11 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     qint64 nFileSize = getSize();
     qint64 nCurrentOffset = 0;
     qint64 nMaxOffset = 0;
 
-    while ((nCurrentOffset < nFileSize) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((nCurrentOffset < nFileSize) && seaCanAppend(nLimit, listResult) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((nFileSize - nCurrentOffset) < 2) {
             break;
         }
@@ -733,38 +736,38 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
 
         QString sFileName = read_ansiString(nCurrentOffset + 2, 13);
 
-        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+        if ((nFileParts & FILEPART_HEADER) && seaCanAppend(nLimit, listResult)) {
             FPART record = {};
 
             record.filePart = FILEPART_HEADER;
             record.nFileOffset = nCurrentOffset;
             record.nFileSize = nHeaderSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Header");
 
             listResult.append(record);
         }
 
-        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+        if ((nFileParts & FILEPART_STREAM) && seaCanAppend(nLimit, listResult)) {
             FPART record = {};
 
             record.filePart = FILEPART_STREAM;
             record.nFileOffset = nCurrentOffset + nHeaderSize;
             record.nFileSize = nCompressedSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = sFileName;
             record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompressedSize);
 
             listResult.append(record);
         }
 
-        if ((nFileParts & FILEPART_REGION) && canAppend()) {
+        if ((nFileParts & FILEPART_REGION) && seaCanAppend(nLimit, listResult)) {
             FPART record = {};
 
             record.filePart = FILEPART_REGION;
             record.nFileOffset = nCurrentOffset;
             record.nFileSize = nHeaderSize + nCompressedSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = sFileName;
 
             listResult.append(record);
@@ -775,13 +778,13 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
     }
 
     // Add overlay if any
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nMaxOffset < nFileSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && seaCanAppend(nLimit, listResult) && (nMaxOffset < nFileSize)) {
         FPART record = {};
 
         record.filePart = FILEPART_OVERLAY;
         record.nFileOffset = nMaxOffset;
         record.nFileSize = nFileSize - nMaxOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Overlay");
 
         listResult.append(record);
@@ -845,22 +848,30 @@ XBinary *XSEAARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModul
 
 bool XSEAARC::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XSEAARC> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XSEAARC::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XSEAARC> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XSEAARC::setInternalInfo(void *pInternalInfo)

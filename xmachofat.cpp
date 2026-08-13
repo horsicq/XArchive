@@ -239,7 +239,7 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
             record.filePart = FILEPART_HEADER;
             record.nOffset = 0;
             record.nSize = sizeof(XMACH_DEF::fat_header);
-            record.nAddress = -1;
+            record.nAddress = XADDR_MAX;
             record.sName = tr("Header");
 
             result.listRecords.append(record);
@@ -260,7 +260,7 @@ XBinary::_MEMORY_MAP XMACHOFat::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruc
             record.sName = XMACH::_getArch(_cputype, _cpusubtype);
             record.nOffset = _offset;
             record.nSize = _size;
-            record.nAddress = -1;
+            record.nAddress = XADDR_MAX;
             record.filePart = FILEPART_SEGMENT;
 
             result.listRecords.append(record);
@@ -749,22 +749,30 @@ XBinary *XMACHOFat::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nMod
 
 bool XMACHOFat::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XMACHOFat> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XMACHOFat::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XMACHOFat> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XMACHOFat::setInternalInfo(void *pInternalInfo)

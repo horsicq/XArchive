@@ -1046,6 +1046,11 @@ QList<XBinary::XFRECORD> XACE::getXFRecords(FT fileType, quint32 nStructID,
     return listResult;
 }
 
+static bool aceCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
                                          PDSTRUCT *pPdStruct)
 {
@@ -1061,12 +1066,9 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
     }
 
     const quint16 nArchiveFlags = listBlocks.constFirst().nHeadFlags;
-    const auto canAppend = [&]() -> bool {
-        return (nLimit == -1) || (listResult.size() < nLimit);
-    };
 
     for (const BLOCK_INFO &info : listBlocks) {
-        if (!canAppend()) {
+        if (!aceCanAppendPart(nLimit, listResult)) {
             break;
         }
 
@@ -1081,23 +1083,23 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
             sName.replace(QLatin1Char('\\'), QLatin1Char('/'));
         }
 
-        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+        if ((nFileParts & FILEPART_HEADER) && aceCanAppendPart(nLimit, listResult)) {
             FPART part = {};
             part.filePart = FILEPART_HEADER;
             part.nFileOffset = info.nOffset;
             part.nFileSize = info.nHeaderSize;
-            part.nVirtualAddress = -1;
+            part.nVirtualAddress = XADDR_MAX;
             part.sName = sName;
             listResult.append(part);
         }
 
-        if ((nFileParts & FILEPART_STREAM) && canAppend() &&
+        if ((nFileParts & FILEPART_STREAM) && aceCanAppendPart(nLimit, listResult) &&
             (info.nHeadType == HEADTYPE_FILE)) {
             FPART part = {};
             part.filePart = FILEPART_STREAM;
             part.nFileOffset = info.nDataOffset;
             part.nFileSize = info.nAddSize;
-            part.nVirtualAddress = -1;
+            part.nVirtualAddress = XADDR_MAX;
             part.sName = sName;
             part.mapProperties.insert(FPART_PROP_ORIGINALNAME, sName);
             part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE,
@@ -1131,12 +1133,12 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
             listResult.append(part);
         }
 
-        if ((nFileParts & FILEPART_REGION) && canAppend()) {
+        if ((nFileParts & FILEPART_REGION) && aceCanAppendPart(nLimit, listResult)) {
             FPART part = {};
             part.filePart = FILEPART_REGION;
             part.nFileOffset = info.nOffset;
             part.nFileSize = info.nHeaderSize + info.nAddSize;
-            part.nVirtualAddress = -1;
+            part.nVirtualAddress = XADDR_MAX;
             part.sName = sName;
             listResult.append(part);
         }
@@ -1144,22 +1146,22 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
 
     const qint64 nArchiveSize = _blockEnd(listBlocks.constLast());
 
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && aceCanAppendPart(nLimit, listResult)) {
         FPART part = {};
         part.filePart = FILEPART_DATA;
         part.nFileOffset = 0;
         part.nFileSize = nArchiveSize;
-        part.nVirtualAddress = -1;
+        part.nVirtualAddress = XADDR_MAX;
         part.sName = tr("Data");
         listResult.append(part);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nArchiveSize < getSize())) {
+    if ((nFileParts & FILEPART_OVERLAY) && aceCanAppendPart(nLimit, listResult) && (nArchiveSize < getSize())) {
         FPART part = {};
         part.filePart = FILEPART_OVERLAY;
         part.nFileOffset = nArchiveSize;
         part.nFileSize = getSize() - nArchiveSize;
-        part.nVirtualAddress = -1;
+        part.nVirtualAddress = XADDR_MAX;
         part.sName = tr("Overlay");
         listResult.append(part);
     }
@@ -1233,23 +1235,30 @@ XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage,
 
 bool XACE::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XACE> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(
-                XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XACE::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XACE> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XACE::setInternalInfo(void *pInternalInfo)

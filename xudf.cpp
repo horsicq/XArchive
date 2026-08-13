@@ -22,6 +22,7 @@
 #include "Algos/xstoredecoder.h"
 
 #include <new>
+#include <QPointer>
 
 static XBinary::XCONVERT _TABLE_XUDF_STRUCTID[] = {{XUDF::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
                                                    {XUDF::STRUCTID_TAG, "TAG", QString("Tag")},
@@ -31,9 +32,22 @@ static XBinary::XCONVERT _TABLE_XUDF_STRUCTID[] = {{XUDF::STRUCTID_UNKNOWN, "Unk
 
 XUDF::XUDF(QIODevice *pDevice) : XArchive(pDevice)
 {
-    if (isValid()) {
-        m_sVolumeIdentifier = getVolumeIdentifier();
-        m_sVolumeSetIdentifier = getVolumeSetIdentifier();
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(pDevice);
+    const bool bValid = guardedThis && guardedThis->isValid();
+    if (!guardedThis || !guardedDevice || !bValid) {
+        return;
+    }
+
+    const QString sVolumeIdentifier = guardedThis->getVolumeIdentifier();
+    if (!guardedThis || !guardedDevice) {
+        return;
+    }
+    guardedThis->m_sVolumeIdentifier = sVolumeIdentifier;
+
+    const QString sVolumeSetIdentifier = guardedThis->getVolumeSetIdentifier();
+    if (guardedThis && guardedDevice) {
+        guardedThis->m_sVolumeSetIdentifier = sVolumeSetIdentifier;
     }
 }
 
@@ -44,16 +58,20 @@ XUDF::~XUDF()
 bool XUDF::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 0x8000)) {
-        _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 0x8000) && guardedDevice) {
 
         // UDF Anchor Volume Descriptor Pointer is typically at sector 256 (offset 0x20000)
         // Check for tag identifier 2 (AVDP) with NSR descriptor
         qint64 nAnchorOffset = 256 * 2048;  // Sector 256 with 2048 byte blocks
 
         if (nAnchorOffset < getSize()) {
-            quint16 nTagIdentifier = read_uint16(nAnchorOffset);
+            quint16 nTagIdentifier = 0;
+            if (!_readUInt16(nAnchorOffset, &nTagIdentifier) || !guardedThis || !guardedDevice) {
+                return false;
+            }
             if (nTagIdentifier == TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER) {
                 bResult = true;
             }
@@ -63,7 +81,10 @@ bool XUDF::isValid(PDSTRUCT *pPdStruct)
         if (!bResult) {
             qint64 nEndOffset = (getSize() / 2048) * 2048 - 2048;
             if (nEndOffset > 0) {
-                quint16 nTagIdentifier = read_uint16(nEndOffset);
+                quint16 nTagIdentifier = 0;
+                if (!_readUInt16(nEndOffset, &nTagIdentifier) || !guardedThis || !guardedDevice) {
+                    return false;
+                }
                 if (nTagIdentifier == TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER) {
                     bResult = true;
                 }
@@ -78,7 +99,11 @@ bool XUDF::isValid(PDSTRUCT *pPdStruct)
 
 bool XUDF::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
+    QPointer<QIODevice> guardedDevice(pDevice);
     XUDF xudf(pDevice);
+    if (!guardedDevice) {
+        return false;
+    }
     return xudf.isValid(pPdStruct);
 }
 
@@ -156,11 +181,16 @@ quint32 XUDF::ftStringToStructID(const QString &sFtString)
 QList<XBinary::XFHEADER> XUDF::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::XFHEADER> listResult;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
 
     quint32 nStructID = xfStruct.nStructID;
 
     if (nStructID == STRUCTID_UNKNOWN) {
         qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+        if (!guardedThis || !guardedDevice) {
+            return listResult;
+        }
 
         if (nAnchorOffset != -1) {
             XFSTRUCT _xfStruct = xfStruct;
@@ -171,7 +201,11 @@ QList<XBinary::XFHEADER> XUDF::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
     } else if (nStructID == STRUCTID_ANCHOR_VOLUME_DESCRIPTOR) {
         XLOC headerLoc = xfStruct.xLoc;
         if (headerLoc.locType == LT_UNKNOWN) {
-            headerLoc = offsetToLoc(_getAnchorVolumeDescriptorOffset());
+            const qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+            if (!guardedThis || !guardedDevice) {
+                return listResult;
+            }
+            headerLoc = offsetToLoc(nAnchorOffset);
         }
 
         qint64 nHeaderOffset = locToOffset(xfStruct.pMemoryMap, headerLoc);
@@ -185,7 +219,13 @@ QList<XBinary::XFHEADER> XUDF::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             xfHeader.nSize = sizeof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER);
             xfHeader.xfType = XFTYPE_HEADER;
             xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_ANCHOR_VOLUME_DESCRIPTOR, headerLoc);
+            if (!guardedThis || !guardedDevice) {
+                return listResult;
+            }
             xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_ANCHOR_VOLUME_DESCRIPTOR), xfHeader.sParentTag);
+            if (!guardedThis || !guardedDevice) {
+                return listResult;
+            }
             listResult.append(xfHeader);
 
             if (xfStruct.bIsParent) {
@@ -202,9 +242,15 @@ QList<XBinary::XFHEADER> XUDF::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         if (nPvdOffset == -1) {
             // Scan the main Volume Descriptor Sequence for the PVD
             qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+            if (!guardedThis || !guardedDevice) {
+                return listResult;
+            }
 
             if (nAnchorOffset != -1) {
-                UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER avdp = _readAnchorVolumeDescriptor(nAnchorOffset);
+                UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER avdp = {};
+                if (!_readAnchorVolumeDescriptor(nAnchorOffset, &avdp) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
 
                 qint32 nBlockSize = _getBlockSize();
                 qint64 nVdsOffset = (qint64)avdp.mainVolumeDescriptorSequenceExtent.nLocation * nBlockSize;
@@ -216,8 +262,14 @@ QList<XBinary::XFHEADER> XUDF::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
                     if (!_isValidTag(nCurrentOffset, pPdStruct)) {
                         break;
                     }
+                    if (!guardedThis || !guardedDevice) {
+                        return listResult;
+                    }
 
-                    UDF_TAG tag = _readTag(nCurrentOffset);
+                    UDF_TAG tag = {};
+                    if (!_readTag(nCurrentOffset, &tag) || !guardedThis || !guardedDevice) {
+                        return listResult;
+                    }
 
                     if (tag.nTagIdentifier == TAG_PRIMARY_VOLUME_DESCRIPTOR) {
                         nPvdOffset = nCurrentOffset;
@@ -240,7 +292,13 @@ QList<XBinary::XFHEADER> XUDF::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             xfHeader.nSize = sizeof(UDF_PRIMARY_VOLUME_DESCRIPTOR);
             xfHeader.xfType = XFTYPE_HEADER;
             xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_PRIMARY_VOLUME_DESCRIPTOR, pvdLoc);
+            if (!guardedThis || !guardedDevice) {
+                return listResult;
+            }
             xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_PRIMARY_VOLUME_DESCRIPTOR), xfHeader.sParentTag);
+            if (!guardedThis || !guardedDevice) {
+                return listResult;
+            }
             listResult.append(xfHeader);
         }
     }
@@ -380,35 +438,50 @@ QList<XBinary::XFRECORD> XUDF::getXFRecords(FT fileType, quint32 nStructID, cons
 //     return listResult;
 // }
 
+static bool _udfCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
 
     if ((nLimit < -1) || (nLimit == 0)) {
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
     qint64 nTotalSize = getSize();
     qint64 nFormatSize = getFileFormatSize(pPdStruct);
+    if (!guardedThis || !guardedDevice) {
+        return listResult;
+    }
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && _udfCanAppend(nLimit, listResult)) {
         qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+        if (!guardedThis || !guardedDevice) {
+            return listResult;
+        }
 
         if (nAnchorOffset != -1) {
             FPART record = {};
             record.filePart = FILEPART_HEADER;
             record.nFileOffset = nAnchorOffset;
             record.nFileSize = 512;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Anchor Volume Descriptor");
 
             listResult.append(record);
         }
     }
 
-    if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+    if ((nFileParts & FILEPART_STREAM) && _udfCanAppend(nLimit, listResult)) {
         qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+        if (!guardedThis || !guardedDevice) {
+            return listResult;
+        }
         qint64 nStreamOffset = 0;
         qint64 nStreamSize = nTotalSize;
 
@@ -421,20 +494,20 @@ QList<XBinary::FPART> XUDF::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             record.filePart = FILEPART_STREAM;
             record.nFileOffset = nStreamOffset;
             record.nFileSize = nStreamSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Data");
 
             listResult.append(record);
         }
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && _udfCanAppend(nLimit, listResult)) {
         if (nFormatSize > 0 && nFormatSize < nTotalSize) {
             FPART record = {};
             record.filePart = FILEPART_OVERLAY;
             record.nFileOffset = nFormatSize;
             record.nFileSize = nTotalSize - nFormatSize;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Overlay");
 
             listResult.append(record);
@@ -454,11 +527,19 @@ QMap<XBinary::UNPACK_PROP, QVariant> XUDF::getDefaultUnpackProperties()
 bool XUDF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
 
     if (pState) {
         finishUnpack(pState, nullptr);
+        if (!guardedThis || !guardedDevice) {
+            return false;
+        }
 
         if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+            return false;
+        }
+        if (!guardedThis || !guardedDevice) {
             return false;
         }
 
@@ -471,6 +552,10 @@ bool XUDF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         }
         pContext->nBlockSize = _getBlockSize();
         pContext->listRecords = _parseFileSystem(pContext->nBlockSize, pPdStruct);
+        if (!guardedThis || !guardedDevice) {
+            delete pContext;
+            return false;
+        }
         pContext->nCurrentRecordIndex = 0;
 
         if (!isPdStructNotCanceled(pPdStruct)) {
@@ -511,8 +596,11 @@ XBinary::ARCHIVERECORD XUDF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    QPointer<QIODevice> guardedOutput(pDevice);
 
-    if (pState && pState->pContext && pDevice) {
+    if (pState && pState->pContext && guardedSource && guardedOutput) {
         UDF_UNPACK_CONTEXT *pContext = (UDF_UNPACK_CONTEXT *)pState->pContext;
 
         if (pContext->nCurrentRecordIndex < pContext->listRecords.count()) {
@@ -522,14 +610,17 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 XBinary::DATAPROCESS_STATE decompressState = {};
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XArchive::HANDLE_METHOD_STORE);
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, ar.nStreamSize);
-                decompressState.pDeviceInput = getDevice();
-                decompressState.pDeviceOutput = pDevice;
+                decompressState.pDeviceInput = guardedSource.data();
+                decompressState.pDeviceOutput = guardedOutput.data();
                 decompressState.nInputOffset = ar.nStreamOffset;
                 decompressState.nInputLimit = ar.nStreamSize;
                 decompressState.nProcessedOffset = 0;
                 decompressState.nProcessedLimit = -1;
 
                 bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
+                if (!guardedThis || !guardedSource || !guardedOutput) {
+                    return false;
+                }
             } else {
                 bResult = true;
             }
@@ -583,37 +674,157 @@ bool XUDF::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 XUDF::UDF_TAG XUDF::_readTag(qint64 nOffset)
 {
     UDF_TAG tag = {};
-    read_array(nOffset, (char *)&tag, sizeof(UDF_TAG));
+    _readTag(nOffset, &tag);
     return tag;
 }
 
 XUDF::UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER XUDF::_readAnchorVolumeDescriptor(qint64 nOffset)
 {
     UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER desc = {};
-    read_array(nOffset, (char *)&desc, sizeof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER));
+    _readAnchorVolumeDescriptor(nOffset, &desc);
     return desc;
 }
 
 XUDF::UDF_PRIMARY_VOLUME_DESCRIPTOR XUDF::_readPrimaryVolumeDescriptor(qint64 nOffset)
 {
     UDF_PRIMARY_VOLUME_DESCRIPTOR desc = {};
-    read_array(nOffset, (char *)&desc, sizeof(UDF_PRIMARY_VOLUME_DESCRIPTOR));
+    _readPrimaryVolumeDescriptor(nOffset, &desc);
     return desc;
+}
+
+bool XUDF::_readExact(qint64 nOffset, char *pData, qint64 nSize)
+{
+    if ((nOffset < 0) || !pData || (nSize <= 0)) {
+        return false;
+    }
+
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(guardedThis ? guardedThis->getDevice() : nullptr);
+    if (!guardedThis || !guardedDevice) {
+        return false;
+    }
+
+    const qint64 nRead = guardedThis->read_array(nOffset, pData, nSize);
+    return guardedThis && guardedDevice && (nRead == nSize);
+}
+
+bool XUDF::_readTag(qint64 nOffset, UDF_TAG *pTag)
+{
+    if (!pTag) {
+        return false;
+    }
+
+    *pTag = {};
+    return _readExact(nOffset, reinterpret_cast<char *>(pTag), sizeof(UDF_TAG));
+}
+
+bool XUDF::_readAnchorVolumeDescriptor(qint64 nOffset, UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER *pDescriptor)
+{
+    if (!pDescriptor) {
+        return false;
+    }
+
+    *pDescriptor = {};
+    return _readExact(nOffset, reinterpret_cast<char *>(pDescriptor), sizeof(UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER));
+}
+
+bool XUDF::_readPrimaryVolumeDescriptor(qint64 nOffset, UDF_PRIMARY_VOLUME_DESCRIPTOR *pDescriptor)
+{
+    if (!pDescriptor) {
+        return false;
+    }
+
+    *pDescriptor = {};
+    return _readExact(nOffset, reinterpret_cast<char *>(pDescriptor), sizeof(UDF_PRIMARY_VOLUME_DESCRIPTOR));
+}
+
+bool XUDF::_readUInt8(qint64 nOffset, quint8 *pValue)
+{
+    if (!pValue) {
+        return false;
+    }
+
+    quint8 nValue = 0;
+    if (!_readExact(nOffset, reinterpret_cast<char *>(&nValue), sizeof(nValue))) {
+        return false;
+    }
+
+    *pValue = nValue;
+    return true;
+}
+
+bool XUDF::_readUInt16(qint64 nOffset, quint16 *pValue)
+{
+    if (!pValue) {
+        return false;
+    }
+
+    quint16 nValue = 0;
+    if (!_readExact(nOffset, reinterpret_cast<char *>(&nValue), sizeof(nValue))) {
+        return false;
+    }
+
+    *pValue = qFromLittleEndian(nValue);
+    return true;
+}
+
+bool XUDF::_readUInt32(qint64 nOffset, quint32 *pValue)
+{
+    if (!pValue) {
+        return false;
+    }
+
+    quint32 nValue = 0;
+    if (!_readExact(nOffset, reinterpret_cast<char *>(&nValue), sizeof(nValue))) {
+        return false;
+    }
+
+    *pValue = qFromLittleEndian(nValue);
+    return true;
+}
+
+bool XUDF::_readUInt64(qint64 nOffset, quint64 *pValue)
+{
+    if (!pValue) {
+        return false;
+    }
+
+    quint64 nValue = 0;
+    if (!_readExact(nOffset, reinterpret_cast<char *>(&nValue), sizeof(nValue))) {
+        return false;
+    }
+
+    *pValue = qFromLittleEndian(nValue);
+    return true;
 }
 
 QString XUDF::getVolumeIdentifier()
 {
     QString sResult;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
 
     qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+    if (!guardedThis || !guardedDevice) {
+        return sResult;
+    }
     if (nAnchorOffset != -1) {
-        UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER anchor = _readAnchorVolumeDescriptor(nAnchorOffset);
+        UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER anchor = {};
+        if (!_readAnchorVolumeDescriptor(nAnchorOffset, &anchor) || !guardedThis || !guardedDevice) {
+            return sResult;
+        }
         qint64 nVDSOffset = (qint64)anchor.mainVolumeDescriptorSequenceExtent.nLocation * 2048;
 
         if (nVDSOffset > 0 && nVDSOffset < getSize()) {
-            UDF_TAG tag = _readTag(nVDSOffset);
+            UDF_TAG tag = {};
+            if (!_readTag(nVDSOffset, &tag) || !guardedThis || !guardedDevice) {
+                return sResult;
+            }
             if (tag.nTagIdentifier == TAG_PRIMARY_VOLUME_DESCRIPTOR) {
-                UDF_PRIMARY_VOLUME_DESCRIPTOR pvd = _readPrimaryVolumeDescriptor(nVDSOffset);
+                UDF_PRIMARY_VOLUME_DESCRIPTOR pvd = {};
+                if (!_readPrimaryVolumeDescriptor(nVDSOffset, &pvd) || !guardedThis || !guardedDevice) {
+                    return sResult;
+                }
                 sResult = QString::fromLatin1(pvd.szVolumeIdentifier, 32).trimmed();
             }
         }
@@ -625,16 +836,30 @@ QString XUDF::getVolumeIdentifier()
 QString XUDF::getVolumeSetIdentifier()
 {
     QString sResult;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
 
     qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+    if (!guardedThis || !guardedDevice) {
+        return sResult;
+    }
     if (nAnchorOffset != -1) {
-        UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER anchor = _readAnchorVolumeDescriptor(nAnchorOffset);
+        UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER anchor = {};
+        if (!_readAnchorVolumeDescriptor(nAnchorOffset, &anchor) || !guardedThis || !guardedDevice) {
+            return sResult;
+        }
         qint64 nVDSOffset = (qint64)anchor.mainVolumeDescriptorSequenceExtent.nLocation * 2048;
 
         if (nVDSOffset > 0 && nVDSOffset < getSize()) {
-            UDF_TAG tag = _readTag(nVDSOffset);
+            UDF_TAG tag = {};
+            if (!_readTag(nVDSOffset, &tag) || !guardedThis || !guardedDevice) {
+                return sResult;
+            }
             if (tag.nTagIdentifier == TAG_PRIMARY_VOLUME_DESCRIPTOR) {
-                UDF_PRIMARY_VOLUME_DESCRIPTOR pvd = _readPrimaryVolumeDescriptor(nVDSOffset);
+                UDF_PRIMARY_VOLUME_DESCRIPTOR pvd = {};
+                if (!_readPrimaryVolumeDescriptor(nVDSOffset, &pvd) || !guardedThis || !guardedDevice) {
+                    return sResult;
+                }
                 sResult = QString::fromLatin1(pvd.szVolumeSetIdentifier, 128).trimmed();
             }
         }
@@ -651,11 +876,17 @@ qint32 XUDF::_getBlockSize()
 
 qint64 XUDF::_getAnchorVolumeDescriptorOffset()
 {
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
+
     // Anchor Volume Descriptor Pointer is at sector 256
     qint64 nOffset = 256 * 2048;
 
     if (nOffset < getSize()) {
-        quint16 nTagIdentifier = read_uint16(nOffset);
+        quint16 nTagIdentifier = 0;
+        if (!_readUInt16(nOffset, &nTagIdentifier) || !guardedThis || !guardedDevice) {
+            return -1;
+        }
         if (nTagIdentifier == TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER) {
             return nOffset;
         }
@@ -664,7 +895,10 @@ qint64 XUDF::_getAnchorVolumeDescriptorOffset()
     // Try at end of volume
     qint64 nEndOffset = (getSize() / 2048) * 2048 - 2048;
     if (nEndOffset > 0) {
-        quint16 nTagIdentifier = read_uint16(nEndOffset);
+        quint16 nTagIdentifier = 0;
+        if (!_readUInt16(nEndOffset, &nTagIdentifier) || !guardedThis || !guardedDevice) {
+            return -1;
+        }
         if (nTagIdentifier == TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER) {
             return nEndOffset;
         }
@@ -684,20 +918,31 @@ bool XUDF::_isValidTag(qint64 nOffset, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    UDF_TAG tag = _readTag(nOffset);
+    UDF_TAG tag = {};
+    if (!_readTag(nOffset, &tag)) {
+        return false;
+    }
     return (tag.nTagIdentifier > 0 && tag.nTagIdentifier < 300);
 }
 
 QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT *pPdStruct)
 {
     QList<ARCHIVERECORD> listResult;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
 
     qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+    if (!guardedThis || !guardedDevice) {
+        return listResult;
+    }
     if (nAnchorOffset == -1) {
         return listResult;
     }
 
-    UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER anchor = _readAnchorVolumeDescriptor(nAnchorOffset);
+    UDF_ANCHOR_VOLUME_DESCRIPTOR_POINTER anchor = {};
+    if (!_readAnchorVolumeDescriptor(nAnchorOffset, &anchor) || !guardedThis || !guardedDevice) {
+        return listResult;
+    }
     qint64 nVDSOffset = (qint64)anchor.mainVolumeDescriptorSequenceExtent.nLocation * nBlockSize;
     qint64 nVDSLength = (qint64)anchor.mainVolumeDescriptorSequenceExtent.nLength;
 
@@ -711,7 +956,10 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
     qint64 nVDSEnd = nVDSOffset + nVDSLength;
 
     while (nCurrentVDSOffset + (qint64)sizeof(UDF_TAG) <= nVDSEnd && isPdStructNotCanceled(pPdStruct)) {
-        UDF_TAG tag = _readTag(nCurrentVDSOffset);
+        UDF_TAG tag = {};
+        if (!_readTag(nCurrentVDSOffset, &tag) || !guardedThis || !guardedDevice) {
+            return listResult;
+        }
 
         if (tag.nTagIdentifier == TAG_TERMINATING_DESCRIPTOR) {
             break;
@@ -726,7 +974,10 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
             // + DomainIdentifier(32) + LogicalVolumeContentsUse(16) <-- FSD extent here
             // + MapTableLength(4) + NumberOfPartitionMaps(4)
             // LogicalVolumeContentsUse starts at offset 16+4+64+128+4+32 = 248
-            quint32 nFSDLoc = read_uint32(nCurrentVDSOffset + 248);
+            quint32 nFSDLoc = 0;
+            if (!_readUInt32(nCurrentVDSOffset + 248, &nFSDLoc) || !guardedThis || !guardedDevice) {
+                return listResult;
+            }
             // quint32 nFSDLen = read_uint32(nCurrentVDSOffset + 252);  // extent length
             if (nFSDLoc > 0) {
                 nFSDLocation = (qint64)nFSDLoc * nBlockSize;
@@ -741,7 +992,10 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
     }
 
     // Read File Set Descriptor (tag id 256)
-    UDF_TAG fsdTag = _readTag(nFSDLocation);
+    UDF_TAG fsdTag = {};
+    if (!_readTag(nFSDLocation, &fsdTag) || !guardedThis || !guardedDevice) {
+        return listResult;
+    }
     if (fsdTag.nTagIdentifier != TAG_FILE_SET_DESCRIPTOR) {
         return listResult;
     }
@@ -754,8 +1008,14 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
     // + (ICB exts: 16 bytes each) ...
     // Root Directory ICB is at offset 16+12+2+2+4+4+4+4+64+128+64+32+12 = 352
     // It is a long_ad: ExtentLength(4) + ExtentLocation: LogicalBlockNumber(4) + PartitionReferenceNumber(2) + ImplementationUse(6) = 16 bytes total
-    quint32 nRootICBLocation = read_uint32(nFSDLocation + 352 + 4);  // LogicalBlockNumber of root ICB
-    quint16 nRootPartRef = read_uint16(nFSDLocation + 352 + 4 + 4);  // PartitionReferenceNumber
+    quint32 nRootICBLocation = 0;
+    if (!_readUInt32(nFSDLocation + 352 + 4, &nRootICBLocation) || !guardedThis || !guardedDevice) {
+        return listResult;
+    }
+    quint16 nRootPartRef = 0;
+    if (!_readUInt16(nFSDLocation + 352 + 4 + 4, &nRootPartRef) || !guardedThis || !guardedDevice) {
+        return listResult;
+    }
     Q_UNUSED(nRootPartRef)
 
     if (nRootICBLocation == 0) {
@@ -785,7 +1045,10 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
     while (!listQueue.isEmpty() && isPdStructNotCanceled(pPdStruct)) {
         DirEntry dirInfo = listQueue.takeFirst();
 
-        UDF_TAG feTag = _readTag(dirInfo.nFileEntryOffset);
+        UDF_TAG feTag = {};
+        if (!_readTag(dirInfo.nFileEntryOffset, &feTag) || !guardedThis || !guardedDevice) {
+            return listResult;
+        }
         if (feTag.nTagIdentifier != TAG_FILE_ENTRY && feTag.nTagIdentifier != TAG_EXTENDED_FILE_ENTRY) {
             continue;
         }
@@ -798,12 +1061,24 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
         // + ExtendedAttributeICB(16) + ImplementationIdentifier(32) + UniqueID(8)
         // + LengthOfExtendedAttributes(4) + LengthOfAllocationDescriptors(4)
         // = 16+20+4+4+4+2+1+1+4+8+8+12+12+12+4+16+32+8+4+4 = 176
-        quint32 nLenExtAttrs = read_uint32(dirInfo.nFileEntryOffset + 168);
-        quint32 nLenAllocDescs = read_uint32(dirInfo.nFileEntryOffset + 172);
+        quint32 nLenExtAttrs = 0;
+        if (!_readUInt32(dirInfo.nFileEntryOffset + 168, &nLenExtAttrs) || !guardedThis || !guardedDevice) {
+            return listResult;
+        }
+        quint32 nLenAllocDescs = 0;
+        if (!_readUInt32(dirInfo.nFileEntryOffset + 172, &nLenAllocDescs) || !guardedThis || !guardedDevice) {
+            return listResult;
+        }
         // ICBTag file type is at offset 16+12 = 28 (within ICBTag at offset 16)
-        quint8 nICBFileType = read_uint8(dirInfo.nFileEntryOffset + 28);
+        quint8 nICBFileType = 0;
+        if (!_readUInt8(dirInfo.nFileEntryOffset + 28, &nICBFileType) || !guardedThis || !guardedDevice) {
+            return listResult;
+        }
         // ICBTag flags (allocation type) at offset 16+18 = 34
-        quint16 nICBFlags = read_uint16(dirInfo.nFileEntryOffset + 34);
+        quint16 nICBFlags = 0;
+        if (!_readUInt16(dirInfo.nFileEntryOffset + 34, &nICBFlags) || !guardedThis || !guardedDevice) {
+            return listResult;
+        }
         quint8 nAllocType = (quint8)(nICBFlags & 0x07);
 
         bool bIsDirectory = (nICBFileType == 4);
@@ -812,7 +1087,10 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
 
         if (!bIsDirectory) {
             // Regular file - read allocation descriptors to get data location
-            quint64 nInfoLength = read_uint64(dirInfo.nFileEntryOffset + 56);
+            quint64 nInfoLength = 0;
+            if (!_readUInt64(dirInfo.nFileEntryOffset + 56, &nInfoLength) || !guardedThis || !guardedDevice) {
+                return listResult;
+            }
 
             ARCHIVERECORD record = {};
             record.mapProperties[FPART_PROP_ORIGINALNAME] = dirInfo.sPath;
@@ -823,14 +1101,28 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
 
             if (nAllocType == 0 && nLenAllocDescs >= 8) {
                 // Short allocation descriptor: ExtentLength(4) + ExtentPosition(4)
-                quint32 nExtLength = read_uint32(nAllocDescsOffset) & 0x3FFFFFFF;
-                quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
+                quint32 nExtLength = 0;
+                if (!_readUInt32(nAllocDescsOffset, &nExtLength) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
+                nExtLength &= 0x3FFFFFFF;
+                quint32 nExtPos = 0;
+                if (!_readUInt32(nAllocDescsOffset + 4, &nExtPos) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
                 record.nStreamOffset = (qint64)nExtPos * nBlockSize;
                 record.nStreamSize = (qint64)nExtLength;
             } else if (nAllocType == 1 && nLenAllocDescs >= 16) {
                 // Long allocation descriptor: ExtentLength(4) + ExtentLocation: LogicalBlockNum(4) + PartRef(2) + ImplUse(6)
-                quint32 nExtLength = read_uint32(nAllocDescsOffset) & 0x3FFFFFFF;
-                quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
+                quint32 nExtLength = 0;
+                if (!_readUInt32(nAllocDescsOffset, &nExtLength) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
+                nExtLength &= 0x3FFFFFFF;
+                quint32 nExtPos = 0;
+                if (!_readUInt32(nAllocDescsOffset + 4, &nExtPos) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
                 record.nStreamOffset = (qint64)nExtPos * nBlockSize;
                 record.nStreamSize = (qint64)nExtLength;
             } else if (nAllocType == 3 && nLenAllocDescs > 0) {
@@ -856,14 +1148,23 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
             qint64 nDirDataOffset = -1;
             qint64 nDirDataSize = 0;
 
-            quint64 nInfoLength = read_uint64(dirInfo.nFileEntryOffset + 56);
+            quint64 nInfoLength = 0;
+            if (!_readUInt64(dirInfo.nFileEntryOffset + 56, &nInfoLength) || !guardedThis || !guardedDevice) {
+                return listResult;
+            }
 
             if (nAllocType == 0 && nLenAllocDescs >= 8) {
-                quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
+                quint32 nExtPos = 0;
+                if (!_readUInt32(nAllocDescsOffset + 4, &nExtPos) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
                 nDirDataOffset = (qint64)nExtPos * nBlockSize;
                 nDirDataSize = (qint64)nInfoLength;
             } else if (nAllocType == 1 && nLenAllocDescs >= 16) {
-                quint32 nExtPos = read_uint32(nAllocDescsOffset + 4);
+                quint32 nExtPos = 0;
+                if (!_readUInt32(nAllocDescsOffset + 4, &nExtPos) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
                 nDirDataOffset = (qint64)nExtPos * nBlockSize;
                 nDirDataSize = (qint64)nInfoLength;
             }
@@ -881,7 +1182,10 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
                     break;
                 }
 
-                UDF_TAG fidTag = _readTag(nFIDOffset);
+                UDF_TAG fidTag = {};
+                if (!_readTag(nFIDOffset, &fidTag) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
 
                 if (fidTag.nTagIdentifier != TAG_FILE_IDENTIFIER_DESCRIPTOR) {
                     break;
@@ -890,12 +1194,24 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
                 // File Identifier Descriptor layout:
                 // tag(16) + FileVersionNumber(2) + FileCharacteristics(1) + LengthOfFileIdentifier(1)
                 // + ICB(16) + LengthOfImplementationUse(2) [+ ImplementationUse(var)] [+ FileIdentifier(var)] [+ padding]
-                quint8 nFileCharacteristics = read_uint8(nFIDOffset + 18);
-                quint8 nLenFileId = read_uint8(nFIDOffset + 19);
-                quint16 nLenImplUse = read_uint16(nFIDOffset + 36);
+                quint8 nFileCharacteristics = 0;
+                if (!_readUInt8(nFIDOffset + 18, &nFileCharacteristics) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
+                quint8 nLenFileId = 0;
+                if (!_readUInt8(nFIDOffset + 19, &nLenFileId) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
+                quint16 nLenImplUse = 0;
+                if (!_readUInt16(nFIDOffset + 36, &nLenImplUse) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
 
                 // ICB (long_ad) of child: ExtentLength(4) + ExtentLocation: LogicalBlockNum(4) + PartRef(2) + ImplUse(6)
-                quint32 nChildICBLocation = read_uint32(nFIDOffset + 20 + 4);
+                quint32 nChildICBLocation = 0;
+                if (!_readUInt32(nFIDOffset + 20 + 4, &nChildICBLocation) || !guardedThis || !guardedDevice) {
+                    return listResult;
+                }
 
                 bool bIsParent = (nFileCharacteristics & 0x08) != 0;  // Parent directory
                 bool bChildIsDir = (nFileCharacteristics & 0x02) != 0;
@@ -906,7 +1222,10 @@ QList<XBinary::ARCHIVERECORD> XUDF::_parseFileSystem(qint32 nBlockSize, PDSTRUCT
                 if (!bIsParent && nLenFileId > 0) {
                     qint64 nNameOffset = nFIDOffset + 38 + (qint64)nLenImplUse;
                     if (nNameOffset + nLenFileId <= getSize()) {
-                        QByteArray baName = read_array(nNameOffset, nLenFileId);
+                        QByteArray baName(nLenFileId, Qt::Uninitialized);
+                        if (!_readExact(nNameOffset, baName.data(), nLenFileId) || !guardedThis || !guardedDevice) {
+                            return listResult;
+                        }
                         // OSTA CS0 encoded: if first byte is 8, rest is ASCII; if 16, UTF-16BE
                         if (baName.size() > 0) {
                             quint8 nEncType = (quint8)baName.at(0);
@@ -991,11 +1310,21 @@ XBinary *XUDF::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 bool XUDF::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
     bool bResult = true;
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
 
     if (!isInternalInfoHandled()) {
         bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !guardedDevice || !bResult) {
+            return false;
+        }
+
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !guardedDevice || !pInfo) {
+            return false;
+        }
+
+        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) = *pInfo;
     }
 
     return bResult;
@@ -1003,7 +1332,11 @@ bool XUDF::handleInternalInfo(PDSTRUCT *pPdStruct)
 
 void *XUDF::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XUDF> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
+    if (!handleInternalInfo(pPdStruct) || !guardedThis || !guardedDevice) {
+        return nullptr;
+    }
 
     return &m_internalInfo;
 }

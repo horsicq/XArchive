@@ -360,6 +360,11 @@ void zipMarkPackWriteFailure(XBinary::PACK_STATE *pState, XZip::ZIP_PACK_CONTEXT
     }
 }
 
+bool zipRestoreSourcePosition(QIODevice *pSource, bool bSequential, qint64 nOriginalPosition)
+{
+    return bSequential || pSource->seek(nOriginalPosition);
+}
+
 bool zipStageSource(QIODevice *pSource, QTemporaryFile *pStage, qint64 nExpectedSize,
                     XBinary::PDSTRUCT *pPdStruct, qint64 *pnSize, quint32 *pnCRC32)
 {
@@ -374,12 +379,8 @@ bool zipStageSource(QIODevice *pSource, QTemporaryFile *pStage, qint64 nExpected
     const qint64 nOriginalPosition = bSequential ? -1 : pSource->pos();
     if (!bSequential && ((nOriginalPosition < 0) || !pSource->seek(0))) return false;
 
-    const auto restoreSource = [&]() -> bool {
-        return bSequential || pSource->seek(nOriginalPosition);
-    };
-
     if (!pStage->open()) {
-        restoreSource();
+        zipRestoreSourcePosition(pSource, bSequential, nOriginalPosition);
         return false;
     }
 
@@ -387,20 +388,20 @@ bool zipStageSource(QIODevice *pSource, QTemporaryFile *pStage, qint64 nExpected
     if (!bSequential) {
         const qint64 nDeviceSize = pSource->size();
         if ((nDeviceSize < 0) || ((nExpectedSize >= 0) && (nDeviceSize != nExpectedSize))) {
-            restoreSource();
+            zipRestoreSourcePosition(pSource, bSequential, nOriginalPosition);
             return false;
         }
         nSize = nDeviceSize;
     }
     if ((nSize >= 0) && ((quint64)nSize >= (std::numeric_limits<quint32>::max)())) {
-        restoreSource();
+        zipRestoreSourcePosition(pSource, bSequential, nOriginalPosition);
         return false;
     }
 
     const qint32 nBufferSize = 0x10000;
     char *pBuffer = new (std::nothrow) char[nBufferSize];
     if (!pBuffer) {
-        restoreSource();
+        zipRestoreSourcePosition(pSource, bSequential, nOriginalPosition);
         return false;
     }
 
@@ -432,7 +433,7 @@ bool zipStageSource(QIODevice *pSource, QTemporaryFile *pStage, qint64 nExpected
     if ((nSize >= 0) && (nTotal != nSize)) bResult = false;
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) bResult = false;
     if (!pStage->flush() || !pStage->seek(0)) bResult = false;
-    if (!restoreSource()) bResult = false;
+    if (!zipRestoreSourcePosition(pSource, bSequential, nOriginalPosition)) bResult = false;
 
     if (!bResult) return false;
     *pnSize = nTotal;
@@ -989,15 +990,11 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     header.nUncompressedSize = (quint32)record.nUncompressedSize;
     header.nFileNameLength = (quint16)baFileName.size();
 
-    const auto failWrite = [pDest, nStartPosition]() -> bool {
-        zipRollbackWrite(pDest, nStartPosition);
-        return false;
-    };
-
     if (!zipWriteAll(pDest, reinterpret_cast<const char *>(&header), sizeof(header), pPdStruct) ||
         !zipWriteAll(pDest, baFileName.constData(), baFileName.size(), pPdStruct) ||
         !zipCopyExactly(pPayload, pDest, record.nCompressedSize, pPdStruct)) {
-        return failWrite();
+        zipRollbackWrite(pDest, nStartPosition);
+        return false;
     }
 
     *pZipFileRecord = record;
@@ -1141,6 +1138,23 @@ bool XZip::_readFileName(qint64 nFileNameOffset, qint64 nFileNameLength, quint16
     return decodeZipFileName(baRawName, nFlags, baExtraField, pFileName);
 }
 
+static bool zipReadExact(QPointer<XZip> *pGuardedArchive, QPointer<QIODevice> *pGuardedSource, qint64 nSize, XBinary::PDSTRUCT *pPdStruct,
+                         qint64 nOffset, qint64 nLength, QByteArray *pData)
+{
+    if (!pData || pGuardedArchive->isNull() || pGuardedSource->isNull() ||
+        (nOffset < 0) || (nLength < 0) || (nOffset > nSize) ||
+        (nLength > (nSize - nOffset))) return false;
+    *pData = XBinary::read_array_process(
+        pGuardedSource->data(), nOffset, nLength, pPdStruct);
+    return !pGuardedArchive->isNull() && !pGuardedSource->isNull() &&
+           (pData->size() == nLength);
+}
+
+static bool zipLocalRangeLessThan(const QPair<qint64, qint64> &a, const QPair<qint64, qint64> &b)
+{
+    return a.first < b.first;
+}
+
 qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
 {
     QPointer<XZip> guardedArchive(this);
@@ -1159,17 +1173,6 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
             pPdStruct);
         if (!guardedArchive || !guardedSource ||
             (baSearch.size() != (nSize - nSearchOffset))) return -1;
-
-        const auto readExact = [&](qint64 nOffset, qint64 nLength,
-                                   QByteArray *pData) -> bool {
-            if (!pData || !guardedArchive || !guardedSource ||
-                (nOffset < 0) || (nLength < 0) || (nOffset > nSize) ||
-                (nLength > (nSize - nOffset))) return false;
-            *pData = XBinary::read_array_process(
-                guardedSource.data(), nOffset, nLength, pPdStruct);
-            return guardedArchive && guardedSource &&
-                   (pData->size() == nLength);
-        };
 
         static const QByteArray baECDSignature("PK\x05\x06", 4);
         qint32 nSearchIndex = 0;
@@ -1233,7 +1236,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 }
 
                 QByteArray baCentralHeader;
-                if (!readExact(nCurrentHeaderOffset,
+                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nCurrentHeaderOffset,
                                sizeof(CENTRALDIRECTORYFILEHEADER),
                                &baCentralHeader)) return -1;
                 CENTRALDIRECTORYFILEHEADER cdfh = {};
@@ -1278,7 +1281,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 setLocalHeaderOffsets.insert(nLocalHeaderOffset);
 
                 QByteArray baLocalHeader;
-                if (!readExact(nLocalHeaderOffset, sizeof(LOCALFILEHEADER),
+                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nLocalHeaderOffset, sizeof(LOCALFILEHEADER),
                                &baLocalHeader)) return -1;
                 LOCALFILEHEADER lfh = {};
                 memcpy(&lfh, baLocalHeader.constData(), sizeof(lfh));
@@ -1288,9 +1291,9 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 QByteArray baLocalName;
                 QByteArray baCentralName;
                 const bool bNamesRead =
-                    readExact(nLocalHeaderOffset + sizeof(LOCALFILEHEADER),
+                    zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nLocalHeaderOffset + sizeof(LOCALFILEHEADER),
                               lfh.nFileNameLength, &baLocalName) &&
-                    readExact(nCurrentHeaderOffset +
+                    zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nCurrentHeaderOffset +
                                   sizeof(CENTRALDIRECTORYFILEHEADER),
                               cdfh.nFileNameLength, &baCentralName);
                 if (!guardedArchive || !guardedSource) return -1;
@@ -1328,7 +1331,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                     const qint64 nDescriptorReadSize =
                         qMin<qint64>(16, qMax<qint64>(0, nAvailableDescriptor));
                     if ((nDescriptorReadSize >= 12) &&
-                        !readExact(nDescriptorOffset, nDescriptorReadSize,
+                        !zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nDescriptorOffset, nDescriptorReadSize,
                                    &baDescriptor)) return -1;
                     char *pDescriptor = baDescriptor.data();
                     if ((baDescriptor.size() >= 16) &&
@@ -1361,10 +1364,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
             }
 
             if (bValid) {
-                std::sort(listLocalRanges.begin(), listLocalRanges.end(),
-                          [](const QPair<qint64, qint64> &a, const QPair<qint64, qint64> &b) {
-                              return a.first < b.first;
-                          });
+                std::sort(listLocalRanges.begin(), listLocalRanges.end(), zipLocalRangeLessThan);
                 for (qint32 i = 0; i < listLocalRanges.size(); i++) {
                     const QPair<qint64, qint64> &range = listLocalRanges.at(i);
                     if ((range.first < 0) || (range.second <= range.first) ||
@@ -1385,7 +1385,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 }
 
                 QByteArray baOptionalHeader;
-                if (!readExact(nCurrentHeaderOffset,
+                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nCurrentHeaderOffset,
                                qMin<qint64>(8, nCurrent - nCurrentHeaderOffset),
                                &baOptionalHeader)) return -1;
                 const quint32 nSignature = XBinary::_read_uint32(
@@ -1713,6 +1713,35 @@ QList<XBinary::MAPMODE> XZip::getMapModesList()
 //     return listResult;
 // }
 
+static bool zipPartsCanAppend(qint32 nLimit, const QList<XBinary::FPART> *pListResult)
+{
+    return (nLimit == -1) || (pListResult->size() < nLimit);
+}
+
+static bool zipIsWinZipAesAe2(XZip *pZip, XBinary::PDSTRUCT *pPdStruct, qint64 nExtraFieldOffset, qint64 nExtraFieldLength)
+{
+    qint64 nCurrentOffset = 0;
+
+    while ((nCurrentOffset + 4) <= nExtraFieldLength) {
+        quint16 nHeaderID = pZip->read_uint16(nExtraFieldOffset + nCurrentOffset);
+        quint16 nDataSize = pZip->read_uint16(nExtraFieldOffset + nCurrentOffset + 2);
+        qint64 nRecordSize = 4 + (qint64)nDataSize;
+
+        if (nRecordSize > (nExtraFieldLength - nCurrentOffset)) {
+            break;
+        }
+
+        if ((nHeaderID == XZip::ZIP_AES_EXTRA_FIELD_HEADER_ID) && (nDataSize >= XZip::ZIP_AES_EXTRA_FIELD_DATA_SIZE)) {
+            XZip::AES_EXTRA_FIELD aesExtraField = pZip->read_AES_EXTRA_FIELD(nExtraFieldOffset + nCurrentOffset, pPdStruct);
+            return (aesExtraField.nAESVersion == 2) && (aesExtraField.nVendorID == XZip::ZIP_AES_VENDOR_ID_AE);
+        }
+
+        nCurrentOffset += nRecordSize;
+    }
+
+    return false;
+}
+
 QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<XBinary::FPART> listResult;
@@ -1720,31 +1749,6 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     if ((nLimit < -1) || (nLimit == 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return listResult;
     }
-
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
-    auto isWinZipAesAe2 = [this, pPdStruct](qint64 nExtraFieldOffset, qint64 nExtraFieldLength) -> bool {
-        qint64 nCurrentOffset = 0;
-
-        while ((nCurrentOffset + 4) <= nExtraFieldLength) {
-            quint16 nHeaderID = read_uint16(nExtraFieldOffset + nCurrentOffset);
-            quint16 nDataSize = read_uint16(nExtraFieldOffset + nCurrentOffset + 2);
-            qint64 nRecordSize = 4 + (qint64)nDataSize;
-
-            if (nRecordSize > (nExtraFieldLength - nCurrentOffset)) {
-                break;
-            }
-
-            if ((nHeaderID == ZIP_AES_EXTRA_FIELD_HEADER_ID) && (nDataSize >= ZIP_AES_EXTRA_FIELD_DATA_SIZE)) {
-                AES_EXTRA_FIELD aesExtraField = read_AES_EXTRA_FIELD(nExtraFieldOffset + nCurrentOffset, pPdStruct);
-                return (aesExtraField.nAESVersion == 2) && (aesExtraField.nVendorID == ZIP_AES_VENDOR_ID_AE);
-            }
-
-            nCurrentOffset += nRecordSize;
-        }
-
-        return false;
-    };
 
     qint64 nECDOffset = findECDOffset(pPdStruct);
     qint64 nMaxOffset = 0;
@@ -1760,13 +1764,13 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
             nMaxOffset = qMin(nECDOffset + (qint64)sizeof(ENDOFCENTRALDIRECTORYRECORD) + (qint64)nCommentLength, nTotalSize);
 
-            if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+            if ((nFileParts & FILEPART_HEADER) && zipPartsCanAppend(nLimit, &listResult)) {
                 FPART record = {};
 
                 record.filePart = FILEPART_HEADER;
                 record.nFileOffset = nECDOffset;
                 record.nFileSize = nMaxOffset - nECDOffset;
-                record.nVirtualAddress = -1;
+                record.nVirtualAddress = XADDR_MAX;
                 record.sName = "End of Central Directory Record";
 
                 listResult.append(record);
@@ -1777,7 +1781,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                     ((qint64)nSizeOfCentralDirectory <= (nECDOffset - (qint64)nOffsetToCentralDirectory))) {
                     qint64 nOffset = nOffsetToCentralDirectory;
 
-                    for (qint32 i = 0; (i < nTotalNumberOfRecords) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+                    for (qint32 i = 0; (i < nTotalNumberOfRecords) && zipPartsCanAppend(nLimit, &listResult) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
                         if ((nOffset >= 0) && ((nECDOffset - nOffset) >= (qint64)sizeof(CENTRALDIRECTORYFILEHEADER))) {
                             CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nOffset, pPdStruct);
                             const qint64 nCentralRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) +
@@ -1795,13 +1799,13 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                     break;
                                 }
 
-                                if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+                                if ((nFileParts & FILEPART_HEADER) && zipPartsCanAppend(nLimit, &listResult)) {
                                     FPART record = {};
 
                                     record.filePart = FILEPART_HEADER;
                                     record.nFileOffset = nOffset;
                                     record.nFileSize = (sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength + cdh.nExtraFieldLength + cdh.nFileCommentLength);
-                                    record.nVirtualAddress = -1;
+                                    record.nVirtualAddress = XADDR_MAX;
                                     record.sName = QString("%1 %2").arg(tr("Stream")).arg(QString::number(i));
                                     record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
 
@@ -1824,26 +1828,26 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                         if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
                                             QString sName = QString("%1 %2").arg(tr("Stream")).arg(QString::number(i));
 
-                                            if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+                                            if ((nFileParts & FILEPART_HEADER) && zipPartsCanAppend(nLimit, &listResult)) {
                                                 FPART record = {};
 
                                                 record.filePart = FILEPART_HEADER;
                                                 record.nFileOffset = nLocalOffset;
                                                 record.nFileSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
-                                                record.nVirtualAddress = -1;
+                                                record.nVirtualAddress = XADDR_MAX;
                                                 record.sName = sName;
                                                 record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
 
                                                 listResult.append(record);
                                             }
 
-                                            if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+                                            if ((nFileParts & FILEPART_STREAM) && zipPartsCanAppend(nLimit, &listResult)) {
                                                 FPART record = {};
 
                                                 record.filePart = FILEPART_STREAM;
                                                 record.nFileOffset = nLocalDataOffset;
                                                 record.nFileSize = cdh.nCompressedSize;
-                                                record.nVirtualAddress = -1;
+                                                record.nVirtualAddress = XADDR_MAX;
                                                 record.sName = sName;
                                                 record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
                                                 record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, zipToCompressMethod(cdh.nMethod, cdh.nFlags));
@@ -1852,7 +1856,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                                                 qint64 nExtraFieldOffset = nOffset + sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength;
                                                 bool bHasUsableCRC = !((cdh.nMethod == CMETHOD_AES) &&
-                                                                       isWinZipAesAe2(nExtraFieldOffset, cdh.nExtraFieldLength));
+                                                                       zipIsWinZipAesAe2(this, pPdStruct, nExtraFieldOffset, cdh.nExtraFieldLength));
                                                 if (bHasUsableCRC) {
                                                     record.mapProperties.insert(FPART_PROP_RESULTCRC, cdh.nCRC32);
                                                     record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
@@ -1881,7 +1885,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
         qint64 nOffset = 0;
 
-        for (qint32 i = 0; (i < nCount) && canAppend() && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        for (qint32 i = 0; (i < nCount) && zipPartsCanAppend(nLimit, &listResult) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
             if ((nOffset >= 0) && ((nTotalSize - nOffset) >= (qint64)sizeof(LOCALFILEHEADER))) {
                 LOCALFILEHEADER lfh = read_LOCALFILEHEADER(nOffset, pPdStruct);
 
@@ -1895,24 +1899,24 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                             break;
                         }
 
-                        if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+                        if ((nFileParts & FILEPART_HEADER) && zipPartsCanAppend(nLimit, &listResult)) {
                             FPART record = {};
 
                             record.filePart = FILEPART_HEADER;
                             record.nFileOffset = nOffset;
                             record.nFileSize = sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
-                            record.nVirtualAddress = -1;
+                            record.nVirtualAddress = XADDR_MAX;
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
 
                             listResult.append(record);
                         }
-                        if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+                        if ((nFileParts & FILEPART_STREAM) && zipPartsCanAppend(nLimit, &listResult)) {
                             FPART record = {};
 
                             record.filePart = FILEPART_STREAM;
                             record.nFileOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength + lfh.nExtraFieldLength;
                             record.nFileSize = lfh.nCompressedSize;
-                            record.nVirtualAddress = -1;
+                            record.nVirtualAddress = XADDR_MAX;
                             record.mapProperties.insert(FPART_PROP_ORIGINALNAME, sOriginalName);
                             record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, zipToCompressMethod(lfh.nMethod, lfh.nFlags));
                             record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, lfh.nCompressedSize);
@@ -1920,7 +1924,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                             const qint64 nLocalExtraFieldOffset = nOffset + sizeof(LOCALFILEHEADER) + lfh.nFileNameLength;
                             bool bHasUsableCRC = !(lfh.nFlags & 0x0008) &&
-                                                 !((lfh.nMethod == CMETHOD_AES) && isWinZipAesAe2(nLocalExtraFieldOffset, lfh.nExtraFieldLength));
+                                                 !((lfh.nMethod == CMETHOD_AES) && zipIsWinZipAesAe2(this, pPdStruct, nLocalExtraFieldOffset, lfh.nExtraFieldLength));
                             if (bHasUsableCRC) {
                                 record.mapProperties.insert(FPART_PROP_RESULTCRC, lfh.nCRC32);
                                 record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
@@ -1944,26 +1948,26 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         nMaxOffset = nRealSize;
     }
 
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && zipPartsCanAppend(nLimit, &listResult)) {
         FPART record = {};
 
         record.filePart = FILEPART_DATA;
         record.nFileOffset = 0;
         record.nFileSize = nMaxOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Data");
 
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && zipPartsCanAppend(nLimit, &listResult)) {
         if (nMaxOffset < getSize()) {
             FPART record = {};
 
             record.filePart = FILEPART_OVERLAY;
             record.nFileOffset = nMaxOffset;
             record.nFileSize = nTotalSize - nMaxOffset;
-            record.nVirtualAddress = -1;
+            record.nVirtualAddress = XADDR_MAX;
             record.sName = tr("Overlay");
 
             listResult.append(record);
@@ -1973,17 +1977,18 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     return XBinary::isPdStructNotCanceled(pPdStruct) ? listResult : QList<FPART>();
 }
 
+static bool zipIsRecordNameMatch(bool bStartWith, const QString &sRecordName1, const QString &sRecordName2, const QString &sRecordName)
+{
+    if (bStartWith) {
+        return sRecordName.startsWith(sRecordName1) || (!sRecordName2.isEmpty() && sRecordName.startsWith(sRecordName2));
+    }
+    return (sRecordName == sRecordName1) || (!sRecordName2.isEmpty() && (sRecordName == sRecordName2));
+}
+
 bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith)
 {
     qint32 nLimit = 10000;  // TODO
     qint64 nTotalSize = getSize();
-
-    const auto isMatch = [&](const QString &sRecordName) -> bool {
-        if (bStartWith) {
-            return sRecordName.startsWith(sRecordName1) || (!sRecordName2.isEmpty() && sRecordName.startsWith(sRecordName2));
-        }
-        return (sRecordName == sRecordName1) || (!sRecordName2.isEmpty() && (sRecordName == sRecordName2));
-    };
 
     if (nECDOffset != -1) {
         qint32 nNumberOfRecords = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
@@ -2008,7 +2013,7 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
                                nExtraFieldOffset, cdh.nExtraFieldLength, &sRecordName)) {
                 break;
             }
-            if (isMatch(sRecordName)) {
+            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2, sRecordName)) {
                 return true;
             }
 
@@ -2042,7 +2047,7 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
                                nExtraFieldOffset, lfh.nExtraFieldLength, &sRecordName)) {
                 break;
             }
-            if (isMatch(sRecordName)) {
+            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2, sRecordName)) {
                 return true;
             }
 
@@ -2401,11 +2406,10 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     localFileHeader.nUncompressedSize = (quint32)zipFileRecord.nUncompressedSize;
     localFileHeader.nFileNameLength = (quint16)baFileName.size();
 
-    try {
-        pListZipFileRecords->reserve(pListZipFileRecords->size() + 1);
-    } catch (const std::bad_alloc &) {
+    if (pListZipFileRecords->size() >= (std::numeric_limits<quint16>::max)()) {
         return false;
     }
+    pListZipFileRecords->reserve(pListZipFileRecords->size() + 1);
     const qint64 nStartPosition = pContext->nCurrentOffset;
     qint64 nRecordWritten = 0;
     qint64 nPartWritten = 0;
@@ -2432,6 +2436,13 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     pState->nCurrentOffset = pContext->nCurrentOffset;
     pState->nNumberOfRecords = pContext->nNumberOfRecords;
     return true;
+}
+
+static void zipRestoreBasePath(XBinary::PACK_STATE *pState, bool bRestoreBasePath, bool bHadBasePath, const QVariant &originalBasePath)
+{
+    if (!bRestoreBasePath) return;
+    if (bHadBasePath) pState->mapProperties.insert(XBinary::PACK_PROP_BASEPATH, originalBasePath);
+    else pState->mapProperties.remove(XBinary::PACK_PROP_BASEPATH);
 }
 
 bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct)
@@ -2465,16 +2476,10 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
         bRestoreBasePath = true;
     }
 
-    const auto restoreBasePath = [pState, bRestoreBasePath, bHadBasePath, originalBasePath]() {
-        if (!bRestoreBasePath) return;
-        if (bHadBasePath) pState->mapProperties.insert(PACK_PROP_BASEPATH, originalBasePath);
-        else pState->mapProperties.remove(PACK_PROP_BASEPATH);
-    };
-
     QList<QString> listFiles;
     XBinary::findFiles(sDirectoryPath, &listFiles, true, 0, pPdStruct);
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-        restoreBasePath();
+        zipRestoreBasePath(pState, bRestoreBasePath, bHadBasePath, originalBasePath);
         return false;
     }
 
@@ -2489,12 +2494,12 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
         }
 
         if (!addFile(pState, sFilePath, pPdStruct)) {
-            restoreBasePath();
+            zipRestoreBasePath(pState, bRestoreBasePath, bHadBasePath, originalBasePath);
             return false;
         }
     }
 
-    restoreBasePath();
+    zipRestoreBasePath(pState, bRestoreBasePath, bHadBasePath, originalBasePath);
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
@@ -3505,22 +3510,30 @@ XBinary *XZip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAd
 
 bool XZip::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XZip> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XZip::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XZip> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XZip::setInternalInfo(void *pInternalInfo)

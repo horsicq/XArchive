@@ -22,7 +22,6 @@
 // Bit reader: 32-bit little-endian DWORDs, bits extracted MSB-first.
 // Huffman: meta-Huffman + delta-encoded widths (not LZH-style).
 #include "xacedecoder.h"
-#include "algo_utils.h"
 
 #include <algorithm>
 #include <cstring>
@@ -54,10 +53,18 @@ qint32 XAceDecoder::readInput(AceDecodeState *pState, char *pBuffer, qint32 nSiz
 
     const qint32 nTarget = (qint32)qMin((qint64)nSize, pState->nInputLimit - pState->nInputBytesRead);
     qint32 nTotal = 0;
+    QPointer<QIODevice> guardedInput(pState->pInput);
+    if (!guardedInput) {
+        pState->bError = true;
+        pState->bReadError = true;
+        return -1;
+    }
 
     while (nTotal < nTarget) {
-        const qint64 nRead = pState->pInput->read(pBuffer + nTotal, nTarget - nTotal);
-        if ((nRead <= 0) || (nRead > (qint64)(nTarget - nTotal))) {
+        const qint64 nRead = guardedInput->read(pBuffer + nTotal,
+                                                nTarget - nTotal);
+        if (!guardedInput || (nRead <= 0) ||
+            (nRead > (qint64)(nTarget - nTotal))) {
             pState->bError = true;
             pState->bReadError = true;
             return -1;
@@ -464,7 +471,9 @@ void XAceDecoder::decompressBlock(AceDecodeState *pState)
             return;
         }
 
-        if (!XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
+        if (!pState->pProgressLifetime ||
+            !XBinary::isPdStructLifetimeAlive(*pState->pProgressLifetime) ||
+            !XBinary::isPdStructNotCanceled(pState->pPdStruct)) {
             pState->bError = true;
             return;
         }
@@ -616,16 +625,25 @@ qint32 XAceDecoder::decompressBlk(AceDecodeState *pState, char *pBuf, qint32 nLe
 // -------------------------------------------------------------------
 // decompressInternal: main entry, drives decompressBlk in a loop.
 // -------------------------------------------------------------------
-bool XAceDecoder::decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressState, QIODevice *pOutput, XBinary::PDSTRUCT *pPdStruct)
+bool XAceDecoder::decompressInternal(
+    XBinary::DATAPROCESS_STATE *pDecompressState, QIODevice *pOutput,
+    XBinary::PDSTRUCT *pPdStruct,
+    const XBinary::PDSTRUCTLIFETIME &progressLifetime)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pOutput ||
+    QPointer<QIODevice> guardedInput(
+        pDecompressState ? pDecompressState->pDeviceInput : nullptr);
+    QPointer<QIODevice> guardedOutput(pOutput);
+    if (!pDecompressState || !guardedInput || !guardedOutput ||
         (pDecompressState->nInputLimit < 0) || ((pDecompressState->nInputLimit & 3) != 0) ||
         (pDecompressState->nInputLimit > ((std::numeric_limits<qint64>::max)() / 8)) ||
+        !XBinary::isPdStructLifetimeAlive(progressLifetime) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if (pDecompressState && (!pDecompressState->pDeviceInput || (pDecompressState->nInputLimit < 0))) {
+        if (pDecompressState && (!guardedInput ||
+                                 (pDecompressState->nInputLimit < 0))) {
             pDecompressState->bReadError = true;
         }
-        if (pDecompressState && !pOutput) pDecompressState->bWriteError = true;
+        if (pDecompressState && !guardedOutput)
+            pDecompressState->bWriteError = true;
         return false;
     }
 
@@ -675,8 +693,9 @@ bool XAceDecoder::decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressStat
 
     memset(state.pText, 0, (size_t)state.nDicSiz);
 
-    state.pInput = pDecompressState->pDeviceInput;
+    state.pInput = guardedInput.data();
     state.pPdStruct = pPdStruct;
+    state.pProgressLifetime = &progressLifetime;
     state.nInputBytesRead = 0;
     state.nInputLimit = pDecompressState->nInputLimit;
     state.nDcrSize = nOrigSize;
@@ -691,7 +710,7 @@ bool XAceDecoder::decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressStat
     // Initial fill: read size_rdb DWORDs = size_rdb * 4 bytes
     qint32 nInitBytes = ACE_SIZE_RDB * 4;
     const qint32 nRead = readInput(&state, (char *)state.nBufRd, nInitBytes);
-    if (nRead < 0) {
+    if (!guardedInput || (nRead < 0)) {
         pDecompressState->nCountInput = state.nInputBytesRead;
         pDecompressState->bReadError = true;
         return false;
@@ -717,7 +736,7 @@ bool XAceDecoder::decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressStat
     if (!pChunkBuffer) return false;
 
     XBinary::DATAPROCESS_STATE writeState = *pDecompressState;
-    writeState.pDeviceOutput = pOutput;
+    writeState.pDeviceOutput = guardedOutput.data();
     writeState.nCountOutput = 0;
     writeState.bWriteError = false;
     if (pOutput != pDecompressState->pDeviceOutput) {
@@ -728,7 +747,9 @@ bool XAceDecoder::decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressStat
     bool bOk = true;
 
     while (state.nDcrSize > 0 && !state.bError) {
-        if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!guardedInput || !guardedOutput ||
+            !XBinary::isPdStructLifetimeAlive(progressLifetime) ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
             bOk = false;
             break;
         }
@@ -736,14 +757,18 @@ bool XAceDecoder::decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressStat
         const qint64 nRemainingBefore = state.nDcrSize;
         qint32 nDone = decompressBlk(&state, pChunkBuffer.get(), nChunkSize);
 
-        if ((nDone <= 0) || ((qint64)nDone > nRemainingBefore) ||
+        if (!guardedInput || !guardedOutput ||
+            !XBinary::isPdStructLifetimeAlive(progressLifetime) ||
+            (nDone <= 0) || ((qint64)nDone > nRemainingBefore) ||
             (state.nDcrSize != (nRemainingBefore - nDone))) {
             state.bError = true;
             bOk = false;
             break;
         }
 
-        if (XBinary::_writeDevice(pChunkBuffer.get(), nDone, &writeState) != nDone) {
+        if (XBinary::_writeDevice(pChunkBuffer.get(), nDone, &writeState) !=
+                nDone ||
+            !guardedOutput) {
             bOk = false;
             break;
         }
@@ -756,6 +781,8 @@ bool XAceDecoder::decompressInternal(XBinary::DATAPROCESS_STATE *pDecompressStat
 
     const qint64 nAvailableBits = state.nInputLimit * 8;
     bOk = bOk && !state.bError && !state.bReadError && !writeState.bWriteError &&
+          guardedInput && guardedOutput &&
+          XBinary::isPdStructLifetimeAlive(progressLifetime) &&
           XBinary::isPdStructNotCanceled(pPdStruct) && (state.nDcrSize == 0) && (state.nBlockSize == 0) &&
           (writeState.nCountOutput == nOrigSize) && (state.nBitsConsumed <= nAvailableBits) &&
           ((nAvailableBits - state.nBitsConsumed) < 32);
@@ -775,9 +802,67 @@ bool XAceDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
         pPdStruct = &pdStructEmpty;
     }
 
-    Algo_utils::prepareState(pDecompressState);
+    const XBinary::PDSTRUCTLIFETIME progressLifetime =
+        XBinary::retainPdStructLifetime(pPdStruct);
+    QPointer<QIODevice> guardedInput(pDecompressState->pDeviceInput);
+    QPointer<QIODevice> guardedOutput(pDecompressState->pDeviceOutput);
+
+    pDecompressState->bReadError = false;
+    pDecompressState->bWriteError = false;
+    pDecompressState->nCountInput = 0;
+    pDecompressState->nCountOutput = 0;
+
+    if (!guardedInput) {
+        pDecompressState->bReadError = true;
+        return false;
+    }
+    if (!guardedOutput) {
+        pDecompressState->bWriteError = true;
+        return false;
+    }
+    if (!XBinary::isPdStructLifetimeAlive(progressLifetime)) return false;
+    if (XBinary::devicesAlias(guardedInput.data(), guardedOutput.data()) ||
+        !guardedInput || !guardedOutput) {
+        pDecompressState->bReadError = true;
+        pDecompressState->bWriteError = true;
+        return false;
+    }
+
+    // Algo_utils::prepareState operates on raw pointers. Do the ACE preflight
+    // locally so a hostile seek()/pos() implementation cannot leave the next
+    // access pointed at a synchronously deleted device.
+    if (!guardedInput || (pDecompressState->nInputOffset < 0)) {
+        pDecompressState->bReadError = true;
+    } else {
+        const bool bInputSeeked =
+            guardedInput->seek(pDecompressState->nInputOffset);
+        if (!guardedInput || !bInputSeeked) {
+            pDecompressState->bReadError = true;
+        } else {
+            const qint64 nInputPosition = guardedInput->pos();
+            if (!guardedInput ||
+                (nInputPosition != pDecompressState->nInputOffset)) {
+                pDecompressState->bReadError = true;
+            }
+        }
+    }
+
+    if (!guardedOutput) {
+        pDecompressState->bWriteError = true;
+    } else {
+        const bool bOutputSeeked = guardedOutput->seek(0);
+        if (!guardedOutput || !bOutputSeeked) {
+            pDecompressState->bWriteError = true;
+        } else {
+            const qint64 nOutputPosition = guardedOutput->pos();
+            if (!guardedOutput || (nOutputPosition != 0)) {
+                pDecompressState->bWriteError = true;
+            }
+        }
+    }
 
     if (pDecompressState->bReadError || pDecompressState->bWriteError ||
+        !XBinary::isPdStructLifetimeAlive(progressLifetime) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -785,23 +870,58 @@ bool XAceDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     // The public decoder owns the destination contents.  Seeking to zero is
     // insufficient for reusable random-access devices because a shorter
     // decode would otherwise leave stale suffix bytes behind.
-    QIODevice *pOutput = pDecompressState->pDeviceOutput;
-    if (!pOutput->isWritable()) {
+    if (!guardedOutput->isWritable() || !guardedOutput) {
         pDecompressState->bWriteError = true;
         return false;
     }
 
-    if (!pOutput->isSequential() && (pOutput->size() > 0)) {
+    const bool bSequentialOutput = guardedOutput->isSequential();
+    if (!guardedOutput) {
+        pDecompressState->bWriteError = true;
+        return false;
+    }
+    qint64 nOutputSize = 0;
+    if (!bSequentialOutput) {
+        nOutputSize = guardedOutput->size();
+        if (!guardedOutput || (nOutputSize < 0)) {
+            pDecompressState->bWriteError = true;
+            return false;
+        }
+    }
+
+    if (!bSequentialOutput && (nOutputSize > 0)) {
         bool bTruncated = false;
 
-        if (QBuffer *pBuffer = qobject_cast<QBuffer *>(pOutput)) {
-            pBuffer->buffer().clear();
-            bTruncated = pBuffer->seek(0);
-        } else if (QFileDevice *pFile = qobject_cast<QFileDevice *>(pOutput)) {
-            bTruncated = pFile->resize(0) && pFile->seek(0);
+        QBuffer *pBuffer = dynamic_cast<QBuffer *>(guardedOutput.data());
+        QPointer<QBuffer> guardedBuffer(pBuffer);
+        if (!guardedOutput) {
+            pDecompressState->bWriteError = true;
+            return false;
+        }
+        if (guardedBuffer) {
+            guardedBuffer->buffer().clear();
+            if (guardedOutput && guardedBuffer) {
+                bTruncated = guardedBuffer->seek(0);
+                bTruncated = guardedOutput && guardedBuffer && bTruncated;
+            }
+        } else {
+            QFileDevice *pFile =
+                dynamic_cast<QFileDevice *>(guardedOutput.data());
+            QPointer<QFileDevice> guardedFile(pFile);
+            if (!guardedOutput) {
+                pDecompressState->bWriteError = true;
+                return false;
+            }
+            if (guardedFile) {
+                const bool bResized = guardedFile->resize(0);
+                if (guardedOutput && guardedFile && bResized) {
+                    const bool bSeeked = guardedFile->seek(0);
+                    bTruncated = guardedOutput && guardedFile && bSeeked;
+                }
+            }
         }
 
-        if (!bTruncated) {
+        if (!guardedOutput || !bTruncated) {
             pDecompressState->bWriteError = true;
             return false;
         }
@@ -813,7 +933,10 @@ bool XAceDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
         return false;
     }
 
-    return decompressInternal(pDecompressState, pDecompressState->pDeviceOutput, pPdStruct);
+    if (!guardedInput || !guardedOutput ||
+        !XBinary::isPdStructLifetimeAlive(progressLifetime)) return false;
+    return decompressInternal(pDecompressState, guardedOutput.data(), pPdStruct,
+                              progressLifetime);
 }
 
 bool XAceDecoder::decompressDelta(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)

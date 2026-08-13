@@ -273,6 +273,8 @@ private:
     };
 
     void _printRecords(QList<SZRECORD> *pListRecords);
+    static bool _isNextId(SZSTATE *pState, EIdEnum nextId);
+    static bool _validationFail(SZSTATE *pState, const QString &sMessage);
     QList<SZRECORD> _handleData(char *pData, qint64 nSize, PDSTRUCT *pPdStruct);
     bool _handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pState, qint32 nCount, bool bCheck, PDSTRUCT *pPdStruct, IMPTYPE impType);
     quint64 _handleNumber(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, quint32 nFlags, IMPTYPE impType);

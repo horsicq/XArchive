@@ -462,6 +462,8 @@ XShrinkDecoder::XShrinkDecoder(QObject *parent) : QObject(parent)
 
 bool XShrinkDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
+    Q_UNUSED(pPdStruct)
+
     Algo_utils::seekToStart(pDecompressState);
 
     bool bResult = true;

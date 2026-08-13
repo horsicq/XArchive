@@ -387,6 +387,11 @@ QList<XBinary::XFRECORD> XLzip::getXFRecords(FT fileType, quint32 nStructID, con
     return listResult;
 }
 
+static bool lzipCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -395,17 +400,15 @@ QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
-
     const qint64 nFileSize = getSize();
     if (!isValid(pPdStruct)) return listResult;
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && lzipCanAppend(nLimit, listResult)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
         header.nFileSize = 6;
-        header.nVirtualAddress = -1;
+        header.nVirtualAddress = XADDR_MAX;
         header.sName = tr("Header");
         listResult.append(header);
     }
@@ -414,12 +417,12 @@ QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     // the first member of a concatenated file. Do not publish a knowingly wrong
     // stream range through the generic file-parts API.
     if (read_uint64(nFileSize - 8) != (quint64)nFileSize) {
-        if ((nFileParts & FILEPART_DATA) && canAppend()) {
+        if ((nFileParts & FILEPART_DATA) && lzipCanAppend(nLimit, listResult)) {
             FPART data = {};
             data.filePart = FILEPART_DATA;
             data.nFileOffset = 6;
             data.nFileSize = nFileSize - 6;
-            data.nVirtualAddress = -1;
+            data.nVirtualAddress = XADDR_MAX;
             data.sName = tr("Concatenated members");
             listResult.append(data);
         }
@@ -430,34 +433,34 @@ QList<XBinary::FPART> XLzip::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     qint64 nDataStart = 6;
     qint64 nDataSize = nFileSize - 26;  // Excluding header (6) and footer (20)
 
-    if ((nFileParts & FILEPART_STREAM) && canAppend()) {
+    if ((nFileParts & FILEPART_STREAM) && lzipCanAppend(nLimit, listResult)) {
         FPART region = {};
         region.filePart = FILEPART_STREAM;
         region.nFileOffset = nDataStart;
         region.nFileSize = nDataSize;
-        region.nVirtualAddress = -1;
+        region.nVirtualAddress = XADDR_MAX;
         region.sName = tr("Stream");
         region.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZMA);
         listResult.append(region);
     }
 
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && lzipCanAppend(nLimit, listResult)) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = nDataStart;
         data.nFileSize = nDataSize;
-        data.nVirtualAddress = -1;
+        data.nVirtualAddress = XADDR_MAX;
         data.sName = tr("Data");
         listResult.append(data);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend()) {
+    if ((nFileParts & FILEPART_OVERLAY) && lzipCanAppend(nLimit, listResult)) {
         if (nFileSize > nDataStart + nDataSize) {
             FPART ov = {};
             ov.filePart = FILEPART_OVERLAY;
             ov.nFileOffset = nDataStart + nDataSize;
             ov.nFileSize = nFileSize - (nDataStart + nDataSize);
-            ov.nVirtualAddress = -1;
+            ov.nVirtualAddress = XADDR_MAX;
             ov.sName = tr("Footer");
             listResult.append(ov);
         }
@@ -797,22 +800,30 @@ XBinary *XLzip::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XLzip::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XLzip> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XLzip::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XLzip> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XLzip::setInternalInfo(void *pInternalInfo)

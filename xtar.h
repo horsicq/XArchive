@@ -113,7 +113,9 @@ private:
     qint64 _getSize(const posix_header &header);
     static QString _getRecordPath(const posix_header &header);
     static bool _parseNumber(const char *pData, qint32 nSize, qint64 *pValue);
-    bool _readRecord(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader, qint64 *pFileSize, qint64 *pRecordSize, bool *pIsZeroBlock);
+    bool _readRecord(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader,
+                     qint64 *pFileSize, qint64 *pRecordSize,
+                     bool *pIsZeroBlock, PDSTRUCT *pPdStruct);
     bool _scanArchive(qint64 nOffset, qint64 nTotalSize, qint32 *pNumberOfRecords, qint64 *pEndOffset, PDSTRUCT *pPdStruct);
     static bool createHeader(const QString &sFileName, const QString &sBasePath, qint64 nFileSize, quint32 nMode, qint64 nMTime,
                              posix_header *pHeader);

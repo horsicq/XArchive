@@ -85,6 +85,9 @@ bool XTAR_GZ::getOuterStreamInfo(qint64 &nOuterStreamOffset, qint64 &nOuterStrea
 
 QIODevice *XTAR_GZ::decompressData(PDSTRUCT *pPdStruct)
 {
+    const PDSTRUCTLIFETIME progressLifetime =
+        pPdStruct ? retainPdStructLifetime(pPdStruct)
+                  : PDSTRUCTLIFETIME();
     XGzip xgzip(getDevice());
 
     if (!xgzip.isValid(pPdStruct)) {
@@ -125,35 +128,59 @@ QIODevice *XTAR_GZ::decompressData(PDSTRUCT *pPdStruct)
                                   ((quint32)(quint8)baFooter.at(6) << 16) |
                                   ((quint32)(quint8)baFooter.at(7) << 24);
 
-    const bool bFooterValid = ((quint32)pResult->size() == nExpectedSize) &&
-                              XBinary::checkCRC(pResult, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF, nExpectedCRC, pPdStruct) &&
+    QPointer<QIODevice> guardedResult(pResult);
+    const qint64 nResultSize = guardedResult->size();
+    if (!guardedResult) return nullptr;
+    if (pPdStruct && !isPdStructLifetimeAlive(progressLifetime)) {
+        delete guardedResult.data();
+        return nullptr;
+    }
+    const bool bCRCValid =
+        ((quint32)nResultSize == nExpectedSize) &&
+        XBinary::checkCRC(guardedResult.data(),
+                          CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF,
+                          nExpectedCRC, pPdStruct);
+    if (!guardedResult) return nullptr;
+    if (pPdStruct && !isPdStructLifetimeAlive(progressLifetime)) {
+        delete guardedResult.data();
+        return nullptr;
+    }
+    const bool bFooterValid = bCRCValid &&
                               XBinary::isPdStructNotCanceled(pPdStruct);
     if (!bFooterValid) {
-        delete pResult;
+        delete guardedResult.data();
         return nullptr;
     }
 
-    return pResult;
+    return guardedResult.data();
 }
 
 bool XTAR_GZ::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XTAR_GZ> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XTARCOMPRESSED::handleInternalInfo(pPdStruct);
-        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(XTARCOMPRESSED::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XTARCOMPRESSED::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XTARCOMPRESSED::INTERNAL_INFO *pInfo =
+            static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(
+                guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XTAR_GZ::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XTAR_GZ> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XTAR_GZ::setInternalInfo(void *pInternalInfo)

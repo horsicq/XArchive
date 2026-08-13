@@ -151,14 +151,28 @@ public:
 
     bool seek(qint64 nPosition) override
     {
-        if (!m_pInputDevice || m_pInputDevice->isSequential() || !m_pInputDevice || (nPosition != 0) ||
-            !m_pInputDevice->seek(nPosition) || !m_pInputDevice) {
+        if (!m_pInputDevice || m_pInputDevice->isSequential() || !m_pInputDevice || (nPosition < 0)) {
             return false;
         }
 
-        m_nA = 1;
-        m_nB = 0;
-        m_nCount = 0;
+        const qint64 nCurrentPosition = m_pInputDevice->pos();
+        if (!m_pInputDevice || (nCurrentPosition < 0)) return false;
+
+        // The bounded read helper synchronizes a seekable device to its
+        // already-current position before and after each read.  Accept that
+        // no-op without discarding the Adler state.  A real rewind is safe
+        // only to zero, where the checksum can be restarted from its seed.
+        if (nPosition != nCurrentPosition) {
+            if ((nPosition != 0) || !m_pInputDevice->seek(0) || !m_pInputDevice) return false;
+            m_nA = 1;
+            m_nB = 0;
+            m_nCount = 0;
+        } else if (nPosition == 0) {
+            m_nA = 1;
+            m_nB = 0;
+            m_nCount = 0;
+        }
+
         return QIODevice::seek(nPosition);
     }
 
@@ -326,6 +340,11 @@ XBinary::_MEMORY_MAP XZlib::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     return result;
 }
 
+static bool zlibCanAppend(qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return (nLimit == -1) || (listResult.size() < nLimit);
+}
+
 QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -333,8 +352,6 @@ QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     if ((nLimit < -1) || (nLimit == 0)) {
         return listResult;
     }
-
-    const auto canAppend = [&]() -> bool { return (nLimit == -1) || (listResult.size() < nLimit); };
 
     const qint64 fileSize = getSize();
     if (fileSize <= 0) return listResult;
@@ -348,55 +365,56 @@ QList<XBinary::FPART> XZlib::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
     const qint64 nFormatSize = context.nFooterOffset + 4;
 
     // Zlib header (2 bytes)
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && zlibCanAppend(nLimit, listResult)) {
         FPART header = {};
         header.filePart = FILEPART_HEADER;
         header.nFileOffset = 0;
         header.nFileSize = context.nHeaderSize;
-        header.nVirtualAddress = -1;
+        header.nVirtualAddress = XADDR_MAX;
         header.sName = tr("Header");
         listResult.append(header);
     }
 
     // Compressed data region
-    if ((nFileParts & FILEPART_REGION) && canAppend()) {
+    if ((nFileParts & FILEPART_REGION) && zlibCanAppend(nLimit, listResult)) {
         FPART region = {};
         region.filePart = FILEPART_REGION;
         region.nFileOffset = context.nHeaderSize;
         region.nFileSize = context.nCompressedSize;
-        region.nVirtualAddress = -1;
+        region.nVirtualAddress = XADDR_MAX;
         region.sName = tr("Data");
         listResult.append(region);
     }
 
     // Footer (4-byte Adler32)
-    if ((nFileParts & FILEPART_FOOTER) && canAppend() && context.bFooterValid) {
+    if ((nFileParts & FILEPART_FOOTER) && zlibCanAppend(nLimit, listResult) && context.bFooterValid) {
         FPART footer = {};
         footer.filePart = FILEPART_FOOTER;
         footer.nFileOffset = context.nFooterOffset;
         footer.nFileSize = 4;
-        footer.nVirtualAddress = -1;
+        footer.nVirtualAddress = XADDR_MAX;
         footer.sName = tr("Adler32");
         listResult.append(footer);
     }
 
     // Data: the zlib member itself, excluding any trailing overlay.
-    if ((nFileParts & FILEPART_DATA) && canAppend()) {
+    if ((nFileParts & FILEPART_DATA) && zlibCanAppend(nLimit, listResult)) {
         FPART data = {};
         data.filePart = FILEPART_DATA;
         data.nFileOffset = 0;
         data.nFileSize = nFormatSize;
-        data.nVirtualAddress = -1;
+        data.nVirtualAddress = XADDR_MAX;
         data.sName = tr("Data");
         listResult.append(data);
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && canAppend() && (nFormatSize < fileSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) &&
+        zlibCanAppend(nLimit, listResult) && (nFormatSize < fileSize)) {
         FPART overlay = {};
         overlay.filePart = FILEPART_OVERLAY;
         overlay.nFileOffset = nFormatSize;
         overlay.nFileSize = fileSize - nFormatSize;
-        overlay.nVirtualAddress = -1;
+        overlay.nVirtualAddress = XADDR_MAX;
         overlay.sName = tr("Overlay");
         listResult.append(overlay);
     }
@@ -878,6 +896,31 @@ bool XZlib::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PRO
     return true;
 }
 
+static bool zlibFailAddDeviceWrite(XBinary::PACK_STATE *pState, qint64 *pnContextCurrentOffset, qint32 *pnContextNumberOfRecords, bool *pbContextFailed,
+                                   qint64 nDataOffset, qint64 nWritten)
+{
+    if (zlibRollbackWrite(pState->pDevice, nDataOffset)) {
+        *pnContextCurrentOffset = nDataOffset;
+        *pnContextNumberOfRecords = 0;
+        pState->nCurrentOffset = nDataOffset;
+        pState->nNumberOfRecords = 0;
+        return false;
+    }
+
+    if (nWritten <= 0) return false;
+    const qint64 nPosition = pState->pDevice ? pState->pDevice->pos() : -1;
+    *pbContextFailed = true;
+    if (pState->pDevice && pState->pDevice->isSequential()) {
+        *pnContextCurrentOffset = nDataOffset + nWritten;
+    } else if (nPosition >= nDataOffset) {
+        *pnContextCurrentOffset = nPosition;
+    } else if (nDataOffset <= ((std::numeric_limits<qint64>::max)() - nWritten)) {
+        *pnContextCurrentOffset = nDataOffset + nWritten;
+    }
+    pState->nCurrentOffset = *pnContextCurrentOffset;
+    return false;
+}
+
 bool XZlib::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     if (!pState || !pState->pContext || !pState->pDevice || !pState->pDevice->isWritable() ||
@@ -927,35 +970,13 @@ bool XZlib::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruc
     adlerInputDevice.close();
 
     const qint64 nDataOffset = pContext->nDataOffset;
-    const auto failWrite = [pState, pContext, nDataOffset](qint64 nWritten) -> bool {
-        if (zlibRollbackWrite(pState->pDevice, nDataOffset)) {
-            pContext->nCurrentOffset = nDataOffset;
-            pContext->nNumberOfRecords = 0;
-            pState->nCurrentOffset = nDataOffset;
-            pState->nNumberOfRecords = 0;
-            return false;
-        }
-
-        if (nWritten <= 0) return false;
-        const qint64 nPosition = pState->pDevice ? pState->pDevice->pos() : -1;
-        pContext->bFailed = true;
-        if (pState->pDevice && pState->pDevice->isSequential()) {
-            pContext->nCurrentOffset = nDataOffset + nWritten;
-        } else if (nPosition >= nDataOffset) {
-            pContext->nCurrentOffset = nPosition;
-        } else if (nDataOffset <= ((std::numeric_limits<qint64>::max)() - nWritten)) {
-            pContext->nCurrentOffset = nDataOffset + nWritten;
-        }
-        pState->nCurrentOffset = pContext->nCurrentOffset;
-        return false;
-    };
 
     const qint64 nCompressedSize = compressState.nCountOutput;
     if (!bCompress || (nCompressedSize < 0) || (nAdlerInputCount != compressState.nCountInput) ||
         ((nInputLimit != -1) && (nAdlerInputCount != nInputLimit)) ||
         (nDataOffset > ((std::numeric_limits<qint64>::max)() - nCompressedSize)) ||
         ((nDataOffset + nCompressedSize) > ((std::numeric_limits<qint64>::max)() - 4))) {
-        return failWrite(compressState.nCountOutput);
+        return zlibFailAddDeviceWrite(pState, &pContext->nCurrentOffset, &pContext->nNumberOfRecords, &pContext->bFailed, nDataOffset, compressState.nCountOutput);
     }
 
     // Write Adler32 checksum (4 bytes, big-endian)
@@ -964,7 +985,7 @@ bool XZlib::addDevice(PACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruc
 
     qint64 nFooterWritten = 0;
     if (!zlibWriteAll(pState->pDevice, baAdler32.constData(), baAdler32.size(), pPdStruct, &nFooterWritten)) {
-        return failWrite(nCompressedSize + nFooterWritten);
+        return zlibFailAddDeviceWrite(pState, &pContext->nCurrentOffset, &pContext->nNumberOfRecords, &pContext->bFailed, nDataOffset, nCompressedSize + nFooterWritten);
     }
 
     // Update state
@@ -1107,22 +1128,30 @@ XBinary *XZlib::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XZlib::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XZlib> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XZlib::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XZlib> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XZlib::setInternalInfo(void *pInternalInfo)

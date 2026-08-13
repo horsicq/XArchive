@@ -161,22 +161,30 @@ quint32 XJAR::ftStringToStructID(const QString &sFtString)
 
 bool XJAR::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XJAR> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XZip::handleInternalInfo(pPdStruct);
-        static_cast<XZip::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XZip::INTERNAL_INFO *>(XZip::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XZip::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XZip::INTERNAL_INFO *pInfo =
+            static_cast<XZip::INTERNAL_INFO *>(
+                guardedThis->XZip::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XZip::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XJAR::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XJAR> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XJAR::setInternalInfo(void *pInternalInfo)

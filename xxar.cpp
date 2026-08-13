@@ -232,6 +232,16 @@ XBinary::HANDLE_METHOD XXAR::_encodingToMethod(const QString &sStyle)
     return HANDLE_METHOD_UNKNOWN;
 }
 
+static bool _xarReadUnsignedValue(const QString &sValue, qint64 *pValue)
+{
+    if (!pValue) return false;
+    bool bOk = false;
+    const quint64 nValue = sValue.trimmed().toULongLong(&bOk, 10);
+    if (!bOk || (nValue > (quint64)(std::numeric_limits<qint64>::max)())) return false;
+    *pValue = (qint64)nValue;
+    return true;
+}
+
 bool XXAR::_parseTOC(const QByteArray &baXML, qint64 nHeapOffset, QList<XAR_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     struct FRAME {
@@ -264,15 +274,6 @@ bool XXAR::_parseTOC(const QByteArray &baXML, qint64 nHeapOffset, QList<XAR_RECO
     bool bSemanticError = false;
     const qint32 nMaxDepth = 1024;
     const qint32 nMaxRecords = 0x40000;
-
-    const auto readUnsignedValue = [](const QString &sValue, qint64 *pValue) -> bool {
-        if (!pValue) return false;
-        bool bOk = false;
-        const quint64 nValue = sValue.trimmed().toULongLong(&bOk, 10);
-        if (!bOk || (nValue > (quint64)(std::numeric_limits<qint64>::max)())) return false;
-        *pValue = (qint64)nValue;
-        return true;
-    };
 
     while (!xml.atEnd() && !xml.hasError() && !bSemanticError && XBinary::isPdStructNotCanceled(pPdStruct)) {
         QXmlStreamReader::TokenType token = xml.readNext();
@@ -348,7 +349,7 @@ bool XXAR::_parseTOC(const QByteArray &baXML, qint64 nHeapOffset, QList<XAR_RECO
                         bSemanticError = true;
                         continue;
                     }
-                    stackFrames.top().bOffsetValid = readUnsignedValue(xml.readElementText(), &stackFrames.top().nOffset);
+                    stackFrames.top().bOffsetValid = _xarReadUnsignedValue(xml.readElementText(), &stackFrames.top().nOffset);
                     stackElements.pop();
                     bSemanticError = bSemanticError || !stackFrames.top().bOffsetValid;
                 }
@@ -359,7 +360,7 @@ bool XXAR::_parseTOC(const QByteArray &baXML, qint64 nHeapOffset, QList<XAR_RECO
                         bSemanticError = true;
                         continue;
                     }
-                    stackFrames.top().bLengthValid = readUnsignedValue(xml.readElementText(), &stackFrames.top().nLength);
+                    stackFrames.top().bLengthValid = _xarReadUnsignedValue(xml.readElementText(), &stackFrames.top().nLength);
                     stackElements.pop();
                     bSemanticError = bSemanticError || !stackFrames.top().bLengthValid;
                 }
@@ -370,7 +371,7 @@ bool XXAR::_parseTOC(const QByteArray &baXML, qint64 nHeapOffset, QList<XAR_RECO
                         bSemanticError = true;
                         continue;
                     }
-                    stackFrames.top().bSizeValid = readUnsignedValue(xml.readElementText(), &stackFrames.top().nSize);
+                    stackFrames.top().bSizeValid = _xarReadUnsignedValue(xml.readElementText(), &stackFrames.top().nSize);
                     stackElements.pop();
                     bSemanticError = bSemanticError || !stackFrames.top().bSizeValid;
                 }
@@ -563,7 +564,7 @@ XBinary::_MEMORY_MAP XXAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
     quint64 nTocCompressed = read_uint64(8, true);
 
     _MEMORY_RECORD recHeader = {};
-    recHeader.nAddress = -1;
+    recHeader.nAddress = XADDR_MAX;
     recHeader.nOffset = 0;
     recHeader.nSize = nHeaderSize;
     recHeader.nIndex = nIndex++;
@@ -573,7 +574,7 @@ XBinary::_MEMORY_MAP XXAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
 
     if ((nTocCompressed > 0) && ((qint64)nHeaderSize + (qint64)nTocCompressed <= getSize())) {
         _MEMORY_RECORD recToc = {};
-        recToc.nAddress = -1;
+        recToc.nAddress = XADDR_MAX;
         recToc.nOffset = nHeaderSize;
         recToc.nSize = (qint64)nTocCompressed;
         recToc.nIndex = nIndex++;
@@ -584,7 +585,7 @@ XBinary::_MEMORY_MAP XXAR::getMemoryMap(MAPMODE mapMode, PDSTRUCT *pPdStruct)
         qint64 nHeapOffset = (qint64)nHeaderSize + (qint64)nTocCompressed;
         if (nHeapOffset < getSize()) {
             _MEMORY_RECORD recHeap = {};
-            recHeap.nAddress = -1;
+            recHeap.nAddress = XADDR_MAX;
             recHeap.nOffset = nHeapOffset;
             recHeap.nSize = getSize() - nHeapOffset;
             recHeap.nIndex = nIndex++;
@@ -665,6 +666,11 @@ QList<XBinary::XFRECORD> XXAR::getXFRecords(FT fileType, quint32 nStructID, cons
     return listResult;
 }
 
+static bool _xarCanAppend(XBinary::PDSTRUCT *pPdStruct, qint32 nLimit, const QList<XBinary::FPART> &listResult)
+{
+    return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.size() < nLimit));
+}
+
 QList<XBinary::FPART> XXAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
@@ -673,31 +679,27 @@ QList<XBinary::FPART> XXAR::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         return listResult;
     }
 
-    const auto canAppend = [&]() -> bool {
-        return XBinary::isPdStructNotCanceled(pPdStruct) && ((nLimit == -1) || (listResult.size() < nLimit));
-    };
-
     qint64 nHeapOffset = _getHeapOffset();
     if (nHeapOffset < 0) {
         return listResult;
     }
 
-    if ((nFileParts & FILEPART_HEADER) && canAppend()) {
+    if ((nFileParts & FILEPART_HEADER) && _xarCanAppend(pPdStruct, nLimit, listResult)) {
         FPART record = {};
         record.filePart = FILEPART_HEADER;
         record.nFileOffset = 0;
         record.nFileSize = (nHeapOffset > 0) ? nHeapOffset : (qint64)sizeof(XAR_HEADER);
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Header");
         listResult.append(record);
     }
 
-    if ((nFileParts & FILEPART_REGION) && canAppend() && (nHeapOffset > 0) && (nHeapOffset < getSize())) {
+    if ((nFileParts & FILEPART_REGION) && _xarCanAppend(pPdStruct, nLimit, listResult) && (nHeapOffset > 0) && (nHeapOffset < getSize())) {
         FPART record = {};
         record.filePart = FILEPART_REGION;
         record.nFileOffset = nHeapOffset;
         record.nFileSize = getSize() - nHeapOffset;
-        record.nVirtualAddress = -1;
+        record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Heap");
         listResult.append(record);
     }
@@ -905,22 +907,30 @@ bool XXAR::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XXAR::handleInternalInfo(PDSTRUCT *pPdStruct)
 {
+    QPointer<XXAR> guardedThis(this);
     bool bResult = true;
 
     if (!isInternalInfoHandled()) {
-        bResult = XArchive::handleInternalInfo(pPdStruct);
-        static_cast<XArchive::INTERNAL_INFO &>(m_internalInfo) =
-            *static_cast<XArchive::INTERNAL_INFO *>(XArchive::getInternalInfo(pPdStruct));
+        bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
+        if (!guardedThis || !bResult) return false;
+        XArchive::INTERNAL_INFO *pInfo =
+            static_cast<XArchive::INTERNAL_INFO *>(
+                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        if (!guardedThis || !pInfo) return false;
+        static_cast<XArchive::INTERNAL_INFO &>(
+            guardedThis->m_internalInfo) = *pInfo;
     }
 
-    return bResult;
+    return guardedThis && bResult;
 }
 
 void *XXAR::getInternalInfo(PDSTRUCT *pPdStruct)
 {
-    handleInternalInfo(pPdStruct);
+    QPointer<XXAR> guardedThis(this);
+    const bool bHandled = guardedThis->handleInternalInfo(pPdStruct);
+    if (!guardedThis || !bHandled) return nullptr;
 
-    return &m_internalInfo;
+    return &guardedThis->m_internalInfo;
 }
 
 void XXAR::setInternalInfo(void *pInternalInfo)
