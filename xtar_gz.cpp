@@ -101,7 +101,39 @@ QIODevice *XTAR_GZ::decompressData(PDSTRUCT *pPdStruct)
     qint64 nCompressedOffset = nHeaderSize;
     qint64 nCompressedSize = nTotalSize - nHeaderSize - 8;  // Footer: CRC32 + ISIZE
 
-    return decompressByMethod(HANDLE_METHOD_DEFLATE, nCompressedOffset, nCompressedSize, pPdStruct);
+    QIODevice *pResult = decompressByMethod(HANDLE_METHOD_DEFLATE, nCompressedOffset, nCompressedSize, pPdStruct);
+    if (!pResult) {
+        return nullptr;
+    }
+
+    // decompressByMethod() intentionally receives only the raw DEFLATE
+    // payload.  Validate the RFC 1952 footer here; otherwise a .tar.gz with a
+    // corrupted CRC32 or ISIZE can still contain a parseable TAR and be
+    // accepted by the compressed-TAR detector.
+    const QByteArray baFooter = read_array(nTotalSize - 8, 8);
+    if (baFooter.size() != 8) {
+        delete pResult;
+        return nullptr;
+    }
+
+    const quint32 nExpectedCRC = (quint32)(quint8)baFooter.at(0) |
+                                 ((quint32)(quint8)baFooter.at(1) << 8) |
+                                 ((quint32)(quint8)baFooter.at(2) << 16) |
+                                 ((quint32)(quint8)baFooter.at(3) << 24);
+    const quint32 nExpectedSize = (quint32)(quint8)baFooter.at(4) |
+                                  ((quint32)(quint8)baFooter.at(5) << 8) |
+                                  ((quint32)(quint8)baFooter.at(6) << 16) |
+                                  ((quint32)(quint8)baFooter.at(7) << 24);
+
+    const bool bFooterValid = ((quint32)pResult->size() == nExpectedSize) &&
+                              XBinary::checkCRC(pResult, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF, nExpectedCRC, pPdStruct) &&
+                              XBinary::isPdStructNotCanceled(pPdStruct);
+    if (!bFooterValid) {
+        delete pResult;
+        return nullptr;
+    }
+
+    return pResult;
 }
 
 bool XTAR_GZ::handleInternalInfo(PDSTRUCT *pPdStruct)

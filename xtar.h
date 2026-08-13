@@ -27,6 +27,7 @@
 class XTAR : public XArchive {
     Q_OBJECT
 
+public:
 #pragma pack(push)
 #pragma pack(1)
     struct posix_header {   /* byte offset */
@@ -50,6 +51,7 @@ class XTAR : public XArchive {
     };
 #pragma pack(pop)
 
+private:
     enum TAR_FORMAT {
         TAR_FORMAT_DEFAULT = 0,
         TAR_FORMAT_POSIX,  // POSIX ustar format (default)
@@ -109,12 +111,14 @@ private:
     posix_header read_posix_header(qint64 nOffset);
     qint32 _getNumberOf_posix_headers(qint64 nOffset, PDSTRUCT *pPdStruct);
     qint64 _getSize(const posix_header &header);
+    static QString _getRecordPath(const posix_header &header);
     static bool _parseNumber(const char *pData, qint32 nSize, qint64 *pValue);
     bool _readRecord(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader, qint64 *pFileSize, qint64 *pRecordSize, bool *pIsZeroBlock);
     bool _scanArchive(qint64 nOffset, qint64 nTotalSize, qint32 *pNumberOfRecords, qint64 *pEndOffset, PDSTRUCT *pPdStruct);
-    static posix_header createHeader(const QString &sFileName, const QString &sBasePath, qint64 nFileSize, quint32 nMode, qint64 nMTime);
+    static bool createHeader(const QString &sFileName, const QString &sBasePath, qint64 nFileSize, quint32 nMode, qint64 nMTime,
+                             posix_header *pHeader);
     static quint32 calculateChecksum(const posix_header &header);
-    static void writeOctal(char *pDest, qint32 nSize, qint64 nValue);
+    static bool writeOctal(char *pDest, qint32 nSize, qint64 nValue);
 
 signals:
 private:
