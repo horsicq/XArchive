@@ -83,7 +83,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
 {
     QByteArray baResult;
 
-    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
+    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
     XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
@@ -140,7 +140,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 {
     bool bResult = false;
 
-    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
+    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
     XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
@@ -157,7 +157,7 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
 {
     bool bResult = false;
 
-    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
+    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
     XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
@@ -219,7 +219,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    const XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
+    const XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
     XArchive *pArchive = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
     if (!pArchive) return false;
 
@@ -253,7 +253,7 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
 {
     bool bResult = false;
 
-    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, true);
+    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
     XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
 
@@ -288,7 +288,7 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &
     QSet<XBinary::FT> _stAvailable = stAvailable;
 
     if (pDevice) {
-        QSet<XBinary::FT> stFT = XBinary::getFileTypes(pDevice, true);
+        QSet<XBinary::FT> stFT = XBinary::getFileTypes(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
         if (!_stAvailable.count()) {
             _stAvailable = getArchiveOpenValidFileTypes();

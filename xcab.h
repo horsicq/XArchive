@@ -22,6 +22,7 @@
 #define XCAB_H
 
 #include <QPointer>
+#include <QSet>
 
 #include "xarchive.h"
 
@@ -37,6 +38,7 @@ public:
 
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
+    quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     enum STRUCTID {
         STRUCTID_UNKNOWN = 0,
         STRUCTID_CFHEADER,
@@ -106,8 +108,9 @@ public:
         QMap<quint16, QList<qint64> > mapFolderDataOffsets;  // Validated CFDATA offsets per folder
         QMap<quint16, QByteArray> mapFolderCache;  // Decompressed folder data cache (folder index -> data)
         QMap<quint16, qint64> mapFolderUncompressedSizes;  // Complete logical size of each solid folder
-        QMap<quint16, qint64> mapFolderStreamSizes;        // Exact bounded CFDATA stream size
-        QMap<quint16, qint64> mapFolderDataSizes;          // Sum of CFDATA.cbUncomp values
+        QMap<quint16, qint64> mapFolderStreamSizes;        // Exact validated CFDATA stream size
+        QMap<quint16, qint64> mapFolderDataSizes;          // Validated sum of CFDATA.cbUncomp values
+        QSet<quint16> setUnvalidatedFolderStreams;         // Directory-only state; unpacking is not permitted
         qint32 nCurrentFileIndex;                  // Current file being processed
         quint16 nCbCFHeader;                       // Size of per-cabinet reserved area (if flags & 0x0004)
         quint8 nCbCFFolder;                        // Size of per-folder reserved area
