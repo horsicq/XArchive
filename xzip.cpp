@@ -1155,6 +1155,27 @@ static bool zipLocalRangeLessThan(const QPair<qint64, qint64> &a, const QPair<qi
     return a.first < b.first;
 }
 
+static const char ZIP_ECD_OFFSET_CACHED[] = "XZip_ECDOffsetCached";
+static const char ZIP_ECD_OFFSET[] = "XZip_ECDOffset";
+
+static bool zipTryGetCachedECDOffset(QIODevice *pDevice, qint64 *pnECDOffset)
+{
+    if (!pDevice || !pnECDOffset || !pDevice->property(ZIP_ECD_OFFSET_CACHED).toBool()) {
+        return false;
+    }
+
+    *pnECDOffset = pDevice->property(ZIP_ECD_OFFSET).toLongLong();
+    return true;
+}
+
+static void zipStoreCachedECDOffset(QIODevice *pDevice, qint64 nECDOffset)
+{
+    if (!pDevice) return;
+
+    pDevice->setProperty(ZIP_ECD_OFFSET_CACHED, true);
+    pDevice->setProperty(ZIP_ECD_OFFSET, nECDOffset);
+}
+
 qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
 {
     QPointer<XZip> guardedArchive(this);
@@ -1163,6 +1184,14 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
     if (!guardedSource) return -1;
     const qint64 nSize = guardedSource->size();
     if (!guardedArchive || !guardedSource) return -1;
+
+    if (zipTryGetCachedECDOffset(guardedSource.data(), &nResult)) {
+        return guardedArchive && guardedSource ? nResult : -1;
+    }
+
+    if (m_internalInfo.bECDOffsetCached) {
+        return guardedArchive && guardedSource ? m_internalInfo.nECDOffset : -1;
+    }
 
     if (nSize >= 22)  // 22 is minimum size [0x50,0x4B,0x05,0x06,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00]
     {
@@ -1175,13 +1204,16 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
             (baSearch.size() != (nSize - nSearchOffset))) return -1;
 
         static const QByteArray baECDSignature("PK\x05\x06", 4);
-        qint32 nSearchIndex = 0;
+        QList<qint32> listCandidates;
+        for (qint32 nPos = 0; nPos <= baSearch.size() - (qint32)baECDSignature.size(); ) {
+            const qint32 nFound = baSearch.indexOf(baECDSignature, nPos);
+            if (nFound < 0) break;
+            listCandidates.append(nFound);
+            nPos = nFound + 1;
+        }
 
-        while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-            nSearchIndex = baSearch.indexOf(baECDSignature, nSearchIndex);
-            if (nSearchIndex < 0) break;
-            const qint64 nCurrent = nSearchOffset + nSearchIndex;
-            nSearchIndex += 4;
+        for (qint32 i = listCandidates.size() - 1; i >= 0 && XBinary::isPdStructNotCanceled(pPdStruct); --i) {
+            const qint64 nCurrent = nSearchOffset + listCandidates.at(i);
 
             if ((nCurrent < 0) || ((nSize - nCurrent) < (qint64)sizeof(ENDOFCENTRALDIRECTORYRECORD))) {
                 continue;
@@ -1214,6 +1246,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
             if (nTotalRecords == 0) {
                 if ((nCentralDirectorySize == 0) && (nOffsetToCentralDirectory == nCurrent)) {
                     nResult = nCurrent;
+                    break;
                 }
                 continue;
             }
@@ -1415,8 +1448,15 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
 
             if (bValid && (nCurrentHeaderOffset == nCurrent)) {
                 nResult = nCurrent;
+                break;
             }
         }
+    }
+
+    if (guardedArchive && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        m_internalInfo.bECDOffsetCached = true;
+        m_internalInfo.nECDOffset = nResult;
+        zipStoreCachedECDOffset(guardedSource.data(), nResult);
     }
 
     return guardedArchive && guardedSource &&
