@@ -153,7 +153,8 @@ set(_xarchive_7zip_sources
 #
 # The expected count moves down as upstream units are folded into Algos
 # amalgamations. Each reduction must be deliberate and accounted for here:
-#   275  original Arc.mak-derived manifest
+#   276  original Arc.mak-derived manifest (275 Arc.mak units + MyWindows.cpp,
+#        which was never in Arc.mak -- see the note below the ledger)
 #   -28  CPP/Common (non-registering) + CPP/Windows  -> Algos/sevenzip_common.cpp
 #    +1  the amalgamation itself
 #   -21  CPP/7zip/Common stream, coder and property support (21 units) -> Algos/sevenzip_7zcommon.cpp
@@ -239,7 +240,6 @@ set(_xarchive_7zip_sources
 #   -15  7-Zip szc group (15 units) -> Algos/szc_03.cpp
 #    +1  the amalgamation itself
 #   ---
-#   ---
 #   42  amalgamations (276 upstream units, all folded)
 #
 # MyWindows.cpp -- the non-Windows Win32/OLE shim the amalgamations call into
@@ -261,7 +261,7 @@ set(_xarchive_7zip_sources
 # bottom line claimed 42 and the guard said 43, so no reading of it was
 # self-consistent. Each -N above is now the count in that file's own generated
 # banner ("N upstream translation units folded into one"); those banners total
-# exactly 275 across exactly 42 files, which is what closes the ledger.
+# exactly 276 across exactly 42 files, which is what closes the ledger.
 set(XARCHIVE_7ZIP_EXPECTED_SOURCE_COUNT 42)
 
 list(LENGTH _xarchive_7zip_sources _xarchive_7zip_source_count)
