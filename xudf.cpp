@@ -61,38 +61,23 @@ bool XUDF::isValid(PDSTRUCT *pPdStruct)
     QPointer<XUDF> guardedThis(this);
     QPointer<QIODevice> guardedDevice(getDevice());
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 0x8000) && guardedDevice) {
-
-        // UDF Anchor Volume Descriptor Pointer is typically at sector 256 (offset 0x20000)
-        // Check for tag identifier 2 (AVDP) with NSR descriptor
-        qint64 nAnchorOffset = 256 * 2048;  // Sector 256 with 2048 byte blocks
-
-        if (nAnchorOffset < getSize()) {
-            quint16 nTagIdentifier = 0;
-            if (!_readUInt16(nAnchorOffset, &nTagIdentifier) || !guardedThis || !guardedDevice) {
-                return false;
-            }
-            if (nTagIdentifier == TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER) {
-                bResult = true;
-            }
+    // A UDF volume has to be large enough for the Volume Recognition Sequence
+    // (ECMA-167 2/9.1, first byte at 32768) plus at least one more logical
+    // sector.  Everything beyond that is decided by _getAnchorVolumeDescriptorOffset(),
+    // which only reports an offset when a *checksum-validated* ECMA-167 Anchor
+    // Volume Descriptor Pointer is recorded there.  A bare "the 16-bit word at
+    // this offset happens to be 2" test used to accept arbitrary binaries -
+    // ordinary ELF objects among them - because the tag checksum, the reserved
+    // byte, the descriptor version, the tag location and the descriptor CRC
+    // were never looked at.
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= (0x8000 + 2048)) && guardedDevice) {
+        const qint64 nAnchorOffset = _getAnchorVolumeDescriptorOffset();
+        if (!guardedThis || !guardedDevice) {
+            return false;
         }
 
-        // Also check at end of volume (last sector)
-        if (!bResult) {
-            qint64 nEndOffset = (getSize() / 2048) * 2048 - 2048;
-            if (nEndOffset > 0) {
-                quint16 nTagIdentifier = 0;
-                if (!_readUInt16(nEndOffset, &nTagIdentifier) || !guardedThis || !guardedDevice) {
-                    return false;
-                }
-                if (nTagIdentifier == TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER) {
-                    bResult = true;
-                }
-            }
-        }
+        bResult = (nAnchorOffset != -1);
     }
-
-    Q_UNUSED(pPdStruct)
 
     return bResult;
 }
@@ -874,33 +859,263 @@ qint32 XUDF::_getBlockSize()
     return 2048;
 }
 
+quint8 XUDF::_calculateTagChecksum(const quint8 *pTagBytes)
+{
+    // ECMA-167 4/7.2.3 "TagChecksum": the sum, modulo 256, of bytes 0-3 and
+    // 5-15 of the 16-byte descriptor tag.  The result is stored in byte 4.
+    quint32 nSum = 0;
+
+    for (qint32 i = 0; i < 16; i++) {
+        if (i != 4) {
+            nSum += pTagBytes[i];
+        }
+    }
+
+    return (quint8)(nSum & 0xFF);
+}
+
+quint16 XUDF::_calculateDescriptorCRC(const quint8 *pData, qint64 nSize)
+{
+    // ECMA-167 Annex A: CRC-ITU-T over the bytes that follow the descriptor
+    // tag, generator polynomial x^16 + x^12 + x^5 + 1 (0x1021), initial value
+    // 0, neither the input nor the output is reflected and there is no final
+    // XOR.
+    quint16 nCRC = 0;
+
+    for (qint64 i = 0; i < nSize; i++) {
+        nCRC = (quint16)(nCRC ^ ((quint16)pData[i] << 8));
+
+        for (qint32 j = 0; j < 8; j++) {
+            if (nCRC & 0x8000) {
+                nCRC = (quint16)((quint16)(nCRC << 1) ^ 0x1021);
+            } else {
+                nCRC = (quint16)(nCRC << 1);
+            }
+        }
+    }
+
+    return nCRC;
+}
+
+bool XUDF::_isValidDescriptorTag(qint64 nOffset, quint16 nExpectedTagIdentifier, bool bStrict, UDF_TAG *pTag)
+{
+    if (pTag) {
+        *pTag = {};
+    }
+
+    const qint32 nBlockSize = _getBlockSize();
+    const qint64 nTagSize = (qint64)sizeof(UDF_TAG);
+    const qint64 nDeviceSize = getSize();
+
+    if ((nOffset < 0) || (nDeviceSize < nTagSize) || (nOffset > nDeviceSize - nTagSize)) {
+        return false;
+    }
+
+    quint8 tagBytes[16] = {};
+    if (!_readExact(nOffset, reinterpret_cast<char *>(tagBytes), (qint64)sizeof(tagBytes))) {
+        return false;
+    }
+
+    UDF_TAG tag = {};
+    tag.nTagIdentifier = (quint16)(tagBytes[0] | ((quint16)tagBytes[1] << 8));
+    tag.nDescriptorVersion = (quint16)(tagBytes[2] | ((quint16)tagBytes[3] << 8));
+    tag.nChecksum = tagBytes[4];
+    tag.nReserved = tagBytes[5];
+    tag.nTagSerialNumber = (quint16)(tagBytes[6] | ((quint16)tagBytes[7] << 8));
+    tag.nDescriptorCRC = (quint16)(tagBytes[8] | ((quint16)tagBytes[9] << 8));
+    tag.nDescriptorCRCLength = (quint16)(tagBytes[10] | ((quint16)tagBytes[11] << 8));
+    tag.nTagLocation = (quint32)tagBytes[12] | ((quint32)tagBytes[13] << 8) | ((quint32)tagBytes[14] << 16) | ((quint32)tagBytes[15] << 24);
+
+    if (tag.nTagIdentifier != nExpectedTagIdentifier) {
+        return false;
+    }
+
+    // ECMA-167 4/7.2.2: the descriptor version is 2 (ECMA-167 2nd edition,
+    // UDF up to 2.01) or 3 (3rd edition, UDF 2.50/2.60).
+    if ((tag.nDescriptorVersion != 2) && (tag.nDescriptorVersion != 3)) {
+        return false;
+    }
+
+    // ECMA-167 4/7.2.4: byte 5 is reserved and shall be #00.
+    if (tag.nReserved != 0) {
+        return false;
+    }
+
+    if (_calculateTagChecksum(tagBytes) != tag.nChecksum) {
+        return false;
+    }
+
+    if (bStrict) {
+        // ECMA-167 4/7.2.8: TagLocation is the number of the logical sector
+        // the descriptor is recorded in.  XUDF addresses everything from the
+        // start of the file, so an anchor that does not sit in the sector it
+        // claims cannot be parsed by this class anyway.
+        if ((nBlockSize <= 0) || ((qint64)tag.nTagLocation != (nOffset / nBlockSize))) {
+            return false;
+        }
+
+        if (tag.nDescriptorCRCLength > 0) {
+            if ((qint64)tag.nDescriptorCRCLength > (qint64)nBlockSize - nTagSize) {
+                return false;
+            }
+            if (nOffset + nTagSize + (qint64)tag.nDescriptorCRCLength > nDeviceSize) {
+                return false;
+            }
+
+            QByteArray baBody((qint32)tag.nDescriptorCRCLength, Qt::Uninitialized);
+            if (!_readExact(nOffset + nTagSize, baBody.data(), (qint64)baBody.size())) {
+                return false;
+            }
+            if (_calculateDescriptorCRC(reinterpret_cast<const quint8 *>(baBody.constData()), (qint64)baBody.size()) != tag.nDescriptorCRC) {
+                return false;
+            }
+        }
+    }
+
+    if (pTag) {
+        *pTag = tag;
+    }
+
+    return true;
+}
+
+bool XUDF::_isAnchorVolumeDescriptorPointer(qint64 nOffset, bool bStrict)
+{
+    UDF_TAG tag = {};
+
+    if (!_isValidDescriptorTag(nOffset, TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER, bStrict, &tag)) {
+        return false;
+    }
+
+    // ECMA-167 3/10.2: the AVDP body is two extent_ad structures.  The main
+    // Volume Descriptor Sequence extent has to be a non-empty, logical-sector
+    // aligned extent that lies inside the volume - without it there is nothing
+    // for this class to parse.
+    const qint32 nBlockSize = _getBlockSize();
+    const qint64 nDeviceSize = getSize();
+
+    quint32 nMainLength = 0;
+    if (!_readUInt32(nOffset + (qint64)sizeof(UDF_TAG), &nMainLength)) {
+        return false;
+    }
+
+    quint32 nMainLocation = 0;
+    if (!_readUInt32(nOffset + (qint64)sizeof(UDF_TAG) + 4, &nMainLocation)) {
+        return false;
+    }
+
+    if ((nBlockSize <= 0) || (nMainLength == 0) || ((nMainLength % (quint32)nBlockSize) != 0)) {
+        return false;
+    }
+
+    const qint64 nMainOffset = (qint64)nMainLocation * nBlockSize;
+
+    if ((nMainOffset <= 0) || (nMainOffset >= nDeviceSize)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool XUDF::_hasVolumeRecognitionSequence()
+{
+    // ECMA-167 2/9.1: the Volume Recognition Sequence starts at byte 32768 and
+    // is a series of 2048-byte Volume Structure Descriptors, each of them
+    //   byte 0     structure type
+    //   bytes 1-5  standard identifier
+    //   byte 6     structure version
+    // A UDF volume announces itself with an "NSR02"/"NSR03" descriptor in the
+    // extended area, that is after "BEA01" and before "TEA01".
+    const qint64 nVRSOffset = 0x8000;
+    const qint32 nSectorSize = 2048;
+    const qint64 nDeviceSize = getSize();
+
+    bool bExtendedArea = false;
+
+    for (qint32 i = 0; i < 64; i++) {
+        const qint64 nOffset = nVRSOffset + (qint64)i * nSectorSize;
+
+        if ((nOffset < 0) || (nOffset + nSectorSize > nDeviceSize)) {
+            break;
+        }
+
+        QByteArray baIdentifier(5, Qt::Uninitialized);
+        if (!_readExact(nOffset + 1, baIdentifier.data(), (qint64)baIdentifier.size())) {
+            break;
+        }
+
+        if (baIdentifier == "BEA01") {
+            bExtendedArea = true;
+        } else if (baIdentifier == "TEA01") {
+            break;
+        } else if (bExtendedArea && ((baIdentifier == "NSR02") || (baIdentifier == "NSR03"))) {
+            return true;
+        } else if ((baIdentifier != "CD001") && (baIdentifier != "CDW02") && (baIdentifier != "BOOT2")) {
+            break;
+        }
+    }
+
+    return false;
+}
+
 qint64 XUDF::_getAnchorVolumeDescriptorOffset()
 {
     QPointer<XUDF> guardedThis(this);
     QPointer<QIODevice> guardedDevice(getDevice());
 
-    // Anchor Volume Descriptor Pointer is at sector 256
-    qint64 nOffset = 256 * 2048;
+    const qint32 nBlockSize = _getBlockSize();
+    const qint64 nDeviceSize = getSize();
 
-    if (nOffset < getSize()) {
-        quint16 nTagIdentifier = 0;
-        if (!_readUInt16(nOffset, &nTagIdentifier) || !guardedThis || !guardedDevice) {
+    if ((nBlockSize <= 0) || (nDeviceSize < nBlockSize)) {
+        return -1;
+    }
+
+    // ECMA-167 3/8.4.2: an Anchor Volume Descriptor Pointer shall be recorded
+    // at logical sector 256, at N (the last sector of the volume space) and/or
+    // at N-256.  UDF 2.60 2.2.3 additionally allows sector 512.  Sector 256 and
+    // the last sector are probed first so that the anchor picked here stays the
+    // one the rest of the class used before.
+    const qint64 nLastSector = (nDeviceSize / nBlockSize) - 1;
+
+    qint64 pnCandidates[4] = {};
+    qint32 nNumberOfCandidates = 0;
+
+    pnCandidates[nNumberOfCandidates++] = (qint64)256 * nBlockSize;
+    if (nLastSector >= 0) {
+        pnCandidates[nNumberOfCandidates++] = nLastSector * nBlockSize;
+    }
+    if (nLastSector >= 256) {
+        pnCandidates[nNumberOfCandidates++] = (nLastSector - 256) * nBlockSize;
+    }
+    pnCandidates[nNumberOfCandidates++] = (qint64)512 * nBlockSize;
+
+    for (qint32 i = 0; i < nNumberOfCandidates; i++) {
+        const bool bIsAnchor = _isAnchorVolumeDescriptorPointer(pnCandidates[i], true);
+        if (!guardedThis || !guardedDevice) {
             return -1;
         }
-        if (nTagIdentifier == TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER) {
-            return nOffset;
+        if (bIsAnchor) {
+            return pnCandidates[i];
         }
     }
 
-    // Try at end of volume
-    qint64 nEndOffset = (getSize() / 2048) * 2048 - 2048;
-    if (nEndOffset > 0) {
-        quint16 nTagIdentifier = 0;
-        if (!_readUInt16(nEndOffset, &nTagIdentifier) || !guardedThis || !guardedDevice) {
-            return -1;
-        }
-        if (nTagIdentifier == TAG_ANCHOR_VOLUME_DESCRIPTOR_POINTER) {
-            return nEndOffset;
+    // Fall back to a tag that passes the checksum but not the self-consistency
+    // checks only when the Volume Recognition Sequence independently declares
+    // the file to be a UDF volume.
+    const bool bHasVRS = _hasVolumeRecognitionSequence();
+    if (!guardedThis || !guardedDevice) {
+        return -1;
+    }
+
+    if (bHasVRS) {
+        for (qint32 i = 0; i < nNumberOfCandidates; i++) {
+            const bool bIsAnchor = _isAnchorVolumeDescriptorPointer(pnCandidates[i], false);
+            if (!guardedThis || !guardedDevice) {
+                return -1;
+            }
+            if (bIsAnchor) {
+                return pnCandidates[i];
+            }
         }
     }
 

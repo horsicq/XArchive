@@ -77,8 +77,27 @@ public:
     virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
     virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+
+    // Streaming unpacking API
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
+    virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
+
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
+
+private:
+    struct LZ4_UNPACK_CONTEXT {
+        qint64 nHeaderSize;
+        qint64 nCompressedSize;
+        qint64 nUncompressedSize;
+        QString sFileName;
+    };
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

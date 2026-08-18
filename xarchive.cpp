@@ -442,23 +442,59 @@ static bool archiveWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize,
     return true;
 }
 
+static XBinary::ARCHIVERECORD archiveRecordFromLegacy(
+    const XArchive::RECORD &record)
+{
+    XBinary::ARCHIVERECORD result = {};
+    result.nStreamOffset = record.nDataOffset;
+    result.nStreamSize = record.nDataSize;
+    result.mapProperties = record.mapProperties;
+    return result;
+}
+
+// Normalizes an archive record path for extraction.
+//
+// Only genuinely dangerous shapes are refused: ".." traversal, and anything
+// XBinary::fixFileName() would have to alter (control characters, NTFS ADS
+// colons, trailing dots/spaces, Windows device aliases).  Shapes that are
+// merely non-canonical are normalized away rather than rejected, because they
+// are entirely ordinary: GNU tar stores "." and "./name", cpio and rpm store
+// absolute paths such as "/home/user/file", and DOS-era archivers store
+// "C:\name".  Refusing those loses ordinary data; 7-Zip, bsdtar and unzip all
+// strip the prefix and extract relative to the destination.
+//
+// *pNormalizedPath may come back empty, meaning the record names the output
+// root itself.  Callers must skip such records without treating it as failure.
 static bool archiveGetSafeRelativePath(const QString &sPath, QString *pNormalizedPath)
 {
     if (!pNormalizedPath) return false;
 
     QString sNormalized = QDir::fromNativeSeparators(sPath);
-    if (sNormalized.isEmpty() || sNormalized.startsWith(QLatin1Char('/'))) return false;
 
-    const QStringList listParts = sNormalized.split(QLatin1Char('/'), Qt::KeepEmptyParts);
-    for (const QString &sPart : listParts) {
-        if (sPart.isEmpty() || (sPart == QLatin1String(".")) || (sPart == QLatin1String(".."))) return false;
+    // Drop a drive-letter prefix ("C:" / "C:/") and any leading separators.
+    if ((sNormalized.size() >= 2) && sNormalized.at(0).isLetter() && (sNormalized.at(1) == QLatin1Char(':'))) {
+        sNormalized = sNormalized.mid(2);
+    }
+    while (sNormalized.startsWith(QLatin1Char('/'))) {
+        sNormalized.remove(0, 1);
     }
 
-    sNormalized = sNormalized.normalized(QString::NormalizationForm_C);
+    QStringList listSafe;
+    const QStringList listParts = sNormalized.split(QLatin1Char('/'), Qt::KeepEmptyParts);
+    for (const QString &sPart : listParts) {
+        // Empty components come from duplicated separators; "." is a no-op.
+        if (sPart.isEmpty() || (sPart == QLatin1String("."))) continue;
+        // Traversal is never normalized away -- it is refused.
+        if (sPart == QLatin1String("..")) return false;
+        listSafe.append(sPart);
+    }
+
+    sNormalized = listSafe.join(QLatin1Char('/')).normalized(QString::NormalizationForm_C);
+
     // fixFileName preserves safe path components and changes every portable
     // filesystem hazard: traversal components, control characters, NTFS ADS
     // colons, trailing dots/spaces, and Windows device aliases.
-    if (XBinary::fixFileName(sNormalized) != sNormalized) return false;
+    if (!sNormalized.isEmpty() && (XBinary::fixFileName(sNormalized) != sNormalized)) return false;
 
     *pNormalizedPath = sNormalized;
     return true;
@@ -1306,19 +1342,64 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
         ARCHIVERECORD archiveRecord =
             guardedArchive->infoCurrent(&state, pPdStruct);
 
+        // An index-paired ARCHIVE_STREAM record deliberately carries no extent
+        // (see XBinary::ARCHIVE_STREAM_NO_EXTENT); every other record must
+        // carry a non-negative one measured on this archive's own device.
+        qint32 nArchiveStreamIndex = -1;
+        const bool bIsArchiveStreamRecord =
+            XBinary::getArchiveStreamRecordIndex(archiveRecord,
+                                                 &nArchiveStreamIndex);
+
         // A callback or parser is allowed to cancel during infoCurrent().  Do
         // not publish the record that was being assembled when that happened.
         if (!guardedArchive || !isProgressAlive() ||
             !XBinary::isPdStructNotCanceled(pPdStruct) ||
             archiveRecord.mapProperties.isEmpty() ||
-            (archiveRecord.nStreamOffset < 0) ||
-            (archiveRecord.nStreamSize < 0) ||
+            !XBinary::isArchiveRecordExtentValid(archiveRecord) ||
             (state.nCurrentIndex < 0) || (state.nNumberOfRecords < 0) ||
             (state.nCurrentIndex != nExpectedIndex) ||
             (state.nNumberOfRecords != nNumberOfRecords) ||
             (state.nCurrentIndex >= nNumberOfRecords)) {
             bEnumerationValid = false;
             break;
+        }
+
+        // A legacy RECORD is nothing but a raw (offset,size) pair, and every
+        // consumer of one resolves it against getDevice().  An index-paired
+        // ARCHIVE_STREAM record carries no device-relative coordinates and is
+        // extracted through the archive session instead, so it is exempt.
+        // Anything else must have been measured on the very device the legacy
+        // path will read; if the session says otherwise the pairing cannot be
+        // established and the enumeration fails cleanly.  Publishing such a
+        // record instead would let a STORE-method member be satisfied by a raw
+        // copy of unrelated container bytes at exactly the right length.
+        //
+        // The test is pure pointer identity, deliberately including the
+        // both-null case.  getRecordStreamDevice()'s default implementation
+        // *is* getDevice() (xbinary.cpp), so a format that keeps the default
+        // contract answers with the very same pointer whatever that pointer
+        // happens to be; two nulls are that identity for a device-less
+        // archive, not a disagreement, and a consumer resolving offsets
+        // against a null device reads nothing at all - there are no unrelated
+        // container bytes for it to be handed.  Exactly one side being null,
+        // on the other hand, can only come from an override that disagrees
+        // with getDevice(): either the session disclaims the coordinates the
+        // legacy path will nevertheless resolve against a real device (the
+        // silent-corruption shape itself), or the record was measured on a
+        // private buffer the legacy path cannot see.  Both stay rejected.
+        if (!bIsArchiveStreamRecord) {
+            QIODevice *pRecordDevice =
+                guardedArchive->getRecordStreamDevice(&state);
+            QIODevice *pPublicDevice =
+                guardedArchive ? guardedArchive->getDevice() : nullptr;
+
+            if (!guardedArchive || (pRecordDevice != pPublicDevice)) {
+                XBinary::setPdStructErrorString(
+                    pPdStruct,
+                    tr("Archive record does not belong to the archive device"));
+                bEnumerationValid = false;
+                break;
+            }
         }
 
         // Convert ARCHIVERECORD to legacy RECORD structure
@@ -1420,6 +1501,93 @@ QList<XArchive::RECORD> XArchive::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     if (!bEnumerationValid || !bFinished || !isProgressAlive() ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         listResult.clear();
+    }
+
+    return listResult;
+}
+
+bool XArchive::isResourcesPresent()
+{
+    return getNumberOfArchiveRecords(nullptr) > 0;
+}
+
+QVector<XBinary::XRESOURCE_STRUCT> XArchive::getResourceStructs()
+{
+    QVector<XRESOURCE_STRUCT> listResult;
+    const QList<ARCHIVERECORD> listRecords = getArchiveRecords(-1, nullptr);
+    const qint32 nNumberOfRecords = listRecords.count();
+
+    listResult.reserve(nNumberOfRecords);
+
+    for (qint32 i = 0; i < nNumberOfRecords; ++i) {
+        const ARCHIVERECORD &archiveRecord = listRecords.at(i);
+
+        XRESOURCE_STRUCT record = {};
+        record.nOffset = archiveRecord.nStreamOffset;
+        record.nSize = archiveRecord.nStreamSize;
+        record.nAddress = offsetToAddress(archiveRecord.nStreamOffset);
+        record.sName = archiveRecord.mapProperties.value(FPART_PROP_ORIGINALNAME).toString();
+        record.nType = archiveRecord.mapProperties.value(FPART_PROP_FILETYPE).toUInt();
+        record.nID = static_cast<quint32>(i);
+
+        listResult.append(record);
+    }
+
+    return listResult;
+}
+
+QVector<XBinary::XMETADATA_STRUCT> XArchive::getMetadataStructs()
+{
+    QVector<XMETADATA_STRUCT> listResult;
+    const QList<ARCHIVERECORD> listRecords = getArchiveRecords(-1, nullptr);
+
+    for (qint32 i = 0; i < listRecords.count(); ++i) {
+        const ARCHIVERECORD &archiveRecord = listRecords.at(i);
+        QString sRecordName = archiveRecord.mapProperties.value(FPART_PROP_ORIGINALNAME).toString();
+        if (sRecordName.isEmpty()) {
+            sRecordName = QString("Record %1").arg(i);
+        }
+
+        const QString sUuid = archiveRecord.mapProperties.value(FPART_PROP_UUID).toString();
+        if (!sUuid.isEmpty()) {
+            XMETADATA_STRUCT record = {};
+            record.nOffset = -1;
+            record.nSize = 16;
+            record.nAddress = (XADDR)-1;
+            record.id = XMETADATA_ID_UUID;
+            record.sName = QString("%1: UUID").arg(sRecordName);
+            record.varValue = sUuid;
+            listResult.append(record);
+        }
+
+        auto appendDateTime = [&listResult, &archiveRecord, &sRecordName](FPART_PROP property, XMETADATA_ID id, const QString &sLabel) {
+            const QVariant varValue = archiveRecord.mapProperties.value(property);
+            if (!varValue.canConvert<QDateTime>()) {
+                return;
+            }
+
+            const QDateTime dateTime = varValue.toDateTime();
+            if (!dateTime.isValid()) {
+                return;
+            }
+
+            XMETADATA_STRUCT record = {};
+            record.nOffset = archiveRecord.nStreamOffset;
+            record.nSize = archiveRecord.nStreamSize;
+            record.nAddress = (XADDR)-1;
+            record.id = id;
+            record.sName = QString("%1: %2").arg(sRecordName, sLabel);
+            record.varValue = dateTime;
+            listResult.append(record);
+        };
+
+        if (archiveRecord.mapProperties.contains(FPART_PROP_MTIME)) {
+            appendDateTime(FPART_PROP_MTIME, XMETADATA_ID_MODIFICATED, QString("Modification time"));
+        } else {
+            appendDateTime(FPART_PROP_DATETIME, XMETADATA_ID_MODIFICATED, QString("Modification time"));
+        }
+        appendDateTime(FPART_PROP_CTIME, XMETADATA_ID_DATETIME_CREATED, QString("Creation time"));
+        appendDateTime(FPART_PROP_ATIME, XMETADATA_ID_DATETIME_ACCESSED, QString("Access time"));
     }
 
     return listResult;
@@ -1857,6 +2025,30 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
                                       (nDecompressedOffset > ((std::numeric_limits<qint64>::max)() - nDecompressedLimit)))) {
         return false;
     }
+    // This static path has no owning archive session with which to resolve a
+    // logical record.  Never reinterpret the outer transport bytes as the
+    // member's packed stream.
+    //
+    // The primary barrier is that such a record has no usable coordinates at
+    // all: markArchiveStreamRecord() publishes ARCHIVE_STREAM_NO_EXTENT, which
+    // the (nDataOffset < 0) || (nDataSize < 0) test above already refuses, so
+    // forging spInfo.compressMethod buys an attacker nothing.
+    //
+    // The tests below refuse such a record explicitly rather than
+    // incidentally, and they hold even if a caller overwrites the extent by
+    // hand.  FPART_PROP_ARCHIVE_RECORD_INDEX in particular is set by exactly
+    // one function - markArchiveStreamRecord() - so its presence identifies an
+    // index-paired record no matter what else has been rewritten around it.
+    if ((pRecord->spInfo.compressMethod == HANDLE_METHOD_ARCHIVE_STREAM) ||
+        (pRecord->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD,
+                                      HANDLE_METHOD_UNKNOWN).toInt() ==
+         HANDLE_METHOD_ARCHIVE_STREAM) ||
+        pRecord->mapProperties.contains(
+            XBinary::FPART_PROP_ARCHIVE_RECORD_INDEX) ||
+        pRecord->mapProperties.contains(
+            XBinary::FPART_PROP_ARCHIVE_RECORD_TOKEN)) {
+        return false;
+    }
 
     const RECORD record = *pRecord;
     QPointer<QIODevice> guardedSource(pSourceDevice);
@@ -2132,12 +2324,49 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdSt
         return !pPdStruct || isPdStructLifetimeAlive(progressLifetime);
     };
 
-    if (!guardedSourceDevice) return result;
+    if (!pRecord || !guardedSourceDevice || (nDecompressedOffset < 0) ||
+        (nDecompressedLimit < -1)) return result;
+
+    const ARCHIVERECORD archiveRecord = archiveRecordFromLegacy(*pRecord);
+    qint32 nArchiveStreamIndex = -1;
+    if (XBinary::getArchiveStreamRecordIndex(
+            archiveRecord, &nArchiveStreamIndex)) {
+        Q_UNUSED(nArchiveStreamIndex)
+        QBuffer buffer;
+        buffer.setBuffer(&result);
+        if (!buffer.open(QIODevice::ReadWrite) ||
+            !guardedArchive->unpackArchiveStreamRecord(
+                archiveRecord, &buffer,
+                QMap<UNPACK_PROP, QVariant>(), pPdStruct) ||
+            !guardedArchive || !guardedSourceDevice ||
+            !isProgressAlive() ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            result.clear();
+            return result;
+        }
+        buffer.close();
+
+        if (nDecompressedOffset > result.size()) {
+            result.clear();
+            return result;
+        }
+        if ((nDecompressedOffset != 0) || (nDecompressedLimit != -1)) {
+            const qint64 nAvailable = result.size() - nDecompressedOffset;
+            const qint64 nResultSize = (nDecompressedLimit == -1)
+                ? nAvailable : qMin(nAvailable, nDecompressedLimit);
+            result = result.mid((qint32)nDecompressedOffset,
+                                (qint32)nResultSize);
+        }
+        return result;
+    }
 
     QBuffer buffer;
     buffer.setBuffer(&result);
 
-    if (buffer.open(QIODevice::WriteOnly)) {
+    // Readable, not write-only: the decoder rereads its complete output to
+    // verify the record's stored checksum, so a write-only destination fails
+    // every record that carries one.
+    if (buffer.open(QIODevice::ReadWrite)) {
         const bool bDecompressed = _decompressRecord(pRecord, guardedSourceDevice.data(), &buffer, pPdStruct, nDecompressedOffset, nDecompressedLimit);
         buffer.close();
 
@@ -2183,6 +2412,32 @@ QByteArray XArchive::decompress(const QString &sRecordFileName, PDSTRUCT *pPdStr
     return guardedArchive->decompress(&listArchive, sRecordFileName, pPdStruct);
 }
 
+bool XArchive::unpackArchiveStreamRecord(
+    const ARCHIVERECORD &expectedRecord, QIODevice *pOutputDevice,
+    const QMap<UNPACK_PROP, QVariant> &mapProperties,
+    PDSTRUCT *pPdStruct)
+{
+    qint32 nRecordIndex = -1;
+    // The only thing this route accepts is the exact contract published by
+    // XBinary::markArchiveStreamRecord(): a logical record index and the
+    // no-extent coordinates.  A record that carries real coordinates is an
+    // offset record and does not belong here.
+    if (!pOutputDevice ||
+        !XBinary::isArchiveStreamNoExtent(expectedRecord.nStreamOffset,
+                                          expectedRecord.nStreamSize) ||
+        !XBinary::getArchiveStreamRecordIndex(expectedRecord,
+                                              &nRecordIndex)) {
+        return false;
+    }
+
+    QPointer<XArchive> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedArchive || !guardedSource) return false;
+
+    return _unpackRecordByIndex(nRecordIndex, &expectedRecord,
+                                pOutputDevice, mapProperties, pPdStruct);
+}
+
 bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct)
 {
     QPointer<XArchive> guardedArchive(this);
@@ -2209,6 +2464,27 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
 
     if (!XBinary::createDirectory(fi.absolutePath())) {
         return false;
+    }
+
+    const ARCHIVERECORD archiveRecord = archiveRecordFromLegacy(*pRecord);
+    qint32 nArchiveStreamIndex = -1;
+    if (XBinary::getArchiveStreamRecordIndex(
+            archiveRecord, &nArchiveStreamIndex)) {
+        Q_UNUSED(nArchiveStreamIndex)
+        QSaveFile outputFile(sResultFileName);
+        if (!outputFile.open(QIODevice::WriteOnly)) return false;
+        const bool bUnpacked = guardedArchive &&
+            guardedArchive->unpackArchiveStreamRecord(
+                archiveRecord, &outputFile,
+                QMap<UNPACK_PROP, QVariant>(), pPdStruct);
+        if (!guardedArchive || !guardedSourceDevice || !bUnpacked ||
+            !isProgressAlive() ||
+            !XBinary::isPdStructNotCanceled(pPdStruct) ||
+            (outputFile.error() != QFile::NoError)) {
+            outputFile.cancelWriting();
+            return false;
+        }
+        return outputFile.commit();
     }
 
     // QSaveFile is deliberately write-only, while the shared decompressor
@@ -2266,7 +2542,19 @@ bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice,
     QPointer<XArchive> guardedArchive(this);
     QPointer<QIODevice> guardedSourceDevice(getDevice());
     QPointer<QIODevice> guardedDestDevice(pDestDevice);
-    if (!guardedSourceDevice || !guardedDestDevice) return false;
+    if (!pRecord || !guardedSourceDevice || !guardedDestDevice) return false;
+
+    const ARCHIVERECORD archiveRecord = archiveRecordFromLegacy(*pRecord);
+    qint32 nArchiveStreamIndex = -1;
+    if (XBinary::getArchiveStreamRecordIndex(
+            archiveRecord, &nArchiveStreamIndex)) {
+        Q_UNUSED(nArchiveStreamIndex)
+        const bool bResult = guardedArchive->unpackArchiveStreamRecord(
+            archiveRecord, guardedDestDevice.data(),
+            QMap<UNPACK_PROP, QVariant>(), pPdStruct);
+        return guardedArchive && guardedSourceDevice && guardedDestDevice &&
+               bResult;
+    }
 
     const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), guardedDestDevice.data(), pPdStruct, 0, -1);
     return guardedArchive && guardedSourceDevice && guardedDestDevice && bResult;
@@ -2374,6 +2662,12 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
             QString sSafeOutputPath;
             if (!archiveGetSafeRelativePath(sFileName, &sSafeOutputPath)) {
                 bResult = false;
+                continue;
+            }
+
+            // The record names the output root itself (tar's leading ".");
+            // there is nothing to place, and it is not a failure.
+            if (sSafeOutputPath.isEmpty()) {
                 continue;
             }
 
@@ -2501,8 +2795,7 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
         if (!guardedArchive || !isProgressAlive() ||
             !isPdStructNotCanceled(pPdStruct) ||
             archiveRecord.mapProperties.isEmpty() ||
-            (archiveRecord.nStreamOffset < 0) ||
-            (archiveRecord.nStreamSize < 0) ||
+            !XBinary::isArchiveRecordExtentValid(archiveRecord) ||
             (state.nCurrentIndex < 0) ||
             (state.nCurrentIndex != nExpectedIndex) ||
             (state.nNumberOfRecords != nNumberOfRecords) ||
@@ -2516,6 +2809,9 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
 
         if (!archiveGetSafeRelativePath(sRecordName, &sSafeRecordPath)) {
             bResult = false;
+        } else if (sSafeRecordPath.isEmpty()) {
+            // The record names the output root itself (tar's leading ".");
+            // there is nothing to place, and it is not a failure.
         } else {
             const QString sResultFileName = _normalizeOutputPath(QDir(sCanonicalRoot).absoluteFilePath(sSafeRecordPath));
             const bool bIsFolder = archiveRecord.mapProperties.value(FPART_PROP_ISFOLDER, false).toBool() || sRecordName.endsWith(QLatin1Char('/'));
@@ -2665,6 +2961,20 @@ bool XArchive::decompressToPath(const QString &sArchiveFileName, const QString &
 bool XArchive::dumpToFile(const XArchive::RECORD *pRecord, const QString &sFileName, PDSTRUCT *pPdStruct)
 {
     if (!pRecord) return false;
+    qint32 nArchiveStreamIndex = -1;
+    // Same refusal as every other coordinate-based route: an index-paired
+    // record has no extent, and the two properties only markArchiveStreamRecord()
+    // writes identify it even if its method field has been rewritten.
+    if ((pRecord->spInfo.compressMethod == HANDLE_METHOD_ARCHIVE_STREAM) ||
+        XBinary::getArchiveStreamRecordIndex(
+            pRecord->mapProperties, &nArchiveStreamIndex) ||
+        pRecord->mapProperties.contains(
+            XBinary::FPART_PROP_ARCHIVE_RECORD_INDEX) ||
+        pRecord->mapProperties.contains(
+            XBinary::FPART_PROP_ARCHIVE_RECORD_TOKEN) ||
+        (pRecord->nDataOffset < 0) || (pRecord->nDataSize < 0)) {
+        return false;
+    }
     return XBinary::dumpToFile(sFileName, pRecord->nDataOffset, pRecord->nDataSize, pPdStruct);
 }
 

@@ -1342,6 +1342,25 @@ XWIM::WIM_HEADER XWIM::readWIMHeader(qint64 nOffset)
     return result;
 }
 
+QVector<XBinary::XMETADATA_STRUCT> XWIM::getMetadataStructs()
+{
+    QVector<XMETADATA_STRUCT> listResult = XArchive::getMetadataStructs();
+    const WIM_HEADER header = readWIMHeader();
+
+    if ((header.baGuid.size() == 16) && (header.baGuid != QByteArray(16, '\0')) && checkOffsetSize(0x18, 16)) {
+        XMETADATA_STRUCT record = {};
+        record.nOffset = 0x18;
+        record.nSize = 16;
+        record.nAddress = offsetToAddress(0x18);
+        record.id = XMETADATA_ID_UUID;
+        record.sName = QString("WIM GUID");
+        record.varValue = read_UUID(0x18);
+        listResult.prepend(record);
+    }
+
+    return listResult;
+}
+
 XWIM::RESOURCE_INFO XWIM::readResourceInfo(qint64 nOffset)
 {
     RESOURCE_INFO result = {};

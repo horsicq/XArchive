@@ -203,6 +203,24 @@ static XBinary::PM_INFO createPMInfo(XBinary::HANDLE_METHOD hm0, XBinary::HANDLE
     return result;
 }
 
+static bool sevenZipCoderPropertiesAreValid(XBinary::HANDLE_METHOD method, qint32 nPropertySize)
+{
+    switch (method) {
+        case XBinary::HANDLE_METHOD_ZSTD:
+            // Current 7-Zip-zstd writes five bytes. Its decoder also accepts
+            // the older three-byte layout and the one-byte flags layout.
+            return (nPropertySize == 1) || (nPropertySize == 3) || (nPropertySize == 5);
+        case XBinary::HANDLE_METHOD_BROTLI:
+        case XBinary::HANDLE_METHOD_LIZARD:
+            return nPropertySize == 3;
+        case XBinary::HANDLE_METHOD_LZ4:
+        case XBinary::HANDLE_METHOD_LZ5:
+            return nPropertySize == 5;
+        default:
+            return true;
+    }
+}
+
 // Resolve a folder in-stream index to its global pack-stream index. Tries a direct
 // lookup first; if that fails, follows one coder bond to handle AES-encrypted
 // sub-streams (the encrypted BCJ2 layout). When resolved via a bond, *pAESCoderIdx
@@ -315,6 +333,7 @@ QList<XBinary::PM_INFO> XSevenZip::unpackImplemented()
 
     static const HANDLE_METHOD g_7zUnpackMethods[] = {
         HANDLE_METHOD_STORE, HANDLE_METHOD_LZMA, HANDLE_METHOD_LZMA2, HANDLE_METHOD_PPMD7, HANDLE_METHOD_BZIP2, HANDLE_METHOD_DEFLATE, HANDLE_METHOD_DEFLATE64,
+        HANDLE_METHOD_ZSTD, HANDLE_METHOD_BROTLI, HANDLE_METHOD_LZ4, HANDLE_METHOD_LZ5, HANDLE_METHOD_LIZARD,
     };
 
     static const HANDLE_METHOD g_7zFilters[] = {
@@ -609,6 +628,16 @@ XBinary::HANDLE_METHOD XSevenZip::coderToCompressMethod(const QByteArray &baCode
             result = HANDLE_METHOD_DEFLATE64;  // Deflate64
         } else if (baCodec.startsWith(QByteArray("\x04\x02\x02", 3))) {
             result = HANDLE_METHOD_BZIP2;  // BZip2
+        } else if (baCodec == QByteArray("\x04\xF7\x11\x01", 4)) {
+            result = HANDLE_METHOD_ZSTD;  // 7-Zip-zstd Zstandard
+        } else if (baCodec == QByteArray("\x04\xF7\x11\x02", 4)) {
+            result = HANDLE_METHOD_BROTLI;  // 7-Zip-zstd Brotli
+        } else if (baCodec == QByteArray("\x04\xF7\x11\x04", 4)) {
+            result = HANDLE_METHOD_LZ4;  // 7-Zip-zstd LZ4
+        } else if (baCodec == QByteArray("\x04\xF7\x11\x05", 4)) {
+            result = HANDLE_METHOD_LZ5;  // 7-Zip-zstd LZ5
+        } else if (baCodec == QByteArray("\x04\xF7\x11\x06", 4)) {
+            result = HANDLE_METHOD_LIZARD;  // 7-Zip-zstd Lizard
         } else if (baCodec.startsWith(QByteArray("\x03\x04\x01", 3))) {
             result = HANDLE_METHOD_PPMD7;  // PPMd (actual codec from 7z)
         } else if (baCodec.startsWith(QByteArray("\x03\x03\x01\x03", 4))) {
@@ -1223,6 +1252,13 @@ bool XSevenZip::_handleId(QList<SZRECORD> *pListRecords, EIdEnum id, SZSTATE *pS
                         if (bHasAttr && !pState->bIsError) {
                             quint64 nPropertySize = _handleNumber(pListRecords, pState, pPdStruct, "PropertiesSize", DRF_SIZE, IMPTYPE_UNKNOWN);
                             coder.baProperty = _handleArray(pListRecords, pState, nPropertySize, pPdStruct, "Property", IMPTYPE_CODERPROPERTY);
+                        }
+
+                        if (!pState->bIsError &&
+                            !sevenZipCoderPropertiesAreValid(coderToCompressMethod(coder.baCoder), coder.baProperty.size())) {
+                            pState->bIsError = true;
+                            pState->sErrorString = tr("Invalid 7z coder property size");
+                            break;
                         }
 
                         szFolder.listCoders.append(coder);

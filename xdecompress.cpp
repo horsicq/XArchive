@@ -377,6 +377,39 @@ private:
     XBinary::PDSTRUCTLIFETIME m_progressLifetime;
 };
 
+// True for the record shape XBinary::markArchiveStreamRecord() publishes: a
+// member of a private decoded stream, addressable only through its owning
+// archive session (XBinary::_unpackRecordByIndex) and never by coordinates.
+// Both the pseudo-method and the bare presence of the logical index are
+// enough, because FPART_PROP_ARCHIVE_RECORD_INDEX is written by exactly one
+// function and nothing else: a caller that forges the method field but leaves
+// the index in place is still holding an archive-stream record.
+static bool decIsArchiveStreamProperties(
+    const QMap<XBinary::FPART_PROP, QVariant> &mapProperties)
+{
+    if (mapProperties.contains(XBinary::FPART_PROP_ARCHIVE_RECORD_INDEX) ||
+        mapProperties.contains(XBinary::FPART_PROP_ARCHIVE_RECORD_TOKEN)) {
+        return true;
+    }
+
+    const XBinary::FPART_PROP arrMethodProps[] = {
+        XBinary::FPART_PROP_HANDLEMETHOD, XBinary::FPART_PROP_HANDLEMETHOD2,
+        XBinary::FPART_PROP_HANDLEMETHOD3, XBinary::FPART_PROP_HANDLEMETHOD4};
+
+    for (size_t i = 0; i < (sizeof(arrMethodProps) / sizeof(arrMethodProps[0]));
+         i++) {
+        if (!mapProperties.contains(arrMethodProps[i])) continue;
+        bool bOk = false;
+        const qint64 nMethod =
+            mapProperties.value(arrMethodProps[i]).toLongLong(&bOk);
+        if (bOk && (nMethod == (qint64)XBinary::HANDLE_METHOD_ARCHIVE_STREAM)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static bool decPrepareBoundedInput(QIODevice *pDevice, qint64 nOffset, qint64 nLimit, qint64 *pnEffectiveLimit)
 {
     const qint64 nMax = (std::numeric_limits<qint64>::max)();
@@ -815,6 +848,15 @@ XDecompress::~XDecompress()
 
 bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct)
 {
+    // Same refusal as decompressArchiveRecord(): a part carrying the
+    // archive-stream contract has no coordinates that mean anything here, and
+    // a negative extent is not a disarmed extent - decPrepareBoundedInput()
+    // reads a -1 limit as "to the end of the device".
+    if (decIsArchiveStreamProperties(fPart.mapProperties) ||
+        (fPart.nFileOffset < 0) || (fPart.nFileSize < 0)) {
+        return false;
+    }
+
     XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = fPart.mapProperties;
     state.pDeviceInput = pDeviceInput;
@@ -830,6 +872,28 @@ bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDevic
 bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput,
                                           const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct)
 {
+    // This is the ARCHIVERECORD-native decode entry point, and it is reachable
+    // from shipping callers (XFormats::extractArchiveRecordsToFolder,
+    // XArchive::unpackCurrent).  An index-paired archive-stream record must be
+    // refused here exactly as it is on the legacy RECORD route: its member is
+    // only reachable through its owning archive session
+    // (XArchive::unpackArchiveStreamRecord), and any coordinates that reach
+    // this function address the raw container instead of the member.
+    qint32 nArchiveStreamIndex = -1;
+    if (XBinary::getArchiveStreamRecordIndex(archiveRecord,
+                                             &nArchiveStreamIndex) ||
+        decIsArchiveStreamProperties(archiveRecord.mapProperties)) {
+        return false;
+    }
+
+    // ARCHIVE_STREAM_NO_EXTENT is -1 on both axes, and -1 is not a disarmed
+    // value: decPrepareBoundedInput() reads a -1 limit as "to the end of the
+    // device", which is how a no-extent record once leaked a whole decoded
+    // archive.  Neither axis may be negative here.
+    if ((archiveRecord.nStreamOffset < 0) || (archiveRecord.nStreamSize < 0)) {
+        return false;
+    }
+
     XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = archiveRecord.mapProperties;
     state.mapUnpackProperties = mapUnpackProperties;
@@ -1154,6 +1218,17 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     if (!pState) {
         return false;
     }
+
+    // An index-paired archive-stream record is not decodable from coordinates.
+    // Its member lives inside a private decoded stream this decoder cannot
+    // reach, so whatever (offset,size) pair arrives here addresses some OTHER
+    // data - in practice the raw container.  Refuse that shape at the one place
+    // every decode funnels through, rather than at each entry point that
+    // happens to remember to ask.
+    if (decIsArchiveStreamProperties(pState->mapProperties)) {
+        return false;
+    }
+
     DecProcessStateTransaction stateTransaction(this, pState, pPdStruct);
     pState = stateTransaction.state();
 
@@ -1598,6 +1673,14 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     if (!pState) {
         return false;
     }
+
+    // The third public decode entry point, and it dispatches to the codecs
+    // without passing through multiDecompress().  It gets the same refusal, so
+    // that no entry point is the one that forgot to ask.
+    if (decIsArchiveStreamProperties(pState->mapProperties)) {
+        return false;
+    }
+
     DecProcessStateTransaction stateTransaction(this, pState, pPdStruct);
     pState = stateTransaction.state();
     QPointer<XDecompress> guardedThis(this);
@@ -1678,8 +1761,13 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     if (pState->mapProperties.contains(XBinary::FPART_PROP_PASSWORD_MODIFIER)) {
         quint8 nModifier = (quint8)pState->mapProperties.value(XBinary::FPART_PROP_PASSWORD_MODIFIER).toUInt();
         QString sPassword = pState->mapUnpackProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
-        if (!sPassword.isEmpty() && pState->pDeviceInput) {
-            if ((pState->nInputLimit <= 0) ||
+        // An empty member (0-byte file, or a directory entry ARJ stores as a
+        // zero-length record) carries no packed bytes to decrypt.  Rejecting
+        // it here would fail every empty entry of an encrypted archive; leave
+        // the plain input in place and let the STORE path emit nothing.
+        if (!sPassword.isEmpty() && pState->pDeviceInput &&
+            (pState->nInputLimit != 0)) {
+            if ((pState->nInputLimit < 0) ||
                 (pState->nInputLimit >
                  (std::numeric_limits<qint32>::max)())) {
                 return false;
@@ -2819,6 +2907,12 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_ZSTD) {
         bResult = XZstdDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZ4) {
+        bResult = XLZ4Decoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZ5) {
+        bResult = XLZ5Decoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LIZARD) {
+        bResult = XLizardDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZOP) {
         bResult = XLZODecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_COMPRESS) {

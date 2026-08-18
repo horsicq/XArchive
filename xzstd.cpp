@@ -25,6 +25,18 @@
 #include <new>
 
 namespace {
+const quint32 ZSTD_STANDARD_MAGIC = 0xFD2FB528U;
+const quint32 ZSTD_LEGACY_MAGIC_V04 = 0xFD2FB524U;
+const quint32 ZSTD_LEGACY_MAGIC_V07 = 0xFD2FB527U;
+const quint32 ZSTD_SKIPPABLE_START = 0x184D2A50U;
+const quint32 ZSTD_SKIPPABLE_MASK = 0xFFFFFFF0U;
+
+bool isSupportedZstdDataMagic(quint32 nMagic)
+{
+    return (nMagic == ZSTD_STANDARD_MAGIC) ||
+           ((nMagic >= ZSTD_LEGACY_MAGIC_V04) && (nMagic <= ZSTD_LEGACY_MAGIC_V07));
+}
+
 class ZstdDiscardDevice : public QIODevice {
 protected:
     qint64 readData(char *, qint64) override { return -1; }
@@ -80,15 +92,31 @@ XZstd::~XZstd()
 
 bool XZstd::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    const qint64 nFileSize = getSize();
+    qint64 nOffset = 0;
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 4)) {
-        // Zstd magic number: 0xFD2FB528 (little-endian) = bytes 28 B5 2F FD
-        quint32 nMagic = read_uint32(0, false);
-        bResult = (nMagic == 0xFD2FB528);
+    // A Zstandard stream may begin with one or more skippable frames.  Walk
+    // their bounded payloads until a real data frame is found; an input made
+    // only of skippable frames is not an extractable Zstandard stream.
+    while (XBinary::isPdStructNotCanceled(pPdStruct) &&
+           (nOffset >= 0) && (nOffset <= nFileSize - 4)) {
+        const quint32 nMagic = read_uint32(nOffset, false);
+        if (isSupportedZstdDataMagic(nMagic)) return true;
+        if ((nMagic & ZSTD_SKIPPABLE_MASK) != ZSTD_SKIPPABLE_START) {
+            return false;
+        }
+        if (nOffset > nFileSize - 8) return false;
+
+        const quint32 nPayloadSize = read_uint32(nOffset + 4, false);
+        const qint64 nRemaining = nFileSize - nOffset - 8;
+        if (static_cast<quint64>(nPayloadSize) >
+            static_cast<quint64>(nRemaining)) {
+            return false;
+        }
+        nOffset += 8 + static_cast<qint64>(nPayloadSize);
     }
 
-    return bResult;
+    return false;
 }
 
 bool XZstd::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -136,7 +164,7 @@ XBinary::FT XZstd::getFileType()
 
 QString XZstd::getFileFormatExtsString()
 {
-    return "zst";
+    return "zst;zstd;tzst;tzstd";
 }
 
 qint64 XZstd::getFileFormatSize(XBinary::PDSTRUCT *pPdStruct)
@@ -600,6 +628,10 @@ QList<QString> XZstd::getSearchSignatures()
 {
     QList<QString> listResult;
 
+    listResult.append("24B52FFD");
+    listResult.append("25B52FFD");
+    listResult.append("26B52FFD");
+    listResult.append("27B52FFD");
     listResult.append("28B52FFD");
 
     return listResult;

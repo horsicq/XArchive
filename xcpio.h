@@ -59,6 +59,29 @@ class XCPIO : public XArchive {
         char filesize[11];  // File size
     };
 
+    // afio's large-ASCII extension (magic "070727").  It is used when
+    // fields no longer fit in the traditional odc header.  Most fields are
+    // hexadecimal; mode remains octal and the marker bytes are literal.
+    struct CPIO_AFIO_HEADER {
+        char magic[6];
+        char dev[8];
+        char ino[16];
+        char inoMarker;
+        char mode[6];
+        char uid[8];
+        char gid[8];
+        char nlink[8];
+        char rdev[8];
+        char mtime[16];
+        char mtimeMarker;
+        char namesize[4];
+        char flag[4];
+        char xsize[4];
+        char xsizeMarker;
+        char filesize[16];
+        char filesizeMarker;
+    };
+
     struct CPIO_BINARY_HEADER {
         quint16 magic;         // 070707 in host byte order
         quint16 dev;           // Device number
@@ -81,6 +104,7 @@ class XCPIO : public XArchive {
         CPIO_FORMAT_NEWC,  // new C format (070701)
         CPIO_FORMAT_CRC,   // CRC format (070702)
         CPIO_FORMAT_ODC,   // Old ASCII C format (070707)
+        CPIO_FORMAT_AFIO,  // afio large ASCII format (070727)
         CPIO_FORMAT_BINARY_LE,
         CPIO_FORMAT_BINARY_BE
     };
@@ -97,6 +121,7 @@ public:
         STRUCTID_NEWC_HEADER,
         STRUCTID_CRC_HEADER,
         STRUCTID_ODC_HEADER,
+        STRUCTID_AFIO_HEADER,
         STRUCTID_BINARY_HEADER
     };
 
@@ -163,6 +188,7 @@ private:
     quint32 _readBinaryUInt32(qint64 nOffset, bool bIsBigEndian);
     CPIO_NEWC_HEADER _readNewcHeader(qint64 nOffset);
     CPIO_ODC_HEADER _readOdcHeader(qint64 nOffset);
+    CPIO_AFIO_HEADER _readAfioHeader(qint64 nOffset);
     bool _parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdStruct = nullptr);
     bool _scanArchive(qint32 nLimit, QList<RECORD> *pListRecords, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct);
     bool _isTrailerRecord(const QString &sFileName);

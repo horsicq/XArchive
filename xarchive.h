@@ -201,7 +201,7 @@ protected:
 
         UNPACK_GUARD_STATE()
             : bOperationInProgress(false), bNestedInfoAuthorized(false),
-              bOwnerAlive(true)
+              bOwnerAlive(true), nPrivateRecordAuthorized(0)
         {
         }
 
@@ -221,7 +221,54 @@ protected:
         bool bOperationInProgress;
         bool bNestedInfoAuthorized;
         bool bOwnerAlive;
+        // Raised only while an archive is decoding a member for itself, and
+        // read by infoCurrent() implementations whose internal record shape
+        // must never be published (see PRIVATE_RECORD_AUTHORIZATION).  Lives
+        // in the shared guard state, not in the archive object, so a caller
+        // callback that destroys the archive mid-decode cannot leave a
+        // dangling counter behind.
+        qint32 nPrivateRecordAuthorized;
         QList<CONTEXT_CLEANUP> listContexts;
+    };
+
+    // Some formats can decode a member two ways: through coordinates that are
+    // correct but describe a stream SHARED by every member (a solid block, or
+    // a whole-container compressed stream), or through their own session by
+    // logical record index.  The first shape decodes correctly but must never
+    // be published, because its (offset,size) pair resolves on the raw
+    // container: a caller who changes nothing but the method field gets
+    // container bytes at the member's declared length.  An infoCurrent() that
+    // can build both shapes builds the coordinate one only while this
+    // authorization is held by the archive's own decode path.
+    class PRIVATE_RECORD_AUTHORIZATION {
+    public:
+        explicit PRIVATE_RECORD_AUTHORIZATION(
+            const QSharedPointer<UNPACK_GUARD_STATE> &pState)
+            : m_pState((pState && (pState->nPrivateRecordAuthorized >= 0))
+                           ? pState
+                           : QSharedPointer<UNPACK_GUARD_STATE>())
+        {
+            if (m_pState) m_pState->nPrivateRecordAuthorized++;
+        }
+
+        ~PRIVATE_RECORD_AUTHORIZATION()
+        {
+            if (m_pState && (m_pState->nPrivateRecordAuthorized > 0)) {
+                m_pState->nPrivateRecordAuthorized--;
+            }
+        }
+
+        bool isAuthorized() const { return !m_pState.isNull(); }
+
+        static bool isHeldBy(
+            const QSharedPointer<UNPACK_GUARD_STATE> &pState)
+        {
+            return pState && (pState->nPrivateRecordAuthorized > 0);
+        }
+
+    private:
+        Q_DISABLE_COPY(PRIVATE_RECORD_AUTHORIZATION)
+        QSharedPointer<UNPACK_GUARD_STATE> m_pState;
     };
 
     template <typename T>
@@ -408,6 +455,10 @@ public:
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct);               // Depricated
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct);  // Depricated
 
+    virtual bool isResourcesPresent() override;
+    virtual QVector<XRESOURCE_STRUCT> getResourceStructs() override;
+    virtual QVector<XMETADATA_STRUCT> getMetadataStructs() override;
+
     struct DECOMPRESSSTRUCT {
         SPINFO spInfo;
         QIODevice *pSourceDevice;
@@ -435,6 +486,13 @@ public:
     bool decompressToPath(QList<RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(const QString &sArchiveFileName, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToPath(const QString &sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
+    // Resolve a tagged logical record by index through a fresh streaming
+    // session.  The expected public record is re-read and matched exactly
+    // before extraction; output remains transactional through finishUnpack().
+    bool unpackArchiveStreamRecord(
+        const ARCHIVERECORD &expectedRecord, QIODevice *pOutputDevice,
+        const QMap<UNPACK_PROP, QVariant> &mapProperties,
+        PDSTRUCT *pPdStruct = nullptr);
     bool unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool dumpToFile(const RECORD *pRecord, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr);
     static RECORD getArchiveRecord(const QString &sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);

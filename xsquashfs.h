@@ -38,8 +38,8 @@ class XSquashfs : public XArchive {
         quint16 nBlockLog;             // Log2 of block size
         quint16 nFlags;                // Flags
         quint16 nNoIds;                // Number of unique IDs
-        quint32 nVersionMajor;         // Version major
-        quint32 nVersionMinor;         // Version minor
+        quint16 nVersionMajor;         // Version major (on-disk s_major, 16-bit)
+        quint16 nVersionMinor;         // Version minor (on-disk s_minor, 16-bit)
         quint64 nRootInodeRef;         // Root inode reference
         quint64 nBytesUsed;            // Bytes used
         quint64 nIdTableStart;         // ID table start block

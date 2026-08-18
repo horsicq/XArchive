@@ -1,3 +1,16 @@
+/* XArchive amalgamation of the Brotli decoder.
+ *
+ * The upstream decoder translation units folded into one. Included by
+ * xbrotlidecoder.cpp rather than compiled on its own.
+ *
+ * Brotli is MIT licensed, Copyright (c) 2009, 2010, 2013-2016 by the Brotli
+ * Authors. The amalgamator strips comments, which removed the upstream license
+ * header from this file; the full text is kept in Algos/licenses/brotli/LICENSE
+ * and is deployed and installed under licenses/brotli.
+ *
+ * This file is generated -- do not edit by hand.
+ */
+
 extern "C" {
 
 #ifndef BROTLI_COMMON_CONSTANTS_H_

@@ -42,7 +42,8 @@ public:
         COMPRESSION_ZSTD,      // .tar.zst, .tzst
         COMPRESSION_COMPRESS,  // .tar.Z, .tZ, .taZ
         COMPRESSION_LZIP,      // .tar.lz
-        COMPRESSION_LZOP       // .tar.lzo
+        COMPRESSION_LZOP,      // .tar.lzo
+        COMPRESSION_LZ4        // .tar.lz4, .tlz4
     };
 
 public:
@@ -57,6 +58,7 @@ public:
     virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QIODevice *getRecordStreamDevice(UNPACK_STATE *pState) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -84,6 +86,20 @@ protected:
 
     // Utility methods
     static QIODevice *createMemoryBuffer(const QByteArray &baData);
+
+    // The solid-block record shape - real coordinates over the container's one
+    // compressed stream, plus the ISSOLID/SOLIDFOLDERINDEX/STREAMUNPACKEDSIZE
+    // decode contract - is how this class actually decodes a member of an
+    // outer-stream container (.tar.gz).  Those coordinates are the WHOLE
+    // stream, not the member's own bytes, so a published record must never
+    // carry them: forge its method field and the container's raw bytes come
+    // back at the member's declared length.  infoCurrent() therefore builds
+    // that shape only while this class's own unpackCurrent() holds the
+    // authorization, and publishes an index-paired archive-stream record to
+    // everyone else.  Decoding is unchanged; only who may see the coordinates
+    // is.
+    bool isSolidRecordAuthorized() const;
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

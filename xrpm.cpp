@@ -54,7 +54,7 @@ bool hasCpioMagic(XBinary *pBinary, qint64 nOffset, qint64 nSize)
     if (baMagic.size() >= 6) {
         const QByteArray baAscii = baMagic.left(6);
         if ((baAscii == QByteArrayLiteral("070701")) || (baAscii == QByteArrayLiteral("070702")) ||
-            (baAscii == QByteArrayLiteral("070707"))) {
+            (baAscii == QByteArrayLiteral("070707")) || (baAscii == QByteArrayLiteral("070727"))) {
             return true;
         }
     }
