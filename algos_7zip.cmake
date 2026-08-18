@@ -57,8 +57,6 @@ set(XARCHIVE_7ZIP_PINNED_VERSION "26.01")
 # Explicitly resolved from CPP/7zip/Bundles/Format7zF/Arc.mak in tag 26.01,
 # plus the portable C optimization fallbacks and ArchiveExports.cpp.
 set(_xarchive_7zip_sources
-    # Non-Windows Win32/OLE compatibility functions used by the amalgamations.
-    "${CMAKE_CURRENT_LIST_DIR}/inbox/CPP/Common/MyWindows.cpp"
     # 7-Zip C codecs, built as C++ (15 units)
     "${CMAKE_CURRENT_LIST_DIR}/Algos/szc_03.cpp"
     # 7-Zip C codecs, built as C++ (16 units)
@@ -156,7 +154,7 @@ set(_xarchive_7zip_sources
 # The expected count moves down as upstream units are folded into Algos
 # amalgamations. Each reduction must be deliberate and accounted for here:
 #   275  original Arc.mak-derived manifest
-#   -27  CPP/Common (non-registering) + CPP/Windows  -> Algos/sevenzip_common.cpp
+#   -28  CPP/Common (non-registering) + CPP/Windows  -> Algos/sevenzip_common.cpp
 #    +1  the amalgamation itself
 #   -21  CPP/7zip/Common stream, coder and property support (21 units) -> Algos/sevenzip_7zcommon.cpp
 #    +1  the amalgamation itself
@@ -241,15 +239,18 @@ set(_xarchive_7zip_sources
 #   -15  7-Zip szc group (15 units) -> Algos/szc_03.cpp
 #    +1  the amalgamation itself
 #   ---
-#   42  amalgamations (275 upstream units, all folded)
-#    +1  inbox/CPP/Common/MyWindows.cpp -- never part of the 275. It is the
-#        non-Windows Win32/OLE shim the amalgamations call into, and it is
-#        deliberately excluded from Algos/sevenzip_common.cpp (that file folds
-#        27 units: 17 CPP/Common + 10 CPP/Windows, and MyWindows.cpp is not
-#        among them -- only MyWindows.h is inlined as a header). Compiling it
-#        separately is what keeps exactly one definition of those symbols.
 #   ---
-#   43
+#   42  amalgamations (276 upstream units, all folded)
+#
+# MyWindows.cpp -- the non-Windows Win32/OLE shim the amalgamations call into
+# -- used to be the one unit compiled from the vendored upstream tree rather
+# than from Algos/, making 43 sources against 42 amalgamations. That tree is no
+# longer referenced by the build at all, so the unit is now folded into
+# Algos/sevenzip_common.cpp as its 28th (18 CPP/Common + 10 CPP/Windows). Its
+# whole body is guarded by #ifndef _WIN32 upstream, so the Windows build is
+# unchanged, and one amalgamation holding the definitions still means exactly
+# one definition of those symbols -- MyWindows.h stays header-only everywhere
+# else.
 #
 # The szc block above used to read -16/-16/-16 plus a fourth
 # "-5 ... -> Algos/szc_04.cpp" line, followed by three "-0 ... built as C++"
@@ -261,7 +262,7 @@ set(_xarchive_7zip_sources
 # self-consistent. Each -N above is now the count in that file's own generated
 # banner ("N upstream translation units folded into one"); those banners total
 # exactly 275 across exactly 42 files, which is what closes the ledger.
-set(XARCHIVE_7ZIP_EXPECTED_SOURCE_COUNT 43)
+set(XARCHIVE_7ZIP_EXPECTED_SOURCE_COUNT 42)
 
 list(LENGTH _xarchive_7zip_sources _xarchive_7zip_source_count)
 set(XARCHIVE_7ZIP_SOURCE_COUNT "${_xarchive_7zip_source_count}")
@@ -317,8 +318,6 @@ target_link_libraries(${XARCHIVE_7ZIP_TARGET}
 target_include_directories(${XARCHIVE_7ZIP_TARGET}
     PUBLIC
         "${CMAKE_CURRENT_LIST_DIR}/Algos"
-    PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/inbox/CPP/Common"
 )
 
 # Z7_EXTERNAL_CODECS must remain undefined: this monolithic registry uses the
