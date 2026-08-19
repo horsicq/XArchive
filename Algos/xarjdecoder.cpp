@@ -178,21 +178,29 @@ bool XArjDecoder::fillBuf(ArjDecodeState *pState, qint32 nBits)
             pState->bError = true;
             return false;
         }
+        // The bit reader runs a full CODE_BIT look-ahead, so the final tokens
+        // of a well-formed member are decoded while the reader asks for one or
+        // two bytes past the end of the packed stream.  arj's decode.c feeds
+        // zero bytes there instead of failing; treating the exhausted stream
+        // as a read error truncates every method 1-4 member right before its
+        // last partial dictionary flush.  Real input is still bounded by
+        // nCompLeft, so nCountInput can never exceed the packed size and the
+        // exact-input check at the end of decompressInternal() still rejects a
+        // member that did not consume its whole stream.
         if (pState->nCompLeft == 0) {
-            pState->bError = true;
-            if (pState->pProcessState) pState->pProcessState->bReadError = true;
-            return false;
-        }
-        if ((pState->nBufAvail <= 0) && !refillInputBuffer(pState)) return false;
-        if (!pState->pBuf || (pState->nBufAvail <= 0)) {
-            pState->bError = true;
-            if (pState->pProcessState) pState->pProcessState->bReadError = true;
-            return false;
-        }
+            pState->nSubBitBuf = 0;
+        } else {
+            if ((pState->nBufAvail <= 0) && !refillInputBuffer(pState)) return false;
+            if (!pState->pBuf || (pState->nBufAvail <= 0)) {
+                pState->bError = true;
+                if (pState->pProcessState) pState->pProcessState->bReadError = true;
+                return false;
+            }
 
-        pState->nSubBitBuf = *pState->pBuf++;
-        pState->nBufAvail--;
-        pState->nCompLeft--;
+            pState->nSubBitBuf = *pState->pBuf++;
+            pState->nBufAvail--;
+            pState->nCompLeft--;
+        }
         pState->nBitCount = 8;
     }
 

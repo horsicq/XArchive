@@ -2738,7 +2738,9 @@ typedef enum {
 int ZLIB_INTERNAL inflate_table OF((codetype type, unsigned short FAR *lens, unsigned codes, code FAR *FAR *table, unsigned FAR *bits, unsigned short FAR *work));
 #define MAXBITS 15
 
-const char inflate_copyright[] = " inflate 1.2.11 Copyright 1995-2017 Mark Adler ";
+/* amalgamation: 'extern "C"' added -- a namespace-scope 'const' has internal
+ * linkage in C++, which would drop this symbol from the object file. */
+extern "C" const char inflate_copyright[] = " inflate 1.2.11 Copyright 1995-2017 Mark Adler ";
 /*
   If you use the zlib library in a product, an acknowledgment is welcome
   in the documentation of your product. If for some reason you cannot
@@ -6132,7 +6134,9 @@ extern const uch ZLIB_INTERNAL _dist_code[];
 #endif
 
 #endif /* DEFLATE_H */
-const char deflate_copyright[] = " deflate 1.2.11 Copyright 1995-2017 Jean-loup Gailly and Mark Adler ";
+/* amalgamation: 'extern "C"' added -- a namespace-scope 'const' has internal
+ * linkage in C++, which would drop this symbol from the object file. */
+extern "C" const char deflate_copyright[] = " deflate 1.2.11 Copyright 1995-2017 Jean-loup Gailly and Mark Adler ";
 /*
   If you use the zlib library in a product, an acknowledgment is welcome
   in the documentation of your product. If for some reason you cannot
@@ -9535,42 +9539,9 @@ void deflateAdlerProgressCallback(void *pUserData,
 #undef inflateInit2_
 #endif
 
-extern "C" {
-int ZEXPORT deflateInit2_(z_streamp strm, int level, int method, int windowBits, int memLevel, int strategy, const char *version, int stream_size)
-{
-    return z_deflateInit2_(strm, level, method, windowBits, memLevel, strategy, version, stream_size);
-}
-
-int ZEXPORT deflate(z_streamp strm, int flush)
-{
-    return z_deflate(strm, flush);
-}
-
-int ZEXPORT deflateEnd(z_streamp strm)
-{
-    return z_deflateEnd(strm);
-}
-
-int ZEXPORT inflateInit_(z_streamp strm, const char *version, int stream_size)
-{
-    return z_inflateInit2_(strm, DEF_WBITS, version, stream_size);
-}
-
-int ZEXPORT inflateInit2_(z_streamp strm, int windowBits, const char *version, int stream_size)
-{
-    return z_inflateInit2_(strm, windowBits, version, stream_size);
-}
-
-int ZEXPORT inflate(z_streamp strm, int flush)
-{
-    return z_inflate(strm, flush);
-}
-
-int ZEXPORT inflateEnd(z_streamp strm)
-{
-    return z_inflateEnd(strm);
-}
-}
+// The embedded decoder uses the Z_PREFIX entry points (z_inflate*).  Do not
+// export unprefixed deflate/inflate wrappers here: the complete bundled zlib
+// library supplies those symbols to libarchive and other app components.
 
 namespace {
 #ifdef ENOUGH_LENS

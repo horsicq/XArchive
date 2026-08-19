@@ -1,9 +1,14 @@
 include_directories(${CMAKE_CURRENT_LIST_DIR})
 include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/)
-include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/bzip2/src/)
-include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/lzma/src/)
-include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/zlib/src/)
-include_directories(${CMAKE_CURRENT_LIST_DIR}/3rdparty/ppmd/src/)
+# The 7-Zip C public headers (LzmaDec.h, Ppmd7.h, 7zTypes.h, ...) live in
+# Algos/include, kept apart from the first-party and generated sources.
+# Consumers outside XArchive -- XStaticUnpacker's xnsis.cpp and xmew.cpp
+# include LzmaDec.h -- resolve them from here without the vendored tree.
+include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/include/)
+# bzip2 headers (bzlib.h) moved to Algos/include with its sources; that path
+# is already on the include list above.
+# zlib headers moved to Algos/include with its sources; that path is already
+# on the include list above.
 
 if (NOT DEFINED XBINARY_SOURCES)
     include(${CMAKE_CURRENT_LIST_DIR}/../Formats/xbinary.cmake)
@@ -35,12 +40,20 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xace.h
     ${CMAKE_CURRENT_LIST_DIR}/xarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xfilteredarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xfilteredarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xcab.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcab.h
     ${CMAKE_CURRENT_LIST_DIR}/xcfbf.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcfbf.h
     ${CMAKE_CURRENT_LIST_DIR}/xcpio.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcpio.h
+    ${CMAKE_CURRENT_LIST_DIR}/xwarc.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xwarc.h
+    ${CMAKE_CURRENT_LIST_DIR}/xmtree.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xmtree.h
+    ${CMAKE_CURRENT_LIST_DIR}/xuu.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xuu.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.h
     ${CMAKE_CURRENT_LIST_DIR}/xdecompress.cpp
@@ -79,6 +92,7 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xrar.h
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.h
+    ${CMAKE_CURRENT_LIST_DIR}/xarchives_ip7z.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xsquashfs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xsquashfs.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar.cpp
@@ -101,10 +115,16 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xtar_xz.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar_zstd.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xtar_zstd.h
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_lz4.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xtar_lz4.h
     ${CMAKE_CURRENT_LIST_DIR}/xzstd.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzstd.h
     ${CMAKE_CURRENT_LIST_DIR}/xlz4.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlz4.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlz5.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlz5.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlizard.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlizard.h
     ${CMAKE_CURRENT_LIST_DIR}/xlzma.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlzma.h
     ${CMAKE_CURRENT_LIST_DIR}/xlzo.cpp
@@ -201,9 +221,29 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xblake2sp.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzstddecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xzstddecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlz4decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlz4decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlz5decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlz5decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlizarddecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlizarddecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/lz5lizarddeclib.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/lz4declib.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/zstdlegacydeclib.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/zstddeclib.cpp
+    # The five entries below were converted from C to C++ on 2026-08-17 and must
+    # stay C++: they define ZSTDv05/06/07_* and ZBUFFv07_* symbols that no header
+    # declares, so a C build of one and a C++ build of its caller fail at link,
+    # not at compile. Each file carries an #ifndef __cplusplus / #error guard.
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/zstd_xxhash.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/zstdlegacy_v04.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/zstdlegacy_v05.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/zstdlegacy_v06.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/zstdlegacy_v07.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzodecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzodecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xcompressdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xcompressdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/lz4declib.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/lz5lizarddeclib.cpp
 )

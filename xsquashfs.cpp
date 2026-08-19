@@ -39,7 +39,11 @@ bool XSquashfs::isValid(PDSTRUCT *pPdStruct)
     if (getSize() >= (qint64)sizeof(SQUASHFS_HEADER)) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
-        if (compareSignature(&memoryMap, "73717368", 0, pPdStruct)) {  // "sqsh"
+        // nMagic is 0x73717368, so the on-disk bytes are "hsqs" on little-endian images
+        // (what mksquashfs and snap packages produce) and "sqsh" on big-endian ones.
+        // Accept both; checking only "sqsh" rejects every standard image.
+        if (compareSignature(&memoryMap, "68737173", 0, pPdStruct) ||    // "hsqs" - little-endian
+            compareSignature(&memoryMap, "73717368", 0, pPdStruct)) {    // "sqsh" - big-endian
             bResult = true;
         }
     }
@@ -191,8 +195,8 @@ QList<XBinary::XFRECORD> XSquashfs::getXFRecords(FT fileType, quint32 nStructID,
         listResult.append({"nBlockLog", (qint32)offsetof(SQUASHFS_HEADER, nBlockLog), 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"nFlags", (qint32)offsetof(SQUASHFS_HEADER, nFlags), 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"nNoIds", (qint32)offsetof(SQUASHFS_HEADER, nNoIds), 2, XFRECORD_FLAG_COUNT, VT_UINT16});
-        listResult.append({"nVersionMajor", (qint32)offsetof(SQUASHFS_HEADER, nVersionMajor), 4, XFRECORD_FLAG_VERSION_MAJOR, VT_UINT32});
-        listResult.append({"nVersionMinor", (qint32)offsetof(SQUASHFS_HEADER, nVersionMinor), 4, XFRECORD_FLAG_VERSION_MINOR, VT_UINT32});
+        listResult.append({"nVersionMajor", (qint32)offsetof(SQUASHFS_HEADER, nVersionMajor), 2, XFRECORD_FLAG_VERSION_MAJOR, VT_UINT16});
+        listResult.append({"nVersionMinor", (qint32)offsetof(SQUASHFS_HEADER, nVersionMinor), 2, XFRECORD_FLAG_VERSION_MINOR, VT_UINT16});
         listResult.append({"nRootInodeRef", (qint32)offsetof(SQUASHFS_HEADER, nRootInodeRef), 8, XFRECORD_FLAG_NONE, VT_UINT64});
         listResult.append({"nBytesUsed", (qint32)offsetof(SQUASHFS_HEADER, nBytesUsed), 8, XFRECORD_FLAG_SIZE, VT_UINT64});
         listResult.append({"nIdTableStart", (qint32)offsetof(SQUASHFS_HEADER, nIdTableStart), 8, XFRECORD_FLAG_OFFSET, VT_UINT64});

@@ -57,6 +57,7 @@ XBinary::XIDSTRING _TABLE_XZip_CMETHOD[] = {
     {XZip::CMETHOD_PKWARE_DCL_IMPLODING, "PKWareDCLImploding"},
     {XZip::CMETHOD_BZIP2, "BZip2"},
     {XZip::CMETHOD_LZMA, "LZMA"},
+    {XZip::CMETHOD_ZSTD, "Zstandard"},
     {XZip::CMETHOD_XZ, "XZ"},
     {XZip::CMETHOD_PPMD, "PPMd"},
     {XZip::CMETHOD_AES, "AES"},
@@ -748,7 +749,9 @@ QString XZip::getCompressMethodString()
 {
     QString sResult;
 
-    QSet<HANDLE_METHOD> stMethods;
+    // Use an ordered container(not QSet), the hash seed is randomized per process,
+    // so a QSet would render the methods in a different order on every run.
+    QList<HANDLE_METHOD> listMethods;
 
     qint64 nECDOffset = findECDOffset(nullptr);
 
@@ -764,7 +767,11 @@ QString XZip::getCompressMethodString()
                 quint32 nUncompressedSize = read_uint32(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nUncompressedSize));
 
                 if (nUncompressedSize > 0) {
-                    stMethods.insert(zipToCompressMethod(nMethod, nFlags));
+                    HANDLE_METHOD method = zipToCompressMethod(nMethod, nFlags);
+
+                    if (!listMethods.contains(method)) {
+                        listMethods.append(method);
+                    }
                 }
 
                 nOffset += (sizeof(CENTRALDIRECTORYFILEHEADER) + read_uint16(nOffset + offsetof(CENTRALDIRECTORYFILEHEADER, nFileNameLength)) +
@@ -786,7 +793,11 @@ QString XZip::getCompressMethodString()
                 quint32 nUncompressedSize = read_uint32(nOffset + offsetof(LOCALFILEHEADER, nUncompressedSize));
 
                 if (nUncompressedSize > 0) {
-                    stMethods.insert(zipToCompressMethod(nMethod, nFlags));
+                    HANDLE_METHOD method = zipToCompressMethod(nMethod, nFlags);
+
+                    if (!listMethods.contains(method)) {
+                        listMethods.append(method);
+                    }
                 }
 
                 nOffset += (sizeof(LOCALFILEHEADER) + read_uint16(nOffset + offsetof(LOCALFILEHEADER, nFileNameLength)) +
@@ -797,12 +808,14 @@ QString XZip::getCompressMethodString()
         }
     }
 
-    // Iterate QSet
+    // Sort by the enum value to get the same string for the same set of methods,
+    // no matter in which order the records are stored in the archive.
+    std::sort(listMethods.begin(), listMethods.end());
 
-    QSetIterator<HANDLE_METHOD> i(stMethods);
-    while (i.hasNext()) {
-        HANDLE_METHOD cm = (HANDLE_METHOD)i.next();
-        QString sMethod = handleMethodToString(cm);
+    qint32 nNumberOfMethods = listMethods.count();
+
+    for (qint32 i = 0; i < nNumberOfMethods; i++) {
+        QString sMethod = handleMethodToString(listMethods.at(i));
 
         sResult = XBinary::appendText(sResult, sMethod, ", ");
     }
@@ -2214,6 +2227,7 @@ XArchive::HANDLE_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nF
         case CMETHOD_DEFLATE64: result = HANDLE_METHOD_DEFLATE64; break;  // TODO
         case CMETHOD_BZIP2: result = HANDLE_METHOD_BZIP2; break;
         case CMETHOD_LZMA: result = HANDLE_METHOD_LZMA; break;
+        case CMETHOD_ZSTD: result = HANDLE_METHOD_ZSTD; break;
         case CMETHOD_XZ: result = HANDLE_METHOD_XZ; break;
         case CMETHOD_PPMD: result = HANDLE_METHOD_PPMD8; break;
         case CMETHOD_AES: result = HANDLE_METHOD_ZIP_AES; break;
@@ -2600,6 +2614,7 @@ QList<XBinary::PM_INFO> XZip::unpackImplemented()
         HANDLE_METHOD_DEFLATE64,
         HANDLE_METHOD_BZIP2,
         HANDLE_METHOD_LZMA,
+        HANDLE_METHOD_ZSTD,
         HANDLE_METHOD_XZ,
         HANDLE_METHOD_PPMD8,
     };

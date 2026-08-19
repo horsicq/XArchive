@@ -194,6 +194,18 @@ private:
     qint32 _getBlockSize();
     qint64 _getAnchorVolumeDescriptorOffset();
     bool _isValidTag(qint64 nOffset, PDSTRUCT *pPdStruct);
+
+    // ECMA-167 descriptor tag verification.  _isValidDescriptorTag() always
+    // checks the tag identifier, the descriptor version, the reserved byte and
+    // the tag checksum; bStrict additionally requires the tag location to match
+    // the sector the descriptor is recorded in and the descriptor CRC to
+    // verify.  Without these an arbitrary binary whose bytes happen to read as
+    // tag identifier 2 is indistinguishable from a real anchor.
+    static quint8 _calculateTagChecksum(const quint8 *pTagBytes);
+    static quint16 _calculateDescriptorCRC(const quint8 *pData, qint64 nSize);
+    bool _isValidDescriptorTag(qint64 nOffset, quint16 nExpectedTagIdentifier, bool bStrict, UDF_TAG *pTag);
+    bool _isAnchorVolumeDescriptorPointer(qint64 nOffset, bool bStrict);
+    bool _hasVolumeRecognitionSequence();
     QList<ARCHIVERECORD> _parseFileSystem(qint32 nBlockSize, PDSTRUCT *pPdStruct);
     QString _cleanFileName(const QString &sFileName);
 

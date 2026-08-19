@@ -128,7 +128,7 @@ XBinary::FT XBrotli::getFileType()
 
 QString XBrotli::getFileFormatExtsString()
 {
-    return "br";
+    return "br;brotli;tbr";
 }
 
 qint64 XBrotli::getFileFormatSize(XBinary::PDSTRUCT *pPdStruct)

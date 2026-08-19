@@ -23,6 +23,11 @@
 
 #include "xbinary.h"
 
+#include <stddef.h>
+
+// Algos/zstddeclib.cpp is the source-native Zstandard decoder used throughout
+// the project. It intentionally has no standalone public header, so declare
+// only the streaming API consumed by XZstdDecoder.
 extern "C" {
 typedef struct ZSTD_DCtx_s ZSTD_DCtx;
 typedef ZSTD_DCtx ZSTD_DStream;

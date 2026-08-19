@@ -1125,6 +1125,7 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     const quint64 nStreamSize = (pContext->nDllVersion == 3)
                                     ? (quint64)qFromLittleEndian<quint32>(pEntry + 120)
                                     : qFromLittleEndian<quint64>(pEntry + 120);
+    const quint64 nCreationTime = qFromLittleEndian<quint64>(pEntry + 100);
     const quint64 nModifiedTime = qFromLittleEndian<quint64>(pEntry + 108);
 
     // Parse name (UTF-16LE)
@@ -1152,6 +1153,11 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nStreamSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE);
 
+    const QByteArray baClsid = baEntry.mid(80, 16);
+    if ((baClsid.size() == 16) && (baClsid != QByteArray(16, '\0'))) {
+        result.mapProperties.insert(FPART_PROP_UUID, read_UUID(nEntryOffset + 80));
+    }
+
     // Store mini-stream flag as type property
     if (bIsMini) {
         result.mapProperties.insert(FPART_PROP_TYPE, QString("MiniStream"));
@@ -1159,16 +1165,17 @@ XBinary::ARCHIVERECORD XCFBF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         result.mapProperties.insert(FPART_PROP_TYPE, QString("Stream"));
     }
 
-    // Convert FILETIME to QDateTime (if non-zero)
+    // Convert FILETIME values to QDateTime (if non-zero).
+    if (nCreationTime != 0) {
+        const QDateTime dateTime = winFileTimeToQDateTime(nCreationTime);
+        if (dateTime.isValid()) {
+            result.mapProperties.insert(FPART_PROP_CTIME, dateTime);
+        }
+    }
+
     if (nModifiedTime != 0) {
-        const quint64 nEpochDiff = 116444736000000000ULL;
-        if (nModifiedTime > nEpochDiff) {
-            qint64 nUnixTime = (nModifiedTime - nEpochDiff) / 10000000;
-#if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
-            QDateTime dateTime = QDateTime::fromSecsSinceEpoch(nUnixTime, Qt::UTC);
-#else
-            QDateTime dateTime = QDateTime::fromMSecsSinceEpoch(nUnixTime * 1000, Qt::UTC);
-#endif
+        const QDateTime dateTime = winFileTimeToQDateTime(nModifiedTime);
+        if (dateTime.isValid()) {
             result.mapProperties.insert(FPART_PROP_MTIME, dateTime);
         }
     }

@@ -27,6 +27,7 @@
 #include "xtar_lzip.h"
 #include "xtar_lzma.h"
 #include "xtar_lzop.h"
+#include "xtar_lz4.h"
 #include "xtar_xz.h"
 #include "xtar_zstd.h"
 
@@ -75,6 +76,40 @@ private:
     bool m_bLimitExceeded;
 };
 
+// Codec of the transport envelope, for DISPLAY only.  It is deliberately NOT
+// published as FPART_PROP_HANDLEMETHOD/HANDLEMETHOD2: those are decode
+// instructions, and an index-paired record must keep
+// HANDLE_METHOD_ARCHIVE_STREAM - which, together with its no-extent
+// coordinates, is what makes every offset-based consumer fail closed.
+// A listing can still say which compressor wraps the TAR.
+XBinary::HANDLE_METHOD tarcContainerCodec(
+    XTARCOMPRESSED::COMPRESSION_TYPE compressionType)
+{
+    XBinary::HANDLE_METHOD result = XBinary::HANDLE_METHOD_UNKNOWN;
+
+    if (compressionType == XTARCOMPRESSED::COMPRESSION_GZIP) {
+        result = XBinary::HANDLE_METHOD_DEFLATE;
+    } else if (compressionType == XTARCOMPRESSED::COMPRESSION_BZIP2) {
+        result = XBinary::HANDLE_METHOD_BZIP2;
+    } else if (compressionType == XTARCOMPRESSED::COMPRESSION_XZ) {
+        result = XBinary::HANDLE_METHOD_XZ;
+    } else if (compressionType == XTARCOMPRESSED::COMPRESSION_LZMA) {
+        result = XBinary::HANDLE_METHOD_LZMA;
+    } else if (compressionType == XTARCOMPRESSED::COMPRESSION_ZSTD) {
+        result = XBinary::HANDLE_METHOD_ZSTD;
+    } else if (compressionType == XTARCOMPRESSED::COMPRESSION_COMPRESS) {
+        result = XBinary::HANDLE_METHOD_COMPRESS;
+    } else if (compressionType == XTARCOMPRESSED::COMPRESSION_LZIP) {
+        result = XBinary::HANDLE_METHOD_LZIP;
+    } else if (compressionType == XTARCOMPRESSED::COMPRESSION_LZOP) {
+        result = XBinary::HANDLE_METHOD_LZOP;
+    } else if (compressionType == XTARCOMPRESSED::COMPRESSION_LZ4) {
+        result = XBinary::HANDLE_METHOD_LZ4;
+    }
+
+    return result;
+}
+
 }  // namespace
 
 XTARCOMPRESSED::XTARCOMPRESSED(QIODevice *pDevice) : XTAR(pDevice)
@@ -85,6 +120,11 @@ XTARCOMPRESSED::XTARCOMPRESSED(QIODevice *pDevice) : XTAR(pDevice)
     m_nOuterStreamOffset = 0;
     m_nOuterStreamSize = 0;
     m_outerHandleMethod = HANDLE_METHOD_UNKNOWN;
+}
+
+bool XTARCOMPRESSED::isSolidRecordAuthorized() const
+{
+    return PRIVATE_RECORD_AUTHORIZATION::isHeldBy(m_pUnpackGuardState);
 }
 
 XTARCOMPRESSED::~XTARCOMPRESSED()
@@ -221,6 +261,10 @@ XTARCOMPRESSED::COMPRESSION_TYPE XTARCOMPRESSED::detectCompressionType(QIODevice
             result = COMPRESSION_XZ;
         } else if (bRead3 && (nByte0 == 0x28) && (nByte1 == 0xB5) && (nByte2 == 0x2F) && (nByte3 == 0xFD)) {
             result = COMPRESSION_ZSTD;
+        } else if (bRead3 && (((nByte0 == 0x04) && (nByte1 == 0x22) && (nByte2 == 0x4D) && (nByte3 == 0x18)) ||
+                             ((nByte0 == 0x02) && (nByte1 == 0x21) && (nByte2 == 0x4C) && (nByte3 == 0x18)) ||
+                             ((nByte0 >= 0x50) && (nByte0 <= 0x5F) && (nByte1 == 0x2A) && (nByte2 == 0x4D) && (nByte3 == 0x18)))) {
+            result = COMPRESSION_LZ4;
         }
     }
 
@@ -251,6 +295,8 @@ XArchive *XTARCOMPRESSED::getCompressionClassInstance(COMPRESSION_TYPE compressi
         pResult = new XTAR_LZIP(pDevice);
     } else if (compressionType == COMPRESSION_LZOP) {
         pResult = new XTAR_LZOP(pDevice);
+    } else if (compressionType == COMPRESSION_LZ4) {
+        pResult = new XTAR_LZ4(pDevice);
     }
 
     return pResult;
@@ -454,11 +500,43 @@ XBinary::ARCHIVERECORD XTARCOMPRESSED::infoCurrent(UNPACK_STATE *pState, PDSTRUC
          (nDecompressedSize - result.nStreamOffset))) {
         return XBinary::ARCHIVERECORD{};
     }
+    // Everything above was measured on m_pDecompressedData, a PRIVATE buffer
+    // that no caller can address.  A record must never leave this function
+    // carrying those coordinates while claiming the compressed file as its
+    // source: a raw-offset consumer would then copy container bytes at the
+    // member's exact length, which is corruption at the correct size and is
+    // undetectable for a format (TAR) that publishes no payload checksum.
+    const qint64 nOriginalSize = guardedOriginal->size();
+    if (!guardedArchive || !guardedDecompressed || !guardedOriginal ||
+        (nOriginalSize < 0)) {
+        return XBinary::ARCHIVERECORD{};
+    }
+
     // If getOuterStreamInfo populated valid outer-stream metadata, build a solid-block
     // ARCHIVERECORD that decompressArchiveRecord can use directly with the original file.
     // FPART_PROP_SUBSTREAMOFFSET carries the TAR entry's offset in the decompressed buffer.
-    if (guardedArchive->m_nOuterStreamSize > 0 &&
-        guardedArchive->m_outerHandleMethod != HANDLE_METHOD_UNKNOWN) {
+    //
+    // That shape is only ever built for this class's own unpackCurrent().  Its
+    // coordinates are the container's ENTIRE compressed stream shared by every
+    // member, not this member's own bytes, so publishing it would hand any
+    // caller a valid (offset,size) pair over the raw container with a single
+    // mutable method field standing between it and a read - forge the method
+    // and 158,632 bytes of raw container come back as "./sample_elf", forge the
+    // container's own codec and the whole decoded TAR does.  Exactly the defect
+    // the five index-paired families no longer have.  Public callers therefore
+    // get the same index-paired archive-stream record those families get; the
+    // solid decode below is unchanged and still runs for real extraction.
+    if ((guardedArchive->m_nOuterStreamSize > 0) &&
+        (guardedArchive->m_outerHandleMethod != HANDLE_METHOD_UNKNOWN) &&
+        guardedArchive->isSolidRecordAuthorized()) {
+        // The republished extent has to be fully addressable on the original
+        // compressed device, otherwise the pairing is not established.
+        if ((guardedArchive->m_nOuterStreamOffset < 0) ||
+            (guardedArchive->m_nOuterStreamOffset > nOriginalSize) ||
+            (guardedArchive->m_nOuterStreamSize >
+             (nOriginalSize - guardedArchive->m_nOuterStreamOffset))) {
+            return XBinary::ARCHIVERECORD{};
+        }
         result.mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, result.nStreamOffset);
         result.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
                                     (quint32)guardedArchive->m_outerHandleMethod);
@@ -466,14 +544,75 @@ XBinary::ARCHIVERECORD XTARCOMPRESSED::infoCurrent(UNPACK_STATE *pState, PDSTRUC
         result.mapProperties.insert(FPART_PROP_SOLIDFOLDERINDEX, (qint64)0);
         result.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE,
                                     nDecompressedSize);
+        // Same display statement as the archive-stream branch below: the
+        // republished extent is the container's single compressed stream, not
+        // this member's own packed bytes.
+        result.mapProperties.insert(
+            FPART_PROP_INFO,
+            QString("%1 (whole-archive stream)")
+                .arg(XBinary::handleMethodToString(
+                    guardedArchive->m_outerHandleMethod)));
         result.nStreamOffset = guardedArchive->m_nOuterStreamOffset;
         result.nStreamSize = guardedArchive->m_nOuterStreamSize;
+    } else {
+        // Every publicly visible record takes this branch, whether or not an
+        // outer-stream pairing exists: a member of a compressed TAR has no
+        // extent of its own on the compressed device either way.  Republish it
+        // as an index-paired archive stream: the coordinates are dropped, the
+        // private decoded-stream method and offsets are stripped, and the only
+        // way to extract it is back through this archive's own session
+        // (_unpackRecordByIndex).  Offset-based decoding of such a record is
+        // refused outright.
+        if (!XBinary::markArchiveStreamRecord(&result,
+                                              pState->nCurrentIndex)) {
+            return XBinary::ARCHIVERECORD{};
+        }
+        // The record now carries no extent at all - not the private decoded
+        // buffer's, and not the container's either.  Republishing the
+        // transport envelope here would be exactly as dangerous as
+        // republishing the decoded coordinates: both are (offset,size) pairs
+        // that resolve on some device a consumer can reach.  A listing has
+        // nothing to misread and a forged codec has nothing to read.
+        // Deliberately do NOT republish the outer-stream branch's
+        // solid-block trio here: FPART_PROP_ISSOLID, FPART_PROP_SOLIDFOLDERINDEX
+        // and FPART_PROP_STREAMUNPACKEDSIZE are a decode contract, not
+        // decoration.  XDecompress reads them as "decode the shared stream,
+        // then cut this member's slice out of it", which would hand a caller
+        // that forges the container codec onto these whole-file coordinates a
+        // plausible-looking prefix of the decoded TAR at exactly the member's
+        // declared size - wrong bytes at the right size, the very failure this
+        // record shape exists to prevent.  Only a descriptive string is safe.
+        const HANDLE_METHOD containerCodec =
+            tarcContainerCodec(guardedArchive->m_compressionType);
+        if (containerCodec != HANDLE_METHOD_UNKNOWN) {
+            result.mapProperties.insert(
+                FPART_PROP_INFO,
+                QString("%1 (whole-archive stream)")
+                    .arg(XBinary::handleMethodToString(containerCodec)));
+        }
     }
     if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
         !guardedArchive || !guardedDecompressed || !guardedOriginal) {
         return XBinary::ARCHIVERECORD{};
     }
     return result;
+}
+
+QIODevice *XTARCOMPRESSED::getRecordStreamDevice(UNPACK_STATE *pState)
+{
+    Q_UNUSED(pState)
+
+    // The TAR structure is parsed out of the private decompressed buffer.  The
+    // outer-stream record shape - the only one whose coordinates are measured
+    // on the original compressed file - is now built exclusively for this
+    // class's own decode (see infoCurrent), so this answer is about that
+    // internal shape; no published record carries an extent on either device.
+    if ((m_nOuterStreamSize > 0) &&
+        (m_outerHandleMethod != HANDLE_METHOD_UNKNOWN)) {
+        return m_pOriginalDevice.data();
+    }
+
+    return m_pDecompressedData.data();
 }
 
 bool XTARCOMPRESSED::getOuterStreamInfo(qint64 &nOuterStreamOffset, qint64 &nOuterStreamSize, HANDLE_METHOD &handleMethod)
@@ -567,6 +706,15 @@ bool XTARCOMPRESSED::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
         // source so its snapshot, alias check and decoder input all refer to
         // one stable device.
         if (guardedArchive->getDevice() != guardedOriginal.data()) return false;
+        // Authorize the solid-block record shape for the duration of this
+        // decode only.  XArchive::unpackCurrent() calls infoCurrent() itself;
+        // this is the one caller entitled to the container-stream coordinates,
+        // because it is the code that actually decodes that stream and cuts
+        // this member out of it.  Nothing escapes: the record never leaves
+        // XArchive::unpackCurrent().
+        PRIVATE_RECORD_AUTHORIZATION solidAuthorization(
+            guardedArchive->m_pUnpackGuardState);
+        if (!solidAuthorization.isAuthorized()) return false;
         bResult = guardedArchive->XTAR::unpackCurrent(
             pState, guardedOutput.data(), pPdStruct);
         if (!guardedArchive || !guardedOutput || !guardedOriginal ||

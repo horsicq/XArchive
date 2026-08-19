@@ -20,6 +20,50 @@
  */
 #include "xarchives.h"
 
+#include <QTemporaryDir>
+
+#include "xfilteredarchive.h"
+
+namespace {
+
+// Automatic nested-filter probing materializes the decoded stream.  Keep that
+// decision bounded on 32-bit builds; larger raw streams remain fully available
+// through the directly compiled ip7z source handlers instead of being decoded several
+// times merely to discover whether their payload is another archive.
+const qint64 NATIVE_FILTER_AUTO_PROBE_MAX_INPUT_SIZE = 256LL * 1024 * 1024;
+
+bool ip7zAllowsNativeFallback(const QString &sError)
+{
+    // Password, CRC, corruption, cancellation, and unsafe-path failures are
+    // authoritative. Only a structured unsupported-format result may fall
+    // back to the native XArchive implementation.
+    return XArchives::isIp7zUnsupportedFormatError(sError);
+}
+
+bool hasLegacyZstdMagic(QIODevice *pDevice)
+{
+    if (!pDevice || !pDevice->isOpen() || !pDevice->isReadable()) return false;
+
+    const QByteArray baMagic = pDevice->peek(4);
+    if (baMagic.size() != 4) return false;
+
+    const unsigned char *p = reinterpret_cast<const unsigned char *>(baMagic.constData());
+    const quint32 nMagic = static_cast<quint32>(p[0]) |
+                           (static_cast<quint32>(p[1]) << 8) |
+                           (static_cast<quint32>(p[2]) << 16) |
+                           (static_cast<quint32>(p[3]) << 24);
+    return (nMagic >= 0xFD2FB524U) && (nMagic <= 0xFD2FB527U);
+}
+
+void setOperationError(XBinary::PDSTRUCT *pPdStruct, const QString &sError)
+{
+    if (pPdStruct && XBinary::getPdStructErrorString(pPdStruct).isEmpty() && !sError.isEmpty()) {
+        XBinary::setPdStructErrorString(pPdStruct, sError);
+    }
+}
+
+}  // namespace
+
 XArchives::XArchives(QObject *pParent) : QObject(pParent)
 {
 }
@@ -85,13 +129,14 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
 
     XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
+    XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+    XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
         baResult = pArchives->decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
     }
 
-    delete pArchives;
+    delete pBinary;
 
     return baResult;
 }
@@ -142,13 +187,14 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 
     XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
+    XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+    XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
         bResult = pArchives->decompressToFile(pRecord, sResultFileName, pPdStruct);
     }
 
-    delete pArchives;
+    delete pBinary;
 
     return bResult;
 }
@@ -159,13 +205,14 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
 
     XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
+    XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+    XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
         bResult = pArchives->decompressToDevice(pRecord, pDestDevice, pPdStruct);
     }
 
-    delete pArchives;
+    delete pBinary;
 
     return bResult;
 }
@@ -210,6 +257,12 @@ bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecor
 
 bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct)
 {
+    return decompressToFolder(pDevice, sResultFileFolder, QMap<XBinary::UNPACK_PROP, QVariant>(), pPdStruct);
+}
+
+bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder,
+                                   const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct)
+{
     if (!pDevice) return false;
 
     XBinary::PDSTRUCT pdStructEmpty = {};
@@ -220,30 +273,151 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     const XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
-    XArchive *pArchive = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
-    if (!pArchive) return false;
-
-    bool bResult = pArchive->unpackToFolder(sResultFileFolder, pPdStruct);
-    if (!bResult && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        QList<XArchive::RECORD> listRecords = pArchive->getRecords(-1, pPdStruct);
-        bResult = !listRecords.isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct) &&
-                  pArchive->decompressToPath(&listRecords, QString(), sResultFileFolder, pPdStruct);
+    XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+    XArchive *pArchive = dynamic_cast<XArchive *>(pBinary);
+    if (!pArchive) {
+        delete pBinary;
+        return false;
     }
-    delete pArchive;
+
+    // XArchive has a legacy overload with the same name which hides the
+    // property-aware implementation inherited from XBinary.  Call the base
+    // implementation explicitly so passwords and the other unpack options are
+    // preserved for the complete streaming operation.
+    bool bResult = pArchive->XBinary::unpackToFolder(sResultFileFolder, mapProperties, pPdStruct);
+
+    // Keep compatibility with formats that only implement the legacy RECORD
+    // API.  Property-aware streaming is always attempted first; the legacy
+    // path is reached only when it fails without cancellation.
+    //
+    // The legacy path re-extracts the WHOLE archive from raw (offset,size)
+    // pairs, so running it after a partially completed streaming attempt both
+    // swallows the streaming diagnostic and rewrites members that were already
+    // produced correctly.  Restrict it to formats that do not implement the
+    // streaming API at all: for every other format a streaming failure is
+    // authoritative and must surface as an error rather than as a second,
+    // weaker extraction attempt.
+    if (!bResult && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        XBinary::UNPACK_STATE probeState = {};
+        const bool bStreamingImplemented =
+            pArchive->initUnpack(&probeState, mapProperties, pPdStruct);
+        pArchive->finishUnpack(&probeState, nullptr);
+
+        if (!bStreamingImplemented &&
+            XBinary::isPdStructNotCanceled(pPdStruct)) {
+            QList<XArchive::RECORD> listRecords = pArchive->getRecords(-1, pPdStruct);
+            bResult = !listRecords.isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct) &&
+                      pArchive->decompressToPath(&listRecords, QString(), sResultFileFolder, pPdStruct);
+        }
+    }
+
+    delete pBinary;
 
     return bResult;
 }
 
 bool XArchives::decompressToFolder(const QString &sFileName, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct)
 {
+    return decompressToFolder(sFileName, sResultFileFolder, QMap<XBinary::UNPACK_PROP, QVariant>(), pPdStruct);
+}
+
+bool XArchives::decompressToFolder(const QString &sFileName, const QString &sResultFileFolder,
+                                   const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct)
+{
     bool bResult = false;
+    QString sIp7zError;
+    const QString sPassword = mapProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+    const XBinary::FT fileType = XFormats::getPrefFileType(sFileName, XBinary::FT_FLAG_ARCHIVES, pPdStruct);
+    QFile nativeProbe(sFileName);
+    const bool bProbeOpened = nativeProbe.open(QIODevice::ReadOnly);
+    const bool bPreferNative = bProbeOpened &&
+        isNativeReaderPreferredFileType(fileType, &nativeProbe, pPdStruct);
+    if (bProbeOpened) nativeProbe.close();
+
+    if (!bPreferNative && isIp7zSourceAvailable()) {
+        QList<XBinary::ARCHIVERECORD> listProbe;
+        if (listArchiveWithIp7zSource(sFileName, sPassword, &listProbe, &sIp7zError, pPdStruct)) {
+            bResult = extractArchiveWithIp7zSource(sFileName, sPassword, sResultFileFolder, &sIp7zError, pPdStruct);
+            if (bResult) return true;
+
+            // Extraction is staged by the source-built ip7z bridge, so an
+            // unsupported coder has committed no destination entries.  Retry
+            // that narrowly classified case through the native XArchive
+            // reader; password, CRC, corruption, cancellation and path-safety
+            // errors remain authoritative and never fall back.
+            if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
+                !ip7zAllowsNativeFallback(sIp7zError)) {
+                setOperationError(pPdStruct, sIp7zError);
+                return false;
+            }
+        }
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) || !ip7zAllowsNativeFallback(sIp7zError)) {
+            setOperationError(pPdStruct, sIp7zError);
+            return false;
+        }
+    }
 
     QFile file;
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        bResult = decompressToFolder(&file, sResultFileFolder, pPdStruct);
+        bResult = decompressToFolder(&file, sResultFileFolder, mapProperties, pPdStruct);
         file.close();
+    }
+
+    if (!bResult) {
+        setOperationError(pPdStruct, sIp7zError);
+    }
+
+    return bResult;
+}
+
+bool XArchives::testArchive(const QString &sFileName, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct)
+{
+    QString sIp7zError;
+    const QString sPassword = mapProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
+    const XBinary::FT fileType = XFormats::getPrefFileType(sFileName, XBinary::FT_FLAG_ARCHIVES, pPdStruct);
+    QFile nativeProbe(sFileName);
+    const bool bProbeOpened = nativeProbe.open(QIODevice::ReadOnly);
+    const bool bPreferNative = bProbeOpened &&
+        isNativeReaderPreferredFileType(fileType, &nativeProbe, pPdStruct);
+    if (bProbeOpened) nativeProbe.close();
+
+    if (!bPreferNative && isIp7zSourceAvailable()) {
+        QList<XBinary::ARCHIVERECORD> listProbe;
+        if (listArchiveWithIp7zSource(sFileName, sPassword, &listProbe, &sIp7zError, pPdStruct)) {
+            const bool bResult = testArchiveWithIp7zSource(sFileName, sPassword, &sIp7zError, pPdStruct);
+            if (bResult) return true;
+            if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
+                !ip7zAllowsNativeFallback(sIp7zError)) {
+                setOperationError(pPdStruct, sIp7zError);
+                return false;
+            }
+        }
+
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) || !ip7zAllowsNativeFallback(sIp7zError)) {
+            setOperationError(pPdStruct, sIp7zError);
+            return false;
+        }
+    }
+
+    QTemporaryDir temporaryDir;
+    bool bResult = false;
+
+    if (temporaryDir.isValid()) {
+        QFile file(sFileName);
+
+        if (file.open(QIODevice::ReadOnly)) {
+            bResult = decompressToFolder(&file, temporaryDir.path(), mapProperties, pPdStruct);
+            file.close();
+        }
+    } else if (pPdStruct) {
+        XBinary::setPdStructErrorString(pPdStruct, tr("Cannot create temporary directory"));
+    }
+
+    if (!bResult) {
+        setOperationError(pPdStruct, sIp7zError);
     }
 
     return bResult;
@@ -255,13 +429,14 @@ bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecor
 
     XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
-    XArchive *pArchives = static_cast<XArchive *>(XFormats::createClass(fileType, pDevice));
+    XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+    XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
         bResult = pArchives->isArchiveRecordPresent(sRecordFileName, pPdStruct);
     }
 
-    delete pArchives;
+    delete pBinary;
 
     return bResult;
 }
@@ -288,7 +463,7 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &
     QSet<XBinary::FT> _stAvailable = stAvailable;
 
     if (pDevice) {
-        QSet<XBinary::FT> stFT = XBinary::getFileTypes(pDevice, XBinary::FT_FLAG_ARCHIVES);
+        QSet<XBinary::FT> stFT = XFormats::getFileTypes(pDevice, XBinary::FT_FLAG_ARCHIVES);
 
         if (!_stAvailable.count()) {
             _stAvailable = getArchiveOpenValidFileTypes();
@@ -312,6 +487,57 @@ bool XArchives::isArchiveOpenValid(const QString &sFileName, const QSet<XBinary:
         file.close();
     }
 
+    return bResult;
+}
+
+bool XArchives::isNativeReaderPreferredFileType(XBinary::FT fileType,
+                                                QIODevice *pDevice,
+                                                XBinary::PDSTRUCT *pPdStruct)
+{
+    switch (fileType) {
+        case XBinary::FT_TAR_GZ:
+        case XBinary::FT_TAR_BZIP2:
+        case XBinary::FT_TAR_LZIP:
+        case XBinary::FT_TAR_LZMA:
+        case XBinary::FT_TAR_LZOP:
+        case XBinary::FT_TAR_XZ:
+        case XBinary::FT_TAR_Z:
+        case XBinary::FT_TAR_ZSTD:
+        case XBinary::FT_TAR_LZ4:
+        case XBinary::FT_BROTLI:
+        case XBinary::FT_LZ4:
+        case XBinary::FT_LZ5:
+        case XBinary::FT_LIZARD:
+        case XBinary::FT_WARC:
+        case XBinary::FT_MTREE:
+        case XBinary::FT_UU: return true;
+        // The source-built ip7z handler is substantially faster for very large
+        // current-format Zstandard streams. A leading legacy v0.4-v0.7 frame
+        // must stay on the native adapter path; bounded current streams fall
+        // through to the generic native-filter probe below.
+        case XBinary::FT_ZSTD:
+            if (hasLegacyZstdMagic(pDevice)) return true;
+            break;
+        default: break;
+    }
+
+    if (!pDevice || !XFilteredArchive::isFilterFileType(fileType) ||
+        !pDevice->isOpen() || !pDevice->isReadable() || pDevice->isSequential()) {
+        return false;
+    }
+
+    const qint64 nSize = pDevice->size();
+    if ((nSize < 0) || (nSize > NATIVE_FILTER_AUTO_PROBE_MAX_INPUT_SIZE)) {
+        return false;
+    }
+
+    const QString sOriginalError = pPdStruct
+        ? XBinary::getPdStructErrorString(pPdStruct)
+        : QString();
+    const bool bResult = XFilteredArchive::isValid(pDevice, fileType, pPdStruct);
+    if (!bResult && pPdStruct && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        XBinary::setPdStructErrorString(pPdStruct, sOriginalError);
+    }
     return bResult;
 }
 
@@ -340,12 +566,18 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_TAR_XZ);
     result.insert(XBinary::FT_TAR_Z);
     result.insert(XBinary::FT_TAR_ZSTD);
+    result.insert(XBinary::FT_TAR_LZ4);
     result.insert(XBinary::FT_NPM);
     result.insert(XBinary::FT_GZIP);
     result.insert(XBinary::FT_BZIP2);
     result.insert(XBinary::FT_BROTLI);
     result.insert(XBinary::FT_LZ4);
+    result.insert(XBinary::FT_LZ5);
+    result.insert(XBinary::FT_LIZARD);
     result.insert(XBinary::FT_LZMA);
+    result.insert(XBinary::FT_LZO);
+    result.insert(XBinary::FT_COMPRESS);
+    result.insert(XBinary::FT_ZSTD);
     result.insert(XBinary::FT_ZLIB);
     result.insert(XBinary::FT_LHA);
     result.insert(XBinary::FT_ARJ);
@@ -359,12 +591,17 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_CPIO);
     result.insert(XBinary::FT_SQUASHFS);
     result.insert(XBinary::FT_ISO9660);
+    result.insert(XBinary::FT_UDF);
+    result.insert(XBinary::FT_DMG);
     result.insert(XBinary::FT_MINIDUMP);
     result.insert(XBinary::FT_RPM);
     result.insert(XBinary::FT_KWAJ);
     result.insert(XBinary::FT_ASAR);
     result.insert(XBinary::FT_XAR);
     result.insert(XBinary::FT_ZOO);
+    result.insert(XBinary::FT_WARC);
+    result.insert(XBinary::FT_MTREE);
+    result.insert(XBinary::FT_UU);
     result.insert(XBinary::FT_DOS4G);
     result.insert(XBinary::FT_DOS16M);
 

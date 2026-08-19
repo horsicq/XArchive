@@ -21,6 +21,17 @@
 #include "xbzip2decoder.h"
 #include "algo_utils.h"
 
+// Keep the compact decoder's private libbzip2-derived implementation separate
+// from the complete bundled libbzip2 linked for libarchive.
+#define BZ2_bz__AssertH__fail XFU_BZ2_bz__AssertH__fail
+#define BZ2_indexIntoF XFU_BZ2_indexIntoF
+#define BZ2_crc32Table XFU_BZ2_crc32Table
+#define BZ2_rNums XFU_BZ2_rNums
+#define BZ2_hbMakeCodeLengths XFU_BZ2_hbMakeCodeLengths
+#define BZ2_hbAssignCodes XFU_BZ2_hbAssignCodes
+#define BZ2_hbCreateDecodeTables XFU_BZ2_hbCreateDecodeTables
+#define BZ2_decompress XFU_BZ2_decompress
+
 extern "C" {
 
 /*-------------------------------------------------------------*/

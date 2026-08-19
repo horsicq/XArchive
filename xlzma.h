@@ -78,7 +78,24 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
+
+    QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
+    bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties,
+                    PDSTRUCT *pPdStruct = nullptr) override;
+    ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    QList<FPART_PROP> getAvailableFPARTProperties() override;
+
 private:
+    struct LZMA_UNPACK_CONTEXT {
+        qint64 nCompressedSize;
+        qint64 nUncompressedSize;
+        QByteArray baProperties;
+        QString sFileName;
+    };
+
     INTERNAL_INFO m_internalInfo;
 };
 
