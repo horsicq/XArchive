@@ -20,22 +20,46 @@
  */
 #include "xapk.h"
 
+namespace {
+const qint64 APK_MANIFEST_LIMIT = 16LL * 1024 * 1024;
+
+class DevicePositionGuard {
+public:
+    explicit DevicePositionGuard(QIODevice *pDevice)
+        : m_pDevice(pDevice), m_nPosition(-1)
+    {
+        if (m_pDevice && !m_pDevice->isSequential()) {
+            m_nPosition = m_pDevice->pos();
+        }
+    }
+
+    ~DevicePositionGuard()
+    {
+        if (m_pDevice && (m_nPosition >= 0) && m_pDevice->isOpen()) {
+            m_pDevice->seek(m_nPosition);
+        }
+    }
+
+private:
+    QPointer<QIODevice> m_pDevice;
+    qint64 m_nPosition;
+};
+}
+
 XAPK::XAPK(QIODevice *pDevice) : XJAR(pDevice)
 {
 }
 
 bool XAPK::isValid(PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
+    DevicePositionGuard positionGuard(getDevice());
     XZip xzip(getDevice());
-
     if (xzip.isValid(pPdStruct)) {
-        qint64 nECDOffset = xzip.findECDOffset(pPdStruct);
-        bResult = xzip.isAPK(nECDOffset, pPdStruct);
+        QList<XArchive::RECORD> listArchiveRecords =
+            xzip.getRecords(20000, pPdStruct);
+        return isValid(getDevice(), &listArchiveRecords, pPdStruct);
     }
-
-    return bResult;
+    return false;
 }
 
 bool XAPK::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -47,12 +71,47 @@ bool XAPK::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XAPK::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    if (!pListRecords) return false;
 
-    bResult =
-        (XArchive::isArchiveRecordPresent("classes.dex", pListRecords, pPdStruct) || XArchive::isArchiveRecordPresent("AndroidManifest.xml", pListRecords, pPdStruct));
+    // AndroidManifest.xml is mandatory for an APK, including resource-only
+    // packages that legitimately have no classes.dex.  A filename alone is
+    // not enough: an empty manifest is a common ZIP lookalike.
+    for (qint32 i = 0; (i < pListRecords->count()) &&
+                       XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        const RECORD &record = pListRecords->at(i);
+        if ((record.spInfo.sRecordName ==
+             QLatin1String("AndroidManifest.xml")) &&
+            (record.spInfo.nUncompressedSize > 0)) {
+            return true;
+        }
+    }
 
-    return bResult;
+    return false;
+}
+
+bool XAPK::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords,
+                   PDSTRUCT *pPdStruct)
+{
+    if (!pDevice || !isValid(pListRecords, pPdStruct)) return false;
+    DevicePositionGuard positionGuard(pDevice);
+
+    const RECORD record = XArchive::getArchiveRecord(
+        QStringLiteral("AndroidManifest.xml"), pListRecords, pPdStruct);
+    if ((record.spInfo.sRecordName !=
+         QLatin1String("AndroidManifest.xml")) ||
+        (record.spInfo.nUncompressedSize <= 0) ||
+        (record.spInfo.nUncompressedSize > APK_MANIFEST_LIMIT) ||
+        (record.nDataSize <= 0) || (record.nDataSize > APK_MANIFEST_LIMIT) ||
+        record.mapProperties.value(
+            XBinary::FPART_PROP_ENCRYPTED, false).toBool() ||
+        (record.spInfo.compressMethod2 != XBinary::HANDLE_METHOD_UNKNOWN)) {
+        return false;
+    }
+
+    XZip zip(pDevice);
+    const QByteArray baManifest = zip.decompress(
+        &record, pPdStruct, 0, APK_MANIFEST_LIMIT + 1);
+    return baManifest.size() == record.spInfo.nUncompressedSize;
 }
 
 XBinary::FT XAPK::getFileType()
@@ -66,7 +125,7 @@ XBinary::FILEFORMATINFO XAPK::getFileFormatInfo(PDSTRUCT *pPdStruct)
 
     QList<XArchive::RECORD> listArchiveRecords = getRecords(20000, pPdStruct);
 
-    if (isValid(&listArchiveRecords, pPdStruct)) {
+    if (isValid(getDevice(), &listArchiveRecords, pPdStruct)) {
         result.bIsValid = true;
         result.nSize = getSize();
         result.sExt = "apk";

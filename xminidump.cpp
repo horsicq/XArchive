@@ -833,7 +833,8 @@ QString XMiniDump::read_MINIDUMP_STRING(qint64 nOffset)
                 QByteArray baData = read_array(nStringOffset, nBytesNeeded);
 
                 // Convert UTF-16LE to QString
-                sResult = QString::fromUtf16(reinterpret_cast<const ushort *>(baData.constData()), nLength / 2);
+                sResult = QString::fromUtf16(
+                    reinterpret_cast<const char16_t *>(baData.constData()), nLength / 2);
             }
         }
     }
@@ -1111,8 +1112,6 @@ bool XMiniDump::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
-    bool bResult = false;
-
     if (!XBinary::isPdStructNotCanceled(pPdStruct) || !pState || !pState->pContext || (pState->nCurrentIndex < 0) ||
         (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
@@ -1125,16 +1124,19 @@ bool XMiniDump::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         static_cast<MINIDUMP_UNPACK_CONTEXT *>(pState->pContext);
 
     qint32 nNextIndex = pState->nCurrentIndex + 1;
-    if (nNextIndex < pContext->listValidDirectoryIndexes.count()) {
-        qint32 nDirectoryIndex = pContext->listValidDirectoryIndexes.at(nNextIndex);
-        if ((nDirectoryIndex >= 0) && (nDirectoryIndex < pContext->listStreamOffsets.count())) {
-            pState->nCurrentIndex = nNextIndex;
-            pState->nCurrentOffset = pContext->listStreamOffsets.at(nDirectoryIndex);
-            bResult = true;
-        }
-    }
+    pState->nCurrentIndex = nNextIndex;
 
-    return bResult;
+    // Reaching the declared record count is the normal terminal state.  The
+    // caller observes false (there is no next record), while the cursor still
+    // advances past the record that was just consumed.
+    if (nNextIndex >= pContext->listValidDirectoryIndexes.count()) return false;
+
+    qint32 nDirectoryIndex = pContext->listValidDirectoryIndexes.at(nNextIndex);
+    if ((nDirectoryIndex < 0) || (nDirectoryIndex >= pContext->listStreamOffsets.count())) return false;
+
+    pState->nCurrentOffset = pContext->listStreamOffsets.at(nDirectoryIndex);
+
+    return true;
 }
 
 bool XMiniDump::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)

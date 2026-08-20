@@ -20,6 +20,9 @@
  */
 #include "xarchives.h"
 
+#include <QBuffer>
+#include <QFileInfo>
+#include <QSaveFile>
 #include <QTemporaryDir>
 
 #include "xfilteredarchive.h"
@@ -62,6 +65,127 @@ void setOperationError(XBinary::PDSTRUCT *pPdStruct, const QString &sError)
     }
 }
 
+XBinary::FT preferredUnpackerFileType(QIODevice *pDevice,
+                                       XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pDevice) return XBinary::FT_UNKNOWN;
+
+    // Installer/packer formats are also executables.  Probe their dedicated
+    // readers before generic archives/ip7z can reinterpret the same PE as raw
+    // sections or an overlay container.
+    const XBinary::FT staticType = XFormats::getPrefFileType(
+        pDevice,
+        XBinary::FT_FLAG_EXECUTABLES | XBinary::FT_FLAG_STATICUNPACKERS,
+        pPdStruct);
+    if (XFormats::isStaticUnpacker(staticType)) return staticType;
+
+    // MSI/WiX static unpackers are CFBF containers, so their dedicated probes
+    // become available only when archive detection has first identified the
+    // compound-file base type.  Keep STATICUNPACKERS enabled for this pass as
+    // well; otherwise FT_UNKNOWN silently falls back to the raw CFBF archive.
+    const XBinary::FT archiveType = XFormats::getPrefFileType(
+        pDevice,
+        XBinary::FT_FLAG_ARCHIVES | XBinary::FT_FLAG_STATICUNPACKERS,
+        pPdStruct);
+    return archiveType;
+}
+
+XArchive::RECORD legacyRecordFromArchiveRecord(
+    const XBinary::ARCHIVERECORD &archiveRecord)
+{
+    XArchive::RECORD record = {};
+
+    record.nDataOffset = archiveRecord.nStreamOffset;
+    record.nDataSize = archiveRecord.nStreamSize;
+    record.mapProperties = archiveRecord.mapProperties;
+    record.spInfo.nUncompressedSize = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
+    record.spInfo.sRecordName = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_ORIGINALNAME).toString();
+    record.spInfo.compressMethod =
+        (XBinary::HANDLE_METHOD)archiveRecord.mapProperties
+            .value(XBinary::FPART_PROP_HANDLEMETHOD,
+                   XBinary::HANDLE_METHOD_UNKNOWN).toInt();
+    record.spInfo.compressMethod2 =
+        (XBinary::HANDLE_METHOD)archiveRecord.mapProperties
+            .value(XBinary::FPART_PROP_HANDLEMETHOD2,
+                   XBinary::HANDLE_METHOD_UNKNOWN).toInt();
+    record.spInfo.nCRC32 = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_RESULTCRC).toUInt();
+    record.spInfo.nWindowSize = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_WINDOWSIZE).toULongLong();
+    record.spInfo.bIsSolid = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_ISSOLID).toBool();
+    record.nHeaderOffset = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_HEADER_OFFSET).toLongLong();
+    record.nHeaderSize = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_HEADER_SIZE).toLongLong();
+    record.nOptHeaderOffset = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_OPTHEADER_OFFSET).toLongLong();
+    record.nOptHeaderSize = archiveRecord.mapProperties
+        .value(XBinary::FPART_PROP_OPTHEADER_SIZE).toLongLong();
+    record.sUUID = XBinary::generateUUID();
+
+    return record;
+}
+
+XBinary::ARCHIVERECORD archiveRecordFromLegacyRecord(
+    const XArchive::RECORD &record)
+{
+    XBinary::ARCHIVERECORD result = {};
+    result.nStreamOffset = record.nDataOffset;
+    result.nStreamSize = record.nDataSize;
+    result.mapProperties = record.mapProperties;
+    return result;
+}
+
+bool resolveStaticRecord(XBinary *pBinary, const XArchive::RECORD *pRecord,
+                         qint32 *pnRecordIndex,
+                         XBinary::ARCHIVERECORD *pArchiveRecord,
+                         XBinary::PDSTRUCT *pPdStruct)
+{
+    if (pnRecordIndex) *pnRecordIndex = -1;
+    if (!pBinary || !pRecord || !pnRecordIndex || !pArchiveRecord ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    const XBinary::ARCHIVERECORD expectedRecord =
+        archiveRecordFromLegacyRecord(*pRecord);
+    const QList<XBinary::ARCHIVERECORD> listRecords =
+        pBinary->getArchiveRecords(-1, pPdStruct);
+
+    for (qint32 i = 0;
+         (i < listRecords.count()) &&
+         XBinary::isPdStructNotCanceled(pPdStruct);
+         ++i) {
+        if (XBinary::isSameArchiveRecordIdentity(listRecords.at(i),
+                                                 expectedRecord)) {
+            *pnRecordIndex = i;
+            *pArchiveRecord = listRecords.at(i);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool unpackStaticRecord(XBinary *pBinary, const XArchive::RECORD *pRecord,
+                        QIODevice *pDestDevice,
+                        XBinary::PDSTRUCT *pPdStruct)
+{
+    qint32 nRecordIndex = -1;
+    XBinary::ARCHIVERECORD archiveRecord = {};
+    if (!resolveStaticRecord(pBinary, pRecord, &nRecordIndex, &archiveRecord,
+                             pPdStruct)) {
+        return false;
+    }
+
+    return pBinary->unpackRecordByIndex(
+        nRecordIndex, &archiveRecord, pDestDevice,
+        QMap<XBinary::UNPACK_PROP, QVariant>(), pPdStruct);
+}
+
 }  // namespace
 
 XArchives::XArchives(QObject *pParent) : QObject(pParent)
@@ -72,16 +196,35 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
 {
     QList<XArchive::RECORD> listResult;
 
+    if (!pDevice || (nLimit == 0) || (nLimit < -1) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return listResult;
+    }
+
+    if (fileType == XBinary::FT_UNKNOWN) {
+        fileType = preferredUnpackerFileType(pDevice, pPdStruct);
+    }
+
     XBinary *pBinary = XFormats::createClass(fileType, pDevice);
-    
+
+    if (pBinary && XFormats::isStaticUnpacker(fileType)) {
+        const QList<XBinary::ARCHIVERECORD> listArchiveRecords =
+            pBinary->getArchiveRecords(nLimit, pPdStruct);
+        listResult.reserve(listArchiveRecords.count());
+        for (const XBinary::ARCHIVERECORD &archiveRecord :
+             listArchiveRecords) {
+            listResult.append(legacyRecordFromArchiveRecord(archiveRecord));
+        }
+        delete pBinary;
+        return listResult;
+    }
+
     XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
         listResult = pArchives->getRecords(nLimit, pPdStruct);
     } else {
-        if (pBinary) {
-            delete pBinary; 
-        }
+        delete pBinary;
 
         pBinary = XFormats::createClass(XBinary::FT_ZIP, pDevice);
         pArchives = dynamic_cast<XArchive *>(pBinary);
@@ -127,9 +270,39 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
 {
     QByteArray baResult;
 
-    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
+    if (!pDevice || !pRecord || (nDecompressedOffset < 0) ||
+        (nDecompressedSize < -1) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return baResult;
+    }
+
+    XBinary::FT fileType = preferredUnpackerFileType(pDevice, pPdStruct);
 
     XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+
+    if (pBinary && XFormats::isStaticUnpacker(fileType)) {
+        QBuffer buffer(&baResult);
+        const bool bOpened = buffer.open(QIODevice::ReadWrite);
+        const bool bUnpacked = bOpened &&
+            unpackStaticRecord(pBinary, pRecord, &buffer, pPdStruct);
+        buffer.close();
+
+        if (!bUnpacked || !XBinary::isPdStructNotCanceled(pPdStruct) ||
+            (nDecompressedOffset > baResult.size())) {
+            baResult.clear();
+        } else if ((nDecompressedOffset != 0) ||
+                   (nDecompressedSize != -1)) {
+            const qint64 nAvailable = baResult.size() - nDecompressedOffset;
+            const qint64 nResultSize = (nDecompressedSize == -1)
+                ? nAvailable : qMin(nAvailable, nDecompressedSize);
+            baResult = baResult.mid((qint32)nDecompressedOffset,
+                                    (qint32)nResultSize);
+        }
+
+        delete pBinary;
+        return baResult;
+    }
+
     XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
@@ -159,9 +332,13 @@ QByteArray XArchives::decompress(const QString &sFileName, const XArchive::RECOR
 
 QByteArray XArchives::decompress(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
 {
-    QList<XArchive::RECORD> listRecords = getRecords(pDevice);
+    QList<XArchive::RECORD> listRecords = getRecords(
+        pDevice, XBinary::FT_UNKNOWN, -1, pPdStruct);
 
-    XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords);
+    XArchive::RECORD record = XArchive::getArchiveRecord(
+        sRecordFileName, &listRecords, pPdStruct);
+
+    if (record.spInfo.sRecordName.isEmpty()) return QByteArray();
 
     return decompress(pDevice, &record, pPdStruct);
 }
@@ -185,9 +362,49 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
 {
     bool bResult = false;
 
-    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
+    if (!pDevice || !pRecord ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    XBinary::FT fileType = preferredUnpackerFileType(pDevice, pPdStruct);
 
     XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+
+    if (pBinary && XFormats::isStaticUnpacker(fileType)) {
+        qint32 nRecordIndex = -1;
+        XBinary::ARCHIVERECORD archiveRecord = {};
+        const bool bRecordResolved = resolveStaticRecord(
+            pBinary, pRecord, &nRecordIndex, &archiveRecord, pPdStruct);
+
+        if (bRecordResolved && archiveRecord.mapProperties
+                .value(XBinary::FPART_PROP_ISFOLDER, false).toBool()) {
+            bResult = XBinary::createDirectory(sResultFileName) &&
+                      XBinary::isPdStructNotCanceled(pPdStruct);
+        } else if (bRecordResolved) {
+            const QFileInfo fileInfo(sResultFileName);
+            if (XBinary::createDirectory(fileInfo.absolutePath())) {
+                QSaveFile outputFile(sResultFileName);
+                if (outputFile.open(QIODevice::WriteOnly)) {
+                    bResult = pBinary->unpackRecordByIndex(
+                        nRecordIndex, &archiveRecord, &outputFile,
+                        QMap<XBinary::UNPACK_PROP, QVariant>(), pPdStruct);
+                    if (bResult &&
+                        XBinary::isPdStructNotCanceled(pPdStruct) &&
+                        (outputFile.error() == QFile::NoError)) {
+                        bResult = outputFile.commit();
+                    } else {
+                        outputFile.cancelWriting();
+                        bResult = false;
+                    }
+                }
+            }
+        }
+
+        delete pBinary;
+        return bResult;
+    }
+
     XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
@@ -203,9 +420,22 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
 {
     bool bResult = false;
 
-    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
+    if (!pDevice || !pRecord || !pDestDevice ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    XBinary::FT fileType = preferredUnpackerFileType(pDevice, pPdStruct);
 
     XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+
+    if (pBinary && XFormats::isStaticUnpacker(fileType)) {
+        bResult = unpackStaticRecord(
+            pBinary, pRecord, pDestDevice, pPdStruct);
+        delete pBinary;
+        return bResult;
+    }
+
     XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
@@ -272,8 +502,16 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
-    const XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
+    const XBinary::FT fileType = preferredUnpackerFileType(pDevice, pPdStruct);
     XBinary *pBinary = XFormats::createClass(fileType, pDevice);
+
+    if (pBinary && XFormats::isStaticUnpacker(fileType)) {
+        const bool bResult = pBinary->unpackToFolder(
+            sResultFileFolder, mapProperties, pPdStruct);
+        delete pBinary;
+        return bResult;
+    }
+
     XArchive *pArchive = dynamic_cast<XArchive *>(pBinary);
     if (!pArchive) {
         delete pBinary;
@@ -327,11 +565,28 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
     bool bResult = false;
     QString sIp7zError;
     const QString sPassword = mapProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
-    const XBinary::FT fileType = XFormats::getPrefFileType(sFileName, XBinary::FT_FLAG_ARCHIVES, pPdStruct);
+    XBinary::FT fileType = XBinary::FT_UNKNOWN;
     QFile nativeProbe(sFileName);
     const bool bProbeOpened = nativeProbe.open(QIODevice::ReadOnly);
-    const bool bPreferNative = bProbeOpened &&
-        isNativeReaderPreferredFileType(fileType, &nativeProbe, pPdStruct);
+    bool bStaticUnpacker = false;
+    bool bPreferNative = false;
+    if (bProbeOpened) {
+        fileType = preferredUnpackerFileType(&nativeProbe, pPdStruct);
+        bStaticUnpacker = XFormats::isStaticUnpacker(fileType);
+        bPreferNative = bStaticUnpacker ||
+            isNativeReaderPreferredFileType(fileType, &nativeProbe, pPdStruct);
+    }
+
+    if (bStaticUnpacker) {
+        bResult = decompressToFolder(&nativeProbe, sResultFileFolder,
+                                     mapProperties, pPdStruct);
+        nativeProbe.close();
+        if (!bResult) {
+            setOperationError(pPdStruct,
+                              tr("Static unpacker extraction failed"));
+        }
+        return bResult;
+    }
     if (bProbeOpened) nativeProbe.close();
 
     if (!bPreferNative && isIp7zSourceAvailable()) {
@@ -377,11 +632,32 @@ bool XArchives::testArchive(const QString &sFileName, const QMap<XBinary::UNPACK
 {
     QString sIp7zError;
     const QString sPassword = mapProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
-    const XBinary::FT fileType = XFormats::getPrefFileType(sFileName, XBinary::FT_FLAG_ARCHIVES, pPdStruct);
+    XBinary::FT fileType = XBinary::FT_UNKNOWN;
     QFile nativeProbe(sFileName);
     const bool bProbeOpened = nativeProbe.open(QIODevice::ReadOnly);
-    const bool bPreferNative = bProbeOpened &&
-        isNativeReaderPreferredFileType(fileType, &nativeProbe, pPdStruct);
+    bool bStaticUnpacker = false;
+    bool bPreferNative = false;
+    if (bProbeOpened) {
+        fileType = preferredUnpackerFileType(&nativeProbe, pPdStruct);
+        bStaticUnpacker = XFormats::isStaticUnpacker(fileType);
+        bPreferNative = bStaticUnpacker ||
+            isNativeReaderPreferredFileType(fileType, &nativeProbe, pPdStruct);
+    }
+
+    if (bStaticUnpacker) {
+        QTemporaryDir temporaryDir;
+        const bool bResult = temporaryDir.isValid() &&
+            decompressToFolder(&nativeProbe, temporaryDir.path(),
+                               mapProperties, pPdStruct);
+        nativeProbe.close();
+        if (!bResult) {
+            setOperationError(pPdStruct,
+                              temporaryDir.isValid()
+                                  ? tr("Static unpacker test failed")
+                                  : tr("Cannot create temporary directory"));
+        }
+        return bResult;
+    }
     if (bProbeOpened) nativeProbe.close();
 
     if (!bPreferNative && isIp7zSourceAvailable()) {
@@ -425,20 +701,10 @@ bool XArchives::testArchive(const QString &sFileName, const QMap<XBinary::UNPACK
 
 bool XArchives::isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-
-    XBinary::FT fileType = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES);
-
-    XBinary *pBinary = XFormats::createClass(fileType, pDevice);
-    XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
-
-    if (pArchives) {
-        bResult = pArchives->isArchiveRecordPresent(sRecordFileName, pPdStruct);
-    }
-
-    delete pBinary;
-
-    return bResult;
+    QList<XArchive::RECORD> listRecords = getRecords(
+        pDevice, XBinary::FT_UNKNOWN, -1, pPdStruct);
+    return XArchive::isArchiveRecordPresent(
+        sRecordFileName, &listRecords, pPdStruct);
 }
 
 bool XArchives::isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
@@ -504,6 +770,7 @@ bool XArchives::isNativeReaderPreferredFileType(XBinary::FT fileType,
         case XBinary::FT_TAR_Z:
         case XBinary::FT_TAR_ZSTD:
         case XBinary::FT_TAR_LZ4:
+        case XBinary::FT_NPM:
         case XBinary::FT_BROTLI:
         case XBinary::FT_LZ4:
         case XBinary::FT_LZ5:

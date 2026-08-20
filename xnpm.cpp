@@ -20,6 +20,32 @@
  */
 #include "xnpm.h"
 
+#include <QJsonDocument>
+#include <QJsonObject>
+
+namespace {
+const qint64 NPM_PACKAGE_JSON_LIMIT = 1024 * 1024;
+
+class DevicePositionGuard {
+public:
+    explicit DevicePositionGuard(QIODevice *pDevice) : m_pDevice(pDevice), m_nPosition(-1)
+    {
+        if (m_pDevice && !m_pDevice->isSequential()) m_nPosition = m_pDevice->pos();
+    }
+
+    ~DevicePositionGuard()
+    {
+        if (m_pDevice && (m_nPosition >= 0) && m_pDevice->isOpen()) {
+            m_pDevice->seek(m_nPosition);
+        }
+    }
+
+private:
+    QPointer<QIODevice> m_pDevice;
+    qint64 m_nPosition;
+};
+}
+
 XBinary::XCONVERT _TABLE_XNPM_STRUCTID[] = {
     {XNPM::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
 };
@@ -37,7 +63,7 @@ bool XNPM::isValid(PDSTRUCT *pPdStruct)
     if (xtarGz.isValid(pPdStruct)) {
         QList<XArchive::RECORD> listArchiveRecords = xtarGz.getRecords(20000, pPdStruct);
 
-        bResult = isValid(&listArchiveRecords, pPdStruct);
+        bResult = isValid(getDevice(), &listArchiveRecords, pPdStruct);
     }
 
     return bResult;
@@ -52,11 +78,33 @@ bool XNPM::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XNPM::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
+    return XArchive::isArchiveRecordPresent("package/package.json", pListRecords, pPdStruct);
+}
 
-    bResult = XArchive::isArchiveRecordPresent("package/package.json", pListRecords, pPdStruct);
+bool XNPM::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
+{
+    if (!pDevice || !isValid(pListRecords, pPdStruct)) return false;
+    DevicePositionGuard positionGuard(pDevice);
 
-    return bResult;
+    const RECORD record = XArchive::getArchiveRecord("package/package.json", pListRecords, pPdStruct);
+    if (record.spInfo.sRecordName.isEmpty() || (record.spInfo.nUncompressedSize == 0) ||
+        (record.spInfo.nUncompressedSize > NPM_PACKAGE_JSON_LIMIT)) {
+        return false;
+    }
+
+    XNPM npm(pDevice);
+    const QByteArray baPackageJson = npm.decompress(&record, pPdStruct, 0, NPM_PACKAGE_JSON_LIMIT + 1);
+    if (baPackageJson.isEmpty() || (baPackageJson.size() > NPM_PACKAGE_JSON_LIMIT)) return false;
+
+    QJsonParseError parseError = {};
+    const QJsonDocument jsonDocument = QJsonDocument::fromJson(baPackageJson, &parseError);
+    if ((parseError.error != QJsonParseError::NoError) || !jsonDocument.isObject()) return false;
+
+    const QJsonObject jsonObject = jsonDocument.object();
+    return jsonObject.value(QLatin1String("name")).isString() &&
+           !jsonObject.value(QLatin1String("name")).toString().trimmed().isEmpty() &&
+           jsonObject.value(QLatin1String("version")).isString() &&
+           !jsonObject.value(QLatin1String("version")).toString().trimmed().isEmpty();
 }
 
 QString XNPM::getFileFormatExt()

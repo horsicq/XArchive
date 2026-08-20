@@ -565,6 +565,29 @@ bool extensionMatches(const QString &sFileName, const QString &sExtensions)
     return false;
 }
 
+bool isSplitStartName(const QString &sFileName)
+{
+    const QString sLowerName = QFileInfo(sFileName).fileName().toLower();
+    const qint32 nDot = sLowerName.lastIndexOf(QLatin1Char('.'));
+    const QString sExtension =
+        (nDot >= 0) ? sLowerName.mid(nDot + 1) : sLowerName;
+    if (sExtension.size() < 2) return false;
+
+    // Mirror SplitHandler's accepted first-volume syntax rather than only its
+    // advertised "001" hint. Alphabetic sequences start with a run ending in
+    // at least two 'a' characters (aa, aaa, partaa, ...). Numeric sequences
+    // are at least two digits wide, all leading zeroes, and end in 0 or 1.
+    if (sExtension.endsWith(QLatin1String("aa"))) return true;
+    if (!sExtension.endsWith(QLatin1Char('0')) &&
+        !sExtension.endsWith(QLatin1Char('1'))) {
+        return false;
+    }
+    for (qint32 i = 0; i < sExtension.size() - 1; i++) {
+        if (sExtension.at(i) != QLatin1Char('0')) return false;
+    }
+    return true;
+}
+
 struct StreamProbe {
     QByteArray prefix;
     UInt64 nSize = 0;
@@ -637,6 +660,10 @@ QList<FormatInfo> enumerateFormats(const QString &sFileName, const StreamProbe &
         info.sExtensions = handlerString(i, NArchive::NHandlerPropID::kExtension);
         handlerUInt32(i, NArchive::NHandlerPropID::kFlags, &info.nFlags);
         info.bExtensionMatch = extensionMatches(sFileName, info.sExtensions);
+        if ((info.sName == QLatin1String("Split")) &&
+            isSplitStartName(sFileName)) {
+            info.bExtensionMatch = true;
+        }
         if ((info.nFlags & NArcInfoFlags::kByExtOnlyOpen) && !info.bExtensionMatch) continue;
 
         UInt32 nProbeResult = k_IsArc_Res_NO;
@@ -688,9 +715,16 @@ QList<FormatInfo> enumerateFormats(const QString &sFileName, const StreamProbe &
             }
         }
 
-        if (bFixedSignature || (bHasProbe && nProbeResult == k_IsArc_Res_YES)) {
+        const bool bExactSplitExtension =
+            info.bExtensionMatch && (info.sName == QLatin1String("Split"));
+        if (bFixedSignature || (bHasProbe && nProbeResult == k_IsArc_Res_YES) ||
+            bExactSplitExtension) {
             // A valid archive at the root always wins over matching byte
-            // sequences that happen to occur later inside its payload.
+            // sequences that happen to occur later inside its payload. Split
+            // volumes are the one extension-led peer at this rank: a numeric
+            // zero/one start or alphabetic "aa" start can contain a valid ZIP
+            // signature while the central directory lives in a sibling part.
+            // The start-name tie-break tries Split before the truncated root.
             info.nStreamOffset = 0;
             info.nDetectionRank = 0;
         }
@@ -1104,6 +1138,10 @@ QList<TechnicalEntry> readEntries(IInArchive *pArchive, const QString &sFileName
             if (nValue & 0x20) sAttributes += QLatin1Char('A');
             entry.mapValues.insert(QStringLiteral("Attributes"), sAttributes);
         }
+        if (itemUInt64(pArchive, i, kpidPosixAttrib, &nValue)) {
+            entry.mapValues.insert(QStringLiteral("POSIX Attributes"),
+                                   QString::number(nValue));
+        }
         bool bValue = false;
         if (itemBool(pArchive, i, kpidEncrypted, &bValue) && bValue) entry.mapValues.insert(QStringLiteral("Encrypted"), QStringLiteral("+"));
         if (itemBool(pArchive, i, kpidIsAltStream, &bValue) && bValue) entry.mapValues.insert(QStringLiteral("Alternate Stream"), QStringLiteral("+"));
@@ -1128,6 +1166,20 @@ QList<TechnicalEntry> readEntries(IInArchive *pArchive, const QString &sFileName
             return result;
         }
         entry.mapValues.insert(QStringLiteral("Method"), sProperty);
+        if (!itemString(pArchive, i, kpidHostOS, &sProperty)) {
+            setError(pErrorString, QStringLiteral("Archive metadata exceeds safety limits"));
+            result.clear();
+            return result;
+        }
+        if (!sProperty.isEmpty()) {
+            entry.mapValues.insert(QStringLiteral("Host OS"), sProperty);
+        }
+        if (itemBool(pArchive, i, kpidSolid, &bValue) && bValue) {
+            entry.mapValues.insert(QStringLiteral("Solid"), QStringLiteral("+"));
+        }
+        if (itemUInt64(pArchive, i, kpidBlock, &nValue)) {
+            entry.mapValues.insert(QStringLiteral("Block"), QString::number(nValue));
+        }
         if (rawProps) {
             const void *pRawData = nullptr;
             UInt32 nRawSize = 0;
@@ -1233,7 +1285,25 @@ XBinary::ARCHIVERECORD technicalToRecord(const TechnicalEntry &entry)
     record.mapProperties.insert(XBinary::FPART_PROP_STREAMSIZE, record.nStreamSize);
     record.mapProperties.insert(XBinary::FPART_PROP_ENCRYPTED, fieldIsTrue(entry.mapValues.value(QStringLiteral("Encrypted"))));
     const QString sMethod = entry.mapValues.value(QStringLiteral("Method"));
-    if (!sMethod.isEmpty()) record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, sMethod);
+    if (!sMethod.isEmpty()) {
+        // kpidMethod is provider text (often a complete pipeline such as
+        // "LZMA2:12 BCJ"), not an XBinary::HANDLE_METHOD value.  Keep the
+        // exact text separately and leave the numeric routing property typed.
+        record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD,
+                                    (quint32)XBinary::HANDLE_METHOD_UNKNOWN);
+        record.mapProperties.insert(XBinary::FPART_PROP_REPORTEDMETHOD, sMethod);
+    }
+    const qint64 nBlock = entry.mapValues.value(QStringLiteral("Block")).toLongLong(&bOk);
+    if (bOk) {
+        record.mapProperties.insert(XBinary::FPART_PROP_SOLIDFOLDERINDEX, nBlock);
+    }
+    if (fieldIsTrue(entry.mapValues.value(QStringLiteral("Solid")))) {
+        record.mapProperties.insert(XBinary::FPART_PROP_ISSOLID, true);
+    }
+    const QString sHostOS = entry.mapValues.value(QStringLiteral("Host OS"));
+    if (!sHostOS.isEmpty()) {
+        record.mapProperties.insert(XBinary::FPART_PROP_HOSTOS, sHostOS);
+    }
     const QDateTime modified = parseDateTime(entry.mapValues.value(QStringLiteral("Modified")));
     const QDateTime created = parseDateTime(entry.mapValues.value(QStringLiteral("Created")));
     const QDateTime accessed = parseDateTime(entry.mapValues.value(QStringLiteral("Accessed")));
@@ -1245,6 +1315,15 @@ XBinary::ARCHIVERECORD technicalToRecord(const TechnicalEntry &entry)
     record.mapProperties.insert(XBinary::FPART_PROP_ISHIDDEN, sAttributes.contains(QLatin1Char('H')));
     record.mapProperties.insert(XBinary::FPART_PROP_ISSYSTEM, sAttributes.contains(QLatin1Char('S')));
     record.mapProperties.insert(XBinary::FPART_PROP_ISARCHIVE, sAttributes.contains(QLatin1Char('A')));
+    const quint32 nPosixAttributes = entry.mapValues.value(
+        QStringLiteral("POSIX Attributes")).toUInt(&bOk);
+    if (bOk) {
+        record.mapProperties.insert(XBinary::FPART_PROP_FILEMODE,
+                                    nPosixAttributes);
+        if ((nPosixAttributes & 0222U) == 0) {
+            record.mapProperties.insert(XBinary::FPART_PROP_ISREADONLY, true);
+        }
+    }
     const QString sCrc = entry.mapValues.value(QStringLiteral("CRC"));
     const quint32 nCrc = sCrc.toUInt(&bOk, 16);
     if (bOk && !sCrc.isEmpty()) {
@@ -1724,7 +1803,25 @@ bool XArchives::listArchiveWithIp7zSource(const QString &sFileName, const QStrin
         setError(pErrorString, sReadError);
         return false;
     }
-    for (const TechnicalEntry &entry : entries) pListRecords->append(technicalToRecord(entry));
+    // kpidBlock is the folder-level accounting key.  7-Zip reports a packed
+    // size only on the first member of a solid block; mark every member of a
+    // shared block so callers can count that size once without treating the
+    // other members as missing metadata.
+    QMap<QString, qint32> mapBlockCounts;
+    for (const TechnicalEntry &entry : entries) {
+        const QString sBlock = entry.mapValues.value(QStringLiteral("Block"));
+        if (!entry.bIsFolder && !sBlock.isEmpty()) {
+            mapBlockCounts[sBlock] = mapBlockCounts.value(sBlock) + 1;
+        }
+    }
+    for (const TechnicalEntry &entry : entries) {
+        XBinary::ARCHIVERECORD record = technicalToRecord(entry);
+        const QString sBlock = entry.mapValues.value(QStringLiteral("Block"));
+        if (!entry.bIsFolder && !sBlock.isEmpty() && (mapBlockCounts.value(sBlock) > 1)) {
+            record.mapProperties.insert(XBinary::FPART_PROP_ISSOLID, true);
+        }
+        pListRecords->append(record);
+    }
     return true;
 }
 

@@ -39,6 +39,28 @@ const char FILTERED_RECURSION_PROPERTY[] =
 // Shared with XUU so mixed transport/compression stacks observe one limit.
 const char FILTERED_DEPTH_PROPERTY[] = "_xfileunpacker_filter_depth";
 
+// Detection can refine a decoded compression layer directly to a typed TAR
+// wrapper (or npm) before this adapter gets a chance to unwrap that layer.
+// The final archive state must refer to the final materialized buffer, so do
+// not embed an XTARCOMPRESSED reader whose public state describes its private
+// decoded TAR rather than the buffer that still contains gzip/bzip2/etc.
+XBinary::FT filterEnvelopeType(XBinary::FT fileType)
+{
+    switch (fileType) {
+        case XBinary::FT_TAR_GZ:
+        case XBinary::FT_NPM: return XBinary::FT_GZIP;
+        case XBinary::FT_TAR_BZIP2: return XBinary::FT_BZIP2;
+        case XBinary::FT_TAR_LZIP: return XBinary::FT_LZIP;
+        case XBinary::FT_TAR_LZMA: return XBinary::FT_LZMA;
+        case XBinary::FT_TAR_LZOP: return XBinary::FT_LZO;
+        case XBinary::FT_TAR_XZ: return XBinary::FT_XZ;
+        case XBinary::FT_TAR_Z: return XBinary::FT_COMPRESS;
+        case XBinary::FT_TAR_ZSTD: return XBinary::FT_ZSTD;
+        case XBinary::FT_TAR_LZ4: return XBinary::FT_LZ4;
+        default: return fileType;
+    }
+}
+
 class DevicePropertyOverride {
 public:
     DevicePropertyOverride(QIODevice *pDevice, const char *pName,
@@ -773,14 +795,16 @@ bool XFilteredArchive::initUnpack(
 
     QIODevice *pCurrentDevice = guardedSource.data();
     std::unique_ptr<QBuffer> pCurrentOwned;
-    while (isFilterFileType(currentType)) {
+    while (isFilterFileType(filterEnvelopeType(currentType))) {
         if ((nDepth < 0) || (nDepth >= FILTERED_MAX_DEPTH) ||
             !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return failInitialization();
         }
 
+        const FT layerType = filterEnvelopeType(currentType);
+
         std::unique_ptr<QBuffer> pDecoded(
-            guardedThis->materializeLayer(pCurrentDevice, currentType,
+            guardedThis->materializeLayer(pCurrentDevice, layerType,
                                           mapProperties, pState,
                                           pPdStruct));
         if (!guardedThis || !guardedSource || !pDecoded) {

@@ -20,6 +20,8 @@
  */
 #include "xmtree.h"
 
+#include <QTimeZone>
+
 #include <limits>
 #include <new>
 
@@ -401,7 +403,7 @@ bool XMTree::_parseTime(const QByteArray &value, QDateTime *pResult)
     }
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 8, 0)
-    const QDateTime result = QDateTime::fromSecsSinceEpoch(nSeconds, Qt::UTC);
+    const QDateTime result = QDateTime::fromSecsSinceEpoch(nSeconds, QTimeZone(0));
 #else
     if ((nSeconds > ((std::numeric_limits<qint64>::max)() / 1000)) ||
         (nSeconds < ((std::numeric_limits<qint64>::min)() / 1000))) {

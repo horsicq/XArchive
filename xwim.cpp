@@ -2239,7 +2239,8 @@ QString XWIM::_readUTF16LEString(const QByteArray &baData, qint64 nOffset, qint3
     if ((nSize > 0) && ((nSize & 1) == 0) && (nOffset >= 0) &&
         (nOffset <= ((qint64)baData.size() - nSize))) {
         QByteArray baString = baData.mid(nOffset, nSize);
-        sResult = QString::fromUtf16(reinterpret_cast<const ushort *>(baString.constData()), nSize / 2);
+        sResult = QString::fromUtf16(
+            reinterpret_cast<const char16_t *>(baString.constData()), nSize / 2);
     }
 
     return sResult;

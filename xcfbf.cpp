@@ -736,7 +736,9 @@ QList<XBinary::FPART> XCFBF::getFileParts(quint32 nFileParts, qint32 nLimit, PDS
                     quint16 nNameLength = read_uint16(entryOffset + 64, false);
                     QString sName;
                     if ((nNameLength >= 2) && (nNameLength <= 64)) {
-                        sName = QString::fromUtf16((const ushort *)baName.constData(), (nNameLength - 2) / 2);
+                        sName = QString::fromUtf16(
+                            reinterpret_cast<const char16_t *>(baName.constData()),
+                            (nNameLength - 2) / 2);
                     }
 
                     FPART part = {};

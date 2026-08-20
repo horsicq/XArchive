@@ -20,21 +20,79 @@
  */
 #include "xipa.h"
 
+namespace {
+const qint64 IPA_INFO_LIMIT = 16LL * 1024 * 1024;
+
+class DevicePositionGuard {
+public:
+    explicit DevicePositionGuard(QIODevice *pDevice)
+        : m_pDevice(pDevice), m_nPosition(-1)
+    {
+        if (m_pDevice && !m_pDevice->isSequential()) {
+            m_nPosition = m_pDevice->pos();
+        }
+    }
+
+    ~DevicePositionGuard()
+    {
+        if (m_pDevice && (m_nPosition >= 0) && m_pDevice->isOpen()) {
+            m_pDevice->seek(m_nPosition);
+        }
+    }
+
+private:
+    QPointer<QIODevice> m_pDevice;
+    qint64 m_nPosition;
+};
+
+bool isInfoPlistRecord(const XArchive::RECORD &record)
+{
+    QString sName = record.spInfo.sRecordName;
+    sName.replace(QLatin1Char('\\'), QLatin1Char('/'));
+
+    const QString sPrefix = QStringLiteral("Payload/");
+    const QString sSuffix = QStringLiteral("/Info.plist");
+    if (!sName.startsWith(sPrefix) || !sName.endsWith(sSuffix) ||
+        (record.spInfo.nUncompressedSize <= 0)) {
+        return false;
+    }
+
+    const QString sApplication = sName.mid(
+        sPrefix.size(), sName.size() - sPrefix.size() - sSuffix.size());
+    return !sApplication.contains(QLatin1Char('/')) &&
+           (sApplication.size() > 4) &&
+           sApplication.endsWith(QLatin1String(".app"));
+}
+}
+
 XIPA::XIPA(QIODevice *pDevice) : XJAR(pDevice)
 {
 }
 
 bool XIPA::isValid(PDSTRUCT *pPdStruct)
 {
-    // TODO
-    // Check "Payload/"
-    return XJAR::isValid(pPdStruct);
+    DevicePositionGuard positionGuard(getDevice());
+    bool bResult = false;
+
+    XZip xzip(getDevice());
+    if (xzip.isValid(pPdStruct)) {
+        QList<XArchive::RECORD> listArchiveRecords =
+            xzip.getRecords(20000, pPdStruct);
+        bResult = isValid(getDevice(), &listArchiveRecords, pPdStruct);
+    }
+
+    return bResult;
 }
 
 bool XIPA::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    Q_UNUSED(pListRecords)
-    Q_UNUSED(pPdStruct)
+    if (!pListRecords) return false;
+
+    for (qint32 i = 0; (i < pListRecords->count()) &&
+                       XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        const RECORD &record = pListRecords->at(i);
+        if (isInfoPlistRecord(record)) return true;
+    }
 
     return false;
 }
@@ -49,6 +107,65 @@ bool XIPA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
     XIPA xipa(pDevice);
 
     return xipa.isValid(pPdStruct);
+}
+
+bool XIPA::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords,
+                   PDSTRUCT *pPdStruct)
+{
+    if (!pDevice || !pListRecords) return false;
+    DevicePositionGuard positionGuard(pDevice);
+    XZip zip(pDevice);
+
+    for (qint32 i = 0; (i < pListRecords->count()) &&
+                       XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+        const RECORD &record = pListRecords->at(i);
+        if (!isInfoPlistRecord(record)) continue;
+        if ((record.spInfo.nUncompressedSize > IPA_INFO_LIMIT) ||
+            (record.nDataSize <= 0) ||
+            (record.nDataSize > IPA_INFO_LIMIT) ||
+            record.mapProperties.value(
+                XBinary::FPART_PROP_ENCRYPTED, false).toBool() ||
+            (record.spInfo.compressMethod2 !=
+             XBinary::HANDLE_METHOD_UNKNOWN)) {
+            continue;
+        }
+
+        const QByteArray baInfo = zip.decompress(
+            &record, pPdStruct, 0, IPA_INFO_LIMIT + 1);
+        if (baInfo.size() == record.spInfo.nUncompressedSize) return true;
+    }
+
+    return false;
+}
+
+XBinary::FT XIPA::getFileType()
+{
+    return FT_IPA;
+}
+
+XBinary::FILEFORMATINFO XIPA::getFileFormatInfo(PDSTRUCT *pPdStruct)
+{
+    XBinary::FILEFORMATINFO result = {};
+
+    QList<XArchive::RECORD> listArchiveRecords = getRecords(20000, pPdStruct);
+    if (isValid(getDevice(), &listArchiveRecords, pPdStruct)) {
+        result.bIsValid = true;
+        result.nSize = getSize();
+        result.sExt = getFileFormatExt();
+        result.fileType = FT_IPA;
+        result.osName = OSNAME_IOS;
+        result.sArch = getArch();
+        result.mode = getMode();
+        result.sType = typeIdToString(getType());
+        result.endian = getEndian();
+    }
+
+    return result;
+}
+
+QString XIPA::getFileFormatExt()
+{
+    return QStringLiteral("ipa");
 }
 
 bool XIPA::handleInternalInfo(PDSTRUCT *pPdStruct)
