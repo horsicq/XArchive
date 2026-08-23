@@ -372,15 +372,7 @@ XBinary::ARCHIVERECORD XSEAARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_CRC16ARC);
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nMethod);
 
-        // Determine handle method
-        XBinary::HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
-
-        if ((nMethod == CMETHOD_STORE_OLD) || (nMethod == CMETHOD_STORE)) {
-            compressMethod = HANDLE_METHOD_STORE;
-        }
-        // Methods 3-9 are various LZW/RLE/Huffman variants - marked as unknown for now
-
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, _methodToHandle(nMethod));
 
         // Convert DOS date/time to QDateTime
         // DOS date: bits 15-9=year(from 1980), bits 8-5=month, bits 4-0=day
@@ -757,6 +749,8 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
             record.nVirtualAddress = XADDR_MAX;
             record.sName = sFileName;
             record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompressedSize);
+            record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nCompressedSize);
+            record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, _methodToHandle(nMethod));
 
             listResult.append(record);
         }
@@ -811,6 +805,32 @@ QString XSEAARC::cmethodToString(CMETHOD cmethod)
     }
 
     return sResult;
+}
+
+// Anything without a decoder must map to HANDLE_METHOD_UNKNOWN rather than be
+// left unset: an unset property makes the shared decompressor fall back to
+// STORE, which would copy the still-compressed bytes out as if they were the
+// file.  Methods 6 and 7 differ only in the encoder's hash function and share
+// one decoder.
+XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
+{
+    switch (nMethod) {
+        case CMETHOD_STORE_OLD:
+        case CMETHOD_STORE: return HANDLE_METHOD_STORE;
+        case CMETHOD_PACKED: return HANDLE_METHOD_ARC_PACK;
+        case CMETHOD_SQUEEZED: return HANDLE_METHOD_ARC_SQUEEZE;
+        // Methods 5-7 use ARC's original hash-table crunch, which is a
+        // different decompressor from the dynamic LZW of methods 8/9 rather
+        // than the same one with a fixed code width. No sample using them has
+        // been found, so they stay unsupported instead of being decoded by an
+        // untested approximation.
+        case CMETHOD_CRUNCHED1:
+        case CMETHOD_CRUNCHED2:
+        case CMETHOD_CRUNCHED3: return HANDLE_METHOD_UNKNOWN;
+        case CMETHOD_CRUNCHED4: return HANDLE_METHOD_ARC_CRUNCH_DYN;
+        case CMETHOD_SQUASHED: return HANDLE_METHOD_ARC_SQUASH;
+        default: return HANDLE_METHOD_UNKNOWN;
+    }
 }
 
 qint32 XSEAARC::_getHeaderSize(quint8 nMethod)

@@ -578,7 +578,11 @@ bool XSZDD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if ((pContext->nCompressedSize <= 0) || (nFileSize <= pContext->nHeaderSize)) {
         return false;
     }
-    if (pContext->nUncompressedSize < 0) return false;
+    if ((pContext->nUncompressedSize < 0) ||
+        !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            pContext->nUncompressedSize)) {
+        return false;
+    }
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         pContext->nUncompressedSize, pPdStruct));
     if (!guardedArchive || !pStage || !guardedOutput || !guardedSource ||
@@ -591,6 +595,7 @@ bool XSZDD::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZSS_SZDD);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
+        state.mapUnpackProperties = pState->mapUnpackProperties;
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pStage.get();
         state.nInputOffset = 0;

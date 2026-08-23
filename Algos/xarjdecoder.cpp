@@ -87,6 +87,20 @@ bool arjWriteAll(XBinary::DATAPROCESS_STATE *pState, const char *pData, qint32 n
         return false;
     }
 
+    // This function reimplements XBinary::_writeDevice's window arithmetic and
+    // is the ARJ decoder's only output path, so it must also reimplement that
+    // function's output-limit gate - otherwise an ARJ member ignores a
+    // correctly supplied UNPACK_PROP_MAX_OUTPUT_SIZE. The charge is against the
+    // bytes produced, not the bytes that survive window clipping, and it has to
+    // happen before the fully-clipped early return below so a skipped chunk
+    // cannot escape it.
+    qint64 nOutputLimit = -1;
+    if (!XBinary::getUnpackOutputLimit(pState->mapUnpackProperties, &nOutputLimit) ||
+        ((nOutputLimit >= 0) && ((nChunkStart > nOutputLimit) || ((qint64)nSize > (nOutputLimit - nChunkStart))))) {
+        pState->bWriteError = true;
+        return false;
+    }
+
     const qint64 nChunkEnd = nChunkStart + nSize;
     const qint64 nWindowEnd = (nWindowSize == -1) ? nMax64 : nWindowOffset + nWindowSize;
     const qint64 nWriteStart = (std::max)(nChunkStart, nWindowOffset);

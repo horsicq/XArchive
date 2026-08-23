@@ -605,7 +605,8 @@ bool XGzip::_getHeaderInfo(qint64 *pHeaderSize, QString *pFileName, PDSTRUCT *pP
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-bool XGzip::_getFirstMemberInfo(GZIP_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct)
+bool XGzip::_getFirstMemberInfo(GZIP_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct,
+                                const QMap<UNPACK_PROP, QVariant> *pUnpackProperties)
 {
     QPointer<XGzip> guardedThis(this);
     if (!pContext) {
@@ -640,6 +641,7 @@ bool XGzip::_getFirstMemberInfo(GZIP_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStru
     }
 
     XBinary::DATAPROCESS_STATE state = {};
+    if (pUnpackProperties) state.mapUnpackProperties = *pUnpackProperties;
     state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
     state.pDeviceInput = &sd;
     state.pDeviceOutput = &discardDevice;
@@ -752,7 +754,8 @@ bool XGzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
 
     GZIP_UNPACK_CONTEXT parsedContext = {};
-    const bool bMemberInfo = guardedThis->_getFirstMemberInfo(&parsedContext, pPdStruct);
+    const bool bMemberInfo = guardedThis->_getFirstMemberInfo(
+        &parsedContext, pPdStruct, &mapProperties);
     if (!guardedThis) return false;
     if (!bMemberInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         guardedThis->releaseUnpackSource(pState);

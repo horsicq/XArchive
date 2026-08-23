@@ -32,7 +32,8 @@ protected:
 };
 
 bool measureBzip2Stream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize,
-                        XBinary::PDSTRUCT *pPdStruct)
+                        XBinary::PDSTRUCT *pPdStruct,
+                        const QMap<XBinary::UNPACK_PROP, QVariant> *pUnpackProperties = nullptr)
 {
     if (pnCompressedSize) *pnCompressedSize = 0;
     if (pnUncompressedSize) *pnUncompressedSize = 0;
@@ -47,6 +48,7 @@ bool measureBzip2Stream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompress
     }
 
     XBinary::DATAPROCESS_STATE state = {};
+    if (pUnpackProperties) state.mapUnpackProperties = *pUnpackProperties;
     state.pDeviceInput = &input;
     state.pDeviceOutput = &output;
     state.nInputOffset = 0;
@@ -405,7 +407,7 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     QPointer<QIODevice> guardedSource(getDevice());
     const bool bMeasured = guardedSource && measureBzip2Stream(
         guardedSource.data(), nFileSize, &nCompressedSize,
-        &nUncompressedSize, pPdStruct);
+        &nUncompressedSize, pPdStruct, &mapProperties);
     if (!guardedThis) return false;
     if (!bMeasured) {
         releaseUnpackSource(pState);

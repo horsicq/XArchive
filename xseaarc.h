@@ -86,6 +86,7 @@ public:
     static QString cmethodToString(CMETHOD cmethod);
 
 private:
+    static HANDLE_METHOD _methodToHandle(quint8 nMethod);
     qint32 _getHeaderSize(quint8 nMethod);
     bool _isValidMethod(quint8 nMethod);
 private:

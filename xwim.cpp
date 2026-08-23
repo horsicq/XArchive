@@ -1155,7 +1155,14 @@ bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         return false;
     }
 
-    if (record.nUncompressedSize < 0) {
+    if ((record.nUncompressedSize < 0) ||
+        (record.resourceInfo.nUnpackSize >
+         (quint64)(std::numeric_limits<qint64>::max)()) ||
+        !XBinary::isUnpackOutputSizeAllowed(
+            pState->mapUnpackProperties, record.nUncompressedSize) ||
+        !XBinary::isUnpackOutputSizeAllowed(
+            pState->mapUnpackProperties,
+            (qint64)record.resourceInfo.nUnpackSize)) {
         return false;
     }
     if (record.nUncompressedSize == 0) {

@@ -90,6 +90,7 @@ private:
         qint64 nDataOffset;
         qint64 nCompressedSize;
         qint64 nUncompressedSize;
+        quint16 nCRC16;
         quint8 nMethod;
         bool bIsFolder;
         QDateTime mtDateTime;

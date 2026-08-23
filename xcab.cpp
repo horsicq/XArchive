@@ -1718,7 +1718,9 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         const qint64 nFolderSize =
             pContext->mapFolderDataSizes.value(nFolderIndex, -1);
         if ((nStreamSize < 0) || (nFolderSize < 0) ||
-            (nFolderSize > CAB_MAX_FOLDER_SIZE)) return false;
+            (nFolderSize > CAB_MAX_FOLDER_SIZE) ||
+            !XBinary::isUnpackOutputSizeAllowed(
+                pState->mapUnpackProperties, nFolderSize)) return false;
 
         FPART streamPart = {};
         streamPart.filePart = FILEPART_STREAM;
@@ -1754,7 +1756,8 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         if (!folderBuffer.open(QIODevice::ReadWrite)) return false;
         XDecompress decompressor;
         const bool bDecoded = decompressor.decompressFPART(
-            streamPart, guardedSource.data(), &folderBuffer, pPdStruct);
+            streamPart, guardedSource.data(), &folderBuffer,
+            pState->mapUnpackProperties, pPdStruct);
         folderBuffer.close();
         if (!guardedThis || !guardedSource || !bDecoded ||
             !XBinary::isPdStructNotCanceled(pPdStruct) ||
@@ -1779,7 +1782,9 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     const qint64 nSubstreamSize = cfFile.cbFile;
     if ((nSubstreamOffset < 0) || (nSubstreamSize < 0) ||
         (nSubstreamOffset > baFolderData.size()) ||
-        (nSubstreamSize > baFolderData.size() - nSubstreamOffset)) {
+        (nSubstreamSize > baFolderData.size() - nSubstreamOffset) ||
+        !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            nSubstreamSize)) {
         return false;
     }
     // A callback/custom source can mutate or rebind the archive after the
@@ -1801,6 +1806,7 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         isUnpackSourceCurrent(pState, pPdStruct);
     if (!guardedThis || !bStageSourceCurrent) return false;
     DATAPROCESS_STATE writeState = {};
+    writeState.mapUnpackProperties = pState->mapUnpackProperties;
     writeState.pDeviceOutput = pStage.get();
     writeState.nProcessedLimit = -1;
     qint64 nWritten = 0;

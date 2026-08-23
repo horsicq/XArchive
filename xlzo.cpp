@@ -32,7 +32,8 @@ protected:
 };
 
 bool measureLzoStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize,
-                      XBinary::PDSTRUCT *pPdStruct)
+                      XBinary::PDSTRUCT *pPdStruct,
+                      const QMap<XBinary::UNPACK_PROP, QVariant> *pUnpackProperties = nullptr)
 {
     if (pnCompressedSize) *pnCompressedSize = 0;
     if (pnUncompressedSize) *pnUncompressedSize = 0;
@@ -47,6 +48,7 @@ bool measureLzoStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressed
     }
 
     XBinary::DATAPROCESS_STATE state = {};
+    if (pUnpackProperties) state.mapUnpackProperties = *pUnpackProperties;
     state.pDeviceInput = &input;
     state.pDeviceOutput = &output;
     state.nInputOffset = 0;
@@ -442,7 +444,7 @@ bool XLzo::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     qint64 nUncompressedSize = 0;
     const bool bMeasured = measureLzoStream(
         guardedThis->getDevice(), nFileSize, &nCompressedSize,
-        &nUncompressedSize, pPdStruct);
+        &nUncompressedSize, pPdStruct, &mapProperties);
     if (!guardedThis) return false;
     if (!bMeasured) {
         guardedThis->releaseUnpackSource(pState);
@@ -539,6 +541,8 @@ bool XLzo::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         (pContext->nUncompressedSize < 0)) return false;
     const qint64 nCompressedSize = pContext->nCompressedSize;
     const qint64 nUncompressedSize = pContext->nUncompressedSize;
+    if (!XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            nUncompressedSize)) return false;
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         nUncompressedSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedOutput || !guardedSource) return false;
@@ -554,6 +558,7 @@ bool XLzo::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     if (bInputOpen) {
         XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
+        state.mapUnpackProperties = pState->mapUnpackProperties;
         state.pDeviceInput = &input;
         state.pDeviceOutput = pStage.get();
         state.nInputOffset = 0;

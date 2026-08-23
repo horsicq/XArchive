@@ -35,12 +35,12 @@ public:
 
     enum COMPRESSION_TYPE {
         COMPRESSION_UNKNOWN = 0,
-        COMPRESSION_GZIP,      // .tar.gz, .tgz, .taz
+        COMPRESSION_GZIP,      // .tar.gz, .tgz
         COMPRESSION_BZIP2,     // .tar.bz2, .tbz, .tbz2, .tb2, .tz2
         COMPRESSION_XZ,        // .tar.xz, .txz
         COMPRESSION_LZMA,      // .tar.lzma, .tlz
         COMPRESSION_ZSTD,      // .tar.zst, .tzst
-        COMPRESSION_COMPRESS,  // .tar.Z, .tZ, .taZ
+        COMPRESSION_COMPRESS,  // .tar.Z, .taz, .tZ, .taZ
         COMPRESSION_LZIP,      // .tar.lz
         COMPRESSION_LZOP,      // .tar.lzo
         COMPRESSION_LZ4        // .tar.lz4, .tlz4
@@ -73,6 +73,7 @@ protected:
     qint64 m_nOuterStreamOffset;
     qint64 m_nOuterStreamSize;
     HANDLE_METHOD m_outerHandleMethod;
+    qint64 m_nMaterializedOutputLimit;
 
     // Override in derived classes to provide the outer compressed-stream location.
     // Returns false when the information is not available (keeps legacy zero behaviour).

@@ -1078,7 +1078,9 @@ bool XMiniDump::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
     if (!guardedThis) return false;
     const qint64 nExpectedSize = archiveRecord.mapProperties
         .value(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
-    if (nExpectedSize < 0) return false;
+    if ((nExpectedSize < 0) ||
+        !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            nExpectedSize)) return false;
 
     std::unique_ptr<QIODevice> pStage(
         XBinary::createFileBuffer(nExpectedSize, pPdStruct));

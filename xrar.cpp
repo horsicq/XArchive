@@ -2797,7 +2797,9 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
         archiveRecord.mapProperties
             .value(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1)
             .toLongLong();
-    if (nExpectedSize < 0) return false;
+    if ((nExpectedSize < 0) ||
+        !XBinary::isUnpackOutputSizeAllowed(
+            pUnpackState->mapUnpackProperties, nExpectedSize)) return false;
 
     std::unique_ptr<QIODevice> pStage(
         XBinary::createFileBuffer(nExpectedSize, pPdStruct));

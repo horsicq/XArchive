@@ -21,6 +21,9 @@
 #ifndef XISO9660_H
 #define XISO9660_H
 
+#include <QFile>
+#include <QPointer>
+
 #include "xarchive.h"
 
 class XISO9660 : public XArchive {
@@ -57,16 +60,16 @@ class XISO9660 : public XArchive {
         char szDataPreparerId[128];   // [446] Data preparer identifier
         char szApplicationId[128];    // [574] Application identifier
         char szCopyrightFile[37];     // [702] Copyright file identifier
-        char szAbstractFile[36];      // [739] Abstract file identifier
-        char szBiblioFile[37];        // [775] Bibliographic file identifier
-        char szCreationTime[17];      // [812] Creation date/time
-        char szModificationTime[17];  // [829] Modification date/time
-        char szExpirationTime[17];    // [846] Expiration date/time
-        char szEffectiveTime[17];     // [863] Effective date/time
-        quint8 nFileStructVersion;    // [880] File structure version
-        quint8 nUnused4;              // [881] Unused
-        quint8 nAppData[512];         // [882] Application-specific data
-        quint8 nUnused5[654];         // [1394] Reserved
+        char szAbstractFile[37];      // [739] Abstract file identifier
+        char szBiblioFile[37];        // [776] Bibliographic file identifier
+        char szCreationTime[17];      // [813] Creation date/time
+        char szModificationTime[17];  // [830] Modification date/time
+        char szExpirationTime[17];    // [847] Expiration date/time
+        char szEffectiveTime[17];     // [864] Effective date/time
+        quint8 nFileStructVersion;    // [881] File structure version
+        quint8 nUnused4;              // [882] Unused
+        quint8 nAppData[512];         // [883] Application-specific data
+        quint8 nUnused5[653];         // [1395] Reserved
     };
 
     struct ISO9660_DIR_RECORD {
@@ -86,8 +89,8 @@ class XISO9660 : public XArchive {
         quint8 nFileFlags;          // File flags
         quint8 nFileUnitSize;       // File unit size
         quint8 nInterleaveGapSize;  // Interleave gap size
-        quint32 nSequenceNumberLE;  // Volume sequence number (little-endian)
-        quint32 nSequenceNumberBE;  // Volume sequence number (big-endian)
+        quint16 nSequenceNumberLE;  // Volume sequence number (little-endian)
+        quint16 nSequenceNumberBE;  // Volume sequence number (big-endian)
         quint8 nFileIdLength;       // Length of file identifier
         // Followed by file identifier and padding
     };
@@ -113,6 +116,9 @@ public:
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
+    // CUE sheets and raw CD sectors need the native logical-sector adapter;
+    // filename-based ISO handlers only understand contiguous 2048-byte data.
+    static bool isCueOrRawImage(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual QString getFileFormatExt() override;
     virtual QString getFileFormatExtsString() override;
     virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct = nullptr) override;
@@ -165,6 +171,8 @@ private:
     qint32 _getLogicalBlockSize();
     qint64 _getPrimaryVolumeDescriptorOffset();
     bool _isValidDescriptor(qint64 nOffset, PDSTRUCT *pPdStruct);
+    bool _configureLogicalImage(QIODevice *pDevice);
+    bool _selectVolumeDescriptor();
     QList<ARCHIVERECORD> _collectAllRecords(qint64 nRootOffset, qint64 nRootSize, qint32 nBlockSize, PDSTRUCT *pPdStruct);
     QList<ARCHIVERECORD> _parseDirectoryEntries(qint64 nOffset, qint64 nSize, qint32 nBlockSize, const QString &sParentPath, PDSTRUCT *pPdStruct);
     QString _cleanFileName(const QString &sFileName);
@@ -182,6 +190,12 @@ private:
     QString m_sModificationDateTime;
     QString m_sExpirationDateTime;
     QString m_sEffectiveDateTime;
+    QPointer<QIODevice> m_pLogicalImageDevice;
+    QPointer<QFile> m_pOwnedImageFile;
+    qint64 m_nVolumeDescriptorOffset;
+    bool m_bJoliet;
+    bool m_bCueSource;
+    bool m_bRawSectorSource;
 private:
     INTERNAL_INFO m_internalInfo;
 };

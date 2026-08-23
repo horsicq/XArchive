@@ -190,8 +190,9 @@ bool decodeFrame(Lz4InputBuffer *pInput, QByteArray *pOutput, qint64 nExpectedOu
     return bFinished && !pState->bReadError && !pState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-bool decodeLegacyFrame(Lz4InputBuffer *pInput, QByteArray *pCompressed, QByteArray *pOutput,
-                       qint64 nExpectedOutput, XBinary::DATAPROCESS_STATE *pState,
+bool decodeLegacyFrame(Lz4InputBuffer *pInput, QByteArray *pOutput,
+                       qint64 nExpectedOutput, qint64 nConfiguredOutputLimit,
+                       XBinary::DATAPROCESS_STATE *pState,
                        XBinary::PDSTRUCT *pPdStruct)
 {
     bool bDecodedBlock = false;
@@ -207,20 +208,67 @@ bool decodeLegacyFrame(Lz4InputBuffer *pInput, QByteArray *pCompressed, QByteArr
         }
         if ((nBlockSize == 0) || (nBlockSize > static_cast<quint32>(LZ4_LEGACY_COMPRESSED_LIMIT))) return false;
 
+        qint64 nRemainingOutput = LZ4_LEGACY_BLOCK_SIZE;
+        if (nConfiguredOutputLimit >= 0) {
+            if ((pState->nCountOutput < 0) ||
+                (pState->nCountOutput > nConfiguredOutputLimit) ||
+                (nBlockSize >
+                 static_cast<quint64>(nConfiguredOutputLimit))) {
+                return false;
+            }
+            nRemainingOutput =
+                nConfiguredOutputLimit - pState->nCountOutput;
+        }
+        const qint32 nOutputCapacity = static_cast<qint32>(
+            (std::min)(nRemainingOutput,
+                       static_cast<qint64>(LZ4_LEGACY_BLOCK_SIZE)));
+        if (nOutputCapacity <= 0) return false;
+
         pInput->consume(4);
         if (!pInput->ensure(static_cast<qint32>(nBlockSize))) return false;
 
-        pCompressed->resize(static_cast<qint32>(nBlockSize));
-        std::memcpy(pCompressed->data(), pInput->data(), static_cast<size_t>(nBlockSize));
-        pInput->consume(static_cast<qint32>(nBlockSize));
-
-        const int nDecoded = LZ4_decompress_safe(pCompressed->constData(), pOutput->data(), static_cast<int>(nBlockSize), pOutput->size());
+        pOutput->resize(nOutputCapacity);
+        const int nDecoded =
+            LZ4_decompress_safe(pInput->data(), pOutput->data(),
+                                static_cast<int>(nBlockSize),
+                                nOutputCapacity);
         if (nDecoded < 0) return false;
+        pInput->consume(static_cast<qint32>(nBlockSize));
         if (!writeOutput(pOutput, static_cast<size_t>(nDecoded), nExpectedOutput, pState)) return false;
         bDecodedBlock = true;
     }
 
     return false;
+}
+
+bool getFrameBufferRequirement(Lz4InputBuffer *pInput,
+                               quint64 *pnBufferRequirement)
+{
+    if (!pInput || !pnBufferRequirement || !pInput->ensure(6)) return false;
+
+    const unsigned char *pData =
+        reinterpret_cast<const unsigned char *>(pInput->data());
+    const unsigned char nFlags = pData[4];
+    const unsigned char nBlockDescriptor = pData[5];
+    const unsigned nVersion = (nFlags >> 6) & 0x03U;
+    const unsigned nBlockSizeId = (nBlockDescriptor >> 4) & 0x07U;
+    if ((nVersion != 1U) || ((nFlags & 0x02U) != 0) ||
+        ((nBlockDescriptor & 0x8FU) != 0) ||
+        (nBlockSizeId < 4U) || (nBlockSizeId > 7U)) {
+        return false;
+    }
+
+    static const quint64 kBlockSizes[4] = {
+        64ULL * 1024ULL, 256ULL * 1024ULL,
+        1024ULL * 1024ULL, 4ULL * 1024ULL * 1024ULL};
+    const quint64 nMaxBlockSize = kBlockSizes[nBlockSizeId - 4U];
+    const bool bBlocksLinked = (nFlags & 0x20U) == 0;
+    const quint64 nInputBufferSize = nMaxBlockSize + 4U;
+    const quint64 nOutputBufferSize =
+        nMaxBlockSize + (bBlocksLinked ? 128ULL * 1024ULL : 0ULL);
+    // Both buffers are allocated by LZ4F_decompress() and coexist.
+    *pnBufferRequirement = nInputBufferSize + nOutputBufferSize;
+    return true;
 }
 }  // namespace
 
@@ -238,22 +286,38 @@ bool XLZ4Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
 
     bool bExpectedOutputValid = true;
     qint64 nExpectedOutput = -1;
+    qint64 nConfiguredOutputLimit = -1;
+    if (!XBinary::getUnpackOutputLimit(
+            pDecompressState->mapUnpackProperties,
+            &nConfiguredOutputLimit)) {
+        return false;
+    }
     if (pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
         nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bExpectedOutputValid);
-        if (!bExpectedOutputValid || (nExpectedOutput < 0)) return false;
+        if (!bExpectedOutputValid ||
+            !XBinary::isUnpackOutputSizeAllowed(
+                pDecompressState->mapUnpackProperties,
+                nExpectedOutput)) return false;
     }
 
     const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
     if (nRequestedBufferSize <= 0) return false;
     const qint32 nBufferSize = qBound(static_cast<qint32>(0x1000), nRequestedBufferSize, static_cast<qint32>(0x100000));
 
+    const qint64 nBaseBufferReservation = (qint64)nBufferSize * 2;
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!memoryReservation.acquire(pDecompressState->mapUnpackProperties,
+                                   nBaseBufferReservation)) {
+        return false;
+    }
+
     Algo_utils::prepareState(pDecompressState);
     if (pDecompressState->bReadError || pDecompressState->bWriteError) return false;
 
     Lz4InputBuffer input(pDecompressState, pPdStruct, nBufferSize);
     QByteArray baOutput(nBufferSize, 0);
-    QByteArray baLegacyOutput(LZ4_LEGACY_BLOCK_SIZE, 0);
-    QByteArray baLegacyCompressed;
+    QByteArray baLegacyOutput;
+    qint64 nPersistentLegacyReservation = 0;
     bool bSawDataFrame = false;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -264,11 +328,54 @@ bool XLZ4Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
 
         const quint32 nMagic = readUInt32LE(input.data());
         if ((nMagic == LZ4F_MAGICNUMBER) || isSkippableMagic(nMagic)) {
+            if (nMagic == LZ4F_MAGICNUMBER) {
+                quint64 nFrameBufferRequirement = 0;
+                if (!getFrameBufferRequirement(
+                        &input, &nFrameBufferRequirement) ||
+                    (nFrameBufferRequirement >
+                     (quint64)(std::numeric_limits<qint64>::max)()) ||
+                    ((nConfiguredOutputLimit >= 0) &&
+                     (nFrameBufferRequirement > static_cast<quint64>(
+                          nConfiguredOutputLimit))) ||
+                    !memoryReservation.resize(
+                        nBaseBufferReservation +
+                        nPersistentLegacyReservation +
+                        (qint64)nFrameBufferRequirement)) {
+                    return false;
+                }
+            }
             if (!decodeFrame(&input, &baOutput, nExpectedOutput, pDecompressState, pPdStruct)) return false;
+            if ((nMagic == LZ4F_MAGICNUMBER) &&
+                !memoryReservation.resize(nBaseBufferReservation +
+                                          nPersistentLegacyReservation)) {
+                return false;
+            }
             if (nMagic == LZ4F_MAGICNUMBER) bSawDataFrame = true;
         } else if (nMagic == LZ4_LEGACY_MAGIC) {
+            qint64 nLegacyOutputReservation = LZ4_LEGACY_BLOCK_SIZE;
+            if (nConfiguredOutputLimit >= 0) {
+                if ((pDecompressState->nCountOutput < 0) ||
+                    (pDecompressState->nCountOutput >=
+                     nConfiguredOutputLimit)) {
+                    return false;
+                }
+                nLegacyOutputReservation = (std::min)(
+                    nLegacyOutputReservation,
+                    nConfiguredOutputLimit -
+                        pDecompressState->nCountOutput);
+            }
+            nPersistentLegacyReservation = (std::max)(
+                nPersistentLegacyReservation,
+                (qint64)LZ4_LEGACY_COMPRESSED_LIMIT +
+                    nLegacyOutputReservation);
+            if (!memoryReservation.resize(nBaseBufferReservation +
+                                          nPersistentLegacyReservation)) {
+                return false;
+            }
             input.consume(4);
-            if (!decodeLegacyFrame(&input, &baLegacyCompressed, &baLegacyOutput, nExpectedOutput,
+            if (!decodeLegacyFrame(&input, &baLegacyOutput,
+                                   nExpectedOutput,
+                                   nConfiguredOutputLimit,
                                    pDecompressState, pPdStruct)) return false;
             bSawDataFrame = true;
         } else {

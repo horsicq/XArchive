@@ -106,10 +106,11 @@ private:
     HANDLE_METHOD _compTypeToMethod(quint16 nCompType);
 
     struct KWAJ_UNPACK_CONTEXT {
-        qint64 nDataOffset;
-        qint64 nDataSize;
-        qint64 nUncompressedSize;
-        HANDLE_METHOD compressMethod;
+        qint64 nDataOffset = 0;
+        qint64 nDataSize = 0;
+        qint64 nUncompressedSize = 0;
+        bool bUncompressedSizeDefined = false;
+        HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
         QString sFileName;
     };
 private:

@@ -22,6 +22,8 @@
 #include "subdevice.h"
 #include "xpng.h"
 #include "Algos/algo_utils.h"
+#include "Algos/xkwajlzssdecoder.h"
+#include "Algos/xkwajlzhdecoder.h"
 #include <QCoreApplication>
 #include <QPointer>
 #include <algorithm>
@@ -467,6 +469,7 @@ static bool decIsValidBufferSize(qint64 nSize)
 
 static const qint64 DEC_CAB_MAX_FOLDER_SIZE = 512LL * 1024 * 1024;
 static const quint16 DEC_CAB_MAX_DATA_BLOCK_SIZE = 0x9800;
+static const quint16 DEC_KWAJ_MSZIP_MAX_BLOCK_SIZE = 32780;
 
 static quint32 decCabDataChecksum(const char *pData, qint32 nSize,
                                   quint32 nSeed = 0)
@@ -613,9 +616,13 @@ static bool decGetBranchStartOffset(const QByteArray &baProperty, quint32 *pnSta
     return true;
 }
 
-static bool decReadInputToByteArray(XBinary::DATAPROCESS_STATE *pState, QByteArray *pData)
+static bool decReadInputToByteArray(
+    XBinary::DATAPROCESS_STATE *pState, QByteArray *pData,
+    XBinary::UNPACK_MEMORY_RESERVATION *pReservation)
 {
-    if (!pState || !pState->pDeviceInput || !pData) return false;
+    if (!pState || !pState->pDeviceInput || !pData || !pReservation) {
+        return false;
+    }
     QPointer<QIODevice> guardedInput(pState->pDeviceInput);
     if (!guardedInput) return false;
 
@@ -631,6 +638,13 @@ static bool decReadInputToByteArray(XBinary::DATAPROCESS_STATE *pState, QByteArr
     }
     if (!decIsValidBufferSize(nSize)) {
         pState->bReadError = true;
+        return false;
+    }
+    if (!XBinary::isUnpackOutputSizeAllowed(
+            pState->mapUnpackProperties, nSize)) {
+        return false;
+    }
+    if (!pReservation->acquire(pState->mapUnpackProperties, nSize)) {
         return false;
     }
 
@@ -776,14 +790,15 @@ private:
     qint64 m_nLimit;
 };
 
-// Each MSZIP CFDATA block is a fresh raw-DEFLATE stream, but blocks after the
-// first inherit the previous 32 KiB as their dictionary.  The bundled inflater
-// has no inflateSetDictionary entry point, so feed that history through a
-// non-final stored block and strip it from the decoded result.
+// Each MSZIP block is a fresh raw-DEFLATE stream, but blocks after the first
+// inherit the previous 32 KiB as their dictionary.  The bundled inflater has
+// no inflateSetDictionary entry point, so feed that history through a non-final
+// stored block and strip it from the decoded result.  CAB supplies an exact
+// block output size; KWAJ passes -1 and validates the actual 1..32768 result.
 static bool decInflateMSZIPBlock(const QByteArray &baPayload, const QByteArray &baHistory, qint32 nExpectedSize, QByteArray *pbaResult,
                                  XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pbaResult || (baPayload.size() < 2) || (baPayload.at(0) != 'C') || (baPayload.at(1) != 'K') || (nExpectedSize < 0) ||
+    if (!pbaResult || (baPayload.size() < 2) || (baPayload.at(0) != 'C') || (baPayload.at(1) != 'K') || (nExpectedSize < -1) ||
         (nExpectedSize > 32768)) {
         return false;
     }
@@ -818,7 +833,13 @@ static bool decInflateMSZIPBlock(const QByteArray &baPayload, const QByteArray &
     state.nInputOffset = 0;
     state.nInputLimit = baInput.size();
     state.nProcessedOffset = 0;
-    state.nProcessedLimit = (qint64)nDictionarySize + nExpectedSize;
+    const qint32 nMaximumBlockOutput =
+        (nExpectedSize == -1) ? 32768 : nExpectedSize;
+    const qint64 nMaximumDecodedSize =
+        (qint64)nDictionarySize + nMaximumBlockOutput;
+    state.nProcessedLimit = nMaximumDecodedSize;
+    state.mapUnpackProperties.insert(
+        XBinary::UNPACK_PROP_MAX_OUTPUT_SIZE, nMaximumDecodedSize);
 
     const XBinary::PDSTRUCTLIFETIME progressLifetime =
         pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct)
@@ -827,18 +848,26 @@ static bool decInflateMSZIPBlock(const QByteArray &baPayload, const QByteArray &
     inputBuffer.close();
     outputBuffer.close();
 
-    qint64 nExpectedDecodedSize = (qint64)nDictionarySize + nExpectedSize;
+    const qint64 nDecodedBlockSize =
+        state.nCountOutput - nDictionarySize;
+    const bool bOutputSizeValid =
+        (nExpectedSize == -1)
+            ? ((nDecodedBlockSize >= 0) && (nDecodedBlockSize <= 32768))
+            : (nDecodedBlockSize == nExpectedSize);
     if ((pPdStruct &&
          !XBinary::isPdStructLifetimeAlive(progressLifetime)) ||
         !bResult || state.bReadError || state.bWriteError ||
         (state.nCountInput != baInput.size()) ||
-        (state.nCountOutput != nExpectedDecodedSize) ||
-        (baDecoded.size() != nExpectedDecodedSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        !bOutputSizeValid || (state.nCountOutput < nDictionarySize) ||
+        (baDecoded.size() != state.nCountOutput) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     *pbaResult = baDecoded.mid(nDictionarySize);
-    return pbaResult->size() == nExpectedSize;
+    return (nExpectedSize == -1)
+               ? (pbaResult->size() == nDecodedBlockSize)
+               : (pbaResult->size() == nExpectedSize);
 }
 
 XDecompress::~XDecompress()
@@ -847,6 +876,13 @@ XDecompress::~XDecompress()
 }
 
 bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct)
+{
+    return decompressFPART(fPart, pDeviceInput, pDeviceOutput,
+                           QMap<XBinary::UNPACK_PROP, QVariant>(), pPdStruct);
+}
+
+bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput,
+                                  const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct)
 {
     // Same refusal as decompressArchiveRecord(): a part carrying the
     // archive-stream contract has no coordinates that mean anything here, and
@@ -859,6 +895,7 @@ bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDevic
 
     XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = fPart.mapProperties;
+    state.mapUnpackProperties = mapUnpackProperties;
     state.pDeviceInput = pDeviceInput;
     state.pDeviceOutput = pDeviceOutput;
     state.nInputOffset = fPart.nFileOffset;
@@ -894,6 +931,25 @@ bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveR
         return false;
     }
 
+    qint64 nOutputLimit = -1;
+    if (!XBinary::getUnpackOutputLimit(mapUnpackProperties, &nOutputLimit)) {
+        XBinary::setPdStructErrorString(pPdStruct,
+                                       tr("Invalid unpacked-output limit"));
+        return false;
+    }
+    if (archiveRecord.mapProperties.contains(
+            XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
+        const qint64 nDeclaredSize = archiveRecord.mapProperties
+            .value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
+        if (!XBinary::isUnpackOutputSizeAllowed(mapUnpackProperties,
+                                                nDeclaredSize)) {
+            XBinary::setPdStructErrorString(
+                pPdStruct,
+                tr("Unpacked output exceeds the configured limit"));
+            return false;
+        }
+    }
+
     XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = archiveRecord.mapProperties;
     state.mapUnpackProperties = mapUnpackProperties;
@@ -902,7 +958,7 @@ bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveR
     state.nInputOffset = archiveRecord.nStreamOffset;
     state.nInputLimit = archiveRecord.nStreamSize;
     state.nProcessedOffset = 0;
-    state.nProcessedLimit = -1;
+    state.nProcessedLimit = nOutputLimit;
 
     return multiDecompress(&state, pPdStruct);
 }
@@ -962,6 +1018,15 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
             (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE).toUInt();
         qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
         qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
+        qint64 nConfiguredOutputLimit = -1;
+        if (!XBinary::getUnpackOutputLimit(
+                pState->mapUnpackProperties, &nConfiguredOutputLimit) ||
+            !XBinary::isUnpackOutputSizeAllowed(
+                pState->mapUnpackProperties, nUncompressedSize) ||
+            ((nConfiguredOutputLimit >= 0) && (nWindowSize > 0) &&
+             (nWindowSize > nConfiguredOutputLimit))) {
+            return false;
+        }
 
         // For encrypted RAR5: decrypt first, then use the inner compression method
         QIODevice *pDecryptedDevice = nullptr;
@@ -979,8 +1044,12 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
             qint64 nEncryptedSize = pState->nInputLimit;
 
             // Align to AES block size
-            if (nEncryptedSize > 0 && (nEncryptedSize % AES_BLOCK_SIZE) == 0) {
-                pDecryptedDevice = XBinary::createFileBuffer(nEncryptedSize, pPdStruct);
+            if (nEncryptedSize > 0 &&
+                (nEncryptedSize % AES_BLOCK_SIZE) == 0 &&
+                XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nEncryptedSize)) {
+                pDecryptedDevice = XBinary::createUnpackFileBuffer(
+                    nEncryptedSize, pState->mapUnpackProperties, pPdStruct);
                 if (!stateTransaction.isAlive() || !guardedInput ||
                     !guardedOutput) {
                     XBinary::freeFileBuffer(&pDecryptedDevice);
@@ -1027,7 +1096,8 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
         bool bIsSolid = (m_nRarSolidIndex > 0);
 
         if (bInputReady && (nUncompressedSize >= 0)) {
-            QIODevice *pBuffer = XBinary::createFileBuffer(nUncompressedSize, pPdStruct);
+            QIODevice *pBuffer = XBinary::createUnpackFileBuffer(
+                nUncompressedSize, pState->mapUnpackProperties, pPdStruct);
             if (!stateTransaction.isAlive() || !guardedInput ||
                 !guardedOutput) {
                 XBinary::freeFileBuffer(&pBuffer);
@@ -1064,6 +1134,8 @@ bool XDecompress::decompressRarSolid(XBinary::DATAPROCESS_STATE *pState, XBinary
                         cacheOutputState.pDeviceOutput = pBuffer;
                         cacheOutputState.nProcessedOffset = 0;
                         cacheOutputState.nProcessedLimit = -1;
+                        cacheOutputState.mapUnpackProperties =
+                            pState->mapUnpackProperties;
                         DecWindowWriteDevice outputDevice(&cacheOutputState);
 
                         if (inputDevice.open(QIODevice::ReadOnly) && outputDevice.open(QIODevice::WriteOnly)) {
@@ -1232,6 +1304,29 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     DecProcessStateTransaction stateTransaction(this, pState, pPdStruct);
     pState = stateTransaction.state();
 
+    qint64 nConfiguredOutputLimit = -1;
+    if (!XBinary::getUnpackOutputLimit(pState->mapUnpackProperties,
+                                       &nConfiguredOutputLimit)) {
+        XBinary::setPdStructErrorString(pPdStruct,
+                                       tr("Invalid unpacked-output limit"));
+        return false;
+    }
+    if (pState->mapProperties.contains(
+            XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
+        const qint64 nDeclaredOutputSize =
+            pState->mapProperties
+                .value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)
+                .toLongLong();
+        if ((nDeclaredOutputSize < 0) ||
+            ((nConfiguredOutputLimit >= 0) &&
+             (nDeclaredOutputSize > nConfiguredOutputLimit))) {
+            XBinary::setPdStructErrorString(
+                pPdStruct,
+                tr("Unpacked output exceeds the configured limit"));
+            return false;
+        }
+    }
+
     const XBinary::PDSTRUCTLIFETIME progressLifetime =
         pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
     const auto isContextAlive = [&]() -> bool {
@@ -1360,7 +1455,13 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
             // then apply the requested processed-output window.
             const qint64 nExpectedSize =
                 qMax<qint64>(0, pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong());
-            QIODevice *pFullDevice = XBinary::createFileBuffer(nExpectedSize, pPdStruct);
+            QIODevice *pFullDevice =
+                XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nExpectedSize)
+                    ? XBinary::createUnpackFileBuffer(
+                          nExpectedSize, pState->mapUnpackProperties,
+                          pPdStruct)
+                    : nullptr;
             if (!isContextAlive() || !guardedInput || !guardedOutput) {
                 XBinary::freeFileBuffer(&pFullDevice);
                 return false;
@@ -1472,7 +1573,13 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
                 }
 
                 QIODevice *pSolidDevice =
-                    (nStreamUnpackedSize >= 0) ? XBinary::createFileBuffer(nStreamUnpackedSize, pPdStruct) : nullptr;
+                    XBinary::isUnpackOutputSizeAllowed(
+                        pState->mapUnpackProperties,
+                        nStreamUnpackedSize)
+                        ? XBinary::createUnpackFileBuffer(
+                              nStreamUnpackedSize,
+                              pState->mapUnpackProperties, pPdStruct)
+                        : nullptr;
                 if (!isContextAlive() || !guardedInput || !guardedOutput) {
                     XBinary::freeFileBuffer(&pSolidDevice);
                     return false;
@@ -1576,7 +1683,13 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
 
             const qint64 nExpectedSize =
                 qMax<qint64>(0, state.mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0).toLongLong());
-            QIODevice *pStageOutput = XBinary::createFileBuffer(nExpectedSize, pPdStruct);
+            QIODevice *pStageOutput =
+                XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nExpectedSize)
+                    ? XBinary::createUnpackFileBuffer(
+                          nExpectedSize, pState->mapUnpackProperties,
+                          pPdStruct)
+                    : nullptr;
             if (!isContextAlive() || !guardedInput || !guardedOutput) {
                 XBinary::freeFileBuffer(&pStageOutput);
                 XBinary::freeFileBuffer(&pIntermediateDevice);
@@ -1753,10 +1866,24 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     bool bUncompressedSizeDefined = pState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
     qint64 nUncompressedSize = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, 0).toLongLong();
     qint64 nWindowSize = pState->mapProperties.value(XBinary::FPART_PROP_WINDOWSIZE, 0).toLongLong();
+    qint64 nConfiguredOutputLimit = -1;
+    if (!XBinary::getUnpackOutputLimit(pState->mapUnpackProperties,
+                                       &nConfiguredOutputLimit) ||
+        (bUncompressedSizeDefined &&
+         !XBinary::isUnpackOutputSizeAllowed(
+             pState->mapUnpackProperties, nUncompressedSize)) ||
+        ((nConfiguredOutputLimit >= 0) && (nWindowSize > 0) &&
+         (nWindowSize > nConfiguredOutputLimit))) {
+        XBinary::setPdStructErrorString(
+            pPdStruct,
+            tr("Unpacked output exceeds the configured limit"));
+        return false;
+    }
 
     // ARJ GARBLE pre-decryption: if PASSWORD_MODIFIER is present, XOR the compressed stream
     // with (modifier + password[i % len]) mod 256 before decompressing.
     QByteArray baArjGarbleDecrypted;
+    XBinary::UNPACK_MEMORY_RESERVATION arjGarbleReservation;
     QBuffer arjGarbleBuf;
     if (pState->mapProperties.contains(XBinary::FPART_PROP_PASSWORD_MODIFIER)) {
         quint8 nModifier = (quint8)pState->mapProperties.value(XBinary::FPART_PROP_PASSWORD_MODIFIER).toUInt();
@@ -1768,8 +1895,18 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         if (!sPassword.isEmpty() && pState->pDeviceInput &&
             (pState->nInputLimit != 0)) {
             if ((pState->nInputLimit < 0) ||
+                ((nConfiguredOutputLimit >= 0) &&
+                 (pState->nInputLimit > nConfiguredOutputLimit)) ||
                 (pState->nInputLimit >
                  (std::numeric_limits<qint32>::max)())) {
+                XBinary::setPdStructErrorString(
+                    pPdStruct,
+                    tr("Encrypted input exceeds the configured limit"));
+                return false;
+            }
+            if (!arjGarbleReservation.acquire(
+                    pState->mapUnpackProperties,
+                    pState->nInputLimit)) {
                 return false;
             }
             const bool bGarbleSeeked = guardedInput->seek(pState->nInputOffset);
@@ -1835,6 +1972,15 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 pState->bReadError = true;
                 return false;
             }
+            if (!XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nFilterSize)) {
+                return false;
+            }
+            XBinary::UNPACK_MEMORY_RESERVATION filterReservation;
+            if (!filterReservation.acquire(
+                    pState->mapUnpackProperties, nFilterSize)) {
+                return false;
+            }
             QByteArray baData = guardedInput->read(nFilterSize);
             if (!guardedInput || !guardedOutput || !isContextAlive())
                 return false;
@@ -1894,6 +2040,15 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 pState->bReadError = true;
                 return false;
             }
+            if (!XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nFilterSize)) {
+                return false;
+            }
+            XBinary::UNPACK_MEMORY_RESERVATION filterReservation;
+            if (!filterReservation.acquire(
+                    pState->mapUnpackProperties, nFilterSize)) {
+                return false;
+            }
             QByteArray baData = guardedInput->read(nFilterSize);
             if (!guardedInput || !guardedOutput || !isContextAlive())
                 return false;
@@ -1908,6 +2063,142 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             }
 
             bResult = XBinary::_writeDevice(baData.constData(), baData.size(), pState) == baData.size();
+        }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_LZSS) {
+        bResult = XKWAJLZSSDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_LZH) {
+        bResult = XKWAJLZHDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_MSZIP) {
+        // KWAJ method 4 is a sequence of uint16-sized MSZIP blocks.  The
+        // length includes the two-byte CK signature but not its own uint16;
+        // a zero length or clean physical EOF at a length boundary terminates
+        // the stream.  Blocks share the preceding 32 KiB DEFLATE history.
+        qint64 nStreamSize = 0;
+        qint64 nPhysicalInputConsumed = 0;
+        qint64 nOffset = 0;
+        qint64 nProduced = 0;
+        qint32 nPreviousBlockOutput = -1;
+        QByteArray baHistory;
+        bool bCleanEnd = false;
+
+        bResult = decPrepareBoundedInput(
+            pState->pDeviceInput, pState->nInputOffset,
+            pState->nInputLimit, &nStreamSize);
+        if (!isContextAlive() || !guardedInput || !guardedOutput) return false;
+
+        while (bResult && !bCleanEnd &&
+               XBinary::isPdStructNotCanceled(pPdStruct)) {
+            if (nOffset == nStreamSize) {
+                bCleanEnd = true;
+                break;
+            }
+
+            char abLength[2] = {};
+            const bool bLengthRead = decReadExactAt(
+                pState->pDeviceInput, pState->nInputOffset + nOffset,
+                abLength, sizeof(abLength), pState, pPdStruct,
+                &nPhysicalInputConsumed);
+            if (!isContextAlive() || !guardedInput || !guardedOutput)
+                return false;
+            if (!bLengthRead) {
+                pState->nCountInput =
+                    qMin(nPhysicalInputConsumed, nStreamSize);
+                bResult = false;
+                break;
+            }
+
+            nOffset += sizeof(abLength);
+            const quint16 nBlockSize =
+                (quint8)abLength[0] |
+                ((quint16)(quint8)abLength[1] << 8);
+            if (nBlockSize == 0) {
+                // An explicit terminator owns the remainder of the bounded
+                // stream.  Bytes after it are unauthenticated trailing data.
+                bCleanEnd = nOffset == nStreamSize;
+                bResult = bCleanEnd;
+                break;
+            }
+
+            // Only the final block may expand to fewer than 32768 bytes.  A
+            // following nonzero block proves the preceding one was non-final.
+            if ((nPreviousBlockOutput >= 0) &&
+                (nPreviousBlockOutput != 32768)) {
+                bResult = false;
+                break;
+            }
+
+            if ((nBlockSize < 2) ||
+                (nBlockSize > DEC_KWAJ_MSZIP_MAX_BLOCK_SIZE) ||
+                ((qint64)nBlockSize > nStreamSize - nOffset)) {
+                if ((qint64)nBlockSize > nStreamSize - nOffset)
+                    pState->bReadError = true;
+                bResult = false;
+                break;
+            }
+
+            QByteArray baPayload(nBlockSize, 0);
+            const bool bPayloadRead = decReadExactAt(
+                pState->pDeviceInput, pState->nInputOffset + nOffset,
+                baPayload.data(), nBlockSize, pState, pPdStruct,
+                &nPhysicalInputConsumed);
+            if (!isContextAlive() || !guardedInput || !guardedOutput)
+                return false;
+            if (!bPayloadRead) {
+                pState->nCountInput =
+                    qMin(nPhysicalInputConsumed, nStreamSize);
+                bResult = false;
+                break;
+            }
+            nOffset += nBlockSize;
+
+            QByteArray baBlock;
+            const bool bInflated = decInflateMSZIPBlock(
+                baPayload, baHistory, -1, &baBlock, pPdStruct);
+            if (!isContextAlive() || !guardedInput || !guardedOutput)
+                return false;
+            if (!bInflated || baBlock.isEmpty() ||
+                (baBlock.size() > 32768) ||
+                (nProduced > (std::numeric_limits<qint64>::max)() -
+                                 baBlock.size())) {
+                bResult = false;
+                break;
+            }
+
+            const qint64 nNextProduced = nProduced + baBlock.size();
+            if (bUncompressedSizeDefined &&
+                (nNextProduced > nUncompressedSize)) {
+                bResult = false;
+                break;
+            }
+
+            const qint32 nWritten = XBinary::_writeDevice(
+                baBlock.constData(), baBlock.size(), pState);
+            if (!isContextAlive() || !guardedInput || !guardedOutput)
+                return false;
+            if (nWritten != baBlock.size()) {
+                bResult = false;
+                break;
+            }
+
+            nProduced = nNextProduced;
+            nPreviousBlockOutput = baBlock.size();
+            baHistory.append(baBlock);
+            if (baHistory.size() > 32768)
+                baHistory = baHistory.right(32768);
+        }
+
+        if (isContextAlive() && guardedInput && guardedOutput) {
+            pState->nCountInput =
+                qMin(nPhysicalInputConsumed, nStreamSize);
+            bResult = bResult && bCleanEnd &&
+                      XBinary::isPdStructNotCanceled(pPdStruct) &&
+                      (nOffset == nStreamSize) &&
+                      (pState->nCountInput == nStreamSize) &&
+                      (pState->nCountOutput == nProduced) &&
+                      (!bUncompressedSizeDefined ||
+                       (nProduced == nUncompressedSize));
+        } else {
+            return false;
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_XZ) {
         bResult = XLZMADecoder::decompressXZ(pState, pPdStruct);
@@ -1958,12 +2249,26 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XRunLengthDecoder::decompress_pdf(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH1) {
         bResult = XLZHDecoder::decompress(pState, 1, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZH4) {
+        bResult = XLZHDecoder::decompress(pState, 4, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH5) {
         bResult = XLZHDecoder::decompress(pState, 5, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH6) {
         bResult = XLZHDecoder::decompress(pState, 6, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH7) {
         bResult = XLZHDecoder::decompress(pState, 7, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ZOO_LZH) {
+        bResult = XLZHDecoder::decompress(pState, 5, pPdStruct, XLZHDecoder::TERMINATION_ZERO_BLOCK);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ZOO_LZD) {
+        bResult = XLZWDecoder::decompress_zoo(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_PACK) {
+        bResult = XArcDecoder::decompress(pState, 3, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_SQUEEZE) {
+        bResult = XArcDecoder::decompress(pState, 4, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_CRUNCH_DYN) {
+        bResult = XArcDecoder::decompress(pState, 8, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_SQUASH) {
+        bResult = XArcDecoder::decompress(pState, 9, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ACE) {
         bResult = XAceDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARJ) {
@@ -2102,10 +2407,60 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             aBCJ2AESUnpack[3] = pState->mapProperties.value(XBinary::FPART_PROP_BCJ2_AES_UNPACK_3, (qint64)0).toLongLong();
             bool bBCJ2HasAES = !aBCJ2AESProps[0].isEmpty();
 
+            bool bBCJ2SizesAllowed =
+                XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nOutputSize) &&
+                XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nMainUnpack) &&
+                XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nCallUnpack) &&
+                XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties, nJmpUnpack);
+            for (qint32 i = 0; i < 4 && bBCJ2SizesAllowed; i++) {
+                if (!aBCJ2AESProps[i].isEmpty()) {
+                    bBCJ2SizesAllowed =
+                        XBinary::isUnpackOutputSizeAllowed(
+                            pState->mapUnpackProperties,
+                            aBCJ2AESUnpack[i]);
+                }
+            }
+
             // Pre-decrypt AES-encrypted BCJ2 sub-streams into temp buffers
             QByteArray aBCJ2Decrypted[4];
+            XBinary::UNPACK_MEMORY_RESERVATION aesOutputReservation;
             bool bAESDecryptOk = true;
-            if (bBCJ2HasAES) {
+            if (bBCJ2HasAES && bBCJ2SizesAllowed) {
+                qint64 nAesOutputReservation = 0;
+                const qint64 nMax =
+                    (std::numeric_limits<qint64>::max)();
+                for (qint32 i = 0; i < 4; i++) {
+                    if (aBCJ2AESProps[i].isEmpty()) continue;
+                    if ((aBCJ2AESUnpack[i] < 0) ||
+                        (aBCJ2AESUnpack[i] >
+                         (std::numeric_limits<qint32>::max)()) ||
+                        (nAesOutputReservation >
+                         nMax - aBCJ2AESUnpack[i])) {
+                        bAESDecryptOk = false;
+                        break;
+                    }
+                    nAesOutputReservation += aBCJ2AESUnpack[i];
+                }
+                if (bAESDecryptOk &&
+                    !aesOutputReservation.acquire(
+                        pState->mapUnpackProperties,
+                        nAesOutputReservation)) {
+                    bAESDecryptOk = false;
+                }
+                if (bAESDecryptOk) {
+                    for (qint32 i = 0; i < 4; i++) {
+                        if (!aBCJ2AESProps[i].isEmpty()) {
+                            aBCJ2Decrypted[i].reserve(
+                                (qint32)aBCJ2AESUnpack[i]);
+                        }
+                    }
+                }
+            }
+            if (bBCJ2HasAES && bBCJ2SizesAllowed) {
                 qint64 aEncOffsets[3] = {pState->nInputOffset, nCallOffset, nJmpOffset};
                 qint64 aEncSizes[3] = {pState->nInputLimit, nCallSize, nJmpSize};
                 for (qint32 ni = 0; ni < 3 && bAESDecryptOk; ni++) {
@@ -2120,6 +2475,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                     aesState.pDeviceOutput = &decBuf;
                     aesState.nInputOffset = aEncOffsets[ni];
                     aesState.nInputLimit = aEncSizes[ni];
+                    aesState.mapUnpackProperties =
+                        pState->mapUnpackProperties;
                     aesState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, aBCJ2AESUnpack[ni]);
                     const bool bAESInputSeeked =
                         guardedInput->seek(aEncOffsets[ni]);
@@ -2143,6 +2500,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         aesState.pDeviceOutput = &decBuf;
                         aesState.nInputOffset = nRangeOffset;
                         aesState.nInputLimit = nRangeSize;
+                        aesState.mapUnpackProperties =
+                            pState->mapUnpackProperties;
                         aesState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, aBCJ2AESUnpack[3]);
                         const bool bRangeSeeked =
                             guardedInput->seek(nRangeOffset);
@@ -2164,8 +2523,23 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
 
             // nCallUnpack / nJmpUnpack may be 0 when the data contains no CALL/JMP instructions
             // (e.g. pure image or text files). Only require nMainUnpack > 0 and nOutputSize > 0.
-            if (nMainUnpack > 0 && nOutputSize > 0 && bAESDecryptOk && decIsValidBufferSize(nMainUnpack) && decIsValidBufferSize(nCallUnpack) &&
+            if (nMainUnpack > 0 && nOutputSize > 0 && bBCJ2SizesAllowed && bAESDecryptOk && decIsValidBufferSize(nMainUnpack) && decIsValidBufferSize(nCallUnpack) &&
                 decIsValidBufferSize(nJmpUnpack)) {
+                const qint64 nMax =
+                    (std::numeric_limits<qint64>::max)();
+                if ((nMainUnpack > nMax - nCallUnpack) ||
+                    (nMainUnpack + nCallUnpack > nMax - nJmpUnpack)) {
+                    return false;
+                }
+                const qint64 nDecodedStreamsSize =
+                    nMainUnpack + nCallUnpack + nJmpUnpack;
+                XBinary::UNPACK_MEMORY_RESERVATION
+                    decodedStreamsReservation;
+                if (!decodedStreamsReservation.acquire(
+                        pState->mapUnpackProperties,
+                        nDecodedStreamsSize)) {
+                    return false;
+                }
                 QByteArray baMain, baCall, baJmp;
                 baMain.resize((qint32)nMainUnpack);
                 baCall.resize((qint32)nCallUnpack);
@@ -2196,6 +2570,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                     dpState.pDeviceOutput = &outBuf;
                     dpState.nProcessedOffset = 0;
                     dpState.nProcessedLimit = tasks[nTask].nOutputSize;
+                    dpState.mapUnpackProperties =
+                        pState->mapUnpackProperties;
                     dpState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, (quint32)tasks[nTask].cm);
                     dpState.mapProperties.insert(XBinary::FPART_PROP_COMPRESSPROPERTIES, *tasks[nTask].pProperty);
                     dpState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, tasks[nTask].nOutputSize);
@@ -2229,9 +2605,21 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 if (bLZMAOk && XBinary::isPdStructNotCanceled(pPdStruct)) {
                     // Range coder stream: raw or AES-decrypted
                     QByteArray baRange;
+                    XBinary::UNPACK_MEMORY_RESERVATION rangeReservation;
                     if (bBCJ2HasAES && !aBCJ2Decrypted[3].isEmpty()) {
                         baRange = aBCJ2Decrypted[3];
                     } else {
+                        if ((nRangeSize < 0) ||
+                            (nRangeSize >
+                             (std::numeric_limits<qint32>::max)()) ||
+                            !XBinary::isUnpackOutputSizeAllowed(
+                                pState->mapUnpackProperties,
+                                nRangeSize) ||
+                            !rangeReservation.acquire(
+                                pState->mapUnpackProperties,
+                                nRangeSize)) {
+                            return false;
+                        }
                         const bool bRangeSeeked =
                             guardedInput->seek(nRangeOffset);
                         if (!guardedInput || !guardedOutput ||
@@ -2247,7 +2635,11 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                         QBuffer rangeBuf(&baRange);
                         if (mainBuf.open(QIODevice::ReadOnly) && callBuf.open(QIODevice::ReadOnly) && jmpBuf.open(QIODevice::ReadOnly)) {
                             if (rangeBuf.open(QIODevice::ReadOnly)) {
-                                QIODevice *pBCJ2Output = XBinary::createFileBuffer(nOutputSize, pPdStruct);
+                                QIODevice *pBCJ2Output =
+                                    XBinary::createUnpackFileBuffer(
+                                        nOutputSize,
+                                        pState->mapUnpackProperties,
+                                        pPdStruct);
                                 if (!isContextAlive() || !guardedInput ||
                                     !guardedOutput) {
                                     XBinary::freeFileBuffer(&pBCJ2Output);
@@ -2322,7 +2714,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         // CCITT Fax image: wrap raw data in a TIFF container
         if (pState->pDeviceInput && pState->pDeviceOutput) {
             QByteArray baData;
-            if (!decReadInputToByteArray(pState, &baData)) return false;
+            XBinary::UNPACK_MEMORY_RESERVATION inputReservation;
+            if (!decReadInputToByteArray(pState, &baData,
+                                         &inputReservation)) return false;
 
             qint32 nWidth = pState->mapProperties.value(XBinary::FPART_PROP_WIDTH).toInt();
             qint32 nHeight = pState->mapProperties.value(XBinary::FPART_PROP_HEIGHT).toInt();
@@ -2389,7 +2783,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         // Palette data: build RIFF PAL container from decompressed RGB data
         if (pState->pDeviceInput && pState->pDeviceOutput) {
             QByteArray baData;
-            if (!decReadInputToByteArray(pState, &baData)) return false;
+            XBinary::UNPACK_MEMORY_RESERVATION inputReservation;
+            if (!decReadInputToByteArray(pState, &baData,
+                                         &inputReservation)) return false;
 
             qint32 nRgbSize = baData.size();
             qint32 nColorCount = nRgbSize / 3;
@@ -2441,7 +2837,9 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         // Raw pixel data image: convert decompressed data to PNG
         if (pState->pDeviceInput && pState->pDeviceOutput) {
             QByteArray baData;
-            if (!decReadInputToByteArray(pState, &baData)) return false;
+            XBinary::UNPACK_MEMORY_RESERVATION inputReservation;
+            if (!decReadInputToByteArray(pState, &baData,
+                                         &inputReservation)) return false;
 
             qint32 nWidth = pState->mapProperties.value(XBinary::FPART_PROP_WIDTH).toInt();
             qint32 nHeight = pState->mapProperties.value(XBinary::FPART_PROP_HEIGHT).toInt();
@@ -2631,6 +3029,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                  (nUncompressedSize <= (std::numeric_limits<qint64>::max)() - nSubstreamOffset);
         qint64 nMinimumFolderSize = bTargetRangeValid ? nSubstreamOffset + nUncompressedSize : -1;
         qint64 nDeclaredFolderSize = pState->mapProperties.value(XBinary::FPART_PROP_STREAMUNPACKEDSIZE, nMinimumFolderSize).toLongLong();
+        const qint64 nCabFolderLimit =
+            (nConfiguredOutputLimit >= 0)
+                ? qMin(DEC_CAB_MAX_FOLDER_SIZE, nConfiguredOutputLimit)
+                : DEC_CAB_MAX_FOLDER_SIZE;
 
         QByteArray baFolderData;
         qint64 nOffset = 0;
@@ -2648,7 +3050,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                          &nEffectiveCabInputSize) &&
                   (nEffectiveCabInputSize == nStreamSize) &&
                   decIsValidBufferSize(nDeclaredFolderSize) &&
-                  (nDeclaredFolderSize <= DEC_CAB_MAX_FOLDER_SIZE) &&
+                  (nDeclaredFolderSize <= nCabFolderLimit) &&
                   (nDeclaredFolderSize >= nMinimumFolderSize);
 
         while (bResult && (nOffset < nStreamSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -2777,6 +3179,14 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                 (nUncompressedSize <= (std::numeric_limits<qint64>::max)() - nSubstreamOffset);
         qint64 nMinimumFolderSize = bFolderSizeValid ? (nSubstreamOffset + nUncompressedSize) : -1;
         qint64 nFolderUncompressed = pState->mapProperties.value(XBinary::FPART_PROP_STREAMUNPACKEDSIZE, nMinimumFolderSize).toLongLong();
+        const qint64 nCabFolderLimit =
+            (nConfiguredOutputLimit >= 0)
+                ? qMin(DEC_CAB_MAX_FOLDER_SIZE, nConfiguredOutputLimit)
+                : DEC_CAB_MAX_FOLDER_SIZE;
+        const qint64 nLzxWindowSize =
+            ((nWindowBits >= 0) && (nWindowBits < 63))
+                ? (Q_INT64_C(1) << nWindowBits)
+                : -1;
         qint64 nOffset = 0;
         qint64 nDeclaredBlockOutput = 0;
         qint64 nPhysicalInputConsumed = 0;
@@ -2791,8 +3201,12 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                          pState->nInputOffset, nStreamSize,
                                          &nEffectiveCabInputSize) &&
                   (nEffectiveCabInputSize == nStreamSize) &&
-                  (nWindowBits >= 15) && (nWindowBits <= 21) && decIsValidBufferSize(nFolderUncompressed) &&
-                  (nFolderUncompressed <= DEC_CAB_MAX_FOLDER_SIZE) &&
+                  (nWindowBits >= 15) && (nWindowBits <= 21) &&
+                  ((nConfiguredOutputLimit < 0) ||
+                   ((nLzxWindowSize >= 0) &&
+                    (nLzxWindowSize <= nConfiguredOutputLimit))) &&
+                  decIsValidBufferSize(nFolderUncompressed) &&
+                  (nFolderUncompressed <= nCabFolderLimit) &&
                   (nFolderUncompressed >= nMinimumFolderSize);
 
         while (bResult && (nOffset < nStreamSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -2827,7 +3241,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 (((qint64)nCbData < nStreamSize - nPayloadOffset) && (nCbUncomp != 32768)) ||
                 !decIsValidBufferSize(nCompressedFolderSize + nCbData) ||
                 (nCompressedFolderSize + nCbData >
-                 DEC_CAB_MAX_FOLDER_SIZE) ||
+                 nCabFolderLimit) ||
                 ((qint64)nCbUncomp > nFolderUncompressed - nDeclaredBlockOutput)) {
                 if ((qint64)nCbData > nStreamSize - nPayloadOffset) {
                     pState->bReadError = true;
@@ -3009,6 +3423,12 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 break;
             }
             member.nUncompressedSize = (qint64)nDataSize64;
+            if (!XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties,
+                    member.nUncompressedSize)) {
+                bResult = false;
+                break;
+            }
 
             char header[6] = {};
             if (!decLzipReadExactAt(pState, member.nOffset, header, sizeof(header))) {
@@ -3032,6 +3452,12 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             }
 
             nTotalUncompressedSize += member.nUncompressedSize;
+            if (!XBinary::isUnpackOutputSizeAllowed(
+                    pState->mapUnpackProperties,
+                    nTotalUncompressedSize)) {
+                bResult = false;
+                break;
+            }
             listMembers.append(member);
             nMemberEnd = member.nOffset;
         }
@@ -3066,6 +3492,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             }
 
             XBinary::DATAPROCESS_STATE lzmaState = {};
+            lzmaState.mapUnpackProperties = pState->mapUnpackProperties;
             lzmaState.pDeviceInput = pState->pDeviceInput;
             lzmaState.pDeviceOutput = &crcOutput;
             lzmaState.nInputOffset = member.nOffset + 6;

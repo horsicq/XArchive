@@ -48,6 +48,8 @@ ZSTD_DStream *ZSTD_createDStream(void);
 size_t ZSTD_freeDStream(ZSTD_DStream *zds);
 size_t ZSTD_initDStream(ZSTD_DStream *zds);
 size_t ZSTD_decompressStream(ZSTD_DStream *zds, ZSTD_outBuffer *output, ZSTD_inBuffer *input);
+size_t ZSTD_DCtx_setMaxWindowSize(ZSTD_DCtx *dctx, size_t maxWindowSize);
+size_t ZSTD_estimateDStreamSize(size_t windowSize);
 unsigned ZSTD_isError(size_t result);
 }
 

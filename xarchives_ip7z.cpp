@@ -64,6 +64,7 @@ const char *const UNSUPPORTED_FORMAT_ERROR = "Unsupported archive format";
 const qint64 COPY_BUFFER_SIZE = 64 * 1024;
 const UInt64 MAXIMUM_SCAN = (UInt64)1 << 23;
 const UInt64 MAX_DECODER_MEMORY = (sizeof(void *) <= 4) ? ((UInt64)512 << 20) : ((UInt64)4 << 30);
+const UInt64 RAW_BASE64_MAX_INPUT_SIZE = (UInt64)256 << 20;
 const UInt32 MAX_ARCHIVE_ITEMS = 100000;
 const qint32 MAX_PROPERTY_CHARS = 32768;
 const qint64 MAX_METADATA_CHARS = 32LL * 1024 * 1024;
@@ -130,8 +131,16 @@ bool isReservedName(QString sComponent)
     if (sComponent.size() == 4) {
         const QString sPrefix = sComponent.left(3);
         const QChar cNumber = sComponent.at(3);
+        const ushort nNumber = cNumber.unicode();
+        // Win32 treats ISO-8859-1 superscript 1, 2 and 3 as device-name
+        // digits too, so COM¹/LPT² and their extension forms are reserved.
+        const bool bDeviceNumber =
+            ((cNumber >= QLatin1Char('1')) &&
+             (cNumber <= QLatin1Char('9'))) ||
+            (nNumber == 0x00B9) || (nNumber == 0x00B2) ||
+            (nNumber == 0x00B3);
         if (((sPrefix == QLatin1String("COM")) || (sPrefix == QLatin1String("LPT"))) &&
-            (cNumber >= QLatin1Char('1')) && (cNumber <= QLatin1Char('9'))) {
+            bDeviceNumber) {
             return true;
         }
     }
@@ -373,6 +382,47 @@ private:
     QIODevice *m_pDevice;
     QMutex m_mutex;
     ProgressGuard m_progress;
+};
+
+class LimitedWriteDevice final : public QIODevice {
+public:
+    LimitedWriteDevice(QIODevice *pDestination, qint64 nLimit)
+        : m_pDestination(pDestination), m_nLimit(nLimit)
+    {
+        open(QIODevice::WriteOnly);
+    }
+
+    bool isSequential() const override { return true; }
+    bool isLimitExceeded() const { return m_bLimitExceeded; }
+
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+
+    qint64 writeData(const char *pData, qint64 nSize) override
+    {
+        if (!m_pDestination || !m_pDestination->isOpen() || !m_pDestination->isWritable() || (nSize < 0) || ((nSize > 0) && !pData)) {
+            return -1;
+        }
+
+        if ((m_nWritten > m_nLimit) || (nSize > (m_nLimit - m_nWritten))) {
+            m_bLimitExceeded = true;
+            return -1;
+        }
+
+        const qint64 nWritten = m_pDestination->write(pData, nSize);
+
+        if (nWritten > 0) {
+            m_nWritten += nWritten;
+        }
+
+        return nWritten;
+    }
+
+private:
+    QIODevice *m_pDestination = nullptr;
+    qint64 m_nLimit = 0;
+    qint64 m_nWritten = 0;
+    bool m_bLimitExceeded = false;
 };
 
 Z7_COM7F_IMF(QtOutStream::Write(const void *data, UInt32 size, UInt32 *processedSize))
@@ -803,16 +853,36 @@ private:
 
 quint64 archiveErrorFlags(IInArchive *pArchive);
 
+constexpr bool isExactArchiveErrorFlag(quint64 nFlags,
+                                       quint64 nExpectedFlag)
+{
+    return nFlags == nExpectedFlag;
+}
+
+static_assert(isExactArchiveErrorFlag(kpv_ErrorFlags_IsNotArc,
+                                      kpv_ErrorFlags_IsNotArc),
+              "A pure IsNotArc flag must remain eligible");
+static_assert(!isExactArchiveErrorFlag(
+                  kpv_ErrorFlags_IsNotArc | kpv_ErrorFlags_HeadersError,
+                  kpv_ErrorFlags_IsNotArc),
+              "Composite IsNotArc flags must remain terminal");
+static_assert(!isExactArchiveErrorFlag(
+                  kpv_ErrorFlags_UnsupportedMethod | kpv_ErrorFlags_DataError,
+                  kpv_ErrorFlags_UnsupportedMethod),
+              "Composite unsupported-method flags must remain terminal");
+
 QString archiveFatalError(IInArchive *pArchive)
 {
     if (!pArchive) return QStringLiteral("Archive open failed");
     const quint64 nFlags = archiveErrorFlags(pArchive);
     if (!nFlags) return QString();
-    if (nFlags & kpv_ErrorFlags_IsNotArc) return QString::fromLatin1(UNSUPPORTED_FORMAT_ERROR);
+    // Only a pure unsupported state may authorize native fallback. Composite
+    // masks can also describe corruption or incomplete input and stay terminal.
+    if (isExactArchiveErrorFlag(nFlags, kpv_ErrorFlags_IsNotArc)) return QString::fromLatin1(UNSUPPORTED_FORMAT_ERROR);
     if (nFlags & kpv_ErrorFlags_EncryptedHeadersError) return QStringLiteral("Wrong archive password or encrypted headers error");
     if (nFlags & kpv_ErrorFlags_HeadersError) return QStringLiteral("Archive headers error");
     if (nFlags & kpv_ErrorFlags_UnexpectedEnd) return QStringLiteral("Unexpected end of archive");
-    if (nFlags & kpv_ErrorFlags_UnsupportedMethod) return QStringLiteral("Unsupported archive method");
+    if (isExactArchiveErrorFlag(nFlags, kpv_ErrorFlags_UnsupportedMethod)) return QStringLiteral("Unsupported archive method");
     if (nFlags & kpv_ErrorFlags_UnsupportedFeature) return QStringLiteral("Unsupported archive feature");
     if (nFlags & kpv_ErrorFlags_DataError) return QStringLiteral("Archive data error");
     if (nFlags & kpv_ErrorFlags_CrcError) return QStringLiteral("Archive CRC error");
@@ -893,6 +963,18 @@ OpenStatus openOneStream(const CMyComPtr<IInStream> &stream, const QString &sLog
             candidateStream = limitedStream;
         }
 
+        // The raw Base64 handler retains the complete encoded stream during
+        // Open(), before extraction-time decoder limits can apply. Reject an
+        // oversized extension-led input before handing it to that allocator.
+        if ((format.sName == QLatin1String("Base64")) &&
+            ((format.nStreamOffset > probe.nSize) ||
+             ((probe.nSize - format.nStreamOffset) >
+              RAW_BASE64_MAX_INPUT_SIZE))) {
+            setError(pErrorString,
+                     QStringLiteral("Raw Base64 input exceeds the 256 MiB safety limit"));
+            return OpenStatus::Fatal;
+        }
+
         CMyComPtr<IInArchive> archive;
         IInArchive *pRawArchive = nullptr;
         const HRESULT nCreateResult = CreateArchiver(&format.classId, &IID_IInArchive, (void **)&pRawArchive);
@@ -905,7 +987,10 @@ OpenStatus openOneStream(const CMyComPtr<IInStream> &stream, const QString &sLog
         const UInt64 nMaximumScan = MAXIMUM_SCAN;
         const HRESULT nOpenResult = archive->Open(candidateStream, &nMaximumScan, callback);
         if (nOpenResult == S_OK) {
-            if (archiveErrorFlags(archive) & kpv_ErrorFlags_IsNotArc) {
+            // A pure false-positive signal may try the next handler. Any
+            // composite error mask must reach the terminal-error mapping.
+            if (isExactArchiveErrorFlag(archiveErrorFlags(archive),
+                                        kpv_ErrorFlags_IsNotArc)) {
                 archive->Close();
                 continue;
             }
@@ -1344,13 +1429,15 @@ class ArchiveExtractCallback final : public IArchiveExtractCallback,
 
 public:
     ArchiveExtractCallback(IInArchive *pArchive, const QList<TechnicalEntry> *pEntries, const QString &sStageRoot,
-                           QIODevice *pSelectedOutput, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct)
+                           QIODevice *pSelectedOutput, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct,
+                           qint64 nMaxOutputSize)
         : m_archive(pArchive),
           m_pEntries(pEntries),
           m_sStageRoot(sStageRoot),
           m_pSelectedOutput(pSelectedOutput),
           m_password(toUString(sPassword)),
-          m_progress(pPdStruct)
+          m_progress(pPdStruct),
+          m_nMaxOutputSize(nMaxOutputSize)
     {
     }
 
@@ -1363,6 +1450,12 @@ public:
     bool isCanceled() const { return !m_progress.canContinue(); }
 
 private:
+    void recordError(const QString &sError)
+    {
+        QMutexLocker locker(&m_errorMutex);
+        if (m_sError.isEmpty()) m_sError = sError;
+    }
+
     void recordResult(Int32 nResult)
     {
         const QString sResult = operationResultText(nResult);
@@ -1384,7 +1477,9 @@ private:
     Int32 m_nAskMode = NArchive::NExtract::NAskMode::kSkip;
     QString m_sCurrentPath;
     QScopedPointer<QFile> m_currentFile;
+    QScopedPointer<LimitedWriteDevice> m_currentLimitedOutput;
     CMyComPtr<ISequentialOutStream> m_currentStream;
+    qint64 m_nMaxOutputSize = -1;
 };
 
 Z7_COM7F_IMF(ArchiveExtractCallback::SetTotal(UInt64))
@@ -1402,6 +1497,7 @@ Z7_COM7F_IMF(ArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStrea
     if (!outStream) return E_INVALIDARG;
     *outStream = nullptr;
     m_currentStream.Release();
+    m_currentLimitedOutput.reset();
     m_currentFile.reset();
     m_sCurrentPath.clear();
     m_nCurrentIndex = index;
@@ -1419,6 +1515,18 @@ Z7_COM7F_IMF(ArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStrea
         return S_OK;
     }
 
+    if (m_nMaxOutputSize >= 0) {
+        bool bSizeValid = false;
+        const qulonglong nDeclaredSize = entry.mapValues
+            .value(QStringLiteral("Size")).toULongLong(&bSizeValid);
+        if (bSizeValid &&
+            (nDeclaredSize > (qulonglong)m_nMaxOutputSize)) {
+            recordError(QStringLiteral(
+                "Archive member exceeds the output-size limit"));
+            return E_FAIL;
+        }
+    }
+
     QIODevice *pDevice = m_pSelectedOutput;
     if (!pDevice) {
         if (m_sStageRoot.isEmpty()) return E_FAIL;
@@ -1429,6 +1537,17 @@ Z7_COM7F_IMF(ArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStrea
         pDevice = m_currentFile.data();
     }
     if (!pDevice || !pDevice->isOpen() || !pDevice->isWritable()) return E_FAIL;
+    // The runtime bound has to wrap whichever device was chosen, not just the
+    // staging file. The declared-size check above is skipped whenever the
+    // handler reports no trustworthy size - which is exactly the single-stream
+    // gzip/xz/bzip2 case - so a caller-supplied output device would otherwise
+    // be left with no bound at all.
+    if (m_nMaxOutputSize >= 0) {
+        m_currentLimitedOutput.reset(
+            new LimitedWriteDevice(pDevice, m_nMaxOutputSize));
+        pDevice = m_currentLimitedOutput.data();
+        if (!pDevice->isOpen() || !pDevice->isWritable()) return E_FAIL;
+    }
 
     QtOutStream *pSpec = new QtOutStream(pDevice, m_progress.pPdStruct);
     CMyComPtr<ISequentialOutStream> stream = pSpec;
@@ -1446,6 +1565,13 @@ Z7_COM7F_IMF(ArchiveExtractCallback::PrepareOperation(Int32 askExtractMode))
 Z7_COM7F_IMF(ArchiveExtractCallback::SetOperationResult(Int32 opRes))
 {
     m_currentStream.Release();
+    if (m_currentLimitedOutput &&
+        m_currentLimitedOutput->isLimitExceeded()) {
+        recordError(QStringLiteral(
+            "Archive member exceeds the output-size limit"));
+        opRes = NArchive::NExtract::NOperationResult::kDataError;
+    }
+    m_currentLimitedOutput.reset();
     if (m_currentFile) {
         if (opRes == NArchive::NExtract::NOperationResult::kOK) {
             if (m_pEntries && m_nCurrentIndex < (UInt32)m_pEntries->size()) {
@@ -1542,8 +1668,14 @@ bool checkExistingSafe(const QString &sPath, bool bExpectDirectory, QString *pEr
     return true;
 }
 
-bool ensureSafeDirectory(const QString &sRoot, const QString &sRelativeDirectory, QString *pErrorString)
+bool ensureSafeDirectory(const QString &sRoot, const QString &sRelativeDirectory,
+                         XBinary::UNPACK_FOLDER_TRANSACTION *pTransaction,
+                         QString *pErrorString)
 {
+    if (!pTransaction) {
+        setError(pErrorString, QStringLiteral("Archive publication transaction is unavailable"));
+        return false;
+    }
     if (sRelativeDirectory.isEmpty() || sRelativeDirectory == QLatin1String(".")) return checkExistingSafe(sRoot, true, pErrorString);
     QString sCurrent = sRoot;
     const QStringList parts = QDir::fromNativeSeparators(sRelativeDirectory).split(QLatin1Char('/'), Qt::SkipEmptyParts);
@@ -1555,9 +1687,15 @@ bool ensureSafeDirectory(const QString &sRoot, const QString &sRelativeDirectory
         }
         if (QFileInfo::exists(sCurrent)) {
             if (!checkExistingSafe(sCurrent, true, pErrorString)) return false;
-        } else if (!QDir().mkdir(sCurrent) || !checkExistingSafe(sCurrent, true, pErrorString)) {
-            setError(pErrorString, QStringLiteral("Cannot create destination directory: %1").arg(sCurrent));
-            return false;
+        } else {
+            if (!pTransaction->ensureDirectory(sCurrent)) {
+                const QString sTransactionError = pTransaction->errorString();
+                setError(pErrorString, sTransactionError.isEmpty()
+                                           ? QStringLiteral("Cannot create destination directory: %1").arg(sCurrent)
+                                           : sTransactionError);
+                return false;
+            }
+            if (!checkExistingSafe(sCurrent, true, pErrorString)) return false;
         }
     }
     return true;
@@ -1637,8 +1775,14 @@ bool preflightDestination(const QString &sRoot, const QList<StagedEntry> &entrie
     return true;
 }
 
-bool copyFileTransactional(const StagedEntry &entry, const QString &sTarget, QString *pErrorString, const ProgressGuard &progress)
+bool copyFileTransactional(const StagedEntry &entry, const QString &sTarget,
+                           XBinary::UNPACK_FOLDER_TRANSACTION *pTransaction,
+                           QString *pErrorString, const ProgressGuard &progress)
 {
+    if (!pTransaction) {
+        setError(pErrorString, QStringLiteral("Archive publication transaction is unavailable"));
+        return false;
+    }
     QFile source(entry.sSourcePath);
     if (!source.open(QIODevice::ReadOnly)) {
         setError(pErrorString, QStringLiteral("Cannot read staged archive item"));
@@ -1655,14 +1799,56 @@ bool copyFileTransactional(const StagedEntry &entry, const QString &sTarget, QSt
         const qint64 nRead = source.read(buffer.data(), buffer.size());
         if (nRead < 0) break;
         if (!nRead) {
+            if (!progress.canContinue()) {
+                target.cancelWriting();
+                setError(pErrorString, QStringLiteral("Archive operation canceled"));
+                return false;
+            }
+            // Re-validate the destination at the publication boundary.
+            // preflightDestination checked it once before extraction began, so
+            // on its own the window between that check and this replacement
+            // spans the whole operation: anything could have swapped the target
+            // for a symlink, a reparse point or a directory in the meantime.
+            // The native route already re-checks immediately before its commit;
+            // this route did not, which made it the weaker of the two.
+            if (!checkExistingSafe(sTarget, false, pErrorString)) {
+                target.cancelWriting();
+                return false;
+            }
+            // Keep the existing destination visible while the verified bytes
+            // are copied into QSaveFile's private temporary.  Journal/backup
+            // the destination only at the publication boundary immediately
+            // before the atomic replacement.
+            if (!pTransaction->prepareFile(sTarget)) {
+                target.cancelWriting();
+                const QString sTransactionError = pTransaction->errorString();
+                setError(pErrorString, sTransactionError.isEmpty()
+                                           ? QStringLiteral("Cannot prepare destination file: %1").arg(sTarget)
+                                           : sTransactionError);
+                return false;
+            }
+            if (!progress.canContinue()) {
+                target.cancelWriting();
+                setError(pErrorString, QStringLiteral("Archive operation canceled"));
+                return false;
+            }
             if (!target.commit()) {
                 setError(pErrorString, QStringLiteral("Cannot finalize destination file: %1").arg(sTarget));
                 return false;
             }
-            QFile::setPermissions(sTarget, entry.permissions);
-            if (entry.modified.isValid()) {
-                QFile output(sTarget);
-                if (output.open(QIODevice::ReadWrite)) output.setFileTime(entry.modified, QFileDevice::FileModificationTime);
+            // Record the now-visible file before doing metadata work or
+            // observing cancellation so every later failure can remove it or
+            // restore the journaled predecessor.
+            if (!pTransaction->markFilePublished(sTarget)) {
+                const QString sTransactionError = pTransaction->errorString();
+                setError(pErrorString, sTransactionError.isEmpty()
+                                           ? QStringLiteral("Cannot journal published destination file: %1").arg(sTarget)
+                                           : sTransactionError);
+                return false;
+            }
+            if (!progress.canContinue()) {
+                setError(pErrorString, QStringLiteral("Archive operation canceled"));
+                return false;
             }
             return true;
         }
@@ -1673,6 +1859,38 @@ bool copyFileTransactional(const StagedEntry &entry, const QString &sTarget, QSt
     return false;
 }
 
+bool rollbackFolderPublication(XBinary::UNPACK_FOLDER_TRANSACTION *pTransaction,
+                               const QString &sFailure,
+                               QString *pErrorString)
+{
+    QString sMessage = sFailure;
+    if (sMessage.isEmpty()) sMessage = QStringLiteral("Archive publication failed");
+
+    const QString sTransactionErrorBefore = pTransaction ? pTransaction->errorString() : QString();
+    const bool bRolledBack = pTransaction && pTransaction->rollback();
+    const QString sTransactionErrorAfter = pTransaction ? pTransaction->errorString() : QString();
+
+    const auto appendDetail = [&sMessage](const QString &sDetail) {
+        if (!sDetail.isEmpty() && !sMessage.contains(sDetail)) {
+            sMessage += QStringLiteral("; ") + sDetail;
+        }
+    };
+    appendDetail(sTransactionErrorBefore);
+
+    if (!bRolledBack) {
+        appendDetail(QStringLiteral("Extraction rollback is incomplete"));
+        appendDetail(sTransactionErrorAfter);
+        const QString sRecoveryPath = pTransaction ? pTransaction->recoveryPath() : QString();
+        appendDetail(QStringLiteral("Rollback recovery path: %1")
+                         .arg(sRecoveryPath.isEmpty()
+                                  ? QStringLiteral("<unavailable>")
+                                  : QDir::toNativeSeparators(sRecoveryPath)));
+    }
+
+    setError(pErrorString, sMessage);
+    return false;
+}
+
 bool mergeStagedEntries(const QString &sRoot, QList<StagedEntry> entries, QString *pErrorString, XBinary::PDSTRUCT *pPdStruct)
 {
     std::stable_sort(entries.begin(), entries.end(), [](const StagedEntry &a, const StagedEntry &b) {
@@ -1680,19 +1898,86 @@ bool mergeStagedEntries(const QString &sRoot, QList<StagedEntry> entries, QStrin
         return a.sRelativePath.count(QLatin1Char('/')) < b.sRelativePath.count(QLatin1Char('/'));
     });
     ProgressGuard progress(pPdStruct);
+    XBinary::UNPACK_FOLDER_TRANSACTION transaction(sRoot);
+    QString sPublicationError;
+    const auto failPublication = [&](const QString &sFailure) {
+        return rollbackFolderPublication(&transaction, sFailure, pErrorString);
+    };
+
+    if (!transaction.isValid()) {
+        const QString sTransactionError = transaction.errorString();
+        // Construction has not published or journaled anything, so there is
+        // nothing to roll back and no recovery directory to report.
+        setError(pErrorString, sTransactionError.isEmpty()
+                                   ? QStringLiteral("Cannot initialize archive publication transaction")
+                                   : sTransactionError);
+        return false;
+    }
+
     for (const StagedEntry &entry : entries) {
         if (!progress.canContinue()) {
-            setError(pErrorString, QStringLiteral("Archive operation canceled"));
-            return false;
+            return failPublication(QStringLiteral("Archive operation canceled"));
         }
         const QString sTarget = QDir(sRoot).filePath(entry.sRelativePath);
+        if (!isContainedPath(sTarget, sRoot)) {
+            return failPublication(QStringLiteral("Destination path escapes its root"));
+        }
         if (entry.bIsFolder) {
-            if (!ensureSafeDirectory(sRoot, entry.sRelativePath, pErrorString)) return false;
+            sPublicationError.clear();
+            if (!ensureSafeDirectory(sRoot, entry.sRelativePath, &transaction,
+                                     &sPublicationError)) {
+                return failPublication(sPublicationError);
+            }
         } else {
             const QString sParentRelative = QDir(sRoot).relativeFilePath(QFileInfo(sTarget).absolutePath());
-            if (!ensureSafeDirectory(sRoot, sParentRelative, pErrorString) ||
-                (QFileInfo::exists(sTarget) && !checkExistingSafe(sTarget, false, pErrorString)) ||
-                !copyFileTransactional(entry, sTarget, pErrorString, progress)) return false;
+            sPublicationError.clear();
+            if (!ensureSafeDirectory(sRoot, sParentRelative, &transaction,
+                                     &sPublicationError) ||
+                (QFileInfo::exists(sTarget) &&
+                 !checkExistingSafe(sTarget, false, &sPublicationError)) ||
+                !copyFileTransactional(entry, sTarget, &transaction,
+                                       &sPublicationError, progress)) {
+                return failPublication(sPublicationError);
+            }
+        }
+    }
+
+    if (!progress.canContinue()) {
+        return failPublication(QStringLiteral("Archive operation canceled"));
+    }
+    if (!transaction.commit()) {
+        const QString sTransactionError = transaction.errorString();
+        return failPublication(sTransactionError.isEmpty()
+                                   ? QStringLiteral("Cannot commit archive publication transaction")
+                                   : sTransactionError);
+    }
+    if (!transaction.errorString().isEmpty()) {
+        QString sWarning = transaction.errorString();
+        if (!transaction.recoveryPath().isEmpty() &&
+            !sWarning.contains(transaction.recoveryPath())) {
+            sWarning += QStringLiteral("; rollback-data recovery path: %1")
+                            .arg(QDir::toNativeSeparators(
+                                transaction.recoveryPath()));
+        }
+        // Publication is committed, so retain success while exposing the
+        // cleanup/recovery warning to callers that inspect diagnostics.
+        setError(pErrorString, sWarning);
+    }
+
+    // Permissions can make a file non-deletable on Windows.  Apply all staged
+    // metadata only after the journal has committed, when rollback is no
+    // longer required.  These best-effort operations preserve the previous
+    // behavior, which did not fail extraction on a metadata-set error.
+    for (const StagedEntry &entry : entries) {
+        if (entry.bIsFolder) continue;
+        const QString sTarget = QDir(sRoot).filePath(entry.sRelativePath);
+        QFile::setPermissions(sTarget, entry.permissions);
+        if (entry.modified.isValid()) {
+            QFile output(sTarget);
+            if (output.open(QIODevice::ReadWrite)) {
+                output.setFileTime(entry.modified,
+                                   QFileDevice::FileModificationTime);
+            }
         }
     }
     return true;
@@ -1700,7 +1985,10 @@ bool mergeStagedEntries(const QString &sRoot, QList<StagedEntry> entries, QStrin
 
 bool copyDevice(QIODevice *pSource, QIODevice *pTarget, QString *pErrorString, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pSource || !pTarget || !pSource->seek(0)) return false;
+    if (!pSource || !pTarget || !pSource->seek(0)) {
+        setError(pErrorString, QStringLiteral("Cannot read extracted archive item"));
+        return false;
+    }
     ProgressGuard progress(pPdStruct);
     QByteArray buffer(COPY_BUFFER_SIZE, 0);
     while (progress.canContinue()) {
@@ -1744,10 +2032,13 @@ bool configureDecoderMemoryLimit(OpenedArchive *pOpened, QString *pErrorString)
 
 bool runExtract(OpenedArchive *pOpened, const QList<TechnicalEntry> &entries, const QString &sPassword,
                 const UInt32 *pIndices, UInt32 nItems, bool bTest, const QString &sStageRoot, QIODevice *pSelectedOutput,
-                QString *pErrorString, XBinary::PDSTRUCT *pPdStruct)
+                QString *pErrorString, XBinary::PDSTRUCT *pPdStruct,
+                qint64 nMaxOutputSize = -1)
 {
     if (!configureDecoderMemoryLimit(pOpened, pErrorString)) return false;
-    ArchiveExtractCallback *pCallbackSpec = new ArchiveExtractCallback(pOpened->archive, &entries, sStageRoot, pSelectedOutput, sPassword, pPdStruct);
+    ArchiveExtractCallback *pCallbackSpec = new ArchiveExtractCallback(
+        pOpened->archive, &entries, sStageRoot, pSelectedOutput, sPassword,
+        pPdStruct, nMaxOutputSize);
     CMyComPtr<IArchiveExtractCallback> callback = pCallbackSpec;
     const HRESULT nResult = pOpened->archive->Extract(pIndices, nItems, bTest ? 1 : 0, callback);
     const QString sCallbackError = pCallbackSpec->errorString();
@@ -1780,6 +2071,7 @@ bool XArchives::isIp7zUnsupportedFormatError(const QString &sErrorString)
 {
     return (sErrorString == QString::fromLatin1(UNSUPPORTED_FORMAT_ERROR)) ||
            (sErrorString == QStringLiteral("Unsupported compression method")) ||
+           (sErrorString == QStringLiteral("Unsupported archive method")) ||
            (sErrorString == QStringLiteral("Archive format or method is not implemented"));
 }
 
@@ -1848,8 +2140,18 @@ bool XArchives::extractArchiveWithIp7zSource(const QString &sFileName, const QSt
                                             const QString &sResultFolder, QString *pErrorString,
                                             XBinary::PDSTRUCT *pPdStruct)
 {
+    return extractArchiveWithIp7zSource(
+        sFileName, sPassword, sResultFolder, pErrorString, pPdStruct, -1);
+}
+
+bool XArchives::extractArchiveWithIp7zSource(const QString &sFileName, const QString &sPassword,
+                                            const QString &sResultFolder, QString *pErrorString,
+                                            XBinary::PDSTRUCT *pPdStruct,
+                                            qint64 nMaxOutputSize)
+{
     setError(pErrorString, QString());
-    if (!QFileInfo(sFileName).isFile() || sResultFolder.isEmpty()) {
+    if (!QFileInfo(sFileName).isFile() || sResultFolder.isEmpty() ||
+        (nMaxOutputSize < -1)) {
         setError(pErrorString, QStringLiteral("Invalid archive or destination directory"));
         return false;
     }
@@ -1875,7 +2177,9 @@ bool XArchives::extractArchiveWithIp7zSource(const QString &sFileName, const QSt
         return false;
     }
     const QString sStageRoot = QFileInfo(temporaryDir.path()).canonicalFilePath();
-    if (!runExtract(&opened, entries, sPassword, nullptr, (UInt32)(Int32)-1, false, sStageRoot, nullptr, pErrorString, pPdStruct)) {
+    if (!runExtract(&opened, entries, sPassword, nullptr,
+                    (UInt32)(Int32)-1, false, sStageRoot, nullptr,
+                    pErrorString, pPdStruct, nMaxOutputSize)) {
         opened.close();
         return false;
     }
@@ -1890,8 +2194,17 @@ bool XArchives::extractArchiveRecordWithIp7zSource(const QString &sFileName, con
                                                   const QString &sPassword, QIODevice *pOutputDevice,
                                                   QString *pErrorString, XBinary::PDSTRUCT *pPdStruct)
 {
+    return extractArchiveRecordWithIp7zSource(sFileName, sRecordName, sPassword, pOutputDevice, pErrorString, pPdStruct, -1);
+}
+
+bool XArchives::extractArchiveRecordWithIp7zSource(const QString &sFileName, const QString &sRecordName,
+                                                  const QString &sPassword, QIODevice *pOutputDevice,
+                                                  QString *pErrorString, XBinary::PDSTRUCT *pPdStruct,
+                                                  qint64 nMaxOutputSize)
+{
     setError(pErrorString, QString());
-    if (!QFileInfo(sFileName).isFile() || sRecordName.isEmpty() || !pOutputDevice || !pOutputDevice->isOpen() || !pOutputDevice->isWritable()) {
+    if (!QFileInfo(sFileName).isFile() || sRecordName.isEmpty() || !pOutputDevice || !pOutputDevice->isOpen() || !pOutputDevice->isWritable() ||
+        (nMaxOutputSize < -1)) {
         setError(pErrorString, QStringLiteral("Invalid archive record or output device"));
         return false;
     }
@@ -1920,6 +2233,16 @@ bool XArchives::extractArchiveRecordWithIp7zSource(const QString &sFileName, con
         opened.close();
         return false;
     }
+    if (nMaxOutputSize >= 0) {
+        bool bSizeValid = false;
+        const qulonglong nDeclaredSize = pMatch->mapValues.value(QStringLiteral("Size")).toULongLong(&bSizeValid);
+
+        if (bSizeValid && (nDeclaredSize > (qulonglong)nMaxOutputSize)) {
+            setError(pErrorString, QStringLiteral("Selected archive record exceeds the output-size limit"));
+            opened.close();
+            return false;
+        }
+    }
     QTemporaryFile stagedFile(QDir(QDir::tempPath()).filePath(QStringLiteral("xfileunpacker-record-XXXXXX")));
     if (!stagedFile.open()) {
         setError(pErrorString, QStringLiteral("Cannot create private record staging file"));
@@ -1927,8 +2250,24 @@ bool XArchives::extractArchiveRecordWithIp7zSource(const QString &sFileName, con
         return false;
     }
     const UInt32 nIndex = pMatch->nIndex;
-    const bool bExtracted = runExtract(&opened, entries, sPassword, &nIndex, 1, false, QString(), &stagedFile, pErrorString, pPdStruct);
+    QScopedPointer<LimitedWriteDevice> limitedOutput;
+    QIODevice *pStagedOutput = &stagedFile;
+
+    if (nMaxOutputSize >= 0) {
+        limitedOutput.reset(new LimitedWriteDevice(&stagedFile, nMaxOutputSize));
+        pStagedOutput = limitedOutput.data();
+    }
+
+    const bool bExtracted = runExtract(&opened, entries, sPassword, &nIndex, 1, false, QString(), pStagedOutput, pErrorString, pPdStruct);
     opened.close();
-    if (!bExtracted || !stagedFile.flush()) return false;
+    if (limitedOutput && limitedOutput->isLimitExceeded()) {
+        setError(pErrorString, QStringLiteral("Selected archive record exceeds the output-size limit"));
+        return false;
+    }
+    if (!bExtracted) return false;
+    if (!stagedFile.flush()) {
+        setError(pErrorString, QStringLiteral("Cannot flush private record staging file"));
+        return false;
+    }
     return copyDevice(&stagedFile, pOutputDevice, pErrorString, pPdStruct);
 }

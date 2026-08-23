@@ -86,6 +86,8 @@ public:
     XMACH_DEF::fat_header read_fat_header();
     XMACH_DEF::fat_arch read_fat_arch(qint32 nIndex);
     QList<XMACH_DEF::fat_arch> read_fat_arch_list(PDSTRUCT *pPdStruct);
+    XMACH_DEF::fat_arch_64 read_fat_arch_64(qint32 nIndex);
+    QList<XMACH_DEF::fat_arch_64> read_fat_arch_64_list(PDSTRUCT *pPdStruct);
 
     static QMap<quint64, QString> getHeaderMagics();
     static QMap<quint64, QString> getHeaderMagicsS();
@@ -97,6 +99,21 @@ public:
     virtual QList<QString> getSearchSignatures() override;
     virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
 private:
+    struct ARCHITECTURE_RECORD {
+        quint32 cputype;
+        quint32 cpusubtype;
+        quint64 offset;
+        quint64 size;
+        quint32 align;
+        quint32 reserved;
+    };
+
+    bool _getFatFormat(bool *pbIs64, bool *pbIsBigEndian);
+    qint64 _getArchitectureRecordSize();
+    bool _readArchitectureRecord(qint32 nIndex, ARCHITECTURE_RECORD *pRecord);
+    bool _isArchitectureRangeValid(const ARCHITECTURE_RECORD &record);
+    quint32 _getValidatedArchitectureCount(PDSTRUCT *pPdStruct, bool bValidateRanges);
+
     INTERNAL_INFO m_internalInfo;
 };
 

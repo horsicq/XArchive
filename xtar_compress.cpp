@@ -57,7 +57,7 @@ QString XTAR_COMPRESS::getFileFormatExt()
 
 QString XTAR_COMPRESS::getFileFormatExtsString()
 {
-    return "*.tar.Z;*.tZ;*.taZ";
+    return "*.tar.Z;*.taz;*.tZ;*.taZ";
 }
 
 QString XTAR_COMPRESS::getMIMEString()

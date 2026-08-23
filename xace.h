@@ -161,6 +161,7 @@ private:
         QList<BLOCK_INFO> listFileBlocks;
         quint16 nArchiveFlags;
         qint64 nArchiveSize;
+        quint8 nVolumeNumber;
     };
 
     bool _readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct = nullptr);

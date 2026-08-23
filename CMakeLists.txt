@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.14)
 
 project(XArchive)
 
+# Keep the direct-module source export in sync with xarchive.cmake.  The game
+# formats are stored containers and add no codec library or external dependency.
+set(XARCHIVE_SOURCES
+    ${XARCHIVE_SOURCES}
+    ${CMAKE_CURRENT_LIST_DIR}/xgamearchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xgamearchive.h
+)
+
 # bzip2 / zlib / lzma / ppmd, built from the Algos amalgamations. Kept in a
 # separate file so standalone demo/test projects that link these by name can
 # include() it without adding all of XArchive as a subdirectory.

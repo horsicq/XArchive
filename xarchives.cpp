@@ -60,7 +60,8 @@ bool hasLegacyZstdMagic(QIODevice *pDevice)
 
 void setOperationError(XBinary::PDSTRUCT *pPdStruct, const QString &sError)
 {
-    if (pPdStruct && XBinary::getPdStructErrorString(pPdStruct).isEmpty() && !sError.isEmpty()) {
+    if (!sError.isEmpty() && pPdStruct &&
+        XBinary::getPdStructErrorString(pPdStruct).isEmpty()) {
         XBinary::setPdStructErrorString(pPdStruct, sError);
     }
 }
@@ -228,7 +229,7 @@ QList<XArchive::RECORD> XArchives::getRecords(QIODevice *pDevice, XBinary::FT fi
 
         pBinary = XFormats::createClass(XBinary::FT_ZIP, pDevice);
         pArchives = dynamic_cast<XArchive *>(pBinary);
-        
+
         if (pArchives) {
             listResult = pArchives->getRecords(nLimit, pPdStruct);
         }
@@ -564,6 +565,12 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
 {
     bool bResult = false;
     QString sIp7zError;
+    qint64 nMaxOutputSize = -1;
+    if (!XBinary::getUnpackOutputLimit(mapProperties, &nMaxOutputSize)) {
+        XBinary::setPdStructErrorString(
+            pPdStruct, tr("Invalid unpacked-output limit"));
+        return false;
+    }
     const QString sPassword = mapProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
     XBinary::FT fileType = XBinary::FT_UNKNOWN;
     QFile nativeProbe(sFileName);
@@ -592,8 +599,16 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
     if (!bPreferNative && isIp7zSourceAvailable()) {
         QList<XBinary::ARCHIVERECORD> listProbe;
         if (listArchiveWithIp7zSource(sFileName, sPassword, &listProbe, &sIp7zError, pPdStruct)) {
-            bResult = extractArchiveWithIp7zSource(sFileName, sPassword, sResultFileFolder, &sIp7zError, pPdStruct);
-            if (bResult) return true;
+            bResult = extractArchiveWithIp7zSource(
+                sFileName, sPassword, sResultFileFolder, &sIp7zError,
+                pPdStruct, nMaxOutputSize);
+            if (bResult) {
+                // A committed extraction can still retain obsolete rollback
+                // data when cleanup fails. Preserve success, but expose the
+                // recovery warning through the normal operation diagnostic.
+                setOperationError(pPdStruct, sIp7zError);
+                return true;
+            }
 
             // Extraction is staged by the source-built ip7z bridge, so an
             // unsupported coder has committed no destination entries.  Retry
@@ -777,7 +792,23 @@ bool XArchives::isNativeReaderPreferredFileType(XBinary::FT fileType,
         case XBinary::FT_LIZARD:
         case XBinary::FT_WARC:
         case XBinary::FT_MTREE:
-        case XBinary::FT_UU: return true;
+        case XBinary::FT_UU:
+        case XBinary::FT_QUAKE_PAK:
+        case XBinary::FT_DOOM_WAD:
+        case XBinary::FT_BUILD_GRP:
+        // SAR and ARX have no compiled ip7z handler, and both reuse LHA's
+        // method tag closely enough that the LZH handler will happily list one
+        // before failing to extract it. Letting that happen turns a working
+        // native read into an "unsupported archive format", so keep them here
+        // rather than relying on ip7z declining them.
+        case XBinary::FT_SAR:
+        case XBinary::FT_ARX: return true;
+        case XBinary::FT_ISO9660:
+            // Raw CD sectors and CUE sheets are projected through XISO9660's
+            // native 2048-byte logical-sector view. ip7z's ISO handler seeks
+            // cooked offsets directly and cannot open these sources.
+            if (XISO9660::isCueOrRawImage(pDevice, pPdStruct)) return true;
+            break;
         // The source-built ip7z handler is substantially faster for very large
         // current-format Zstandard streams. A leading legacy v0.4-v0.7 frame
         // must stay on the native adapter path; bounded current streams fall
@@ -847,6 +878,8 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ZSTD);
     result.insert(XBinary::FT_ZLIB);
     result.insert(XBinary::FT_LHA);
+    result.insert(XBinary::FT_SAR);
+    result.insert(XBinary::FT_ARX);
     result.insert(XBinary::FT_ARJ);
     result.insert(XBinary::FT_ACE);
     result.insert(XBinary::FT_ARC);
@@ -869,6 +902,9 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_WARC);
     result.insert(XBinary::FT_MTREE);
     result.insert(XBinary::FT_UU);
+    result.insert(XBinary::FT_QUAKE_PAK);
+    result.insert(XBinary::FT_DOOM_WAD);
+    result.insert(XBinary::FT_BUILD_GRP);
     result.insert(XBinary::FT_DOS4G);
     result.insert(XBinary::FT_DOS16M);
 

@@ -107,15 +107,39 @@ public:
     virtual bool addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
+protected:
+    struct TAR_RECORD {
+        posix_header header;
+        qint64 nHeaderOffset;
+        qint64 nDataOffset;
+        qint64 nFileSize;
+        qint64 nRecordSize;
+        QString sPath;
+        QString sLinkPath;
+        bool bHasLinkPath;
+        QMap<QByteArray, QByteArray> mapMetadata;
+    };
+
+    struct UNPACK_CONTEXT {
+        QList<TAR_RECORD> listRecords;
+        qint64 nArchiveEnd;
+    };
+
 private:
     posix_header read_posix_header(qint64 nOffset);
     qint32 _getNumberOf_posix_headers(qint64 nOffset, PDSTRUCT *pPdStruct);
     qint64 _getSize(const posix_header &header);
     static QString _getRecordPath(const posix_header &header);
     static bool _parseNumber(const char *pData, qint32 nSize, qint64 *pValue);
+    bool _readHeader(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader,
+                     bool *pIsZeroBlock, PDSTRUCT *pPdStruct);
     bool _readRecord(qint64 nOffset, qint64 nTotalSize, posix_header *pHeader,
                      qint64 *pFileSize, qint64 *pRecordSize,
-                     bool *pIsZeroBlock, PDSTRUCT *pPdStruct);
+                     bool *pIsZeroBlock, PDSTRUCT *pPdStruct,
+                     qint64 nSizeOverride = -1);
+    bool _collectRecords(qint64 nOffset, qint64 nTotalSize,
+                         QList<TAR_RECORD> *pListRecords,
+                         qint64 *pEndOffset, PDSTRUCT *pPdStruct);
     bool _scanArchive(qint64 nOffset, qint64 nTotalSize, qint32 *pNumberOfRecords, qint64 *pEndOffset, PDSTRUCT *pPdStruct);
     static bool createHeader(const QString &sFileName, const QString &sBasePath, qint64 nFileSize, quint32 nMode, qint64 nMTime,
                              posix_header *pHeader);

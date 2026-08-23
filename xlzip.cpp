@@ -652,6 +652,10 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if ((pContext->nUncompressedSize < 0) ||
         (pContext->nMemberSize < 0)) return false;
     const qint64 nMemberSize = pContext->nMemberSize;
+    if (!XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            pContext->nUncompressedSize)) {
+        return false;
+    }
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         pContext->nUncompressedSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedOutput || !guardedSource) return false;

@@ -24,6 +24,7 @@
 #include "xaesdecoder.h"
 #include "xzipcryptodecoder.h"
 #include "xlzhdecoder.h"
+#include "xarcdecoder.h"
 #include "xarjdecoder.h"
 #include "xacedecoder.h"
 #include "xrardecoder.h"
@@ -59,6 +60,8 @@ public:
     explicit XDecompress(QObject *parent = nullptr);
     virtual ~XDecompress();
     bool decompressFPART(const XBinary::FPART &fPart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput, XBinary::PDSTRUCT *pPdStruct);
+    bool decompressFPART(const XBinary::FPART &fPart, QIODevice *pDeviceInput, QIODevice *pDeviceOutput,
+                         const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct);
     bool decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput,
                                  const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct);
     bool multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);

@@ -75,12 +75,24 @@ public:
                                             const QString &sResultFolder,
                                             QString *pErrorString = nullptr,
                                             XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool extractArchiveWithIp7zSource(const QString &sFileName, const QString &sPassword,
+                                            const QString &sResultFolder,
+                                            QString *pErrorString,
+                                            XBinary::PDSTRUCT *pPdStruct,
+                                            qint64 nMaxOutputSize);
     static bool extractArchiveRecordWithIp7zSource(const QString &sFileName,
                                                   const QString &sRecordName,
                                                   const QString &sPassword,
                                                   QIODevice *pOutputDevice,
                                                   QString *pErrorString = nullptr,
                                                   XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool extractArchiveRecordWithIp7zSource(const QString &sFileName,
+                                                  const QString &sRecordName,
+                                                  const QString &sPassword,
+                                                  QIODevice *pOutputDevice,
+                                                  QString *pErrorString,
+                                                  XBinary::PDSTRUCT *pPdStruct,
+                                                  qint64 nMaxOutputSize);
     static QSet<XBinary::FT> getArchiveOpenValidFileTypes();
 
 private:

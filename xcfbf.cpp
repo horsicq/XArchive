@@ -1244,7 +1244,9 @@ bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
                                     : qFromLittleEndian<quint64>(pStreamEntry + 4);
     const bool bIsMini = (nStreamSize < pContext->nMiniCutoff) && (pContext->nRootStartSector != 0xFFFFFFFF);
 
-    if (nStreamSize > (quint64)(std::numeric_limits<qint64>::max)()) {
+    if ((nStreamSize > (quint64)(std::numeric_limits<qint64>::max)()) ||
+        !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            (qint64)nStreamSize)) {
         return false;
     }
 
