@@ -124,6 +124,7 @@ HEADERS += \
     $$PWD/Algos/xbcj2decoder.h \
     $$PWD/Algos/xbranchdecoder.h \
     $$PWD/Algos/xlzxdecoder.h \
+    $$PWD/Algos/xquantumdecoder.h \
     $$PWD/Algos/xxpressdecoder.h \
     $$PWD/Algos/xsha256decoder.h \
     $$PWD/Algos/xblake2sp.h \
@@ -238,6 +239,7 @@ SOURCES += \
     $$PWD/Algos/xbcj2decoder.cpp \
     $$PWD/Algos/xbranchdecoder.cpp \
     $$PWD/Algos/xlzxdecoder.cpp \
+    $$PWD/Algos/xquantumdecoder.cpp \
     $$PWD/Algos/xxpressdecoder.cpp \
     $$PWD/Algos/xsha256decoder.cpp \
     $$PWD/Algos/xblake2sp.cpp \

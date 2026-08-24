@@ -52,6 +52,7 @@
 #include "Algos/xbcj2decoder.h"
 #include "Algos/xbranchdecoder.h"
 #include "Algos/xlzxdecoder.h"
+#include "Algos/xquantumdecoder.h"
 
 class XDecompress : public QObject {
     Q_OBJECT

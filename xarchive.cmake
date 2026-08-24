@@ -225,6 +225,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbranchdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzxdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzxdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xquantumdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xquantumdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xxpressdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xxpressdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.cpp

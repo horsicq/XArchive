@@ -3162,7 +3162,11 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             bResult = decEmitByteArray(baFolderData, nSubstreamOffset,
                                        nUncompressedSize, pState, pPdStruct);
         }
-    } else if (compressMethod == XBinary::HANDLE_METHOD_LZX_CAB) {
+    } else if ((compressMethod == XBinary::HANDLE_METHOD_LZX_CAB) || (compressMethod == XBinary::HANDLE_METHOD_QUANTUM_CAB)) {
+        // CAB LZX and Quantum share identical CFDATA framing (checksum, per-block
+        // boundary, exact cbUncomp result) and both keep decoder state across
+        // records; only the decoder call and the window-bits floor differ.
+        const bool bQuantumCab = (compressMethod == XBinary::HANDLE_METHOD_QUANTUM_CAB);
         // CAB LZX keeps dictionary state across CFDATA records, but every
         // payload has its own compressed boundary and exact cbUncomp result.
         // The window bits come from CFFOLDER.typeCompress.
@@ -3201,7 +3205,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                          pState->nInputOffset, nStreamSize,
                                          &nEffectiveCabInputSize) &&
                   (nEffectiveCabInputSize == nStreamSize) &&
-                  (nWindowBits >= 15) && (nWindowBits <= 21) &&
+                  (nWindowBits >= (bQuantumCab ? 10 : 15)) && (nWindowBits <= 21) &&
                   ((nConfiguredOutputLimit < 0) ||
                    ((nLzxWindowSize >= 0) &&
                     (nLzxWindowSize <= nConfiguredOutputLimit))) &&
@@ -3307,9 +3311,13 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                                        pPdStruct);
         } else if (bResult) {
             QByteArray baFolderData;
-            bResult = XLZXDecoder::decompressCABDataBlocks(
-                listCompressedBlocks, listUncompressedBlockSizes,
-                &baFolderData, nWindowBits, pPdStruct);
+            bResult = bQuantumCab
+                          ? XQuantumDecoder::decompressCABDataBlocks(
+                                listCompressedBlocks, listUncompressedBlockSizes,
+                                &baFolderData, nWindowBits, pPdStruct)
+                          : XLZXDecoder::decompressCABDataBlocks(
+                                listCompressedBlocks, listUncompressedBlockSizes,
+                                &baFolderData, nWindowBits, pPdStruct);
 
             if (bResult && (baFolderData.size() == nFolderUncompressed)) {
                 bResult = decEmitByteArray(baFolderData, nSubstreamOffset,

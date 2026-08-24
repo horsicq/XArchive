@@ -2215,7 +2215,7 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         }
 
         if ((record.spInfo.compressMethod == HANDLE_METHOD_STORE_CAB) || (record.spInfo.compressMethod == HANDLE_METHOD_MSZIP_CAB) ||
-            (record.spInfo.compressMethod == HANDLE_METHOD_LZX_CAB)) {
+            (record.spInfo.compressMethod == HANDLE_METHOD_LZX_CAB) || (record.spInfo.compressMethod == HANDLE_METHOD_QUANTUM_CAB)) {
             state.mapProperties.insert(XBinary::FPART_PROP_SUBSTREAMOFFSET, record.nOptHeaderOffset);
             state.mapProperties.insert(XBinary::FPART_PROP_OPTHEADER_SIZE, record.nOptHeaderSize);
         }

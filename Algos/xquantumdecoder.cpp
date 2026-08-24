@@ -249,7 +249,9 @@ bool decodeBlock(QuantumState &st, const QByteArray &baData, qint64 nOutLen, QBy
             // Quantum never does; fail closed on malformed data).
             if (((pOut->size() - nStart) + nLength) > nOutLen) return false;
             for (qint64 k = 0; k < nLength; k++) {
-                const quint8 c = (quint8)pOut->at(nSrc);
+                // Re-fetch constData() each iteration: append() below may
+                // reallocate. nSrc stays < size() because it trails the tail.
+                const quint8 c = (quint8)(pOut->constData()[nSrc]);
                 pOut->append((char)c);
                 nSrc++;
             }
