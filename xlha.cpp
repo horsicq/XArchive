@@ -151,11 +151,12 @@ XBinary::HANDLE_METHOD XLHA::_methodToHandle(const QString &sMethod)
     if (sMethod == "-lh7-") return HANDLE_METHOD_LZH7;
 
     // Streamline SAR spells the same tags with spaces instead of hyphens and
-    // upper-cases them. Its " LH5 " payload is a bit-exact standard -lh5-
-    // stream, so it maps to the same decoder. Only the stored and lh5 tags have
-    // ever been observed; anything else stays unknown so it fails closed rather
+    // upper-cases them. Its payloads are bit-exact standard LHA streams, so they
+    // map to the same decoders. SAR.DOC documents exactly three methods - LH5,
+    // LH4 and LH0 - and anything else stays unknown so it fails closed rather
     // than being decoded on an assumption.
     if (sMethod == " LH0 ") return HANDLE_METHOD_STORE;
+    if (sMethod == " LH4 ") return HANDLE_METHOD_LZH4;
     if (sMethod == " LH5 ") return HANDLE_METHOD_LZH5;
 
     return HANDLE_METHOD_UNKNOWN;

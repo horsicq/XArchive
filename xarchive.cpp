@@ -523,6 +523,22 @@ static bool archivePathHasUnsafeLink(const QString &sCanonicalRoot, const QStrin
         // isSymLink() also detects a broken link, for which exists() is false.
         if (fileInfo.isSymLink()) return true;
 
+#ifdef Q_OS_WIN
+        // Qt's isSymLink() does not reliably flag every NTFS reparse point
+        // (junctions and mount points in particular), so check the reparse
+        // attribute directly the same way the ip7z route does - otherwise the
+        // native path is weaker on Windows than the ip7z path it mirrors. Only
+        // an existing component that IS a reparse point is unsafe; a not-yet-
+        // created component reads INVALID_FILE_ATTRIBUTES and is fine.
+        {
+            const QString sNative = XBinary::winExtendedNativePath(fileInfo.absoluteFilePath());
+            const DWORD nReparseAttr = GetFileAttributesW(reinterpret_cast<LPCWSTR>(sNative.utf16()));
+            if ((nReparseAttr != INVALID_FILE_ATTRIBUTES) && (nReparseAttr & FILE_ATTRIBUTE_REPARSE_POINT)) {
+                return true;
+            }
+        }
+#endif
+
         if (fileInfo.exists()) {
             const QString sCanonical = QDir::fromNativeSeparators(fileInfo.canonicalFilePath());
             if (sCanonical.isEmpty() ||
@@ -2128,7 +2144,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 }
 
 bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset = 0,
-                                 qint64 nDecompressedLimit = -1)
+                                 qint64 nDecompressedLimit = -1,
+                                 const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties)
 {
     bool bResult = false;
 
@@ -2209,6 +2226,11 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         state.nInputLimit = record.nDataSize;
         state.nProcessedOffset = nDecompressedOffset;
         state.nProcessedLimit = nDecompressedLimit;
+        // Without this the whole decoder chain resolves every output gate to
+        // -1: the state was built with seven fields and this one was missing,
+        // so UNPACK_PROP_MAX_OUTPUT_SIZE never reached multiDecompress or the
+        // _writeDevice choke point.
+        state.mapUnpackProperties = mapUnpackProperties;
 
         XDecompress decompressor;
         bResult = decompressor.multiDecompress(&state, pPdStruct);
@@ -2424,7 +2446,8 @@ XArchive::COMPRESS_RESULT XArchive::_compress_deflate(QIODevice *pSourceDevice, 
     return result;
 }
 
-QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedLimit)
+QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedLimit,
+                                const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties)
 {
     QByteArray result;
     QPointer<XArchive> guardedArchive(this);
@@ -2449,7 +2472,7 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdSt
         if (!buffer.open(QIODevice::ReadWrite) ||
             !guardedArchive->unpackArchiveStreamRecord(
                 archiveRecord, &buffer,
-                QMap<UNPACK_PROP, QVariant>(), pPdStruct) ||
+                mapUnpackProperties, pPdStruct) ||
             !guardedArchive || !guardedSourceDevice ||
             !isProgressAlive() ||
             !XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -2479,7 +2502,7 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdSt
     // verify the record's stored checksum, so a write-only destination fails
     // every record that carries one.
     if (buffer.open(QIODevice::ReadWrite)) {
-        const bool bDecompressed = _decompressRecord(pRecord, guardedSourceDevice.data(), &buffer, pPdStruct, nDecompressedOffset, nDecompressedLimit);
+        const bool bDecompressed = _decompressRecord(pRecord, guardedSourceDevice.data(), &buffer, pPdStruct, nDecompressedOffset, nDecompressedLimit, mapUnpackProperties);
         buffer.close();
 
         // A QByteArray return value must never expose a valid-looking prefix
@@ -2550,7 +2573,8 @@ bool XArchive::unpackArchiveStreamRecord(
                                 pOutputDevice, mapProperties, pPdStruct);
 }
 
-bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct,
+                                const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties)
 {
     QPointer<XArchive> guardedArchive(this);
     const PDSTRUCTLIFETIME progressLifetime =
@@ -2588,7 +2612,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
         const bool bUnpacked = guardedArchive &&
             guardedArchive->unpackArchiveStreamRecord(
                 archiveRecord, &outputFile,
-                QMap<UNPACK_PROP, QVariant>(), pPdStruct);
+                mapUnpackProperties, pPdStruct);
         if (!guardedArchive || !guardedSourceDevice || !bUnpacked ||
             !isProgressAlive() ||
             !XBinary::isPdStructNotCanceled(pPdStruct) ||
@@ -2611,7 +2635,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
     // A zero packed size is not proof of a valid empty member.  The selected
     // codec must still validate its terminator, declared output size, password,
     // and checksum contract.
-    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), &workFile, pPdStruct, 0, -1);
+    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), &workFile, pPdStruct, 0, -1, mapUnpackProperties);
 
     if (!guardedArchive || !guardedSourceDevice || !bResult ||
         !isProgressAlive() || !XBinary::isPdStructNotCanceled(pPdStruct) ||
@@ -2649,7 +2673,8 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
     return file.commit();
 }
 
-bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct,
+                                  const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties)
 {
     QPointer<XArchive> guardedArchive(this);
     QPointer<QIODevice> guardedSourceDevice(getDevice());
@@ -2663,12 +2688,12 @@ bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice,
         Q_UNUSED(nArchiveStreamIndex)
         const bool bResult = guardedArchive->unpackArchiveStreamRecord(
             archiveRecord, guardedDestDevice.data(),
-            QMap<UNPACK_PROP, QVariant>(), pPdStruct);
+            mapUnpackProperties, pPdStruct);
         return guardedArchive && guardedSourceDevice && guardedDestDevice &&
                bResult;
     }
 
-    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), guardedDestDevice.data(), pPdStruct, 0, -1);
+    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), guardedDestDevice.data(), pPdStruct, 0, -1, mapUnpackProperties);
     return guardedArchive && guardedSourceDevice && guardedDestDevice && bResult;
 }
 

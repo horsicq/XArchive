@@ -56,6 +56,11 @@ XNPM::XNPM(QIODevice *pDevice) : XTAR_GZ(pDevice)
 
 bool XNPM::isValid(PDSTRUCT *pPdStruct)
 {
+    // getRecords() below leaves the cursor wherever its last read ended, so
+    // this needs the same guard the four-argument overload already uses. It
+    // was the only one of the five package member-isValid overloads without it.
+    DevicePositionGuard positionGuard(getDevice());
+
     bool bResult = false;
 
     XTAR_GZ xtarGz(getDevice());

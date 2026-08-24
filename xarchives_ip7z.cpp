@@ -516,7 +516,8 @@ Z7_COM7F_IMF(ArchiveOpenCallback::GetStream(const wchar_t *name, IInStream **inS
     const QFileInfo info(sPath);
     if (!info.isFile() || info.isSymLink()) return S_FALSE;
 #ifdef Q_OS_WIN
-    const DWORD nAttributes = GetFileAttributesW((LPCWSTR)QDir::toNativeSeparators(info.absoluteFilePath()).utf16());
+    const DWORD nAttributes =
+        GetFileAttributesW((LPCWSTR)XBinary::winExtendedNativePath(info.absoluteFilePath()).utf16());
     if (nAttributes == INVALID_FILE_ATTRIBUTES || (nAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) return S_FALSE;
 #endif
     QtInStream *pSpec = new QtInStream(info.absoluteFilePath(), m_progress.pPdStruct);
@@ -1640,7 +1641,11 @@ Z7_COM7F_IMF(ArchiveExtractCallback::CryptoGetTextPassword(BSTR *password))
 #ifdef Q_OS_WIN
 bool isReparsePoint(const QString &sPath, bool *pbValid = nullptr)
 {
-    const DWORD nAttributes = GetFileAttributesW((LPCWSTR)QDir::toNativeSeparators(sPath).utf16());
+    // Extended-length form, or a staged item past MAX_PATH reports as invalid
+    // and the caller then refuses the extraction with "Staged archive item is
+    // a reparse point" - the failure mode behind the long-destination reports.
+    const DWORD nAttributes =
+        GetFileAttributesW((LPCWSTR)XBinary::winExtendedNativePath(QFileInfo(sPath).absoluteFilePath()).utf16());
     if (nAttributes == INVALID_FILE_ATTRIBUTES) {
         if (pbValid) *pbValid = false;
         return false;

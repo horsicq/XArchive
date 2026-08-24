@@ -43,7 +43,8 @@ bool XSAR::isValid(PDSTRUCT *pPdStruct)
         if (compareSignature(&memoryMap, "....' LH'..20", 0, pPdStruct)) {
             const QString sMethod = read_ansiString(2, 5);
 
-            if ((sMethod == " LH0 ") || (sMethod == " LH5 ")) {
+            // SAR.DOC documents exactly three methods: LH5, LH4 and LH0.
+            if ((sMethod == " LH0 ") || (sMethod == " LH4 ") || (sMethod == " LH5 ")) {
                 const quint8 nHeaderSize = read_uint8(0);
                 const quint8 nLevel = read_uint8(20);
 

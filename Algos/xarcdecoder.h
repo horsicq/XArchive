@@ -34,11 +34,17 @@
  *
  *   3  packed          run-length only
  *   4  squeezed        Huffman  -> run-length
- *   5  crunched (old)  LZW, fixed width, no run-length stage
- *   6  crunched        LZW, fixed width -> run-length
- *   7  crunched        as 6; only the encoder's hash differs, so it decodes identically
+ *   5  crunched (old)  hash-table LZW, no run-length stage
+ *   6  crunched        hash-table LZW -> run-length
+ *   7  crunched        as 6 but a DIFFERENT hash (newh); does not decode as 6
  *   8  crunched        LZW, dynamic width -> run-length
  *   9  squashed        LZW, dynamic width, no run-length stage
+ *
+ * Methods 5-7 are NOT this decoder with a fixed code width.  They are ARC's
+ * original "crunch": strings are reconstructed by probing a hash table, codes
+ * are nybble-packed, there is no CLEAR, and because init_tab hashes even the
+ * 256 atomic codes a literal's code is not its byte value.  They are refused
+ * here rather than approximated.
  *
  * The two stages are composed inside one decoder rather than being chained
  * through the shared multi-method path, because only the final byte count may be

@@ -47,7 +47,17 @@ bool hasLegacyZstdMagic(QIODevice *pDevice)
 {
     if (!pDevice || !pDevice->isOpen() || !pDevice->isReadable()) return false;
 
-    const QByteArray baMagic = pDevice->peek(4);
+    // The magic lives at offset 0, not at wherever the caller left the cursor.
+    // peek() reads from the current position, so a device that has already been
+    // used - the explorer widget keeps one alive across extractions - was
+    // classified on the wrong bytes and misrouted in both directions.
+    if (pDevice->isSequential()) return false;
+
+    const qint64 nSavedPos = pDevice->pos();
+    if (!pDevice->seek(0)) return false;
+    const QByteArray baMagic = pDevice->read(4);
+    pDevice->seek(nSavedPos);
+
     if (baMagic.size() != 4) return false;
 
     const unsigned char *p = reinterpret_cast<const unsigned char *>(baMagic.constData());

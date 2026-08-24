@@ -472,16 +472,26 @@ public:
     };
 
     static COMPRESS_RESULT _decompress(DECOMPRESSSTRUCT *pDecompressStruct, PDSTRUCT *pPdStruct = nullptr);
+    // The trailing property map is what carries UNPACK_PROP_MAX_OUTPUT_SIZE
+    // into the decoder chain. Without it every downstream output gate on this
+    // path resolved to -1, so a caller could set a limit and have it silently
+    // discarded. The default lives here and NOT on the definition below, which
+    // already supplies defaults for the two preceding parameters - repeating it
+    // there is a redefinition-of-default-argument error.
     static bool _decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset,
-                                  qint64 nDecompressedLimit);
+                                  qint64 nDecompressedLimit,
+                                  const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties = QMap<UNPACK_PROP, QVariant>());
     static COMPRESS_RESULT _compress(HANDLE_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr);
     static COMPRESS_RESULT _compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
                                              qint32 nStrategy, PDSTRUCT *pPdStruct = nullptr);
-    QByteArray decompress(const RECORD *pRecord, PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0, qint64 nDecompressedLimit = -1);
+    QByteArray decompress(const RECORD *pRecord, PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0, qint64 nDecompressedLimit = -1,
+                          const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties = QMap<UNPACK_PROP, QVariant>());
     QByteArray decompress(QList<RECORD> *pListArchive, const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
     QByteArray decompress(const QString &sRecordFileName, PDSTRUCT *pPdStruct = nullptr);
-    bool decompressToFile(const RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
-    bool decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr);
+    bool decompressToFile(const RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr,
+                          const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties = QMap<UNPACK_PROP, QVariant>());
+    bool decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr,
+                            const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties = QMap<UNPACK_PROP, QVariant>());
     bool decompressToFile(QList<RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToPath(QList<RECORD> *pListArchive, const QString &sRecordFileName, const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool decompressToFile(const QString &sArchiveFileName, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct = nullptr);

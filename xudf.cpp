@@ -511,51 +511,77 @@ QMap<XBinary::UNPACK_PROP, QVariant> XUDF::getDefaultUnpackProperties()
 
 bool XUDF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
     QPointer<XUDF> guardedThis(this);
     QPointer<QIODevice> guardedDevice(getDevice());
 
-    if (pState) {
-        finishUnpack(pState, nullptr);
-        if (!guardedThis || !guardedDevice) {
-            return false;
-        }
+    // Refuse a state that belongs to someone else before touching anything:
+    // without this a foreign state's context would be deleted below, and a
+    // caller holding a copy of it would then double-free.
+    if (!pState || m_bUnpackOperationInProgress ||
+        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState))) {
+        return false;
+    }
+    if (!guardedThis->finishUnpack(pState, nullptr) || !guardedThis || !guardedDevice) return false;
 
-        if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
-            return false;
-        }
-        if (!guardedThis || !guardedDevice) {
-            return false;
-        }
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
 
-        pState->mapUnpackProperties = mapProperties;
+    if (!isPdStructNotCanceled(pPdStruct) || !isValid(pPdStruct)) {
+        return false;
+    }
+    if (!guardedThis || !guardedDevice) {
+        return false;
+    }
 
-        UDF_UNPACK_CONTEXT *pContext = new (std::nothrow) UDF_UNPACK_CONTEXT;
-        if (!pContext) {
-            finishUnpack(pState, nullptr);
-            return false;
-        }
-        pContext->nBlockSize = _getBlockSize();
-        pContext->listRecords = _parseFileSystem(pContext->nBlockSize, pPdStruct);
-        if (!guardedThis || !guardedDevice) {
-            delete pContext;
-            return false;
-        }
-        pContext->nCurrentRecordIndex = 0;
+    // Binding is what lets every later call authenticate the state against
+    // this device; it only takes effect once finalized below.
+    const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
+    if (!guardedThis || !guardedDevice || !bBound) return false;
 
-        if (!isPdStructNotCanceled(pPdStruct)) {
-            delete pContext;
-            finishUnpack(pState, nullptr);
-            return false;
-        }
+    pState->mapUnpackProperties = mapProperties;
 
-        pState->pContext = pContext;
-        pState->nCurrentIndex = 0;
-        pState->nNumberOfRecords = pContext->listRecords.count();
-        pState->nCurrentOffset = 0;
-        pState->nTotalSize = getSize();
+    UDF_UNPACK_CONTEXT *pContext = new (std::nothrow) UDF_UNPACK_CONTEXT;
+    if (!pContext) {
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+    pContext->nBlockSize = _getBlockSize();
+    pContext->listRecords = _parseFileSystem(pContext->nBlockSize, pPdStruct);
+    if (!guardedThis || !guardedDevice) {
+        delete pContext;
+        return false;
+    }
+    pContext->nCurrentRecordIndex = 0;
 
-        bResult = true;
+    if (!isPdStructNotCanceled(pPdStruct)) {
+        delete pContext;
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    pState->pContext = pContext;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = pContext->listRecords.count();
+    pState->nCurrentOffset = 0;
+    pState->nTotalSize = getSize();
+
+    // A bound source is not usable until it is finalized: isUnpackSourceCurrent
+    // authenticates against the finalized token, so skipping this leaves every
+    // later record check failing - listing would work while extraction quietly
+    // produced nothing.
+    bool bResult = guardedThis->validateAndFinalizeUnpackSource(pState, pPdStruct);
+    if (!guardedThis) {
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    if (!bResult) {
+        delete pContext;
+        pState->pContext = nullptr;
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
     }
 
     return bResult;
@@ -563,7 +589,15 @@ bool XUDF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XUDF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    // The nested-authorized form: XArchive::unpackCurrent already holds the
+    // operation guard when it calls this, so the single-argument form would
+    // refuse and hand back an empty record.
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return ARCHIVERECORD();
+
     ARCHIVERECORD result = {};
+
+    if (!isUnpackSourceCurrent(pState, pPdStruct)) return result;
 
     if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
@@ -584,6 +618,11 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     QPointer<XUDF> guardedThis(this);
     QPointer<QIODevice> guardedSource(getDevice());
     QPointer<QIODevice> guardedOutput(pDevice);
+
+    // Authenticate the state against this device. Without it a stale or
+    // foreign state extracts a different image's bytes under the current
+    // record's name.
+    if (!isUnpackSourceCurrent(pState, pPdStruct)) return false;
 
     if (pState && pState->pContext && guardedSource && guardedOutput) {
         UDF_UNPACK_CONTEXT *pContext = (UDF_UNPACK_CONTEXT *)pState->pContext;
@@ -622,7 +661,12 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
 
 bool XUDF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     bool bResult = false;
+
+    if (!isUnpackSourceCurrent(pState, pPdStruct)) return false;
 
     if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
@@ -639,17 +683,28 @@ bool XUDF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 bool XUDF::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired()) return false;
+
     Q_UNUSED(pPdStruct)
 
     if (!pState) {
         return false;
     }
 
+    // The ownership gate has to precede the delete. UNPACK_STATE is copied by
+    // value in production code (xtarcompressed.cpp:486), so finishing a state
+    // this archive does not own would free a context its real owner still
+    // holds, and the owner would then free it again.
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
+
     if (pState->pContext) {
         UDF_UNPACK_CONTEXT *pContext = (UDF_UNPACK_CONTEXT *)pState->pContext;
         delete pContext;
         pState->pContext = nullptr;
     }
+
+    releaseUnpackSource(pState);
 
     pState->nCurrentOffset = 0;
     pState->nTotalSize = 0;

@@ -816,6 +816,9 @@ QList<XBinary::FPART> XCab::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                 } else if (nCompressionType == 3) {
                     record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZX_CAB);
                     record.mapProperties.insert(FPART_PROP_WINDOWSIZE, (qint64)((folder.typeCompress >> 8) & 0x1F));
+                } else if (nCompressionType == 2) {
+                    record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_QUANTUM_CAB);
+                    record.mapProperties.insert(FPART_PROP_WINDOWSIZE, (qint64)((folder.typeCompress >> 8) & 0x1F));
                 } else {
                     record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN);
                 }
@@ -1639,6 +1642,9 @@ XBinary::ARCHIVERECORD XCab::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZX_CAB);
             // LZX window size is stored in the upper bits of typeCompress: (typeCompress >> 8) & 0x1F
             result.mapProperties.insert(FPART_PROP_WINDOWSIZE, (qint64)((cfFolder.typeCompress >> 8) & 0x1F));
+        } else if (nCompressType == 0x0002) {
+            result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_QUANTUM_CAB);
+            result.mapProperties.insert(FPART_PROP_WINDOWSIZE, (qint64)((cfFolder.typeCompress >> 8) & 0x1F));
         } else {
             result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_UNKNOWN);
         }
@@ -1744,6 +1750,12 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
         } else if (nCompressionType == 3) {
             streamPart.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
                                             HANDLE_METHOD_LZX_CAB);
+            streamPart.mapProperties.insert(
+                FPART_PROP_WINDOWSIZE,
+                (qint64)((folder.typeCompress >> 8) & 0x1F));
+        } else if (nCompressionType == 2) {
+            streamPart.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
+                                            HANDLE_METHOD_QUANTUM_CAB);
             streamPart.mapProperties.insert(
                 FPART_PROP_WINDOWSIZE,
                 (qint64)((folder.typeCompress >> 8) & 0x1F));

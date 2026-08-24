@@ -121,6 +121,10 @@ XBinary::FT XAPK::getFileType()
 
 XBinary::FILEFORMATINFO XAPK::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
+    // getRecords() is called at top level here, so unlike isValid() this needs
+    // its own guard to leave the caller's cursor where it was.
+    DevicePositionGuard positionGuard(getDevice());
+
     XBinary::FILEFORMATINFO result = {};
 
     QList<XArchive::RECORD> listArchiveRecords = getRecords(20000, pPdStruct);

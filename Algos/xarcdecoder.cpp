@@ -57,10 +57,13 @@ bool arcParams(qint32 nMethod, ARC_PARAMS *pParams)
         // is a separate decompressor from the dynamic one used by 8 and 9: it
         // reconstructs strings by probing a hash table rather than by indexing
         // a prefix/suffix array, so it is not this decoder with different
-        // parameters.  Methods 6 and 7 differ only in the encoder's hash
-        // function and would decode identically to each other.  No archive
-        // using any of the three has been found to test against, so they are
-        // refused rather than decoded by an untested approximation.
+        // parameters.  Its codes are also nybble-packed and a literal's code is
+        // not its byte value, because init_tab hashes even the 256 atomic
+        // codes.  Methods 6 and 7 do NOT decode identically: init_ucr(1, f)
+        // selects a different hash function (newh) for 7 only, so the three
+        // need three distinct handles rather than two.  No archive using any of
+        // them has been found to test against, so they are refused rather than
+        // decoded by an untested approximation.
         case 8: *pParams = {true, true, ARC_LZW_CRUNCH_MAX_BITS, true}; return true;
         case 9: *pParams = {false, true, ARC_LZW_SQUASH_BITS, false}; return true;
         default: return false;

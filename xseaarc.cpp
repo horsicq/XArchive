@@ -61,13 +61,21 @@ bool XSEAARC::isValid(PDSTRUCT *pPdStruct)
         return false;
     }
 
-    // ARC archive: starts with 0x1A followed by method byte (1-9)
-    // and 13-byte null-terminated filename
-    if (getSize() >= 29) {  // Minimum: 1 (marker) + 1 (method) + 13 (name) + 4 (compressed size) + 2 (date) + 2 (time) + 2 (crc) + 4 (original size) = 29
+    // Same contract as XLHA::isValid: detection probes a device the caller
+    // still owns, so its cursor is restored before returning.
+    QIODevice *pSourceDevice = getDevice();
+    const qint64 nSavedPos = pSourceDevice ? pSourceDevice->pos() : -1;
+
+    // ARC archive: starts with 0x1A followed by a method byte and a 13-byte
+    // null-terminated filename. The size floor is the method's OWN header
+    // length: method 1 carries no original-size field and so uses a 25-byte
+    // header, while methods 2-9 use 29. Budgeting a flat 29 rejected valid
+    // method-1 archives that period tools (PKUNPAK 3.61) list and extract.
+    if (getSize() >= 25) {
         quint8 nMarker = read_uint8(0);
         quint8 nMethod = read_uint8(1);
 
-        if ((nMarker == 0x1A) && (nMethod >= 1) && (nMethod <= 9)) {
+        if ((nMarker == 0x1A) && _isValidMethod(nMethod) && (getSize() >= (qint64)_getHeaderSize(nMethod))) {
             // Read filename (13 bytes, null-terminated ASCII)
             QByteArray baFileName = read_array(2, 13);
 
@@ -98,6 +106,10 @@ bool XSEAARC::isValid(PDSTRUCT *pPdStruct)
                 }
             }
         }
+    }
+
+    if (pSourceDevice && (nSavedPos >= 0)) {
+        pSourceDevice->seek(nSavedPos);
     }
 
     return bResult;
