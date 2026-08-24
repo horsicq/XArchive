@@ -364,6 +364,16 @@ if(WIN32)
             advapi32
             shell32
     )
+else()
+    # Algos/szc_03.cpp (Thread_Create, Thread_Create_With_Affinity,
+    # Thread_Create_With_CpuSet) calls pthread_create. glibc >= 2.34 folds the
+    # pthread symbols into libc, so Linux links without asking for them;
+    # FreeBSD and friends still need the explicit -pthread.
+    find_package(Threads REQUIRED)
+    target_link_libraries(${XARCHIVE_7ZIP_TARGET}
+        INTERFACE
+            Threads::Threads
+    )
 endif()
 
 endif()
