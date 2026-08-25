@@ -930,6 +930,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ASAR);
     result.insert(XBinary::FT_XAR);
     result.insert(XBinary::FT_ZOO);
+    result.insert(XBinary::FT_STK);
     result.insert(XBinary::FT_WARC);
     result.insert(XBinary::FT_MTREE);
     result.insert(XBinary::FT_UU);

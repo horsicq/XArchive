@@ -24,6 +24,7 @@
 #include "Algos/algo_utils.h"
 #include "Algos/xkwajlzssdecoder.h"
 #include "Algos/xkwajlzhdecoder.h"
+#include "Algos/xcoktellzdecoder.h"
 #include <QCoreApplication>
 #include <QPointer>
 #include <algorithm>
@@ -2068,6 +2069,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_LZSS) {
         bResult = XKWAJLZSSDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_COKTEL_LZ) {
+        bResult = XCoktelLZDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_LZH) {
         bResult = XKWAJLZHDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_MSZIP) {

@@ -84,6 +84,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xxar.h
     ${CMAKE_CURRENT_LIST_DIR}/xzoo.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzoo.h
+    ${CMAKE_CURRENT_LIST_DIR}/xstk.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xstk.h
     ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xjar.h
     ${CMAKE_CURRENT_LIST_DIR}/xlha.cpp
@@ -203,6 +205,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbrotlidecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzssdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzssdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xcoktellzdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xcoktellzdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xshrinkdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xshrinkdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xreducedecoder.cpp

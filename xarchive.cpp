@@ -23,6 +23,7 @@
 #include "Algos/xkwajlzssdecoder.h"
 #include "Algos/xkwajlzhdecoder.h"
 #include "Algos/xppmddecoder.h"
+#include "Algos/xcoktellzdecoder.h"
 
 #include <algorithm>
 #include <limits>
@@ -2106,6 +2107,29 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
             } else {
                 result = COMPRESS_RESULT_DATAERROR;
             }
+        }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_COKTEL_LZ) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_COKTEL_LZ);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XCoktelLZDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else if (decompressState.bReadError) {
+            result = COMPRESS_RESULT_READERROR;
+        } else if (decompressState.bWriteError) {
+            result = COMPRESS_RESULT_WRITEERROR;
+        } else {
+            result = COMPRESS_RESULT_DATAERROR;
         }
     } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_XZ) {
         XBinary::DATAPROCESS_STATE decompressState = {};
