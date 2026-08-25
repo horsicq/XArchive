@@ -635,18 +635,38 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                         pState->mapUnpackProperties, ar.nStreamSize)) {
                     return false;
                 }
+
+                // Stage the decoded bytes into a private work buffer and publish
+                // atomically instead of streaming straight into the caller's
+                // device: a mid-stream decode failure must not leave partial
+                // output in a device the caller owns.  Mirrors XASAR::unpackCurrent.
+                QIODevice *pWorkDevice = XBinary::createFileBuffer(ar.nStreamSize, pPdStruct);
+                if (!pWorkDevice) {
+                    return false;
+                }
+
                 XBinary::DATAPROCESS_STATE decompressState = {};
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XArchive::HANDLE_METHOD_STORE);
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, ar.nStreamSize);
                 decompressState.mapUnpackProperties = pState->mapUnpackProperties;
                 decompressState.pDeviceInput = guardedSource.data();
-                decompressState.pDeviceOutput = guardedOutput.data();
+                decompressState.pDeviceOutput = pWorkDevice;
                 decompressState.nInputOffset = ar.nStreamOffset;
                 decompressState.nInputLimit = ar.nStreamSize;
                 decompressState.nProcessedOffset = 0;
                 decompressState.nProcessedLimit = -1;
 
                 bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
+
+                if (bResult) {
+                    bResult = guardedThis && guardedSource && guardedOutput &&
+                              XBinary::isPdStructNotCanceled(pPdStruct) &&
+                              guardedThis->isUnpackSourceCurrent(pState, pPdStruct) &&
+                              guardedThis->publishUnpackOutput(pWorkDevice, guardedOutput.data(), pState, pPdStruct);
+                }
+
+                XBinary::freeFileBuffer(&pWorkDevice);
+
                 if (!guardedThis || !guardedSource || !guardedOutput) {
                     return false;
                 }

@@ -907,7 +907,8 @@ bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDevic
 }
 
 bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput,
-                                          const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct)
+                                          const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct,
+                                          const QSharedPointer<XBinary::OUTPUT_BUDGET> &spOutputBudget)
 {
     // This is the ARCHIVERECORD-native decode entry point, and it is reachable
     // from shipping callers (XFormats::extractArchiveRecordsToFolder,
@@ -953,6 +954,7 @@ bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveR
     XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = archiveRecord.mapProperties;
     state.mapUnpackProperties = mapUnpackProperties;
+    state.spOutputBudget = spOutputBudget;  // XFU-015: share the operation budget into the decode chain
     state.pDeviceInput = pDeviceInput;
     state.pDeviceOutput = pDeviceOutput;
     state.nInputOffset = archiveRecord.nStreamOffset;

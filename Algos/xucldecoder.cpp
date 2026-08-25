@@ -4258,6 +4258,14 @@ bool XUCLDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
         return false;
     }
 
+    // Refuse before allocating the header-declared output buffer when a configured
+    // output-size limit rejects it, matching the peer whole-buffer decoders
+    // (xlz4decoder et al.).  nExpectedOutputSize is already validated > 0 above, so
+    // this can run unconditionally.
+    if (!XBinary::isUnpackOutputSizeAllowed(pDecompressState->mapUnpackProperties, nExpectedOutputSize)) {
+        return false;
+    }
+
     XUCLDecoder::METHOD method = XUCLDecoder::METHOD_NRV2B_8;
     if (!Algo_utils::getUclMethodFromState(pDecompressState, &method) || !_getDecompressRoutine(method)) {
         return false;
