@@ -61,13 +61,82 @@ struct XZStreamDescriptor {
     QList<XZBlockDescriptor> listBlocks;
 };
 
-bool isLZMA2DictionaryAllowed(quint8 nProperty)
+bool isLZMAAllocationAllowed(const XBinary::DATAPROCESS_STATE *pState,
+                             quint64 nSize)
+{
+    if (!pState || (nSize > (quint64)LZMA_MAX_DICTIONARY_SIZE)) {
+        return false;
+    }
+
+    qint64 nOutputLimit = -1;
+    return XBinary::getUnpackOutputLimit(pState->mapUnpackProperties,
+                                         &nOutputLimit) &&
+           ((nOutputLimit < 0) || (nSize <= (quint64)nOutputLimit));
+}
+
+bool isLZMA2DictionaryAllowed(const XBinary::DATAPROCESS_STATE *pState,
+                              quint8 nProperty)
 {
     if (nProperty > 40) return false;
 
     const quint64 nDictionarySize = (nProperty == 40) ? Q_UINT64_C(0xFFFFFFFF)
                                                        : (((quint64)2 | (nProperty & 1)) << (nProperty / 2 + 11));
-    return nDictionarySize <= (quint64)LZMA_MAX_DICTIONARY_SIZE;
+    return isLZMAAllocationAllowed(pState, nDictionarySize);
+}
+
+bool getLzmaAllocationSize(const CLzmaProps &properties,
+                           quint64 *pnSize)
+{
+    if (!pnSize || (properties.lc > 8) || (properties.lp > 4) ||
+        ((quint32)properties.lc + properties.lp > 12)) {
+        return false;
+    }
+
+    quint64 nMask = (Q_UINT64_C(1) << 12) - 1;
+    if (properties.dicSize >= (Q_UINT64_C(1) << 30)) {
+        nMask = (Q_UINT64_C(1) << 22) - 1;
+    } else if (properties.dicSize >= (Q_UINT64_C(1) << 22)) {
+        nMask = (Q_UINT64_C(1) << 20) - 1;
+    }
+    const quint64 nDictionarySize =
+        ((quint64)properties.dicSize + nMask) & ~nMask;
+    const quint64 nNumberOfProbabilities =
+        Q_UINT64_C(1984) +
+        (Q_UINT64_C(0x300) << (properties.lc + properties.lp));
+    const quint64 nProbabilitiesSize =
+        nNumberOfProbabilities * sizeof(CLzmaProb);
+    if (nDictionarySize >
+        (std::numeric_limits<quint64>::max)() - nProbabilitiesSize) {
+        return false;
+    }
+    *pnSize = nDictionarySize + nProbabilitiesSize;
+    return true;
+}
+
+bool reserveLzmaAllocation(
+    const XBinary::DATAPROCESS_STATE *pState,
+    const CLzmaProps &properties,
+    XBinary::UNPACK_MEMORY_RESERVATION *pReservation)
+{
+    quint64 nSize = 0;
+    return pState && pReservation &&
+           getLzmaAllocationSize(properties, &nSize) &&
+           (nSize <= (quint64)(std::numeric_limits<qint64>::max)()) &&
+           pReservation->acquire(pState->mapUnpackProperties,
+                                 (qint64)nSize);
+}
+
+bool getLzma2Properties(quint8 nProperty, CLzmaProps *pProperties)
+{
+    if (!pProperties || (nProperty > 40)) return false;
+    *pProperties = CLzmaProps();
+    pProperties->lc = 4;
+    pProperties->dicSize =
+        (nProperty == 40)
+            ? 0xFFFFFFFFU
+            : (quint32)(((quint64)2 | (nProperty & 1))
+                        << (nProperty / 2 + 11));
+    return true;
 }
 
 quint32 readLE32(const char *pData)
@@ -357,7 +426,15 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
     CLzmaDec state = {};
     SRes ret = X_LzmaProps_Decode(&state.prop, (Byte *)properties, nPropSize);
 
-    if ((ret != 0) || ((quint64)state.prop.dicSize > (quint64)LZMA_MAX_DICTIONARY_SIZE)) {  // S_OK
+    if ((ret != 0) ||
+        !isLZMAAllocationAllowed(pDecompressState,
+                                 (quint64)state.prop.dicSize)) {  // S_OK
+        return false;
+    }
+
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!reserveLzmaAllocation(pDecompressState, state.prop,
+                               &memoryReservation)) {
         return false;
     }
 
@@ -392,7 +469,15 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, cons
     CLzmaDec state = {};
     SRes ret = X_LzmaProps_Decode(&state.prop, (Byte *)baProperty.constData(), baProperty.size());
 
-    if ((ret != 0) || ((quint64)state.prop.dicSize > (quint64)LZMA_MAX_DICTIONARY_SIZE)) {
+    if ((ret != 0) ||
+        !isLZMAAllocationAllowed(pDecompressState,
+                                 (quint64)state.prop.dicSize)) {
+        return false;
+    }
+
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!reserveLzmaAllocation(pDecompressState, state.prop,
+                               &memoryReservation)) {
         return false;
     }
 
@@ -427,7 +512,18 @@ bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState,
     if (!readExactState(&propByte, 1, pDecompressState)) {
         return false;
     }
-    if (!isLZMA2DictionaryAllowed((quint8)propByte)) {
+    if (!isLZMA2DictionaryAllowed(pDecompressState,
+                                  (quint8)propByte)) {
+        return false;
+    }
+
+    CLzmaProps allocationProperties = {};
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!getLzma2Properties((quint8)propByte,
+                            &allocationProperties) ||
+        !reserveLzmaAllocation(pDecompressState,
+                               allocationProperties,
+                               &memoryReservation)) {
         return false;
     }
 
@@ -452,7 +548,19 @@ bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState,
         return false;
     }
 
-    if ((baProperty.size() != 1) || !isLZMA2DictionaryAllowed((quint8)baProperty.at(0))) {
+    if ((baProperty.size() != 1) ||
+        !isLZMA2DictionaryAllowed(pDecompressState,
+                                  (quint8)baProperty.at(0))) {
+        return false;
+    }
+
+    CLzmaProps allocationProperties = {};
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!getLzma2Properties((quint8)baProperty.at(0),
+                            &allocationProperties) ||
+        !reserveLzmaAllocation(pDecompressState,
+                               allocationProperties,
+                               &memoryReservation)) {
         return false;
     }
 
@@ -527,10 +635,14 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     const qint64 nDeviceSize = pDevice->size();
     qint64 nTotalSize = pDecompressState->nInputLimit;
     const qint64 nMax = (std::numeric_limits<qint64>::max)();
+    qint64 nConfiguredOutputLimit = -1;
 
     if ((nOffset < 0) || (nDeviceSize < 0) || (nOffset > nDeviceSize) || (pDecompressState->nInputLimit < -1) ||
         (pDecompressState->nProcessedOffset < 0) ||
         (pDecompressState->nProcessedLimit < -1) ||
+        !XBinary::getUnpackOutputLimit(
+            pDecompressState->mapUnpackProperties,
+            &nConfiguredOutputLimit) ||
         ((pDecompressState->nProcessedLimit != -1) && (pDecompressState->nProcessedOffset > (nMax - pDecompressState->nProcessedLimit)))) {
         return false;
     }
@@ -712,7 +824,10 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
                                                 ? Q_UINT64_C(0xFFFFFFFF)
                                                 : (((quint64)2 | (blockDescriptor.nLZMA2PropsByte & 1))
                                                    << (blockDescriptor.nLZMA2PropsByte / 2 + 11));
-            if (nDictionarySize > (quint64)LZMA_MAX_DICTIONARY_SIZE) return false;
+            if (!isLZMAAllocationAllowed(pDecompressState,
+                                         nDictionarySize)) {
+                return false;
+            }
 
             const quint64 nDataSize64 = indexRecord.nUnpaddedSize - (quint64)nActualHeaderSize - (quint64)nCheckSize;
             if ((nDataSize64 == 0) || (nDataSize64 > (quint64)nMax) ||
@@ -726,6 +841,11 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
             blockDescriptor.nDataOffset = nBlockOffset + nActualHeaderSize;
             blockDescriptor.nDataSize = (qint64)nDataSize64;
             blockDescriptor.nUncompressedSize = (qint64)indexRecord.nUncompressedSize;
+            if (!XBinary::isUnpackOutputSizeAllowed(
+                    pDecompressState->mapUnpackProperties,
+                    blockDescriptor.nUncompressedSize)) {
+                return false;
+            }
             const qint64 nBlockCheckOffset = blockDescriptor.nDataOffset + blockDescriptor.nDataSize + nBlockPaddingSize;
 
             QByteArray baBlockPadding;
@@ -743,6 +863,10 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
             if (nTotalExpectedOutput > (nMax - blockDescriptor.nUncompressedSize)) return false;
             nTotalExpectedOutput += blockDescriptor.nUncompressedSize;
+            if ((nConfiguredOutputLimit >= 0) &&
+                (nTotalExpectedOutput > nConfiguredOutputLimit)) {
+                return false;
+            }
             streamDescriptor.listBlocks.append(blockDescriptor);
             nBlockOffset += (qint64)nPaddedBlockSize64;
         }
@@ -781,6 +905,8 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
             lzma2State.nInputLimit = blockDescriptor.nDataSize;
             lzma2State.nProcessedOffset = 0;
             lzma2State.nProcessedLimit = -1;
+            lzma2State.mapUnpackProperties =
+                pDecompressState->mapUnpackProperties;
             lzma2State.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, blockDescriptor.nUncompressedSize);
 
             if (blockDescriptor.listPrefilters.isEmpty()) {
@@ -815,6 +941,14 @@ bool XLZMADecoder::decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
                 // nUncompressedSize is pre-validated above against
                 // XZ_MAX_PREFILTER_OUTPUT_SIZE, so the allocation size is bounded.
+                XBinary::UNPACK_MEMORY_RESERVATION
+                    intermediateReservation;
+                if (!intermediateReservation.acquire(
+                        pDecompressState->mapUnpackProperties,
+                        blockDescriptor.nUncompressedSize)) {
+                    compressedDevice.close();
+                    return false;
+                }
                 QByteArray baIntermediate;
                 baIntermediate.resize((qint32)blockDescriptor.nUncompressedSize);
 

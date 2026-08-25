@@ -323,8 +323,18 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
                     *op++ = *pRef++;
                 }
             } else {
-                // t < 16: shouldn't reach here in match context
-                return false;
+                // M1 match: exactly two bytes copied from within the last 1 KiB.
+                //   distance = 1 + (t >> 2) + (next byte << 2)
+                // lzo1x_1, which lzop uses for methods 1 and 2, never emits this
+                // opcode, so rejecting it went unnoticed. lzo1x_999 - lzop -7
+                // and above, i.e. method 3 - does emit it, which is why every
+                // such archive failed to open.
+                if (ip >= ip_end) return false;
+                const quint32 nDist = 1 + (quint32)(t >> 2) + ((quint32)*ip++ << 2);
+                if (((qint64)(op - pOutput) < (qint64)nDist) || (lzoBytesAvailable(op, op_end) < 2)) return false;
+                const quint8 *pRef = op - nDist;
+                *op++ = *pRef++;
+                *op++ = *pRef;
             }
 
         match_done:
@@ -480,6 +490,9 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
 
         if ((nUncompressedBlockSize > LZOP_MAX_BLOCK_SIZE) ||
             (nTotalOutput > (nMax - nUncompressedBlockSize)) ||
+            !XBinary::isUnpackOutputSizeAllowed(
+                pDecompressState->mapUnpackProperties,
+                nTotalOutput + (qint64)nUncompressedBlockSize) ||
             (bHasExpectedOutput && ((nTotalOutput > nExpectedOutput) ||
                                     ((qint64)nUncompressedBlockSize > (nExpectedOutput - nTotalOutput))))) return false;
 

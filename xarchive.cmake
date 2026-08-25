@@ -48,6 +48,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xcfbf.h
     ${CMAKE_CURRENT_LIST_DIR}/xcpio.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcpio.h
+    ${CMAKE_CURRENT_LIST_DIR}/xgamearchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xgamearchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xwarc.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xwarc.h
     ${CMAKE_CURRENT_LIST_DIR}/xmtree.cpp
@@ -85,6 +87,10 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xjar.h
     ${CMAKE_CURRENT_LIST_DIR}/xlha.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xsar.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xsar.h
+    ${CMAKE_CURRENT_LIST_DIR}/xarx.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xarx.h
     ${CMAKE_CURRENT_LIST_DIR}/xlha.h
     ${CMAKE_CURRENT_LIST_DIR}/xmachofat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xmachofat.h
@@ -156,6 +162,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/algo_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/algo_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xalgo_local.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xarcdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xarcdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarjdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xacedecoder.cpp
@@ -165,6 +173,10 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xucldecoder_acc.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xkwajlzssdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xkwajlzssdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xkwajlzhdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xkwajlzhdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xit214decoder.cpp
@@ -213,6 +225,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbranchdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzxdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzxdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xquantumdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xquantumdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xxpressdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xxpressdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xsha256decoder.cpp

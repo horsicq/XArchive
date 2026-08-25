@@ -44,7 +44,8 @@ protected:
 };
 
 bool measureZstdStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize,
-                       XBinary::PDSTRUCT *pPdStruct)
+                       XBinary::PDSTRUCT *pPdStruct,
+                       const QMap<XBinary::UNPACK_PROP, QVariant> *pUnpackProperties = nullptr)
 {
     if (pnCompressedSize) *pnCompressedSize = 0;
     if (pnUncompressedSize) *pnUncompressedSize = 0;
@@ -59,6 +60,7 @@ bool measureZstdStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompresse
     }
 
     XBinary::DATAPROCESS_STATE state = {};
+    if (pUnpackProperties) state.mapUnpackProperties = *pUnpackProperties;
     state.pDeviceInput = &input;
     state.pDeviceOutput = &output;
     state.nInputOffset = 0;
@@ -435,7 +437,7 @@ bool XZstd::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     if (!guardedArchive || !guardedSource) return false;
     const bool bMeasured = measureZstdStream(
         guardedSource.data(), nFileSize, &nCompressedSize,
-        &nUncompressedSize, pPdStruct);
+        &nUncompressedSize, pPdStruct, &mapProperties);
     if (!guardedArchive || !guardedSource) return false;
     if (!bMeasured) {
         guardedArchive->releaseUnpackSource(pState);
@@ -531,6 +533,8 @@ bool XZstd::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         (pContext->nUncompressedSize < 0)) return false;
     const qint64 nCompressedSize = pContext->nCompressedSize;
     const qint64 nUncompressedSize = pContext->nUncompressedSize;
+    if (!XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            nUncompressedSize)) return false;
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         nUncompressedSize, pPdStruct));
     if (!guardedArchive || !pStage || !guardedOutput || !guardedSource ||
@@ -543,6 +547,7 @@ bool XZstd::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if (input.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
+        state.mapUnpackProperties = pState->mapUnpackProperties;
         state.pDeviceInput = &input;
         state.pDeviceOutput = pStage.get();
         state.nInputOffset = 0;

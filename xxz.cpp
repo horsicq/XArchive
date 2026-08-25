@@ -640,6 +640,7 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_XZ);
+        state.mapUnpackProperties = pState->mapUnpackProperties;
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pStage.get();
         state.nInputOffset = 0;

@@ -19,6 +19,10 @@
  * SOFTWARE.
  */
 #include "xzip.h"
+#include "xapk.h"
+#include "xapks.h"
+#include "xipa.h"
+#include "xjar.h"
 #include <algorithm>
 #include <QSet>
 #include <QTemporaryFile>
@@ -842,32 +846,31 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
     const bool hasRecords = (pListRecords && !pListRecords->isEmpty());
 
     // Fast single-pass classification using record names
-    bool seenClassesDex = false;
-    bool seenAndroidManifest = false;
     bool seenJarManifest = false;
-    bool seenPayloadDir = false;
+    bool seenApksTableOfContents = false;
+    bool seenApksPayload = false;
 
     if (hasRecords) {
         for (int idx = 0, n = pListRecords->count(); idx < n; ++idx) {
             const RECORD &rec = pListRecords->at(idx);
             const QString &name = rec.spInfo.sRecordName;
-            if (!seenClassesDex && name == QLatin1String("classes.dex")) seenClassesDex = true;
-            if (!seenAndroidManifest && name == QLatin1String("AndroidManifest.xml")) seenAndroidManifest = true;
-            if (!seenJarManifest && name == QLatin1String("META-INF/MANIFEST.MF")) seenJarManifest = true;
-            if (!seenPayloadDir && name.startsWith(QLatin1String("Payload/"))) seenPayloadDir = true;
-
-            // Early exit if APK (most common) is detected
-            if ((seenClassesDex || seenAndroidManifest)) {
-                result = FT_APK;
-                break;
-            }
+            if (!seenJarManifest &&
+                (name == QLatin1String("META-INF/MANIFEST.MF")) &&
+                (rec.spInfo.nUncompressedSize > 0)) seenJarManifest = true;
+            if (!seenApksTableOfContents && (name == QLatin1String("toc.pb")) &&
+                (rec.spInfo.nUncompressedSize != 0)) seenApksTableOfContents = true;
+            if (!seenApksPayload && name.endsWith(QLatin1String(".apk"), Qt::CaseInsensitive) &&
+                (rec.spInfo.nUncompressedSize != 0)) seenApksPayload = true;
         }
     }
 
-    if (result != FT_APK) {
-        if (seenPayloadDir) {
+    if (hasRecords) {
+        if (XAPK::isValid(pDevice, pListRecords, pPdStruct)) {
+            result = FT_APK;
+        } else if (XIPA::isValid(pDevice, pListRecords, pPdStruct)) {
             result = FT_IPA;
-        } else if (seenJarManifest) {
+        } else if (seenJarManifest &&
+                   XJAR::isValid(pDevice, pListRecords, pPdStruct)) {
             result = FT_JAR;
         } else {
             result = FT_ZIP;
@@ -875,49 +878,13 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
     }
 
     if (bDeep && hasRecords) {
-        // Detect APKS: a ZIP where all entries are stored and (the ones we consider) are inner ZIPs.
+        // bundletool APK Sets contain a root toc.pb plus one or more APK
+        // payloads.  toc.pb is metadata rather than an inner ZIP, and ZIP is
+        // free to deflate entries, so an "all stored inner ZIPs" predicate can
+        // never describe the real format.
         if ((result != FT_JAR) && (result != FT_APK) && (result != FT_IPA)) {
-            bool bAPKS = !pListRecords->isEmpty();
-
-            for (int idx = 0, n = pListRecords->count(); idx < n; ++idx) {
-                if (!isPdStructNotCanceled(pPdStruct)) break;
-                const RECORD &rec = pListRecords->at(idx);
-
-                if (rec.spInfo.compressMethod == XArchive::HANDLE_METHOD_STORE) {
-                    // Skip directories
-                    if (rec.spInfo.nUncompressedSize < 4) {
-                        bAPKS = false;
-                        break;
-                    }
-
-                    SubDevice subDevice(pDevice, rec.nDataOffset, qMin<qint64>(rec.spInfo.nUncompressedSize, 8));
-                    if (!subDevice.open(QIODevice::ReadOnly)) {
-                        bAPKS = false;
-                        break;
-                    }
-
-                    char sig[4] = {0};
-                    qint64 r = subDevice.read(sig, 4);
-                    subDevice.close();
-                    if (r != 4) {
-                        bAPKS = false;
-                        break;
-                    }
-
-                    // Check for local file header 'PK\x03\x04'
-                    const quint32 ZIP_LFH = 0x04034B50u;
-                    quint32 v = ((quint8)sig[0]) | (((quint8)sig[1]) << 8) | (((quint8)sig[2]) << 16) | (((quint8)sig[3]) << 24);
-                    if (v != ZIP_LFH) {
-                        bAPKS = false;
-                        break;
-                    }
-                } else {
-                    bAPKS = false;
-                    break;
-                }
-            }
-
-            if (bAPKS) {
+            if (seenApksTableOfContents && seenApksPayload &&
+                XAPKS::isValid(pDevice, pListRecords, pPdStruct)) {
                 result = FT_APKS;
             }
         }
@@ -1480,7 +1447,8 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
 
 bool XZip::isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
-    return _isRecordNamePresent(nECDOffset, "classes.dex", "AndroidManifest.xml", pPdStruct, false);
+    return _isRecordNamePresent(nECDOffset, "AndroidManifest.xml", "",
+                                pPdStruct, false, true);
 }
 
 bool XZip::isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct)
@@ -1490,7 +1458,7 @@ bool XZip::isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 
 bool XZip::isJAR(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
-    return _isRecordNamePresent(nECDOffset, "META-INF/MANIFEST.MF", "", pPdStruct, false);
+    return _isRecordNamePresent(nECDOffset, "META-INF/MANIFEST.MF", "", pPdStruct, false, true);
 }
 
 QString XZip::structIDToString(quint32 nID)
@@ -2038,7 +2006,10 @@ static bool zipIsRecordNameMatch(bool bStartWith, const QString &sRecordName1, c
     return (sRecordName == sRecordName1) || (!sRecordName2.isEmpty() && (sRecordName == sRecordName2));
 }
 
-bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith)
+bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1,
+                                QString sRecordName2,
+                                PDSTRUCT *pPdStruct, bool bStartWith,
+                                bool bRequireNonEmpty)
 {
     qint32 nLimit = 10000;  // TODO
     qint64 nTotalSize = getSize();
@@ -2066,7 +2037,9 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
                                nExtraFieldOffset, cdh.nExtraFieldLength, &sRecordName)) {
                 break;
             }
-            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2, sRecordName)) {
+            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2,
+                                     sRecordName) &&
+                (!bRequireNonEmpty || (cdh.nUncompressedSize > 0))) {
                 return true;
             }
 
@@ -2100,7 +2073,9 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString
                                nExtraFieldOffset, lfh.nExtraFieldLength, &sRecordName)) {
                 break;
             }
-            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2, sRecordName)) {
+            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2,
+                                     sRecordName) &&
+                (!bRequireNonEmpty || (lfh.nUncompressedSize > 0))) {
                 return true;
             }
 

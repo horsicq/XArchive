@@ -413,6 +413,7 @@ bool XCompressZ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVaria
         CompressZDiscardDevice output;
         if (output.open(QIODevice::WriteOnly)) {
             XBinary::DATAPROCESS_STATE decompressState = {};
+            decompressState.mapUnpackProperties = mapProperties;
             decompressState.pDeviceInput = &sd;
             decompressState.pDeviceOutput = &output;
             decompressState.nInputOffset = 0;
@@ -529,7 +530,11 @@ bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
     const qint64 nFileSize = getSize();
     if (!guardedThis) return false;
     if ((nFileSize < 0) || (pContext->nUncompressedSize < 0) ||
-        !guardedSource) return false;
+        !guardedSource ||
+        !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            pContext->nUncompressedSize)) {
+        return false;
+    }
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         pContext->nUncompressedSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedSource || !guardedOutput)
@@ -543,6 +548,7 @@ bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
 
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapUnpackProperties = pState->mapUnpackProperties;
         decompressState.pDeviceInput = &sd;
         decompressState.pDeviceOutput = pStage.get();
         decompressState.nInputOffset = 0;

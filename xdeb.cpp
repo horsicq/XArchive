@@ -27,6 +27,29 @@ XBinary::XCONVERT _TABLE_XDEB_STRUCTID[] = {
 namespace {
 static const qint32 N_DEB_MAX_MEMBERS = 0x10000;
 
+// Same guard the package readers use: getRecords() leaves the cursor wherever
+// its last read ended, and detection probes a device the caller still owns.
+class DevicePositionGuard {
+public:
+    explicit DevicePositionGuard(QIODevice *pDevice) : m_pDevice(pDevice), m_nPosition(-1)
+    {
+        if (m_pDevice && !m_pDevice->isSequential()) {
+            m_nPosition = m_pDevice->pos();
+        }
+    }
+
+    ~DevicePositionGuard()
+    {
+        if (m_pDevice && (m_nPosition >= 0) && m_pDevice->isOpen()) {
+            m_pDevice->seek(m_nPosition);
+        }
+    }
+
+private:
+    QPointer<QIODevice> m_pDevice;
+    qint64 m_nPosition;
+};
+
 bool isDebTarMember(const QString &sName, const QString &sPrefix)
 {
     if (sName == (sPrefix + QStringLiteral(".tar"))) {
@@ -50,6 +73,8 @@ XDEB::XDEB(QIODevice *pDevice) : X_Ar(pDevice)
 
 bool XDEB::isValid(PDSTRUCT *pPdStruct)
 {
+    DevicePositionGuard positionGuard(getDevice());
+
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -131,6 +156,8 @@ QString XDEB::getMIMEString()
 
 XBinary::FILEFORMATINFO XDEB::getFileFormatInfo(PDSTRUCT *pPdStruct)
 {
+    DevicePositionGuard positionGuard(getDevice());
+
     XBinary::FILEFORMATINFO result = {};
 
     QList<XArchive::RECORD> listArchiveRecords = getRecords(N_DEB_MAX_MEMBERS + 1, pPdStruct);

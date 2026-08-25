@@ -42,6 +42,11 @@
 class XLZHDecoder : public QObject {
     Q_OBJECT
 public:
+    enum TERMINATION_MODE {
+        TERMINATION_PHYSICAL_EOF = 0,
+        TERMINATION_ZERO_BLOCK
+    };
+
 // LZH
 #define LZH_MAXMATCH 256 /* Maximum match length. */
 #define LZH_MINMATCH 3   /* Minimum match length. */
@@ -163,6 +168,8 @@ public:
         qint32 reading_position;
         qint32 loop;
         qint32 error;
+        bool bZeroBlockTermination;
+        bool bExplicitEOFSeen;
     };
 
     struct lzh_stream {
@@ -198,6 +205,7 @@ public:
     explicit XLZHDecoder(QObject *pParent = nullptr);
 
     static bool lzh_decode_init(struct lzh_stream *strm, qint32 method);
+    static bool lzh_decode_init(struct lzh_stream *strm, qint32 method, TERMINATION_MODE terminationMode);
     static bool lzh_huffman_init(struct lzh_huffman *hf, size_t len_size, qint32 tbl_bits);
     static qint32 lzh_decode(struct lzh_stream *strm, qint32 last);
     static qint32 lzh_read_blocks(struct lzh_stream *strm, qint32 last);
@@ -215,6 +223,8 @@ public:
     static void lzh_decode_free(struct lzh_stream *strm);
     static void lzh_huffman_free(struct lzh_huffman *hf);
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nMethod, XBinary::PDSTRUCT *pPdStruct,
+                           TERMINATION_MODE terminationMode);
 
     // LHA -lh1- (LArc-compatible): 4 KiB LZSS + adaptive Huffman (LZHUF). This method predates
     // the block-based static-Huffman lh4/5/6/7 the state machine above handles, so it has its

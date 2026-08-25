@@ -645,6 +645,7 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
     pContext->nArchiveFlags = listBlocks.constFirst().nHeadFlags;
     pContext->nArchiveSize = _blockEnd(listBlocks.constLast());
+    pContext->nVolumeNumber = listBlocks.constFirst().nVolumeNumber;
 
     for (const BLOCK_INFO &info : listBlocks) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -728,8 +729,18 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(FPART_PROP_ENCRYPTED, true);
     }
 
-    const bool bSolid = (pContext->nArchiveFlags & ARCHFLAG_SOLID) ||
-                        (info.nHeadFlags & FILEFLAG_SOLID);
+    // ACE marks every member of a solid archive as solid, including the first
+    // one - which by definition cannot continue an earlier member's decoder
+    // state. Treating the archive flag as decisive refused even a single-entry
+    // stored archive, which made the method-1 decoder unreachable entirely.
+    //
+    // Volume 0 is part of the test: the first file block of a continuation
+    // volume also has index 0, but it does depend on the previous volume's
+    // dictionary, so it is genuinely solid.
+    const bool bSolidArchive = (pContext->nArchiveFlags & ARCHFLAG_SOLID) ||
+                               (info.nHeadFlags & FILEFLAG_SOLID);
+    const bool bFirstInSolidChain = (pState->nCurrentIndex == 0) && (pContext->nVolumeNumber == 0);
+    const bool bSolid = bSolidArchive && (!bFirstInSolidChain);
 
     if (bSolid) {
         result.mapProperties.insert(FPART_PROP_ISSOLID, true);
@@ -1066,6 +1077,8 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
     }
 
     const quint16 nArchiveFlags = listBlocks.constFirst().nHeadFlags;
+    const quint8 nMainVolumeNumber = listBlocks.constFirst().nVolumeNumber;
+    qint32 nFileBlockIndex = 0;
 
     for (const BLOCK_INFO &info : listBlocks) {
         if (!aceCanAppendPart(nLimit, listResult)) {
@@ -1115,11 +1128,10 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
                 static_cast<qint64>(quint64(1) << ((info.nTechParameter & 15) + 10)));
 
             HANDLE_METHOD method = HANDLE_METHOD_UNKNOWN;
-            const bool bUnsupported = (nArchiveFlags & ARCHFLAG_SOLID) ||
-                                      (info.nHeadFlags & (FILEFLAG_PASSWORD |
-                                                          FILEFLAG_SPLIT_BEFORE |
-                                                          FILEFLAG_SPLIT_AFTER |
-                                                          FILEFLAG_SOLID));
+            const bool bFirstInSolidChain = (nFileBlockIndex == 0) && (nMainVolumeNumber == 0);
+            const bool bUnsupported =
+                (((nArchiveFlags & ARCHFLAG_SOLID) || (info.nHeadFlags & FILEFLAG_SOLID)) && (!bFirstInSolidChain)) ||
+                (info.nHeadFlags & (FILEFLAG_PASSWORD | FILEFLAG_SPLIT_BEFORE | FILEFLAG_SPLIT_AFTER));
 
             if (!bUnsupported) {
                 if (info.nTechType == CTYPE_STORED) {
@@ -1141,6 +1153,10 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
             part.nVirtualAddress = XADDR_MAX;
             part.sName = sName;
             listResult.append(part);
+        }
+
+        if (info.nHeadType == HEADTYPE_FILE) {
+            nFileBlockIndex++;
         }
     }
 

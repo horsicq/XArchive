@@ -183,6 +183,167 @@ QList<XArchive::RECORD> XDOS16::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
     return listResult;
 }
 
+bool XDOS16::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
+{
+    QPointer<XDOS16> guardedThis(this);
+    if (m_bUnpackOperationInProgress) {
+        return false;
+    }
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired() || !pState) {
+        return false;
+    }
+
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) {
+        return false;
+    }
+
+    DOS16_UNPACK_CONTEXT *pOldContext = static_cast<DOS16_UNPACK_CONTEXT *>(pState->pContext);
+    guardedThis->releaseUnpackSource(pState);
+    pState->pContext = nullptr;
+    *pState = UNPACK_STATE();
+    delete pOldContext;
+
+    if (!guardedThis || !XBinary::isPdStructNotCanceled(pPdStruct) || !guardedThis->bindUnpackSource(pState, pPdStruct) || !guardedThis) {
+        return false;
+    }
+
+    const bool bValid = guardedThis->isValid(pPdStruct);
+    if (!guardedThis || !bValid) {
+        if (guardedThis) guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    const QList<RECORD> listRecords = guardedThis->getRecords(-1, pPdStruct);
+    if (!guardedThis) {
+        return false;
+    }
+    const qint64 nSourceSize = guardedThis->getSize();
+    if (!guardedThis) {
+        return false;
+    }
+
+    if (listRecords.isEmpty() || (nSourceSize < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    DOS16_UNPACK_CONTEXT *pContext = new (std::nothrow) DOS16_UNPACK_CONTEXT;
+    if (!pContext) {
+        guardedThis->releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    for (const RECORD &record : listRecords) {
+        if ((record.nDataOffset < 0) || (record.nDataSize < 0) || (record.nDataOffset > nSourceSize) ||
+            (record.nDataSize > (nSourceSize - record.nDataOffset))) {
+            guardedThis->releaseUnpackSource(pState);
+            delete pContext;
+            *pState = UNPACK_STATE();
+            return false;
+        }
+    }
+
+    pContext->listRecords = listRecords;
+    pState->pContext = pContext;
+    pState->nCurrentOffset = 0;
+    pState->nCurrentIndex = 0;
+    pState->nNumberOfRecords = pContext->listRecords.count();
+    pState->nTotalSize = nSourceSize;
+    pState->mapUnpackProperties = mapProperties;
+
+    if (!guardedThis->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
+        if (!guardedThis) return false;
+        pState->pContext = nullptr;
+        guardedThis->releaseUnpackSource(pState);
+        delete pContext;
+        *pState = UNPACK_STATE();
+        return false;
+    }
+
+    return true;
+}
+
+XBinary::ARCHIVERECORD XDOS16::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    QPointer<XDOS16> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed() || !pState || !pState->pContext) {
+        return ARCHIVERECORD();
+    }
+
+    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+        return ARCHIVERECORD();
+    }
+
+    DOS16_UNPACK_CONTEXT *pContext = static_cast<DOS16_UNPACK_CONTEXT *>(pState->pContext);
+    if (pState->nCurrentIndex >= pContext->listRecords.count()) {
+        return ARCHIVERECORD();
+    }
+
+    const RECORD &record = pContext->listRecords.at(pState->nCurrentIndex);
+    ARCHIVERECORD result = {};
+    result.nStreamOffset = record.nDataOffset;
+    result.nStreamSize = record.nDataSize;
+    result.mapProperties = record.mapProperties;
+    result.mapProperties.insert(FPART_PROP_ORIGINALNAME, record.spInfo.sRecordName);
+    result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, record.nDataSize);
+    result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, record.spInfo.nUncompressedSize);
+    result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, static_cast<quint32>(record.spInfo.compressMethod));
+
+    return result;
+}
+
+bool XDOS16::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    QPointer<XDOS16> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext) {
+        return false;
+    }
+
+    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+        return false;
+    }
+
+    DOS16_UNPACK_CONTEXT *pContext = static_cast<DOS16_UNPACK_CONTEXT *>(pState->pContext);
+    if (pState->nNumberOfRecords != pContext->listRecords.count()) {
+        return false;
+    }
+
+    pState->nCurrentIndex++;
+
+    return (pState->nCurrentIndex < pState->nNumberOfRecords);
+}
+
+bool XDOS16::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+{
+    QPointer<XDOS16> guardedThis(this);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
+    if (!operationGuard.isAcquired() || !pState) {
+        return false;
+    }
+
+    Q_UNUSED(pPdStruct)
+
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) {
+        return false;
+    }
+
+    DOS16_UNPACK_CONTEXT *pContext = static_cast<DOS16_UNPACK_CONTEXT *>(pState->pContext);
+    guardedThis->releaseUnpackSource(pState);
+    pState->pContext = nullptr;
+    *pState = UNPACK_STATE();
+    delete pContext;
+
+    return guardedThis;
+}
+
 static bool dos16CanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listResult)
 {
     return (nLimit == -1) || (listResult.size() < nLimit);

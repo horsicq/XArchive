@@ -21,7 +21,9 @@
 #include "xlzwdecoder.h"
 #include "algo_utils.h"
 #include <assert.h>
+#include <limits>
 #include <string.h>
+#include <vector>
 
 typedef int (*WRITEFUNC)(void *user, unsigned char *buf, int len);
 typedef int (*READFUNC)(void *user, unsigned char *buf, int len);
@@ -357,4 +359,223 @@ bool XLZWDecoder::decompress_pdf(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
     return (nResult == 0) && bConsumedBoundedInput && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
            XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+namespace {
+const quint32 ZOO_LZD_CLEAR = 256;
+const quint32 ZOO_LZD_EOF = 257;
+const quint32 ZOO_LZD_FIRST_FREE = 258;
+const quint32 ZOO_LZD_TABLE_SIZE = 8192;
+const qint32 ZOO_LZD_MIN_BITS = 9;
+const qint32 ZOO_LZD_MAX_BITS = 13;
+const qint32 ZOO_LZD_OUTPUT_BUFFER_SIZE = 0x10000;
+
+class ZooLzdBitReader {
+public:
+    explicit ZooLzdBitReader(XBinary::DATAPROCESS_STATE *pState) : m_pState(pState), m_nBits(0), m_nBuffer(0) {}
+
+    bool readCode(qint32 nWidth, quint32 *pCode)
+    {
+        if (!m_pState || !pCode || (nWidth < ZOO_LZD_MIN_BITS) || (nWidth > ZOO_LZD_MAX_BITS)) return false;
+
+        while (m_nBits < nWidth) {
+            char cByte = 0;
+            if (XBinary::_readDevice(&cByte, 1, m_pState) != 1) {
+                m_pState->bReadError = true;
+                return false;
+            }
+            m_nBuffer |= ((quint64)(quint8)cByte << m_nBits);
+            m_nBits += 8;
+        }
+
+        *pCode = (quint32)(m_nBuffer & ((((quint64)1) << nWidth) - 1));
+        m_nBuffer >>= nWidth;
+        m_nBits -= nWidth;
+        return true;
+    }
+
+    bool hasOnlyZeroPadding() const { return m_nBuffer == 0; }
+
+private:
+    XBinary::DATAPROCESS_STATE *m_pState;
+    qint32 m_nBits;
+    quint64 m_nBuffer;
+};
+}  // namespace
+
+// ZOO method 1 (LZD) is a distinct 13-bit, LSB-first LZW stream.  It starts
+// with CLEAR, reserves 257 as an explicit end marker, and resets the table when
+// it reaches 8192 codes.  Keep it separate from PDF LZW, whose packing and
+// maximum code width are different.
+bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
+        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1)) {
+        return false;
+    }
+
+    const bool bHasExpectedSize = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
+    const qint64 nExpectedSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    if (bHasExpectedSize && (nExpectedSize < 0)) return false;
+
+    Algo_utils::prepareState(pDecompressState);
+    if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    std::vector<quint16> prefix(ZOO_LZD_TABLE_SIZE, 0);
+    std::vector<quint8> suffix(ZOO_LZD_TABLE_SIZE, 0);
+    std::vector<quint8> decodeStack(ZOO_LZD_TABLE_SIZE, 0);
+    QByteArray baOutput;
+    baOutput.reserve(ZOO_LZD_OUTPUT_BUFFER_SIZE);
+    ZooLzdBitReader reader(pDecompressState);
+
+    qint32 nCodeWidth = ZOO_LZD_MIN_BITS;
+    quint32 nWidthLimit = (1U << ZOO_LZD_MIN_BITS);
+    quint32 nNextCode = ZOO_LZD_FIRST_FREE;
+    qint32 nPreviousCode = -1;
+    qint64 nProduced = 0;
+    bool bInitialClearSeen = false;
+    bool bExplicitEOFSeen = false;
+    bool bDataError = false;
+
+    const auto flushOutput = [&]() -> bool {
+        if (baOutput.isEmpty()) return true;
+        const qint32 nSize = baOutput.size();
+        if (XBinary::_writeDevice(baOutput.constData(), nSize, pDecompressState) != nSize) return false;
+        baOutput.clear();
+        return true;
+    };
+
+    const auto emitByte = [&](quint8 nByte) -> bool {
+        if ((nProduced == (std::numeric_limits<qint64>::max)()) ||
+            (bHasExpectedSize && (nProduced >= nExpectedSize))) {
+            return false;
+        }
+        baOutput.append((char)nByte);
+        nProduced++;
+        return (baOutput.size() < ZOO_LZD_OUTPUT_BUFFER_SIZE) || flushOutput();
+    };
+
+    const auto expandCode = [&](quint32 nCode, quint32 *pStackSize, quint8 *pFirstByte) -> bool {
+        if (!pStackSize || !pFirstByte) return false;
+        quint32 nStackSize = 0;
+        quint32 nDepth = 0;
+
+        while (nCode >= ZOO_LZD_FIRST_FREE) {
+            if ((nCode >= nNextCode) || (nStackSize >= ZOO_LZD_TABLE_SIZE) || (++nDepth > ZOO_LZD_TABLE_SIZE)) return false;
+            decodeStack[nStackSize++] = suffix[nCode];
+            nCode = prefix[nCode];
+        }
+        if ((nCode >= 256) || (nStackSize >= ZOO_LZD_TABLE_SIZE)) return false;
+        decodeStack[nStackSize++] = (quint8)nCode;
+        *pStackSize = nStackSize;
+        *pFirstByte = (quint8)nCode;
+        return true;
+    };
+
+    while (XBinary::isPdStructNotCanceled(pPdStruct)) {
+        quint32 nCode = 0;
+        if (!reader.readCode(nCodeWidth, &nCode)) break;
+
+        if (!bInitialClearSeen) {
+            if (nCode != ZOO_LZD_CLEAR) {
+                bDataError = true;
+                break;
+            }
+            bInitialClearSeen = true;
+        }
+
+        if (nCode == ZOO_LZD_EOF) {
+            bExplicitEOFSeen = true;
+            break;
+        }
+
+        if (nCode == ZOO_LZD_CLEAR) {
+            nCodeWidth = ZOO_LZD_MIN_BITS;
+            nWidthLimit = (1U << ZOO_LZD_MIN_BITS);
+            nNextCode = ZOO_LZD_FIRST_FREE;
+            nPreviousCode = -1;
+
+            if (!reader.readCode(nCodeWidth, &nCode)) break;
+            if (nCode == ZOO_LZD_EOF) {
+                bExplicitEOFSeen = true;
+                break;
+            }
+            if (nCode >= 256) {
+                bDataError = true;
+                break;
+            }
+            if (!emitByte((quint8)nCode)) {
+                bDataError = !pDecompressState->bWriteError;
+                break;
+            }
+            nPreviousCode = (qint32)nCode;
+            continue;
+        }
+
+        if ((nPreviousCode < 0) || (nNextCode >= ZOO_LZD_TABLE_SIZE)) {
+            bDataError = true;
+            break;
+        }
+
+        const quint32 nInputCode = nCode;
+        quint32 nStackSize = 0;
+        quint8 nFirstByte = 0;
+
+        if (nCode < nNextCode) {
+            if (!expandCode(nCode, &nStackSize, &nFirstByte)) {
+                bDataError = true;
+                break;
+            }
+            bool bEmitOK = true;
+            while (nStackSize > 0) {
+                if (!emitByte(decodeStack[--nStackSize])) {
+                    bEmitOK = false;
+                    break;
+                }
+            }
+            if (!bEmitOK) bDataError = !pDecompressState->bWriteError;
+        } else if (nCode == nNextCode) {
+            if (!expandCode((quint32)nPreviousCode, &nStackSize, &nFirstByte)) {
+                bDataError = true;
+                break;
+            }
+            bool bEmitOK = true;
+            while (nStackSize > 0) {
+                if (!emitByte(decodeStack[--nStackSize])) {
+                    bEmitOK = false;
+                    break;
+                }
+            }
+            if (!bEmitOK) bDataError = !pDecompressState->bWriteError;
+            if (!pDecompressState->bWriteError && !bDataError && !emitByte(nFirstByte)) bDataError = !pDecompressState->bWriteError;
+        } else {
+            bDataError = true;
+            break;
+        }
+
+        if (pDecompressState->bWriteError || bDataError) break;
+
+        prefix[nNextCode] = (quint16)nPreviousCode;
+        suffix[nNextCode] = nFirstByte;
+        nNextCode++;
+        if ((nNextCode >= nWidthLimit) && (nCodeWidth < ZOO_LZD_MAX_BITS)) {
+            nCodeWidth++;
+            nWidthLimit <<= 1;
+        }
+        nPreviousCode = (qint32)nInputCode;
+    }
+
+    if (!bDataError && bExplicitEOFSeen && XBinary::isPdStructNotCanceled(pPdStruct) && !pDecompressState->bReadError &&
+        !pDecompressState->bWriteError && !flushOutput()) {
+        bDataError = !pDecompressState->bWriteError;
+    }
+
+    const bool bInputComplete = (pDecompressState->nInputLimit == -1)
+                                    ? pDecompressState->pDeviceInput->atEnd()
+                                    : (pDecompressState->nCountInput == pDecompressState->nInputLimit);
+    const bool bOutputComplete = !bHasExpectedSize || (nProduced == nExpectedSize);
+
+    return bInitialClearSeen && bExplicitEOFSeen && reader.hasOnlyZeroPadding() && bInputComplete && bOutputComplete &&
+           (pDecompressState->nCountOutput == nProduced) && !bDataError && !pDecompressState->bReadError &&
+           !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

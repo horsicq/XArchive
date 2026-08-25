@@ -81,6 +81,13 @@ bool XLHA::isValid(PDSTRUCT *pPdStruct)
 {
     bool bResult = false;
 
+    // Callers probe a shared device and expect their own cursor back. Every
+    // read_* below seeks, so the position is snapshotted and restored
+    // explicitly instead of depending on where the last read happens to leave
+    // it - the tag read alone used to land on 7 by coincidence.
+    QIODevice *pSourceDevice = getDevice();
+    const qint64 nSavedPos = pSourceDevice ? pSourceDevice->pos() : -1;
+
     if (XBinary::isPdStructNotCanceled(pPdStruct) && (getSize() >= 12)) {
         _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
 
@@ -93,10 +100,31 @@ bool XLHA::isValid(PDSTRUCT *pPdStruct)
                 (sMethod == "-lh5-") || (sMethod == "-lh6-") || (sMethod == "-lh7-") || (sMethod == "-lh8-") || (sMethod == "-lh9-") || (sMethod == "-lha-") ||
                 (sMethod == "-lhb-") || (sMethod == "-lhc-") || (sMethod == "-lhe-") || (sMethod == "-lhd-") || (sMethod == "-lhx-") || (sMethod == "-pm0-") ||
                 (sMethod == "-pm2-")) {
-                bResult = true;
+                const quint8 nLevel = read_uint8(20);
+
+                if (nLevel <= 2) {
+                    // Detection has to agree with the member walk. initUnpack
+                    // computes this same first record and gives up when it does
+                    // not fit, so accepting on the tag alone produced files that
+                    // reported as LHA and then refused to open.
+                    //
+                    // ARX is exactly that case: it carries a genuine "-lh1-" tag
+                    // and a valid LHA header checksum, but inserts one byte at
+                    // offset 7, so every field from there on is shifted and the
+                    // compressed size reads far too large for the file.
+                    const qint64 nHeaderSize = (nLevel == 2) ? (qint64)read_uint16(0) : (qint64)(read_uint8(0) + 2);
+                    const qint64 nRecordSize = nHeaderSize + (qint64)(quint32)read_uint32(7);
+
+                    if ((nHeaderSize >= 21) && (nRecordSize > 0) && (nRecordSize <= getSize())) {
+                        bResult = true;
+                    }
+                }
             }
-            bResult = true;
         }
+    }
+
+    if (pSourceDevice && (nSavedPos >= 0)) {
+        pSourceDevice->seek(nSavedPos);
     }
 
     return bResult;
@@ -107,6 +135,61 @@ bool XLHA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
     XLHA xhla(pDevice);
 
     return xhla.isValid(pPdStruct);
+}
+
+// lh2/lh3, LArc lzs/lz2/lz3/lz5..., the lh8-lhx large-window methods and PMarc
+// pm0/pm2 are recognized but have no decoder, so they must resolve to
+// HANDLE_METHOD_UNKNOWN.  Leaving the property unset instead would make the
+// shared decompressor default to STORE and publish the compressed bytes.
+XBinary::HANDLE_METHOD XLHA::_methodToHandle(const QString &sMethod)
+{
+    if ((sMethod == "-lh0-") || (sMethod == "-lz4-") || (sMethod == "-lhd-")) return HANDLE_METHOD_STORE;
+    if (sMethod == "-lh1-") return HANDLE_METHOD_LZH1;  // LArc-compatible: adaptive Huffman + 4 KiB LZSS (LZHUF)
+    if (sMethod == "-lh4-") return HANDLE_METHOD_LZH4;
+    if (sMethod == "-lh5-") return HANDLE_METHOD_LZH5;
+    if (sMethod == "-lh6-") return HANDLE_METHOD_LZH6;
+    if (sMethod == "-lh7-") return HANDLE_METHOD_LZH7;
+
+    // Streamline SAR spells the same tags with spaces instead of hyphens and
+    // upper-cases them. Its payloads are bit-exact standard LHA streams, so they
+    // map to the same decoders. SAR.DOC documents exactly three methods - LH5,
+    // LH4 and LH0 - and anything else stays unknown so it fails closed rather
+    // than being decoded on an assumption.
+    if (sMethod == " LH0 ") return HANDLE_METHOD_STORE;
+    if (sMethod == " LH4 ") return HANDLE_METHOD_LZH4;
+    if (sMethod == " LH5 ") return HANDLE_METHOD_LZH5;
+
+    return HANDLE_METHOD_UNKNOWN;
+}
+
+// Does this 21-byte header prefix start a member of this format?  LHA writes
+// "-lh?-", "-lz?-" or "-pm?-"; SAR writes the same tags spaced and upper-cased.
+// Everything else about the walk is identical, so only the spelling varies.
+bool XLHA::_isMemberTag(const QByteArray &baHeader)
+{
+    if (baHeader.size() < 21) return false;
+
+    const QByteArray baPrefix = baHeader.mid(2, 3);
+
+    return ((baPrefix == "-lh") || (baPrefix == "-lz") || (baPrefix == "-pm")) && (baHeader.at(6) == '-');
+}
+
+// Level 0 and 1 store the header size at offset 0 and a checksum at offset 1
+// covering the bytes from offset 2 to the end of that header. Level 2 has no
+// such byte, so callers must not apply this there.
+bool XLHA::_isHeaderChecksumValid(const QByteArray &baHeader)
+{
+    if (baHeader.size() < 3) return false;
+    const qint32 nHeaderSize = (quint8)baHeader.at(0);
+    if (nHeaderSize < 2) return false;
+    if (baHeader.size() < (2 + nHeaderSize)) return false;
+
+    quint32 nSum = 0;
+    for (qint32 i = 2; i < (2 + nHeaderSize); i++) {
+        nSum += (quint8)baHeader.at(i);
+    }
+
+    return ((nSum & 0xFF) == (quint32)(quint8)baHeader.at(1));
 }
 
 qint64 XLHA::getFileFormatSize(PDSTRUCT *pPdStruct)
@@ -250,11 +333,7 @@ bool XLHA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
                 return false;
             }
             if (baHeader.size() != 21) break;
-            const QByteArray baMethodPrefix = baHeader.mid(2, 3);
-            if (((baMethodPrefix == "-lh") ||
-                 (baMethodPrefix == "-lz") ||
-                 (baMethodPrefix == "-pm")) &&
-                (baHeader.at(6) == '-')) {
+            if (guardedArchive->_isMemberTag(baHeader)) {
                 quint8 nLevel = static_cast<quint8>(baHeader.at(20));
                 qint64 nHeaderSize = (nLevel == 2)
                     ? (qint64)lhaReadLe16(baHeader, 0)
@@ -352,21 +431,8 @@ XBinary::ARCHIVERECORD XLHA::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
         // Get compression method
         QString sMethod = QString::fromLatin1(baHeader.constData() + 2, 5);
-        XBinary::HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
 
-        if ((sMethod == "-lh0-") || (sMethod == "-lz4-") || (sMethod == "-lhd-")) {
-            compressMethod = HANDLE_METHOD_STORE;
-        } else if (sMethod == "-lh1-") {
-            compressMethod = HANDLE_METHOD_LZH1;  // LArc-compatible: adaptive Huffman + 4 KiB LZSS (LZHUF)
-        } else if (sMethod == "-lh5-") {
-            compressMethod = HANDLE_METHOD_LZH5;
-        } else if (sMethod == "-lh6-") {
-            compressMethod = HANDLE_METHOD_LZH6;
-        } else if (sMethod == "-lh7-") {
-            compressMethod = HANDLE_METHOD_LZH7;
-        }
-
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, _methodToHandle(sMethod));
         result.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
         result.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, nCompressedSize);
 
@@ -756,6 +822,8 @@ QList<XBinary::FPART> XLHA::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                 record.nVirtualAddress = XADDR_MAX;
                 record.sName = sFileName;
                 record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, read_uint32(nCurrentOffset + 11));
+                record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nDataSize);
+                record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, _methodToHandle(read_ansiString(nCurrentOffset + 2, 5)));
 
                 listResult.append(record);
             }

@@ -36,6 +36,17 @@ static bool isAesWholeBufferSizeValid(qint64 nSize)
            (nSize <= (std::numeric_limits<qint32>::max)());
 }
 
+static bool reserveAesWholeBuffers(
+    const XBinary::DATAPROCESS_STATE *pState, qint64 nSize,
+    XBinary::UNPACK_MEMORY_RESERVATION *pReservation)
+{
+    if (!pState || !pReservation || !isAesWholeBufferSizeValid(nSize) ||
+        (nSize > (std::numeric_limits<qint64>::max)() / 2)) {
+        return false;
+    }
+    return pReservation->acquire(pState->mapUnpackProperties, nSize * 2);
+}
+
 static bool readAesExact(char *pData, qint32 nSize, XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     qint32 nTotal = 0;
@@ -233,6 +244,13 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecryptState, const QByte
 
     if (nTotalEncrypted <= 0 || !isAesWholeBufferSizeValid(nTotalEncrypted) || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
         qWarning() << "[XAESDecoder] Invalid encrypted data size:" << nTotalEncrypted;
+        memset(aKey, 0, sizeof(aKey));
+        return false;
+    }
+
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!reserveAesWholeBuffers(pDecryptState, nTotalEncrypted,
+                                &memoryReservation)) {
         memset(aKey, 0, sizeof(aKey));
         return false;
     }
@@ -435,6 +453,13 @@ bool XAESDecoder::decrypt(XBinary::DATAPROCESS_STATE *pDecompressState, const QB
 
         qint64 nEncryptedDataSize = pDecompressState->nInputLimit - nSaltSize - N_PASSWORD_VERIFY_SIZE - N_HMAC_SIZE;
         if (nEncryptedDataSize < 0) {
+            return false;
+        }
+
+        XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+        if (!reserveAesWholeBuffers(pDecompressState,
+                                    nEncryptedDataSize,
+                                    &memoryReservation)) {
             return false;
         }
 
@@ -1315,6 +1340,15 @@ bool XAESDecoder::decryptRar5(XBinary::DATAPROCESS_STATE *pDecryptState, const Q
 
     if (nTotalEncrypted <= 0 || !isAesWholeBufferSizeValid(nTotalEncrypted) || (nTotalEncrypted % AES_BLOCK_SIZE) != 0) {
         qWarning() << "[XAESDecoder::decryptRar5] Invalid encrypted data size:" << nTotalEncrypted;
+        memset(aAesKey, 0, 32);
+        memset(aHashKey, 0, 32);
+        memset(aPswCheck, 0, 32);
+        return false;
+    }
+
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!reserveAesWholeBuffers(pDecryptState, nTotalEncrypted,
+                                &memoryReservation)) {
         memset(aAesKey, 0, 32);
         memset(aHashKey, 0, 32);
         memset(aPswCheck, 0, 32);

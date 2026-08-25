@@ -123,6 +123,7 @@ bool XZOO::_parseEntries(QList<ZOO_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
         qint64 nPosData = zooReadLe32(baEntry, 10);
         quint16 nDosDate = zooReadLe16(baEntry, 14);
         quint16 nDosTime = zooReadLe16(baEntry, 16);
+        quint16 nCRC16 = zooReadLe16(baEntry, 18);
         qint64 nSizeOrig = zooReadLe32(baEntry, 20);
         qint64 nSizeNow = zooReadLe32(baEntry, 24);
         quint8 nMajVer = static_cast<quint8>(baEntry.at(28));
@@ -165,6 +166,7 @@ bool XZOO::_parseEntries(QList<ZOO_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
             record.nDataOffset = nPosData;
             record.nCompressedSize = nSizeNow;
             record.nUncompressedSize = nSizeOrig;
+            record.nCRC16 = nCRC16;
             record.nMethod = nMethod;
             record.bIsFolder = false;
             Q_UNUSED(nType)
@@ -529,6 +531,8 @@ XBinary::ARCHIVERECORD XZOO::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, record.nUncompressedSize);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, record.nCompressedSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, _methodToHandle(record.nMethod));
+    result.mapProperties.insert(FPART_PROP_RESULTCRC, record.nCRC16);
+    result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_CRC16);
 
     if (record.mtDateTime.isValid()) {
         result.mapProperties.insert(FPART_PROP_DATETIME, record.mtDateTime);

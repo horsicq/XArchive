@@ -8050,7 +8050,7 @@ static size_t MEM_read_ARCH(const void* p) { size_t r; memcpy(&r, p, sizeof(r));
 }*/
 
 
-MEM_STATIC unsigned MEM_NbCommonBytes (register size_t val)
+MEM_STATIC unsigned MEM_NbCommonBytes (size_t val)
 {
     if (MEM_isLittleEndian())
     {

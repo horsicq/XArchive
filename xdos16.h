@@ -50,6 +50,10 @@ public:
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
     virtual QList<RECORD> getRecords(qint32 nLimit, PDSTRUCT *pPdStruct) override;
+    virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
     virtual FT getFileType() override;
     virtual QString getMIMEString() override;
@@ -70,6 +74,10 @@ public:
     virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
     virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
 private:
+    struct DOS16_UNPACK_CONTEXT {
+        QList<RECORD> listRecords;
+    };
+
     INTERNAL_INFO m_internalInfo;
 };
 

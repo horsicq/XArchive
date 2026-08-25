@@ -165,10 +165,11 @@ protected:
 
 bool measureLzmaAloneStream(QIODevice *pDevice, qint64 nFileSize,
                             const QByteArray &baProperties,
-                            qint64 nDeclaredSize,
-                            qint64 *pnCompressedSize,
-                            qint64 *pnUncompressedSize,
-                            XBinary::PDSTRUCT *pPdStruct)
+                             qint64 nDeclaredSize,
+                             qint64 *pnCompressedSize,
+                             qint64 *pnUncompressedSize,
+                             XBinary::PDSTRUCT *pPdStruct,
+                             const QMap<XBinary::UNPACK_PROP, QVariant> *pUnpackProperties = nullptr)
 {
     if (pnCompressedSize) *pnCompressedSize = 0;
     if (pnUncompressedSize) *pnUncompressedSize = 0;
@@ -194,6 +195,7 @@ bool measureLzmaAloneStream(QIODevice *pDevice, qint64 nFileSize,
     }
 
     XBinary::DATAPROCESS_STATE state = {};
+    if (pUnpackProperties) state.mapUnpackProperties = *pUnpackProperties;
     state.pDeviceInput = &input;
     state.pDeviceOutput = &output;
     state.nInputOffset = 0;
@@ -570,7 +572,7 @@ bool XLZMA::initUnpack(
     qint64 nUncompressedSize = 0;
     const bool bMeasured = measureLzmaAloneStream(
         guardedSource.data(), nFileSize, baProperties, nDeclaredSize,
-        &nCompressedSize, &nUncompressedSize, pPdStruct);
+        &nCompressedSize, &nUncompressedSize, pPdStruct, &mapProperties);
     if (!guardedThis || !guardedSource || !bMeasured ||
         (nCompressedSize <= 0) ||
         (nCompressedSize > (nFileSize - LZMA_ALONE_HEADER_SIZE)) ||

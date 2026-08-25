@@ -488,7 +488,7 @@ bool XZlib::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         ZLIB_UNPACK_CONTEXT *pContext = new ZLIB_UNPACK_CONTEXT();
 
         const bool bStreamInfo = guardedArchive->_getStreamInfo(
-            pContext, pPdStruct);
+            pContext, pPdStruct, &mapProperties);
         if (!guardedArchive) {
             delete pContext;
             return false;
@@ -526,7 +526,8 @@ bool XZlib::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     return bResult;
 }
 
-bool XZlib::_getStreamInfo(ZLIB_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct)
+bool XZlib::_getStreamInfo(ZLIB_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct,
+                           const QMap<UNPACK_PROP, QVariant> *pUnpackProperties)
 {
     QPointer<XZlib> guardedArchive(this);
     if (!pContext) return false;
@@ -559,6 +560,7 @@ bool XZlib::_getStreamInfo(ZLIB_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
 
     XBinary::DATAPROCESS_STATE state = {};
+    if (pUnpackProperties) state.mapUnpackProperties = *pUnpackProperties;
     state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
     state.pDeviceInput = &inputDevice;
     state.pDeviceOutput = &discardDevice;
@@ -668,6 +670,8 @@ bool XZlib::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if ((pContext->nCompressedSize < 0) ||
         (pContext->nUncompressedSize < 0)) return false;
     const qint64 nUncompressedSize = pContext->nUncompressedSize;
+    if (!XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                            nUncompressedSize)) return false;
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         nUncompressedSize, pPdStruct));
     if (!guardedArchive || !pStage || !guardedOutput || !guardedSource ||
@@ -697,6 +701,9 @@ bool XZlib::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         XBinary::DATAPROCESS_STATE state = {};
         // Use raw DEFLATE since SubDevice skips the 2-byte zlib header
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
+        state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE,
+                                   nUncompressedSize);
+        state.mapUnpackProperties = pState->mapUnpackProperties;
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pDecompressOutput;
         state.nInputOffset = 0;

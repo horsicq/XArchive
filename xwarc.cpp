@@ -22,21 +22,113 @@
 
 #include <limits>
 #include <new>
+#include <QCryptographicHash>
 #include <QDir>
+#include <QSet>
+#include <QUrl>
 
 namespace {
 const qint32 WARC_MAX_HEADER_SIZE = 1024 * 1024;
 const qint32 WARC_MAX_RECORDS = 100000;
 const qint32 WARC_MAX_NAME_SIZE = 32768;
 
-QByteArray warcTrimLeadingWhitespace(const QByteArray &value)
+QByteArray warcTrimFieldWhitespace(const QByteArray &value)
 {
-    qint32 nOffset = 0;
-    while ((nOffset < value.size()) &&
-           ((value.at(nOffset) == ' ') || (value.at(nOffset) == '\t'))) {
-        nOffset++;
+    qint32 nStart = 0;
+    qint32 nEnd = value.size();
+    while ((nStart < nEnd) &&
+           ((value.at(nStart) == ' ') || (value.at(nStart) == '\t'))) {
+        nStart++;
     }
-    return value.mid(nOffset);
+    while ((nEnd > nStart) &&
+           ((value.at(nEnd - 1) == ' ') || (value.at(nEnd - 1) == '\t'))) {
+        nEnd--;
+    }
+    return value.mid(nStart, nEnd - nStart);
+}
+
+QByteArray warcAsciiLower(const QByteArray &value)
+{
+    QByteArray result = value;
+    for (qint32 i = 0; i < result.size(); i++) {
+        const char c = result.at(i);
+        if ((c >= 'A') && (c <= 'Z')) {
+            result[i] = c + ('a' - 'A');
+        }
+    }
+    return result;
+}
+
+bool warcIsHttpToken(const QByteArray &value)
+{
+    if (value.isEmpty()) return false;
+    static const QByteArray allowedPunctuation("!#$%&'*+-.^_`|~");
+    for (char c : value) {
+        if (((c >= '0') && (c <= '9')) ||
+            ((c >= 'A') && (c <= 'Z')) ||
+            ((c >= 'a') && (c <= 'z')) ||
+            allowedPunctuation.contains(c)) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool warcIsHexDigit(char c)
+{
+    return ((c >= '0') && (c <= '9')) ||
+           ((c >= 'A') && (c <= 'F')) ||
+           ((c >= 'a') && (c <= 'f'));
+}
+
+bool warcIsValidRecordId(const QByteArray &value)
+{
+    const QByteArray recordId = warcTrimFieldWhitespace(value);
+    if ((recordId.size() < 4) ||
+        (recordId.size() > WARC_MAX_NAME_SIZE) ||
+        (recordId.at(0) != '<') ||
+        (recordId.at(recordId.size() - 1) != '>')) {
+        return false;
+    }
+
+    const QByteArray uri = recordId.mid(1, recordId.size() - 2);
+    const qint32 nColon = uri.indexOf(':');
+    if ((nColon <= 0) ||
+        !(((uri.at(0) >= 'A') && (uri.at(0) <= 'Z')) ||
+          ((uri.at(0) >= 'a') && (uri.at(0) <= 'z')))) {
+        return false;
+    }
+    for (qint32 i = 1; i < nColon; i++) {
+        const char c = uri.at(i);
+        if (!(((c >= 'A') && (c <= 'Z')) ||
+              ((c >= 'a') && (c <= 'z')) ||
+              ((c >= '0') && (c <= '9')) ||
+              (c == '+') || (c == '-') || (c == '.'))) {
+            return false;
+        }
+    }
+
+    static const QByteArray uriPunctuation("-._~:/?#[]@!$&'()*+,;=");
+    for (qint32 i = nColon + 1; i < uri.size(); i++) {
+        const char c = uri.at(i);
+        if (c == '%') {
+            if ((i + 2 >= uri.size()) || !warcIsHexDigit(uri.at(i + 1)) ||
+                !warcIsHexDigit(uri.at(i + 2))) {
+                return false;
+            }
+            i += 2;
+        } else if (!(((c >= 'A') && (c <= 'Z')) ||
+                     ((c >= 'a') && (c <= 'z')) ||
+                     ((c >= '0') && (c <= '9')) ||
+                     uriPunctuation.contains(c))) {
+            return false;
+        }
+    }
+    const QString uriString = QString::fromUtf8(uri.constData(), uri.size());
+    if (uriString.toUtf8() != uri) return false;
+    const QUrl parsed(uriString, QUrl::StrictMode);
+    return parsed.isValid() && !parsed.scheme().isEmpty();
 }
 
 bool warcIsSafeRelativePath(const QString &path)
@@ -121,26 +213,10 @@ XBinary *XWARC::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleA
 
 bool XWARC::_parseVersion(const QByteArray &line)
 {
-    if (!line.startsWith("WARC/")) return false;
-
-    const QByteArray version = line.mid(5);
-    if ((version.size() != 3) && (version.size() != 4)) return false;
-    if ((version.at(0) < '0') || (version.at(0) > '9') ||
-        (version.at(1) != '.') ||
-        (version.at(2) < '0') || (version.at(2) > '9') ||
-        ((version.size() == 4) &&
-         ((version.at(3) < '0') || (version.at(3) > '9')))) {
-        return false;
-    }
-
-    const quint32 nMajor = (quint32)(version.at(0) - '0');
-    quint32 nMinor = (quint32)(version.at(2) - '0');
-    if (version.size() == 4) {
-        nMinor = nMinor * 10 + (quint32)(version.at(3) - '0');
-    }
-    const quint32 nVersion = nMajor * 10000 + nMinor * 100;
-
-    return (nVersion >= 1200) && (nVersion <= 10000);
+    // ISO 28500 currently defines the 1.0 and 1.1 WARC revisions.  The old
+    // numeric range calculation accidentally rejected 1.1 while accepting
+    // unrelated pre-1.0 strings such as 0.12.
+    return (line == "WARC/1.0") || (line == "WARC/1.1");
 }
 
 bool XWARC::_parseUnsignedDecimal(const QByteArray &value, qint64 *pResult)
@@ -164,42 +240,77 @@ bool XWARC::_parseDate(const QByteArray &value, QDateTime *pResult)
 {
     if (!pResult) return false;
 
-    const QByteArray date = warcTrimLeadingWhitespace(value);
-    if ((date.size() != 20) || (date.at(4) != '-') ||
-        (date.at(7) != '-') || (date.at(10) != 'T') ||
-        (date.at(13) != ':') || (date.at(16) != ':') ||
-        (date.at(19) != 'Z')) {
+    const QByteArray date = warcTrimFieldWhitespace(value);
+    const qint32 nSize = date.size();
+    const bool bHasFraction = (nSize >= 22) && (nSize <= 30);
+    if ((nSize != 4) && (nSize != 7) && (nSize != 10) &&
+        (nSize != 17) && (nSize != 20) && !bHasFraction) {
         return false;
     }
 
-    const qint32 positions[] = {0, 1, 2, 3, 5, 6, 8, 9,
-                                11, 12, 14, 15, 17, 18};
-    for (qint32 nPosition : positions) {
-        if ((date.at(nPosition) < '0') || (date.at(nPosition) > '9')) {
+    const auto areDigits = [&date](qint32 nOffset, qint32 nCount) {
+        if ((nOffset < 0) || (nCount < 0) ||
+            (nOffset > date.size()) || (nCount > date.size() - nOffset)) {
+            return false;
+        }
+        for (qint32 i = 0; i < nCount; i++) {
+            const char c = date.at(nOffset + i);
+            if ((c < '0') || (c > '9')) return false;
+        }
+        return true;
+    };
+
+    if (!areDigits(0, 4)) return false;
+    if (nSize >= 7) {
+        if ((date.at(4) != '-') || !areDigits(5, 2)) return false;
+    }
+    if (nSize >= 10) {
+        if ((date.at(7) != '-') || !areDigits(8, 2)) return false;
+    }
+    if (nSize >= 17) {
+        if ((date.at(10) != 'T') || (date.at(13) != ':') ||
+            !areDigits(11, 2) || !areDigits(14, 2)) {
+            return false;
+        }
+    }
+    if (nSize == 17) {
+        if (date.at(16) != 'Z') return false;
+    } else if (nSize >= 20) {
+        if ((date.at(16) != ':') || !areDigits(17, 2)) return false;
+        if (nSize == 20) {
+            if (date.at(19) != 'Z') return false;
+        } else if ((date.at(19) != '.') ||
+                   (date.at(nSize - 1) != 'Z') ||
+                   !areDigits(20, nSize - 21)) {
             return false;
         }
     }
 
     const qint32 nYear = date.mid(0, 4).toInt();
-    const qint32 nMonth = date.mid(5, 2).toInt();
-    const qint32 nDay = date.mid(8, 2).toInt();
-    const qint32 nHour = date.mid(11, 2).toInt();
-    const qint32 nMinute = date.mid(14, 2).toInt();
-    const qint32 nSecond = date.mid(17, 2).toInt();
+    const qint32 nMonth = (nSize >= 7) ? date.mid(5, 2).toInt() : 1;
+    const qint32 nDay = (nSize >= 10) ? date.mid(8, 2).toInt() : 1;
+    const qint32 nHour = (nSize >= 17) ? date.mid(11, 2).toInt() : 0;
+    const qint32 nMinute = (nSize >= 17) ? date.mid(14, 2).toInt() : 0;
+    const qint32 nSecond = (nSize >= 20) ? date.mid(17, 2).toInt() : 0;
+    qint32 nMillisecond = 0;
+    if (bHasFraction) {
+        QByteArray milliseconds = date.mid(20, qMin(3, nSize - 21));
+        while (milliseconds.size() < 3) milliseconds.append('0');
+        nMillisecond = milliseconds.toInt();
+    }
 
-    if ((nYear < 1583) || (nYear > 4095) ||
+    if ((nYear < 1) || (nYear > 9999) ||
         (nHour < 0) || (nHour > 23) ||
         (nMinute < 0) || (nMinute > 59) ||
-        (nSecond < 0) || (nSecond > 60)) {
+        (nSecond < 0) || (nSecond > 59)) {
         return false;
     }
 
     const QDate qDate(nYear, nMonth, nDay);
-    const QTime qTime(nHour, nMinute, qMin(nSecond, 59));
+    const QTime qTime(nHour, nMinute, nSecond, nMillisecond);
     if (!qDate.isValid() || !qTime.isValid()) return false;
 
     QDateTime result(qDate, qTime, Qt::UTC);
-    if (nSecond == 60) result = result.addSecs(1);
     if (!result.isValid()) return false;
 
     *pResult = result;
@@ -210,7 +321,7 @@ bool XWARC::_mapTargetURI(const QByteArray &value, QString *pResult)
 {
     if (!pResult) return false;
 
-    const QByteArray uri = warcTrimLeadingWhitespace(value);
+    const QByteArray uri = warcTrimFieldWhitespace(value);
     if (uri.isEmpty()) return false;
 
     for (char c : uri) {
@@ -225,7 +336,7 @@ bool XWARC::_mapTargetURI(const QByteArray &value, QString *pResult)
     const qint32 nSeparator = uri.indexOf("://");
     if (nSeparator < 3) return false;
 
-    const QByteArray scheme = uri.left(nSeparator);
+    const QByteArray scheme = warcAsciiLower(uri.left(nSeparator));
     const QByteArray remainder = uri.mid(nSeparator + 3);
     QByteArray path;
 
@@ -318,9 +429,11 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
     if (!guardedThis || !bRead || (header.size() < 12)) return false;
 
     QMap<QByteArray, QByteArray> criticalFields;
+    QByteArray previousFieldKey;
     qint32 nLineOffset = 0;
     qint32 nLineNumber = 0;
     bool bSawTerminator = false;
+    bool bVersion11 = false;
 
     while (nLineOffset < header.size()) {
         const qint32 nLineEnd = header.indexOf("\r\n", nLineOffset);
@@ -344,26 +457,37 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
 
         if (nLineNumber == 0) {
             if (!_parseVersion(line)) return false;
+            bVersion11 = (line == "WARC/1.1");
+        } else if ((line.at(0) == ' ') || (line.at(0) == '\t')) {
+            // WARC named fields inherit the HTTP-style folding rule.  Unfold
+            // critical values to one SP; continuations of extension fields
+            // remain syntactically accepted without retaining unneeded data.
+            if (previousFieldKey.isEmpty()) return false;
+            if (criticalFields.contains(previousFieldKey)) {
+                QByteArray value = criticalFields.value(previousFieldKey);
+                value.append(' ');
+                value.append(warcTrimFieldWhitespace(line));
+                criticalFields.insert(previousFieldKey, value);
+            }
         } else {
             const qint32 nColon = line.indexOf(':');
             if (nColon <= 0) return false;
 
             const QByteArray key = line.left(nColon);
-            for (char c : key) {
-                const quint8 nCharacter = (quint8)c;
-                if ((nCharacter <= 0x20) || (nCharacter >= 0x7f) ||
-                    (nCharacter == ':')) {
-                    return false;
-                }
-            }
+            if (!warcIsHttpToken(key)) return false;
 
+            const QByteArray normalizedKey = warcAsciiLower(key);
+            previousFieldKey = normalizedKey;
             const bool bCritical =
-                (key == "WARC-Type") || (key == "WARC-Target-URI") ||
-                (key == "Content-Length") || (key == "WARC-Date") ||
-                (key == "Last-Modified");
+                (normalizedKey == "warc-type") ||
+                (normalizedKey == "warc-target-uri") ||
+                (normalizedKey == "content-length") ||
+                (normalizedKey == "warc-date") ||
+                (normalizedKey == "warc-record-id") ||
+                (normalizedKey == "last-modified");
             if (bCritical) {
-                if (criticalFields.contains(key)) return false;
-                criticalFields.insert(key, line.mid(nColon + 1));
+                if (criticalFields.contains(normalizedKey)) return false;
+                criticalFields.insert(normalizedKey, line.mid(nColon + 1));
             }
         }
 
@@ -371,27 +495,42 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
     }
 
     if (!bSawTerminator || (nLineNumber == 0) ||
-        !criticalFields.contains("Content-Length") ||
-        !criticalFields.contains("WARC-Date")) {
+        !criticalFields.contains("warc-type") ||
+        !criticalFields.contains("warc-record-id") ||
+        !criticalFields.contains("content-length") ||
+        !criticalFields.contains("warc-date")) {
+        return false;
+    }
+
+    const QByteArray type = warcAsciiLower(
+        warcTrimFieldWhitespace(criticalFields.value("warc-type")));
+    const QByteArray recordId =
+        warcTrimFieldWhitespace(criticalFields.value("warc-record-id"));
+    if (!warcIsHttpToken(type) || !warcIsValidRecordId(recordId)) {
         return false;
     }
 
     qint64 nContentLength = -1;
     if (!_parseUnsignedDecimal(
-            warcTrimLeadingWhitespace(criticalFields.value("Content-Length")),
+            warcTrimFieldWhitespace(criticalFields.value("content-length")),
             &nContentLength)) {
         return false;
     }
 
     QDateTime created;
-    if (!_parseDate(criticalFields.value("WARC-Date"), &created)) {
+    if (!bVersion11 &&
+        (warcTrimFieldWhitespace(criticalFields.value("warc-date")).size() !=
+         20)) {
+        return false;
+    }
+    if (!_parseDate(criticalFields.value("warc-date"), &created)) {
         return false;
     }
 
     QDateTime modified = created;
-    if (criticalFields.contains("Last-Modified")) {
+    if (criticalFields.contains("last-modified")) {
         QDateTime candidate;
-        if (_parseDate(criticalFields.value("Last-Modified"), &candidate)) {
+        if (_parseDate(criticalFields.value("last-modified"), &candidate)) {
             modified = candidate;
         }
     }
@@ -412,19 +551,19 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
     }
 
     QString sFileName;
-    const QByteArray type =
-        warcTrimLeadingWhitespace(criticalFields.value("WARC-Type"));
     const bool bSupportedType =
         (type == "resource") || (type == "response");
     const bool bMapped = bSupportedType &&
-        criticalFields.contains("WARC-Target-URI") &&
-        _mapTargetURI(criticalFields.value("WARC-Target-URI"), &sFileName);
+        criticalFields.contains("warc-target-uri") &&
+        _mapTargetURI(criticalFields.value("warc-target-uri"), &sFileName);
 
     pEntry->nHeaderOffset = nOffset;
     pEntry->nHeaderSize = nDataOffset - nOffset;
     pEntry->nDataOffset = nDataOffset;
     pEntry->nDataSize = nContentLength;
     pEntry->nNextOffset = nDataEnd + 4;
+    pEntry->baRecordIdHash = QCryptographicHash::hash(
+        recordId, QCryptographicHash::Sha256);
     pEntry->sFileName = sFileName;
     pEntry->created = created;
     pEntry->modified = modified;
@@ -447,6 +586,7 @@ bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries,
 
     qint64 nOffset = 0;
     qint32 nPhysicalRecords = 0;
+    QSet<QByteArray> recordIds;
     while ((nOffset < nTotalSize) &&
            XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (nPhysicalRecords >= WARC_MAX_RECORDS) {
@@ -464,6 +604,11 @@ bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries,
             if (pEntries) pEntries->clear();
             return false;
         }
+        if (recordIds.contains(entry.baRecordIdHash)) {
+            if (pEntries) pEntries->clear();
+            return false;
+        }
+        recordIds.insert(entry.baRecordIdHash);
 
         if (bVisible && pEntries) pEntries->append(entry);
         nOffset = entry.nNextOffset;
@@ -588,6 +733,7 @@ XBinary::ARCHIVERECORD XWARC::infoCurrent(UNPACK_STATE *pState,
         (parsed.nDataOffset != entry.nDataOffset) ||
         (parsed.nDataSize != entry.nDataSize) ||
         (parsed.nNextOffset != entry.nNextOffset) ||
+        (parsed.baRecordIdHash != entry.baRecordIdHash) ||
         (parsed.sFileName != entry.sFileName) ||
         (parsed.created != entry.created) ||
         (parsed.modified != entry.modified)) {

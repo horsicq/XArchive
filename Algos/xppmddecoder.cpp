@@ -2972,6 +2972,23 @@ int X_Ppmd8g_DecodeSymbol(CPpmd8 *p)
 #include <memory>
 #include <new>
 
+namespace {
+const quint64 PPMD_MAX_MODEL_MEMORY = Q_UINT64_C(256) * 1024 * 1024;
+
+bool isPpmdModelMemoryAllowed(
+    const XBinary::DATAPROCESS_STATE *pState, quint64 nSize)
+{
+    if (!pState || (nSize == 0) || (nSize > PPMD_MAX_MODEL_MEMORY)) {
+        return false;
+    }
+
+    qint64 nOutputLimit = -1;
+    return XBinary::getUnpackOutputLimit(pState->mapUnpackProperties,
+                                         &nOutputLimit) &&
+           ((nOutputLimit < 0) || (nSize <= (quint64)nOutputLimit));
+}
+}  // namespace
+
 XPPMdDecoder::XPPMdDecoder(QObject *pParent) : QObject(pParent)
 {
 }
@@ -3026,6 +3043,9 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
     if (nRestor > 2) {
         return false;
     }
+    if (!isPpmdModelMemoryAllowed(pDecompressState, nMemSize)) {
+        return false;
+    }
 
     const qint32 N_BUFFER_SIZE = 0x4000;
     std::unique_ptr<char[]> pBufferOut(new (std::nothrow) char[N_BUFFER_SIZE]);
@@ -3033,6 +3053,12 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
 
     // Initialize PPMd8 decoder using wrapper classes
     XPPMdModel model;
+
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!memoryReservation.acquire(
+            pDecompressState->mapUnpackProperties, nMemSize)) {
+        return false;
+    }
 
     if (!model.allocate(nMemSize)) {
         return false;
@@ -3138,7 +3164,7 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
         return false;
     }
 
-    if (nMemSize == 0) {
+    if (!isPpmdModelMemoryAllowed(pDecompressState, nMemSize)) {
         return false;
     }
 
@@ -3148,6 +3174,12 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
 
     // Initialize Ppmd7 model (PPMdH variant used by 7z)
     XPPMd7Model model;
+
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!memoryReservation.acquire(
+            pDecompressState->mapUnpackProperties, nMemSize)) {
+        return false;
+    }
 
     if (!model.allocate(nMemSize)) {
         return false;

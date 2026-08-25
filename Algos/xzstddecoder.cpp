@@ -36,6 +36,9 @@ const quint32 X_ZSTD_LEGACY_MAGIC_V04 = 0xFD2FB524U;
 const quint32 X_ZSTD_LEGACY_MAGIC_V07 = 0xFD2FB527U;
 const quint32 X_ZSTD_SKIPPABLE_MAGIC_START = 0x184D2A50U;
 const quint32 X_ZSTD_SKIPPABLE_MAGIC_MASK = 0xFFFFFFF0U;
+const quint64 X_ZSTD_MODERN_MAX_WINDOW =
+    quint64(1) << ((sizeof(size_t) == 4) ? 30 : 31);
+const qint64 X_ZSTD_LEGACY_MAX_WINDOW = Q_INT64_C(1) << 27;
 
 quint32 readUInt32LE(const char *pData)
 {
@@ -248,6 +251,119 @@ private:
     qint32 m_nPosition;
     bool m_bAtEnd;
 };
+
+bool getLegacyWindowSize(unsigned nVersion, ZstdInputBuffer *pInput,
+                         quint64 *pnWindowSize)
+{
+    if (!pInput || !pnWindowSize || !pInput->ensure(5)) return false;
+
+    const unsigned char *pData =
+        reinterpret_cast<const unsigned char *>(pInput->data());
+    quint64 nWindowSize = 0;
+
+    if ((nVersion == 4) || (nVersion == 5)) {
+        // v0.4/v0.5 encode windowLog directly in the low nibble. The high
+        // nibble is reserved and rejected by the matching legacy decoder.
+        if ((pData[4] & 0xF0U) != 0) return false;
+        nWindowSize = quint64(1) << ((pData[4] & 0x0FU) + 11U);
+    } else if (nVersion == 6) {
+        // v0.6 uses the same low-nibble representation with a 4 KiB base.
+        // Bit 5 is reserved; the remaining high bits describe content size.
+        if ((pData[4] & 0x20U) != 0) return false;
+        nWindowSize = quint64(1) << ((pData[4] & 0x0FU) + 12U);
+    } else if (nVersion == 7) {
+        const unsigned char nFrameDescriptor = pData[4];
+        if ((nFrameDescriptor & 0x08U) != 0) return false;
+
+        const bool bSingleSegment = (nFrameDescriptor & 0x20U) != 0;
+        if (!bSingleSegment) {
+            if (!pInput->ensure(6)) return false;
+            pData = reinterpret_cast<const unsigned char *>(pInput->data());
+            const unsigned char nWindowDescriptor = pData[5];
+            const unsigned nWindowLog =
+                (nWindowDescriptor >> 3) + 10U;
+            if (nWindowLog > 27U) return false;
+            const quint64 nWindowBase = quint64(1) << nWindowLog;
+            nWindowSize = nWindowBase +
+                          ((nWindowBase >> 3) *
+                           (nWindowDescriptor & 0x07U));
+            if (nWindowSize > (quint64(1) << 27)) return false;
+        } else {
+            // In single-segment mode the frame content size is the history
+            // window. Locate its variable-width field after the dictionary ID.
+            static const qint32 kDictIdSizes[4] = {0, 1, 2, 4};
+            static const qint32 kContentSizeSizes[4] = {1, 2, 4, 8};
+            const unsigned nDictIdCode = nFrameDescriptor & 0x03U;
+            const unsigned nContentSizeCode = nFrameDescriptor >> 6;
+            const qint32 nContentSizeOffset =
+                5 + kDictIdSizes[nDictIdCode];
+            const qint32 nContentSizeBytes =
+                kContentSizeSizes[nContentSizeCode];
+            if (!pInput->ensure(nContentSizeOffset + nContentSizeBytes))
+                return false;
+            pData = reinterpret_cast<const unsigned char *>(pInput->data());
+
+            quint64 nFrameContentSize = 0;
+            for (qint32 i = 0; i < nContentSizeBytes; ++i) {
+                nFrameContentSize |=
+                    quint64(pData[nContentSizeOffset + i]) << (i * 8);
+            }
+            if (nContentSizeCode == 1U) nFrameContentSize += 256U;
+            // The legacy v0.7 decoder stores this value in a 32-bit window
+            // field and rejects windows above 128 MiB. Reject before it can
+            // truncate or allocate from an attacker-controlled header.
+            if (nFrameContentSize > (quint64(1) << 27)) return false;
+            nWindowSize = (std::max)(nFrameContentSize, quint64(1) << 10);
+        }
+    } else {
+        return false;
+    }
+
+    *pnWindowSize = nWindowSize;
+    return true;
+}
+
+bool getModernWindowSize(ZstdInputBuffer *pInput, quint64 *pnWindowSize)
+{
+    if (!pInput || !pnWindowSize || !pInput->ensure(5)) return false;
+    const unsigned char *pData =
+        reinterpret_cast<const unsigned char *>(pInput->data());
+    const unsigned char nDescriptor = pData[4];
+    if ((nDescriptor & 0x08U) != 0) return false;
+
+    const bool bSingleSegment = (nDescriptor & 0x20U) != 0;
+    if (!bSingleSegment) {
+        if (!pInput->ensure(6)) return false;
+        pData = reinterpret_cast<const unsigned char *>(pInput->data());
+        const unsigned char nWindowDescriptor = pData[5];
+        const unsigned nWindowLog =
+            (nWindowDescriptor >> 3) + 10U;
+        if (nWindowLog >= 63U) return false;
+        const quint64 nBase = quint64(1) << nWindowLog;
+        *pnWindowSize = nBase +
+                        ((nBase >> 3) *
+                         (nWindowDescriptor & 0x07U));
+        return true;
+    }
+
+    static const qint32 kDictIdSizes[4] = {0, 1, 2, 4};
+    static const qint32 kContentSizeSizes[4] = {1, 2, 4, 8};
+    const qint32 nContentOffset =
+        5 + kDictIdSizes[nDescriptor & 0x03U];
+    const qint32 nContentSize =
+        kContentSizeSizes[nDescriptor >> 6];
+    if (!pInput->ensure(nContentOffset + nContentSize)) return false;
+    pData = reinterpret_cast<const unsigned char *>(pInput->data());
+
+    quint64 nFrameContentSize = 0;
+    for (qint32 i = 0; i < nContentSize; i++) {
+        nFrameContentSize |=
+            quint64(pData[nContentOffset + i]) << (i * 8);
+    }
+    if ((nDescriptor >> 6) == 1U) nFrameContentSize += 256U;
+    *pnWindowSize = nFrameContentSize;
+    return true;
+}
 }  // namespace
 
 XZstdDecoder::XZstdDecoder(QObject *parent) : QObject(parent)
@@ -264,20 +380,97 @@ bool XZstdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
 
     bool bExpectedOutputValid = true;
     qint64 nExpectedOutput = -1;
+    qint64 nConfiguredOutputLimit = -1;
+    if (!XBinary::getUnpackOutputLimit(
+            pDecompressState->mapUnpackProperties,
+            &nConfiguredOutputLimit)) {
+        return false;
+    }
     if (pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
         nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bExpectedOutputValid);
-        if (!bExpectedOutputValid || (nExpectedOutput < 0)) return false;
+        if (!bExpectedOutputValid ||
+            !XBinary::isUnpackOutputSizeAllowed(
+                pDecompressState->mapUnpackProperties,
+                nExpectedOutput)) {
+            return false;
+        }
     }
 
     const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
     if (nRequestedBufferSize <= 0) return false;
     const qint32 nBufferSize = qBound(static_cast<qint32>(0x1000), nRequestedBufferSize, static_cast<qint32>(0x100000));
 
+    const size_t nMinimumDStreamSize = ZSTD_estimateDStreamSize(1024);
+    if (ZSTD_isError(nMinimumDStreamSize) ||
+        (nMinimumDStreamSize >
+         (size_t)(std::numeric_limits<qint64>::max)())) {
+        return false;
+    }
+    const qint64 nFixedBufferReservation = (qint64)nBufferSize * 2;
+    const qint64 nBaseBufferReservation =
+        nFixedBufferReservation + (qint64)nMinimumDStreamSize;
+    QMap<XBinary::UNPACK_PROP, QVariant> mapReservationProperties =
+        pDecompressState->mapUnpackProperties;
+    size_t nModernWindowLimit = 1024;
+    if (nConfiguredOutputLimit >= 0) {
+        // MAX_OUTPUT_SIZE is an output budget, not a request to instantiate a
+        // decoder window of that size.  Clamp accounting and the decoder's
+        // window setting to the largest window this build can actually use.
+        if (nConfiguredOutputLimit < 1024) return false;
+        nModernWindowLimit = (size_t)(std::min)(
+            (quint64)nConfiguredOutputLimit, X_ZSTD_MODERN_MAX_WINDOW);
+        // MAX_OUTPUT_SIZE bounds the frame's output/window.  Keep the fixed
+        // streaming buffers and decoder context in the process-wide memory
+        // accounting without making an exact legal window exceed that bound.
+        const qint64 nMaximum = (std::numeric_limits<qint64>::max)();
+        const size_t nMaximumDStreamSize = ZSTD_estimateDStreamSize(
+            nModernWindowLimit);
+        if (ZSTD_isError(nMaximumDStreamSize) ||
+            (nMaximumDStreamSize > (size_t)nMaximum)) {
+            return false;
+        }
+        // A concatenated stream can switch from a modern max-window frame to
+        // a legacy max-window frame.  The modern DStream retains its workspace
+        // while the legacy decoder owns its history buffer, so account for
+        // both live allocations plus the fixed I/O buffers.  The caller's
+        // original properties still enforce the output/window limit itself.
+        qint64 nReservationLimit = nFixedBufferReservation;
+        if ((qint64)nMaximumDStreamSize > nMaximum - nReservationLimit) {
+            nReservationLimit = nMaximum;
+        } else {
+            nReservationLimit += (qint64)nMaximumDStreamSize;
+        }
+        const qint64 nLegacyWindowLimit = (std::min)(
+            nConfiguredOutputLimit, X_ZSTD_LEGACY_MAX_WINDOW);
+        if ((nReservationLimit != nMaximum) &&
+            (nLegacyWindowLimit > nMaximum - nReservationLimit)) {
+            nReservationLimit = nMaximum;
+        } else if (nReservationLimit != nMaximum) {
+            nReservationLimit += nLegacyWindowLimit;
+        }
+        mapReservationProperties.insert(XBinary::UNPACK_PROP_MAX_OUTPUT_SIZE,
+                                         nReservationLimit);
+    }
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!memoryReservation.acquire(mapReservationProperties,
+                                   nBaseBufferReservation)) {
+        return false;
+    }
+
     Algo_utils::prepareState(pDecompressState);
     if (pDecompressState->bReadError || pDecompressState->bWriteError) return false;
 
     ZSTD_DStream *pDStream = ZSTD_createDStream();
     if (!pDStream) return false;
+    if (nConfiguredOutputLimit >= 0) {
+        // Zstandard's smallest legal window is 1 KiB. A tighter operation
+        // budget cannot safely instantiate even the minimum decoder window.
+        if (ZSTD_isError(ZSTD_DCtx_setMaxWindowSize(
+                pDStream, nModernWindowLimit))) {
+            ZSTD_freeDStream(pDStream);
+            return false;
+        }
+    }
 
     ZstdInputBuffer input(pDecompressState, pPdStruct, nBufferSize);
     QByteArray baOutput(nBufferSize, 0);
@@ -288,6 +481,8 @@ bool XZstdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
     bool bSawDataFrame = false;
     bool bFinished = false;
     bool bValid = true;
+    qint64 nPersistentDStreamReservation =
+        (qint64)nMinimumDStreamSize;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (bAtFrameStart) {
@@ -307,12 +502,55 @@ bool XZstdDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
             }
 
             if (bCurrentFrameIsLegacy) {
+                quint64 nLegacyWindowSize = 0;
+                if (!getLegacyWindowSize(nLegacyVersion, &input,
+                                         &nLegacyWindowSize) ||
+                    (nLegacyWindowSize >
+                     (quint64)(std::numeric_limits<qint64>::max)()) ||
+                    ((nConfiguredOutputLimit >= 0) &&
+                     (nLegacyWindowSize >
+                      static_cast<quint64>(nConfiguredOutputLimit))) ||
+                    !memoryReservation.resize(
+                        (qint64)nBufferSize * 2 +
+                        nPersistentDStreamReservation +
+                        (qint64)nLegacyWindowSize)) {
+                    bValid = false;
+                    break;
+                }
                 if (!legacyStream.initialize(nLegacyVersion)) {
                     bValid = false;
                     break;
                 }
             } else {
                 legacyStream.reset();
+                if (nMagic == X_ZSTD_FRAME_MAGIC) {
+                    quint64 nWindowSize = 0;
+                    if (!getModernWindowSize(&input, &nWindowSize) ||
+                        (nWindowSize >
+                         (quint64)(std::numeric_limits<size_t>::max)())) {
+                        bValid = false;
+                        break;
+                    }
+                    const size_t nEstimatedSize =
+                        ZSTD_estimateDStreamSize(
+                            (size_t)(std::max)(nWindowSize,
+                                               quint64(1024)));
+                    if (ZSTD_isError(nEstimatedSize) ||
+                        (nEstimatedSize >
+                         (size_t)(std::numeric_limits<qint64>::max)())) {
+                        bValid = false;
+                        break;
+                    }
+                    nPersistentDStreamReservation = (std::max)(
+                        nPersistentDStreamReservation,
+                        (qint64)nEstimatedSize);
+                }
+                if (!memoryReservation.resize(
+                        (qint64)nBufferSize * 2 +
+                        nPersistentDStreamReservation)) {
+                    bValid = false;
+                    break;
+                }
                 const size_t nInitResult = ZSTD_initDStream(pDStream);
                 if (ZSTD_isError(nInitResult)) {
                     bValid = false;

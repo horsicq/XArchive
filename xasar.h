@@ -73,25 +73,37 @@ public:
     virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     struct ASAR_RECORD {
         QString sFileName;
+        QString sLinkName;
+        QString sExternalLogicalName;
+        QString sExternalFileName;
+        QByteArray baExternalSHA256;
         qint64 nOffset;   // absolute file offset
         qint64 nSize;
         bool bIsFolder;
+        bool bIsExternal;
+        bool bIsLink;
     };
 
     struct ASAR_UNPACK_CONTEXT {
         QList<ASAR_RECORD> listRecords;
+        QString sExternalRoot;
+        QString sExternalCanonicalRoot;
     };
 
     // Returns [jsonLength, jsonStringOffset] via out params; false if not ASAR.
     bool _readHeader(qint64 *pnJsonOffset, qint64 *pnJsonSize, qint64 *pnBlobOffset);
     bool _walkTree(const class QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords,
-                   PDSTRUCT *pPdStruct, qint32 nDepth);
+                   PDSTRUCT *pPdStruct, qint32 nDepth, bool bParentUnpacked = false);
+    bool _prepareExternalRecords(ASAR_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct);
+    bool _resolveLinks(ASAR_UNPACK_CONTEXT *pContext);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

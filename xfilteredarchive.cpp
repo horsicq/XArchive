@@ -39,6 +39,28 @@ const char FILTERED_RECURSION_PROPERTY[] =
 // Shared with XUU so mixed transport/compression stacks observe one limit.
 const char FILTERED_DEPTH_PROPERTY[] = "_xfileunpacker_filter_depth";
 
+// Detection can refine a decoded compression layer directly to a typed TAR
+// wrapper (or npm) before this adapter gets a chance to unwrap that layer.
+// The final archive state must refer to the final materialized buffer, so do
+// not embed an XTARCOMPRESSED reader whose public state describes its private
+// decoded TAR rather than the buffer that still contains gzip/bzip2/etc.
+XBinary::FT filterEnvelopeType(XBinary::FT fileType)
+{
+    switch (fileType) {
+        case XBinary::FT_TAR_GZ:
+        case XBinary::FT_NPM: return XBinary::FT_GZIP;
+        case XBinary::FT_TAR_BZIP2: return XBinary::FT_BZIP2;
+        case XBinary::FT_TAR_LZIP: return XBinary::FT_LZIP;
+        case XBinary::FT_TAR_LZMA: return XBinary::FT_LZMA;
+        case XBinary::FT_TAR_LZOP: return XBinary::FT_LZO;
+        case XBinary::FT_TAR_XZ: return XBinary::FT_XZ;
+        case XBinary::FT_TAR_Z: return XBinary::FT_COMPRESS;
+        case XBinary::FT_TAR_ZSTD: return XBinary::FT_ZSTD;
+        case XBinary::FT_TAR_LZ4: return XBinary::FT_LZ4;
+        default: return fileType;
+    }
+}
+
 class DevicePropertyOverride {
 public:
     DevicePropertyOverride(QIODevice *pDevice, const char *pName,
@@ -622,6 +644,15 @@ QBuffer *XFilteredArchive::materializeLayer(
     }
 
     qint64 nExpectedSize = -1;
+    qint64 nConfiguredLimit = -1;
+    qint64 nEffectiveLimit = FILTERED_MAX_DECODED_SIZE;
+    if (bResult) {
+        bResult = XBinary::getUnpackOutputLimit(mapProperties,
+                                                &nConfiguredLimit);
+        if (bResult && (nConfiguredLimit >= 0)) {
+            nEffectiveLimit = qMin(nEffectiveLimit, nConfiguredLimit);
+        }
+    }
     if (bResult &&
         record.mapProperties.contains(FPART_PROP_UNCOMPRESSEDSIZE)) {
         bool bSizeOk = false;
@@ -629,13 +660,13 @@ QBuffer *XFilteredArchive::materializeLayer(
             record.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE)
                 .toLongLong(&bSizeOk);
         bResult = bSizeOk && (nExpectedSize >= 0) &&
-                  (nExpectedSize <= FILTERED_MAX_DECODED_SIZE);
+                  (nExpectedSize <= nEffectiveLimit);
     }
 
     std::unique_ptr<BoundedFilteredOutputBuffer> pDecoded;
     if (bResult) {
         pDecoded.reset(new (std::nothrow) BoundedFilteredOutputBuffer(
-            FILTERED_MAX_DECODED_SIZE));
+            nEffectiveLimit));
         bResult = pDecoded && pDecoded->open(QIODevice::ReadWrite);
     }
 
@@ -662,7 +693,7 @@ QBuffer *XFilteredArchive::materializeLayer(
     if (bResult) {
         nDecodedSize = pDecoded->size();
         bResult = !pDecoded->isLimitExceeded() && (nDecodedSize > 0) &&
-                  (nDecodedSize <= FILTERED_MAX_DECODED_SIZE) &&
+                  (nDecodedSize <= nEffectiveLimit) &&
                   (decompressState.nCountInput == record.nStreamSize) &&
                   (decompressState.nCountOutput == nDecodedSize) &&
                   ((nExpectedSize < 0) ||
@@ -773,14 +804,16 @@ bool XFilteredArchive::initUnpack(
 
     QIODevice *pCurrentDevice = guardedSource.data();
     std::unique_ptr<QBuffer> pCurrentOwned;
-    while (isFilterFileType(currentType)) {
+    while (isFilterFileType(filterEnvelopeType(currentType))) {
         if ((nDepth < 0) || (nDepth >= FILTERED_MAX_DEPTH) ||
             !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return failInitialization();
         }
 
+        const FT layerType = filterEnvelopeType(currentType);
+
         std::unique_ptr<QBuffer> pDecoded(
-            guardedThis->materializeLayer(pCurrentDevice, currentType,
+            guardedThis->materializeLayer(pCurrentDevice, layerType,
                                           mapProperties, pState,
                                           pPdStruct));
         if (!guardedThis || !guardedSource || !pDecoded) {
@@ -1024,6 +1057,8 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState,
 
     QIODevice *pStage = nullptr;
     if (nExpectedSize >= 0) {
+        if (!XBinary::isUnpackOutputSizeAllowed(
+                pState->mapUnpackProperties, nExpectedSize)) return false;
         pStage = XBinary::createFileBuffer(nExpectedSize, pPdStruct);
     } else {
         QTemporaryFile *pTemporaryFile =
@@ -1045,6 +1080,7 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState,
         return false;
     }
 
+    pContext->innerState.mapUnpackProperties = pState->mapUnpackProperties;
     bool bResult = guardedInner->unpackCurrent(
         &pContext->innerState, guardedStage.data(), pPdStruct);
     if (!guardedThis || !guardedInner || !guardedDecoded ||
@@ -1054,6 +1090,8 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState,
     if (bResult) {
         const qint64 nStageSize = guardedStage->size();
         bResult = (nStageSize >= 0) &&
+                  XBinary::isUnpackOutputSizeAllowed(
+                      pState->mapUnpackProperties, nStageSize) &&
                   ((nExpectedSize < 0) ||
                    (nStageSize == nExpectedSize)) &&
                   (pContext->innerState.nCurrentIndex == nIndex) &&

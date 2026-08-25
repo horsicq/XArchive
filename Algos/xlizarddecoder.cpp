@@ -137,11 +137,35 @@ private:
     bool m_bAtEnd;
 };
 
-bool hasValidFrameBlockSize(LizardInputBuffer *pInput)
+bool getFrameBufferRequirement(LizardInputBuffer *pInput,
+                               quint64 *pnBufferRequirement)
 {
-    if (!pInput->ensure(6)) return false;
-    const unsigned nBlockSizeId = (static_cast<unsigned char>(pInput->data()[5]) >> 4) & 7U;
-    return (nBlockSizeId >= 1U) && (nBlockSizeId <= 7U);
+    if (!pInput || !pnBufferRequirement || !pInput->ensure(6)) return false;
+
+    const unsigned char *pData =
+        reinterpret_cast<const unsigned char *>(pInput->data());
+    const unsigned char nFlags = pData[4];
+    const unsigned char nBlockDescriptor = pData[5];
+    const unsigned nVersion = (nFlags >> 6) & 0x03U;
+    const unsigned nBlockSizeId = (nBlockDescriptor >> 4) & 0x07U;
+    if ((nVersion != 1U) || ((nFlags & 0x13U) != 0) ||
+        ((nBlockDescriptor & 0x8FU) != 0) ||
+        (nBlockSizeId < 1U) || (nBlockSizeId > 7U)) {
+        return false;
+    }
+
+    static const quint64 kBlockSizes[7] = {
+        128ULL * 1024ULL, 256ULL * 1024ULL,
+        1024ULL * 1024ULL, 4ULL * 1024ULL * 1024ULL,
+        16ULL * 1024ULL * 1024ULL, 64ULL * 1024ULL * 1024ULL,
+        256ULL * 1024ULL * 1024ULL};
+    const quint64 nMaxBlockSize = kBlockSizes[nBlockSizeId - 1U];
+    const bool bBlocksLinked = (nFlags & 0x20U) == 0;
+    // The vendored Lizard frame decoder reserves two 16 MiB dictionary
+    // regions in addition to the advertised maximum block for linked frames.
+    *pnBufferRequirement =
+        nMaxBlockSize + (bBlocksLinked ? 32ULL * 1024ULL * 1024ULL : 0ULL);
+    return true;
 }
 
 bool writeOutput(const QByteArray *pOutput, size_t nOutputSize, qint64 nExpectedOutput,
@@ -211,14 +235,30 @@ bool XLizardDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
     bool bExpectedOutputValid = true;
     qint64 nExpectedOutput = -1;
+    qint64 nConfiguredOutputLimit = -1;
+    if (!XBinary::getUnpackOutputLimit(
+            pDecompressState->mapUnpackProperties,
+            &nConfiguredOutputLimit)) {
+        return false;
+    }
     if (pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
         nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bExpectedOutputValid);
-        if (!bExpectedOutputValid || (nExpectedOutput < 0)) return false;
+        if (!bExpectedOutputValid ||
+            !XBinary::isUnpackOutputSizeAllowed(
+                pDecompressState->mapUnpackProperties,
+                nExpectedOutput)) return false;
     }
 
     const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
     if (nRequestedBufferSize <= 0) return false;
     const qint32 nBufferSize = qBound(static_cast<qint32>(0x1000), nRequestedBufferSize, static_cast<qint32>(0x100000));
+
+    const qint64 nBaseBufferReservation = (qint64)nBufferSize * 2;
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!memoryReservation.acquire(pDecompressState->mapUnpackProperties,
+                                   nBaseBufferReservation)) {
+        return false;
+    }
 
     Algo_utils::prepareState(pDecompressState);
     if (pDecompressState->bReadError || pDecompressState->bWriteError) return false;
@@ -235,8 +275,26 @@ bool XLizardDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
         const quint32 nMagic = readUInt32LE(input.data());
         if ((nMagic != LIZARD_FRAME_MAGIC) && !isSkippableMagic(nMagic)) return false;
-        if ((nMagic == LIZARD_FRAME_MAGIC) && !hasValidFrameBlockSize(&input)) return false;
+        if (nMagic == LIZARD_FRAME_MAGIC) {
+            quint64 nFrameBufferRequirement = 0;
+            if (!getFrameBufferRequirement(&input,
+                                           &nFrameBufferRequirement) ||
+                (nFrameBufferRequirement >
+                 (quint64)(std::numeric_limits<qint64>::max)()) ||
+                ((nConfiguredOutputLimit >= 0) &&
+                 (nFrameBufferRequirement > static_cast<quint64>(
+                      nConfiguredOutputLimit))) ||
+                !memoryReservation.resize(
+                    nBaseBufferReservation +
+                    (qint64)nFrameBufferRequirement)) {
+                return false;
+            }
+        }
         if (!decodeFrame(&input, &baOutput, nExpectedOutput, pDecompressState, pPdStruct)) return false;
+        if ((nMagic == LIZARD_FRAME_MAGIC) &&
+            !memoryReservation.resize(nBaseBufferReservation)) {
+            return false;
+        }
         if (nMagic == LIZARD_FRAME_MAGIC) bSawDataFrame = true;
     }
 

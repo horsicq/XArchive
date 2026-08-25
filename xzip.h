@@ -291,7 +291,8 @@ protected:
     HANDLE_METHOD zipToCompressMethod(quint16 nZipMethod, quint32 nFlags);
     bool _readFileName(qint64 nFileNameOffset, qint64 nFileNameLength, quint16 nFlags,
                        qint64 nExtraFieldOffset, qint64 nExtraFieldLength, QString *pFileName);
-    bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith);
+    bool _isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith,
+                              bool bRequireNonEmpty = false);
     qint32 _getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *pnRealSize, PDSTRUCT *pPdStruct);
     bool _isECDSignaturePresent(qint64 nOffset, PDSTRUCT *pPdStruct);
 private:

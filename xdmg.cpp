@@ -1958,6 +1958,8 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
             (quint64)DMG_SECTOR_SIZE) return false;
     const qint64 nExpectedOutput =
         (qint64)(mishBlock.nSectorCount * (quint64)DMG_SECTOR_SIZE);
+    if (!XBinary::isUnpackOutputSizeAllowed(
+            pState->mapUnpackProperties, nExpectedOutput)) return false;
     const bool bCheckCRC = XBinary::isUnpackCRCEnabled(
         pState->mapUnpackProperties, XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
     QTemporaryFile staging;
@@ -1969,7 +1971,7 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         bResult = guardedThis->_decompressStripe(
             listCurrentStripes.at(i), pContext->nDataForkOffset,
             pContext->nDataForkLength, (qint64)mishBlock.nDataOffset,
-            &staging, pPdStruct);
+            &staging, pState->mapUnpackProperties, pPdStruct);
         if (!guardedThis) return false;
     }
 
@@ -2824,7 +2826,9 @@ QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseResourceForkPartitions(
 }
 
 bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, qint64 nDataForkLength,
-                             qint64 nMishDataOffset, QIODevice *pDevice, PDSTRUCT *pPdStruct)
+                             qint64 nMishDataOffset, QIODevice *pDevice,
+                             const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties,
+                             PDSTRUCT *pPdStruct)
 {
     QPointer<XDMG> guardedThis(this);
     QPointer<QIODevice> guardedOutput(pDevice);
@@ -2988,6 +2992,7 @@ bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, q
             QTemporaryFile stripeStaging;
             if (!stripeStaging.open()) return false;
             DATAPROCESS_STATE state = {};
+            state.mapUnpackProperties = mapUnpackProperties;
             state.pDeviceInput = guardedSource.data();
             state.pDeviceOutput = &stripeStaging;
             state.nInputOffset = nInputOffset;

@@ -60,6 +60,7 @@ private:
         qint64 nDataOffset;
         qint64 nDataSize;
         qint64 nNextOffset;
+        QByteArray baRecordIdHash;
         QString sFileName;
         QDateTime created;
         QDateTime modified;

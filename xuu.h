@@ -25,8 +25,9 @@
 
 class QBuffer;
 
-// A uuencode transport filter.  The decoded bytes must themselves be a
-// supported archive; records are delegated to that native archive handler.
+// A uuencode transport filter. Recognized archives are delegated to their
+// native handler; every other valid transport block is exposed as one decoded
+// file using the name declared by the transport header.
 class XUU : public XArchive {
     Q_OBJECT
 
@@ -57,12 +58,15 @@ private:
         QBuffer *pDecodedDevice;
         XArchive *pInnerArchive;
         UNPACK_STATE innerState;
+        QString sDeclaredName;
+        bool bDirectPayload;
 
         UU_UNPACK_CONTEXT();
         ~UU_UNPACK_CONTEXT();
     };
 
-    bool decodeTransport(QByteArray *pOutput, QString *pDeclaredName, PDSTRUCT *pPdStruct);
+    bool decodeTransport(QByteArray *pOutput, QString *pDeclaredName,
+                         qint64 nOutputLimit, PDSTRUCT *pPdStruct);
     static bool parseHeader(const QByteArray &line, bool *pbBase64, QString *pName);
     static qint32 base64Value(quint8 value);
 };

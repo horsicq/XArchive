@@ -20,6 +20,8 @@
  */
 #include "xarchive.h"
 #include "xdecompress.h"
+#include "Algos/xkwajlzssdecoder.h"
+#include "Algos/xkwajlzhdecoder.h"
 #include "Algos/xppmddecoder.h"
 
 #include <algorithm>
@@ -520,6 +522,22 @@ static bool archivePathHasUnsafeLink(const QString &sCanonicalRoot, const QStrin
 
         // isSymLink() also detects a broken link, for which exists() is false.
         if (fileInfo.isSymLink()) return true;
+
+#ifdef Q_OS_WIN
+        // Qt's isSymLink() does not reliably flag every NTFS reparse point
+        // (junctions and mount points in particular), so check the reparse
+        // attribute directly the same way the ip7z route does - otherwise the
+        // native path is weaker on Windows than the ip7z path it mirrors. Only
+        // an existing component that IS a reparse point is unsafe; a not-yet-
+        // created component reads INVALID_FILE_ATTRIBUTES and is fine.
+        {
+            const QString sNative = XBinary::winExtendedNativePath(fileInfo.absoluteFilePath());
+            const DWORD nReparseAttr = GetFileAttributesW(reinterpret_cast<LPCWSTR>(sNative.utf16()));
+            if ((nReparseAttr != INVALID_FILE_ATTRIBUTES) && (nReparseAttr & FILE_ATTRIBUTE_REPARSE_POINT)) {
+                return true;
+            }
+        }
+#endif
 
         if (fileInfo.exists()) {
             const QString sCanonical = QDir::fromNativeSeparators(fileInfo.canonicalFilePath());
@@ -1792,16 +1810,126 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
-    } else if ((pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH5) || (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH6) ||
-               (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH7)) {
-        qint32 nMethod = 5;
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_ZOO_LZD) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_ZOO_LZD);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
-        if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH5) {
+        if (XLZWDecoder::decompress_zoo(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else {
+            if (decompressState.bReadError) {
+                result = COMPRESS_RESULT_READERROR;
+            } else if (decompressState.bWriteError) {
+                result = COMPRESS_RESULT_WRITEERROR;
+            } else {
+                result = COMPRESS_RESULT_DATAERROR;
+            }
+        }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_KWAJ_LZSS) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_KWAJ_LZSS);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XKWAJLZSSDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else if (decompressState.bReadError) {
+            result = COMPRESS_RESULT_READERROR;
+        } else if (decompressState.bWriteError) {
+            result = COMPRESS_RESULT_WRITEERROR;
+        } else {
+            result = COMPRESS_RESULT_DATAERROR;
+        }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_KWAJ_LZH) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_KWAJ_LZH);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XKWAJLZHDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else if (decompressState.bReadError) {
+            result = COMPRESS_RESULT_READERROR;
+        } else if (decompressState.bWriteError) {
+            result = COMPRESS_RESULT_WRITEERROR;
+        } else {
+            result = COMPRESS_RESULT_DATAERROR;
+        }
+    } else if (pDecompressStruct->spInfo.compressMethod ==
+               HANDLE_METHOD_KWAJ_MSZIP) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(
+            XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_KWAJ_MSZIP);
+        decompressState.mapProperties.insert(
+            XBinary::FPART_PROP_UNCOMPRESSEDSIZE,
+            pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset =
+            pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit =
+            pDecompressStruct->nDecompressedLimit;
+
+        XDecompress decompressor;
+        if (decompressor.decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit =
+                (pDecompressStruct->nDecompressedLimit != -1) &&
+                (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else if (decompressState.bReadError) {
+            result = COMPRESS_RESULT_READERROR;
+        } else if (decompressState.bWriteError) {
+            result = COMPRESS_RESULT_WRITEERROR;
+        } else {
+            result = COMPRESS_RESULT_DATAERROR;
+        }
+    } else if ((pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH4) || (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH5) ||
+               (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH6) ||
+               (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH7) ||
+               (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_ZOO_LZH)) {
+        qint32 nMethod = 5;
+        XLZHDecoder::TERMINATION_MODE terminationMode = XLZHDecoder::TERMINATION_PHYSICAL_EOF;
+
+        if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH4) {
+            nMethod = 4;
+        } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH5) {
             nMethod = 5;
         } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH6) {
             nMethod = 6;
         } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_LZH7) {
             nMethod = 7;
+        } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_ZOO_LZH) {
+            terminationMode = XLZHDecoder::TERMINATION_ZERO_BLOCK;
         }
 
         XBinary::DATAPROCESS_STATE decompressState = {};
@@ -1814,7 +1942,7 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
         decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
-        if (XLZHDecoder::decompress(&decompressState, nMethod, pPdStruct)) {
+        if (XLZHDecoder::decompress(&decompressState, nMethod, pPdStruct, terminationMode)) {
             pDecompressStruct->nInSize = decompressState.nCountInput;
             pDecompressStruct->nOutSize = decompressState.nCountOutput;
             pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
@@ -2016,7 +2144,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
 }
 
 bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset = 0,
-                                 qint64 nDecompressedLimit = -1)
+                                 qint64 nDecompressedLimit = -1,
+                                 const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties)
 {
     bool bResult = false;
 
@@ -2086,7 +2215,7 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         }
 
         if ((record.spInfo.compressMethod == HANDLE_METHOD_STORE_CAB) || (record.spInfo.compressMethod == HANDLE_METHOD_MSZIP_CAB) ||
-            (record.spInfo.compressMethod == HANDLE_METHOD_LZX_CAB)) {
+            (record.spInfo.compressMethod == HANDLE_METHOD_LZX_CAB) || (record.spInfo.compressMethod == HANDLE_METHOD_QUANTUM_CAB)) {
             state.mapProperties.insert(XBinary::FPART_PROP_SUBSTREAMOFFSET, record.nOptHeaderOffset);
             state.mapProperties.insert(XBinary::FPART_PROP_OPTHEADER_SIZE, record.nOptHeaderSize);
         }
@@ -2097,6 +2226,11 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         state.nInputLimit = record.nDataSize;
         state.nProcessedOffset = nDecompressedOffset;
         state.nProcessedLimit = nDecompressedLimit;
+        // Without this the whole decoder chain resolves every output gate to
+        // -1: the state was built with seven fields and this one was missing,
+        // so UNPACK_PROP_MAX_OUTPUT_SIZE never reached multiDecompress or the
+        // _writeDevice choke point.
+        state.mapUnpackProperties = mapUnpackProperties;
 
         XDecompress decompressor;
         bResult = decompressor.multiDecompress(&state, pPdStruct);
@@ -2312,7 +2446,8 @@ XArchive::COMPRESS_RESULT XArchive::_compress_deflate(QIODevice *pSourceDevice, 
     return result;
 }
 
-QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedLimit)
+QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedLimit,
+                                const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties)
 {
     QByteArray result;
     QPointer<XArchive> guardedArchive(this);
@@ -2337,7 +2472,7 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdSt
         if (!buffer.open(QIODevice::ReadWrite) ||
             !guardedArchive->unpackArchiveStreamRecord(
                 archiveRecord, &buffer,
-                QMap<UNPACK_PROP, QVariant>(), pPdStruct) ||
+                mapUnpackProperties, pPdStruct) ||
             !guardedArchive || !guardedSourceDevice ||
             !isProgressAlive() ||
             !XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -2367,7 +2502,7 @@ QByteArray XArchive::decompress(const XArchive::RECORD *pRecord, PDSTRUCT *pPdSt
     // verify the record's stored checksum, so a write-only destination fails
     // every record that carries one.
     if (buffer.open(QIODevice::ReadWrite)) {
-        const bool bDecompressed = _decompressRecord(pRecord, guardedSourceDevice.data(), &buffer, pPdStruct, nDecompressedOffset, nDecompressedLimit);
+        const bool bDecompressed = _decompressRecord(pRecord, guardedSourceDevice.data(), &buffer, pPdStruct, nDecompressedOffset, nDecompressedLimit, mapUnpackProperties);
         buffer.close();
 
         // A QByteArray return value must never expose a valid-looking prefix
@@ -2438,7 +2573,8 @@ bool XArchive::unpackArchiveStreamRecord(
                                 pOutputDevice, mapProperties, pPdStruct);
 }
 
-bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &sResultFileName, PDSTRUCT *pPdStruct,
+                                const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties)
 {
     QPointer<XArchive> guardedArchive(this);
     const PDSTRUCTLIFETIME progressLifetime =
@@ -2476,7 +2612,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
         const bool bUnpacked = guardedArchive &&
             guardedArchive->unpackArchiveStreamRecord(
                 archiveRecord, &outputFile,
-                QMap<UNPACK_PROP, QVariant>(), pPdStruct);
+                mapUnpackProperties, pPdStruct);
         if (!guardedArchive || !guardedSourceDevice || !bUnpacked ||
             !isProgressAlive() ||
             !XBinary::isPdStructNotCanceled(pPdStruct) ||
@@ -2499,7 +2635,7 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
     // A zero packed size is not proof of a valid empty member.  The selected
     // codec must still validate its terminator, declared output size, password,
     // and checksum contract.
-    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), &workFile, pPdStruct, 0, -1);
+    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), &workFile, pPdStruct, 0, -1, mapUnpackProperties);
 
     if (!guardedArchive || !guardedSourceDevice || !bResult ||
         !isProgressAlive() || !XBinary::isPdStructNotCanceled(pPdStruct) ||
@@ -2537,7 +2673,8 @@ bool XArchive::decompressToFile(const XArchive::RECORD *pRecord, const QString &
     return file.commit();
 }
 
-bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct)
+bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice, PDSTRUCT *pPdStruct,
+                                  const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties)
 {
     QPointer<XArchive> guardedArchive(this);
     QPointer<QIODevice> guardedSourceDevice(getDevice());
@@ -2551,12 +2688,12 @@ bool XArchive::decompressToDevice(const RECORD *pRecord, QIODevice *pDestDevice,
         Q_UNUSED(nArchiveStreamIndex)
         const bool bResult = guardedArchive->unpackArchiveStreamRecord(
             archiveRecord, guardedDestDevice.data(),
-            QMap<UNPACK_PROP, QVariant>(), pPdStruct);
+            mapUnpackProperties, pPdStruct);
         return guardedArchive && guardedSourceDevice && guardedDestDevice &&
                bResult;
     }
 
-    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), guardedDestDevice.data(), pPdStruct, 0, -1);
+    const bool bResult = _decompressRecord(pRecord, guardedSourceDevice.data(), guardedDestDevice.data(), pPdStruct, 0, -1, mapUnpackProperties);
     return guardedArchive && guardedSourceDevice && guardedDestDevice && bResult;
 }
 
@@ -2616,6 +2753,39 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
     sCanonicalRoot = QDir::fromNativeSeparators(QFileInfo(sCanonicalRoot).canonicalFilePath());
     if (sCanonicalRoot.isEmpty() || !QFileInfo(sCanonicalRoot).isDir()) return false;
 
+    XBinary::UNPACK_FOLDER_TRANSACTION transaction(sCanonicalRoot);
+    const auto transactionError = [&]() -> QString {
+        QString sError = transaction.errorString();
+        if (sError.isEmpty()) {
+            sError = tr("Extraction transaction failed");
+        }
+        const QString sRecoveryPath = transaction.recoveryPath();
+        if (!sRecoveryPath.isEmpty()) {
+            sError += QString(". %1: %2")
+                          .arg(tr("Recovery path"), sRecoveryPath);
+        }
+        return sError;
+    };
+    const auto reportTransactionError = [&]() {
+        const QString sError = transactionError();
+        if (isProgressAlive()) {
+            XBinary::setPdStructErrorString(pPdStruct, sError);
+        }
+        if (guardedArchive) {
+            emit guardedArchive->errorMessage(sError);
+        }
+    };
+    const auto rollbackTransaction = [&]() {
+        if (!transaction.rollback()) {
+            reportTransactionError();
+        }
+    };
+
+    if (!transaction.isValid()) {
+        reportTransactionError();
+        return false;
+    }
+
     qint32 nNumberOfArchives = pListArchive->count();
     bool bExtractAll = sNormalizedRecordFileName.isEmpty();
 
@@ -2629,7 +2799,10 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
 
         QString sSafeRecordPath;
         if (!archiveGetSafeRelativePath(sRecordFileNameInArchive, &sSafeRecordPath)) {
-            if (bExtractAll) bResult = false;
+            if (bExtractAll) {
+                bResult = false;
+                break;
+            }
             continue;
         }
 
@@ -2662,7 +2835,7 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
             QString sSafeOutputPath;
             if (!archiveGetSafeRelativePath(sFileName, &sSafeOutputPath)) {
                 bResult = false;
-                continue;
+                break;
             }
 
             // The record names the output root itself (tar's leading ".");
@@ -2676,32 +2849,107 @@ bool XArchive::decompressToPath(QList<XArchive::RECORD> *pListArchive, const QSt
             if (!XArchive::_isSafeChildPath(sResultFileName, sCanonicalRoot) ||
                 archivePathHasUnsafeLink(sCanonicalRoot, sSafeOutputPath)) {
                 bResult = false;
-                continue;
+                break;
             }
 
             const bool bIsFolder = record.mapProperties.value(XBinary::FPART_PROP_ISFOLDER, false).toBool();
             const QString sDirectoryName = bIsFolder ? sResultFileName : QFileInfo(sResultFileName).absolutePath();
-            if (!XBinary::createDirectory(sDirectoryName) ||
+            if (!transaction.ensureDirectory(sDirectoryName) ||
                 archivePathHasUnsafeLink(sCanonicalRoot, sSafeOutputPath)) {
+                if (!transaction.errorString().isEmpty()) {
+                    reportTransactionError();
+                }
                 bResult = false;
-                continue;
+                break;
             }
 
-            if (!bIsFolder &&
-                (!guardedArchive ||
-                 !guardedArchive->decompressToFile(
-                     &record, sResultFileName, pPdStruct) ||
-                 !guardedArchive)) {
-                bResult = false;
+            if (!bIsFolder) {
+                QTemporaryFile stagedFile(
+                    QDir(sDirectoryName).filePath(
+                        QLatin1String(".xarchive-legacy-XXXXXX")));
+                if (!guardedArchive || !stagedFile.open() ||
+                    !guardedArchive->decompressToDevice(
+                        &record, &stagedFile, pPdStruct) ||
+                    !guardedArchive || !isProgressAlive() ||
+                    !isPdStructNotCanceled(pPdStruct) ||
+                    !stagedFile.flush() || !stagedFile.seek(0) ||
+                    archivePathHasUnsafeLink(sCanonicalRoot,
+                                             sSafeOutputPath)) {
+                    bResult = false;
+                    break;
+                }
+
+                QSaveFile outputFile(sResultFileName);
+                outputFile.setDirectWriteFallback(false);
+                bool bPublished = outputFile.open(QIODevice::WriteOnly);
+                QByteArray baBuffer(0x4000, 0);
+                qint64 nRemaining = stagedFile.size();
+                bPublished = bPublished && (nRemaining >= 0);
+
+                while (bPublished && (nRemaining > 0) &&
+                       isProgressAlive() &&
+                       isPdStructNotCanceled(pPdStruct)) {
+                    const qint64 nRead = archiveReadWithBoundedProgress(
+                        &stagedFile, baBuffer.data(),
+                        (std::min)(nRemaining,
+                                   (qint64)baBuffer.size()));
+                    if ((nRead <= 0) || (nRead > nRemaining) ||
+                        !archiveWriteAll(&outputFile,
+                                         baBuffer.constData(), nRead,
+                                         pPdStruct)) {
+                        bPublished = false;
+                        break;
+                    }
+                    nRemaining -= nRead;
+                }
+
+                if (!bPublished || (nRemaining != 0) ||
+                    !isProgressAlive() ||
+                    !isPdStructNotCanceled(pPdStruct) ||
+                    (outputFile.error() != QFile::NoError) ||
+                    archivePathHasUnsafeLink(sCanonicalRoot,
+                                             sSafeOutputPath)) {
+                    outputFile.cancelWriting();
+                    bResult = false;
+                    break;
+                }
+                if (!transaction.prepareFile(sResultFileName)) {
+                    reportTransactionError();
+                    outputFile.cancelWriting();
+                    bResult = false;
+                    break;
+                }
+                if (!outputFile.commit()) {
+                    bResult = false;
+                    break;
+                }
+                if (!transaction.markFilePublished(sResultFileName)) {
+                    reportTransactionError();
+                    bResult = false;
+                    break;
+                }
             }
         }
     }
     // TODO emits
 
-    return guardedArchive && bResult &&
-           isProgressAlive() &&
-           XBinary::isPdStructNotCanceled(pPdStruct) &&
-           (bExtractAll || bMatched);
+    bResult = guardedArchive && bResult &&
+              isProgressAlive() &&
+              XBinary::isPdStructNotCanceled(pPdStruct) &&
+              (bExtractAll || bMatched);
+    if (bResult) {
+        if (!transaction.commit()) {
+            reportTransactionError();
+            bResult = false;
+            rollbackTransaction();
+        } else if (!transaction.errorString().isEmpty()) {
+            reportTransactionError();
+        }
+    } else {
+        rollbackTransaction();
+    }
+
+    return bResult;
 }
 
 bool XArchive::decompressToFile(const QString &sArchiveFileName, const QString &sRecordFileName, const QString &sResultFileName, PDSTRUCT *pPdStruct)
@@ -2771,11 +3019,52 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
     sCanonicalRoot = QDir::fromNativeSeparators(QFileInfo(sCanonicalRoot).canonicalFilePath());
     if (sCanonicalRoot.isEmpty() || !QFileInfo(sCanonicalRoot).isDir()) return false;
 
+    XBinary::UNPACK_FOLDER_TRANSACTION transaction(sCanonicalRoot);
+    const auto transactionError = [&]() -> QString {
+        QString sError = transaction.errorString();
+        if (sError.isEmpty()) {
+            sError = tr("Extraction transaction failed");
+        }
+        const QString sRecoveryPath = transaction.recoveryPath();
+        if (!sRecoveryPath.isEmpty()) {
+            sError += QString(". %1: %2")
+                          .arg(tr("Recovery path"), sRecoveryPath);
+        }
+        return sError;
+    };
+    const auto reportTransactionError = [&]() {
+        const QString sError = transactionError();
+        if (isProgressAlive()) {
+            XBinary::setPdStructErrorString(pPdStruct, sError);
+        }
+        if (guardedArchive) {
+            emit guardedArchive->errorMessage(sError);
+        }
+    };
+    const auto rollbackTransaction = [&]() {
+        if (!transaction.rollback()) {
+            reportTransactionError();
+        }
+    };
+
+    if (!transaction.isValid()) {
+        reportTransactionError();
+        return false;
+    }
+
     UNPACK_STATE state = {};
     QMap<UNPACK_PROP, QVariant> mapProperties;
-    if (!guardedArchive ||
-        !guardedArchive->initUnpack(&state, mapProperties, pPdStruct) ||
-        !guardedArchive || !isProgressAlive()) return false;
+    const bool bInitialized = guardedArchive &&
+        guardedArchive->initUnpack(&state, mapProperties, pPdStruct);
+    if (guardedArchive && bInitialized && !isProgressAlive()) {
+        guardedArchive->finishUnpack(&state, nullptr);
+        rollbackTransaction();
+        return false;
+    }
+    if (!guardedArchive || !bInitialized || !isProgressAlive()) {
+        rollbackTransaction();
+        return false;
+    }
 
     const qint32 nNumberOfRecords = state.nNumberOfRecords;
 
@@ -2819,9 +3108,15 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
             if (!_isSafeChildPath(sResultFileName, sCanonicalRoot) || archivePathHasUnsafeLink(sCanonicalRoot, sSafeRecordPath)) {
                 bResult = false;
             } else if (bIsFolder) {
-                if (!XBinary::createDirectory(sResultFileName)) bResult = false;
-            } else if (!XBinary::createDirectory(QFileInfo(sResultFileName).absolutePath()) ||
+                if (!transaction.ensureDirectory(sResultFileName)) {
+                    reportTransactionError();
+                    bResult = false;
+                }
+            } else if (!transaction.ensureDirectory(QFileInfo(sResultFileName).absolutePath()) ||
                        archivePathHasUnsafeLink(sCanonicalRoot, sSafeRecordPath)) {
+                if (!transaction.errorString().isEmpty()) {
+                    reportTransactionError();
+                }
                 bResult = false;
             } else {
                 const QString sOutputDirectory =
@@ -2836,12 +3131,13 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
                     (state.nCurrentIndex != nExpectedIndex) ||
                     (state.nNumberOfRecords != nNumberOfRecords) ||
                     !isPdStructNotCanceled(pPdStruct) ||
-                    !stagedFile.seek(0) ||
+                    !stagedFile.flush() || !stagedFile.seek(0) ||
                     archivePathHasUnsafeLink(sCanonicalRoot,
                                              sSafeRecordPath)) {
                     bResult = false;
                 } else {
                     QSaveFile outputFile(sResultFileName);
+                    outputFile.setDirectWriteFallback(false);
                     bool bPublished = outputFile.open(QIODevice::WriteOnly);
                     QByteArray baBuffer(0x4000, 0);
                     qint64 nRemaining = stagedFile.size();
@@ -2867,11 +3163,25 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
                     if (!bPublished || (nRemaining != 0) ||
                         !isProgressAlive() ||
                         !isPdStructNotCanceled(pPdStruct) ||
-                        (outputFile.error() != QFile::NoError)) {
+                        (outputFile.error() != QFile::NoError) ||
+                        archivePathHasUnsafeLink(sCanonicalRoot,
+                                                 sSafeRecordPath)) {
+                        outputFile.cancelWriting();
+                        bResult = false;
+                    } else if (!transaction.prepareFile(
+                                   sResultFileName)) {
+                        reportTransactionError();
                         outputFile.cancelWriting();
                         bResult = false;
                     } else {
                         bResult = outputFile.commit();
+                        if (bResult) {
+                            bResult = transaction.markFilePublished(
+                                sResultFileName);
+                            if (!bResult) {
+                                reportTransactionError();
+                            }
+                        }
                     }
                 }
             }
@@ -2907,9 +3217,22 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
 
     const bool bFinished = guardedArchive &&
         guardedArchive->finishUnpack(&state, nullptr);
-    return guardedArchive && bResult && bEnumerationValid && bFinished &&
-           isProgressAlive() &&
-           isPdStructNotCanceled(pPdStruct);
+    bResult = guardedArchive && bResult && bEnumerationValid && bFinished &&
+              isProgressAlive() &&
+              isPdStructNotCanceled(pPdStruct);
+    if (bResult) {
+        if (!transaction.commit()) {
+            reportTransactionError();
+            bResult = false;
+            rollbackTransaction();
+        } else if (!transaction.errorString().isEmpty()) {
+            reportTransactionError();
+        }
+    } else {
+        rollbackTransaction();
+    }
+
+    return bResult;
 }
 
 bool XArchive::decompressToPath(const QString &sArchiveFileName, const QString &sRecordPathName, const QString &sResultPathName, PDSTRUCT *pPdStruct)
@@ -3450,12 +3773,43 @@ bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
     // destinations are published only after the complete record succeeds, so
     // decoder, CRC, cancellation and source-mutation failures cannot expose a
     // partial result.
-    const qint64 nExpectedSize = archiveRecord.mapProperties
-        .value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)0)
-        .toLongLong();
-    if (nExpectedSize < 0) return false;
-    QIODevice *pWorkDevice = XBinary::createFileBuffer(
-        nExpectedSize, pPdStruct);
+    const bool bExpectedSizeDefined = archiveRecord.mapProperties.contains(
+        XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
+    bool bExpectedSizeConverted = !bExpectedSizeDefined;
+    const qint64 nExpectedSize = bExpectedSizeDefined
+        ? archiveRecord.mapProperties
+              .value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)
+              .toLongLong(&bExpectedSizeConverted)
+        : 0;
+    qint64 nConfiguredOutputLimit = -1;
+    if (!XBinary::getUnpackOutputLimit(pState->mapUnpackProperties,
+                                       &nConfiguredOutputLimit) ||
+        !bExpectedSizeConverted ||
+        (bExpectedSizeDefined &&
+         ((nExpectedSize < 0) ||
+          ((nConfiguredOutputLimit >= 0) &&
+           (nExpectedSize > nConfiguredOutputLimit))))) {
+        XBinary::setPdStructErrorString(
+            pPdStruct, tr("Unpacked output exceeds the configured limit"));
+        return false;
+    }
+
+    // A declared size can use the normal size-aware verification buffer.  A
+    // terminator-driven member has no allocation hint, so stage it in a
+    // private temporary file instead of treating the missing property as a
+    // declaration of zero or allowing unbounded in-memory growth.  The shared
+    // decompressor still carries mapUnpackProperties, and _writeDevice enforces
+    // any configured output cap while this file grows.
+    QTemporaryFile unknownSizeWorkFile;
+    QIODevice *pOwnedWorkDevice = nullptr;
+    QIODevice *pWorkDevice = nullptr;
+    if (bExpectedSizeDefined) {
+        pOwnedWorkDevice = XBinary::createFileBuffer(
+            nExpectedSize, pPdStruct);
+        pWorkDevice = pOwnedWorkDevice;
+    } else if (unknownSizeWorkFile.open()) {
+        pWorkDevice = &unknownSizeWorkFile;
+    }
     if (!pWorkDevice) {
         XBinary::setPdStructErrorString(
             pPdStruct, tr("Cannot create unpack verification buffer"));
@@ -3473,6 +3827,14 @@ bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
         pState->mapUnpackProperties, pPdStruct);
     bResult = bResult && guardedArchive && guardedOutput && guardedSource;
     if (bResult) {
+        const qint64 nDecodedSize = pWorkDevice->size();
+        bResult = (nDecodedSize >= 0) &&
+                  (!bExpectedSizeDefined ||
+                   (nDecodedSize == nExpectedSize)) &&
+                  XBinary::isUnpackOutputSizeAllowed(
+                      pState->mapUnpackProperties, nDecodedSize);
+    }
+    if (bResult) {
         bResult = guardedArchive->isSourceDeviceSnapshotCurrent(
             sourceSnapshot, guardedArchive->getDevice(), pPdStruct);
     }
@@ -3488,7 +3850,7 @@ bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
             pWorkDevice, guardedOutput.data(), pState, pPdStruct);
     }
 
-    XBinary::freeFileBuffer(&pWorkDevice);
+    XBinary::freeFileBuffer(&pOwnedWorkDevice);
 
     return bResult;
 }

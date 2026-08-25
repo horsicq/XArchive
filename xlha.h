@@ -70,10 +70,20 @@ public:
     // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
-private:
+protected:
+    // Shared with XSAR, whose container is this format with a different method
+    // tag spelling; see xsar.h. The tag test is virtual because that spelling
+    // is the only thing that differs in the member walk.
+    virtual bool _isMemberTag(const QByteArray &baHeader);
+    static HANDLE_METHOD _methodToHandle(const QString &sMethod);
     // For Level 1 archives: bytes 7-10 = skip_sz = ext_headers + compressed_data.
     // Returns the total size of extended headers that follow the base header.
     qint64 _getLevel1ExtHeadersSize(qint64 nOffset, qint64 nBaseHeaderSize);
+    // A level 0/1 header is preceded by its own size and a checksum over the
+    // bytes it covers. Verifying it is what makes a signature-free container
+    // safe to claim.
+    static bool _isHeaderChecksumValid(const QByteArray &baHeader);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

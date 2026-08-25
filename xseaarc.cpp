@@ -61,13 +61,21 @@ bool XSEAARC::isValid(PDSTRUCT *pPdStruct)
         return false;
     }
 
-    // ARC archive: starts with 0x1A followed by method byte (1-9)
-    // and 13-byte null-terminated filename
-    if (getSize() >= 29) {  // Minimum: 1 (marker) + 1 (method) + 13 (name) + 4 (compressed size) + 2 (date) + 2 (time) + 2 (crc) + 4 (original size) = 29
+    // Same contract as XLHA::isValid: detection probes a device the caller
+    // still owns, so its cursor is restored before returning.
+    QIODevice *pSourceDevice = getDevice();
+    const qint64 nSavedPos = pSourceDevice ? pSourceDevice->pos() : -1;
+
+    // ARC archive: starts with 0x1A followed by a method byte and a 13-byte
+    // null-terminated filename. The size floor is the method's OWN header
+    // length: method 1 carries no original-size field and so uses a 25-byte
+    // header, while methods 2-9 use 29. Budgeting a flat 29 rejected valid
+    // method-1 archives that period tools (PKUNPAK 3.61) list and extract.
+    if (getSize() >= 25) {
         quint8 nMarker = read_uint8(0);
         quint8 nMethod = read_uint8(1);
 
-        if ((nMarker == 0x1A) && (nMethod >= 1) && (nMethod <= 9)) {
+        if ((nMarker == 0x1A) && _isValidMethod(nMethod) && (getSize() >= (qint64)_getHeaderSize(nMethod))) {
             // Read filename (13 bytes, null-terminated ASCII)
             QByteArray baFileName = read_array(2, 13);
 
@@ -98,6 +106,10 @@ bool XSEAARC::isValid(PDSTRUCT *pPdStruct)
                 }
             }
         }
+    }
+
+    if (pSourceDevice && (nSavedPos >= 0)) {
+        pSourceDevice->seek(nSavedPos);
     }
 
     return bResult;
@@ -372,15 +384,7 @@ XBinary::ARCHIVERECORD XSEAARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_CRC16ARC);
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nMethod);
 
-        // Determine handle method
-        XBinary::HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
-
-        if ((nMethod == CMETHOD_STORE_OLD) || (nMethod == CMETHOD_STORE)) {
-            compressMethod = HANDLE_METHOD_STORE;
-        }
-        // Methods 3-9 are various LZW/RLE/Huffman variants - marked as unknown for now
-
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, _methodToHandle(nMethod));
 
         // Convert DOS date/time to QDateTime
         // DOS date: bits 15-9=year(from 1980), bits 8-5=month, bits 4-0=day
@@ -757,6 +761,8 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
             record.nVirtualAddress = XADDR_MAX;
             record.sName = sFileName;
             record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompressedSize);
+            record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nCompressedSize);
+            record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, _methodToHandle(nMethod));
 
             listResult.append(record);
         }
@@ -811,6 +817,32 @@ QString XSEAARC::cmethodToString(CMETHOD cmethod)
     }
 
     return sResult;
+}
+
+// Anything without a decoder must map to HANDLE_METHOD_UNKNOWN rather than be
+// left unset: an unset property makes the shared decompressor fall back to
+// STORE, which would copy the still-compressed bytes out as if they were the
+// file.  Methods 6 and 7 differ only in the encoder's hash function and share
+// one decoder.
+XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
+{
+    switch (nMethod) {
+        case CMETHOD_STORE_OLD:
+        case CMETHOD_STORE: return HANDLE_METHOD_STORE;
+        case CMETHOD_PACKED: return HANDLE_METHOD_ARC_PACK;
+        case CMETHOD_SQUEEZED: return HANDLE_METHOD_ARC_SQUEEZE;
+        // Methods 5-7 use ARC's original hash-table crunch, which is a
+        // different decompressor from the dynamic LZW of methods 8/9 rather
+        // than the same one with a fixed code width. No sample using them has
+        // been found, so they stay unsupported instead of being decoded by an
+        // untested approximation.
+        case CMETHOD_CRUNCHED1:
+        case CMETHOD_CRUNCHED2:
+        case CMETHOD_CRUNCHED3: return HANDLE_METHOD_UNKNOWN;
+        case CMETHOD_CRUNCHED4: return HANDLE_METHOD_ARC_CRUNCH_DYN;
+        case CMETHOD_SQUASHED: return HANDLE_METHOD_ARC_SQUASH;
+        default: return HANDLE_METHOD_UNKNOWN;
+    }
 }
 
 qint32 XSEAARC::_getHeaderSize(quint8 nMethod)

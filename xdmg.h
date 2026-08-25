@@ -198,7 +198,9 @@ private:
     QList<DMG_PARTITION_INFO> _parseResourceForkPartitions(const QByteArray &baResource,
                                                            PDSTRUCT *pPdStruct);
     bool _decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, qint64 nDataForkLength,
-                           qint64 nMishDataOffset, QIODevice *pDevice, PDSTRUCT *pPdStruct);
+                           qint64 nMishDataOffset, QIODevice *pDevice,
+                           const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties,
+                           PDSTRUCT *pPdStruct);
     bool _writeZeroes(QIODevice *pDevice, qint64 nSize, PDSTRUCT *pPdStruct);
     bool _validatePartitionCRC(QIODevice *pDevice, const MISH_BLOCK &mishBlock,
                                const QList<BLOCK_DATA> &listStripes, PDSTRUCT *pPdStruct);

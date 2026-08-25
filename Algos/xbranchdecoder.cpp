@@ -277,6 +277,8 @@ bool readTransformInput(XBinary::DATAPROCESS_STATE *pState, QByteArray *pData, X
     }
 
     if ((nInputSize < 0) || (nInputSize > BRANCH_MAX_BUFFERED_SIZE) ||
+        !XBinary::isUnpackOutputSizeAllowed(
+            pState->mapUnpackProperties, nInputSize) ||
         (nInputSize > (std::numeric_limits<qint32>::max)())) {
         return false;
     }

@@ -94,9 +94,12 @@ DEPENDPATH += $$PWD/Algos/include
 HEADERS += \
     $$PWD/Algos/algo_utils.h \
     $$PWD/Algos/xalgo_local.h \
+    $$PWD/Algos/xarcdecoder.h \
     $$PWD/Algos/xarjdecoder.h \
     $$PWD/Algos/xacedecoder.h \
     $$PWD/Algos/xlzhdecoder.h \
+    $$PWD/Algos/xkwajlzssdecoder.h \
+    $$PWD/Algos/xkwajlzhdecoder.h \
     $$PWD/Algos/xrardecoder.h \
     $$PWD/Algos/xit214decoder.h \
     $$PWD/Algos/xdeflatedecoder.h \
@@ -121,6 +124,7 @@ HEADERS += \
     $$PWD/Algos/xbcj2decoder.h \
     $$PWD/Algos/xbranchdecoder.h \
     $$PWD/Algos/xlzxdecoder.h \
+    $$PWD/Algos/xquantumdecoder.h \
     $$PWD/Algos/xxpressdecoder.h \
     $$PWD/Algos/xsha256decoder.h \
     $$PWD/Algos/xblake2sp.h \
@@ -147,6 +151,7 @@ HEADERS += \
     $$PWD/xcab.h \
     $$PWD/xcfbf.h \
     $$PWD/xcpio.h \
+    $$PWD/xgamearchive.h \
     $$PWD/xwarc.h \
     $$PWD/xmtree.h \
     $$PWD/xuu.h \
@@ -167,6 +172,8 @@ HEADERS += \
     $$PWD/xzoo.h \
     $$PWD/xjar.h \
     $$PWD/xlha.h \
+    $$PWD/xsar.h \
+    $$PWD/xarx.h \
     $$PWD/xmachofat.h \
     $$PWD/xrar.h \
     $$PWD/xsevenzip.h \
@@ -202,9 +209,12 @@ HEADERS += \
 
 SOURCES += \
     $$PWD/Algos/algo_utils.cpp \
+    $$PWD/Algos/xarcdecoder.cpp \
     $$PWD/Algos/xarjdecoder.cpp \
     $$PWD/Algos/xacedecoder.cpp \
     $$PWD/Algos/xlzhdecoder.cpp \
+    $$PWD/Algos/xkwajlzssdecoder.cpp \
+    $$PWD/Algos/xkwajlzhdecoder.cpp \
     $$PWD/Algos/xrardecoder.cpp \
     $$PWD/Algos/xit214decoder.cpp \
     $$PWD/Algos/xdeflatedecoder.cpp \
@@ -229,6 +239,7 @@ SOURCES += \
     $$PWD/Algos/xbcj2decoder.cpp \
     $$PWD/Algos/xbranchdecoder.cpp \
     $$PWD/Algos/xlzxdecoder.cpp \
+    $$PWD/Algos/xquantumdecoder.cpp \
     $$PWD/Algos/xxpressdecoder.cpp \
     $$PWD/Algos/xsha256decoder.cpp \
     $$PWD/Algos/xblake2sp.cpp \
@@ -251,6 +262,7 @@ SOURCES += \
     $$PWD/xcab.cpp \
     $$PWD/xcfbf.cpp \
     $$PWD/xcpio.cpp \
+    $$PWD/xgamearchive.cpp \
     $$PWD/xwarc.cpp \
     $$PWD/xmtree.cpp \
     $$PWD/xuu.cpp \
@@ -271,6 +283,8 @@ SOURCES += \
     $$PWD/xzoo.cpp \
     $$PWD/xjar.cpp \
     $$PWD/xlha.cpp \
+    $$PWD/xsar.cpp \
+    $$PWD/xarx.cpp \
     $$PWD/xmachofat.cpp \
     $$PWD/xrar.cpp \
     $$PWD/xsevenzip.cpp \

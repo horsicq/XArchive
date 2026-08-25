@@ -60,9 +60,11 @@ XBinary::HANDLE_METHOD XKWAJ::_compTypeToMethod(quint16 nCompType)
     switch (nCompType) {
         case COMP_TYPE_STORE: return HANDLE_METHOD_STORE;
         case COMP_TYPE_XOR: return HANDLE_METHOD_KWAJ_XOR;
-        case COMP_TYPE_SZDD: return HANDLE_METHOD_LZSS_SZDD;
+        // KWAJ uses QBasic's +18 LZSS variant, not ordinary SZDD (+16).
+        // Keep it on its dedicated route.
+        case COMP_TYPE_SZDD: return HANDLE_METHOD_KWAJ_LZSS;
         case COMP_TYPE_LZH: return HANDLE_METHOD_KWAJ_LZH;
-        case COMP_TYPE_MSZIP: return HANDLE_METHOD_DEFLATE;
+        case COMP_TYPE_MSZIP: return HANDLE_METHOD_KWAJ_MSZIP;
         default: return HANDLE_METHOD_UNKNOWN;
     }
 }
@@ -333,57 +335,111 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
 
-    quint16 nCompType = guardedThis->read_uint16(offsetof(KWAJ_HEADER, comp_type));
-    if (!guardedThis) return false;
-    qint64 nDataOffset = guardedThis->read_uint16(offsetof(KWAJ_HEADER, data_offset));
-    if (!guardedThis) return false;
-    quint16 nHeaderFlags = guardedThis->read_uint16(offsetof(KWAJ_HEADER, header_flags));
-    if (!guardedThis) return false;
-
-    if ((nDataOffset <= 0) || (nDataOffset > getSize())) {
-        guardedThis->releaseUnpackSource(pState);
+    const auto failInitialization = [&]() -> bool {
+        if (guardedThis) guardedThis->releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
+    };
+
+    const qint64 nFileSize = guardedThis->getSize();
+    if (!guardedThis || (nFileSize < (qint64)sizeof(KWAJ_HEADER))) {
+        return failInitialization();
+    }
+
+    const quint16 nCompType = guardedThis->read_uint16(offsetof(KWAJ_HEADER, comp_type));
+    if (!guardedThis) return failInitialization();
+    const qint64 nDataOffset = guardedThis->read_uint16(offsetof(KWAJ_HEADER, data_offset));
+    if (!guardedThis) return failInitialization();
+    const quint16 nHeaderFlags = guardedThis->read_uint16(offsetof(KWAJ_HEADER, header_flags));
+    if (!guardedThis) return failInitialization();
+
+    const quint16 nKnownHeaderFlags = HDR_FLAG_HASLENGTH | HDR_FLAG_HASUNKNOWN1 |
+                                      HDR_FLAG_HASUNKNOWN2 | HDR_FLAG_HASFILENAME |
+                                      HDR_FLAG_HASFILEEXT | HDR_FLAG_HASEXTRATEXT;
+    if ((nCompType > COMP_TYPE_MSZIP) ||
+        (nDataOffset < (qint64)sizeof(KWAJ_HEADER)) ||
+        (nDataOffset > nFileSize) ||
+        ((nHeaderFlags & ~nKnownHeaderFlags) != 0)) {
+        return failInitialization();
     }
 
     qint64 nUncompressedSize = 0;
+    const bool bHasUncompressedSize = (nHeaderFlags & HDR_FLAG_HASLENGTH) != 0;
 
-    // Parse the optional header extension for the uncompressed length and filename.
+    // Every optional extension is bounded by data_offset.  Variable strings
+    // are searched only within their format-defined 8.3 limits so malformed
+    // metadata can never consume payload bytes.
     qint64 nExtOffset = sizeof(KWAJ_HEADER);
+    const auto hasExtensionBytes = [&](qint64 nSize) -> bool {
+        return (nSize >= 0) && (nExtOffset <= nDataOffset) &&
+               (nSize <= (nDataOffset - nExtOffset));
+    };
+    const auto skipExtensionBytes = [&](qint64 nSize) -> bool {
+        if (!hasExtensionBytes(nSize)) return false;
+        nExtOffset += nSize;
+        return true;
+    };
 
-    if (nHeaderFlags & HDR_FLAG_HASLENGTH) {
+    if (bHasUncompressedSize) {
+        if (!hasExtensionBytes(4)) return failInitialization();
         nUncompressedSize = guardedThis->read_uint32(nExtOffset);
-        if (!guardedThis) return false;
-        nExtOffset += 4;
+        if (!guardedThis || !skipExtensionBytes(4)) return failInitialization();
     }
-    if (nHeaderFlags & HDR_FLAG_HASUNKNOWN1) {
-        nExtOffset += 2;
+    if ((nHeaderFlags & HDR_FLAG_HASUNKNOWN1) && !skipExtensionBytes(2)) {
+        return failInitialization();
     }
     if (nHeaderFlags & HDR_FLAG_HASUNKNOWN2) {
-        quint16 nLen = guardedThis->read_uint16(nExtOffset);
-        if (!guardedThis) return false;
-        nExtOffset += 2 + nLen;
+        if (!hasExtensionBytes(2)) return failInitialization();
+        const quint16 nLength = guardedThis->read_uint16(nExtOffset);
+        if (!guardedThis || !skipExtensionBytes(2) || !skipExtensionBytes(nLength)) {
+            return failInitialization();
+        }
     }
 
+    const auto readBoundedString = [&](qint32 nMaximumBytes, QString *pString) -> bool {
+        if (!pString || !hasExtensionBytes(1)) return false;
+        const qint32 nReadSize = (qint32)qMin<qint64>(nMaximumBytes, nDataOffset - nExtOffset);
+        const QByteArray baString = guardedThis->read_array(nExtOffset, nReadSize);
+        if (!guardedThis || (baString.size() != nReadSize)) return false;
+        const qint32 nTerminator = baString.indexOf('\0');
+        if (nTerminator < 0) return false;
+        *pString = QString::fromLatin1(baString.constData(), nTerminator);
+        return skipExtensionBytes(nTerminator + 1);
+    };
+
     QString sName;
-    if (nHeaderFlags & HDR_FLAG_HASFILENAME) {
-        sName = guardedThis->read_ansiString(nExtOffset, 256);
-        if (!guardedThis) return false;
-        nExtOffset += sName.length() + 1;
+    if ((nHeaderFlags & HDR_FLAG_HASFILENAME) && !readBoundedString(9, &sName)) {
+        return failInitialization();
     }
     if (nHeaderFlags & HDR_FLAG_HASFILEEXT) {
-        QString sExt = guardedThis->read_ansiString(nExtOffset, 256);
-        if (!guardedThis) return false;
-        if (!sExt.isEmpty()) {
-            sName += QString(".") + sExt;
+        QString sExt;
+        if (!readBoundedString(4, &sExt)) return failInitialization();
+        if (!sExt.isEmpty()) sName += QString(".") + sExt;
+    }
+    if (nHeaderFlags & HDR_FLAG_HASEXTRATEXT) {
+        if (!hasExtensionBytes(2)) return failInitialization();
+        const quint16 nLength = guardedThis->read_uint16(nExtOffset);
+        if (!guardedThis || !skipExtensionBytes(2) || !skipExtensionBytes(nLength)) {
+            return failInitialization();
         }
+    }
+
+    if (nExtOffset > nDataOffset) {
+        return failInitialization();
     }
 
     if (sName.isEmpty()) {
         sName = XBinary::getDeviceFileBaseName(guardedThis->getDevice());
-        if (sName.isEmpty()) {
-            sName = "kwaj_data";
-        }
+        if (!guardedThis) return failInitialization();
+        if (sName.isEmpty()) sName = "kwaj_data";
+    }
+
+    const qint64 nDataSize = nFileSize - nDataOffset;
+    bool bUncompressedSizeDefined = bHasUncompressedSize;
+    if (!bUncompressedSizeDefined &&
+        ((nCompType == COMP_TYPE_STORE) || (nCompType == COMP_TYPE_XOR))) {
+        nUncompressedSize = nDataSize;
+        bUncompressedSizeDefined = true;
     }
 
     KWAJ_UNPACK_CONTEXT *pContext = new (std::nothrow) KWAJ_UNPACK_CONTEXT;
@@ -393,9 +449,10 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
     pContext->nDataOffset = nDataOffset;
-    pContext->nDataSize = guardedThis->getSize() - nDataOffset;
+    pContext->nDataSize = nDataSize;
     pContext->compressMethod = guardedThis->_compTypeToMethod(nCompType);
     pContext->nUncompressedSize = nUncompressedSize;
+    pContext->bUncompressedSizeDefined = bUncompressedSizeDefined;
     pContext->sFileName = sName;
 
     pState->pContext = pContext;
@@ -439,7 +496,7 @@ XBinary::ARCHIVERECORD XKWAJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     result.nStreamSize = pContext->nDataSize;
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sFileName);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nDataSize);
-    if (pContext->nUncompressedSize > 0) {
+    if (pContext->bUncompressedSizeDefined) {
         result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
     }
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, pContext->compressMethod);
