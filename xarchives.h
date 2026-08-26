@@ -39,15 +39,21 @@ public:
                                               XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QList<XArchive::RECORD> getRecordsFromDirectory(const QString &sDirectoryName, qint32 nLimit = -1, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static QByteArray decompress(QIODevice *pDevice, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0,
-                                 qint64 nDecompressedSize = -1);
+                                 qint64 nDecompressedSize = -1, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
     static QByteArray decompress(const QString &sFileName, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct = nullptr, qint64 nDecompressedOffset = 0,
-                                 qint64 nDecompressedSize = -1);
-    static QByteArray decompress(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static QByteArray decompress(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord, QIODevice *pDestDevice, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decompressToFile(const QString &sFileName, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool decompressToFile(const QString &sFileName, const QString &sRecordFileName, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
+                                 qint64 nDecompressedSize = -1, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
+    static QByteArray decompress(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
+    static QByteArray decompress(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
+    static bool decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
+    static bool decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord, QIODevice *pDestDevice, XBinary::PDSTRUCT *pPdStruct = nullptr,
+                                   const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
+    static bool decompressToFile(const QString &sFileName, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
+    static bool decompressToFile(const QString &sFileName, const QString &sRecordFileName, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
     static bool decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties,
                                    XBinary::PDSTRUCT *pPdStruct = nullptr);
@@ -79,7 +85,8 @@ public:
                                             const QString &sResultFolder,
                                             QString *pErrorString,
                                             XBinary::PDSTRUCT *pPdStruct,
-                                            qint64 nMaxOutputSize);
+                                            qint64 nMaxOutputSize,
+                                            const QSharedPointer<XBinary::OUTPUT_BUDGET> &spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>());
     static bool extractArchiveRecordWithIp7zSource(const QString &sFileName,
                                                   const QString &sRecordName,
                                                   const QString &sPassword,

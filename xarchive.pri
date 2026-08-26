@@ -113,6 +113,7 @@ HEADERS += \
     $$PWD/Algos/xbzip2decoder.h \
     $$PWD/Algos/xbrotlidecoder.h \
     $$PWD/Algos/xlzssdecoder.h \
+    $$PWD/Algos/xcoktellzdecoder.h \
     $$PWD/Algos/xshrinkdecoder.h \
     $$PWD/Algos/xreducedecoder.h \
     $$PWD/Algos/xzipcryptodecoder.h \
@@ -170,6 +171,7 @@ HEADERS += \
     $$PWD/xasar.h \
     $$PWD/xxar.h \
     $$PWD/xzoo.h \
+    $$PWD/xstk.h \
     $$PWD/xjar.h \
     $$PWD/xlha.h \
     $$PWD/xsar.h \
@@ -228,6 +230,7 @@ SOURCES += \
     $$PWD/Algos/xbzip2decoder.cpp \
     $$PWD/Algos/xbrotlidecoder.cpp \
     $$PWD/Algos/xlzssdecoder.cpp \
+    $$PWD/Algos/xcoktellzdecoder.cpp \
     $$PWD/Algos/xshrinkdecoder.cpp \
     $$PWD/Algos/xreducedecoder.cpp \
     $$PWD/Algos/xzipcryptodecoder.cpp \
@@ -281,6 +284,7 @@ SOURCES += \
     $$PWD/xasar.cpp \
     $$PWD/xxar.cpp \
     $$PWD/xzoo.cpp \
+    $$PWD/xstk.cpp \
     $$PWD/xjar.cpp \
     $$PWD/xlha.cpp \
     $$PWD/xsar.cpp \

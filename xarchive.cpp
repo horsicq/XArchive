@@ -23,6 +23,7 @@
 #include "Algos/xkwajlzssdecoder.h"
 #include "Algos/xkwajlzhdecoder.h"
 #include "Algos/xppmddecoder.h"
+#include "Algos/xcoktellzdecoder.h"
 
 #include <algorithm>
 #include <limits>
@@ -2107,6 +2108,29 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_COKTEL_LZ) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_COKTEL_LZ);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XCoktelLZDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else if (decompressState.bReadError) {
+            result = COMPRESS_RESULT_READERROR;
+        } else if (decompressState.bWriteError) {
+            result = COMPRESS_RESULT_WRITEERROR;
+        } else {
+            result = COMPRESS_RESULT_DATAERROR;
+        }
     } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_XZ) {
         XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_XZ);
@@ -2231,6 +2255,18 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         // so UNPACK_PROP_MAX_OUTPUT_SIZE never reached multiDecompress or the
         // _writeDevice choke point.
         state.mapUnpackProperties = mapUnpackProperties;
+        // XFU-015 shadow: the legacy RECORD route builds its own DATAPROCESS_STATE
+        // with no operation budget in scope. Mint a per-call budget so _writeDevice
+        // meters this route too; shadow mode enforces nothing.
+        {
+            XBinary::OUTPUT_POLICY legacyPolicy = {};
+            if (XBinary::resolveUnpackOutputPolicy(mapUnpackProperties, &legacyPolicy)) {
+                state.spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>::create();
+                state.spOutputBudget->setLimits(legacyPolicy.nMaxEntryOutputSize, legacyPolicy.nMaxTotalOutputSize,
+                                                legacyPolicy.nMaxEntryCount, legacyPolicy.nMaxMemoryOutputSize);
+                state.spOutputBudget->beginEntry(0, record.spInfo.sRecordName);
+            }
+        }
 
         XDecompress decompressor;
         bResult = decompressor.multiDecompress(&state, pPdStruct);
@@ -3822,9 +3858,19 @@ bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
     connect(&xDecompress, &XDecompress::infoMessage,
             this, &XBinary::infoMessage);
 
+    // XFU-015 shadow: begin a new member on the operation budget (resets the
+    // per-entry meter, counts the member). A would-be entry-count refusal is
+    // recorded + logged but NOT enforced in shadow mode.
+    if (pState->spOutputBudget) {
+        const QString sEntryName = archiveRecord.mapProperties.value(XBinary::FPART_PROP_ORIGINALNAME).toString();
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, sEntryName)) {
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+    }
+
     bool bResult = xDecompress.decompressArchiveRecord(
         archiveRecord, guardedSource.data(), pWorkDevice,
-        pState->mapUnpackProperties, pPdStruct);
+        pState->mapUnpackProperties, pPdStruct, pState->spOutputBudget);
     bResult = bResult && guardedArchive && guardedOutput && guardedSource;
     if (bResult) {
         const qint64 nDecodedSize = pWorkDevice->size();

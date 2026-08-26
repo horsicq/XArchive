@@ -373,8 +373,9 @@ class QtOutStream final : public ISequentialOutStream, public CMyUnknownImp {
     Z7_IFACES_IMP_UNK_1(ISequentialOutStream)
 
 public:
-    QtOutStream(QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
-        : m_pDevice(pDevice), m_progress(pPdStruct)
+    QtOutStream(QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct,
+                const QSharedPointer<XBinary::OUTPUT_BUDGET> &spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>())
+        : m_pDevice(pDevice), m_progress(pPdStruct), m_spOutputBudget(spOutputBudget)
     {
     }
 
@@ -382,6 +383,7 @@ private:
     QIODevice *m_pDevice;
     QMutex m_mutex;
     ProgressGuard m_progress;
+    QSharedPointer<XBinary::OUTPUT_BUDGET> m_spOutputBudget;
 };
 
 class LimitedWriteDevice final : public QIODevice {
@@ -433,6 +435,20 @@ Z7_COM7F_IMF(QtOutStream::Write(const void *data, UInt32 size, UInt32 *processed
     if (!size) return S_OK;
     QMutexLocker locker(&m_mutex);
     if (!data) return E_INVALIDARG;
+    // Shadow-mode output metering (XFU-015): charge the produced-byte count for
+    // this decoded chunk exactly once, before the drain loop. The budget's
+    // debit()/beginEntry() are byte-identical to the native routes and still
+    // return false on a breach; here that false is deliberately discarded so
+    // extraction behaviour is unchanged - only noteShadowRefusal() records the
+    // first would-be refusal for the differential zero-breach evidence.
+    if (m_spOutputBudget) {
+        const XBinary::OUTPUT_BUDGET::REFUSAL nRefusalBefore = m_spOutputBudget->refusal();
+        (void)m_spOutputBudget->debit((qint64)size);
+        if ((nRefusalBefore == XBinary::OUTPUT_BUDGET::REFUSAL_NONE) &&
+            (m_spOutputBudget->refusal() != XBinary::OUTPUT_BUDGET::REFUSAL_NONE)) {
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(m_spOutputBudget.data());
+        }
+    }
     UInt32 nTotalWritten = 0;
     while (nTotalWritten < size) {
         if (!m_progress.canContinue()) return E_ABORT;
@@ -1431,14 +1447,16 @@ class ArchiveExtractCallback final : public IArchiveExtractCallback,
 public:
     ArchiveExtractCallback(IInArchive *pArchive, const QList<TechnicalEntry> *pEntries, const QString &sStageRoot,
                            QIODevice *pSelectedOutput, const QString &sPassword, XBinary::PDSTRUCT *pPdStruct,
-                           qint64 nMaxOutputSize)
+                           qint64 nMaxOutputSize,
+                           const QSharedPointer<XBinary::OUTPUT_BUDGET> &spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>())
         : m_archive(pArchive),
           m_pEntries(pEntries),
           m_sStageRoot(sStageRoot),
           m_pSelectedOutput(pSelectedOutput),
           m_password(toUString(sPassword)),
           m_progress(pPdStruct),
-          m_nMaxOutputSize(nMaxOutputSize)
+          m_nMaxOutputSize(nMaxOutputSize),
+          m_spOutputBudget(spOutputBudget)
     {
     }
 
@@ -1481,6 +1499,7 @@ private:
     QScopedPointer<LimitedWriteDevice> m_currentLimitedOutput;
     CMyComPtr<ISequentialOutStream> m_currentStream;
     qint64 m_nMaxOutputSize = -1;
+    QSharedPointer<XBinary::OUTPUT_BUDGET> m_spOutputBudget;
 };
 
 Z7_COM7F_IMF(ArchiveExtractCallback::SetTotal(UInt64))
@@ -1550,7 +1569,17 @@ Z7_COM7F_IMF(ArchiveExtractCallback::GetStream(UInt32 index, ISequentialOutStrea
         if (!pDevice->isOpen() || !pDevice->isWritable()) return E_FAIL;
     }
 
-    QtOutStream *pSpec = new QtOutStream(pDevice, m_progress.pPdStruct);
+    // Shadow-mode per-member boundary (XFU-015): reset the per-entry meter and
+    // count this produced member. beginEntry() is byte-identical to the native
+    // routes; its false return (member-count breach) is deliberately ignored so
+    // the stream is still produced - only noteShadowRefusal() records it.
+    if (m_spOutputBudget) {
+        if (!m_spOutputBudget->beginEntry((qint32)index, entry.sNormalizedPath)) {
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(m_spOutputBudget.data());
+        }
+    }
+
+    QtOutStream *pSpec = new QtOutStream(pDevice, m_progress.pPdStruct, m_spOutputBudget);
     CMyComPtr<ISequentialOutStream> stream = pSpec;
     m_currentStream = stream;
     *outStream = stream.Detach();
@@ -2038,12 +2067,13 @@ bool configureDecoderMemoryLimit(OpenedArchive *pOpened, QString *pErrorString)
 bool runExtract(OpenedArchive *pOpened, const QList<TechnicalEntry> &entries, const QString &sPassword,
                 const UInt32 *pIndices, UInt32 nItems, bool bTest, const QString &sStageRoot, QIODevice *pSelectedOutput,
                 QString *pErrorString, XBinary::PDSTRUCT *pPdStruct,
-                qint64 nMaxOutputSize = -1)
+                qint64 nMaxOutputSize = -1,
+                const QSharedPointer<XBinary::OUTPUT_BUDGET> &spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>())
 {
     if (!configureDecoderMemoryLimit(pOpened, pErrorString)) return false;
     ArchiveExtractCallback *pCallbackSpec = new ArchiveExtractCallback(
         pOpened->archive, &entries, sStageRoot, pSelectedOutput, sPassword,
-        pPdStruct, nMaxOutputSize);
+        pPdStruct, nMaxOutputSize, spOutputBudget);
     CMyComPtr<IArchiveExtractCallback> callback = pCallbackSpec;
     const HRESULT nResult = pOpened->archive->Extract(pIndices, nItems, bTest ? 1 : 0, callback);
     const QString sCallbackError = pCallbackSpec->errorString();
@@ -2152,7 +2182,8 @@ bool XArchives::extractArchiveWithIp7zSource(const QString &sFileName, const QSt
 bool XArchives::extractArchiveWithIp7zSource(const QString &sFileName, const QString &sPassword,
                                             const QString &sResultFolder, QString *pErrorString,
                                             XBinary::PDSTRUCT *pPdStruct,
-                                            qint64 nMaxOutputSize)
+                                            qint64 nMaxOutputSize,
+                                            const QSharedPointer<XBinary::OUTPUT_BUDGET> &spOutputBudget)
 {
     setError(pErrorString, QString());
     if (!QFileInfo(sFileName).isFile() || sResultFolder.isEmpty() ||
@@ -2184,7 +2215,7 @@ bool XArchives::extractArchiveWithIp7zSource(const QString &sFileName, const QSt
     const QString sStageRoot = QFileInfo(temporaryDir.path()).canonicalFilePath();
     if (!runExtract(&opened, entries, sPassword, nullptr,
                     (UInt32)(Int32)-1, false, sStageRoot, nullptr,
-                    pErrorString, pPdStruct, nMaxOutputSize)) {
+                    pErrorString, pPdStruct, nMaxOutputSize, spOutputBudget)) {
         opened.close();
         return false;
     }
@@ -2263,7 +2294,20 @@ bool XArchives::extractArchiveRecordWithIp7zSource(const QString &sFileName, con
         pStagedOutput = limitedOutput.data();
     }
 
-    const bool bExtracted = runExtract(&opened, entries, sPassword, &nIndex, 1, false, QString(), pStagedOutput, pErrorString, pPdStruct);
+    // Shadow-mode output metering (XFU-015). This route has no map-bearing
+    // public caller (the widget supplies only nMaxOutputSize), so the budget
+    // is minted from resolver defaults - the honest ceiling for what this route
+    // can know. At defaults it never refuses; it keeps the single-record ip7z
+    // spine exercised for the differential zero-breach evidence.
+    XBinary::OUTPUT_POLICY policy;
+    QSharedPointer<XBinary::OUTPUT_BUDGET> spOutputBudget;
+    if (XBinary::resolveUnpackOutputPolicy(QMap<XBinary::UNPACK_PROP, QVariant>(), &policy)) {
+        spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>::create();
+        spOutputBudget->setLimits(policy.nMaxEntryOutputSize, policy.nMaxTotalOutputSize,
+                                  policy.nMaxEntryCount, policy.nMaxMemoryOutputSize);
+    }
+
+    const bool bExtracted = runExtract(&opened, entries, sPassword, &nIndex, 1, false, QString(), pStagedOutput, pErrorString, pPdStruct, -1, spOutputBudget);
     opened.close();
     if (limitedOutput && limitedOutput->isLimitExceeded()) {
         setError(pErrorString, QStringLiteral("Selected archive record exceeds the output-size limit"));

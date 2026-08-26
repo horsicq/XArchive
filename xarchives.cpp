@@ -183,7 +183,8 @@ bool resolveStaticRecord(XBinary *pBinary, const XArchive::RECORD *pRecord,
 
 bool unpackStaticRecord(XBinary *pBinary, const XArchive::RECORD *pRecord,
                         QIODevice *pDestDevice,
-                        XBinary::PDSTRUCT *pPdStruct)
+                        XBinary::PDSTRUCT *pPdStruct,
+                        const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     qint32 nRecordIndex = -1;
     XBinary::ARCHIVERECORD archiveRecord = {};
@@ -194,7 +195,7 @@ bool unpackStaticRecord(XBinary *pBinary, const XArchive::RECORD *pRecord,
 
     return pBinary->unpackRecordByIndex(
         nRecordIndex, &archiveRecord, pDestDevice,
-        QMap<XBinary::UNPACK_PROP, QVariant>(), pPdStruct);
+        mapProperties, pPdStruct);
 }
 
 }  // namespace
@@ -277,7 +278,8 @@ QList<XArchive::RECORD> XArchives::getRecordsFromDirectory(const QString &sDirec
     return listResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedSize)
+QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset, qint64 nDecompressedSize,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     QByteArray baResult;
 
@@ -295,7 +297,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
         QBuffer buffer(&baResult);
         const bool bOpened = buffer.open(QIODevice::ReadWrite);
         const bool bUnpacked = bOpened &&
-            unpackStaticRecord(pBinary, pRecord, &buffer, pPdStruct);
+            unpackStaticRecord(pBinary, pRecord, &buffer, pPdStruct, mapProperties);
         buffer.close();
 
         if (!bUnpacked || !XBinary::isPdStructNotCanceled(pPdStruct) ||
@@ -317,7 +319,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
     XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
-        baResult = pArchives->decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+        baResult = pArchives->decompress(pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize, mapProperties);
     }
 
     delete pBinary;
@@ -326,7 +328,7 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const XArchive::RECORD *pRe
 }
 
 QByteArray XArchives::decompress(const QString &sFileName, const XArchive::RECORD *pRecord, XBinary::PDSTRUCT *pPdStruct, qint64 nDecompressedOffset,
-                                 qint64 nDecompressedSize)
+                                 qint64 nDecompressedSize, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     QByteArray baResult;
 
@@ -334,14 +336,15 @@ QByteArray XArchives::decompress(const QString &sFileName, const XArchive::RECOR
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        baResult = decompress(&file, pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize);
+        baResult = decompress(&file, pRecord, pPdStruct, nDecompressedOffset, nDecompressedSize, mapProperties);
         file.close();
     }
 
     return baResult;
 }
 
-QByteArray XArchives::decompress(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XArchives::decompress(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     QList<XArchive::RECORD> listRecords = getRecords(
         pDevice, XBinary::FT_UNKNOWN, -1, pPdStruct);
@@ -351,10 +354,11 @@ QByteArray XArchives::decompress(QIODevice *pDevice, const QString &sRecordFileN
 
     if (record.spInfo.sRecordName.isEmpty()) return QByteArray();
 
-    return decompress(pDevice, &record, pPdStruct);
+    return decompress(pDevice, &record, pPdStruct, 0, -1, mapProperties);
 }
 
-QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct)
+QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     QByteArray baResult;
 
@@ -362,14 +366,15 @@ QByteArray XArchives::decompress(const QString &sFileName, const QString &sRecor
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        baResult = decompress(&file, sRecordFileName, pPdStruct);
+        baResult = decompress(&file, sRecordFileName, pPdStruct, mapProperties);
         file.close();
     }
 
     return baResult;
 }
 
-bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     bool bResult = false;
 
@@ -399,7 +404,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
                 if (outputFile.open(QIODevice::WriteOnly)) {
                     bResult = pBinary->unpackRecordByIndex(
                         nRecordIndex, &archiveRecord, &outputFile,
-                        QMap<XBinary::UNPACK_PROP, QVariant>(), pPdStruct);
+                        mapProperties, pPdStruct);
                     if (bResult &&
                         XBinary::isPdStructNotCanceled(pPdStruct) &&
                         (outputFile.error() == QFile::NoError)) {
@@ -419,7 +424,7 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
-        bResult = pArchives->decompressToFile(pRecord, sResultFileName, pPdStruct);
+        bResult = pArchives->decompressToFile(pRecord, sResultFileName, pPdStruct, mapProperties);
     }
 
     delete pBinary;
@@ -427,7 +432,8 @@ bool XArchives::decompressToFile(QIODevice *pDevice, XArchive::RECORD *pRecord, 
     return bResult;
 }
 
-bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord, QIODevice *pDestDevice, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord, QIODevice *pDestDevice, XBinary::PDSTRUCT *pPdStruct,
+                                   const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     bool bResult = false;
 
@@ -442,7 +448,7 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
 
     if (pBinary && XFormats::isStaticUnpacker(fileType)) {
         bResult = unpackStaticRecord(
-            pBinary, pRecord, pDestDevice, pPdStruct);
+            pBinary, pRecord, pDestDevice, pPdStruct, mapProperties);
         delete pBinary;
         return bResult;
     }
@@ -450,7 +456,7 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
     XArchive *pArchives = dynamic_cast<XArchive *>(pBinary);
 
     if (pArchives) {
-        bResult = pArchives->decompressToDevice(pRecord, pDestDevice, pPdStruct);
+        bResult = pArchives->decompressToDevice(pRecord, pDestDevice, pPdStruct, mapProperties);
     }
 
     delete pBinary;
@@ -458,7 +464,8 @@ bool XArchives::decompressToDevice(QIODevice *pDevice, XArchive::RECORD *pRecord
     return bResult;
 }
 
-bool XArchives::decompressToFile(const QString &sFileName, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToFile(const QString &sFileName, XArchive::RECORD *pRecord, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     bool bResult = false;
 
@@ -466,7 +473,7 @@ bool XArchives::decompressToFile(const QString &sFileName, XArchive::RECORD *pRe
     file.setFileName(sFileName);
 
     if (file.open(QIODevice::ReadOnly)) {
-        bResult = decompressToFile(&file, pRecord, sResultFileName, pPdStruct);
+        bResult = decompressToFile(&file, pRecord, sResultFileName, pPdStruct, mapProperties);
 
         file.close();
     }
@@ -474,7 +481,8 @@ bool XArchives::decompressToFile(const QString &sFileName, XArchive::RECORD *pRe
     return bResult;
 }
 
-bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecordFileName, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecordFileName, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct,
+                                 const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties)
 {
     bool bResult = false;
 
@@ -487,7 +495,7 @@ bool XArchives::decompressToFile(const QString &sFileName, const QString &sRecor
         XArchive::RECORD record = XArchive::getArchiveRecord(sRecordFileName, &listRecords, pPdStruct);
 
         if (record.spInfo.sRecordName != "") {
-            bResult = decompressToFile(&file, &record, sResultFileName, pPdStruct);
+            bResult = decompressToFile(&file, &record, sResultFileName, pPdStruct, mapProperties);
         }
 
         file.close();
@@ -607,11 +615,24 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
     if (bProbeOpened) nativeProbe.close();
 
     if (!bPreferNative && isIp7zSourceAvailable()) {
+        // Shadow-mode output budget (XFU-015): resolve the aggregate/member-count
+        // policy from mapProperties and mint an operation-scoped budget for the
+        // ip7z bridge. getUnpackOutputLimit above only reads the per-member key;
+        // the aggregate MAX_TOTAL / entry-count / memory keys are parsed solely
+        // by resolveUnpackOutputPolicy. A malformed aggregate key must stay
+        // behaviour-neutral, so a false return simply leaves the budget null.
+        XBinary::OUTPUT_POLICY policy;
+        QSharedPointer<XBinary::OUTPUT_BUDGET> spOutputBudget;
+        if (XBinary::resolveUnpackOutputPolicy(mapProperties, &policy)) {
+            spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>::create();
+            spOutputBudget->setLimits(policy.nMaxEntryOutputSize, policy.nMaxTotalOutputSize,
+                                      policy.nMaxEntryCount, policy.nMaxMemoryOutputSize);
+        }
         QList<XBinary::ARCHIVERECORD> listProbe;
         if (listArchiveWithIp7zSource(sFileName, sPassword, &listProbe, &sIp7zError, pPdStruct)) {
             bResult = extractArchiveWithIp7zSource(
                 sFileName, sPassword, sResultFileFolder, &sIp7zError,
-                pPdStruct, nMaxOutputSize);
+                pPdStruct, nMaxOutputSize, spOutputBudget);
             if (bResult) {
                 // A committed extraction can still retain obsolete rollback
                 // data when cleanup fails. Preserve success, but expose the
@@ -909,6 +930,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ASAR);
     result.insert(XBinary::FT_XAR);
     result.insert(XBinary::FT_ZOO);
+    result.insert(XBinary::FT_STK);
     result.insert(XBinary::FT_WARC);
     result.insert(XBinary::FT_MTREE);
     result.insert(XBinary::FT_UU);

@@ -24,6 +24,7 @@
 #include "Algos/algo_utils.h"
 #include "Algos/xkwajlzssdecoder.h"
 #include "Algos/xkwajlzhdecoder.h"
+#include "Algos/xcoktellzdecoder.h"
 #include <QCoreApplication>
 #include <QPointer>
 #include <algorithm>
@@ -907,7 +908,8 @@ bool XDecompress::decompressFPART(const XBinary::FPART &fPart, QIODevice *pDevic
 }
 
 bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveRecord, QIODevice *pDeviceInput, QIODevice *pDeviceOutput,
-                                          const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct)
+                                          const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct,
+                                          const QSharedPointer<XBinary::OUTPUT_BUDGET> &spOutputBudget)
 {
     // This is the ARCHIVERECORD-native decode entry point, and it is reachable
     // from shipping callers (XFormats::extractArchiveRecordsToFolder,
@@ -953,6 +955,7 @@ bool XDecompress::decompressArchiveRecord(const XBinary::ARCHIVERECORD &archiveR
     XBinary::DATAPROCESS_STATE state = {};
     state.mapProperties = archiveRecord.mapProperties;
     state.mapUnpackProperties = mapUnpackProperties;
+    state.spOutputBudget = spOutputBudget;  // XFU-015: share the operation budget into the decode chain
     state.pDeviceInput = pDeviceInput;
     state.pDeviceOutput = pDeviceOutput;
     state.nInputOffset = archiveRecord.nStreamOffset;
@@ -2066,6 +2069,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_LZSS) {
         bResult = XKWAJLZSSDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_COKTEL_LZ) {
+        bResult = XCoktelLZDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_LZH) {
         bResult = XKWAJLZHDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_MSZIP) {
