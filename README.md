@@ -6,3 +6,4 @@ Archives formats
 * Quake PAK
 * Doom WAD
 * Build GRP
+* Coktel Vision STK
