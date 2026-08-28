@@ -28,7 +28,10 @@ class XZip : public XArchive {
     Q_OBJECT
 
 public:
-    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {
+        bool bECDOffsetCached = false;
+        qint64 nECDOffset = -1;
+    };
 
     bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
     void *getInternalInfo(PDSTRUCT *pPdStruct) override;
