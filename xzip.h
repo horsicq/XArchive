@@ -91,11 +91,11 @@ public:
         CMETHOD_LZMA = 14,
         CMETHOD_ZSTD = 93,
         CMETHOD_XZ = 95,
+        CMETHOD_JPEG = 96,  // WinZip JPEG recompression
+        CMETHOD_WAVPACK = 97,
         CMETHOD_PPMD = 98,
         CMETHOD_AES = 99,  // Apple or AES?
-        // TODO
-        // 96 - JPEG (recompression) - WinZip proprietary
-        // 97 - WavPack
+        // TODO 94 - MP3 (WinZip proprietary, no published specification)
     };
 
     // AES encryption mode constants

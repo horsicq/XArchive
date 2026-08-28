@@ -1160,7 +1160,7 @@ char *WavpackGetFileExtension (WavpackContext *wpc)
     if (wpc && wpc->file_extension [0])
         return wpc->file_extension;
     else
-        return "wav";
+        return (char *)"wav";
 }
 
 // This function initializes everything required to unpack a WavPack block
@@ -1743,8 +1743,8 @@ static void bs_read (Bitstream *bs);
 static void bs_open_read (Bitstream *bs, void *buffer_start, void *buffer_end)
 {
     bs->error = bs->sr = bs->bc = 0;
-    bs->ptr = (bs->buf = (uint16_t *) buffer_start) - 1;  /* XARCHIVE-C++ */
-    bs->end = (uint16_t *) buffer_end;  /* XARCHIVE-C++ */
+    bs->ptr = (bs->buf = (decltype(bs->buf)) buffer_start) - 1;  /* XARCHIVE-C++ */
+    bs->end = (decltype(bs->end)) buffer_end;  /* XARCHIVE-C++ */
     bs->wrap = bs_read;
 }
 
@@ -1840,7 +1840,7 @@ uint32_t read_next_header (WavpackStreamReader64 *reader, void *id, WavpackHeade
             !(*++sp & 1) && sp [2] < 16 && !sp [3] && (sp [2] || sp [1] || *sp >= 24) && sp [5] == 4 &&
             sp [4] >= (MIN_STREAM_VERS & 0xff) && sp [4] <= (MAX_STREAM_VERS & 0xff) && sp [18] < 3 && !sp [19]) {
                 memcpy (wphdr, buffer, sizeof (*wphdr));
-                WavpackLittleEndianToNative (wphdr, WavpackHeaderFormat);
+                WavpackLittleEndianToNative (wphdr, (char *)WavpackHeaderFormat);
                 return bytes_skipped;
             }
 
@@ -2182,14 +2182,14 @@ int WavpackVerifySingleBlock (unsigned char *buffer, int verify_checksum)
             while (wcount--)
                 csum = (csum * 3) + *csptr++;
 #else
-            WavpackNativeToLittleEndian ((WavpackHeader *) buffer, WavpackHeaderFormat);
+            WavpackNativeToLittleEndian ((WavpackHeader *) buffer, (char *)WavpackHeaderFormat);
 
             while (wcount--) {
                 csum = (csum * 3) + csptr [0] + (csptr [1] << 8);
                 csptr += 2;
             }
 
-            WavpackLittleEndianToNative ((WavpackHeader *) buffer, WavpackHeaderFormat);
+            WavpackLittleEndianToNative ((WavpackHeader *) buffer, (char *)WavpackHeaderFormat);
 #endif
 
             if (meta_bc == 4) {
@@ -6679,7 +6679,7 @@ int WavpackSeekSample64 (WavpackContext *wpc, int64_t sample)
     if (!wps->blockbuff) {
         wpc->reader->set_pos_abs (wpc->wv_in, wpc->filepos);
         wpc->reader->read_bytes (wpc->wv_in, &wps->wphdr, sizeof (WavpackHeader));
-        WavpackLittleEndianToNative (&wps->wphdr, WavpackHeaderFormat);
+        WavpackLittleEndianToNative (&wps->wphdr, (char *)WavpackHeaderFormat);
 
         if ((wps->wphdr.ckSize & 1) || wps->wphdr.ckSize < 24 || wps->wphdr.ckSize >= 1024 * 1024) {
             free_streams (wpc);
@@ -6709,7 +6709,7 @@ int WavpackSeekSample64 (WavpackContext *wpc, int64_t sample)
         if (wpc->wvc_flag) {
             wpc->reader->set_pos_abs (wpc->wvc_in, wpc->file2pos);
             wpc->reader->read_bytes (wpc->wvc_in, &wps->wphdr, sizeof (WavpackHeader));
-            WavpackLittleEndianToNative (&wps->wphdr, WavpackHeaderFormat);
+            WavpackLittleEndianToNative (&wps->wphdr, (char *)WavpackHeaderFormat);
 
             if ((wps->wphdr.ckSize & 1) || wps->wphdr.ckSize < 24 || wps->wphdr.ckSize >= 1024 * 1024) {
                 free_streams (wpc);
@@ -6893,7 +6893,7 @@ static int64_t find_header (WavpackStreamReader64 *reader, void *id, int64_t fil
                 !(*++sp & 1) && sp [2] < 16 && !sp [3] && (sp [2] || sp [1] || *sp >= 24) && sp [5] == 4 &&
                 sp [4] >= (MIN_STREAM_VERS & 0xff) && sp [4] <= (MAX_STREAM_VERS & 0xff) && sp [18] < 3 && !sp [19]) {
                     memcpy (wphdr, sp - 4, sizeof (*wphdr));
-                    WavpackLittleEndianToNative (wphdr, WavpackHeaderFormat);
+                    WavpackLittleEndianToNative (wphdr, (char *)WavpackHeaderFormat);
 
                     if (wphdr->block_samples && (wphdr->flags & INITIAL_BLOCK)) {
                         int64_t retpos = reader->get_pos (id) - (ep - sp + 4);
