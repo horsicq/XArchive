@@ -497,6 +497,32 @@ bool XUU::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
                 pState->mapUnpackProperties, nDecodedSize)) {
             return false;
         }
+        // The direct-payload route bypasses the base decode chain, so it
+        // must charge the operation budget itself: one entry, nDecodedSize
+        // produced bytes (publishUnpackOutput never debits the copy).
+        if (pState->spOutputBudget) {
+            if (!pState->spOutputBudget->beginEntry(
+                    pState->nCurrentIndex, pContext->sDeclaredName)) {
+                if (pState->spOutputBudget->isEnforcing()) {
+                    XBinary::setPdStructErrorString(
+                        pPdStruct,
+                        tr("Unpacked output exceeds the configured limit"));
+                    return false;
+                }
+                XBinary::OUTPUT_BUDGET::noteShadowRefusal(
+                    pState->spOutputBudget.data());
+            }
+            if (!pState->spOutputBudget->debit(nDecodedSize)) {
+                if (pState->spOutputBudget->isEnforcing()) {
+                    XBinary::setPdStructErrorString(
+                        pPdStruct,
+                        tr("Unpacked output exceeds the configured limit"));
+                    return false;
+                }
+                XBinary::OUTPUT_BUDGET::noteShadowRefusal(
+                    pState->spOutputBudget.data());
+            }
+        }
         const bool bResult = publishUnpackOutput(
             pContext->pDecodedDevice, pDevice, pState, pPdStruct);
         // publishUnpackOutput() finishes with the outer source-authentication
@@ -506,6 +532,9 @@ bool XUU::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
         pState->nCurrentOffset = 0;
         return true;
     }
+    // Delegate to the inner archive; it performs its own entry and
+    // produced-byte accounting against the shared operation budget.
+    pContext->innerState.spOutputBudget = pState->spOutputBudget;
     const bool bResult = pContext->pInnerArchive->unpackCurrent(&pContext->innerState, pDevice, pPdStruct);
     if (!guardedThis || !bResult ||
         (pContext->innerState.nCurrentIndex != pState->nCurrentIndex) ||

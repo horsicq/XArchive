@@ -622,6 +622,21 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
     XXZ_UNPACK_CONTEXT *pContext = (XXZ_UNPACK_CONTEXT *)pState->pContext;
     if (pContext->nCompressedSize < 0) return false;
     const qint64 nCompressedSize = pContext->nCompressedSize;
+
+    // This override bypasses the base decode chain's per-entry gate; account
+    // the member here. The decoded size is unknown up front, so the budget
+    // debit inside _writeDevice (through state.spOutputBudget) is the only
+    // aggregate bound on the produced bytes.
+    if (pState->spOutputBudget) {
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, pContext->sFileName)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+    }
+
     // The authoritative uncompressed total lives in the validated XZ
     // Index(es), which decompressXZ walks before decoding any Block.  Stage in
     // a growable temporary file rather than rejecting the still-unknown size
@@ -641,6 +656,7 @@ bool XXZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
         XBinary::DATAPROCESS_STATE state = {};
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_XZ);
         state.mapUnpackProperties = pState->mapUnpackProperties;
+        state.spOutputBudget = pState->spOutputBudget;
         state.pDeviceInput = &sd;
         state.pDeviceOutput = pStage.get();
         state.nInputOffset = 0;

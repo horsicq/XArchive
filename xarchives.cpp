@@ -25,56 +25,7 @@
 #include <QSaveFile>
 #include <QTemporaryDir>
 
-#include "xfilteredarchive.h"
-
 namespace {
-
-// Automatic nested-filter probing materializes the decoded stream.  Keep that
-// decision bounded on 32-bit builds; larger raw streams remain fully available
-// through the directly compiled ip7z source handlers instead of being decoded several
-// times merely to discover whether their payload is another archive.
-const qint64 NATIVE_FILTER_AUTO_PROBE_MAX_INPUT_SIZE = 256LL * 1024 * 1024;
-
-bool ip7zAllowsNativeFallback(const QString &sError)
-{
-    // Password, CRC, corruption, cancellation, and unsafe-path failures are
-    // authoritative. Only a structured unsupported-format result may fall
-    // back to the native XArchive implementation.
-    return XArchives::isIp7zUnsupportedFormatError(sError);
-}
-
-bool hasLegacyZstdMagic(QIODevice *pDevice)
-{
-    if (!pDevice || !pDevice->isOpen() || !pDevice->isReadable()) return false;
-
-    // The magic lives at offset 0, not at wherever the caller left the cursor.
-    // peek() reads from the current position, so a device that has already been
-    // used - the explorer widget keeps one alive across extractions - was
-    // classified on the wrong bytes and misrouted in both directions.
-    if (pDevice->isSequential()) return false;
-
-    const qint64 nSavedPos = pDevice->pos();
-    if (!pDevice->seek(0)) return false;
-    const QByteArray baMagic = pDevice->read(4);
-    pDevice->seek(nSavedPos);
-
-    if (baMagic.size() != 4) return false;
-
-    const unsigned char *p = reinterpret_cast<const unsigned char *>(baMagic.constData());
-    const quint32 nMagic = static_cast<quint32>(p[0]) |
-                           (static_cast<quint32>(p[1]) << 8) |
-                           (static_cast<quint32>(p[2]) << 16) |
-                           (static_cast<quint32>(p[3]) << 24);
-    return (nMagic >= 0xFD2FB524U) && (nMagic <= 0xFD2FB527U);
-}
-
-void setOperationError(XBinary::PDSTRUCT *pPdStruct, const QString &sError)
-{
-    if (!sError.isEmpty() && pPdStruct &&
-        XBinary::getPdStructErrorString(pPdStruct).isEmpty()) {
-        XBinary::setPdStructErrorString(pPdStruct, sError);
-    }
-}
 
 XBinary::FT preferredUnpackerFileType(QIODevice *pDevice,
                                        XBinary::PDSTRUCT *pPdStruct)
@@ -82,7 +33,7 @@ XBinary::FT preferredUnpackerFileType(QIODevice *pDevice,
     if (!pDevice) return XBinary::FT_UNKNOWN;
 
     // Installer/packer formats are also executables.  Probe their dedicated
-    // readers before generic archives/ip7z can reinterpret the same PE as raw
+    // readers before generic archive readers can reinterpret the same PE as raw
     // sections or an overlay container.
     const XBinary::FT staticType = XFormats::getPrefFileType(
         pDevice,
@@ -99,6 +50,25 @@ XBinary::FT preferredUnpackerFileType(QIODevice *pDevice,
         XBinary::FT_FLAG_ARCHIVES | XBinary::FT_FLAG_STATICUNPACKERS,
         pPdStruct);
     return archiveType;
+}
+
+bool hasAuthoritativeStreamingReader(XBinary::FT fileType)
+{
+    switch (fileType) {
+        case XBinary::FT_ZPAQ:
+        case XBinary::FT_BCM:
+        case XBinary::FT_LPAQ8:
+        case XBinary::FT_PEA:
+        case XBinary::FT_FREEARC:
+        case XBinary::FT_CKP:
+        case XBinary::FT_EDP:
+        case XBinary::FT_MPQ:
+        case XBinary::FT_BIGF:
+        case XBinary::FT_RIB:
+        case XBinary::FT_PARSEC_ARCHIVE:
+        case XBinary::FT_PMM: return true;
+        default: return false;
+    }
 }
 
 XArchive::RECORD legacyRecordFromArchiveRecord(
@@ -555,10 +525,13 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
     // authoritative and must surface as an error rather than as a second,
     // weaker extraction attempt.
     if (!bResult && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        XBinary::UNPACK_STATE probeState = {};
-        const bool bStreamingImplemented =
-            pArchive->initUnpack(&probeState, mapProperties, pPdStruct);
-        pArchive->finishUnpack(&probeState, nullptr);
+        bool bStreamingImplemented = hasAuthoritativeStreamingReader(fileType);
+        if (!bStreamingImplemented) {
+            XBinary::UNPACK_STATE probeState = {};
+            bStreamingImplemented =
+                pArchive->initUnpack(&probeState, mapProperties, pPdStruct);
+            pArchive->finishUnpack(&probeState, nullptr);
+        }
 
         if (!bStreamingImplemented &&
             XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -581,166 +554,47 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
 bool XArchives::decompressToFolder(const QString &sFileName, const QString &sResultFileFolder,
                                    const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct)
 {
-    bool bResult = false;
-    QString sIp7zError;
+    // Keep the filename overload's eager policy validation. The native device
+    // path validates again when extraction starts, but retaining this check
+    // preserves the existing error contract for malformed limits.
     qint64 nMaxOutputSize = -1;
     if (!XBinary::getUnpackOutputLimit(mapProperties, &nMaxOutputSize)) {
         XBinary::setPdStructErrorString(
             pPdStruct, tr("Invalid unpacked-output limit"));
         return false;
     }
-    const QString sPassword = mapProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
-    XBinary::FT fileType = XBinary::FT_UNKNOWN;
-    QFile nativeProbe(sFileName);
-    const bool bProbeOpened = nativeProbe.open(QIODevice::ReadOnly);
-    bool bStaticUnpacker = false;
-    bool bPreferNative = false;
-    if (bProbeOpened) {
-        fileType = preferredUnpackerFileType(&nativeProbe, pPdStruct);
-        bStaticUnpacker = XFormats::isStaticUnpacker(fileType);
-        bPreferNative = bStaticUnpacker ||
-            isNativeReaderPreferredFileType(fileType, &nativeProbe, pPdStruct);
+    XBinary::OUTPUT_POLICY policy = {};
+    if (!XBinary::resolveUnpackOutputPolicy(mapProperties, &policy)) {
+        XBinary::setPdStructErrorString(
+            pPdStruct, tr("Invalid unpacked-output limit"));
+        return false;
     }
 
-    if (bStaticUnpacker) {
-        bResult = decompressToFolder(&nativeProbe, sResultFileFolder,
-                                     mapProperties, pPdStruct);
-        nativeProbe.close();
-        if (!bResult) {
-            setOperationError(pPdStruct,
-                              tr("Static unpacker extraction failed"));
-        }
-        return bResult;
-    }
-    if (bProbeOpened) nativeProbe.close();
+    QFile file(sFileName);
 
-    if (!bPreferNative && isIp7zSourceAvailable()) {
-        // Shadow-mode output budget (XFU-015): resolve the aggregate/member-count
-        // policy from mapProperties and mint an operation-scoped budget for the
-        // ip7z bridge. getUnpackOutputLimit above only reads the per-member key;
-        // the aggregate MAX_TOTAL / entry-count / memory keys are parsed solely
-        // by resolveUnpackOutputPolicy. A malformed aggregate key must stay
-        // behaviour-neutral, so a false return simply leaves the budget null.
-        XBinary::OUTPUT_POLICY policy;
-        QSharedPointer<XBinary::OUTPUT_BUDGET> spOutputBudget;
-        if (XBinary::resolveUnpackOutputPolicy(mapProperties, &policy)) {
-            spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>::create();
-            spOutputBudget->setLimits(policy.nMaxEntryOutputSize, policy.nMaxTotalOutputSize,
-                                      policy.nMaxEntryCount, policy.nMaxMemoryOutputSize);
-        }
-        QList<XBinary::ARCHIVERECORD> listProbe;
-        if (listArchiveWithIp7zSource(sFileName, sPassword, &listProbe, &sIp7zError, pPdStruct)) {
-            bResult = extractArchiveWithIp7zSource(
-                sFileName, sPassword, sResultFileFolder, &sIp7zError,
-                pPdStruct, nMaxOutputSize, spOutputBudget);
-            if (bResult) {
-                // A committed extraction can still retain obsolete rollback
-                // data when cleanup fails. Preserve success, but expose the
-                // recovery warning through the normal operation diagnostic.
-                setOperationError(pPdStruct, sIp7zError);
-                return true;
-            }
+    if (!file.open(QIODevice::ReadOnly)) return false;
 
-            // Extraction is staged by the source-built ip7z bridge, so an
-            // unsupported coder has committed no destination entries.  Retry
-            // that narrowly classified case through the native XArchive
-            // reader; password, CRC, corruption, cancellation and path-safety
-            // errors remain authoritative and never fall back.
-            if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
-                !ip7zAllowsNativeFallback(sIp7zError)) {
-                setOperationError(pPdStruct, sIp7zError);
-                return false;
-            }
-        }
-
-        if (!XBinary::isPdStructNotCanceled(pPdStruct) || !ip7zAllowsNativeFallback(sIp7zError)) {
-            setOperationError(pPdStruct, sIp7zError);
-            return false;
-        }
-    }
-
-    QFile file;
-    file.setFileName(sFileName);
-
-    if (file.open(QIODevice::ReadOnly)) {
-        bResult = decompressToFolder(&file, sResultFileFolder, mapProperties, pPdStruct);
-        file.close();
-    }
-
-    if (!bResult) {
-        setOperationError(pPdStruct, sIp7zError);
-    }
+    const bool bResult = decompressToFolder(
+        &file, sResultFileFolder, mapProperties, pPdStruct);
+    file.close();
 
     return bResult;
 }
 
 bool XArchives::testArchive(const QString &sFileName, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct)
 {
-    QString sIp7zError;
-    const QString sPassword = mapProperties.value(XBinary::UNPACK_PROP_PASSWORD).toString();
-    XBinary::FT fileType = XBinary::FT_UNKNOWN;
-    QFile nativeProbe(sFileName);
-    const bool bProbeOpened = nativeProbe.open(QIODevice::ReadOnly);
-    bool bStaticUnpacker = false;
-    bool bPreferNative = false;
-    if (bProbeOpened) {
-        fileType = preferredUnpackerFileType(&nativeProbe, pPdStruct);
-        bStaticUnpacker = XFormats::isStaticUnpacker(fileType);
-        bPreferNative = bStaticUnpacker ||
-            isNativeReaderPreferredFileType(fileType, &nativeProbe, pPdStruct);
-    }
-
-    if (bStaticUnpacker) {
-        QTemporaryDir temporaryDir;
-        const bool bResult = temporaryDir.isValid() &&
-            decompressToFolder(&nativeProbe, temporaryDir.path(),
-                               mapProperties, pPdStruct);
-        nativeProbe.close();
-        if (!bResult) {
-            setOperationError(pPdStruct,
-                              temporaryDir.isValid()
-                                  ? tr("Static unpacker test failed")
-                                  : tr("Cannot create temporary directory"));
-        }
-        return bResult;
-    }
-    if (bProbeOpened) nativeProbe.close();
-
-    if (!bPreferNative && isIp7zSourceAvailable()) {
-        QList<XBinary::ARCHIVERECORD> listProbe;
-        if (listArchiveWithIp7zSource(sFileName, sPassword, &listProbe, &sIp7zError, pPdStruct)) {
-            const bool bResult = testArchiveWithIp7zSource(sFileName, sPassword, &sIp7zError, pPdStruct);
-            if (bResult) return true;
-            if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
-                !ip7zAllowsNativeFallback(sIp7zError)) {
-                setOperationError(pPdStruct, sIp7zError);
-                return false;
-            }
-        }
-
-        if (!XBinary::isPdStructNotCanceled(pPdStruct) || !ip7zAllowsNativeFallback(sIp7zError)) {
-            setOperationError(pPdStruct, sIp7zError);
-            return false;
-        }
-    }
-
     QTemporaryDir temporaryDir;
-    bool bResult = false;
-
-    if (temporaryDir.isValid()) {
-        QFile file(sFileName);
-
-        if (file.open(QIODevice::ReadOnly)) {
-            bResult = decompressToFolder(&file, temporaryDir.path(), mapProperties, pPdStruct);
-            file.close();
-        }
-    } else if (pPdStruct) {
+    if (!temporaryDir.isValid()) {
         XBinary::setPdStructErrorString(pPdStruct, tr("Cannot create temporary directory"));
+        return false;
     }
 
-    if (!bResult) {
-        setOperationError(pPdStruct, sIp7zError);
-    }
+    QFile file(sFileName);
+    if (!file.open(QIODevice::ReadOnly)) return false;
+
+    const bool bResult = decompressToFolder(
+        &file, temporaryDir.path(), mapProperties, pPdStruct);
+    file.close();
 
     return bResult;
 }
@@ -775,7 +629,13 @@ bool XArchives::isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &
     QSet<XBinary::FT> _stAvailable = stAvailable;
 
     if (pDevice) {
-        QSet<XBinary::FT> stFT = XFormats::getFileTypes(pDevice, XBinary::FT_FLAG_ARCHIVES);
+        // InstallShield cabinets are implemented by XStaticUnpacker rather
+        // than the Microsoft-CAB archive reader.  Keep the static flag in this
+        // openability probe so FT_ISCAB can actually match the entry returned
+        // by getArchiveOpenValidFileTypes().
+        QSet<XBinary::FT> stFT = XFormats::getFileTypes(
+            pDevice,
+            XBinary::FT_FLAG_ARCHIVES | XBinary::FT_FLAG_STATICUNPACKERS);
 
         if (!_stAvailable.count()) {
             _stAvailable = getArchiveOpenValidFileTypes();
@@ -799,74 +659,6 @@ bool XArchives::isArchiveOpenValid(const QString &sFileName, const QSet<XBinary:
         file.close();
     }
 
-    return bResult;
-}
-
-bool XArchives::isNativeReaderPreferredFileType(XBinary::FT fileType,
-                                                QIODevice *pDevice,
-                                                XBinary::PDSTRUCT *pPdStruct)
-{
-    switch (fileType) {
-        case XBinary::FT_TAR_GZ:
-        case XBinary::FT_TAR_BZIP2:
-        case XBinary::FT_TAR_LZIP:
-        case XBinary::FT_TAR_LZMA:
-        case XBinary::FT_TAR_LZOP:
-        case XBinary::FT_TAR_XZ:
-        case XBinary::FT_TAR_Z:
-        case XBinary::FT_TAR_ZSTD:
-        case XBinary::FT_TAR_LZ4:
-        case XBinary::FT_NPM:
-        case XBinary::FT_BROTLI:
-        case XBinary::FT_LZ4:
-        case XBinary::FT_LZ5:
-        case XBinary::FT_LIZARD:
-        case XBinary::FT_WARC:
-        case XBinary::FT_MTREE:
-        case XBinary::FT_UU:
-        case XBinary::FT_QUAKE_PAK:
-        case XBinary::FT_DOOM_WAD:
-        case XBinary::FT_BUILD_GRP:
-        // SAR and ARX have no compiled ip7z handler, and both reuse LHA's
-        // method tag closely enough that the LZH handler will happily list one
-        // before failing to extract it. Letting that happen turns a working
-        // native read into an "unsupported archive format", so keep them here
-        // rather than relying on ip7z declining them.
-        case XBinary::FT_SAR:
-        case XBinary::FT_ARX: return true;
-        case XBinary::FT_ISO9660:
-            // Raw CD sectors and CUE sheets are projected through XISO9660's
-            // native 2048-byte logical-sector view. ip7z's ISO handler seeks
-            // cooked offsets directly and cannot open these sources.
-            if (XISO9660::isCueOrRawImage(pDevice, pPdStruct)) return true;
-            break;
-        // The source-built ip7z handler is substantially faster for very large
-        // current-format Zstandard streams. A leading legacy v0.4-v0.7 frame
-        // must stay on the native adapter path; bounded current streams fall
-        // through to the generic native-filter probe below.
-        case XBinary::FT_ZSTD:
-            if (hasLegacyZstdMagic(pDevice)) return true;
-            break;
-        default: break;
-    }
-
-    if (!pDevice || !XFilteredArchive::isFilterFileType(fileType) ||
-        !pDevice->isOpen() || !pDevice->isReadable() || pDevice->isSequential()) {
-        return false;
-    }
-
-    const qint64 nSize = pDevice->size();
-    if ((nSize < 0) || (nSize > NATIVE_FILTER_AUTO_PROBE_MAX_INPUT_SIZE)) {
-        return false;
-    }
-
-    const QString sOriginalError = pPdStruct
-        ? XBinary::getPdStructErrorString(pPdStruct)
-        : QString();
-    const bool bResult = XFilteredArchive::isValid(pDevice, fileType, pPdStruct);
-    if (!bResult && pPdStruct && XBinary::isPdStructNotCanceled(pPdStruct)) {
-        XBinary::setPdStructErrorString(pPdStruct, sOriginalError);
-    }
     return bResult;
 }
 
@@ -915,6 +707,10 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ACE);
     result.insert(XBinary::FT_ARC);
     result.insert(XBinary::FT_FREEARC);
+    result.insert(XBinary::FT_ZPAQ);
+    result.insert(XBinary::FT_BCM);
+    result.insert(XBinary::FT_LPAQ8);
+    result.insert(XBinary::FT_PEA);
     result.insert(XBinary::FT_CFBF);
     result.insert(XBinary::FT_SZDD);
     result.insert(XBinary::FT_LZIP);
@@ -937,6 +733,14 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_QUAKE_PAK);
     result.insert(XBinary::FT_DOOM_WAD);
     result.insert(XBinary::FT_BUILD_GRP);
+    result.insert(XBinary::FT_RIB);
+    result.insert(XBinary::FT_PARSEC_ARCHIVE);
+    result.insert(XBinary::FT_PMM);
+    result.insert(XBinary::FT_CKP);
+    result.insert(XBinary::FT_EDP);
+    result.insert(XBinary::FT_MPQ);
+    result.insert(XBinary::FT_BIGF);
+    result.insert(XBinary::FT_ISCAB);
     result.insert(XBinary::FT_DOS4G);
     result.insert(XBinary::FT_DOS16M);
 

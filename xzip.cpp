@@ -63,6 +63,8 @@ XBinary::XIDSTRING _TABLE_XZip_CMETHOD[] = {
     {XZip::CMETHOD_LZMA, "LZMA"},
     {XZip::CMETHOD_ZSTD, "Zstandard"},
     {XZip::CMETHOD_XZ, "XZ"},
+    {XZip::CMETHOD_JPEG, "JPEG"},
+    {XZip::CMETHOD_WAVPACK, "WavPack"},
     {XZip::CMETHOD_PPMD, "PPMd"},
     {XZip::CMETHOD_AES, "AES"},
 };
@@ -1135,27 +1137,6 @@ static bool zipLocalRangeLessThan(const QPair<qint64, qint64> &a, const QPair<qi
     return a.first < b.first;
 }
 
-static const char ZIP_ECD_OFFSET_CACHED[] = "XZip_ECDOffsetCached";
-static const char ZIP_ECD_OFFSET[] = "XZip_ECDOffset";
-
-static bool zipTryGetCachedECDOffset(QIODevice *pDevice, qint64 *pnECDOffset)
-{
-    if (!pDevice || !pnECDOffset || !pDevice->property(ZIP_ECD_OFFSET_CACHED).toBool()) {
-        return false;
-    }
-
-    *pnECDOffset = pDevice->property(ZIP_ECD_OFFSET).toLongLong();
-    return true;
-}
-
-static void zipStoreCachedECDOffset(QIODevice *pDevice, qint64 nECDOffset)
-{
-    if (!pDevice) return;
-
-    pDevice->setProperty(ZIP_ECD_OFFSET_CACHED, true);
-    pDevice->setProperty(ZIP_ECD_OFFSET, nECDOffset);
-}
-
 qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
 {
     QPointer<XZip> guardedArchive(this);
@@ -1165,10 +1146,12 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
     const qint64 nSize = guardedSource->size();
     if (!guardedArchive || !guardedSource) return -1;
 
-    if (zipTryGetCachedECDOffset(guardedSource.data(), &nResult)) {
-        return guardedArchive && guardedSource ? nResult : -1;
-    }
-
+    // Per-instance only.  This cache holds an absolute offset into one specific
+    // device state, so it must die with that state: XBinary::setDevice() clears
+    // it through setInternalInfo(nullptr) along with every other format cache.
+    // Storing it on the QIODevice instead would put it beyond the reach of that
+    // invalidation -- a device reused for new contents (QBuffer::setData(), a
+    // reopened file) would keep answering with the previous file's EOCD offset.
     if (m_internalInfo.bECDOffsetCached) {
         return guardedArchive && guardedSource ? m_internalInfo.nECDOffset : -1;
     }
@@ -1436,7 +1419,6 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
     if (guardedArchive && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct)) {
         m_internalInfo.bECDOffsetCached = true;
         m_internalInfo.nECDOffset = nResult;
-        zipStoreCachedECDOffset(guardedSource.data(), nResult);
     }
 
     return guardedArchive && guardedSource &&
@@ -2204,6 +2186,8 @@ XArchive::HANDLE_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nF
         case CMETHOD_LZMA: result = HANDLE_METHOD_LZMA; break;
         case CMETHOD_ZSTD: result = HANDLE_METHOD_ZSTD; break;
         case CMETHOD_XZ: result = HANDLE_METHOD_XZ; break;
+        case CMETHOD_JPEG: result = HANDLE_METHOD_WINZIP_JPEG; break;
+        case CMETHOD_WAVPACK: result = HANDLE_METHOD_WAVPACK; break;
         case CMETHOD_PPMD: result = HANDLE_METHOD_PPMD8; break;
         case CMETHOD_AES: result = HANDLE_METHOD_ZIP_AES; break;
     }
@@ -2592,6 +2576,8 @@ QList<XBinary::PM_INFO> XZip::unpackImplemented()
         HANDLE_METHOD_ZSTD,
         HANDLE_METHOD_XZ,
         HANDLE_METHOD_PPMD8,
+        HANDLE_METHOD_WINZIP_JPEG,
+        HANDLE_METHOD_WAVPACK,
     };
 
     static const HANDLE_METHOD g_zipUnpackCryptoMethods[] = {
@@ -2708,13 +2694,28 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             return false;
         }
 
-        const quint32 nSignature = guardedArchive->read_uint32(nCDFHOffset);
+        const quint16 nNumberOfRecords = guardedArchive->read_uint16(
+            nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD,
+                                  nTotalNumberOfRecords));
         if (!guardedArchive) {
             *pState = UNPACK_STATE();
             return false;
         }
-        if (nSignature == SIGNATURE_CFD) {
+
+        // findECDOffset() has already authenticated an empty EOCD. There is no
+        // central-file header to inspect when the archive contains no records.
+        if (nNumberOfRecords == 0) {
             bIsECD = true;
+        } else {
+            const quint32 nSignature =
+                guardedArchive->read_uint32(nCDFHOffset);
+            if (!guardedArchive) {
+                *pState = UNPACK_STATE();
+                return false;
+            }
+            if (nSignature == SIGNATURE_CFD) {
+                bIsECD = true;
+            }
         }
     }
 
@@ -2727,7 +2728,10 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             *pState = UNPACK_STATE();
             return false;
         }
-        bResult = (pState->nNumberOfRecords > 0);
+        // A structurally authenticated EOCD with zero records is a valid empty
+        // ZIP archive. Keep an unpack context so wrappers such as ZIP SFX can
+        // list and finish it successfully without inventing a member.
+        bResult = true;
     } else if (nECDOffset == -1) {
         // Fallback: count complete local file records only when no authenticated
         // central directory is available. If an EOCD signature follows those

@@ -656,6 +656,22 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
                                             pContext->nUncompressedSize)) {
         return false;
     }
+
+    // This override bypasses the base decode chain's per-entry gate; account
+    // the record here. Produced bytes are charged by _writeDevice through
+    // state.spOutputBudget; the publish copy is never charged.
+    if (pState->spOutputBudget) {
+        if (!pState->spOutputBudget->beginEntry(
+                pState->nCurrentIndex,
+                XBinary::getDeviceFileBaseName(guardedSource.data()))) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+    }
+
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         pContext->nUncompressedSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedOutput || !guardedSource) return false;
@@ -705,6 +721,7 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         state.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_LZMA);
         state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, member.nUncompressedSize);
         state.mapUnpackProperties = pState->mapUnpackProperties;
+        state.spOutputBudget = pState->spOutputBudget;
         state.pDeviceInput = &inputDevice;
         state.pDeviceOutput = &outputDevice;
         state.nInputOffset = 0;

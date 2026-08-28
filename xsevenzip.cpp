@@ -2603,6 +2603,37 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                                 nStreamSize = state.listInStreams.at(nStreamListIndex).nSize;
                             }
 
+                            // PackInfo assigns packed streams to folders, not
+                            // to individual files.  Preserve that distinction:
+                            // the first member of a folder reports the sum once
+                            // and later solid members leave it absent.  Summing
+                            // every stream also accounts for BCJ2 side streams;
+                            // record.nStreamSize must remain the main stream
+                            // extent used by extraction.
+                            qint64 nFolderPackedSize = 0;
+                            bool bFolderPackedSizeValid = false;
+                            if ((nCurrentFolder < state.listFolders.count()) &&
+                                (nStreamListIndex >= 0)) {
+                                const qint32 nFolderPackStreamCount =
+                                    state.listFolders.at(nCurrentFolder).listStreamIndexes.count();
+                                bFolderPackedSizeValid =
+                                    (nFolderPackStreamCount > 0) &&
+                                    (nStreamListIndex <= state.listInStreams.count() - nFolderPackStreamCount);
+
+                                for (qint32 nPack = 0;
+                                     bFolderPackedSizeValid && (nPack < nFolderPackStreamCount);
+                                     nPack++) {
+                                    const qint64 nPackSize =
+                                        state.listInStreams.at(nStreamListIndex + nPack).nSize;
+                                    if ((nPackSize < 0) ||
+                                        (nFolderPackedSize > (LLONG_MAX - nPackSize))) {
+                                        bFolderPackedSizeValid = false;
+                                    } else {
+                                        nFolderPackedSize += nPackSize;
+                                    }
+                                }
+                            }
+
                             // Compute this folder's total decompressed size (last coder's output)
                             qint32 nCoderSizesOffset = 0;
                             for (qint32 nFi = 0; nFi < nCurrentFolder; nFi++) {
@@ -2959,6 +2990,9 @@ bool XSevenZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
                             record.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nFolderDecompressedSize);
                             record.mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, nCurrentUncompressedOffset);
                             record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nFileSize);
+                            if ((nFileIndexInCurrentFolder == 0) && bFolderPackedSizeValid) {
+                                record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nFolderPackedSize);
+                            }
                             if (bFileCRCDefined) {
                                 record.mapProperties.insert(FPART_PROP_CRC_TYPE, (quint32)CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
                                 record.mapProperties.insert(FPART_PROP_RESULTCRC, nFileCRC);

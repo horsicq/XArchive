@@ -26,7 +26,8 @@ XBinary::XCONVERT _TABLE_XFREEARC_STRUCTID[] = {
     {XFREEARC::STRUCTID_BLOCK, "BLOCK", QString("Block")},
 };
 
-XFREEARC::XFREEARC(QIODevice *pDevice) : XArchive(pDevice)
+XFREEARC::XFREEARC(QIODevice *pDevice)
+    : XExternalArchive(pDevice, BACKEND_FREEARC)
 {
 }
 
@@ -68,7 +69,8 @@ bool XFREEARC::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 qint64 XFREEARC::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    return _calculateRawSize(pPdStruct);
+    Q_UNUSED(pPdStruct)
+    return getSize();
 }
 
 QList<XBinary::MAPMODE> XFREEARC::getMapModesList()
@@ -145,92 +147,6 @@ XBinary::ENDIAN XFREEARC::getEndian()
 XBinary::MODE XFREEARC::getMode()
 {
     return MODE_DATA;
-}
-
-QMap<XBinary::UNPACK_PROP, QVariant> XFREEARC::getDefaultUnpackProperties()
-{
-    QMap<XBinary::UNPACK_PROP, QVariant> result = XArchive::getDefaultUnpackProperties();
-
-    return result;
-}
-
-bool XFREEARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
-{
-    if (m_bUnpackOperationInProgress) {
-        return false;
-    }
-    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired()) return false;
-    QPointer<XFREEARC> guardedArchive(this);
-
-    Q_UNUSED(mapProperties)
-
-    if (!pState) return false;
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedArchive->ownsUnpackSource(pState)) return false;
-    guardedArchive->releaseUnpackSource(pState);
-    *pState = UNPACK_STATE();
-    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
-    if (!guardedArchive || !bBound) return false;
-
-    // TODO: FreeARC unpacking requires parsing the directory block,
-    // which is itself compressed (typically with LZMA).
-    // For now, return false to indicate unpacking is not yet supported.
-    // Complete the source-session handshake even on this currently
-    // unsupported path, then immediately release it with the failed state.
-    (void)guardedArchive->validateAndFinalizeUnpackSource(
-        pState, pPdStruct);
-    if (!guardedArchive) {
-        *pState = UNPACK_STATE();
-        return false;
-    }
-    guardedArchive->releaseUnpackSource(pState);
-    *pState = UNPACK_STATE();
-
-    return false;
-}
-
-XBinary::ARCHIVERECORD XFREEARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
-{
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-
-    // TODO: implement when directory block parsing is available
-    XBinary::ARCHIVERECORD result = {};
-
-    if (!pState || !isUnpackSourceCurrent(pState, pPdStruct)) return result;
-
-    return result;
-}
-
-bool XFREEARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
-{
-    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired()) return false;
-
-    if (!pState || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
-
-    return false;
-}
-
-bool XFREEARC::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
-{
-    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired()) return false;
-
-    Q_UNUSED(pPdStruct)
-
-    if (!pState) {
-        return false;
-    }
-
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) return false;
-    releaseUnpackSource(pState);
-    *pState = UNPACK_STATE();
-
-    return true;
 }
 
 QString XFREEARC::structIDToString(quint32 nID)
@@ -506,7 +422,8 @@ QList<XFREEARC::BLOCK> XFREEARC::getBlocks(PDSTRUCT *pPdStruct)
         block.sCompressor = _readCompressorString(nOffset + 5, nFileSize - nOffset - 5);
 
         // Find the next block to determine this block's size
-        qint64 nNextBlock = _findNextBlock(nOffset + FREEARC_SIGNATURE_SIZE, nFileSize);
+        qint64 nNextBlock = _findNextBlock(
+            nOffset + FREEARC_SIGNATURE_SIZE, nFileSize, pPdStruct);
 
         if (nNextBlock == -1) {
             // Last block extends to end of file
@@ -542,7 +459,8 @@ QString XFREEARC::blockTypeToString(quint8 nType)
     return sResult;
 }
 
-qint64 XFREEARC::_findNextBlock(qint64 nOffset, qint64 nFileSize)
+qint64 XFREEARC::_findNextBlock(qint64 nOffset, qint64 nFileSize,
+                                PDSTRUCT *pPdStruct)
 {
     // Scan forward from nOffset looking for the next "ArC\x01" signature
     QByteArray baSignature;
@@ -553,8 +471,10 @@ qint64 XFREEARC::_findNextBlock(qint64 nOffset, qint64 nFileSize)
 
     qint64 nPos = nOffset;
 
-    while (nPos < nFileSize - 3) {
-        qint64 nFound = find_signature(nPos, nFileSize - nPos, "41724301");
+    while ((nPos < nFileSize - 3) &&
+           XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qint64 nFound = find_signature(
+            nPos, nFileSize - nPos, "41724301", nullptr, pPdStruct);
 
         if (nFound == -1) {
             return -1;

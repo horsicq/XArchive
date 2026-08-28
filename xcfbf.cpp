@@ -1250,6 +1250,35 @@ bool XCFBF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         return false;
     }
 
+    // This override bypasses the base decode chain: the sector loops below
+    // produce the bytes themselves into a private stage, so account the
+    // member and its exact size here (publishUnpackOutput never debits).
+    if (pState->spOutputBudget) {
+        const QString sRecordName = read_unicodeString(nEntryOffset, 32);
+        if (!guardedThis) return false;
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex,
+                                                sRecordName)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(
+                    pPdStruct,
+                    tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(
+                pState->spOutputBudget.data());
+        }
+        if (!pState->spOutputBudget->debit((qint64)nStreamSize)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(
+                    pPdStruct,
+                    tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(
+                pState->spOutputBudget.data());
+        }
+    }
+
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         (qint64)nStreamSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedOutput || !guardedSource)

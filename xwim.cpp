@@ -1165,6 +1165,28 @@ bool XWIM::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
             (qint64)record.resourceInfo.nUnpackSize)) {
         return false;
     }
+
+    // This override bypasses the base decode chain: the resource is
+    // reassembled chunk-wise into a private stage and published as one
+    // copy.  Account the member and its exact produced size here; the
+    // publish copy itself is never charged.
+    if (!record.bIsFolder && pState->spOutputBudget) {
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, record.sFileName)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+        if (!pState->spOutputBudget->debit(record.nUncompressedSize)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+    }
+
     if (record.nUncompressedSize == 0) {
         if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
             (record.resourceInfo.nUnpackSize != 0) || (record.resourceInfo.nPackSize != 0) ||

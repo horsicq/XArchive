@@ -1810,6 +1810,23 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     if (!guardedThis || !bPreStageSnapshotCurrent || !guardedOutput)
         return false;
 
+    // This override bypasses the base decode chain's per-entry gate; account
+    // the member here.  Produced bytes are charged by _writeDevice through
+    // writeState.spOutputBudget; the folder-cache decode and the
+    // publishUnpackOutput copy are never charged.
+    if (pState->spOutputBudget) {
+        if (!pState->spOutputBudget->beginEntry(
+                pState->nCurrentIndex,
+                pContext->listFileNames.value(pState->nCurrentIndex))) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(
+                    pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+    }
+
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         nSubstreamSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedOutput || !guardedSource)
@@ -1819,6 +1836,7 @@ bool XCab::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     if (!guardedThis || !bStageSourceCurrent) return false;
     DATAPROCESS_STATE writeState = {};
     writeState.mapUnpackProperties = pState->mapUnpackProperties;
+    writeState.spOutputBudget = pState->spOutputBudget;
     writeState.pDeviceOutput = pStage.get();
     writeState.nProcessedLimit = -1;
     qint64 nWritten = 0;

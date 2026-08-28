@@ -24,17 +24,21 @@
 #include "Algos/xkwajlzhdecoder.h"
 #include "Algos/xppmddecoder.h"
 #include "Algos/xcoktellzdecoder.h"
+#include "Algos/xwinzipjpegdecoder.h"
+#include "Algos/xwavpackdecoder.h"
 
 #include <algorithm>
 #include <limits>
 #include <memory>
 #include <new>
+#include <cstdio>
 #include <QBuffer>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QDebug>
 #include <QSaveFile>
 #include <QSet>
 #include <QTemporaryFile>
@@ -117,10 +121,13 @@ static QByteArray archiveFileMutationIdentity(QFile *pFile)
             &standardInformation, sizeof(standardInformation))) {
         return result;
     }
+    // ChangeTime is deliberately excluded: NTFS bumps it for metadata-only
+    // events a mere reader triggers or cannot prevent (the deferred
+    // last-access-time update after any read, AV/indexer touches), so a
+    // session validated against it dies nondeterministically on a file
+    // nobody modified. Reads never move LastWriteTime or EndOfFile.
     result = QByteArray::number(
                  (qlonglong)basicInformation.LastWriteTime.QuadPart, 16) + ':' +
-             QByteArray::number(
-                 (qlonglong)basicInformation.ChangeTime.QuadPart, 16) + ':' +
              QByteArray::number(
                  (qlonglong)standardInformation.EndOfFile.QuadPart, 16);
 #elif defined(Q_OS_UNIX)
@@ -527,9 +534,8 @@ static bool archivePathHasUnsafeLink(const QString &sCanonicalRoot, const QStrin
 #ifdef Q_OS_WIN
         // Qt's isSymLink() does not reliably flag every NTFS reparse point
         // (junctions and mount points in particular), so check the reparse
-        // attribute directly the same way the ip7z route does - otherwise the
-        // native path is weaker on Windows than the ip7z path it mirrors. Only
-        // an existing component that IS a reparse point is unsafe; a not-yet-
+        // attribute directly. Only an existing component that IS a reparse
+        // point is unsafe; a not-yet-
         // created component reads INVALID_FILE_ATTRIBUTES and is fine.
         {
             const QString sNative = XBinary::winExtendedNativePath(fileInfo.absoluteFilePath());
@@ -2131,6 +2137,52 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         } else {
             result = COMPRESS_RESULT_DATAERROR;
         }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_WINZIP_JPEG) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_WINZIP_JPEG);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XWinZipJPEGDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else if (decompressState.bReadError) {
+            result = COMPRESS_RESULT_READERROR;
+        } else if (decompressState.bWriteError) {
+            result = COMPRESS_RESULT_WRITEERROR;
+        } else {
+            result = COMPRESS_RESULT_DATAERROR;
+        }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_WAVPACK) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_WAVPACK);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XWavPackDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else if (decompressState.bReadError) {
+            result = COMPRESS_RESULT_READERROR;
+        } else if (decompressState.bWriteError) {
+            result = COMPRESS_RESULT_WRITEERROR;
+        } else {
+            result = COMPRESS_RESULT_DATAERROR;
+        }
     } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_XZ) {
         XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_XZ);
@@ -2215,6 +2267,14 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
     };
     if (!isContextAlive()) return false;
 
+    XBinary::OUTPUT_POLICY legacyPolicy = {};
+    if (!XBinary::resolveUnpackOutputPolicy(mapUnpackProperties,
+                                            &legacyPolicy)) {
+        setPdStructErrorString(pPdStruct,
+                               tr("Invalid unpacked-output limit"));
+        return false;
+    }
+
     const qint64 nSourceSize = guardedSource->size();
     if (!isContextAlive() || (nSourceSize < 0) ||
         (record.nDataOffset > nSourceSize) ||
@@ -2255,16 +2315,19 @@ bool XArchive::_decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice
         // so UNPACK_PROP_MAX_OUTPUT_SIZE never reached multiDecompress or the
         // _writeDevice choke point.
         state.mapUnpackProperties = mapUnpackProperties;
-        // XFU-015 shadow: the legacy RECORD route builds its own DATAPROCESS_STATE
-        // with no operation budget in scope. Mint a per-call budget so _writeDevice
-        // meters this route too; shadow mode enforces nothing.
+        // The legacy RECORD route has no owning archive session, so mint its
+        // budget here. Explicit aggregate/count policy enforces; defaults shadow.
         {
-            XBinary::OUTPUT_POLICY legacyPolicy = {};
-            if (XBinary::resolveUnpackOutputPolicy(mapUnpackProperties, &legacyPolicy)) {
-                state.spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>::create();
-                state.spOutputBudget->setLimits(legacyPolicy.nMaxEntryOutputSize, legacyPolicy.nMaxTotalOutputSize,
-                                                legacyPolicy.nMaxEntryCount, legacyPolicy.nMaxMemoryOutputSize);
-                state.spOutputBudget->beginEntry(0, record.spInfo.sRecordName);
+            state.spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>::create();
+            state.spOutputBudget->configureForProperties(
+                legacyPolicy, mapUnpackProperties);
+            if (!state.spOutputBudget->beginEntry(0, record.spInfo.sRecordName) &&
+                state.spOutputBudget->isEnforcing()) {
+                setPdStructErrorString(
+                    pPdStruct,
+                    tr("Unpacked output exceeds the configured limit"));
+                sd.close();
+                return false;
             }
         }
 
@@ -3102,6 +3165,15 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
         return false;
     }
 
+    // Mint one budget per folder extraction so the decode chain's debit sites
+    // are live on this deprecated root too. This overload takes no property
+    // map, so the resolved defaults always run shadow-metered, never enforcing.
+    XBinary::OUTPUT_POLICY outputPolicy = {};
+    if (XBinary::resolveUnpackOutputPolicy(mapProperties, &outputPolicy)) {
+        state.spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>::create();
+        state.spOutputBudget->configureForProperties(outputPolicy, mapProperties);
+    }
+
     const qint32 nNumberOfRecords = state.nNumberOfRecords;
 
     bool bEnumerationValid = (state.nCurrentIndex == 0) &&
@@ -3160,16 +3232,18 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
                 QTemporaryFile stagedFile(
                     QDir(sOutputDirectory).filePath(
                         QLatin1String(".xarchive-XXXXXX")));
-                if (!stagedFile.open() ||
-                    !guardedArchive->unpackCurrent(&state, &stagedFile,
-                                                   pPdStruct) ||
+                const bool bStageOpened = stagedFile.open();
+                const bool bRecordUnpacked = bStageOpened && guardedArchive->unpackCurrent(&state, &stagedFile,
+                                                   pPdStruct);
+                const bool bStageFlushed = bRecordUnpacked && stagedFile.flush();
+                const bool bStageSeeked = bStageFlushed && stagedFile.seek(0);
+                const bool bUnsafeAfter = archivePathHasUnsafeLink(sCanonicalRoot, sSafeRecordPath);
+                if (!bStageOpened || !bRecordUnpacked ||
                     !guardedArchive || !isProgressAlive() ||
                     (state.nCurrentIndex != nExpectedIndex) ||
                     (state.nNumberOfRecords != nNumberOfRecords) ||
                     !isPdStructNotCanceled(pPdStruct) ||
-                    !stagedFile.flush() || !stagedFile.seek(0) ||
-                    archivePathHasUnsafeLink(sCanonicalRoot,
-                                             sSafeRecordPath)) {
+                    !bStageFlushed || !bStageSeeked || bUnsafeAfter) {
                     bResult = false;
                 } else {
                     QSaveFile outputFile(sResultFileName);
@@ -3225,7 +3299,9 @@ bool XArchive::unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruc
 
         // A later successful record must never mask an earlier extraction,
         // path, or publication failure.
-        if (!bResult) break;
+        if (!bResult) {
+            break;
+        }
 
         const qint32 nPreviousIndex = state.nCurrentIndex;
         const bool bMoved = guardedArchive->moveToNext(&state, pPdStruct);
@@ -3858,12 +3934,17 @@ bool XArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT 
     connect(&xDecompress, &XDecompress::infoMessage,
             this, &XBinary::infoMessage);
 
-    // XFU-015 shadow: begin a new member on the operation budget (resets the
-    // per-entry meter, counts the member). A would-be entry-count refusal is
-    // recorded + logged but NOT enforced in shadow mode.
+    // Reset the per-entry meter and count this member. Explicit entry-count
+    // policy enforces; the default remains shadow-metered.
     if (pState->spOutputBudget) {
         const QString sEntryName = archiveRecord.mapProperties.value(XBinary::FPART_PROP_ORIGINALNAME).toString();
         if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, sEntryName)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(
+                    pPdStruct,
+                    tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
             XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
         }
     }

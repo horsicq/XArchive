@@ -58,7 +58,7 @@ void Algo_utils::seekToStart(XBinary::DATAPROCESS_STATE *pState)
         pState->pDeviceInput->seek(pState->nInputOffset);
     }
 
-    if (pState->pDeviceOutput) {
+    if (pState->pDeviceOutput && !pState->pDeviceOutput->isSequential()) {
         pState->pDeviceOutput->seek(0);
     }
 }
@@ -152,15 +152,15 @@ ISzAlloc *Algo_utils::ppmdAlloc()
     return &g_ppmdAlloc;
 }
 
-bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nBufferSize,
+                                XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pState || !pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
     }
 
-    const qint32 nBufferSize = XBinary::getBufferSize(pPdStruct);
     const qint64 nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
-    if ((nBufferSize <= 0) || (nExpectedOutput < -1)) {
+    if ((nBufferSize < 0x1000) || (nBufferSize > 0x100000) || (nExpectedOutput < -1)) {
         return false;
     }
 

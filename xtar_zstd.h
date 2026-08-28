@@ -40,6 +40,9 @@ public:
 
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
+    // Detection-only bounded probe: consume at most 1 MiB of input with a
+    // 16 MiB decoder-window cap and retain only the first 512-byte TAR header.
+    static bool isValidPrefix(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
 
     virtual FT getFileType() override;
     virtual QString getFileFormatExt() override;

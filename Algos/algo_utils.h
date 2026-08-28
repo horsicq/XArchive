@@ -48,7 +48,8 @@ public:
     static void *szAlloc(ISzAllocPtr pAlloc, size_t nSize);
     static void szFree(ISzAllocPtr pAlloc, void *pAddress);
     static ISzAlloc *lzmaAlloc();
-    static bool decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct);
+    static bool decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nBufferSize,
+                               XBinary::PDSTRUCT *pPdStruct);
     static bool decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct);
 
     static bool xzReadVarInt(const QByteArray &baData, qint32 &nPos, quint64 &nValue);

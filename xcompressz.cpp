@@ -535,6 +535,21 @@ bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
                                             pContext->nUncompressedSize)) {
         return false;
     }
+    // This override bypasses the base decode chain's per-entry gate;
+    // account the member here. Produced bytes are charged by
+    // _writeDevice through decompressState.spOutputBudget.
+    if (pState->spOutputBudget) {
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex,
+                                                pContext->sFileName)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(
+                    pPdStruct,
+                    tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+    }
     std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
         pContext->nUncompressedSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedSource || !guardedOutput)
@@ -549,6 +564,7 @@ bool XCompressZ::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUC
     if (sd.open(QIODevice::ReadOnly)) {
         XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapUnpackProperties = pState->mapUnpackProperties;
+        decompressState.spOutputBudget = pState->spOutputBudget;
         decompressState.pDeviceInput = &sd;
         decompressState.pDeviceOutput = pStage.get();
         decompressState.nInputOffset = 0;

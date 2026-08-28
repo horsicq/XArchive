@@ -1081,6 +1081,11 @@ bool XFilteredArchive::unpackCurrent(UNPACK_STATE *pState,
     }
 
     pContext->innerState.mapUnpackProperties = pState->mapUnpackProperties;
+    // Thread the operation budget into the inner session: the inner
+    // unpackCurrent route performs its own per-entry and produced-byte
+    // accounting, so no outer beginEntry/debit here.  The subsequent
+    // publishUnpackOutput stage-to-caller copy is never charged.
+    pContext->innerState.spOutputBudget = pState->spOutputBudget;
     bool bResult = guardedInner->unpackCurrent(
         &pContext->innerState, guardedStage.data(), pPdStruct);
     if (!guardedThis || !guardedInner || !guardedDecoded ||

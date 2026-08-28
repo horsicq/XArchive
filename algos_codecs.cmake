@@ -13,16 +13,14 @@
 # an empty LINK_PATH) and fails only at link time. Such a project should
 # include() this file rather than duplicate the definitions.
 #
-# The lzma/ppmd decoders stay in their own targets rather than folding into
-# xarchive_7zip: several projects link them without linking xarchive_7zip, and
-# keeping them separate preserves one definition of each C symbol.
+# The lzma/ppmd decoders stay in their own targets so independent consumers can
+# link them directly while preserving one definition of each C symbol.
 #
 # POSITION_INDEPENDENT_CODE is carried over from the four original subprojects.
 # Dropping PIC is invisible on MSVC but hard-fails the ELF shared-library builds
 # (die/nfd) with "relocation R_X86_64_PC32 against symbol 'z_errmsg' ...
 # recompile with -fPIC". The amalgamations are now .cpp, so the former
-# LINKER_LANGUAGE C / C_STANDARD 11 became LINKER_LANGUAGE CXX / CXX_STANDARD 14,
-# matching xarchive_7zip.
+# LINKER_LANGUAGE C / C_STANDARD 11 became LINKER_LANGUAGE CXX / CXX_STANDARD 14.
 #
 # Those sources were converted from C to C++ on 2026-08-17 and must stay C++.
 # Do not add them to a C target or rename any of them back to .c. Several of

@@ -21,9 +21,9 @@
 #ifndef XFREEARC_H
 #define XFREEARC_H
 
-#include "xarchive.h"
+#include "xexternalarchive.h"
 
-class XFREEARC : public XArchive {
+class XFREEARC : public XExternalArchive {
     Q_OBJECT
 public:
     struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
@@ -71,11 +71,6 @@ public:
     virtual MODE getMode() override;
     virtual ENDIAN getEndian() override;
 
-    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
-    virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QString structIDToString(quint32 nID) override;
     virtual QString structIDToFtString(quint32 nID) override;
     virtual quint32 ftStringToStructID(const QString &sFtString) override;
@@ -92,7 +87,8 @@ private:
     static const qint32 FREEARC_SIGNATURE_SIZE = 4;
     static const qint32 FREEARC_HEADER_SIZE = 8;  // magic(4) + flags(2) + version(2)
 
-    qint64 _findNextBlock(qint64 nOffset, qint64 nFileSize);
+    qint64 _findNextBlock(qint64 nOffset, qint64 nFileSize,
+                          PDSTRUCT *pPdStruct);
     QString _readCompressorString(qint64 nOffset, qint64 nMaxSize);
 private:
     INTERNAL_INFO m_internalInfo;

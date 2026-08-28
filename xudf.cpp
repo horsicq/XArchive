@@ -636,6 +636,22 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                     return false;
                 }
 
+                // This override bypasses the base decode chain's per-entry
+                // gate; account the member here. Produced bytes are charged
+                // by _writeDevice through decompressState.spOutputBudget.
+                if (pState->spOutputBudget) {
+                    if (!pState->spOutputBudget->beginEntry(
+                            pState->nCurrentIndex,
+                            ar.mapProperties.value(XBinary::FPART_PROP_ORIGINALNAME).toString())) {
+                        if (pState->spOutputBudget->isEnforcing()) {
+                            XBinary::setPdStructErrorString(
+                                pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                            return false;
+                        }
+                        XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+                    }
+                }
+
                 // Stage the decoded bytes into a private work buffer and publish
                 // atomically instead of streaming straight into the caller's
                 // device: a mid-stream decode failure must not leave partial
@@ -649,6 +665,7 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, XArchive::HANDLE_METHOD_STORE);
                 decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, ar.nStreamSize);
                 decompressState.mapUnpackProperties = pState->mapUnpackProperties;
+                decompressState.spOutputBudget = pState->spOutputBudget;
                 decompressState.pDeviceInput = guardedSource.data();
                 decompressState.pDeviceOutput = pWorkDevice;
                 decompressState.nInputOffset = ar.nStreamOffset;

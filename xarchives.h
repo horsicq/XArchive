@@ -66,40 +66,6 @@ public:
     static bool isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &stAvailable);
     static bool isArchiveOpenValid(const QString &sFileName, const QSet<XBinary::FT> &stAvailable);
-    static bool isNativeReaderPreferredFileType(XBinary::FT fileType, QIODevice *pDevice,
-                                                XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool isIp7zSourceAvailable();
-    static bool isIp7zUnsupportedFormatError(const QString &sErrorString);
-    static bool listArchiveWithIp7zSource(const QString &sFileName, const QString &sPassword,
-                                         QList<XBinary::ARCHIVERECORD> *pListRecords,
-                                         QString *pErrorString = nullptr,
-                                         XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool testArchiveWithIp7zSource(const QString &sFileName, const QString &sPassword,
-                                         QString *pErrorString = nullptr,
-                                         XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool extractArchiveWithIp7zSource(const QString &sFileName, const QString &sPassword,
-                                            const QString &sResultFolder,
-                                            QString *pErrorString = nullptr,
-                                            XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool extractArchiveWithIp7zSource(const QString &sFileName, const QString &sPassword,
-                                            const QString &sResultFolder,
-                                            QString *pErrorString,
-                                            XBinary::PDSTRUCT *pPdStruct,
-                                            qint64 nMaxOutputSize,
-                                            const QSharedPointer<XBinary::OUTPUT_BUDGET> &spOutputBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>());
-    static bool extractArchiveRecordWithIp7zSource(const QString &sFileName,
-                                                  const QString &sRecordName,
-                                                  const QString &sPassword,
-                                                  QIODevice *pOutputDevice,
-                                                  QString *pErrorString = nullptr,
-                                                  XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool extractArchiveRecordWithIp7zSource(const QString &sFileName,
-                                                  const QString &sRecordName,
-                                                  const QString &sPassword,
-                                                  QIODevice *pOutputDevice,
-                                                  QString *pErrorString,
-                                                  XBinary::PDSTRUCT *pPdStruct,
-                                                  qint64 nMaxOutputSize);
     static QSet<XBinary::FT> getArchiveOpenValidFileTypes();
 
 private:

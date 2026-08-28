@@ -36,6 +36,8 @@ namespace {
 // crafted raw properties from requesting multi-gigabyte SDK allocations while
 // keeping the same policy for raw LZMA, raw LZMA2, and XZ Blocks.
 const qint64 LZMA_MAX_DICTIONARY_SIZE = 512LL * 1024 * 1024;
+const qint32 LZMA_MIN_BUFFER_SIZE = 0x1000;
+const qint32 LZMA_MAX_BUFFER_SIZE = 0x100000;
 const qint64 XZ_MAX_PREFILTER_OUTPUT_SIZE = 512LL * 1024 * 1024;
 const qint64 XZ_MAX_INDEX_SIZE = 64LL * 1024 * 1024;
 const quint64 XZ_MAX_INDEX_RECORDS = 1000000;
@@ -113,6 +115,46 @@ bool getLzmaAllocationSize(const CLzmaProps &properties,
     return true;
 }
 
+bool getLzmaBufferSize(XBinary::PDSTRUCT *pPdStruct,
+                       qint32 *pnBufferSize)
+{
+    if (!pnBufferSize) return false;
+
+    const qint32 nRequestedBufferSize =
+        XBinary::getBufferSize(pPdStruct);
+    if (nRequestedBufferSize <= 0) return false;
+
+    *pnBufferSize = qBound(LZMA_MIN_BUFFER_SIZE,
+                           nRequestedBufferSize,
+                           LZMA_MAX_BUFFER_SIZE);
+    return true;
+}
+
+bool getLzmaDecoderMemorySize(const CLzmaProps &properties,
+                              qint32 nBufferSize,
+                              quint64 *pnSize)
+{
+    if (!pnSize || (nBufferSize < LZMA_MIN_BUFFER_SIZE) ||
+        (nBufferSize > LZMA_MAX_BUFFER_SIZE)) {
+        return false;
+    }
+
+    quint64 nSdkAllocationSize = 0;
+    if (!getLzmaAllocationSize(properties, &nSdkAllocationSize)) {
+        return false;
+    }
+
+    const quint64 nIoBufferSize =
+        static_cast<quint64>(nBufferSize) * 2;
+    if (nSdkAllocationSize >
+        (std::numeric_limits<quint64>::max)() - nIoBufferSize) {
+        return false;
+    }
+
+    *pnSize = nSdkAllocationSize + nIoBufferSize;
+    return true;
+}
+
 bool reserveLzmaAllocation(
     const XBinary::DATAPROCESS_STATE *pState,
     const CLzmaProps &properties,
@@ -121,6 +163,19 @@ bool reserveLzmaAllocation(
     quint64 nSize = 0;
     return pState && pReservation &&
            getLzmaAllocationSize(properties, &nSize) &&
+           (nSize <= (quint64)(std::numeric_limits<qint64>::max)()) &&
+           pReservation->acquire(pState->mapUnpackProperties,
+                                 (qint64)nSize);
+}
+
+bool reserveLzmaDecoderMemory(
+    const XBinary::DATAPROCESS_STATE *pState,
+    const CLzmaProps &properties, qint32 nBufferSize,
+    XBinary::UNPACK_MEMORY_RESERVATION *pReservation)
+{
+    quint64 nSize = 0;
+    return pState && pReservation &&
+           getLzmaDecoderMemorySize(properties, nBufferSize, &nSize) &&
            (nSize <= (quint64)(std::numeric_limits<qint64>::max)()) &&
            pReservation->acquire(pState->mapUnpackProperties,
                                  (qint64)nSize);
@@ -432,9 +487,11 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
         return false;
     }
 
+    qint32 nBufferSize = 0;
     XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
-    if (!reserveLzmaAllocation(pDecompressState, state.prop,
-                               &memoryReservation)) {
+    if (!getLzmaBufferSize(pPdStruct, &nBufferSize) ||
+        !reserveLzmaDecoderMemory(pDecompressState, state.prop,
+                                  nBufferSize, &memoryReservation)) {
         return false;
     }
 
@@ -446,7 +503,8 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
     }
 
     X_LzmaDec_Init(&state);
-    bool bResult = Algo_utils::decompressLZMA(&state, pDecompressState, pPdStruct);
+    bool bResult = Algo_utils::decompressLZMA(
+        &state, pDecompressState, nBufferSize, pPdStruct);
     X_LzmaDec_Free(&state, Algo_utils::lzmaAlloc());
 
     return bResult;
@@ -454,14 +512,56 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
 
 bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
 {
+    return decompressWithResult(pDecompressState, baProperty, pPdStruct) ==
+           DECOMPRESS_RESULT_SUCCESS;
+}
+
+XLZMADecoder::DECOMPRESS_RESULT XLZMADecoder::decompressWithResult(
+    XBinary::DATAPROCESS_STATE *pDecompressState,
+    const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
+{
+    return decompressWithResult(pDecompressState, baProperty, pPdStruct,
+                                nullptr);
+}
+
+bool XLZMADecoder::getMemoryRequirement(const QByteArray &baProperty,
+                                        qint64 *pnSize,
+                                        XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pnSize || (baProperty.size() <= 0) ||
+        (baProperty.size() >= 30)) {
+        return false;
+    }
+
+    CLzmaProps properties = {};
+    qint32 nBufferSize = 0;
+    quint64 nSize = 0;
+    if ((X_LzmaProps_Decode(&properties,
+                            (Byte *)baProperty.constData(),
+                            baProperty.size()) != 0) ||
+        !getLzmaBufferSize(pPdStruct, &nBufferSize) ||
+        !getLzmaDecoderMemorySize(properties, nBufferSize, &nSize) ||
+        (nSize > (quint64)(std::numeric_limits<qint64>::max)())) {
+        return false;
+    }
+
+    *pnSize = (qint64)nSize;
+    return true;
+}
+
+XLZMADecoder::DECOMPRESS_RESULT XLZMADecoder::decompressWithResult(
+    XBinary::DATAPROCESS_STATE *pDecompressState,
+    const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct,
+    XBinary::UNPACK_MEMORY_RESERVATION *pReservedMemory)
+{
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         // qDebug("XLZMADecoder::decompress() FAILED: null pointer check");
-        return false;
+        return DECOMPRESS_RESULT_INVALID_DATA;
     }
 
     if (baProperty.size() <= 0 || baProperty.size() >= 30) {
         // qDebug("XLZMADecoder::decompress() FAILED: invalid baProperty size: %d", baProperty.size());
-        return false;
+        return DECOMPRESS_RESULT_INVALID_DATA;
     }
 
     Algo_utils::prepareState(pDecompressState);
@@ -469,30 +569,49 @@ bool XLZMADecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, cons
     CLzmaDec state = {};
     SRes ret = X_LzmaProps_Decode(&state.prop, (Byte *)baProperty.constData(), baProperty.size());
 
-    if ((ret != 0) ||
-        !isLZMAAllocationAllowed(pDecompressState,
+    if (ret != 0) return DECOMPRESS_RESULT_INVALID_DATA;
+    if (!isLZMAAllocationAllowed(pDecompressState,
                                  (quint64)state.prop.dicSize)) {
-        return false;
+        return DECOMPRESS_RESULT_RESOURCE_LIMIT;
+    }
+
+    qint32 nBufferSize = 0;
+    quint64 nRequiredSize = 0;
+    if (!getLzmaBufferSize(pPdStruct, &nBufferSize) ||
+        !getLzmaDecoderMemorySize(state.prop, nBufferSize,
+                                  &nRequiredSize) ||
+        (nRequiredSize >
+         (quint64)(std::numeric_limits<qint64>::max)())) {
+        return DECOMPRESS_RESULT_RESOURCE_LIMIT;
     }
 
     XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
-    if (!reserveLzmaAllocation(pDecompressState, state.prop,
-                               &memoryReservation)) {
-        return false;
+    if (pReservedMemory) {
+        if (!pReservedMemory->isActive() ||
+            (nRequiredSize >
+             static_cast<quint64>(pReservedMemory->size()))) {
+            return DECOMPRESS_RESULT_RESOURCE_LIMIT;
+        }
+    } else if (!memoryReservation.acquire(
+                   pDecompressState->mapUnpackProperties,
+                   static_cast<qint64>(nRequiredSize))) {
+        return DECOMPRESS_RESULT_RESOURCE_LIMIT;
     }
 
     X_LzmaDec_Construct(&state);
     ret = X_LzmaDec_Allocate(&state, (Byte *)baProperty.constData(), baProperty.size(), Algo_utils::lzmaAlloc());
 
     if (ret != 0) {
-        return false;
+        return DECOMPRESS_RESULT_RESOURCE_LIMIT;
     }
 
     X_LzmaDec_Init(&state);
-    bool bResult = Algo_utils::decompressLZMA(&state, pDecompressState, pPdStruct);
+    bool bResult = Algo_utils::decompressLZMA(
+        &state, pDecompressState, nBufferSize, pPdStruct);
     X_LzmaDec_Free(&state, Algo_utils::lzmaAlloc());
 
-    return bResult;
+    return bResult ? DECOMPRESS_RESULT_SUCCESS
+                   : DECOMPRESS_RESULT_INVALID_DATA;
 }
 
 bool XLZMADecoder::decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)

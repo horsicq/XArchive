@@ -28,9 +28,34 @@ class XLZMADecoder : public QObject {
     Q_OBJECT
 
 public:
+    enum DECOMPRESS_RESULT {
+        DECOMPRESS_RESULT_SUCCESS = 0,
+        DECOMPRESS_RESULT_INVALID_DATA,
+        DECOMPRESS_RESULT_RESOURCE_LIMIT
+    };
+
     explicit XLZMADecoder(QObject *parent = nullptr);
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    // Raw-property entry point with a reasoned result. Callers performing
+    // format probing must distinguish malformed input from an allocation or
+    // policy refusal so a valid outer container is not discarded under load.
+    static DECOMPRESS_RESULT decompressWithResult(
+        XBinary::DATAPROCESS_STATE *pDecompressState,
+        const QByteArray &baProperty,
+        XBinary::PDSTRUCT *pPdStruct = nullptr);
+    // Returns the complete transient decoder allocation represented by raw
+    // LZMA properties: SDK dictionary/probabilities plus both bounded I/O
+    // buffers. Probe paths can reserve this together with their output buffer,
+    // avoiding split reservations that deadlock under pressure.
+    static bool getMemoryRequirement(const QByteArray &baProperty,
+                                     qint64 *pnSize,
+                                     XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static DECOMPRESS_RESULT decompressWithResult(
+        XBinary::DATAPROCESS_STATE *pDecompressState,
+        const QByteArray &baProperty,
+        XBinary::PDSTRUCT *pPdStruct,
+        XBinary::UNPACK_MEMORY_RESERVATION *pReservedMemory);
     static bool decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressLZMA2(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressXZ(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);

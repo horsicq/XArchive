@@ -1082,6 +1082,22 @@ bool XMiniDump::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
         !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
                                             nExpectedSize)) return false;
 
+    // This override bypasses the base decode chain's per-entry gate; account
+    // the member here. Produced bytes are charged by _writeDevice through the
+    // budget threaded into decompressArchiveRecord below.
+    if (pState->spOutputBudget) {
+        if (!pState->spOutputBudget->beginEntry(
+                pState->nCurrentIndex,
+                archiveRecord.mapProperties.value(FPART_PROP_ORIGINALNAME).toString())) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(
+                    pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+    }
+
     std::unique_ptr<QIODevice> pStage(
         XBinary::createFileBuffer(nExpectedSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedSource || !guardedOutput) return false;
@@ -1097,7 +1113,7 @@ bool XMiniDump::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT
 
     const bool bResult = xDecompress.decompressArchiveRecord(
         archiveRecord, guardedSource.data(), pStage.get(),
-        pState->mapUnpackProperties, pPdStruct);
+        pState->mapUnpackProperties, pPdStruct, pState->spOutputBudget);
     if (!guardedThis || !bResult || !guardedSource || !guardedOutput) return false;
     const bool bFinalSourceCurrent =
         guardedThis->isUnpackSourceCurrent(pState, pPdStruct);

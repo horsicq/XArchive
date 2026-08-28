@@ -1,4 +1,4 @@
-/* XArchive amalgamation of 7-Zip 26.01 -- externally-owned decoder Lzma2Dec.
+/* XArchive amalgamation of public-domain LZMA SDK 26.01 decoder Lzma2Dec.
  *
  * 1 upstream translation units folded into one. Code is verbatim;
  * only the file boundaries are gone.
@@ -14,7 +14,7 @@
  * REGISTER_CODEC are safe -- they fire inside per-format namespaces or mangle
  * by class.
  *
- * 7-Zip is LGPL-2.1-or-later with unRAR restrictions; see licenses/7-Zip.
+ * The retained SDK units are public domain and carry their notices below.
  *
  * This file is generated -- do not edit by hand.
  */

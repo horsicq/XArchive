@@ -29,7 +29,7 @@
 //
 // EXPERIMENTAL / THINLY VERIFIED. Implemented clean-room from Matthew Russotto's
 // public reverse-engineering of Quantum (russotto.net/quantumcomp.html); no
-// libmspack (qtmd.c/.h) or ip7z Quantum source was consulted. It is a faithful
+// libmspack (qtmd.c/.h) or other decoder source was consulted. It is a faithful
 // port of a Python prototype that was validated two ways: (1) it decodes the one
 // genuine local Quantum vector - the 59-byte qtm.txt inside libmspack's
 // mixed.cab (window order 18) - to the exact expected bytes, and a single-bit
@@ -39,8 +39,8 @@
 // ONE small vector: the selector model, all four literal banks, and one short
 // match are exercised, but the length model, the rescale/reorder paths, larger
 // windows and multi-block coder re-init are covered only by the self-consistent
-// round-trip, NOT by real compressed data. ip7z already covers CAB Quantum; this
-// native path is parity, so any divergence from real data is this decoder's bug.
+// round-trip, NOT by real compressed data. Any divergence from real data is
+// this decoder's bug.
 class XQuantumDecoder {
 public:
     // Decode ordered, independently framed CAB CFDATA payloads. The two lists

@@ -1960,6 +1960,38 @@ bool XDMG::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
         (qint64)(mishBlock.nSectorCount * (quint64)DMG_SECTOR_SIZE);
     if (!XBinary::isUnpackOutputSizeAllowed(
             pState->mapUnpackProperties, nExpectedOutput)) return false;
+
+    // This override decodes the stripes into a private stage and publishes the
+    // result, so it bypasses the base decode chain and must charge the budget
+    // itself: one entry, nExpectedOutput produced bytes.  The partition is
+    // either produced whole (staging.size() == nExpectedOutput is required
+    // below) or the extraction fails, so this is the exact produced size.  The
+    // publish copy is not a second charge.
+    if (pState->spOutputBudget) {
+        QString sRecordName;
+        if (pState->nCurrentIndex < pContext->listPartitionNames.size()) {
+            sRecordName = pContext->listPartitionNames.at(pState->nCurrentIndex);
+        }
+        if (sRecordName.isEmpty()) {
+            sRecordName = QString("partition%1").arg(pContext->nCurrentFileIndex);
+        }
+        sRecordName += ".img";
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, sRecordName)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+        if (!pState->spOutputBudget->debit(nExpectedOutput)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+    }
+
     const bool bCheckCRC = XBinary::isUnpackCRCEnabled(
         pState->mapUnpackProperties, XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
     QTemporaryFile staging;

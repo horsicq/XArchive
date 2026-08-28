@@ -25,6 +25,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -1147,6 +1148,26 @@ bool XASAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, record.nSize) ||
         (record.baExternalSHA256.size() != 32)) {
         return false;
+    }
+
+    // The external-sidecar route bypasses the base decode chain, so it must
+    // charge the operation budget itself: one entry, record.nSize produced
+    // bytes (the copy loop below reads exactly that much, hash-verified).
+    if (pState->spOutputBudget) {
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, record.sFileName)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
+        if (!pState->spOutputBudget->debit(record.nSize)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                return false;
+            }
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+        }
     }
 
     QString sCurrentExternalFile;
