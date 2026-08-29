@@ -9334,6 +9334,9 @@ uLong ZEXPORT adler32_combine64(uLong adler1, uLong adler2, z_off64_t len2)
 #ifdef adler32
 #undef adler32
 #endif
+#ifdef local
+#undef local
+#endif
 
 #include "xdeflatedecoder.h"
 #include <QPointer>
