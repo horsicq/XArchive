@@ -78,11 +78,13 @@ struct LZOP_CHECKSUMS {
         nCRC32 = XBinary::_getCRC32(pData, nSize, nCRC32, XBinary::_getCRC32Table_EDB88320());
     }
 
-    quint32 crc32() const { return nCRC32 ^ 0xFFFFFFFFU; }
+    quint32 crc32() const
+    {
+        return nCRC32 ^ 0xFFFFFFFFU;
+    }
 };
 
-bool lzoReadExact(XBinary::DATAPROCESS_STATE *pState, char *pData, qint32 nSize,
-                  XBinary::PDSTRUCT *pPdStruct, LZOP_CHECKSUMS *pChecksums = nullptr)
+bool lzoReadExact(XBinary::DATAPROCESS_STATE *pState, char *pData, qint32 nSize, XBinary::PDSTRUCT *pPdStruct, LZOP_CHECKSUMS *pChecksums = nullptr)
 {
     if (!pState || (nSize < 0) || ((nSize > 0) && !pData)) {
         if (pState) pState->bReadError = true;
@@ -103,8 +105,7 @@ bool lzoReadExact(XBinary::DATAPROCESS_STATE *pState, char *pData, qint32 nSize,
     return (nDone == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-bool lzoReadBE16(XBinary::DATAPROCESS_STATE *pState, quint16 *pValue, XBinary::PDSTRUCT *pPdStruct,
-                 LZOP_CHECKSUMS *pChecksums = nullptr)
+bool lzoReadBE16(XBinary::DATAPROCESS_STATE *pState, quint16 *pValue, XBinary::PDSTRUCT *pPdStruct, LZOP_CHECKSUMS *pChecksums = nullptr)
 {
     quint8 aData[2] = {};
     if (!pValue || !lzoReadExact(pState, (char *)aData, sizeof(aData), pPdStruct, pChecksums)) return false;
@@ -112,8 +113,7 @@ bool lzoReadBE16(XBinary::DATAPROCESS_STATE *pState, quint16 *pValue, XBinary::P
     return true;
 }
 
-bool lzoReadBE32(XBinary::DATAPROCESS_STATE *pState, quint32 *pValue, XBinary::PDSTRUCT *pPdStruct,
-                 LZOP_CHECKSUMS *pChecksums = nullptr)
+bool lzoReadBE32(XBinary::DATAPROCESS_STATE *pState, quint32 *pValue, XBinary::PDSTRUCT *pPdStruct, LZOP_CHECKSUMS *pChecksums = nullptr)
 {
     quint8 aData[4] = {};
     if (!pValue || !lzoReadExact(pState, (char *)aData, sizeof(aData), pPdStruct, pChecksums)) return false;
@@ -121,8 +121,7 @@ bool lzoReadBE32(XBinary::DATAPROCESS_STATE *pState, quint32 *pValue, XBinary::P
     return true;
 }
 
-bool lzoWriteState(XBinary::DATAPROCESS_STATE *pState, const char *pData, qint64 nSize,
-                   XBinary::PDSTRUCT *pPdStruct)
+bool lzoWriteState(XBinary::DATAPROCESS_STATE *pState, const char *pData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pState || (nSize < 0) || ((nSize > 0) && !pData)) {
         if (pState) pState->bWriteError = true;
@@ -139,8 +138,7 @@ bool lzoWriteState(XBinary::DATAPROCESS_STATE *pState, const char *pData, qint64
     return (nDone == nSize) && !pState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-bool lzoConsumeExtraField(XBinary::DATAPROCESS_STATE *pState, bool bCRC32,
-                          XBinary::PDSTRUCT *pPdStruct)
+bool lzoConsumeExtraField(XBinary::DATAPROCESS_STATE *pState, bool bCRC32, XBinary::PDSTRUCT *pPdStruct)
 {
     LZOP_CHECKSUMS checksums;
     quint32 nLength = 0;
@@ -155,8 +153,7 @@ bool lzoConsumeExtraField(XBinary::DATAPROCESS_STATE *pState, bool bCRC32,
     }
 
     quint32 nExpected = 0;
-    return (nRemaining == 0) && lzoReadBE32(pState, &nExpected, pPdStruct) &&
-           (nExpected == (bCRC32 ? checksums.crc32() : checksums.nAdler32));
+    return (nRemaining == 0) && lzoReadBE32(pState, &nExpected, pPdStruct) && (nExpected == (bCRC32 ? checksums.crc32() : checksums.nAdler32));
 }
 
 bool lzoIsExactInputEnd(XBinary::DATAPROCESS_STATE *pState)
@@ -183,8 +180,7 @@ bool XLZODecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, quint
 {
     if (pnBytesWritten) *pnBytesWritten = 0;
     const quint64 nPointerLimit = (quint64)(std::numeric_limits<std::ptrdiff_t>::max)();
-    if (!pInput || !pOutput || nInputSize <= 0 || nOutputSize <= 0 ||
-        ((quint64)nInputSize > nPointerLimit) || ((quint64)nOutputSize > nPointerLimit)) {
+    if (!pInput || !pOutput || nInputSize <= 0 || nOutputSize <= 0 || ((quint64)nInputSize > nPointerLimit) || ((quint64)nOutputSize > nPointerLimit)) {
         return false;
     }
 
@@ -375,13 +371,10 @@ eof_found:
 bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
     const qint64 nMax = (std::numeric_limits<qint64>::max)();
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
-        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1) ||
-        ((pDecompressState->nInputLimit != -1) &&
-         (pDecompressState->nInputOffset > (nMax - pDecompressState->nInputLimit))) ||
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || (pDecompressState->nInputOffset < 0) ||
+        (pDecompressState->nInputLimit < -1) || ((pDecompressState->nInputLimit != -1) && (pDecompressState->nInputOffset > (nMax - pDecompressState->nInputLimit))) ||
         (pDecompressState->nProcessedOffset < 0) || (pDecompressState->nProcessedLimit < -1) ||
-        ((pDecompressState->nProcessedLimit != -1) &&
-         (pDecompressState->nProcessedOffset > (nMax - pDecompressState->nProcessedLimit))) ||
+        ((pDecompressState->nProcessedLimit != -1) && (pDecompressState->nProcessedOffset > (nMax - pDecompressState->nProcessedLimit))) ||
         (XBinary::getBufferSize(pPdStruct) <= 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -392,8 +385,7 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     // LZOP magic: 89 4C 5A 4F 00 0D 0A 1A 0A (9 bytes)
     const quint8 nExpectedMagic[] = {0x89, 0x4C, 0x5A, 0x4F, 0x00, 0x0D, 0x0A, 0x1A, 0x0A};
     quint8 aMagic[sizeof(nExpectedMagic)] = {};
-    if (!lzoReadExact(pDecompressState, (char *)aMagic, sizeof(aMagic), pPdStruct) ||
-        (memcmp(aMagic, nExpectedMagic, sizeof(aMagic)) != 0)) {
+    if (!lzoReadExact(pDecompressState, (char *)aMagic, sizeof(aMagic), pPdStruct) || (memcmp(aMagic, nExpectedMagic, sizeof(aMagic)) != 0)) {
         return false;
     }
 
@@ -402,31 +394,27 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     quint16 nVersion = 0;
     quint16 nLibVersion = 0;
     quint16 nExtractVersion = 0;
-    if (!lzoReadBE16(pDecompressState, &nVersion, pPdStruct, &headerChecksums) ||
-        !lzoReadBE16(pDecompressState, &nLibVersion, pPdStruct, &headerChecksums) ||
+    if (!lzoReadBE16(pDecompressState, &nVersion, pPdStruct, &headerChecksums) || !lzoReadBE16(pDecompressState, &nLibVersion, pPdStruct, &headerChecksums) ||
         (nVersion < LZOP_MIN_VERSION) || (nVersion > LZOP_SUPPORTED_VERSION)) {
         return false;
     }
 
     if (nVersion >= 0x0940) {
-        if (!lzoReadBE16(pDecompressState, &nExtractVersion, pPdStruct, &headerChecksums) ||
-            (nExtractVersion < LZOP_MIN_VERSION) || (nExtractVersion > LZOP_SUPPORTED_VERSION)) {
+        if (!lzoReadBE16(pDecompressState, &nExtractVersion, pPdStruct, &headerChecksums) || (nExtractVersion < LZOP_MIN_VERSION) ||
+            (nExtractVersion > LZOP_SUPPORTED_VERSION)) {
             return false;
         }
     }
 
     quint8 nMethod = 0;
     quint8 nLevel = 0;
-    if (!lzoReadExact(pDecompressState, (char *)&nMethod, 1, pPdStruct, &headerChecksums) ||
-        ((nMethod != 1) && (nMethod != 2) && (nMethod != 3))) {
+    if (!lzoReadExact(pDecompressState, (char *)&nMethod, 1, pPdStruct, &headerChecksums) || ((nMethod != 1) && (nMethod != 2) && (nMethod != 3))) {
         return false;
     }
-    if ((nVersion >= 0x0940) &&
-        !lzoReadExact(pDecompressState, (char *)&nLevel, 1, pPdStruct, &headerChecksums)) return false;
+    if ((nVersion >= 0x0940) && !lzoReadExact(pDecompressState, (char *)&nLevel, 1, pPdStruct, &headerChecksums)) return false;
 
     quint32 nFlags = 0;
-    if (!lzoReadBE32(pDecompressState, &nFlags, pPdStruct, &headerChecksums) ||
-        (nFlags & ~(LZOP_F_MASK | LZOP_F_OS_MASK | LZOP_F_CS_MASK)) ||
+    if (!lzoReadBE32(pDecompressState, &nFlags, pPdStruct, &headerChecksums) || (nFlags & ~(LZOP_F_MASK | LZOP_F_OS_MASK | LZOP_F_CS_MASK)) ||
         (nFlags & (LZOP_F_H_FILTER | LZOP_F_MULTIPART))) {
         // Filtered and multipart LZOP streams require transformations/framing
         // this decoder does not implement; accepting them would fabricate data.
@@ -436,8 +424,7 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     quint32 nMode = 0;
     quint32 nMTimeLow = 0;
     quint32 nMTimeHigh = 0;
-    if (!lzoReadBE32(pDecompressState, &nMode, pPdStruct, &headerChecksums) ||
-        !lzoReadBE32(pDecompressState, &nMTimeLow, pPdStruct, &headerChecksums)) return false;
+    if (!lzoReadBE32(pDecompressState, &nMode, pPdStruct, &headerChecksums) || !lzoReadBE32(pDecompressState, &nMTimeLow, pPdStruct, &headerChecksums)) return false;
     if (nVersion >= 0x0940) {
         if (!lzoReadBE32(pDecompressState, &nMTimeHigh, pPdStruct, &headerChecksums)) return false;
     }
@@ -456,8 +443,7 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
         (nExpectedHeaderChecksum != ((nFlags & LZOP_F_H_CRC32) ? headerChecksums.crc32() : headerChecksums.nAdler32))) {
         return false;
     }
-    if ((nFlags & LZOP_F_H_EXTRA_FIELD) &&
-        !lzoConsumeExtraField(pDecompressState, (nFlags & LZOP_F_H_CRC32) != 0, pPdStruct)) return false;
+    if ((nFlags & LZOP_F_H_EXTRA_FIELD) && !lzoConsumeExtraField(pDecompressState, (nFlags & LZOP_F_H_CRC32) != 0, pPdStruct)) return false;
 
     Q_UNUSED(nLibVersion)
     Q_UNUSED(nLevel)
@@ -470,9 +456,7 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     const bool bHasAdler32Compressed = (nFlags & LZOP_F_ADLER32_C) != 0;
     const bool bHasCrc32Compressed = (nFlags & LZOP_F_CRC32_C) != 0;
     const bool bHasExpectedOutput = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
-    const qint64 nExpectedOutput = bHasExpectedOutput
-                                      ? pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()
-                                      : -1;
+    const qint64 nExpectedOutput = bHasExpectedOutput ? pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() : -1;
     if (bHasExpectedOutput && (nExpectedOutput < 0)) return false;
 
     qint64 nTotalOutput = 0;
@@ -488,31 +472,24 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
             break;
         }
 
-        if ((nUncompressedBlockSize > LZOP_MAX_BLOCK_SIZE) ||
-            (nTotalOutput > (nMax - nUncompressedBlockSize)) ||
-            !XBinary::isUnpackOutputSizeAllowed(
-                pDecompressState->mapUnpackProperties,
-                nTotalOutput + (qint64)nUncompressedBlockSize) ||
-            (bHasExpectedOutput && ((nTotalOutput > nExpectedOutput) ||
-                                    ((qint64)nUncompressedBlockSize > (nExpectedOutput - nTotalOutput))))) return false;
+        if ((nUncompressedBlockSize > LZOP_MAX_BLOCK_SIZE) || (nTotalOutput > (nMax - nUncompressedBlockSize)) ||
+            !XBinary::isUnpackOutputSizeAllowed(pDecompressState->mapUnpackProperties, nTotalOutput + (qint64)nUncompressedBlockSize) ||
+            (bHasExpectedOutput && ((nTotalOutput > nExpectedOutput) || ((qint64)nUncompressedBlockSize > (nExpectedOutput - nTotalOutput)))))
+            return false;
 
         quint32 nCompressedBlockSize = 0;
-        if (!lzoReadBE32(pDecompressState, &nCompressedBlockSize, pPdStruct) ||
-            (nCompressedBlockSize == 0) || (nCompressedBlockSize > nUncompressedBlockSize)) return false;
+        if (!lzoReadBE32(pDecompressState, &nCompressedBlockSize, pPdStruct) || (nCompressedBlockSize == 0) || (nCompressedBlockSize > nUncompressedBlockSize))
+            return false;
 
         quint32 nExpectedAdler32Uncompressed = 0;
         quint32 nExpectedCrc32Uncompressed = 0;
         quint32 nExpectedAdler32Compressed = 0;
         quint32 nExpectedCrc32Compressed = 0;
-        if (bHasAdler32Uncompressed &&
-            !lzoReadBE32(pDecompressState, &nExpectedAdler32Uncompressed, pPdStruct)) return false;
-        if (bHasCrc32Uncompressed &&
-            !lzoReadBE32(pDecompressState, &nExpectedCrc32Uncompressed, pPdStruct)) return false;
+        if (bHasAdler32Uncompressed && !lzoReadBE32(pDecompressState, &nExpectedAdler32Uncompressed, pPdStruct)) return false;
+        if (bHasCrc32Uncompressed && !lzoReadBE32(pDecompressState, &nExpectedCrc32Uncompressed, pPdStruct)) return false;
         if (nCompressedBlockSize < nUncompressedBlockSize) {
-            if (bHasAdler32Compressed &&
-                !lzoReadBE32(pDecompressState, &nExpectedAdler32Compressed, pPdStruct)) return false;
-            if (bHasCrc32Compressed &&
-                !lzoReadBE32(pDecompressState, &nExpectedCrc32Compressed, pPdStruct)) return false;
+            if (bHasAdler32Compressed && !lzoReadBE32(pDecompressState, &nExpectedAdler32Compressed, pPdStruct)) return false;
+            if (bHasCrc32Compressed && !lzoReadBE32(pDecompressState, &nExpectedCrc32Compressed, pPdStruct)) return false;
         }
 
         QByteArray baCompressed((qint32)nCompressedBlockSize, 0);
@@ -520,9 +497,9 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
 
         LZOP_CHECKSUMS compressedChecksums;
         compressedChecksums.update(baCompressed.constData(), baCompressed.size());
-        if ((nCompressedBlockSize < nUncompressedBlockSize) &&
-            ((bHasAdler32Compressed && (compressedChecksums.nAdler32 != nExpectedAdler32Compressed)) ||
-             (bHasCrc32Compressed && (compressedChecksums.crc32() != nExpectedCrc32Compressed)))) return false;
+        if ((nCompressedBlockSize < nUncompressedBlockSize) && ((bHasAdler32Compressed && (compressedChecksums.nAdler32 != nExpectedAdler32Compressed)) ||
+                                                                (bHasCrc32Compressed && (compressedChecksums.crc32() != nExpectedCrc32Compressed))))
+            return false;
 
         QByteArray baUncompressed;
 
@@ -532,21 +509,22 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
             baUncompressed.resize((qint32)nUncompressedBlockSize);
             qint64 nBytesWritten = 0;
 
-            if (!decompressBlock((const quint8 *)baCompressed.constData(), nCompressedBlockSize,
-                                 (quint8 *)baUncompressed.data(), nUncompressedBlockSize, &nBytesWritten) ||
-                (nBytesWritten != (qint64)nUncompressedBlockSize)) return false;
+            if (!decompressBlock((const quint8 *)baCompressed.constData(), nCompressedBlockSize, (quint8 *)baUncompressed.data(), nUncompressedBlockSize,
+                                 &nBytesWritten) ||
+                (nBytesWritten != (qint64)nUncompressedBlockSize))
+                return false;
         }
 
         LZOP_CHECKSUMS uncompressedChecksums;
         uncompressedChecksums.update(baUncompressed.constData(), baUncompressed.size());
         if ((bHasAdler32Uncompressed && (uncompressedChecksums.nAdler32 != nExpectedAdler32Uncompressed)) ||
             (bHasCrc32Uncompressed && (uncompressedChecksums.crc32() != nExpectedCrc32Uncompressed)) ||
-            !lzoWriteState(pDecompressState, baUncompressed.constData(), baUncompressed.size(), pPdStruct)) return false;
+            !lzoWriteState(pDecompressState, baUncompressed.constData(), baUncompressed.size(), pPdStruct))
+            return false;
 
         nTotalOutput += nUncompressedBlockSize;
     }
 
-    return lzoIsExactInputEnd(pDecompressState) && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct) && (pDecompressState->nCountOutput == nTotalOutput) &&
-           (!bHasExpectedOutput || (nTotalOutput == nExpectedOutput));
+    return lzoIsExactInputEnd(pDecompressState) && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct) &&
+           (pDecompressState->nCountOutput == nTotalOutput) && (!bHasExpectedOutput || (nTotalOutput == nExpectedOutput));
 }

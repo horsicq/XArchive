@@ -180,6 +180,7 @@ private:
     quint32 _getCompressedSize(qint64 nOffset);
     // Returns filename from a file block
     QString _getFileName(qint64 nOffset);
+
 private:
     INTERNAL_INFO m_internalInfo;
     QString m_sFileNameCodePage;

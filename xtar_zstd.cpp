@@ -37,8 +37,7 @@ bool parseTarNumber(const char *pData, qint32 nSize, qint64 *pValue)
     if (!pData || !pValue || (nSize <= 0)) return false;
 
     const quint8 *pBytes = reinterpret_cast<const quint8 *>(pData);
-    const quint64 nMaximum =
-        static_cast<quint64>((std::numeric_limits<qint64>::max)());
+    const quint64 nMaximum = static_cast<quint64>((std::numeric_limits<qint64>::max)());
 
     if (pBytes[0] & 0x80) {
         if (pBytes[0] & 0x40) return false;
@@ -52,8 +51,7 @@ bool parseTarNumber(const char *pData, qint32 nSize, qint64 *pValue)
     }
 
     qint32 nIndex = 0;
-    while ((nIndex < nSize) &&
-           ((pBytes[nIndex] == 0) || (pBytes[nIndex] == ' '))) {
+    while ((nIndex < nSize) && ((pBytes[nIndex] == 0) || (pBytes[nIndex] == ' '))) {
         nIndex++;
     }
 
@@ -83,37 +81,26 @@ bool parseTarNumber(const char *pData, qint32 nSize, qint64 *pValue)
 
 bool isValidTarHeader(const QByteArray &baHeader)
 {
-    if (baHeader.size() != TAR_ZSTD_HEADER_SIZE ||
-        (baHeader.at(0) == 0) ||
-        (memcmp(baHeader.constData() + 257, "ustar", 5) != 0)) {
+    if (baHeader.size() != TAR_ZSTD_HEADER_SIZE || (baHeader.at(0) == 0) || (memcmp(baHeader.constData() + 257, "ustar", 5) != 0)) {
         return false;
     }
 
     qint64 nStoredChecksum = 0;
     qint64 nFileSize = 0;
-    if (!parseTarNumber(baHeader.constData() + 148, 8,
-                        &nStoredChecksum) ||
-        !parseTarNumber(baHeader.constData() + 124, 12, &nFileSize)) {
+    if (!parseTarNumber(baHeader.constData() + 148, 8, &nStoredChecksum) || !parseTarNumber(baHeader.constData() + 124, 12, &nFileSize)) {
         return false;
     }
 
     quint64 nUnsignedChecksum = 0;
     qint64 nSignedChecksum = 0;
     for (qint32 i = 0; i < baHeader.size(); i++) {
-        const quint8 nUnsignedByte = ((i >= 148) && (i < 156))
-                                        ? static_cast<quint8>(' ')
-                                        : static_cast<quint8>(baHeader.at(i));
-        const qint8 nSignedByte = ((i >= 148) && (i < 156))
-                                      ? static_cast<qint8>(' ')
-                                      : static_cast<qint8>(baHeader.at(i));
+        const quint8 nUnsignedByte = ((i >= 148) && (i < 156)) ? static_cast<quint8>(' ') : static_cast<quint8>(baHeader.at(i));
+        const qint8 nSignedByte = ((i >= 148) && (i < 156)) ? static_cast<qint8>(' ') : static_cast<qint8>(baHeader.at(i));
         nUnsignedChecksum += nUnsignedByte;
         nSignedChecksum += nSignedByte;
     }
 
-    return (nFileSize >= 0) &&
-           ((static_cast<quint64>(nStoredChecksum) == nUnsignedChecksum) ||
-            ((nSignedChecksum >= 0) &&
-             (nStoredChecksum == nSignedChecksum)));
+    return (nFileSize >= 0) && ((static_cast<quint64>(nStoredChecksum) == nUnsignedChecksum) || ((nSignedChecksum >= 0) && (nStoredChecksum == nSignedChecksum)));
 }
 
 }  // namespace
@@ -146,72 +133,50 @@ bool XTAR_ZSTD::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 bool XTAR_ZSTD::isValidPrefix(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     QPointer<QIODevice> guardedDevice(pDevice);
-    if (!guardedDevice || guardedDevice->isSequential() ||
-        !guardedDevice->isOpen() || !guardedDevice->isReadable() ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedDevice || guardedDevice->isSequential() || !guardedDevice->isOpen() || !guardedDevice->isReadable() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const qint64 nOriginalPosition = guardedDevice->pos();
     const qint64 nFileSize = guardedDevice->size();
-    if (!guardedDevice || (nOriginalPosition < 0) ||
-        (nFileSize < 8) || !guardedDevice->seek(0)) {
+    if (!guardedDevice || (nOriginalPosition < 0) || (nFileSize < 8) || !guardedDevice->seek(0)) {
         return false;
     }
 
     const qint64 nProbeSize = qMin(nFileSize, TAR_ZSTD_PROBE_MAX_INPUT);
     QByteArray baInput;
     baInput.reserve(static_cast<qint32>(nProbeSize));
-    while (guardedDevice && (baInput.size() < 4) &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while (guardedDevice && (baInput.size() < 4) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         const QByteArray baChunk = guardedDevice->read(4 - baInput.size());
         if (!guardedDevice || baChunk.isEmpty()) break;
         baInput.append(baChunk);
     }
 
-    const bool bHasZstdMagic =
-        (baInput.size() == 4) &&
-        (static_cast<quint8>(baInput.at(0)) == 0x28) &&
-        (static_cast<quint8>(baInput.at(1)) == 0xB5) &&
-        (static_cast<quint8>(baInput.at(2)) == 0x2F) &&
-        (static_cast<quint8>(baInput.at(3)) == 0xFD);
-    while (bHasZstdMagic && guardedDevice &&
-           (baInput.size() < nProbeSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
+    const bool bHasZstdMagic = (baInput.size() == 4) && (static_cast<quint8>(baInput.at(0)) == 0x28) && (static_cast<quint8>(baInput.at(1)) == 0xB5) &&
+                               (static_cast<quint8>(baInput.at(2)) == 0x2F) && (static_cast<quint8>(baInput.at(3)) == 0xFD);
+    while (bHasZstdMagic && guardedDevice && (baInput.size() < nProbeSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         const qint64 nRemaining = nProbeSize - baInput.size();
-        const QByteArray baChunk =
-            guardedDevice->read(qMin<qint64>(65536, nRemaining));
+        const QByteArray baChunk = guardedDevice->read(qMin<qint64>(65536, nRemaining));
         if (!guardedDevice || baChunk.isEmpty()) break;
         baInput.append(baChunk);
     }
 
     bool bResult = false;
-    if (bHasZstdMagic && guardedDevice && (baInput.size() >= 8) &&
-        XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (bHasZstdMagic && guardedDevice && (baInput.size() >= 8) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         ZSTD_DStream *pStream = ZSTD_createDStream();
         if (pStream) {
-            const size_t nWindowResult =
-                ZSTD_DCtx_setMaxWindowSize(pStream,
-                                           TAR_ZSTD_PROBE_MAX_WINDOW);
+            const size_t nWindowResult = ZSTD_DCtx_setMaxWindowSize(pStream, TAR_ZSTD_PROBE_MAX_WINDOW);
             const size_t nInitResult = ZSTD_initDStream(pStream);
-            if (!ZSTD_isError(nWindowResult) &&
-                !ZSTD_isError(nInitResult)) {
+            if (!ZSTD_isError(nWindowResult) && !ZSTD_isError(nInitResult)) {
                 QByteArray baHeader(TAR_ZSTD_HEADER_SIZE, 0);
-                ZSTD_inBuffer input = {baInput.constData(),
-                                       static_cast<size_t>(baInput.size()), 0};
-                ZSTD_outBuffer output = {baHeader.data(),
-                                         static_cast<size_t>(baHeader.size()), 0};
+                ZSTD_inBuffer input = {baInput.constData(), static_cast<size_t>(baInput.size()), 0};
+                ZSTD_outBuffer output = {baHeader.data(), static_cast<size_t>(baHeader.size()), 0};
 
-                while ((output.pos < output.size) &&
-                       (input.pos < input.size) &&
-                       XBinary::isPdStructNotCanceled(pPdStruct)) {
+                while ((output.pos < output.size) && (input.pos < input.size) && XBinary::isPdStructNotCanceled(pPdStruct)) {
                     const size_t nInputBefore = input.pos;
                     const size_t nOutputBefore = output.pos;
-                    const size_t nDecodeResult =
-                        ZSTD_decompressStream(pStream, &output, &input);
-                    if (ZSTD_isError(nDecodeResult) ||
-                        ((input.pos == nInputBefore) &&
-                         (output.pos == nOutputBefore))) {
+                    const size_t nDecodeResult = ZSTD_decompressStream(pStream, &output, &input);
+                    if (ZSTD_isError(nDecodeResult) || ((input.pos == nInputBefore) && (output.pos == nOutputBefore))) {
                         break;
                     }
                     // A Zstandard stream can concatenate frames.  Continue
@@ -219,9 +184,7 @@ bool XTAR_ZSTD::isValidPrefix(QIODevice *pDevice, PDSTRUCT *pPdStruct)
                     // split between frames; the input/output caps still apply.
                 }
 
-                bResult = (output.pos == output.size) &&
-                          isValidTarHeader(baHeader) &&
-                          XBinary::isPdStructNotCanceled(pPdStruct);
+                bResult = (output.pos == output.size) && isValidTarHeader(baHeader) && XBinary::isPdStructNotCanceled(pPdStruct);
             }
             ZSTD_freeDStream(pStream);
         }
@@ -283,12 +246,9 @@ bool XTAR_ZSTD::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XTARCOMPRESSED::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XTARCOMPRESSED::INTERNAL_INFO *pInfo =
-            static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(
-                guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
+        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

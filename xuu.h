@@ -46,8 +46,7 @@ public:
     XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
 
     QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
-    bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties,
-                    PDSTRUCT *pPdStruct = nullptr) override;
+    bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
@@ -65,8 +64,7 @@ private:
         ~UU_UNPACK_CONTEXT();
     };
 
-    bool decodeTransport(QByteArray *pOutput, QString *pDeclaredName,
-                         qint64 nOutputLimit, PDSTRUCT *pPdStruct);
+    bool decodeTransport(QByteArray *pOutput, QString *pDeclaredName, qint64 nOutputLimit, PDSTRUCT *pPdStruct);
     static bool parseHeader(const QByteArray &line, bool *pbBase64, QString *pName);
     static qint32 base64Value(quint8 value);
 };

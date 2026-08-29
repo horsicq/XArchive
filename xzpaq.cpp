@@ -23,13 +23,10 @@
 #include <cstring>
 
 namespace {
-const char ZPAQ_TAG[] = {0x37, 0x6B, 0x53, 0x74, (char)0xA0, 0x31, (char)0x83,
-                         (char)0xD3, (char)0x8C, (char)0xB2, 0x28, (char)0xB0,
-                         (char)0xD3};
+const char ZPAQ_TAG[] = {0x37, 0x6B, 0x53, 0x74, (char)0xA0, 0x31, (char)0x83, (char)0xD3, (char)0x8C, (char)0xB2, 0x28, (char)0xB0, (char)0xD3};
 }
 
-XZPAQ::XZPAQ(QIODevice *pDevice)
-    : XExternalArchive(pDevice, BACKEND_ZPAQ)
+XZPAQ::XZPAQ(QIODevice *pDevice) : XExternalArchive(pDevice, BACKEND_ZPAQ)
 {
 }
 
@@ -40,8 +37,7 @@ qint64 XZPAQ::getFirstBlockOffset() const
     if (nFileSize < ZPAQ_BLOCK_PREFIX_SIZE) return -1;
 
     const QByteArray baPrefix = pThis->read_array(0, qMin(nFileSize, (qint64)(ZPAQ_TAG_SIZE + 3)));
-    if ((baPrefix.size() >= ZPAQ_TAG_SIZE + 3) &&
-        (std::memcmp(baPrefix.constData(), ZPAQ_TAG, ZPAQ_TAG_SIZE) == 0) &&
+    if ((baPrefix.size() >= ZPAQ_TAG_SIZE + 3) && (std::memcmp(baPrefix.constData(), ZPAQ_TAG, ZPAQ_TAG_SIZE) == 0) &&
         (std::memcmp(baPrefix.constData() + ZPAQ_TAG_SIZE, "zPQ", 3) == 0)) {
         return ZPAQ_TAG_SIZE;
     }
@@ -58,9 +54,7 @@ quint8 XZPAQ::getLevel() const
     XZPAQ *pThis = const_cast<XZPAQ *>(this);
     const qint64 nOffset = getFirstBlockOffset();
     const qint64 nFileSize = pThis->getSize();
-    return ((nOffset >= 0) && (nOffset <= nFileSize - ZPAQ_BLOCK_PREFIX_SIZE))
-               ? pThis->read_uint8(nOffset + 3)
-               : 0;
+    return ((nOffset >= 0) && (nOffset <= nFileSize - ZPAQ_BLOCK_PREFIX_SIZE)) ? pThis->read_uint8(nOffset + 3) : 0;
 }
 
 quint16 XZPAQ::getHeaderSize() const
@@ -68,9 +62,7 @@ quint16 XZPAQ::getHeaderSize() const
     XZPAQ *pThis = const_cast<XZPAQ *>(this);
     const qint64 nOffset = getFirstBlockOffset();
     const qint64 nFileSize = pThis->getSize();
-    return ((nOffset >= 0) && (nOffset <= nFileSize - ZPAQ_BLOCK_PREFIX_SIZE))
-               ? pThis->read_uint16(nOffset + 5, false)
-               : 0;
+    return ((nOffset >= 0) && (nOffset <= nFileSize - ZPAQ_BLOCK_PREFIX_SIZE)) ? pThis->read_uint16(nOffset + 5, false) : 0;
 }
 
 void XZPAQ::setAllowOpaqueEncrypted(bool bAllow)
@@ -84,15 +76,13 @@ bool XZPAQ::isValid(PDSTRUCT *pPdStruct)
 
     const qint64 nBlockOffset = getFirstBlockOffset();
     const qint64 nFileSize = getSize();
-    if ((nBlockOffset < 0) ||
-        (nBlockOffset > nFileSize - ZPAQ_BLOCK_PREFIX_SIZE)) {
+    if ((nBlockOffset < 0) || (nBlockOffset > nFileSize - ZPAQ_BLOCK_PREFIX_SIZE)) {
         // Encrypted ZPAQ has no plaintext signature: a 32-byte salt is
         // followed by AES-CTR ciphertext. This opt-in is set only after XSFX
         // validates zpaqfranz's exact executable-overlay framing. The helper
         // must still authenticate the password and archive before records are
         // exposed.
-        return m_bAllowOpaqueEncrypted && (nFileSize > 32) &&
-               isPdStructNotCanceled(pPdStruct);
+        return m_bAllowOpaqueEncrypted && (nFileSize > 32) && isPdStructNotCanceled(pPdStruct);
     }
 
     const quint8 nLevel = read_uint8(nBlockOffset + 3);
@@ -100,26 +90,19 @@ bool XZPAQ::isValid(PDSTRUCT *pPdStruct)
     const quint16 nHeaderSize = read_uint16(nBlockOffset + 5, false);
     const qint64 nRemaining = nFileSize - nBlockOffset - ZPAQ_BLOCK_PREFIX_SIZE;
 
-    return isPdStructNotCanceled(pPdStruct) && ((nLevel == 1) || (nLevel == 2)) &&
-           (nType == 1) && (nHeaderSize >= 7) && (nHeaderSize <= nRemaining) &&
+    return isPdStructNotCanceled(pPdStruct) && ((nLevel == 1) || (nLevel == 2)) && (nType == 1) && (nHeaderSize >= 7) && (nHeaderSize <= nRemaining) &&
            (read_uint8(nBlockOffset + ZPAQ_BLOCK_PREFIX_SIZE + nHeaderSize - 1) == 0);
 }
 
-bool XZPAQ::initUnpack(
-    UNPACK_STATE *pState,
-    const QMap<UNPACK_PROP, QVariant> &mapProperties,
-    PDSTRUCT *pPdStruct)
+bool XZPAQ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    if (m_bAllowOpaqueEncrypted &&
-        mapProperties.value(UNPACK_PROP_PASSWORD).toString().isEmpty() &&
+    if (m_bAllowOpaqueEncrypted && mapProperties.value(UNPACK_PROP_PASSWORD).toString().isEmpty() &&
         mapProperties.value(UNPACK_PROP_PASSWORD_BYTES).toByteArray().isEmpty()) {
         setLastExternalFailure(EXTERNAL_FAILURE_PASSWORD);
-        XBinary::setPdStructErrorString(
-            pPdStruct, tr("Encrypted ZPAQ archive password is required"));
+        XBinary::setPdStructErrorString(pPdStruct, tr("Encrypted ZPAQ archive password is required"));
         return false;
     }
-    return XExternalArchive::initUnpack(
-        pState, mapProperties, pPdStruct);
+    return XExternalArchive::initUnpack(pState, mapProperties, pPdStruct);
 }
 
 bool XZPAQ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)

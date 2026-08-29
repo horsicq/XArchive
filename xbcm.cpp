@@ -20,15 +20,13 @@
  */
 #include "xbcm.h"
 
-XBCM::XBCM(QIODevice *pDevice)
-    : XExternalArchive(pDevice, BACKEND_BCM)
+XBCM::XBCM(QIODevice *pDevice) : XExternalArchive(pDevice, BACKEND_BCM)
 {
 }
 
 bool XBCM::isValid(PDSTRUCT *pPdStruct)
 {
-    return isPdStructNotCanceled(pPdStruct) && (getSize() >= 8) &&
-           (read_array(0, 4) == QByteArray("BCM1", 4));
+    return isPdStructNotCanceled(pPdStruct) && (getSize() >= 8) && (read_array(0, 4) == QByteArray("BCM1", 4));
 }
 
 bool XBCM::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)

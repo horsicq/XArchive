@@ -62,6 +62,7 @@ public:
     virtual QString structIDToString(quint32 nID);
     virtual QString structIDToFtString(quint32 nID);
     virtual quint32 ftStringToStructID(const QString &sFtString);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

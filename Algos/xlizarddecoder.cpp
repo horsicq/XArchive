@@ -35,8 +35,7 @@ const quint32 LIZARD_SKIPPABLE_MAGIC_MASK = 0xFFFFFFF0U;
 quint32 readUInt32LE(const char *pData)
 {
     const unsigned char *p = reinterpret_cast<const unsigned char *>(pData);
-    return static_cast<quint32>(p[0]) | (static_cast<quint32>(p[1]) << 8) |
-           (static_cast<quint32>(p[2]) << 16) | (static_cast<quint32>(p[3]) << 24);
+    return static_cast<quint32>(p[0]) | (static_cast<quint32>(p[1]) << 8) | (static_cast<quint32>(p[2]) << 16) | (static_cast<quint32>(p[3]) << 24);
 }
 
 bool isSkippableMagic(quint32 nMagic)
@@ -137,52 +136,41 @@ private:
     bool m_bAtEnd;
 };
 
-bool getFrameBufferRequirement(LizardInputBuffer *pInput,
-                               quint64 *pnBufferRequirement)
+bool getFrameBufferRequirement(LizardInputBuffer *pInput, quint64 *pnBufferRequirement)
 {
     if (!pInput || !pnBufferRequirement || !pInput->ensure(6)) return false;
 
-    const unsigned char *pData =
-        reinterpret_cast<const unsigned char *>(pInput->data());
+    const unsigned char *pData = reinterpret_cast<const unsigned char *>(pInput->data());
     const unsigned char nFlags = pData[4];
     const unsigned char nBlockDescriptor = pData[5];
     const unsigned nVersion = (nFlags >> 6) & 0x03U;
     const unsigned nBlockSizeId = (nBlockDescriptor >> 4) & 0x07U;
-    if ((nVersion != 1U) || ((nFlags & 0x13U) != 0) ||
-        ((nBlockDescriptor & 0x8FU) != 0) ||
-        (nBlockSizeId < 1U) || (nBlockSizeId > 7U)) {
+    if ((nVersion != 1U) || ((nFlags & 0x13U) != 0) || ((nBlockDescriptor & 0x8FU) != 0) || (nBlockSizeId < 1U) || (nBlockSizeId > 7U)) {
         return false;
     }
 
-    static const quint64 kBlockSizes[7] = {
-        128ULL * 1024ULL, 256ULL * 1024ULL,
-        1024ULL * 1024ULL, 4ULL * 1024ULL * 1024ULL,
-        16ULL * 1024ULL * 1024ULL, 64ULL * 1024ULL * 1024ULL,
-        256ULL * 1024ULL * 1024ULL};
+    static const quint64 kBlockSizes[7] = {128ULL * 1024ULL,          256ULL * 1024ULL,          1024ULL * 1024ULL,         4ULL * 1024ULL * 1024ULL,
+                                           16ULL * 1024ULL * 1024ULL, 64ULL * 1024ULL * 1024ULL, 256ULL * 1024ULL * 1024ULL};
     const quint64 nMaxBlockSize = kBlockSizes[nBlockSizeId - 1U];
     const bool bBlocksLinked = (nFlags & 0x20U) == 0;
     // The vendored Lizard frame decoder reserves two 16 MiB dictionary
     // regions in addition to the advertised maximum block for linked frames.
-    *pnBufferRequirement =
-        nMaxBlockSize + (bBlocksLinked ? 32ULL * 1024ULL * 1024ULL : 0ULL);
+    *pnBufferRequirement = nMaxBlockSize + (bBlocksLinked ? 32ULL * 1024ULL * 1024ULL : 0ULL);
     return true;
 }
 
-bool writeOutput(const QByteArray *pOutput, size_t nOutputSize, qint64 nExpectedOutput,
-                 XBinary::DATAPROCESS_STATE *pState)
+bool writeOutput(const QByteArray *pOutput, size_t nOutputSize, qint64 nExpectedOutput, XBinary::DATAPROCESS_STATE *pState)
 {
     if (nOutputSize == 0) return true;
     if (nOutputSize > static_cast<size_t>((std::numeric_limits<qint32>::max)())) return false;
     const qint32 nSize = static_cast<qint32>(nOutputSize);
-    if ((nExpectedOutput != -1) &&
-        ((pState->nCountOutput > nExpectedOutput) || (nSize > nExpectedOutput - pState->nCountOutput))) {
+    if ((nExpectedOutput != -1) && ((pState->nCountOutput > nExpectedOutput) || (nSize > nExpectedOutput - pState->nCountOutput))) {
         return false;
     }
     return XBinary::_writeDevice(pOutput->constData(), nSize, pState) == nSize;
 }
 
-bool decodeFrame(LizardInputBuffer *pInput, QByteArray *pOutput, qint64 nExpectedOutput,
-                 XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+bool decodeFrame(LizardInputBuffer *pInput, QByteArray *pOutput, qint64 nExpectedOutput, XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     LizardF_decompressionContext_t pContext = nullptr;
     const LizardF_errorCode_t nCreateResult = LizardF_createDecompressionContext(&pContext, LIZARDF_VERSION);
@@ -195,12 +183,9 @@ bool decodeFrame(LizardInputBuffer *pInput, QByteArray *pOutput, qint64 nExpecte
         const qint32 nAvailableBefore = pInput->available();
         size_t nInputSize = static_cast<size_t>(nAvailableBefore);
         size_t nOutputSize = static_cast<size_t>(pOutput->size());
-        const size_t nResult = LizardF_decompress(pContext, pOutput->data(), &nOutputSize,
-                                                  pInput->data(), &nInputSize, nullptr);
-        if (LizardF_isError(nResult) || (nInputSize > static_cast<size_t>(nAvailableBefore)) ||
-            (nOutputSize > static_cast<size_t>(pOutput->size())) ||
-            !pInput->consume(static_cast<qint32>(nInputSize)) ||
-            !writeOutput(pOutput, nOutputSize, nExpectedOutput, pState)) {
+        const size_t nResult = LizardF_decompress(pContext, pOutput->data(), &nOutputSize, pInput->data(), &nInputSize, nullptr);
+        if (LizardF_isError(nResult) || (nInputSize > static_cast<size_t>(nAvailableBefore)) || (nOutputSize > static_cast<size_t>(pOutput->size())) ||
+            !pInput->consume(static_cast<qint32>(nInputSize)) || !writeOutput(pOutput, nOutputSize, nExpectedOutput, pState)) {
             break;
         }
 
@@ -216,8 +201,7 @@ bool decodeFrame(LizardInputBuffer *pInput, QByteArray *pOutput, qint64 nExpecte
     }
 
     const LizardF_errorCode_t nFreeResult = LizardF_freeDecompressionContext(pContext);
-    return bFinished && (nFreeResult == 0) && !pState->bReadError && !pState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return bFinished && (nFreeResult == 0) && !pState->bReadError && !pState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 }  // namespace
 
@@ -227,26 +211,20 @@ XLizardDecoder::XLizardDecoder(QObject *parent) : QObject(parent)
 
 bool XLizardDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
-        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1) ||
-        XBinary::isPdStructStopped(pPdStruct)) {
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || (pDecompressState->nInputOffset < 0) ||
+        (pDecompressState->nInputLimit < -1) || XBinary::isPdStructStopped(pPdStruct)) {
         return false;
     }
 
     bool bExpectedOutputValid = true;
     qint64 nExpectedOutput = -1;
     qint64 nConfiguredOutputLimit = -1;
-    if (!XBinary::getUnpackOutputLimit(
-            pDecompressState->mapUnpackProperties,
-            &nConfiguredOutputLimit)) {
+    if (!XBinary::getUnpackOutputLimit(pDecompressState->mapUnpackProperties, &nConfiguredOutputLimit)) {
         return false;
     }
     if (pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
         nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bExpectedOutputValid);
-        if (!bExpectedOutputValid ||
-            !XBinary::isUnpackOutputSizeAllowed(
-                pDecompressState->mapUnpackProperties,
-                nExpectedOutput)) return false;
+        if (!bExpectedOutputValid || !XBinary::isUnpackOutputSizeAllowed(pDecompressState->mapUnpackProperties, nExpectedOutput)) return false;
     }
 
     const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
@@ -255,8 +233,7 @@ bool XLizardDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
     const qint64 nBaseBufferReservation = (qint64)nBufferSize * 2;
     XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
-    if (!memoryReservation.acquire(pDecompressState->mapUnpackProperties,
-                                   nBaseBufferReservation)) {
+    if (!memoryReservation.acquire(pDecompressState->mapUnpackProperties, nBaseBufferReservation)) {
         return false;
     }
 
@@ -277,31 +254,20 @@ bool XLizardDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
         if ((nMagic != LIZARD_FRAME_MAGIC) && !isSkippableMagic(nMagic)) return false;
         if (nMagic == LIZARD_FRAME_MAGIC) {
             quint64 nFrameBufferRequirement = 0;
-            if (!getFrameBufferRequirement(&input,
-                                           &nFrameBufferRequirement) ||
-                (nFrameBufferRequirement >
-                 (quint64)(std::numeric_limits<qint64>::max)()) ||
-                ((nConfiguredOutputLimit >= 0) &&
-                 (nFrameBufferRequirement > static_cast<quint64>(
-                      nConfiguredOutputLimit))) ||
-                !memoryReservation.resize(
-                    nBaseBufferReservation +
-                    (qint64)nFrameBufferRequirement)) {
+            if (!getFrameBufferRequirement(&input, &nFrameBufferRequirement) || (nFrameBufferRequirement > (quint64)(std::numeric_limits<qint64>::max)()) ||
+                ((nConfiguredOutputLimit >= 0) && (nFrameBufferRequirement > static_cast<quint64>(nConfiguredOutputLimit))) ||
+                !memoryReservation.resize(nBaseBufferReservation + (qint64)nFrameBufferRequirement)) {
                 return false;
             }
         }
         if (!decodeFrame(&input, &baOutput, nExpectedOutput, pDecompressState, pPdStruct)) return false;
-        if ((nMagic == LIZARD_FRAME_MAGIC) &&
-            !memoryReservation.resize(nBaseBufferReservation)) {
+        if ((nMagic == LIZARD_FRAME_MAGIC) && !memoryReservation.resize(nBaseBufferReservation)) {
             return false;
         }
         if (nMagic == LIZARD_FRAME_MAGIC) bSawDataFrame = true;
     }
 
-    const bool bExactInput = input.atEnd() &&
-                             ((pDecompressState->nInputLimit == -1) ||
-                              (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+    const bool bExactInput = input.atEnd() && ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit));
     const bool bExactOutput = (nExpectedOutput == -1) || (pDecompressState->nCountOutput == nExpectedOutput);
-    return bSawDataFrame && bExactInput && bExactOutput && !pDecompressState->bReadError &&
-           !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
+    return bSawDataFrame && bExactInput && bExactOutput && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

@@ -106,8 +106,7 @@ private:
     };
 
     bool _getHeaderInfo(qint64 *pHeaderSize, QString *pFileName = nullptr, PDSTRUCT *pPdStruct = nullptr);
-    bool _getFirstMemberInfo(GZIP_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct = nullptr,
-                             const QMap<UNPACK_PROP, QVariant> *pUnpackProperties = nullptr);
+    bool _getFirstMemberInfo(GZIP_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct = nullptr, const QMap<UNPACK_PROP, QVariant> *pUnpackProperties = nullptr);
 
 private:
     INTERNAL_INFO m_internalInfo;

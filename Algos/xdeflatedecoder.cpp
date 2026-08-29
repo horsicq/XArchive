@@ -7192,12 +7192,12 @@ local void lm_init(deflate_state *s)
  */
 local uInt longest_match(deflate_state *s, IPos cur_match)
 {
-    unsigned chain_length = s->max_chain_length;    /* max hash chain length */
-    Bytef *scan = s->window + s->strstart; /* current string */
-    Bytef *match;                          /* matched string */
-    int len;                               /* length of current match */
-    int best_len = (int)s->prev_length;             /* best match length so far */
-    int nice_match = s->nice_match;                 /* stop if match long enough */
+    unsigned chain_length = s->max_chain_length; /* max hash chain length */
+    Bytef *scan = s->window + s->strstart;       /* current string */
+    Bytef *match;                                /* matched string */
+    int len;                                     /* length of current match */
+    int best_len = (int)s->prev_length;          /* best match length so far */
+    int nice_match = s->nice_match;              /* stop if match long enough */
     IPos limit = s->strstart > (IPos)MAX_DIST(s) ? s->strstart - (IPos)MAX_DIST(s) : NIL;
     /* Stop when cur_match becomes <= limit. To simplify the code,
      * we prevent matches with the string of window index 0.
@@ -9491,15 +9491,12 @@ struct DeflateAdlerProgressBridge {
     XBinary::PDSTRUCTLIFETIME originalLifetime;
 };
 
-void deflateAdlerProgressCallback(void *pUserData,
-                                  XBinary::PDSTRUCT *pLocalProgress)
+void deflateAdlerProgressCallback(void *pUserData, XBinary::PDSTRUCT *pLocalProgress)
 {
-    DeflateAdlerProgressBridge *pBridge =
-        static_cast<DeflateAdlerProgressBridge *>(pUserData);
+    DeflateAdlerProgressBridge *pBridge = static_cast<DeflateAdlerProgressBridge *>(pUserData);
     if (!pBridge || !pLocalProgress) return;
 
-    if (!XBinary::isPdStructLifetimeAlive(pBridge->originalLifetime) ||
-        !XBinary::isPdStructNotCanceled(pBridge->pOriginal)) {
+    if (!XBinary::isPdStructLifetimeAlive(pBridge->originalLifetime) || !XBinary::isPdStructNotCanceled(pBridge->pOriginal)) {
         XBinary::setPdStructStopped(pLocalProgress);
     }
 }
@@ -10530,17 +10527,15 @@ static bool zlibReadExactAt(XBinary::DATAPROCESS_STATE *pDecompressState, qint64
 
 bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
-        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < 6) ||
-        (pDecompressState->nInputOffset > (std::numeric_limits<qint64>::max)() - pDecompressState->nInputLimit) ||
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || (pDecompressState->nInputOffset < 0) ||
+        (pDecompressState->nInputLimit < 6) || (pDecompressState->nInputOffset > (std::numeric_limits<qint64>::max)() - pDecompressState->nInputLimit) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     QPointer<QIODevice> guardedInput(pDecompressState->pDeviceInput);
     QPointer<QIODevice> guardedOutput(pDecompressState->pDeviceOutput);
-    const XBinary::PDSTRUCTLIFETIME progressLifetime =
-        pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
+    const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
 
     Algo_utils::prepareState(pDecompressState);
     if (!guardedInput || !guardedOutput) return false;
@@ -10570,8 +10565,7 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     char aHeader[2] = {};
     char aFooter[4] = {};
     const qint64 nFooterOffset = pDecompressState->nInputOffset + pDecompressState->nInputLimit - 4;
-    if (!readExactAt(pDecompressState->nInputOffset, aHeader, sizeof(aHeader)) ||
-        !readExactAt(nFooterOffset, aFooter, sizeof(aFooter))) {
+    if (!readExactAt(pDecompressState->nInputOffset, aHeader, sizeof(aHeader)) || !readExactAt(nFooterOffset, aFooter, sizeof(aFooter))) {
         if (!guardedInput) return false;
         pDecompressState->bReadError = true;
         return false;
@@ -10587,8 +10581,8 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
         return false;
     }
 
-    const quint32 nExpectedAdler = ((quint32)(quint8)aFooter[0] << 24) | ((quint32)(quint8)aFooter[1] << 16) |
-                                   ((quint32)(quint8)aFooter[2] << 8) | (quint32)(quint8)aFooter[3];
+    const quint32 nExpectedAdler =
+        ((quint32)(quint8)aFooter[0] << 24) | ((quint32)(quint8)aFooter[1] << 16) | ((quint32)(quint8)aFooter[2] << 8) | (quint32)(quint8)aFooter[3];
     const qint64 nCompressedSize = pDecompressState->nInputLimit - 6;
 
     XBinary::DATAPROCESS_STATE decompressState = *pDecompressState;
@@ -10600,8 +10594,7 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     decompressState.nCountOutput = 0;
 
     bool bResult = decompress(&decompressState, pPdStruct);
-    if (!guardedInput || !guardedOutput ||
-        (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) {
+    if (!guardedInput || !guardedOutput || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) {
         return false;
     }
     pDecompressState->bReadError = decompressState.bReadError;
@@ -10613,8 +10606,7 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
     // an early end marker would otherwise make bytes before the Adler footer
     // unauthenticated and was also what allowed a bad footer to pass the old
     // header-only retry path.
-    bResult = bResult && (decompressState.nCountInput == nCompressedSize) &&
-              !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+    bResult = bResult && (decompressState.nCountInput == nCompressedSize) && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
               XBinary::isPdStructNotCanceled(pPdStruct);
 
     if (bResult && pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
@@ -10626,18 +10618,13 @@ bool XDeflateDecoder::decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressSta
         DeflateAdlerProgressBridge adlerBridge = {pPdStruct, progressLifetime};
         XBinary::PDSTRUCT adlerProgress = XBinary::getPdStructSnapshot(pPdStruct);
         if (pPdStruct) {
-            XBinary::setPdStructCallback(&adlerProgress,
-                                         deflateAdlerProgressCallback,
-                                         &adlerBridge);
+            XBinary::setPdStructCallback(&adlerProgress, deflateAdlerProgressCallback, &adlerBridge);
         }
-        const quint32 nActualAdler =
-            XBinary::getAdler32(guardedOutput.data(), &adlerProgress);
-        if (!guardedOutput ||
-            (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) {
+        const quint32 nActualAdler = XBinary::getAdler32(guardedOutput.data(), &adlerProgress);
+        if (!guardedOutput || (pPdStruct && !XBinary::isPdStructLifetimeAlive(progressLifetime))) {
             return false;
         }
-        bResult = XBinary::isPdStructNotCanceled(pPdStruct) &&
-                  (nActualAdler == nExpectedAdler);
+        bResult = XBinary::isPdStructNotCanceled(pPdStruct) && (nActualAdler == nExpectedAdler);
     }
 
     if (!bResult) {

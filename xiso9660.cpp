@@ -46,9 +46,7 @@ struct CD_SOURCE_LAYOUT {
     qint32 nSectorSize;
     qint32 nPayloadOffset;
 
-    CD_SOURCE_LAYOUT()
-        : bValid(false), bCue(false), nSourceOffset(0), nSourceSize(0),
-          nSectorSize(0), nPayloadOffset(0)
+    CD_SOURCE_LAYOUT() : bValid(false), bCue(false), nSourceOffset(0), nSourceSize(0), nSectorSize(0), nPayloadOffset(0)
     {
     }
 };
@@ -60,47 +58,39 @@ struct CUE_TRACK {
     qint64 nIndex00;
     qint64 nIndex01;
 
-    CUE_TRACK() : nIndex00(-1), nIndex01(-1) {}
+    CUE_TRACK() : nIndex00(-1), nIndex01(-1)
+    {
+    }
 };
 
 quint16 read16le(const char *pData)
 {
     const uchar *p = reinterpret_cast<const uchar *>(pData);
-    return static_cast<quint16>(p[0]) |
-           (static_cast<quint16>(p[1]) << 8);
+    return static_cast<quint16>(p[0]) | (static_cast<quint16>(p[1]) << 8);
 }
 
 quint16 read16be(const char *pData)
 {
     const uchar *p = reinterpret_cast<const uchar *>(pData);
-    return (static_cast<quint16>(p[0]) << 8) |
-           static_cast<quint16>(p[1]);
+    return (static_cast<quint16>(p[0]) << 8) | static_cast<quint16>(p[1]);
 }
 
 quint32 read32le(const char *pData)
 {
     const uchar *p = reinterpret_cast<const uchar *>(pData);
-    return static_cast<quint32>(p[0]) |
-           (static_cast<quint32>(p[1]) << 8) |
-           (static_cast<quint32>(p[2]) << 16) |
-           (static_cast<quint32>(p[3]) << 24);
+    return static_cast<quint32>(p[0]) | (static_cast<quint32>(p[1]) << 8) | (static_cast<quint32>(p[2]) << 16) | (static_cast<quint32>(p[3]) << 24);
 }
 
 quint32 read32be(const char *pData)
 {
     const uchar *p = reinterpret_cast<const uchar *>(pData);
-    return (static_cast<quint32>(p[0]) << 24) |
-           (static_cast<quint32>(p[1]) << 16) |
-           (static_cast<quint32>(p[2]) << 8) |
-           static_cast<quint32>(p[3]);
+    return (static_cast<quint32>(p[0]) << 24) | (static_cast<quint32>(p[1]) << 16) | (static_cast<quint32>(p[2]) << 8) | static_cast<quint32>(p[3]);
 }
 
-bool readDeviceAt(QIODevice *pDevice, qint64 nOffset, char *pData,
-                  qint64 nSize)
+bool readDeviceAt(QIODevice *pDevice, qint64 nOffset, char *pData, qint64 nSize)
 {
     QPointer<QIODevice> guardedDevice(pDevice);
-    if (!guardedDevice || (nOffset < 0) || (nSize < 0) ||
-        ((nSize > 0) && !pData)) {
+    if (!guardedDevice || (nOffset < 0) || (nSize < 0) || ((nSize > 0) && !pData)) {
         return false;
     }
     const bool bOpen = guardedDevice->isOpen();
@@ -118,10 +108,8 @@ bool readDeviceAt(QIODevice *pDevice, qint64 nOffset, char *pData,
     while (guardedDevice && (nReadTotal < nSize)) {
         const bool bSeek = guardedDevice->seek(nOffset + nReadTotal);
         if (!guardedDevice || !bSeek) break;
-        const qint64 nRead = guardedDevice->read(
-            pData + nReadTotal, nSize - nReadTotal);
-        if (!guardedDevice || (nRead <= 0) ||
-            (nRead > (nSize - nReadTotal))) {
+        const qint64 nRead = guardedDevice->read(pData + nReadTotal, nSize - nReadTotal);
+        if (!guardedDevice || (nRead <= 0) || (nRead > (nSize - nReadTotal))) {
             break;
         }
         nReadTotal += nRead;
@@ -134,18 +122,15 @@ bool readDeviceAt(QIODevice *pDevice, qint64 nOffset, char *pData,
 
 QByteArray readDeviceAt(QIODevice *pDevice, qint64 nOffset, qint64 nSize)
 {
-    if ((nSize < 0) || (nSize > (std::numeric_limits<int>::max)()))
-        return QByteArray();
+    if ((nSize < 0) || (nSize > (std::numeric_limits<int>::max)())) return QByteArray();
     QByteArray baResult(static_cast<int>(nSize), 0);
-    if (!readDeviceAt(pDevice, nOffset, baResult.data(), nSize))
-        baResult.clear();
+    if (!readDeviceAt(pDevice, nOffset, baResult.data(), nSize)) baResult.clear();
     return baResult;
 }
 
 bool hasRawSync(const char *pSector)
 {
-    if (!pSector || (static_cast<uchar>(pSector[0]) != 0) ||
-        (static_cast<uchar>(pSector[11]) != 0)) {
+    if (!pSector || (static_cast<uchar>(pSector[0]) != 0) || (static_cast<uchar>(pSector[11]) != 0)) {
         return false;
     }
     for (qint32 i = 1; i < 11; ++i) {
@@ -154,12 +139,9 @@ bool hasRawSync(const char *pSector)
     return true;
 }
 
-bool isPhysicalSectorValid(const char *pSector, qint32 nSectorSize,
-                           qint32 nPayloadOffset)
+bool isPhysicalSectorValid(const char *pSector, qint32 nSectorSize, qint32 nPayloadOffset)
 {
-    if (!pSector || (nSectorSize < ISO_LOGICAL_SECTOR_SIZE) ||
-        (nPayloadOffset < 0) ||
-        (nPayloadOffset > nSectorSize - ISO_LOGICAL_SECTOR_SIZE)) {
+    if (!pSector || (nSectorSize < ISO_LOGICAL_SECTOR_SIZE) || (nPayloadOffset < 0) || (nPayloadOffset > nSectorSize - ISO_LOGICAL_SECTOR_SIZE)) {
         return false;
     }
 
@@ -175,62 +157,48 @@ bool isPhysicalSectorValid(const char *pSector, qint32 nSectorSize,
         // duplicated subheader bytes to match: surviving historical images
         // can contain a damaged file/channel copy while their 2048-byte data
         // payload remains intact (for example Abe's Exoddus CD 2).
-        return ((static_cast<uchar>(pSector[18]) & 0x20) == 0) &&
-               ((static_cast<uchar>(pSector[22]) & 0x20) == 0);
+        return ((static_cast<uchar>(pSector[18]) & 0x20) == 0) && ((static_cast<uchar>(pSector[22]) & 0x20) == 0);
     }
 
     if ((nSectorSize == 2336) && (nPayloadOffset == 8)) {
-        return ((static_cast<uchar>(pSector[2]) & 0x20) == 0) &&
-               ((static_cast<uchar>(pSector[6]) & 0x20) == 0);
+        return ((static_cast<uchar>(pSector[2]) & 0x20) == 0) && ((static_cast<uchar>(pSector[6]) & 0x20) == 0);
     }
 
-    return (nSectorSize == ISO_LOGICAL_SECTOR_SIZE) &&
-           (nPayloadOffset == 0);
+    return (nSectorSize == ISO_LOGICAL_SECTOR_SIZE) && (nPayloadOffset == 0);
 }
 
 class CDLogicalSectorDevice : public SubDevice {
 public:
-    CDLogicalSectorDevice(QIODevice *pDevice, qint64 nOffset,
-                          qint64 nSourceSize, qint32 nSectorSize,
-                          qint32 nPayloadOffset)
-        : SubDevice(pDevice, nOffset, nSourceSize),
-          m_nSourceSize(nSourceSize), m_nSectorSize(nSectorSize),
-          m_nPayloadOffset(nPayloadOffset), m_nLogicalSize(0)
+    CDLogicalSectorDevice(QIODevice *pDevice, qint64 nOffset, qint64 nSourceSize, qint32 nSectorSize, qint32 nPayloadOffset)
+        : SubDevice(pDevice, nOffset, nSourceSize), m_nSourceSize(nSourceSize), m_nSectorSize(nSectorSize), m_nPayloadOffset(nPayloadOffset), m_nLogicalSize(0)
     {
-        if ((m_nSourceSize >= 0) && (m_nSectorSize > 0) &&
-            (m_nPayloadOffset >= 0) &&
-            (m_nPayloadOffset <=
-             m_nSectorSize - ISO_LOGICAL_SECTOR_SIZE)) {
+        if ((m_nSourceSize >= 0) && (m_nSectorSize > 0) && (m_nPayloadOffset >= 0) && (m_nPayloadOffset <= m_nSectorSize - ISO_LOGICAL_SECTOR_SIZE)) {
             const qint64 nSectors = m_nSourceSize / m_nSectorSize;
-            if (nSectors <=
-                (std::numeric_limits<qint64>::max)() /
-                    ISO_LOGICAL_SECTOR_SIZE) {
-                m_nLogicalSize =
-                    nSectors * ISO_LOGICAL_SECTOR_SIZE;
+            if (nSectors <= (std::numeric_limits<qint64>::max)() / ISO_LOGICAL_SECTOR_SIZE) {
+                m_nLogicalSize = nSectors * ISO_LOGICAL_SECTOR_SIZE;
             }
         }
     }
 
-    qint64 size() const override { return m_nLogicalSize; }
+    qint64 size() const override
+    {
+        return m_nLogicalSize;
+    }
 
     bool open(OpenMode mode) override
     {
         QPointer<CDLogicalSectorDevice> guardedThis(this);
         QPointer<QIODevice> guardedSource(getOrigDevice());
-        if (!guardedThis || !guardedSource ||
-            ((mode & QIODevice::ReadOnly) == 0) ||
-            ((mode & QIODevice::WriteOnly) != 0)) {
+        if (!guardedThis || !guardedSource || ((mode & QIODevice::ReadOnly) == 0) || ((mode & QIODevice::WriteOnly) != 0)) {
             return false;
         }
         const qint64 nOriginalSourcePosition = guardedSource->pos();
-        if (!guardedThis || !guardedSource ||
-            (nOriginalSourcePosition < 0)) {
+        if (!guardedThis || !guardedSource || (nOriginalSourcePosition < 0)) {
             return false;
         }
         const bool bOpened = SubDevice::open(mode);
         if (!guardedSource) return false;
-        const bool bRestored = guardedSource->seek(
-            nOriginalSourcePosition);
+        const bool bRestored = guardedSource->seek(nOriginalSourcePosition);
         if (!guardedThis || !guardedSource || !bRestored) {
             if (guardedThis) guardedThis->close();
             return false;
@@ -240,8 +208,7 @@ public:
 
     bool seek(qint64 nPosition) override
     {
-        if (!isOpen() || (nPosition < 0) ||
-            (nPosition > m_nLogicalSize)) {
+        if (!isOpen() || (nPosition < 0) || (nPosition > m_nLogicalSize)) {
             return false;
         }
         return XIODevice::seek(nPosition);
@@ -252,8 +219,7 @@ protected:
     {
         QPointer<CDLogicalSectorDevice> guardedThis(this);
         QPointer<QIODevice> guardedSource(getOrigDevice());
-        if (!guardedThis || !guardedSource || (nMaximumSize < 0) ||
-            ((nMaximumSize > 0) && !pData)) {
+        if (!guardedThis || !guardedSource || (nMaximumSize < 0) || ((nMaximumSize > 0) && !pData)) {
             return -1;
         }
         const qint64 nStart = guardedThis->pos();
@@ -267,119 +233,82 @@ protected:
         const bool bSourceReadable = guardedSource->isReadable();
         if (!guardedThis || !guardedSource || !bSourceReadable) return -1;
         const bool bSourceSequential = guardedSource->isSequential();
-        if (!guardedThis || !guardedSource || bSourceSequential ||
-            (nStart > guardedThis->m_nLogicalSize)) {
+        if (!guardedThis || !guardedSource || bSourceSequential || (nStart > guardedThis->m_nLogicalSize)) {
             return -1;
         }
         const qint64 nOriginalSourcePosition = guardedSource->pos();
-        if (!guardedThis || !guardedSource ||
-            (nOriginalSourcePosition < 0)) {
+        if (!guardedThis || !guardedSource || (nOriginalSourcePosition < 0)) {
             return -1;
         }
-        const auto finishRead = [&guardedSource,
-                                 nOriginalSourcePosition](qint64 nResult) {
+        const auto finishRead = [&guardedSource, nOriginalSourcePosition](qint64 nResult) {
             if (!guardedSource) return static_cast<qint64>(-1);
-            const bool bRestored =
-                guardedSource->seek(nOriginalSourcePosition);
+            const bool bRestored = guardedSource->seek(nOriginalSourcePosition);
             if (!guardedSource || !bRestored) {
                 return static_cast<qint64>(-1);
             }
             return nResult;
         };
 
-        qint64 nRemaining = qMin(
-            nMaximumSize, guardedThis->m_nLogicalSize - nStart);
+        qint64 nRemaining = qMin(nMaximumSize, guardedThis->m_nLogicalSize - nStart);
         qint64 nProduced = 0;
-        const qint64 nBaseOffset = static_cast<qint64>(
-            guardedThis->getInitLocation());
-        if (!guardedThis || !guardedSource)
-            return finishRead(-1);
+        const qint64 nBaseOffset = static_cast<qint64>(guardedThis->getInitLocation());
+        if (!guardedThis || !guardedSource) return finishRead(-1);
 
         while (guardedThis && guardedSource && (nRemaining > 0)) {
             const qint64 nLogicalPosition = nStart + nProduced;
-            const qint64 nSector =
-                nLogicalPosition / ISO_LOGICAL_SECTOR_SIZE;
-            const qint32 nInside = static_cast<qint32>(
-                nLogicalPosition % ISO_LOGICAL_SECTOR_SIZE);
+            const qint64 nSector = nLogicalPosition / ISO_LOGICAL_SECTOR_SIZE;
+            const qint32 nInside = static_cast<qint32>(nLogicalPosition % ISO_LOGICAL_SECTOR_SIZE);
 
             qint64 nSectorCount = 1;
-            if ((nInside == 0) &&
-                (nRemaining >= ISO_LOGICAL_SECTOR_SIZE)) {
-                nSectorCount = qMin<qint64>(
-                    256, nRemaining / ISO_LOGICAL_SECTOR_SIZE);
+            if ((nInside == 0) && (nRemaining >= ISO_LOGICAL_SECTOR_SIZE)) {
+                nSectorCount = qMin<qint64>(256, nRemaining / ISO_LOGICAL_SECTOR_SIZE);
             }
-            if (nSector >
-                ((std::numeric_limits<qint64>::max)() - nBaseOffset) /
-                    guardedThis->m_nSectorSize) {
+            if (nSector > ((std::numeric_limits<qint64>::max)() - nBaseOffset) / guardedThis->m_nSectorSize) {
                 return finishRead(nProduced ? nProduced : -1);
             }
-            const qint64 nPhysicalOffset =
-                nBaseOffset + nSector * guardedThis->m_nSectorSize;
-            if (nSectorCount >
-                (std::numeric_limits<int>::max)() /
-                    guardedThis->m_nSectorSize) {
+            const qint64 nPhysicalOffset = nBaseOffset + nSector * guardedThis->m_nSectorSize;
+            if (nSectorCount > (std::numeric_limits<int>::max)() / guardedThis->m_nSectorSize) {
                 return finishRead(nProduced ? nProduced : -1);
             }
-            const qint64 nPhysicalSize =
-                nSectorCount * guardedThis->m_nSectorSize;
+            const qint64 nPhysicalSize = nSectorCount * guardedThis->m_nSectorSize;
             QByteArray baSectors(static_cast<int>(nPhysicalSize), 0);
 
             const bool bPositioned = guardedSource->seek(nPhysicalOffset);
-            if (!guardedThis || !guardedSource || !bPositioned)
-                return finishRead(nProduced ? nProduced : -1);
+            if (!guardedThis || !guardedSource || !bPositioned) return finishRead(nProduced ? nProduced : -1);
             qint64 nReadTotal = 0;
-            while (guardedThis && guardedSource &&
-                   (nReadTotal < nPhysicalSize)) {
-                const bool bSeek = guardedSource->seek(
-                    nPhysicalOffset + nReadTotal);
-                if (!guardedThis || !guardedSource || !bSeek)
-                    return finishRead(nProduced ? nProduced : -1);
-                const qint64 nRead = guardedSource->read(
-                    baSectors.data() + nReadTotal,
-                    nPhysicalSize - nReadTotal);
-                if (!guardedThis || !guardedSource || (nRead <= 0) ||
-                    (nRead > nPhysicalSize - nReadTotal)) {
+            while (guardedThis && guardedSource && (nReadTotal < nPhysicalSize)) {
+                const bool bSeek = guardedSource->seek(nPhysicalOffset + nReadTotal);
+                if (!guardedThis || !guardedSource || !bSeek) return finishRead(nProduced ? nProduced : -1);
+                const qint64 nRead = guardedSource->read(baSectors.data() + nReadTotal, nPhysicalSize - nReadTotal);
+                if (!guardedThis || !guardedSource || (nRead <= 0) || (nRead > nPhysicalSize - nReadTotal)) {
                     return finishRead(nProduced ? nProduced : -1);
                 }
                 nReadTotal += nRead;
             }
 
-            if ((nInside != 0) ||
-                (nRemaining < ISO_LOGICAL_SECTOR_SIZE)) {
-                if (!isPhysicalSectorValid(baSectors.constData(),
-                                           guardedThis->m_nSectorSize,
-                                           guardedThis->m_nPayloadOffset)) {
+            if ((nInside != 0) || (nRemaining < ISO_LOGICAL_SECTOR_SIZE)) {
+                if (!isPhysicalSectorValid(baSectors.constData(), guardedThis->m_nSectorSize, guardedThis->m_nPayloadOffset)) {
                     return finishRead(nProduced ? nProduced : -1);
                 }
-                const qint64 nCopy = qMin<qint64>(
-                    nRemaining, ISO_LOGICAL_SECTOR_SIZE - nInside);
-                memcpy(pData + nProduced,
-                       baSectors.constData() +
-                           guardedThis->m_nPayloadOffset + nInside,
-                       static_cast<size_t>(nCopy));
+                const qint64 nCopy = qMin<qint64>(nRemaining, ISO_LOGICAL_SECTOR_SIZE - nInside);
+                memcpy(pData + nProduced, baSectors.constData() + guardedThis->m_nPayloadOffset + nInside, static_cast<size_t>(nCopy));
                 nProduced += nCopy;
                 nRemaining -= nCopy;
                 continue;
             }
 
             for (qint64 i = 0; i < nSectorCount; ++i) {
-                const char *pSector = baSectors.constData() +
-                                      i * guardedThis->m_nSectorSize;
-                if (!isPhysicalSectorValid(
-                        pSector, guardedThis->m_nSectorSize,
-                        guardedThis->m_nPayloadOffset)) {
+                const char *pSector = baSectors.constData() + i * guardedThis->m_nSectorSize;
+                if (!isPhysicalSectorValid(pSector, guardedThis->m_nSectorSize, guardedThis->m_nPayloadOffset)) {
                     return finishRead(nProduced ? nProduced : -1);
                 }
-                memcpy(pData + nProduced,
-                       pSector + guardedThis->m_nPayloadOffset,
-                       ISO_LOGICAL_SECTOR_SIZE);
+                memcpy(pData + nProduced, pSector + guardedThis->m_nPayloadOffset, ISO_LOGICAL_SECTOR_SIZE);
                 nProduced += ISO_LOGICAL_SECTOR_SIZE;
                 nRemaining -= ISO_LOGICAL_SECTOR_SIZE;
             }
         }
 
-        return finishRead(
-            (guardedThis && guardedSource) ? nProduced : -1);
+        return finishRead((guardedThis && guardedSource) ? nProduced : -1);
     }
 
 private:
@@ -395,8 +324,7 @@ struct ISO_DESCRIPTOR_CHOICE {
     qint32 nJolietLevel;
     qint64 nOffset;
 
-    ISO_DESCRIPTOR_CHOICE()
-        : bValid(false), bJoliet(false), nJolietLevel(0), nOffset(-1)
+    ISO_DESCRIPTOR_CHOICE() : bValid(false), bJoliet(false), nJolietLevel(0), nOffset(-1)
     {
     }
 };
@@ -406,25 +334,17 @@ bool isBoundedRange(quint64 nOffset, quint64 nSize, quint64 nLimit)
     return (nOffset <= nLimit) && (nSize <= nLimit - nOffset);
 }
 
-bool validateSpecialDirectoryRecord(const QByteArray &baDirectory,
-                                    qint32 nOffset, quint8 nIdentifier,
-                                    quint64 nVolumeSize,
-                                    qint32 nBlockSize)
+bool validateSpecialDirectoryRecord(const QByteArray &baDirectory, qint32 nOffset, quint8 nIdentifier, quint64 nVolumeSize, qint32 nBlockSize)
 {
-    if ((nOffset < 0) ||
-        (nOffset > baDirectory.size() - 34)) {
+    if ((nOffset < 0) || (nOffset > baDirectory.size() - 34)) {
         return false;
     }
     const char *pRecord = baDirectory.constData() + nOffset;
     const quint8 nRecordLength = static_cast<quint8>(pRecord[0]);
     const quint8 nNameLength = static_cast<quint8>(pRecord[32]);
-    const qint32 nMinimumLength = 33 + nNameLength +
-                                 ((nNameLength % 2) == 0 ? 1 : 0);
-    if ((nRecordLength < 34) ||
-        (nRecordLength > baDirectory.size() - nOffset) ||
-        (nMinimumLength > nRecordLength) || (nNameLength != 1) ||
-        (static_cast<quint8>(pRecord[33]) != nIdentifier) ||
-        ((static_cast<quint8>(pRecord[25]) & 0x02) == 0)) {
+    const qint32 nMinimumLength = 33 + nNameLength + ((nNameLength % 2) == 0 ? 1 : 0);
+    if ((nRecordLength < 34) || (nRecordLength > baDirectory.size() - nOffset) || (nMinimumLength > nRecordLength) || (nNameLength != 1) ||
+        (static_cast<quint8>(pRecord[33]) != nIdentifier) || ((static_cast<quint8>(pRecord[25]) & 0x02) == 0)) {
         return false;
     }
 
@@ -434,46 +354,33 @@ bool validateSpecialDirectoryRecord(const QByteArray &baDirectory,
     const quint32 nDataSizeBe = read32be(pRecord + 14);
     const quint16 nSequenceLe = read16le(pRecord + 28);
     const quint16 nSequenceBe = read16be(pRecord + 30);
-    if ((nExtentLe != nExtentBe) || (nDataSizeLe == 0) ||
-        (nDataSizeLe != nDataSizeBe) || (nSequenceLe == 0) ||
-        (nSequenceLe != nSequenceBe)) {
+    if ((nExtentLe != nExtentBe) || (nDataSizeLe == 0) || (nDataSizeLe != nDataSizeBe) || (nSequenceLe == 0) || (nSequenceLe != nSequenceBe)) {
         return false;
     }
 
-    const quint64 nDataBlock = static_cast<quint64>(nExtentLe) +
-                               static_cast<quint8>(pRecord[1]);
+    const quint64 nDataBlock = static_cast<quint64>(nExtentLe) + static_cast<quint8>(pRecord[1]);
     const quint64 nDataOffset = nDataBlock * nBlockSize;
     return isBoundedRange(nDataOffset, nDataSizeLe, nVolumeSize);
 }
 
-bool validateVolumeDescriptor(QIODevice *pDevice,
-                              const QByteArray &baDescriptor)
+bool validateVolumeDescriptor(QIODevice *pDevice, const QByteArray &baDescriptor)
 {
     QPointer<QIODevice> guardedDevice(pDevice);
-    if (!guardedDevice ||
-        (baDescriptor.size() != ISO_LOGICAL_SECTOR_SIZE)) {
+    if (!guardedDevice || (baDescriptor.size() != ISO_LOGICAL_SECTOR_SIZE)) {
         return false;
     }
 
-    const quint16 nBlockSizeLe =
-        read16le(baDescriptor.constData() + 128);
-    const quint16 nBlockSizeBe =
-        read16be(baDescriptor.constData() + 130);
-    const quint32 nVolumeBlocksLe =
-        read32le(baDescriptor.constData() + 80);
-    const quint32 nVolumeBlocksBe =
-        read32be(baDescriptor.constData() + 84);
-    if ((nBlockSizeLe < 512) || (nBlockSizeLe > 8192) ||
-        (nBlockSizeLe != nBlockSizeBe) || (nVolumeBlocksLe == 0) ||
-        (nVolumeBlocksLe != nVolumeBlocksBe)) {
+    const quint16 nBlockSizeLe = read16le(baDescriptor.constData() + 128);
+    const quint16 nBlockSizeBe = read16be(baDescriptor.constData() + 130);
+    const quint32 nVolumeBlocksLe = read32le(baDescriptor.constData() + 80);
+    const quint32 nVolumeBlocksBe = read32be(baDescriptor.constData() + 84);
+    if ((nBlockSizeLe < 512) || (nBlockSizeLe > 8192) || (nBlockSizeLe != nBlockSizeBe) || (nVolumeBlocksLe == 0) || (nVolumeBlocksLe != nVolumeBlocksBe)) {
         return false;
     }
 
-    const quint64 nVolumeSize =
-        static_cast<quint64>(nVolumeBlocksLe) * nBlockSizeLe;
+    const quint64 nVolumeSize = static_cast<quint64>(nVolumeBlocksLe) * nBlockSizeLe;
     const qint64 nDeviceSize = guardedDevice->size();
-    if (!guardedDevice || (nDeviceSize < 0) ||
-        (nVolumeSize > static_cast<quint64>(nDeviceSize))) {
+    if (!guardedDevice || (nDeviceSize < 0) || (nVolumeSize > static_cast<quint64>(nDeviceSize))) {
         return false;
     }
 
@@ -486,43 +393,28 @@ bool validateVolumeDescriptor(QIODevice *pDevice,
     const quint32 nRootSizeBe = read32be(pRoot + 14);
     const quint16 nRootSequenceLe = read16le(pRoot + 28);
     const quint16 nRootSequenceBe = read16be(pRoot + 30);
-    if ((nRootLength < 34) || (156 + nRootLength > 2048) ||
-        (nRootNameLength != 1) ||
-        (static_cast<quint8>(pRoot[33]) != 0) ||
-        ((static_cast<quint8>(pRoot[25]) & 0x02) == 0) ||
-        (nRootExtentLe != nRootExtentBe) || (nRootSizeLe == 0) ||
-        (nRootSizeLe != nRootSizeBe) || (nRootSequenceLe == 0) ||
-        (nRootSequenceLe != nRootSequenceBe)) {
+    if ((nRootLength < 34) || (156 + nRootLength > 2048) || (nRootNameLength != 1) || (static_cast<quint8>(pRoot[33]) != 0) ||
+        ((static_cast<quint8>(pRoot[25]) & 0x02) == 0) || (nRootExtentLe != nRootExtentBe) || (nRootSizeLe == 0) || (nRootSizeLe != nRootSizeBe) ||
+        (nRootSequenceLe == 0) || (nRootSequenceLe != nRootSequenceBe)) {
         return false;
     }
 
-    const quint64 nRootBlock = static_cast<quint64>(nRootExtentLe) +
-                               static_cast<quint8>(pRoot[1]);
+    const quint64 nRootBlock = static_cast<quint64>(nRootExtentLe) + static_cast<quint8>(pRoot[1]);
     const quint64 nRootOffset = nRootBlock * nBlockSizeLe;
-    if (!isBoundedRange(nRootOffset, nRootSizeLe, nVolumeSize))
-        return false;
+    if (!isBoundedRange(nRootOffset, nRootSizeLe, nVolumeSize)) return false;
 
-    const qint64 nProbeSize = qMin<qint64>(
-        nRootSizeLe, ISO_LOGICAL_SECTOR_SIZE);
-    const QByteArray baRoot = readDeviceAt(
-        guardedDevice.data(), static_cast<qint64>(nRootOffset),
-        nProbeSize);
-    if (!guardedDevice || (baRoot.size() != nProbeSize) ||
-        !validateSpecialDirectoryRecord(baRoot, 0, 0, nVolumeSize,
-                                        nBlockSizeLe)) {
+    const qint64 nProbeSize = qMin<qint64>(nRootSizeLe, ISO_LOGICAL_SECTOR_SIZE);
+    const QByteArray baRoot = readDeviceAt(guardedDevice.data(), static_cast<qint64>(nRootOffset), nProbeSize);
+    if (!guardedDevice || (baRoot.size() != nProbeSize) || !validateSpecialDirectoryRecord(baRoot, 0, 0, nVolumeSize, nBlockSizeLe)) {
         return false;
     }
-    const qint32 nParentOffset =
-        static_cast<quint8>(baRoot.at(0));
-    return validateSpecialDirectoryRecord(
-        baRoot, nParentOffset, 1, nVolumeSize, nBlockSizeLe);
+    const qint32 nParentOffset = static_cast<quint8>(baRoot.at(0));
+    return validateSpecialDirectoryRecord(baRoot, nParentOffset, 1, nVolumeSize, nBlockSizeLe);
 }
 
 qint32 jolietLevel(const QByteArray &baDescriptor)
 {
-    if ((baDescriptor.size() != ISO_LOGICAL_SECTOR_SIZE) ||
-        (static_cast<quint8>(baDescriptor.at(0)) != 2) ||
-        ((static_cast<quint8>(baDescriptor.at(7)) & 0x01) != 0)) {
+    if ((baDescriptor.size() != ISO_LOGICAL_SECTOR_SIZE) || (static_cast<quint8>(baDescriptor.at(0)) != 2) || ((static_cast<quint8>(baDescriptor.at(7)) & 0x01) != 0)) {
         return 0;
     }
     const QByteArray baEscape = baDescriptor.mid(88, 3);
@@ -532,8 +424,7 @@ qint32 jolietLevel(const QByteArray &baDescriptor)
     return 0;
 }
 
-bool selectIsoDescriptor(QIODevice *pDevice,
-                         ISO_DESCRIPTOR_CHOICE *pChoice)
+bool selectIsoDescriptor(QIODevice *pDevice, ISO_DESCRIPTOR_CHOICE *pChoice)
 {
     if (pChoice) *pChoice = ISO_DESCRIPTOR_CHOICE();
     QPointer<QIODevice> guardedDevice(pDevice);
@@ -545,25 +436,21 @@ bool selectIsoDescriptor(QIODevice *pDevice,
     const bool bSequential = guardedDevice->isSequential();
     if (!guardedDevice || bSequential) return false;
     const qint64 nDeviceSize = guardedDevice->size();
-    if (!guardedDevice ||
-        (nDeviceSize < 17LL * ISO_LOGICAL_SECTOR_SIZE)) {
+    if (!guardedDevice || (nDeviceSize < 17LL * ISO_LOGICAL_SECTOR_SIZE)) {
         return false;
     }
 
     ISO_DESCRIPTOR_CHOICE primaryChoice;
     ISO_DESCRIPTOR_CHOICE jolietChoice;
     bool bFoundTerminator = false;
-    const qint64 nSectorCount =
-        nDeviceSize / ISO_LOGICAL_SECTOR_SIZE;
+    const qint64 nSectorCount = nDeviceSize / ISO_LOGICAL_SECTOR_SIZE;
     const qint64 nScanEnd = qMin<qint64>(nSectorCount, 16 + 256);
     for (qint64 nSector = 16; nSector < nScanEnd; ++nSector) {
         const qint64 nOffset = nSector * ISO_LOGICAL_SECTOR_SIZE;
-        const QByteArray baDescriptor = readDeviceAt(
-            guardedDevice.data(), nOffset, ISO_LOGICAL_SECTOR_SIZE);
+        const QByteArray baDescriptor = readDeviceAt(guardedDevice.data(), nOffset, ISO_LOGICAL_SECTOR_SIZE);
         if (!guardedDevice) return false;
         if (baDescriptor.size() != ISO_LOGICAL_SECTOR_SIZE) return false;
-        if ((baDescriptor.mid(1, 5) != QByteArrayLiteral("CD001")) ||
-            (static_cast<quint8>(baDescriptor.at(6)) != 1)) {
+        if ((baDescriptor.mid(1, 5) != QByteArrayLiteral("CD001")) || (static_cast<quint8>(baDescriptor.at(6)) != 1)) {
             break;
         }
 
@@ -574,13 +461,11 @@ bool selectIsoDescriptor(QIODevice *pDevice,
         }
         const qint32 nLevel = jolietLevel(baDescriptor);
         if ((nType != 1) && (nLevel == 0)) continue;
-        if (!validateVolumeDescriptor(guardedDevice.data(), baDescriptor))
-            continue;
+        if (!validateVolumeDescriptor(guardedDevice.data(), baDescriptor)) continue;
         if (!guardedDevice) return false;
 
         if (nLevel > 0) {
-            if (!jolietChoice.bValid ||
-                (nLevel >= jolietChoice.nJolietLevel)) {
+            if (!jolietChoice.bValid || (nLevel >= jolietChoice.nJolietLevel)) {
                 jolietChoice.bValid = true;
                 jolietChoice.bJoliet = true;
                 jolietChoice.nJolietLevel = nLevel;
@@ -609,10 +494,7 @@ bool decodeUcs2Be(const QByteArray &baValue, QString *pResult)
     pResult->clear();
     pResult->reserve(baValue.size() / 2);
     for (qint32 i = 0; i < baValue.size(); i += 2) {
-        const quint16 nCodeUnit =
-            (static_cast<quint16>(static_cast<quint8>(baValue.at(i)))
-             << 8) |
-            static_cast<quint8>(baValue.at(i + 1));
+        const quint16 nCodeUnit = (static_cast<quint16>(static_cast<quint8>(baValue.at(i))) << 8) | static_cast<quint8>(baValue.at(i + 1));
         if (nCodeUnit == 0) break;
         pResult->append(QChar(nCodeUnit));
     }
@@ -629,8 +511,7 @@ QString decodeDescriptorText(const QByteArray &baValue, bool bJoliet)
     return sResult.trimmed();
 }
 
-bool modeToLayout(const QString &sMode, qint32 *pnSectorSize,
-                  qint32 *pnPayloadOffset)
+bool modeToLayout(const QString &sMode, qint32 *pnSectorSize, qint32 *pnPayloadOffset)
 {
     if (!pnSectorSize || !pnPayloadOffset) return false;
     const QString sUpper = sMode.toUpper();
@@ -665,16 +546,12 @@ qint64 cueFrames(const QRegularExpressionMatch &match)
     const qint64 nMinute = match.captured(2).toLongLong(&bMinute);
     const qint64 nSecond = match.captured(3).toLongLong(&bSecond);
     const qint64 nFrame = match.captured(4).toLongLong(&bFrame);
-    if (!bMinute || !bSecond || !bFrame || (nMinute < 0) ||
-        (nSecond < 0) || (nSecond >= 60) || (nFrame < 0) ||
-        (nFrame >= 75) ||
-        (nMinute >
-         ((std::numeric_limits<qint64>::max)() - nSecond) / 60)) {
+    if (!bMinute || !bSecond || !bFrame || (nMinute < 0) || (nSecond < 0) || (nSecond >= 60) || (nFrame < 0) || (nFrame >= 75) ||
+        (nMinute > ((std::numeric_limits<qint64>::max)() - nSecond) / 60)) {
         return -1;
     }
     const qint64 nSeconds = nMinute * 60 + nSecond;
-    if (nSeconds >
-        ((std::numeric_limits<qint64>::max)() - nFrame) / 75) {
+    if (nSeconds > ((std::numeric_limits<qint64>::max)() - nFrame) / 75) {
         return -1;
     }
     return nSeconds * 75 + nFrame;
@@ -691,44 +568,28 @@ bool parseCue(QIODevice *pDevice, QList<CUE_TRACK> *pTracks)
     const bool bSequential = guardedDevice->isSequential();
     if (!guardedDevice || bSequential) return false;
     const qint64 nCueSize = guardedDevice->size();
-    if (!guardedDevice || (nCueSize <= 0) ||
-        (nCueSize > CUE_MAX_SIZE)) {
+    if (!guardedDevice || (nCueSize <= 0) || (nCueSize > CUE_MAX_SIZE)) {
         return false;
     }
     pTracks->clear();
-    const QByteArray baCue = readDeviceAt(
-        guardedDevice.data(), 0, nCueSize);
-    if (!guardedDevice || baCue.isEmpty() || baCue.contains('\0'))
-        return false;
+    const QByteArray baCue = readDeviceAt(guardedDevice.data(), 0, nCueSize);
+    if (!guardedDevice || baCue.isEmpty() || baCue.contains('\0')) return false;
 
-    const QRegularExpression rxFile(
-        QStringLiteral("^\\s*FILE\\s+(?:\\\"([^\\\"]+)\\\"|(\\S+))\\s+(\\S+)\\s*$"),
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpression rxTrack(
-        QStringLiteral("^\\s*TRACK\\s+(\\d{1,3})\\s+(\\S+)\\s*$"),
-        QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpression rxIndex(
-        QStringLiteral("^\\s*INDEX\\s+(\\d{1,2})\\s+(\\d+):(\\d+):(\\d+)\\s*$"),
-        QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression rxFile(QStringLiteral("^\\s*FILE\\s+(?:\\\"([^\\\"]+)\\\"|(\\S+))\\s+(\\S+)\\s*$"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression rxTrack(QStringLiteral("^\\s*TRACK\\s+(\\d{1,3})\\s+(\\S+)\\s*$"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpression rxIndex(QStringLiteral("^\\s*INDEX\\s+(\\d{1,2})\\s+(\\d+):(\\d+):(\\d+)\\s*$"), QRegularExpression::CaseInsensitiveOption);
 
     QString sCurrentFile;
     QString sCurrentFileType;
-    const QStringList listLines = QString::fromLatin1(baCue).split(
-        QRegularExpression(QStringLiteral("[\\r\\n]+")),
-        Qt::SkipEmptyParts);
+    const QStringList listLines = QString::fromLatin1(baCue).split(QRegularExpression(QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
     for (const QString &sLine : listLines) {
         QRegularExpressionMatch match = rxFile.match(sLine);
         if (match.hasMatch()) {
-            sCurrentFile = match.captured(1).isEmpty()
-                               ? match.captured(2)
-                               : match.captured(1);
+            sCurrentFile = match.captured(1).isEmpty() ? match.captured(2) : match.captured(1);
             sCurrentFileType = match.captured(3).toUpper();
             continue;
         }
-        if (QRegularExpression(
-                QStringLiteral("^\\s*FILE(?:\\s|$)"),
-                QRegularExpression::CaseInsensitiveOption)
-                .match(sLine).hasMatch()) {
+        if (QRegularExpression(QStringLiteral("^\\s*FILE(?:\\s|$)"), QRegularExpression::CaseInsensitiveOption).match(sLine).hasMatch()) {
             return false;
         }
         match = rxTrack.match(sLine);
@@ -741,10 +602,7 @@ bool parseCue(QIODevice *pDevice, QList<CUE_TRACK> *pTracks)
             pTracks->append(track);
             continue;
         }
-        if (QRegularExpression(
-                QStringLiteral("^\\s*TRACK(?:\\s|$)"),
-                QRegularExpression::CaseInsensitiveOption)
-                .match(sLine).hasMatch()) {
+        if (QRegularExpression(QStringLiteral("^\\s*TRACK(?:\\s|$)"), QRegularExpression::CaseInsensitiveOption).match(sLine).hasMatch()) {
             return false;
         }
         match = rxIndex.match(sLine);
@@ -758,10 +616,7 @@ bool parseCue(QIODevice *pDevice, QList<CUE_TRACK> *pTracks)
             if (nIndex == 1) pTracks->last().nIndex01 = nFrames;
             continue;
         }
-        if (QRegularExpression(
-                QStringLiteral("^\\s*INDEX(?:\\s|$)"),
-                QRegularExpression::CaseInsensitiveOption)
-                .match(sLine).hasMatch()) {
+        if (QRegularExpression(QStringLiteral("^\\s*INDEX(?:\\s|$)"), QRegularExpression::CaseInsensitiveOption).match(sLine).hasMatch()) {
             return false;
         }
     }
@@ -778,11 +633,9 @@ Qt::CaseSensitivity pathCaseSensitivity()
 #endif
 }
 
-bool isSafeCueCandidate(const QString &sCueDirectory,
-                        const QFileInfo &candidate)
+bool isSafeCueCandidate(const QString &sCueDirectory, const QFileInfo &candidate)
 {
-    if (!candidate.exists() || !candidate.isFile() ||
-        candidate.isSymLink()) {
+    if (!candidate.exists() || !candidate.isFile() || candidate.isSymLink()) {
         return false;
     }
     const QString sRoot = QFileInfo(sCueDirectory).canonicalFilePath();
@@ -794,29 +647,21 @@ bool isSafeCueCandidate(const QString &sCueDirectory,
     return sNormalized.startsWith(sPrefix, pathCaseSensitivity());
 }
 
-QString resolveSiblingCaseInsensitive(const QString &sDirectory,
-                                      const QString &sFileName)
+QString resolveSiblingCaseInsensitive(const QString &sDirectory, const QString &sFileName)
 {
-    if (sFileName.isEmpty() || sFileName.contains(QLatin1Char('/')) ||
-        sFileName.contains(QLatin1Char('\\'))) {
+    if (sFileName.isEmpty() || sFileName.contains(QLatin1Char('/')) || sFileName.contains(QLatin1Char('\\'))) {
         return QString();
     }
 
     const QDir dir(sDirectory);
     const QFileInfo exact(dir.filePath(sFileName));
-    if (isSafeCueCandidate(sDirectory, exact))
-        return exact.canonicalFilePath();
+    if (isSafeCueCandidate(sDirectory, exact)) return exact.canonicalFilePath();
 
     QString sResult;
-    const QFileInfoList listFiles = dir.entryInfoList(
-        QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
+    const QFileInfoList listFiles = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
     for (const QFileInfo &fileInfo : listFiles) {
-        if ((fileInfo.fileName().compare(sFileName,
-                                         Qt::CaseInsensitive) == 0) &&
-            isSafeCueCandidate(sDirectory, fileInfo)) {
-            if (!sResult.isEmpty() &&
-                (sResult.compare(fileInfo.canonicalFilePath(),
-                                 pathCaseSensitivity()) != 0)) {
+        if ((fileInfo.fileName().compare(sFileName, Qt::CaseInsensitive) == 0) && isSafeCueCandidate(sDirectory, fileInfo)) {
+            if (!sResult.isEmpty() && (sResult.compare(fileInfo.canonicalFilePath(), pathCaseSensitivity()) != 0)) {
                 return QString();
             }
             sResult = fileInfo.canonicalFilePath();
@@ -825,8 +670,7 @@ QString resolveSiblingCaseInsensitive(const QString &sDirectory,
     return sResult;
 }
 
-QString resolveCueImage(const QString &sCueFileName,
-                        const QString &sReference)
+QString resolveCueImage(const QString &sCueFileName, const QString &sReference)
 {
     const QFileInfo cueInfo(sCueFileName);
     const QString sDirectory = cueInfo.absolutePath();
@@ -835,16 +679,12 @@ QString resolveCueImage(const QString &sCueFileName,
 
     // A genuine relative reference may name a child path, but never escape
     // the directory containing the CUE sheet.
-    const bool bDriveRooted = QRegularExpression(
-        QStringLiteral("^[A-Za-z]:/")).match(sNormalizedReference).hasMatch();
+    const bool bDriveRooted = QRegularExpression(QStringLiteral("^[A-Za-z]:/")).match(sNormalizedReference).hasMatch();
     if (!bDriveRooted && !QDir::isAbsolutePath(sNormalizedReference)) {
         const QString sClean = QDir::cleanPath(sNormalizedReference);
-        if ((sClean != QStringLiteral("..")) &&
-            !sClean.startsWith(QStringLiteral("../"))) {
-            const QFileInfo relativeCandidate(
-                QDir(sDirectory).absoluteFilePath(sClean));
-            if (isSafeCueCandidate(sDirectory, relativeCandidate))
-                return relativeCandidate.canonicalFilePath();
+        if ((sClean != QStringLiteral("..")) && !sClean.startsWith(QStringLiteral("../"))) {
+            const QFileInfo relativeCandidate(QDir(sDirectory).absoluteFilePath(sClean));
+            if (isSafeCueCandidate(sDirectory, relativeCandidate)) return relativeCandidate.canonicalFilePath();
         }
     }
 
@@ -858,15 +698,12 @@ QString resolveCueImage(const QString &sCueFileName,
     // token. A same-directory image matching the CUE stem is deterministic.
     const QString sStem = cueInfo.completeBaseName();
     QStringList listFallbacks;
-    listFallbacks << sStem + QStringLiteral(".bin")
-                  << sStem + QStringLiteral(".raw");
+    listFallbacks << sStem + QStringLiteral(".bin") << sStem + QStringLiteral(".raw");
     QString sFallback;
     for (const QString &sName : listFallbacks) {
-        const QString sCandidate =
-            resolveSiblingCaseInsensitive(sDirectory, sName);
+        const QString sCandidate = resolveSiblingCaseInsensitive(sDirectory, sName);
         if (sCandidate.isEmpty()) continue;
-        if (!sFallback.isEmpty() &&
-            (sFallback.compare(sCandidate, pathCaseSensitivity()) != 0)) {
+        if (!sFallback.isEmpty() && (sFallback.compare(sCandidate, pathCaseSensitivity()) != 0)) {
             return QString();
         }
         sFallback = sCandidate;
@@ -878,36 +715,28 @@ bool detectCueLayout(QIODevice *pCueDevice, CD_SOURCE_LAYOUT *pLayout)
 {
     QPointer<QIODevice> guardedCueDevice(pCueDevice);
     if (!guardedCueDevice || !pLayout) return false;
-    const QString sCueFileName =
-        XBinary::getDeviceFileName(guardedCueDevice.data());
-    if (!guardedCueDevice || sCueFileName.isEmpty() ||
-        (QFileInfo(sCueFileName).suffix().compare(
-             QStringLiteral("cue"), Qt::CaseInsensitive) != 0)) {
+    const QString sCueFileName = XBinary::getDeviceFileName(guardedCueDevice.data());
+    if (!guardedCueDevice || sCueFileName.isEmpty() || (QFileInfo(sCueFileName).suffix().compare(QStringLiteral("cue"), Qt::CaseInsensitive) != 0)) {
         return false;
     }
 
     QList<CUE_TRACK> listTracks;
-    if (!parseCue(guardedCueDevice.data(), &listTracks) ||
-        !guardedCueDevice) return false;
+    if (!parseCue(guardedCueDevice.data(), &listTracks) || !guardedCueDevice) return false;
 
     for (qint32 i = 0; i < listTracks.size(); ++i) {
         const CUE_TRACK &track = listTracks.at(i);
         qint32 nSectorSize = 0;
         qint32 nPayloadOffset = 0;
-        if ((track.sFileType != QStringLiteral("BINARY")) ||
-            (track.nIndex01 < 0) ||
-            !modeToLayout(track.sMode, &nSectorSize, &nPayloadOffset)) {
+        if ((track.sFileType != QStringLiteral("BINARY")) || (track.nIndex01 < 0) || !modeToLayout(track.sMode, &nSectorSize, &nPayloadOffset)) {
             continue;
         }
 
-        const QString sImageFileName =
-            resolveCueImage(sCueFileName, track.sFileName);
+        const QString sImageFileName = resolveCueImage(sCueFileName, track.sFileName);
         if (sImageFileName.isEmpty()) continue;
         QFile imageFile(sImageFileName);
         if (!imageFile.open(QIODevice::ReadOnly)) continue;
 
-        if ((track.nIndex01 >
-             (std::numeric_limits<qint64>::max)() / nSectorSize)) {
+        if ((track.nIndex01 > (std::numeric_limits<qint64>::max)() / nSectorSize)) {
             imageFile.close();
             continue;
         }
@@ -915,37 +744,26 @@ bool detectCueLayout(QIODevice *pCueDevice, CD_SOURCE_LAYOUT *pLayout)
         qint64 nSourceEnd = imageFile.size();
         for (qint32 j = i + 1; j < listTracks.size(); ++j) {
             const CUE_TRACK &nextTrack = listTracks.at(j);
-            if (nextTrack.sFileName.compare(track.sFileName,
-                                            Qt::CaseInsensitive) != 0) {
+            if (nextTrack.sFileName.compare(track.sFileName, Qt::CaseInsensitive) != 0) {
                 break;
             }
             // INDEX 00 is the following track's pregap.  Some mixed-mode
             // masters (including Excessive Speed) keep valid MODE1 sectors
             // there and declare them in the ISO volume.  Bound the current
             // track at INDEX 01, falling back only when it is absent.
-            qint64 nBoundaryFrames = nextTrack.nIndex01 >= 0
-                                         ? nextTrack.nIndex01
-                                         : nextTrack.nIndex00;
-            if ((nBoundaryFrames >= track.nIndex01) &&
-                (nBoundaryFrames <=
-                 (std::numeric_limits<qint64>::max)() / nSectorSize)) {
-                nSourceEnd = qMin(nSourceEnd,
-                                  nBoundaryFrames * nSectorSize);
+            qint64 nBoundaryFrames = nextTrack.nIndex01 >= 0 ? nextTrack.nIndex01 : nextTrack.nIndex00;
+            if ((nBoundaryFrames >= track.nIndex01) && (nBoundaryFrames <= (std::numeric_limits<qint64>::max)() / nSectorSize)) {
+                nSourceEnd = qMin(nSourceEnd, nBoundaryFrames * nSectorSize);
             }
             break;
         }
-        if ((nSourceOffset < 0) || (nSourceOffset >= nSourceEnd) ||
-            ((nSourceEnd - nSourceOffset) <
-             17LL * nSectorSize)) {
+        if ((nSourceOffset < 0) || (nSourceOffset >= nSourceEnd) || ((nSourceEnd - nSourceOffset) < 17LL * nSectorSize)) {
             imageFile.close();
             continue;
         }
 
-        CDLogicalSectorDevice logicalDevice(
-            &imageFile, nSourceOffset, nSourceEnd - nSourceOffset,
-            nSectorSize, nPayloadOffset);
-        const bool bValid = logicalDevice.open(QIODevice::ReadOnly) &&
-                            isLogicalIsoValid(&logicalDevice);
+        CDLogicalSectorDevice logicalDevice(&imageFile, nSourceOffset, nSourceEnd - nSourceOffset, nSectorSize, nPayloadOffset);
+        const bool bValid = logicalDevice.open(QIODevice::ReadOnly) && isLogicalIsoValid(&logicalDevice);
         logicalDevice.close();
         imageFile.close();
         if (!bValid) continue;
@@ -974,13 +792,11 @@ bool detectDirectLayout(QIODevice *pDevice, CD_SOURCE_LAYOUT *pLayout)
     if (!guardedDevice || bSequential) return false;
 
     const qint64 nSize = guardedDevice->size();
-    if (!guardedDevice ||
-        (nSize < 17LL * ISO_LOGICAL_SECTOR_SIZE)) return false;
+    if (!guardedDevice || (nSize < 17LL * ISO_LOGICAL_SECTOR_SIZE)) return false;
 
     // Preserve the historical cooked ISO acceptance contract. The native
     // parser performs its normal descriptor checks after construction.
-    const QByteArray baCookedSignature = readDeviceAt(
-        guardedDevice.data(), 16LL * ISO_LOGICAL_SECTOR_SIZE + 1, 5);
+    const QByteArray baCookedSignature = readDeviceAt(guardedDevice.data(), 16LL * ISO_LOGICAL_SECTOR_SIZE + 1, 5);
     if (!guardedDevice) return false;
     if (baCookedSignature == QByteArrayLiteral("CD001")) {
         pLayout->bValid = true;
@@ -994,19 +810,13 @@ bool detectDirectLayout(QIODevice *pDevice, CD_SOURCE_LAYOUT *pLayout)
         qint32 nSectorSize;
         qint32 nPayloadOffset;
     };
-    const RAW_LAYOUT layouts[] = {
-        {2352, 16}, {2352, 24}, {2336, 8},
-        {2448, 16}, {2448, 24}};
+    const RAW_LAYOUT layouts[] = {{2352, 16}, {2352, 24}, {2336, 8}, {2448, 16}, {2448, 24}};
     for (const RAW_LAYOUT &candidate : layouts) {
-        if ((nSize < 17LL * candidate.nSectorSize) ||
-            ((nSize % candidate.nSectorSize) != 0)) {
+        if ((nSize < 17LL * candidate.nSectorSize) || ((nSize % candidate.nSectorSize) != 0)) {
             continue;
         }
-        CDLogicalSectorDevice logicalDevice(
-            guardedDevice.data(), 0, nSize, candidate.nSectorSize,
-            candidate.nPayloadOffset);
-        const bool bValid = logicalDevice.open(QIODevice::ReadOnly) &&
-                            isLogicalIsoValid(&logicalDevice);
+        CDLogicalSectorDevice logicalDevice(guardedDevice.data(), 0, nSize, candidate.nSectorSize, candidate.nPayloadOffset);
+        const bool bValid = logicalDevice.open(QIODevice::ReadOnly) && isLogicalIsoValid(&logicalDevice);
         logicalDevice.close();
         if (!guardedDevice) return false;
         if (!bValid) continue;
@@ -1037,47 +847,36 @@ XBinary::XCONVERT _TABLE_XISO9660_STRUCTID[] = {{XISO9660::STRUCTID_UNKNOWN, "Un
                                                 {XISO9660::STRUCTID_DIR_RECORD, "DIR_RECORD", QString("Directory Record")}};
 
 XISO9660::XISO9660(QIODevice *pDevice)
-    : XArchive(pDevice), m_pLogicalImageDevice(nullptr),
-      m_pOwnedImageFile(nullptr), m_nVolumeDescriptorOffset(-1),
-      m_bJoliet(false), m_bCueSource(false), m_bRawSectorSource(false)
+    : XArchive(pDevice),
+      m_pLogicalImageDevice(nullptr),
+      m_pOwnedImageFile(nullptr),
+      m_nVolumeDescriptorOffset(-1),
+      m_bJoliet(false),
+      m_bCueSource(false),
+      m_bRawSectorSource(false)
 {
     QPointer<QIODevice> guardedOriginalDevice(pDevice);
-    const qint64 nOriginalPosition = guardedOriginalDevice
-        ? guardedOriginalDevice->pos() : -1;
+    const qint64 nOriginalPosition = guardedOriginalDevice ? guardedOriginalDevice->pos() : -1;
     _configureLogicalImage(guardedOriginalDevice.data());
     _selectVolumeDescriptor();
 
     if (isValid()) {
         qint64 nPVDOffset = _getPrimaryVolumeDescriptorOffset();
-        m_sSystemIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 8, 32), m_bJoliet);
-        m_sVolumeIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 40, 32), m_bJoliet);
-        m_sVolumeSetIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 190, 128), m_bJoliet);
-        m_sPublisherIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 318, 128), m_bJoliet);
-        m_sDataPreparerIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 446, 128), m_bJoliet);
-        m_sApplicationIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 574, 128), m_bJoliet);
-        m_sCopyrightFileIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 702, 37), m_bJoliet);
-        m_sAbstractFileIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 739, 37), m_bJoliet);
-        m_sBibliographicFileIdentifier = decodeDescriptorText(
-            read_array(nPVDOffset + 776, 37), m_bJoliet);
-        m_sCreationDateTime = QString::fromLatin1(
-            read_array(nPVDOffset + 813, 17)).trimmed();
-        m_sModificationDateTime = QString::fromLatin1(
-            read_array(nPVDOffset + 830, 17)).trimmed();
-        m_sExpirationDateTime = QString::fromLatin1(
-            read_array(nPVDOffset + 847, 17)).trimmed();
-        m_sEffectiveDateTime = QString::fromLatin1(
-            read_array(nPVDOffset + 864, 17)).trimmed();
+        m_sSystemIdentifier = decodeDescriptorText(read_array(nPVDOffset + 8, 32), m_bJoliet);
+        m_sVolumeIdentifier = decodeDescriptorText(read_array(nPVDOffset + 40, 32), m_bJoliet);
+        m_sVolumeSetIdentifier = decodeDescriptorText(read_array(nPVDOffset + 190, 128), m_bJoliet);
+        m_sPublisherIdentifier = decodeDescriptorText(read_array(nPVDOffset + 318, 128), m_bJoliet);
+        m_sDataPreparerIdentifier = decodeDescriptorText(read_array(nPVDOffset + 446, 128), m_bJoliet);
+        m_sApplicationIdentifier = decodeDescriptorText(read_array(nPVDOffset + 574, 128), m_bJoliet);
+        m_sCopyrightFileIdentifier = decodeDescriptorText(read_array(nPVDOffset + 702, 37), m_bJoliet);
+        m_sAbstractFileIdentifier = decodeDescriptorText(read_array(nPVDOffset + 739, 37), m_bJoliet);
+        m_sBibliographicFileIdentifier = decodeDescriptorText(read_array(nPVDOffset + 776, 37), m_bJoliet);
+        m_sCreationDateTime = QString::fromLatin1(read_array(nPVDOffset + 813, 17)).trimmed();
+        m_sModificationDateTime = QString::fromLatin1(read_array(nPVDOffset + 830, 17)).trimmed();
+        m_sExpirationDateTime = QString::fromLatin1(read_array(nPVDOffset + 847, 17)).trimmed();
+        m_sEffectiveDateTime = QString::fromLatin1(read_array(nPVDOffset + 864, 17)).trimmed();
     }
-    if (guardedOriginalDevice && (nOriginalPosition >= 0))
-        guardedOriginalDevice->seek(nOriginalPosition);
+    if (guardedOriginalDevice && (nOriginalPosition >= 0)) guardedOriginalDevice->seek(nOriginalPosition);
 }
 
 XISO9660::~XISO9660()
@@ -1103,19 +902,15 @@ bool XISO9660::_configureLogicalImage(QIODevice *pDevice)
     QPointer<QIODevice> guardedSource(pDevice);
     if (!guardedThis || !guardedSource) return false;
     CD_SOURCE_LAYOUT layout;
-    if (!detectSourceLayout(guardedSource.data(), &layout) ||
-        !guardedThis || !guardedSource || !layout.bValid) {
+    if (!detectSourceLayout(guardedSource.data(), &layout) || !guardedThis || !guardedSource || !layout.bValid) {
         return false;
     }
 
     m_bCueSource = layout.bCue;
-    m_bRawSectorSource =
-        (layout.nSectorSize != ISO_LOGICAL_SECTOR_SIZE) ||
-        (layout.nPayloadOffset != 0);
+    m_bRawSectorSource = (layout.nSectorSize != ISO_LOGICAL_SECTOR_SIZE) || (layout.nPayloadOffset != 0);
 
     // A normal contiguous ISO already is the logical view.
-    if (!layout.bCue && !m_bRawSectorSource &&
-        (layout.nSourceOffset == 0)) {
+    if (!layout.bCue && !m_bRawSectorSource && (layout.nSourceOffset == 0)) {
         const qint64 nDeviceSize = guardedSource->size();
         if (!guardedThis || !guardedSource) return false;
         if (layout.nSourceSize == nDeviceSize) return true;
@@ -1136,12 +931,8 @@ bool XISO9660::_configureLogicalImage(QIODevice *pDevice)
     }
 
     QPointer<CDLogicalSectorDevice> guardedLogicalDevice =
-        new (std::nothrow) CDLogicalSectorDevice(
-            guardedImageDevice.data(), layout.nSourceOffset,
-            layout.nSourceSize,
-            layout.nSectorSize, layout.nPayloadOffset);
-    if (!guardedThis || !guardedImageDevice ||
-        !guardedLogicalDevice) {
+        new (std::nothrow) CDLogicalSectorDevice(guardedImageDevice.data(), layout.nSourceOffset, layout.nSourceSize, layout.nSectorSize, layout.nPayloadOffset);
+    if (!guardedThis || !guardedImageDevice || !guardedLogicalDevice) {
         if (guardedLogicalDevice) delete guardedLogicalDevice.data();
         if (guardedThis && m_pOwnedImageFile) {
             QPointer<QFile> guardedFile = m_pOwnedImageFile;
@@ -1151,10 +942,8 @@ bool XISO9660::_configureLogicalImage(QIODevice *pDevice)
         }
         return false;
     }
-    const bool bLogicalOpened =
-        guardedLogicalDevice->open(QIODevice::ReadOnly);
-    if (!guardedThis || !guardedImageDevice ||
-        !guardedLogicalDevice || !bLogicalOpened) {
+    const bool bLogicalOpened = guardedLogicalDevice->open(QIODevice::ReadOnly);
+    if (!guardedThis || !guardedImageDevice || !guardedLogicalDevice || !bLogicalOpened) {
         if (guardedLogicalDevice) delete guardedLogicalDevice.data();
         if (guardedThis && m_pOwnedImageFile) {
             QPointer<QFile> guardedFile = m_pOwnedImageFile;
@@ -1167,8 +956,7 @@ bool XISO9660::_configureLogicalImage(QIODevice *pDevice)
 
     m_pLogicalImageDevice = guardedLogicalDevice.data();
     setDevice(guardedLogicalDevice.data());
-    return guardedThis && guardedLogicalDevice &&
-           (getDevice() == guardedLogicalDevice.data());
+    return guardedThis && guardedLogicalDevice && (getDevice() == guardedLogicalDevice.data());
 }
 
 bool XISO9660::_selectVolumeDescriptor()
@@ -1178,8 +966,7 @@ bool XISO9660::_selectVolumeDescriptor()
     m_nVolumeDescriptorOffset = -1;
     m_bJoliet = false;
     ISO_DESCRIPTOR_CHOICE choice;
-    if (!selectIsoDescriptor(guardedDevice.data(), &choice) ||
-        !guardedThis || !guardedDevice) return false;
+    if (!selectIsoDescriptor(guardedDevice.data(), &choice) || !guardedThis || !guardedDevice) return false;
     m_nVolumeDescriptorOffset = choice.nOffset;
     m_bJoliet = choice.bJoliet;
     return true;
@@ -1190,23 +977,16 @@ bool XISO9660::isValid(PDSTRUCT *pPdStruct)
     bool bResult = false;
     QPointer<XISO9660> guardedThis(this);
     QPointer<QIODevice> guardedDevice(getDevice());
-    const qint64 nOriginalPosition = guardedDevice
-        ? guardedDevice->pos() : -1;
-    if (!guardedThis || !guardedDevice || (nOriginalPosition < 0))
-        return false;
+    const qint64 nOriginalPosition = guardedDevice ? guardedDevice->pos() : -1;
+    if (!guardedThis || !guardedDevice || (nOriginalPosition < 0)) return false;
     const qint64 nTotalSize = guardedThis->getSize();
     if (!guardedThis || !guardedDevice) return false;
 
-    if (XBinary::isPdStructNotCanceled(pPdStruct) &&
-        (nTotalSize >= ISO_LOGICAL_SECTOR_SIZE) &&
-        (m_nVolumeDescriptorOffset >= 0) &&
-        (m_nVolumeDescriptorOffset <=
-         nTotalSize - ISO_LOGICAL_SECTOR_SIZE)) {
+    if (XBinary::isPdStructNotCanceled(pPdStruct) && (nTotalSize >= ISO_LOGICAL_SECTOR_SIZE) && (m_nVolumeDescriptorOffset >= 0) &&
+        (m_nVolumeDescriptorOffset <= nTotalSize - ISO_LOGICAL_SECTOR_SIZE)) {
         _MEMORY_MAP memoryMap = XBinary::getSimpleMemoryMap();
 
-        if (compareSignature(&memoryMap, "4344303031",
-                             m_nVolumeDescriptorOffset + 1,
-                             pPdStruct)) {
+        if (compareSignature(&memoryMap, "4344303031", m_nVolumeDescriptorOffset + 1, pPdStruct)) {
             bResult = true;
         }
     }
@@ -1227,10 +1007,7 @@ bool XISO9660::isCueOrRawImage(QIODevice *pDevice, PDSTRUCT *pPdStruct)
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     CD_SOURCE_LAYOUT layout;
     const bool bDetected = detectSourceLayout(pDevice, &layout);
-    return bDetected && XBinary::isPdStructNotCanceled(pPdStruct) &&
-           (layout.bCue ||
-            (layout.nSectorSize != ISO_LOGICAL_SECTOR_SIZE) ||
-            (layout.nPayloadOffset != 0));
+    return bDetected && XBinary::isPdStructNotCanceled(pPdStruct) && (layout.bCue || (layout.nSectorSize != ISO_LOGICAL_SECTOR_SIZE) || (layout.nPayloadOffset != 0));
 }
 
 XISO9660::ISO9660_PVDESC XISO9660::_readPrimaryVolumeDescriptor(qint64 nOffset)
@@ -1682,9 +1459,7 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
     const qint64 nFormatSize = guardedThis->getFileFormatSize(pPdStruct);
     if (!guardedThis) return listResult;
     if (nFormatSize > 0) nFileSize = qMin(nFileSize, nFormatSize);
-    if ((nBlockSize <= 0) || (nFileSize < 0) || (nOffset < 0) ||
-        (nSize < 0) || (nOffset > nFileSize) ||
-        (nSize > nFileSize - nOffset)) {
+    if ((nBlockSize <= 0) || (nFileSize < 0) || (nOffset < 0) || (nSize < 0) || (nOffset > nFileSize) || (nSize > nFileSize - nOffset)) {
         return listResult;
     }
     const qint64 nEndOffset = nOffset + nSize;
@@ -1694,11 +1469,8 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
     while ((nCurrentOffset < nEndOffset) && isPdStructNotCanceled(pPdStruct)) {
         // Align to logical block boundaries for padding detection
         const qint64 nBlockStart = nCurrentOffset;
-        const qint64 nAdvance = nBlockSize -
-                                (nBlockStart % nBlockSize);
-        const qint64 nNextBlockStart =
-            (nAdvance > nEndOffset - nBlockStart)
-                ? nEndOffset : nBlockStart + nAdvance;
+        const qint64 nAdvance = nBlockSize - (nBlockStart % nBlockSize);
+        const qint64 nNextBlockStart = (nAdvance > nEndOffset - nBlockStart) ? nEndOffset : nBlockStart + nAdvance;
         qint64 nBlockEnd = qMin(nNextBlockStart, nEndOffset);
 
         while (nCurrentOffset < nBlockEnd && isPdStructNotCanceled(pPdStruct)) {
@@ -1711,70 +1483,49 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
                 break;
             }
 
-            if ((nRecordLength < 34) ||
-                (nRecordLength > nBlockEnd - nCurrentOffset)) {
+            if ((nRecordLength < 34) || (nRecordLength > nBlockEnd - nCurrentOffset)) {
                 return QList<ARCHIVERECORD>();
             }
 
-            const QByteArray baRecord = guardedThis->read_array(
-                nCurrentOffset, nRecordLength);
-            if (!guardedThis || (baRecord.size() != nRecordLength))
-                return QList<ARCHIVERECORD>();
+            const QByteArray baRecord = guardedThis->read_array(nCurrentOffset, nRecordLength);
+            if (!guardedThis || (baRecord.size() != nRecordLength)) return QList<ARCHIVERECORD>();
             const char *pRecord = baRecord.constData();
-            const quint8 nExtAttrLength =
-                static_cast<quint8>(pRecord[1]);
+            const quint8 nExtAttrLength = static_cast<quint8>(pRecord[1]);
             const quint32 nExtentLocation = read32le(pRecord + 2);
             const quint32 nExtentLocationBe = read32be(pRecord + 6);
             const quint32 nDataLength = read32le(pRecord + 10);
             const quint32 nDataLengthBe = read32be(pRecord + 14);
-            const quint8 nFileFlags =
-                static_cast<quint8>(pRecord[25]);
+            const quint8 nFileFlags = static_cast<quint8>(pRecord[25]);
             const quint16 nSequence = read16le(pRecord + 28);
             const quint16 nSequenceBe = read16be(pRecord + 30);
-            const quint8 nFileNameLength =
-                static_cast<quint8>(pRecord[32]);
-            const qint32 nMinimumRecordLength =
-                33 + nFileNameLength +
-                ((nFileNameLength % 2) == 0 ? 1 : 0);
-            if ((nMinimumRecordLength > nRecordLength) ||
-                (nExtentLocation != nExtentLocationBe) ||
-                (nDataLength != nDataLengthBe) || (nSequence == 0) ||
+            const quint8 nFileNameLength = static_cast<quint8>(pRecord[32]);
+            const qint32 nMinimumRecordLength = 33 + nFileNameLength + ((nFileNameLength % 2) == 0 ? 1 : 0);
+            if ((nMinimumRecordLength > nRecordLength) || (nExtentLocation != nExtentLocationBe) || (nDataLength != nDataLengthBe) || (nSequence == 0) ||
                 (nSequence != nSequenceBe)) {
                 return QList<ARCHIVERECORD>();
             }
 
-            const QByteArray baFileName =
-                baRecord.mid(33, nFileNameLength);
-            if ((nFileNameLength == 1) &&
-                ((static_cast<quint8>(baFileName.at(0)) == 0) ||
-                 (static_cast<quint8>(baFileName.at(0)) == 1))) {
+            const QByteArray baFileName = baRecord.mid(33, nFileNameLength);
+            if ((nFileNameLength == 1) && ((static_cast<quint8>(baFileName.at(0)) == 0) || (static_cast<quint8>(baFileName.at(0)) == 1))) {
                 nCurrentOffset += nRecordLength;
                 continue;
             }
 
             QString sFileName;
             if (m_bJoliet) {
-                if (!decodeUcs2Be(baFileName, &sFileName))
-                    return QList<ARCHIVERECORD>();
+                if (!decodeUcs2Be(baFileName, &sFileName)) return QList<ARCHIVERECORD>();
             } else {
                 sFileName = QString::fromLatin1(baFileName);
             }
             if (sFileName.isEmpty()) return QList<ARCHIVERECORD>();
 
-            const qint64 nDataBlock =
-                static_cast<qint64>(nExtentLocation) + nExtAttrLength;
-            bool bPayloadAvailable =
-                (nDataBlock >= 0) &&
-                (nDataBlock <=
-                 (std::numeric_limits<qint64>::max)() / nBlockSize);
+            const qint64 nDataBlock = static_cast<qint64>(nExtentLocation) + nExtAttrLength;
+            bool bPayloadAvailable = (nDataBlock >= 0) && (nDataBlock <= (std::numeric_limits<qint64>::max)() / nBlockSize);
             qint64 nStreamOffset = 0;
             if (bPayloadAvailable) {
                 nStreamOffset = nDataBlock * nBlockSize;
                 bPayloadAvailable =
-                    (nStreamOffset >= 0) &&
-                    (nStreamOffset <= nFileSize) &&
-                    (static_cast<quint64>(nDataLength) <=
-                     static_cast<quint64>(nFileSize - nStreamOffset));
+                    (nStreamOffset >= 0) && (nStreamOffset <= nFileSize) && (static_cast<quint64>(nDataLength) <= static_cast<quint64>(nFileSize - nStreamOffset));
             }
 
             ARCHIVERECORD record = {};
@@ -1800,24 +1551,18 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_parseDirectoryEntries(qint64 nOffset, q
             bool bIsFolder = (nFileFlags & 0x02) != 0;
 
             record.mapProperties[FPART_PROP_ORIGINALNAME] = sFullPath;
-            record.mapProperties[FPART_PROP_UNCOMPRESSEDSIZE] =
-                bPayloadAvailable ? (qint64)nDataLength : 0;
-            record.mapProperties[FPART_PROP_COMPRESSEDSIZE] =
-                bPayloadAvailable ? (qint64)nDataLength : 0;
+            record.mapProperties[FPART_PROP_UNCOMPRESSEDSIZE] = bPayloadAvailable ? (qint64)nDataLength : 0;
+            record.mapProperties[FPART_PROP_COMPRESSEDSIZE] = bPayloadAvailable ? (qint64)nDataLength : 0;
             record.mapProperties[FPART_PROP_HANDLEMETHOD] = HANDLE_METHOD_STORE;
             record.mapProperties[FPART_PROP_ISFOLDER] = bIsFolder;
             if (!bPayloadAvailable) {
                 record.mapProperties[FPART_PROP_INFO] =
-                    tr("Payload unavailable: ISO extent block %1, declared size %2 is outside the selected volume")
-                        .arg(nDataBlock)
-                        .arg(nDataLength);
+                    tr("Payload unavailable: ISO extent block %1, declared size %2 is outside the selected volume").arg(nDataBlock).arg(nDataLength);
             }
 
             if (bIsFolder) {
-                record.mapProperties[FPART_PROP_STREAMOFFSET] =
-                    record.nStreamOffset;
-                record.mapProperties[FPART_PROP_STREAMSIZE] =
-                    record.nStreamSize;
+                record.mapProperties[FPART_PROP_STREAMOFFSET] = record.nStreamOffset;
+                record.mapProperties[FPART_PROP_STREAMSIZE] = record.nStreamSize;
             }
 
             // Read recording date/time from directory record
@@ -1870,9 +1615,7 @@ QList<XBinary::ARCHIVERECORD> XISO9660::_collectAllRecords(qint64 nRootOffset, q
     while (!listDirQueue.isEmpty() && isPdStructNotCanceled(pPdStruct)) {
         DirEntry dirInfo = listDirQueue.takeFirst();
 
-        QList<ARCHIVERECORD> listDirRecords = guardedThis->_parseDirectoryEntries(
-            dirInfo.nOffset, dirInfo.nSize, nBlockSize, dirInfo.sPath,
-            pPdStruct);
+        QList<ARCHIVERECORD> listDirRecords = guardedThis->_parseDirectoryEntries(dirInfo.nOffset, dirInfo.nSize, nBlockSize, dirInfo.sPath, pPdStruct);
         if (!guardedThis) return QList<ARCHIVERECORD>();
 
         for (qint32 i = 0; i < listDirRecords.count() && isPdStructNotCanceled(pPdStruct); i++) {
@@ -1921,12 +1664,10 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedThis->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) {
         return false;
     }
-    ISO9660_UNPACK_CONTEXT *pOldContext =
-        static_cast<ISO9660_UNPACK_CONTEXT *>(pState->pContext);
+    ISO9660_UNPACK_CONTEXT *pOldContext = static_cast<ISO9660_UNPACK_CONTEXT *>(pState->pContext);
     guardedThis->releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pOldContext;
@@ -1935,8 +1676,7 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
     if (!isPdStructNotCanceled(pPdStruct)) return false;
     const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
     if (!guardedThis || !bBound) return false;
-    const bool bDescriptorSelected =
-        guardedThis->_selectVolumeDescriptor();
+    const bool bDescriptorSelected = guardedThis->_selectVolumeDescriptor();
     if (!guardedThis || !bDescriptorSelected) {
         if (guardedThis) guardedThis->releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -1953,8 +1693,7 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         return false;
     }
 
-    const qint64 nDescriptorOffset =
-        guardedThis->_getPrimaryVolumeDescriptorOffset();
+    const qint64 nDescriptorOffset = guardedThis->_getPrimaryVolumeDescriptorOffset();
     if (!guardedThis || (nDescriptorOffset < 0)) {
         guardedThis->releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -1977,43 +1716,34 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         return false;
     }
 
-    const quint8 nRootExtAttrLength =
-        guardedThis->read_uint8(nRootRecordOffset + 1);
+    const quint8 nRootExtAttrLength = guardedThis->read_uint8(nRootRecordOffset + 1);
     if (!guardedThis) return false;
     quint32 nRootExtentLocation = guardedThis->read_uint32(nRootRecordOffset + 2);
     if (!guardedThis) return false;
-    const quint32 nRootExtentLocationBe =
-        guardedThis->read_uint32(nRootRecordOffset + 6, true);
+    const quint32 nRootExtentLocationBe = guardedThis->read_uint32(nRootRecordOffset + 6, true);
     if (!guardedThis) return false;
     quint32 nRootDataLength = guardedThis->read_uint32(nRootRecordOffset + 10);
     if (!guardedThis) return false;
-    const quint32 nRootDataLengthBe =
-        guardedThis->read_uint32(nRootRecordOffset + 14, true);
+    const quint32 nRootDataLengthBe = guardedThis->read_uint32(nRootRecordOffset + 14, true);
     if (!guardedThis) return false;
 
-    if ((nRootExtentLocation != nRootExtentLocationBe) ||
-        (nRootDataLength != nRootDataLengthBe)) {
+    if ((nRootExtentLocation != nRootExtentLocationBe) || (nRootDataLength != nRootDataLengthBe)) {
         guardedThis->releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
 
-    qint64 nRootOffset =
-        (static_cast<qint64>(nRootExtentLocation) +
-         nRootExtAttrLength) * nLogicalBlockSize;
+    qint64 nRootOffset = (static_cast<qint64>(nRootExtentLocation) + nRootExtAttrLength) * nLogicalBlockSize;
     qint64 nRootSize = (qint64)nRootDataLength;
 
-    if ((nRootOffset <= 0) || (nRootSize <= 0) ||
-        (nRootOffset >= nTotalSize) ||
-        (nRootSize > nTotalSize - nRootOffset)) {
+    if ((nRootOffset <= 0) || (nRootSize <= 0) || (nRootOffset >= nTotalSize) || (nRootSize > nTotalSize - nRootOffset)) {
         guardedThis->releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
 
     // Build flat list of all records via BFS traversal
-    QList<ARCHIVERECORD> listAllRecords = guardedThis->_collectAllRecords(
-        nRootOffset, nRootSize, nLogicalBlockSize, pPdStruct);
+    QList<ARCHIVERECORD> listAllRecords = guardedThis->_collectAllRecords(nRootOffset, nRootSize, nLogicalBlockSize, pPdStruct);
     if (!guardedThis) return false;
 
     if (!isPdStructNotCanceled(pPdStruct)) {
@@ -2022,8 +1752,7 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
         return false;
     }
 
-    ISO9660_UNPACK_CONTEXT *pContext =
-        new (std::nothrow) ISO9660_UNPACK_CONTEXT;
+    ISO9660_UNPACK_CONTEXT *pContext = new (std::nothrow) ISO9660_UNPACK_CONTEXT;
     if (!pContext) {
         guardedThis->releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -2054,8 +1783,7 @@ bool XISO9660::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant
 XBinary::ARCHIVERECORD XISO9660::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     QPointer<XISO9660> guardedThis(this);
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     ARCHIVERECORD record = {};
@@ -2081,8 +1809,7 @@ bool XISO9660::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     if (!pState || !pState->pContext) return false;
     const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
@@ -2105,10 +1832,8 @@ bool XISO9660::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedThis->ownsUnpackSource(pState)) return false;
-    ISO9660_UNPACK_CONTEXT *pContext =
-        static_cast<ISO9660_UNPACK_CONTEXT *>(pState->pContext);
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) return false;
+    ISO9660_UNPACK_CONTEXT *pContext = static_cast<ISO9660_UNPACK_CONTEXT *>(pState->pContext);
     pState->pContext = nullptr;
     guardedThis->releaseUnpackSource(pState);
     if (!guardedThis) return false;
@@ -2213,12 +1938,9 @@ bool XISO9660::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

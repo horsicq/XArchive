@@ -51,7 +51,7 @@ struct COMPRESS_BITREADER {
     qint32 nReadLen;
     quint64 nBitBuf;
     qint32 nBitsInBuf;
-    qint64 nBitsRead;     // code-aligned bits consumed (for boundary tracking)
+    qint64 nBitsRead;  // code-aligned bits consumed (for boundary tracking)
 };
 
 // Read one nCodeBits-wide code from the stream, or -1 at end of input.
@@ -83,8 +83,7 @@ static qint32 compressReadCode(COMPRESS_BITREADER *br, qint32 nCodeBits)
 // is padding and the next code begins at the following group boundary.
 static bool compressAlignCodeGroup(COMPRESS_BITREADER *br, qint32 nCodeBits, qint64 *pnGroupStartBits)
 {
-    if (!br || !pnGroupStartBits || (nCodeBits < COMPRESS_MINBITS) || (nCodeBits > COMPRESS_MAXBITS) ||
-        (br->nBitsRead < *pnGroupStartBits)) {
+    if (!br || !pnGroupStartBits || (nCodeBits < COMPRESS_MINBITS) || (nCodeBits > COMPRESS_MAXBITS) || (br->nBitsRead < *pnGroupStartBits)) {
         return false;
     }
 
@@ -115,11 +114,11 @@ static bool compressFlushOutput(XBinary::DATAPROCESS_STATE *pState, quint8 *outB
     return true;
 }
 
-static bool compressAppendOutput(XBinary::DATAPROCESS_STATE *pState, quint8 *pOutBuf, qint32 nOutBufSize, qint32 *pnOutPos,
-                                 qint64 *pnTotalOutput, bool bHasExpectedSize, qint64 nExpectedSize, quint8 nByte)
+static bool compressAppendOutput(XBinary::DATAPROCESS_STATE *pState, quint8 *pOutBuf, qint32 nOutBufSize, qint32 *pnOutPos, qint64 *pnTotalOutput, bool bHasExpectedSize,
+                                 qint64 nExpectedSize, quint8 nByte)
 {
-    if (!pState || !pOutBuf || !pnOutPos || !pnTotalOutput || (*pnOutPos < 0) || (*pnOutPos >= nOutBufSize) ||
-        (*pnTotalOutput == (std::numeric_limits<qint64>::max)()) || (bHasExpectedSize && (*pnTotalOutput >= nExpectedSize))) {
+    if (!pState || !pOutBuf || !pnOutPos || !pnTotalOutput || (*pnOutPos < 0) || (*pnOutPos >= nOutBufSize) || (*pnTotalOutput == (std::numeric_limits<qint64>::max)()) ||
+        (bHasExpectedSize && (*pnTotalOutput >= nExpectedSize))) {
         return false;
     }
 
@@ -135,12 +134,10 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
         return false;
     }
 
-    if ((pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1) ||
-        ((pDecompressState->nInputLimit != -1) && (pDecompressState->nInputLimit < 3)) ||
+    if ((pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1) || ((pDecompressState->nInputLimit != -1) && (pDecompressState->nInputLimit < 3)) ||
         (pDecompressState->nProcessedOffset < 0) || (pDecompressState->nProcessedLimit < -1) ||
         ((pDecompressState->nProcessedLimit != -1) &&
-         (pDecompressState->nProcessedOffset >
-          ((std::numeric_limits<qint64>::max)() - pDecompressState->nProcessedLimit)))) {
+         (pDecompressState->nProcessedOffset > ((std::numeric_limits<qint64>::max)() - pDecompressState->nProcessedLimit)))) {
         return false;
     }
 
@@ -239,10 +236,8 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
         // are a truncated first code, not an empty payload.
         const bool bZeroPadding = (br.nBitsInBuf >= 0) && (br.nBitsInBuf < nCodeBits) && (br.nBitBuf == 0);
         const bool bEmptyResult = bZeroPadding && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-                                  ((pDecompressState->nInputLimit == -1) ||
-                                   (pDecompressState->nCountInput == pDecompressState->nInputLimit)) &&
-                                  (!bHasExpectedSize || (nExpectedSize == 0)) && (pDecompressState->nCountOutput == 0) &&
-                                  XBinary::isPdStructNotCanceled(pPdStruct);
+                                  ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit)) &&
+                                  (!bHasExpectedSize || (nExpectedSize == 0)) && (pDecompressState->nCountOutput == 0) && XBinary::isPdStructNotCanceled(pPdStruct);
         delete[] pPrefix;
         delete[] pSuffix;
         delete[] pStack;
@@ -299,8 +294,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
 
             nOldCode = nCode;
             nFinChar = (quint8)nCode;
-            if (!compressAppendOutput(pDecompressState, outBuf, OUTBUF_SIZE, &nOutPos, &nTotalOutput, bHasExpectedSize, nExpectedSize,
-                                      nFinChar)) {
+            if (!compressAppendOutput(pDecompressState, outBuf, OUTBUF_SIZE, &nOutPos, &nTotalOutput, bHasExpectedSize, nExpectedSize, nFinChar)) {
                 bResult = false;
                 break;
             }
@@ -343,8 +337,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
 
         // Output in correct order (reverse of stack)
         for (qint32 i = nStackTop - 1; i >= 0; i--) {
-            if (!compressAppendOutput(pDecompressState, outBuf, OUTBUF_SIZE, &nOutPos, &nTotalOutput, bHasExpectedSize, nExpectedSize,
-                                      pStack[i])) {
+            if (!compressAppendOutput(pDecompressState, outBuf, OUTBUF_SIZE, &nOutPos, &nTotalOutput, bHasExpectedSize, nExpectedSize, pStack[i])) {
                 bResult = false;
                 break;
             }
@@ -377,8 +370,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
 
     bResult = bResult && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
               ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit)) &&
-              (!bHasExpectedSize || (nTotalOutput == nExpectedSize)) && (pDecompressState->nCountOutput == nTotalOutput) &&
-              XBinary::isPdStructNotCanceled(pPdStruct);
+              (!bHasExpectedSize || (nTotalOutput == nExpectedSize)) && (pDecompressState->nCountOutput == nTotalOutput) && XBinary::isPdStructNotCanceled(pPdStruct);
 
     delete[] pPrefix;
     delete[] pSuffix;

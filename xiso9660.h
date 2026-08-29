@@ -196,6 +196,7 @@ private:
     bool m_bJoliet;
     bool m_bCueSource;
     bool m_bRawSectorSource;
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

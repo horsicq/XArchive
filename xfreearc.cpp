@@ -26,8 +26,7 @@ XBinary::XCONVERT _TABLE_XFREEARC_STRUCTID[] = {
     {XFREEARC::STRUCTID_BLOCK, "BLOCK", QString("Block")},
 };
 
-XFREEARC::XFREEARC(QIODevice *pDevice)
-    : XExternalArchive(pDevice, BACKEND_FREEARC)
+XFREEARC::XFREEARC(QIODevice *pDevice) : XExternalArchive(pDevice, BACKEND_FREEARC)
 {
 }
 
@@ -164,10 +163,8 @@ quint32 XFREEARC::ftStringToStructID(const QString &sFtString)
     return XCONVERT_ftStringToId(sFtString, _TABLE_XFREEARC_STRUCTID, sizeof(_TABLE_XFREEARC_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
-static XBinary::XIDSTRING _TABLE_XFREEARC_BlockTypes[] = {{XFREEARC::BLOCKTYPE_HEADER, "HEADER"},
-                                                          {XFREEARC::BLOCKTYPE_DATA, "DATA"},
-                                                          {XFREEARC::BLOCKTYPE_DIR, "DIR"},
-                                                          {XFREEARC::BLOCKTYPE_FOOTER, "FOOTER"}};
+static XBinary::XIDSTRING _TABLE_XFREEARC_BlockTypes[] = {
+    {XFREEARC::BLOCKTYPE_HEADER, "HEADER"}, {XFREEARC::BLOCKTYPE_DATA, "DATA"}, {XFREEARC::BLOCKTYPE_DIR, "DIR"}, {XFREEARC::BLOCKTYPE_FOOTER, "FOOTER"}};
 
 QList<XBinary::XFHEADER> XFREEARC::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
 {
@@ -422,8 +419,7 @@ QList<XFREEARC::BLOCK> XFREEARC::getBlocks(PDSTRUCT *pPdStruct)
         block.sCompressor = _readCompressorString(nOffset + 5, nFileSize - nOffset - 5);
 
         // Find the next block to determine this block's size
-        qint64 nNextBlock = _findNextBlock(
-            nOffset + FREEARC_SIGNATURE_SIZE, nFileSize, pPdStruct);
+        qint64 nNextBlock = _findNextBlock(nOffset + FREEARC_SIGNATURE_SIZE, nFileSize, pPdStruct);
 
         if (nNextBlock == -1) {
             // Last block extends to end of file
@@ -459,8 +455,7 @@ QString XFREEARC::blockTypeToString(quint8 nType)
     return sResult;
 }
 
-qint64 XFREEARC::_findNextBlock(qint64 nOffset, qint64 nFileSize,
-                                PDSTRUCT *pPdStruct)
+qint64 XFREEARC::_findNextBlock(qint64 nOffset, qint64 nFileSize, PDSTRUCT *pPdStruct)
 {
     // Scan forward from nOffset looking for the next "ArC\x01" signature
     QByteArray baSignature;
@@ -471,10 +466,8 @@ qint64 XFREEARC::_findNextBlock(qint64 nOffset, qint64 nFileSize,
 
     qint64 nPos = nOffset;
 
-    while ((nPos < nFileSize - 3) &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
-        qint64 nFound = find_signature(
-            nPos, nFileSize - nPos, "41724301", nullptr, pPdStruct);
+    while ((nPos < nFileSize - 3) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qint64 nFound = find_signature(nPos, nFileSize - nPos, "41724301", nullptr, pPdStruct);
 
         if (nFound == -1) {
             return -1;
@@ -538,12 +531,9 @@ bool XFREEARC::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

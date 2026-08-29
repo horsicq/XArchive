@@ -46,8 +46,7 @@ public:
     virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
-    static bool isValid(QIODevice *pDevice, QList<RECORD> *pListRecords,
-                        PDSTRUCT *pPdStruct);
+    static bool isValid(QIODevice *pDevice, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     virtual FT getFileType() override;
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
@@ -73,6 +72,7 @@ public:
 
 private:
     qint64 findAPKSignBlockOffset(PDSTRUCT *pPdStruct = nullptr);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

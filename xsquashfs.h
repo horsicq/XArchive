@@ -100,6 +100,7 @@ public:
 private:
     SQUASHFS_COMPRESSION _getCompressionMethod(quint16 nType);
     QString _getCompressionMethodString(SQUASHFS_COMPRESSION comp);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

@@ -47,8 +47,7 @@
 #include <unistd.h>
 #endif
 
-static XBinary::XCONVERT _TABLE_XASAR_STRUCTID[] = {{XASAR::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                     {XASAR::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
+static XBinary::XCONVERT _TABLE_XASAR_STRUCTID[] = {{XASAR::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")}, {XASAR::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
 
 static const qint64 ASAR_MAX_JSON_SIZE = Q_INT64_C(16) * 1024 * 1024;
 static const qint64 ASAR_MAX_FILE_SIZE = Q_INT64_C(9007199254740991);
@@ -58,8 +57,7 @@ static const qint32 ASAR_MAX_RECORDS = 1000000;
 
 class ASAR_DEVICE_POSITION_GUARD {
 public:
-    explicit ASAR_DEVICE_POSITION_GUARD(QIODevice *pDevice)
-        : m_pDevice(pDevice), m_nPosition(pDevice ? pDevice->pos() : -1), m_bRestored(false)
+    explicit ASAR_DEVICE_POSITION_GUARD(QIODevice *pDevice) : m_pDevice(pDevice), m_nPosition(pDevice ? pDevice->pos() : -1), m_bRestored(false)
     {
     }
 
@@ -98,14 +96,12 @@ static Qt::CaseSensitivity asarPathCaseSensitivity()
 static bool asarPathsEqual(const QString &sFirst, const QString &sSecond)
 {
     return !sFirst.isEmpty() && !sSecond.isEmpty() &&
-           (QDir::fromNativeSeparators(QDir::cleanPath(sFirst)).compare(
-                QDir::fromNativeSeparators(QDir::cleanPath(sSecond)), asarPathCaseSensitivity()) == 0);
+           (QDir::fromNativeSeparators(QDir::cleanPath(sFirst)).compare(QDir::fromNativeSeparators(QDir::cleanPath(sSecond)), asarPathCaseSensitivity()) == 0);
 }
 
 static bool asarIsValidComponent(const QString &sComponent)
 {
-    return !sComponent.isEmpty() && (sComponent != QLatin1String(".")) &&
-           (sComponent != QLatin1String("..")) && !sComponent.contains(QChar(0)) &&
+    return !sComponent.isEmpty() && (sComponent != QLatin1String(".")) && (sComponent != QLatin1String("..")) && !sComponent.contains(QChar(0)) &&
            !sComponent.contains(QLatin1Char('/')) && !sComponent.contains(QLatin1Char('\\'));
 }
 
@@ -139,8 +135,7 @@ static bool asarNormalizeLinkPath(const QString &sPath, QString *pResult)
     QString sNormalized = sPath;
     sNormalized.replace(QLatin1Char('\\'), QLatin1Char('/'));
     if (sNormalized.startsWith(QLatin1Char('/')) || QDir::isAbsolutePath(sNormalized) ||
-        ((sNormalized.size() >= 2) && sNormalized.at(0).isLetter() &&
-         (sNormalized.at(1) == QLatin1Char(':')))) {
+        ((sNormalized.size() >= 2) && sNormalized.at(0).isLetter() && (sNormalized.at(1) == QLatin1Char(':')))) {
         return false;
     }
 
@@ -180,22 +175,20 @@ static bool asarResolveExternalRoot(const QString &sRoot, QString *pCanonicalRoo
 #ifdef Q_OS_WIN
         || rootInfo.isJunction()
 #endif
-    ) return false;
+    )
+        return false;
     *pCanonicalRoot = QDir::fromNativeSeparators(rootInfo.canonicalFilePath());
     return !pCanonicalRoot->isEmpty();
 }
 
-static bool asarResolveExternalFile(const QString &sRoot, const QString &sPinnedCanonicalRoot,
-                                    const QString &sLogicalName, QString *pResult)
+static bool asarResolveExternalFile(const QString &sRoot, const QString &sPinnedCanonicalRoot, const QString &sLogicalName, QString *pResult)
 {
     if (pResult) pResult->clear();
     QString sNormalizedName;
-    if (!pResult || sPinnedCanonicalRoot.isEmpty() ||
-        !asarNormalizeRelativePath(sLogicalName, &sNormalizedName)) return false;
+    if (!pResult || sPinnedCanonicalRoot.isEmpty() || !asarNormalizeRelativePath(sLogicalName, &sNormalizedName)) return false;
 
     QString sCanonicalRoot;
-    if (!asarResolveExternalRoot(sRoot, &sCanonicalRoot) ||
-        !asarPathsEqual(sCanonicalRoot, sPinnedCanonicalRoot)) return false;
+    if (!asarResolveExternalRoot(sRoot, &sCanonicalRoot) || !asarPathsEqual(sCanonicalRoot, sPinnedCanonicalRoot)) return false;
 
     const QString sCandidate = QDir(sRoot).absoluteFilePath(sNormalizedName);
     QFileInfo candidateInfo(sCandidate);
@@ -220,8 +213,7 @@ static bool asarOpenedFileCanonicalPath(QFile *pFile, QString *pResult)
     const DWORD nRequired = GetFinalPathNameByHandleW(hFile, nullptr, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
     if ((nRequired == 0) || (nRequired > (1u << 20))) return false;
     QVector<wchar_t> buffer((qint32)nRequired + 1);
-    const DWORD nLength = GetFinalPathNameByHandleW(hFile, buffer.data(), (DWORD)buffer.size(),
-                                                    FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    const DWORD nLength = GetFinalPathNameByHandleW(hFile, buffer.data(), (DWORD)buffer.size(), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
     if ((nLength == 0) || (nLength >= (DWORD)buffer.size())) return false;
     sNativePath = QString::fromWCharArray(buffer.constData(), (qint32)nLength);
     if (sNativePath.startsWith(QLatin1String("\\\\?\\UNC\\"), Qt::CaseInsensitive)) {
@@ -258,24 +250,20 @@ static bool asarOpenedFileCanonicalPath(QFile *pFile, QString *pResult)
     return true;
 }
 
-static bool asarOpenedFileIsContained(QFile *pFile, const QString &sCanonicalRoot,
-                                      const QString &sExpectedCanonicalPath)
+static bool asarOpenedFileIsContained(QFile *pFile, const QString &sCanonicalRoot, const QString &sExpectedCanonicalPath)
 {
     QString sOpenedPath;
-    return asarOpenedFileCanonicalPath(pFile, &sOpenedPath) &&
-           asarPathIsWithinRoot(sCanonicalRoot, sOpenedPath) &&
-           asarPathsEqual(sOpenedPath, sExpectedCanonicalPath);
+    return asarOpenedFileCanonicalPath(pFile, &sOpenedPath) && asarPathIsWithinRoot(sCanonicalRoot, sOpenedPath) && asarPathsEqual(sOpenedPath, sExpectedCanonicalPath);
 }
 
-static bool asarHashExternalFile(const QString &sFileName, const QString &sCanonicalRoot,
-                                 qint64 nExpectedSize, QByteArray *pHash, XBinary::PDSTRUCT *pPdStruct)
+static bool asarHashExternalFile(const QString &sFileName, const QString &sCanonicalRoot, qint64 nExpectedSize, QByteArray *pHash, XBinary::PDSTRUCT *pPdStruct)
 {
     if (pHash) pHash->clear();
     if (!pHash || (nExpectedSize < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     QFile file(sFileName);
-    if (!file.open(QIODevice::ReadOnly) || file.isSequential() || (file.size() != nExpectedSize) ||
-        !asarOpenedFileIsContained(&file, sCanonicalRoot, sFileName)) return false;
+    if (!file.open(QIODevice::ReadOnly) || file.isSequential() || (file.size() != nExpectedSize) || !asarOpenedFileIsContained(&file, sCanonicalRoot, sFileName))
+        return false;
 
     QCryptographicHash hash(QCryptographicHash::Sha256);
     QByteArray baBuffer;
@@ -291,8 +279,7 @@ static bool asarHashExternalFile(const QString &sFileName, const QString &sCanon
         nReadTotal += nRead;
     }
 
-    if ((nReadTotal != nExpectedSize) || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        (file.size() != nExpectedSize) || !file.atEnd()) {
+    if ((nReadTotal != nExpectedSize) || !XBinary::isPdStructNotCanceled(pPdStruct) || (file.size() != nExpectedSize) || !file.atEnd()) {
         return false;
     }
 
@@ -304,8 +291,7 @@ static bool asarIsSHA256Hex(const QByteArray &baHex)
 {
     if (baHex.size() != 64) return false;
     for (char c : baHex) {
-        if (!(((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f')) ||
-              ((c >= 'A') && (c <= 'F')))) return false;
+        if (!(((c >= '0') && (c <= '9')) || ((c >= 'a') && (c <= 'f')) || ((c >= 'A') && (c <= 'F')))) return false;
     }
     return true;
 }
@@ -319,22 +305,19 @@ static bool asarReadSHA256(const QJsonObject &objEntry, qint64 nFileSize, QByteA
     const QJsonValue integrityValue = objEntry.value(QLatin1String("integrity"));
     if (!integrityValue.isObject()) return false;
     const QJsonObject integrity = integrityValue.toObject();
-    if (!integrity.value(QLatin1String("algorithm")).isString() ||
-        (integrity.value(QLatin1String("algorithm")).toString() != QLatin1String("SHA256")) ||
-        !integrity.value(QLatin1String("hash")).isString() ||
-        !integrity.value(QLatin1String("blockSize")).isDouble() ||
-        !integrity.value(QLatin1String("blocks")).isArray()) return false;
+    if (!integrity.value(QLatin1String("algorithm")).isString() || (integrity.value(QLatin1String("algorithm")).toString() != QLatin1String("SHA256")) ||
+        !integrity.value(QLatin1String("hash")).isString() || !integrity.value(QLatin1String("blockSize")).isDouble() ||
+        !integrity.value(QLatin1String("blocks")).isArray())
+        return false;
 
     const QByteArray baHex = integrity.value(QLatin1String("hash")).toString().toLatin1();
     if (!asarIsSHA256Hex(baHex)) return false;
     const double dBlockSize = integrity.value(QLatin1String("blockSize")).toDouble();
-    if (!std::isfinite(dBlockSize) || (dBlockSize <= 0) ||
-        (dBlockSize > (double)ASAR_MAX_FILE_SIZE) || (std::floor(dBlockSize) != dBlockSize)) return false;
+    if (!std::isfinite(dBlockSize) || (dBlockSize <= 0) || (dBlockSize > (double)ASAR_MAX_FILE_SIZE) || (std::floor(dBlockSize) != dBlockSize)) return false;
     const qint64 nBlockSize = (qint64)dBlockSize;
     const qint64 nExpectedBlocks = (nFileSize == 0) ? 1 : (((nFileSize - 1) / nBlockSize) + 1);
     const QJsonArray blocks = integrity.value(QLatin1String("blocks")).toArray();
-    if ((nExpectedBlocks > (std::numeric_limits<qint32>::max)()) ||
-        (blocks.size() != (qint32)nExpectedBlocks)) return false;
+    if ((nExpectedBlocks > (std::numeric_limits<qint32>::max)()) || (blocks.size() != (qint32)nExpectedBlocks)) return false;
     for (const QJsonValue &block : blocks) {
         if (!block.isString() || !asarIsSHA256Hex(block.toString().toLatin1())) return false;
     }
@@ -380,8 +363,7 @@ bool XASAR::_readHeader(qint64 *pnJsonOffset, qint64 *pnJsonSize, qint64 *pnBlob
     const quint64 nAlignedJsonSize = ((quint64)nJsonSize + 3u) & ~Q_UINT64_C(3);
     const quint64 nExpectedJsonStringPayload = 4u + nAlignedJsonSize;
     const quint64 nExpectedHeaderSize = 4u + nExpectedJsonStringPayload;
-    if (((quint64)nJsonStrSize != nExpectedJsonStringPayload) ||
-        ((quint64)nHeaderSize != nExpectedHeaderSize)) {
+    if (((quint64)nJsonStrSize != nExpectedJsonStringPayload) || ((quint64)nHeaderSize != nExpectedHeaderSize)) {
         return false;
     }
 
@@ -435,19 +417,17 @@ bool XASAR::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
     return xasar.isValid(pPdStruct);
 }
 
-bool XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords,
-                     PDSTRUCT *pPdStruct, qint32 nDepth, bool bParentUnpacked)
+bool XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords, PDSTRUCT *pPdStruct, qint32 nDepth,
+                      bool bParentUnpacked)
 {
-    if (!pListRecords || (nDepth < 0) || (nDepth > ASAR_MAX_TREE_DEPTH) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pListRecords || (nDepth < 0) || (nDepth > ASAR_MAX_TREE_DEPTH) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const QStringList listKeys = objFiles.keys();
 
     for (const QString &sKey : listKeys) {
-        if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
-            (pListRecords->count() >= ASAR_MAX_RECORDS) || !asarIsValidComponent(sKey)) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) || (pListRecords->count() >= ASAR_MAX_RECORDS) || !asarIsValidComponent(sKey)) {
             return false;
         }
 
@@ -467,8 +447,7 @@ bool XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint6
         const bool bUnpacked = bParentUnpacked || bOwnUnpacked;
 
         if (bHasFiles) {
-            if (bHasLink || bHasOffset || bHasSize || bHasIntegrity || bHasExecutable ||
-                !objEntry.value(QLatin1String("files")).isObject()) return false;
+            if (bHasLink || bHasOffset || bHasSize || bHasIntegrity || bHasExecutable || !objEntry.value(QLatin1String("files")).isObject()) return false;
             ASAR_RECORD folderRecord = {};
             folderRecord.sFileName = sPath;
             folderRecord.nOffset = 0;
@@ -480,8 +459,7 @@ bool XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint6
                 return false;
             }
         } else if (bHasLink) {
-            if (bHasOffset || bHasSize || bHasIntegrity || bHasExecutable ||
-                !objEntry.value(QLatin1String("link")).isString()) return false;
+            if (bHasOffset || bHasSize || bHasIntegrity || bHasExecutable || !objEntry.value(QLatin1String("link")).isString()) return false;
             QString sNormalizedLink;
             if (!asarNormalizeLinkPath(objEntry.value(QLatin1String("link")).toString(), &sNormalizedLink)) return false;
             ASAR_RECORD linkRecord = {};
@@ -490,12 +468,11 @@ bool XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint6
             linkRecord.bIsLink = true;
             pListRecords->append(linkRecord);
         } else {
-            if (!bHasSize || !objEntry.value(QLatin1String("size")).isDouble() ||
-                (bUnpacked ? bHasOffset : !bHasOffset) ||
-                (bHasExecutable && !objEntry.value(QLatin1String("executable")).isBool())) return false;
+            if (!bHasSize || !objEntry.value(QLatin1String("size")).isDouble() || (bUnpacked ? bHasOffset : !bHasOffset) ||
+                (bHasExecutable && !objEntry.value(QLatin1String("executable")).isBool()))
+                return false;
             const double dSize = objEntry.value(QLatin1String("size")).toDouble(-1);
-            if (!std::isfinite(dSize) || (dSize < 0) || (dSize > (double)ASAR_MAX_FILE_SIZE) ||
-                (std::floor(dSize) != dSize)) return false;
+            if (!std::isfinite(dSize) || (dSize < 0) || (dSize > (double)ASAR_MAX_FILE_SIZE) || (std::floor(dSize) != dSize)) return false;
 
             ASAR_RECORD fileRecord = {};
             fileRecord.sFileName = sPath;
@@ -506,8 +483,7 @@ bool XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint6
                 if (!asarReadSHA256(objEntry, fileRecord.nSize, &fileRecord.baExternalSHA256)) return false;
             } else {
                 QByteArray baUnusedHash;
-                if (!asarReadSHA256(objEntry, fileRecord.nSize, &baUnusedHash) ||
-                    !objEntry.value(QLatin1String("offset")).isString()) return false;
+                if (!asarReadSHA256(objEntry, fileRecord.nSize, &baUnusedHash) || !objEntry.value(QLatin1String("offset")).isString()) return false;
                 const QString sOffset = objEntry.value(QLatin1String("offset")).toString();
                 if (sOffset.isEmpty()) return false;
                 for (const QChar c : sOffset) {
@@ -515,11 +491,9 @@ bool XASAR::_walkTree(const QJsonObject &objFiles, const QString &sParent, qint6
                 }
                 bool bOk = false;
                 const qulonglong nUnsignedOffset = sOffset.toULongLong(&bOk, 10);
-                if (!bOk || (nUnsignedOffset > (qulonglong)(std::numeric_limits<qint64>::max)()) ||
-                    (nBlobOffset < 0)) return false;
+                if (!bOk || (nUnsignedOffset > (qulonglong)(std::numeric_limits<qint64>::max)()) || (nBlobOffset < 0)) return false;
                 const qint64 nRelOffset = (qint64)nUnsignedOffset;
-                if ((nRelOffset < 0) ||
-                    (nRelOffset > (std::numeric_limits<qint64>::max)() - nBlobOffset)) {
+                if ((nRelOffset < 0) || (nRelOffset > (std::numeric_limits<qint64>::max)() - nBlobOffset)) {
                     return false;
                 }
                 fileRecord.nOffset = nBlobOffset + nRelOffset;
@@ -550,7 +524,8 @@ bool XASAR::_prepareExternalRecords(ASAR_UNPACK_CONTEXT *pContext, PDSTRUCT *pPd
     const QString sArchivePath = QDir::fromNativeSeparators(QFileInfo(guardedArchiveFile->fileName()).absoluteFilePath());
     QString sOpenedArchivePath;
     if (sArchivePath.isEmpty() || !asarOpenedFileCanonicalPath(guardedArchiveFile.data(), &sOpenedArchivePath) ||
-        !asarPathsEqual(QFileInfo(sArchivePath).canonicalFilePath(), sOpenedArchivePath)) return false;
+        !asarPathsEqual(QFileInfo(sArchivePath).canonicalFilePath(), sOpenedArchivePath))
+        return false;
     pContext->sExternalRoot = QDir::fromNativeSeparators(sArchivePath + QLatin1String(".unpacked"));
     if (!asarResolveExternalRoot(pContext->sExternalRoot, &pContext->sExternalCanonicalRoot)) return false;
 
@@ -558,15 +533,13 @@ bool XASAR::_prepareExternalRecords(ASAR_UNPACK_CONTEXT *pContext, PDSTRUCT *pPd
         if (!record.bIsExternal) continue;
         record.sExternalLogicalName = record.sFileName;
         if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
-            !asarResolveExternalFile(pContext->sExternalRoot, pContext->sExternalCanonicalRoot,
-                                     record.sExternalLogicalName, &record.sExternalFileName)) {
+            !asarResolveExternalFile(pContext->sExternalRoot, pContext->sExternalCanonicalRoot, record.sExternalLogicalName, &record.sExternalFileName)) {
             return false;
         }
 
         const QByteArray baHeaderSHA256 = record.baExternalSHA256;
         QByteArray baActualSHA256;
-        if (!asarHashExternalFile(record.sExternalFileName, pContext->sExternalCanonicalRoot,
-                                  record.nSize, &baActualSHA256, pPdStruct) ||
+        if (!asarHashExternalFile(record.sExternalFileName, pContext->sExternalCanonicalRoot, record.nSize, &baActualSHA256, pPdStruct) ||
             (!baHeaderSHA256.isEmpty() && (baActualSHA256 != baHeaderSHA256))) {
             return false;
         }
@@ -584,18 +557,16 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
     const qint32 nOriginalRecordCount = pContext->listRecords.size();
     for (qint32 i = 0; i < nOriginalRecordCount; ++i) {
         QString sNormalizedPath;
-        if (!asarNormalizeRelativePath(pContext->listRecords.at(i).sFileName, &sNormalizedPath) ||
-            (sNormalizedPath != pContext->listRecords.at(i).sFileName)) return false;
+        if (!asarNormalizeRelativePath(pContext->listRecords.at(i).sFileName, &sNormalizedPath) || (sNormalizedPath != pContext->listRecords.at(i).sFileName))
+            return false;
         if (mapRecords.contains(sNormalizedPath)) return false;
         mapRecords.insert(sNormalizedPath, i);
     }
 
-    const auto resolvePath = [&](const QString &sInputPath, qint32 nInitialLinkDepth,
-                                 qint32 *pnTargetIndex, QString *pFinalPath) -> bool {
+    const auto resolvePath = [&](const QString &sInputPath, qint32 nInitialLinkDepth, qint32 *pnTargetIndex, QString *pFinalPath) -> bool {
         if (pnTargetIndex) *pnTargetIndex = -1;
         if (pFinalPath) pFinalPath->clear();
-        if (!pnTargetIndex || !pFinalPath || (nInitialLinkDepth < 0) ||
-            (nInitialLinkDepth > ASAR_MAX_LINK_DEPTH)) return false;
+        if (!pnTargetIndex || !pFinalPath || (nInitialLinkDepth < 0) || (nInitialLinkDepth > ASAR_MAX_LINK_DEPTH)) return false;
         QString sCurrentPath;
         if (!asarNormalizeLinkPath(sInputPath, &sCurrentPath)) return false;
 
@@ -626,9 +597,8 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
                 if ((nPrefixIndex >= 0) && pContext->listRecords.at(nPrefixIndex).bIsLink) {
                     if (++nLinkDepth > ASAR_MAX_LINK_DEPTH) return false;
                     QString sRewrittenPath;
-                    if (!asarNormalizeLinkPath(pContext->listRecords.at(nPrefixIndex).sLinkName +
-                                                   QLatin1Char('/') + sCurrentPath.mid(nSlash + 1),
-                                               &sRewrittenPath)) return false;
+                    if (!asarNormalizeLinkPath(pContext->listRecords.at(nPrefixIndex).sLinkName + QLatin1Char('/') + sCurrentPath.mid(nSlash + 1), &sRewrittenPath))
+                        return false;
                     sCurrentPath = sRewrittenPath;
                     bRewritten = true;
                     break;
@@ -663,10 +633,8 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
     const QStringList listRecordNames = mapRecords.keys();
     QSet<QString> setAllNames(listRecordNames.cbegin(), listRecordNames.cend());
     std::function<bool(const QString &, const QString &, QSet<QString> *, qint32)> expandDirectory;
-    expandDirectory = [&](const QString &sAliasPath, const QString &sTargetFolderPath,
-                          QSet<QString> *pAncestry, qint32 nDepth) -> bool {
-        if (!pAncestry || (nDepth > ASAR_MAX_TREE_DEPTH) ||
-            pAncestry->contains(sTargetFolderPath)) return false;
+    expandDirectory = [&](const QString &sAliasPath, const QString &sTargetFolderPath, QSet<QString> *pAncestry, qint32 nDepth) -> bool {
+        if (!pAncestry || (nDepth > ASAR_MAX_TREE_DEPTH) || pAncestry->contains(sTargetFolderPath)) return false;
         pAncestry->insert(sTargetFolderPath);
         const QString sPrefix = sTargetFolderPath + QLatin1Char('/');
 
@@ -680,8 +648,7 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
             QString sResolvedChildPath;
             if (!resolvePath(sSourcePath, 0, &nTargetIndex, &sResolvedChildPath) || (nTargetIndex < 0)) return false;
             const QString sDestinationPath = sAliasPath + QLatin1Char('/') + sSuffix;
-            if (setAllNames.contains(sDestinationPath) ||
-                (pContext->listRecords.size() >= ASAR_MAX_RECORDS)) return false;
+            if (setAllNames.contains(sDestinationPath) || (pContext->listRecords.size() >= ASAR_MAX_RECORDS)) return false;
 
             ASAR_RECORD materialized = pContext->listRecords.at(nTargetIndex);
             materialized.sFileName = sDestinationPath;
@@ -690,8 +657,7 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
             pContext->listRecords.append(materialized);
             setAllNames.insert(sDestinationPath);
 
-            if (materialized.bIsFolder &&
-                !expandDirectory(sDestinationPath, sResolvedChildPath, pAncestry, nDepth + 1)) return false;
+            if (materialized.bIsFolder && !expandDirectory(sDestinationPath, sResolvedChildPath, pAncestry, nDepth + 1)) return false;
         }
 
         pAncestry->remove(sTargetFolderPath);
@@ -703,8 +669,7 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
         if (!linkRecord.bIsLink || !linkRecord.bIsFolder) continue;
         qint32 nTargetIndex = -1;
         QString sFinalPath;
-        if (!resolvePath(linkRecord.sLinkName, 1, &nTargetIndex, &sFinalPath) ||
-            (nTargetIndex < 0) || !pContext->listRecords.at(nTargetIndex).bIsFolder) return false;
+        if (!resolvePath(linkRecord.sLinkName, 1, &nTargetIndex, &sFinalPath) || (nTargetIndex < 0) || !pContext->listRecords.at(nTargetIndex).bIsFolder) return false;
         QSet<QString> setAncestry;
         if (!expandDirectory(linkRecord.sFileName, sFinalPath, &setAncestry, 0)) return false;
     }
@@ -961,12 +926,10 @@ bool XASAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    ASAR_UNPACK_CONTEXT *pOldContext =
-        static_cast<ASAR_UNPACK_CONTEXT *>(pState->pContext);
+    ASAR_UNPACK_CONTEXT *pOldContext = static_cast<ASAR_UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
@@ -992,8 +955,7 @@ bool XASAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     qint64 nJsonSize = 0;
     qint64 nBlobOffset = 0;
 
-    const bool bHeaderRead =
-        _readHeader(&nJsonOffset, &nJsonSize, &nBlobOffset);
+    const bool bHeaderRead = _readHeader(&nJsonOffset, &nJsonSize, &nBlobOffset);
     if (!guardedThis) return false;
     if (!bHeaderRead) {
         releaseUnpackSource(pState);
@@ -1029,8 +991,8 @@ bool XASAR::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     }
 
     for (const ASAR_RECORD &record : pContext->listRecords) {
-        if (!record.bIsFolder && !record.bIsExternal && ((record.nOffset < nBlobOffset) || (record.nOffset > nTotalSize) ||
-                                 (record.nSize < 0) || (record.nSize > nTotalSize - record.nOffset))) {
+        if (!record.bIsFolder && !record.bIsExternal &&
+            ((record.nOffset < nBlobOffset) || (record.nOffset > nTotalSize) || (record.nSize < 0) || (record.nSize > nTotalSize - record.nOffset))) {
             releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
@@ -1069,8 +1031,7 @@ XBinary::ARCHIVERECORD XASAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
     QPointer<XASAR> guardedThis(this);
     ASAR_DEVICE_POSITION_GUARD positionGuard(getDevice());
     if (!positionGuard.isValid()) return ARCHIVERECORD();
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     ARCHIVERECORD result = {};
@@ -1079,8 +1040,7 @@ XBinary::ARCHIVERECORD XASAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         return result;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return result;
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return result;
 
     ASAR_UNPACK_CONTEXT *pContext = (ASAR_UNPACK_CONTEXT *)pState->pContext;
 
@@ -1101,8 +1061,7 @@ XBinary::ARCHIVERECORD XASAR::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStr
         result.mapProperties.insert(FPART_PROP_ISFOLDER, true);
     }
     if (record.bIsLink) {
-        result.mapProperties.insert(FPART_PROP_INFO,
-                                    QStringLiteral("ASAR symbolic link -> %1 (materialized)").arg(record.sLinkName));
+        result.mapProperties.insert(FPART_PROP_INFO, QStringLiteral("ASAR symbolic link -> %1 (materialized)").arg(record.sLinkName));
     }
     if (record.bIsExternal) {
         if (record.baExternalSHA256.size() != 32) return ARCHIVERECORD();
@@ -1123,11 +1082,8 @@ bool XASAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     if (!positionGuard.isValid() || !operationGuard.isAcquired() || !pState || !pDevice || !guardedThis) return false;
     pState->nCurrentOffset = 0;
 
-    const bool bInitialSourceCurrent = pState->pContext &&
-                                       guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!pState->pContext || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
-        !bInitialSourceCurrent || !guardedThis) {
+    const bool bInitialSourceCurrent = pState->pContext && guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!pState->pContext || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords) || !bInitialSourceCurrent || !guardedThis) {
         return false;
     }
 
@@ -1144,8 +1100,7 @@ bool XASAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     QPointer<QIODevice> guardedOutput(pDevice);
     QPointer<QIODevice> guardedSource(guardedThis->getDevice());
     if (!guardedOutput || !guardedSource || !guardedThis->isUnpackOutputSupported(guardedOutput.data()) ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
-        !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, record.nSize) ||
+        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) || !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, record.nSize) ||
         (record.baExternalSHA256.size() != 32)) {
         return false;
     }
@@ -1171,15 +1126,13 @@ bool XASAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     QString sCurrentExternalFile;
-    if (!asarResolveExternalFile(pContext->sExternalRoot, pContext->sExternalCanonicalRoot,
-                                 record.sExternalLogicalName, &sCurrentExternalFile) ||
+    if (!asarResolveExternalFile(pContext->sExternalRoot, pContext->sExternalCanonicalRoot, record.sExternalLogicalName, &sCurrentExternalFile) ||
         !asarPathsEqual(sCurrentExternalFile, record.sExternalFileName)) {
         return false;
     }
 
     QFile sidecarFile(sCurrentExternalFile);
-    if (!sidecarFile.open(QIODevice::ReadOnly) || sidecarFile.isSequential() ||
-        (sidecarFile.size() != record.nSize) ||
+    if (!sidecarFile.open(QIODevice::ReadOnly) || sidecarFile.isSequential() || (sidecarFile.size() != record.nSize) ||
         !asarOpenedFileIsContained(&sidecarFile, pContext->sExternalCanonicalRoot, record.sExternalFileName) ||
         XBinary::devicesAlias(&sidecarFile, guardedOutput.data())) {
         return false;
@@ -1198,8 +1151,7 @@ bool XASAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
     QCryptographicHash hash(QCryptographicHash::Sha256);
     qint64 nReadTotal = 0;
-    while (bResult && guardedThis && guardedOutput && guardedSource &&
-           (nReadTotal < record.nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while (bResult && guardedThis && guardedOutput && guardedSource && (nReadTotal < record.nSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         const qint64 nRequest = qMin<qint64>(baBuffer.size(), record.nSize - nReadTotal);
         const qint64 nRead = sidecarFile.read(baBuffer.data(), nRequest);
         if ((nRead <= 0) || (nRead > nRequest)) {
@@ -1216,20 +1168,14 @@ bool XASAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
 
     if (bResult) {
-        bResult = guardedThis && guardedOutput && guardedSource &&
-                  XBinary::isPdStructNotCanceled(pPdStruct) &&
-                  (nReadTotal == record.nSize) && sidecarFile.atEnd() &&
-                  (sidecarFile.size() == record.nSize) &&
-                  (pWorkDevice->size() == record.nSize) &&
-                  (hash.result() == record.baExternalSHA256);
+        bResult = guardedThis && guardedOutput && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct) && (nReadTotal == record.nSize) && sidecarFile.atEnd() &&
+                  (sidecarFile.size() == record.nSize) && (pWorkDevice->size() == record.nSize) && (hash.result() == record.baExternalSHA256);
     }
     if (bResult) {
         QString sFinalExternalFile;
-        bResult = asarResolveExternalFile(pContext->sExternalRoot, pContext->sExternalCanonicalRoot,
-                                          record.sExternalLogicalName, &sFinalExternalFile) &&
+        bResult = asarResolveExternalFile(pContext->sExternalRoot, pContext->sExternalCanonicalRoot, record.sExternalLogicalName, &sFinalExternalFile) &&
                   asarPathsEqual(sFinalExternalFile, record.sExternalFileName) &&
-                  asarOpenedFileIsContained(&sidecarFile, pContext->sExternalCanonicalRoot,
-                                            record.sExternalFileName) &&
+                  asarOpenedFileIsContained(&sidecarFile, pContext->sExternalCanonicalRoot, record.sExternalFileName) &&
                   guardedThis->isUnpackSourceCurrent(pState, pPdStruct) && guardedThis && guardedOutput && guardedSource;
     }
     if (bResult) {
@@ -1253,8 +1199,7 @@ bool XASAR::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
 
     pState->nCurrentIndex++;
 
@@ -1276,10 +1221,8 @@ bool XASAR::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) return false;
-    ASAR_UNPACK_CONTEXT *pContext =
-        static_cast<ASAR_UNPACK_CONTEXT *>(pState->pContext);
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
+    ASAR_UNPACK_CONTEXT *pContext = static_cast<ASAR_UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
 
@@ -1303,12 +1246,9 @@ bool XASAR::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

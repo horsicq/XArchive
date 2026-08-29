@@ -151,6 +151,7 @@ private:
     QByteArray _readStreamBySectorChain(const QList<quint32> &listFAT, quint32 nStartSector, qint64 nSectorSize, qint64 nStreamSize, PDSTRUCT *pPdStruct);
 
     static void _addRegion(QList<FPART> *pListResult, qint64 fileSize, qint64 offset, qint64 size, const QString &name);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

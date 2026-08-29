@@ -81,13 +81,11 @@ struct StageScanResult {
 void sortExternalRecords(QList<ExternalRecord> *pRecords)
 {
     if (!pRecords) return;
-    std::sort(pRecords->begin(), pRecords->end(),
-              [](const ExternalRecord &a, const ExternalRecord &b) {
-                  const int nCompare = QString::compare(
-                      a.sName, b.sName, Qt::CaseSensitive);
-                  if (nCompare != 0) return nCompare < 0;
-                  return a.bIsFolder && !b.bIsFolder;
-              });
+    std::sort(pRecords->begin(), pRecords->end(), [](const ExternalRecord &a, const ExternalRecord &b) {
+        const int nCompare = QString::compare(a.sName, b.sName, Qt::CaseSensitive);
+        if (nCompare != 0) return nCompare < 0;
+        return a.bIsFolder && !b.bIsFolder;
+    });
 }
 
 QString backendName(XExternalArchive::BACKEND backend)
@@ -165,8 +163,7 @@ QString resolveHelper(XExternalArchive::BACKEND backend)
     for (const QString &sRoot : listRoots) {
         const QFileInfo fileInfo(QDir(sRoot).filePath(sRelative));
         const QString sCanonical = fileInfo.canonicalFilePath();
-        if (fileInfo.exists() && fileInfo.isFile() && fileInfo.isExecutable() &&
-            !fileInfo.isSymLink() && !sCanonical.isEmpty()) {
+        if (fileInfo.exists() && fileInfo.isFile() && fileInfo.isExecutable() && !fileInfo.isSymLink() && !sCanonical.isEmpty()) {
             return sCanonical;
         }
     }
@@ -188,15 +185,13 @@ Qt::CaseSensitivity pathCaseSensitivity()
 #endif
 }
 
-bool isContainedPath(const QString &sCanonicalRoot,
-                     const QString &sCanonicalPath)
+bool isContainedPath(const QString &sCanonicalRoot, const QString &sCanonicalPath)
 {
     if (sCanonicalRoot.isEmpty() || sCanonicalPath.isEmpty()) return false;
     QString sRoot = QDir::fromNativeSeparators(sCanonicalRoot);
     QString sPath = QDir::fromNativeSeparators(sCanonicalPath);
     while (sRoot.endsWith(QLatin1Char('/'))) sRoot.chop(1);
-    return (sPath.compare(sRoot, pathCaseSensitivity()) == 0) ||
-           sPath.startsWith(sRoot + QLatin1Char('/'), pathCaseSensitivity());
+    return (sPath.compare(sRoot, pathCaseSensitivity()) == 0) || sPath.startsWith(sRoot + QLatin1Char('/'), pathCaseSensitivity());
 }
 
 bool normalizeRecordName(const QString &sValue, QString *pResult)
@@ -212,18 +207,15 @@ bool normalizeRecordName(const QString &sValue, QString *pResult)
     while (sName.startsWith(QStringLiteral("./"))) sName.remove(0, 2);
     while (sName.endsWith(QLatin1Char('/'))) sName.chop(1);
     if (sName.isEmpty() || QDir::isAbsolutePath(sName)) return false;
-    if ((sName.size() >= 2) && sName.at(0).isLetter() &&
-        (sName.at(1) == QLatin1Char(':'))) return false;
+    if ((sName.size() >= 2) && sName.at(0).isLetter() && (sName.at(1) == QLatin1Char(':'))) return false;
 
     const QStringList listParts = sName.split(QLatin1Char('/'), Qt::KeepEmptyParts);
     for (const QString &sPart : listParts) {
-        if (sPart.isEmpty() || (sPart == QLatin1String(".")) ||
-            (sPart == QLatin1String(".."))) return false;
+        if (sPart.isEmpty() || (sPart == QLatin1String(".")) || (sPart == QLatin1String(".."))) return false;
     }
 
     const QString sClean = QDir::cleanPath(sName);
-    if ((sClean != sName) || sClean.startsWith(QStringLiteral("../")) ||
-        (sClean == QLatin1String(".."))) return false;
+    if ((sClean != sName) || sClean.startsWith(QStringLiteral("../")) || (sClean == QLatin1String(".."))) return false;
     *pResult = sClean;
     return true;
 }
@@ -253,31 +245,19 @@ bool normalizeZpaqExtractedName(const QString &sValue, QString *pResult)
 
 bool addWithLimit(qint64 nValue, qint64 *pnTotal)
 {
-    if (!pnTotal || (nValue < 0) || (*pnTotal < 0) ||
-        (nValue > (std::numeric_limits<qint64>::max)() - *pnTotal)) return false;
+    if (!pnTotal || (nValue < 0) || (*pnTotal < 0) || (nValue > (std::numeric_limits<qint64>::max)() - *pnTotal)) return false;
     *pnTotal += nValue;
     return true;
 }
 
-bool policyAllows(qint64 nEntrySize, qint64 nTotalSize, qint64 nEntryCount,
-                  const XBinary::OUTPUT_POLICY &policy)
+bool policyAllows(qint64 nEntrySize, qint64 nTotalSize, qint64 nEntryCount, const XBinary::OUTPUT_POLICY &policy)
 {
-    return (nEntrySize >= 0) && (nTotalSize >= 0) && (nEntryCount >= 0) &&
-           ((policy.nMaxEntryOutputSize < 0) ||
-            (nEntrySize <= policy.nMaxEntryOutputSize)) &&
-           ((policy.nMaxTotalOutputSize < 0) ||
-            (nTotalSize <= policy.nMaxTotalOutputSize)) &&
-           ((policy.nMaxEntryCount < 0) ||
-            (nEntryCount <= policy.nMaxEntryCount));
+    return (nEntrySize >= 0) && (nTotalSize >= 0) && (nEntryCount >= 0) && ((policy.nMaxEntryOutputSize < 0) || (nEntrySize <= policy.nMaxEntryOutputSize)) &&
+           ((policy.nMaxTotalOutputSize < 0) || (nTotalSize <= policy.nMaxTotalOutputSize)) && ((policy.nMaxEntryCount < 0) || (nEntryCount <= policy.nMaxEntryCount));
 }
 
-bool scanStageTree(const QString &sRoot,
-                   const XBinary::OUTPUT_POLICY &policy,
-                   const QString &sProvider, bool bBuildRecords,
-                   StageScanResult *pResult,
-                   XBinary::PDSTRUCT *pPdStruct = nullptr,
-                   const QDeadlineTimer *pDeadline = nullptr,
-                   bool *pbTimedOut = nullptr)
+bool scanStageTree(const QString &sRoot, const XBinary::OUTPUT_POLICY &policy, const QString &sProvider, bool bBuildRecords, StageScanResult *pResult,
+                   XBinary::PDSTRUCT *pPdStruct = nullptr, const QDeadlineTimer *pDeadline = nullptr, bool *pbTimedOut = nullptr)
 {
     if (pbTimedOut) *pbTimedOut = false;
     if (!pResult) return false;
@@ -285,46 +265,34 @@ bool scanStageTree(const QString &sRoot,
 
     const QFileInfo rootInfo(sRoot);
     const QString sCanonicalRoot = rootInfo.canonicalFilePath();
-    if (!rootInfo.exists() || !rootInfo.isDir() || rootInfo.isSymLink() ||
-        sCanonicalRoot.isEmpty()) return false;
+    if (!rootInfo.exists() || !rootInfo.isDir() || rootInfo.isSymLink() || sCanonicalRoot.isEmpty()) return false;
 
     QSet<QString> setNames;
-    QDirIterator iterator(sCanonicalRoot,
-                          QDir::AllEntries | QDir::NoDotAndDotDot |
-                              QDir::Hidden | QDir::System,
-                          QDirIterator::Subdirectories);
+    QDirIterator iterator(sCanonicalRoot, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
     while (iterator.hasNext()) {
-        if (pDeadline && !pDeadline->isForever() &&
-            pDeadline->hasExpired()) {
+        if (pDeadline && !pDeadline->isForever() && pDeadline->hasExpired()) {
             if (pbTimedOut) *pbTimedOut = true;
             return false;
         }
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         iterator.next();
         const QFileInfo fileInfo = iterator.fileInfo();
-        if (fileInfo.isSymLink() || (!fileInfo.isFile() && !fileInfo.isDir()))
-            return false;
+        if (fileInfo.isSymLink() || (!fileInfo.isFile() && !fileInfo.isDir())) return false;
 
         const QString sCanonicalPath = fileInfo.canonicalFilePath();
         if (!isContainedPath(sCanonicalRoot, sCanonicalPath)) return false;
 
-        QString sRelative = QDir::fromNativeSeparators(
-            QDir(sCanonicalRoot).relativeFilePath(sCanonicalPath));
+        QString sRelative = QDir::fromNativeSeparators(QDir(sCanonicalRoot).relativeFilePath(sCanonicalPath));
         if (!normalizeRecordName(sRelative, &sRelative)) return false;
-        const QString sKey = (pathCaseSensitivity() == Qt::CaseInsensitive)
-                                 ? sRelative.toCaseFolded()
-                                 : sRelative;
+        const QString sKey = (pathCaseSensitivity() == Qt::CaseInsensitive) ? sRelative.toCaseFolded() : sRelative;
         if (setNames.contains(sKey)) return false;
         setNames.insert(sKey);
 
-        if (pResult->nEntryCount == (std::numeric_limits<qint64>::max)())
-            return false;
+        if (pResult->nEntryCount == (std::numeric_limits<qint64>::max)()) return false;
         ++pResult->nEntryCount;
 
         const qint64 nSize = fileInfo.isFile() ? fileInfo.size() : 0;
-        if ((nSize < 0) || !addWithLimit(nSize, &pResult->nTotalSize) ||
-            !policyAllows(nSize, pResult->nTotalSize,
-                          pResult->nEntryCount, policy)) return false;
+        if ((nSize < 0) || !addWithLimit(nSize, &pResult->nTotalSize) || !policyAllows(nSize, pResult->nTotalSize, pResult->nEntryCount, policy)) return false;
 
         if (bBuildRecords) {
             ExternalRecord record;
@@ -347,15 +315,12 @@ bool scanStageTree(const QString &sRoot,
 qint64 externalTimeoutMs()
 {
     bool bOK = false;
-    const qint64 nValue = qEnvironmentVariable("XFU_EXTERNAL_TOOL_TIMEOUT_MS")
-                              .toLongLong(&bOK);
-    if (!bOK || (nValue < 1000) || (nValue > 60LL * 60LL * 1000LL))
-        return EXTERNAL_DEFAULT_TIMEOUT_MS;
+    const qint64 nValue = qEnvironmentVariable("XFU_EXTERNAL_TOOL_TIMEOUT_MS").toLongLong(&bOK);
+    if (!bOK || (nValue < 1000) || (nValue > 60LL * 60LL * 1000LL)) return EXTERNAL_DEFAULT_TIMEOUT_MS;
     return nValue;
 }
 
-class ExternalHelperProcess : public QProcess
-{
+class ExternalHelperProcess : public QProcess {
 public:
     using QProcess::QProcess;
 
@@ -376,53 +341,38 @@ bool allocateLowIntegritySid(PSID *ppSid, QString *pError)
 {
     if (!ppSid) return false;
     *ppSid = nullptr;
-    SID_IDENTIFIER_AUTHORITY authority =
-        SECURITY_MANDATORY_LABEL_AUTHORITY;
-    if (!AllocateAndInitializeSid(
-            &authority, 1, SECURITY_MANDATORY_LOW_RID,
-            0, 0, 0, 0, 0, 0, 0, ppSid)) {
+    SID_IDENTIFIER_AUTHORITY authority = SECURITY_MANDATORY_LABEL_AUTHORITY;
+    if (!AllocateAndInitializeSid(&authority, 1, SECURITY_MANDATORY_LOW_RID, 0, 0, 0, 0, 0, 0, 0, ppSid)) {
         if (pError) {
             *pError = QStringLiteral(
-                "Cannot allocate the external-helper Low-integrity SID "
-                "(Windows error %1)").arg(GetLastError());
+                          "Cannot allocate the external-helper Low-integrity SID "
+                          "(Windows error %1)")
+                          .arg(GetLastError());
         }
         return false;
     }
     return true;
 }
 
-bool setLowIntegrityDirectoryTree(const QString &sCanonicalRoot,
-                                  QString *pError)
+bool setLowIntegrityDirectoryTree(const QString &sCanonicalRoot, QString *pError)
 {
     const QFileInfo rootInfo(sCanonicalRoot);
-    if (!rootInfo.exists() || !rootInfo.isDir() || rootInfo.isSymLink() ||
-        (rootInfo.canonicalFilePath().compare(
-             sCanonicalRoot, pathCaseSensitivity()) != 0)) {
-        if (pError)
-            *pError = QStringLiteral(
-                "Cannot label an invalid external-helper working directory");
+    if (!rootInfo.exists() || !rootInfo.isDir() || rootInfo.isSymLink() || (rootInfo.canonicalFilePath().compare(sCanonicalRoot, pathCaseSensitivity()) != 0)) {
+        if (pError) *pError = QStringLiteral("Cannot label an invalid external-helper working directory");
         return false;
     }
 
     QStringList listDirectories;
     listDirectories.append(sCanonicalRoot);
-    QDirIterator iterator(
-        sCanonicalRoot,
-        QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden |
-            QDir::System,
-        QDirIterator::Subdirectories);
+    QDirIterator iterator(sCanonicalRoot, QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
     while (iterator.hasNext()) {
         const QString sPath = iterator.next();
         const QFileInfo directoryInfo = iterator.fileInfo();
         const QString sCanonicalPath = directoryInfo.canonicalFilePath();
         const QString sNativePath = QDir::toNativeSeparators(sPath);
-        const DWORD nAttributes = GetFileAttributesW(
-            reinterpret_cast<LPCWSTR>(sNativePath.utf16()));
-        if (!directoryInfo.isDir() || directoryInfo.isSymLink() ||
-            sCanonicalPath.isEmpty() ||
-            !isContainedPath(sCanonicalRoot, sCanonicalPath) ||
-            (nAttributes == INVALID_FILE_ATTRIBUTES) ||
-            (nAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        const DWORD nAttributes = GetFileAttributesW(reinterpret_cast<LPCWSTR>(sNativePath.utf16()));
+        if (!directoryInfo.isDir() || directoryInfo.isSymLink() || sCanonicalPath.isEmpty() || !isContainedPath(sCanonicalRoot, sCanonicalPath) ||
+            (nAttributes == INVALID_FILE_ATTRIBUTES) || (nAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
             if (pError)
                 *pError = QStringLiteral(
                     "External-helper working directory contains an unsafe "
@@ -434,36 +384,31 @@ bool setLowIntegrityDirectoryTree(const QString &sCanonicalRoot,
 
     PSID pLowSid = nullptr;
     if (!allocateLowIntegritySid(&pLowSid, pError)) return false;
-    const DWORD nAclSize = sizeof(ACL) +
-        sizeof(SYSTEM_MANDATORY_LABEL_ACE) - sizeof(DWORD) +
-        GetLengthSid(pLowSid);
+    const DWORD nAclSize = sizeof(ACL) + sizeof(SYSTEM_MANDATORY_LABEL_ACE) - sizeof(DWORD) + GetLengthSid(pLowSid);
     QByteArray baAcl(static_cast<int>(nAclSize), 0);
     PACL pAcl = reinterpret_cast<PACL>(baAcl.data());
     bool bResult = InitializeAcl(pAcl, nAclSize, ACL_REVISION) != FALSE;
     if (bResult) {
-        bResult = AddMandatoryAce(
-            pAcl, ACL_REVISION,
-            OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE,
-            SYSTEM_MANDATORY_LABEL_NO_WRITE_UP, pLowSid) != FALSE;
+        bResult = AddMandatoryAce(pAcl, ACL_REVISION, OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE, SYSTEM_MANDATORY_LABEL_NO_WRITE_UP, pLowSid) != FALSE;
     }
     if (!bResult && pError) {
         *pError = QStringLiteral(
-            "Cannot construct the external-helper Low-integrity label "
-            "(Windows error %1)").arg(GetLastError());
+                      "Cannot construct the external-helper Low-integrity label "
+                      "(Windows error %1)")
+                      .arg(GetLastError());
     }
 
     for (const QString &sDirectory : qAsConst(listDirectories)) {
         if (!bResult) break;
         QString sNativeDirectory = QDir::toNativeSeparators(sDirectory);
-        const DWORD nStatus = SetNamedSecurityInfoW(
-            reinterpret_cast<LPWSTR>(sNativeDirectory.data()),
-            SE_FILE_OBJECT, LABEL_SECURITY_INFORMATION,
-            nullptr, nullptr, nullptr, pAcl);
+        const DWORD nStatus =
+            SetNamedSecurityInfoW(reinterpret_cast<LPWSTR>(sNativeDirectory.data()), SE_FILE_OBJECT, LABEL_SECURITY_INFORMATION, nullptr, nullptr, nullptr, pAcl);
         if (nStatus != ERROR_SUCCESS) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot label the external-helper working directory "
-                    "Low integrity (Windows error %1)").arg(nStatus);
+                              "Cannot label the external-helper working directory "
+                              "Low integrity (Windows error %1)")
+                              .arg(nStatus);
             }
             bResult = false;
         }
@@ -472,18 +417,16 @@ bool setLowIntegrityDirectoryTree(const QString &sCanonicalRoot,
     return bResult;
 }
 
-bool lowerProcessIntegrity(PROCESS_INFORMATION *pProcessInformation,
-                           QString *pError)
+bool lowerProcessIntegrity(PROCESS_INFORMATION *pProcessInformation, QString *pError)
 {
     if (!pProcessInformation || !pProcessInformation->hProcess) return false;
     HANDLE hToken = nullptr;
-    if (!OpenProcessToken(pProcessInformation->hProcess,
-                          TOKEN_ADJUST_DEFAULT | TOKEN_QUERY,
-                          &hToken)) {
+    if (!OpenProcessToken(pProcessInformation->hProcess, TOKEN_ADJUST_DEFAULT | TOKEN_QUERY, &hToken)) {
         if (pError) {
             *pError = QStringLiteral(
-                "Cannot open the external-helper process token "
-                "(Windows error %1)").arg(GetLastError());
+                          "Cannot open the external-helper process token "
+                          "(Windows error %1)")
+                          .arg(GetLastError());
         }
         return false;
     }
@@ -495,12 +438,12 @@ bool lowerProcessIntegrity(PROCESS_INFORMATION *pProcessInformation,
         label.Label.Attributes = SE_GROUP_INTEGRITY;
         label.Label.Sid = pLowSid;
         const DWORD nLabelSize = sizeof(label) + GetLengthSid(pLowSid);
-        if (!SetTokenInformation(hToken, TokenIntegrityLevel,
-                                 &label, nLabelSize)) {
+        if (!SetTokenInformation(hToken, TokenIntegrityLevel, &label, nLabelSize)) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot lower the external-helper process to Low "
-                    "integrity (Windows error %1)").arg(GetLastError());
+                              "Cannot lower the external-helper process to Low "
+                              "integrity (Windows error %1)")
+                              .arg(GetLastError());
             }
             bResult = false;
         }
@@ -510,46 +453,39 @@ bool lowerProcessIntegrity(PROCESS_INFORMATION *pProcessInformation,
     return bResult;
 }
 
-class RestrictedChildHandleInheritance
-{
+class RestrictedChildHandleInheritance {
 public:
     ~RestrictedChildHandleInheritance()
     {
-        if (m_bAttributeListInitialized)
-            DeleteProcThreadAttributeList(m_pAttributeList);
-        if (m_pAttributeStorage)
-            HeapFree(GetProcessHeap(), 0, m_pAttributeStorage);
+        if (m_bAttributeListInitialized) DeleteProcThreadAttributeList(m_pAttributeList);
+        if (m_pAttributeStorage) HeapFree(GetProcessHeap(), 0, m_pAttributeStorage);
     }
 
     bool initialize(QString *pError)
     {
         SIZE_T nAttributeBytes = 0;
-        InitializeProcThreadAttributeList(nullptr, 1, 0,
-                                          &nAttributeBytes);
+        InitializeProcThreadAttributeList(nullptr, 1, 0, &nAttributeBytes);
         if (!nAttributeBytes) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot size the external-helper handle allowlist "
-                    "(Windows error %1)").arg(GetLastError());
+                              "Cannot size the external-helper handle allowlist "
+                              "(Windows error %1)")
+                              .arg(GetLastError());
             }
             return false;
         }
-        m_pAttributeStorage = HeapAlloc(GetProcessHeap(), 0,
-                                        nAttributeBytes);
+        m_pAttributeStorage = HeapAlloc(GetProcessHeap(), 0, nAttributeBytes);
         if (!m_pAttributeStorage) {
-            if (pError)
-                *pError = QStringLiteral(
-                    "Cannot allocate the external-helper handle allowlist");
+            if (pError) *pError = QStringLiteral("Cannot allocate the external-helper handle allowlist");
             return false;
         }
-        m_pAttributeList = static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
-            m_pAttributeStorage);
-        if (!InitializeProcThreadAttributeList(m_pAttributeList, 1, 0,
-                                               &nAttributeBytes)) {
+        m_pAttributeList = static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(m_pAttributeStorage);
+        if (!InitializeProcThreadAttributeList(m_pAttributeList, 1, 0, &nAttributeBytes)) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot initialize the external-helper handle allowlist "
-                    "(Windows error %1)").arg(GetLastError());
+                              "Cannot initialize the external-helper handle allowlist "
+                              "(Windows error %1)")
+                              .arg(GetLastError());
             }
             return false;
         }
@@ -557,8 +493,7 @@ public:
         return true;
     }
 
-    bool configure(QProcess::CreateProcessArguments *pArguments,
-                   QString *pError)
+    bool configure(QProcess::CreateProcessArguments *pArguments, QString *pError)
     {
         if (!pArguments || !pArguments->startupInfo || !m_pAttributeList) {
             if (pError) {
@@ -569,8 +504,7 @@ public:
             return false;
         }
 
-        const STARTUPINFOW *pStartupInfo =
-            reinterpret_cast<const STARTUPINFOW *>(pArguments->startupInfo);
+        const STARTUPINFOW *pStartupInfo = reinterpret_cast<const STARTUPINFOW *>(pArguments->startupInfo);
         if (!(pStartupInfo->dwFlags & STARTF_USESTDHANDLES)) {
             if (pError) {
                 *pError = QStringLiteral(
@@ -581,68 +515,61 @@ public:
         }
 
         m_listInheritedHandles.clear();
-        const auto appendHandle = [&](HANDLE hHandle,
-                                      const QString &sName) -> bool {
+        const auto appendHandle = [&](HANDLE hHandle, const QString &sName) -> bool {
             if (!hHandle || (hHandle == INVALID_HANDLE_VALUE)) {
                 if (pError) {
                     *pError = QStringLiteral(
-                        "QProcess supplied an invalid external-helper %1 "
-                        "handle").arg(sName);
+                                  "QProcess supplied an invalid external-helper %1 "
+                                  "handle")
+                                  .arg(sName);
                 }
                 return false;
             }
             DWORD nFlags = 0;
-            if (!GetHandleInformation(hHandle, &nFlags) ||
-                !(nFlags & HANDLE_FLAG_INHERIT)) {
+            if (!GetHandleInformation(hHandle, &nFlags) || !(nFlags & HANDLE_FLAG_INHERIT)) {
                 if (pError) {
                     *pError = QStringLiteral(
-                        "QProcess supplied a non-inheritable external-helper "
-                        "%1 handle (Windows error %2)")
+                                  "QProcess supplied a non-inheritable external-helper "
+                                  "%1 handle (Windows error %2)")
                                   .arg(sName)
                                   .arg(GetLastError());
                 }
                 return false;
             }
-            if (!m_listInheritedHandles.contains(hHandle))
-                m_listInheritedHandles.append(hHandle);
+            if (!m_listInheritedHandles.contains(hHandle)) m_listInheritedHandles.append(hHandle);
             return true;
         };
 
-        if (!appendHandle(pStartupInfo->hStdInput,
-                          QStringLiteral("stdin")) ||
-            !appendHandle(pStartupInfo->hStdOutput,
-                          QStringLiteral("stdout")) ||
-            !appendHandle(pStartupInfo->hStdError,
-                          QStringLiteral("stderr"))) return false;
+        if (!appendHandle(pStartupInfo->hStdInput, QStringLiteral("stdin")) || !appendHandle(pStartupInfo->hStdOutput, QStringLiteral("stdout")) ||
+            !appendHandle(pStartupInfo->hStdError, QStringLiteral("stderr")))
+            return false;
 
         m_startupInfo = {};
         m_startupInfo.StartupInfo = *pStartupInfo;
         m_startupInfo.StartupInfo.cb = sizeof(m_startupInfo);
         m_startupInfo.lpAttributeList = m_pAttributeList;
-        if (!UpdateProcThreadAttribute(
-                m_pAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-                m_listInheritedHandles.data(),
-                static_cast<SIZE_T>(m_listInheritedHandles.size()) *
-                    sizeof(HANDLE), nullptr, nullptr)) {
+        if (!UpdateProcThreadAttribute(m_pAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, m_listInheritedHandles.data(),
+                                       static_cast<SIZE_T>(m_listInheritedHandles.size()) * sizeof(HANDLE), nullptr, nullptr)) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot install the external-helper handle allowlist "
-                    "(Windows error %1)").arg(GetLastError());
+                              "Cannot install the external-helper handle allowlist "
+                              "(Windows error %1)")
+                              .arg(GetLastError());
             }
             return false;
         }
 
-        pArguments->startupInfo =
-            reinterpret_cast<Q_STARTUPINFO *>(&m_startupInfo);
+        pArguments->startupInfo = reinterpret_cast<Q_STARTUPINFO *>(&m_startupInfo);
         pArguments->inheritHandles = true;
-        pArguments->flags |= CREATE_SUSPENDED |
-                             EXTENDED_STARTUPINFO_PRESENT |
-                             CREATE_NO_WINDOW;
+        pArguments->flags |= CREATE_SUSPENDED | EXTENDED_STARTUPINFO_PRESENT | CREATE_NO_WINDOW;
         m_bConfigured = true;
         return true;
     }
 
-    bool isConfigured() const { return m_bConfigured; }
+    bool isConfigured() const
+    {
+        return m_bConfigured;
+    }
 
 private:
     void *m_pAttributeStorage = nullptr;
@@ -653,32 +580,27 @@ private:
     bool m_bConfigured = false;
 };
 
-class ExternalProcessTreeGuard
-{
+class ExternalProcessTreeGuard {
 public:
     ExternalProcessTreeGuard()
     {
         m_hJob = CreateJobObjectW(nullptr, nullptr);
         if (!m_hJob) {
             m_sError = QStringLiteral(
-                "Cannot create the external-helper containment job "
-                "(Windows error %1)").arg(GetLastError());
+                           "Cannot create the external-helper containment job "
+                           "(Windows error %1)")
+                           .arg(GetLastError());
             return;
         }
 
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = {};
-        limits.BasicLimitInformation.LimitFlags =
-            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
-            JOB_OBJECT_LIMIT_ACTIVE_PROCESS |
-            JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
-        limits.BasicLimitInformation.ActiveProcessLimit =
-            EXTERNAL_JOB_PROCESS_LIMIT;
-        if (!SetInformationJobObject(m_hJob,
-                                     JobObjectExtendedLimitInformation,
-                                     &limits, sizeof(limits))) {
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_ACTIVE_PROCESS | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
+        limits.BasicLimitInformation.ActiveProcessLimit = EXTERNAL_JOB_PROCESS_LIMIT;
+        if (!SetInformationJobObject(m_hJob, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
             m_sError = QStringLiteral(
-                "Cannot configure the external-helper containment job "
-                "(Windows error %1)").arg(GetLastError());
+                           "Cannot configure the external-helper containment job "
+                           "(Windows error %1)")
+                           .arg(GetLastError());
             CloseHandle(m_hJob);
             m_hJob = nullptr;
         }
@@ -691,32 +613,34 @@ public:
         if (m_hJob) CloseHandle(m_hJob);
     }
 
-    bool isValid() const { return m_hJob != nullptr; }
-    QString errorString() const { return m_sError; }
+    bool isValid() const
+    {
+        return m_hJob != nullptr;
+    }
+    QString errorString() const
+    {
+        return m_sError;
+    }
 
     bool attachAndResume(void *pNativeProcessInformation, QString *pError)
     {
-        PROCESS_INFORMATION *pProcessInformation =
-            static_cast<PROCESS_INFORMATION *>(pNativeProcessInformation);
-        if (!m_hJob || !pProcessInformation ||
-            !pProcessInformation->hProcess ||
-            !pProcessInformation->hThread) {
+        PROCESS_INFORMATION *pProcessInformation = static_cast<PROCESS_INFORMATION *>(pNativeProcessInformation);
+        if (!m_hJob || !pProcessInformation || !pProcessInformation->hProcess || !pProcessInformation->hThread) {
             if (pError) {
-                *pError = m_sError.isEmpty()
-                              ? QStringLiteral(
-                                    "QProcess did not expose the suspended "
-                                    "external-helper process handles")
-                              : m_sError;
+                *pError = m_sError.isEmpty() ? QStringLiteral(
+                                                   "QProcess did not expose the suspended "
+                                                   "external-helper process handles")
+                                             : m_sError;
             }
             return false;
         }
 
-        if (!AssignProcessToJobObject(m_hJob,
-                                      pProcessInformation->hProcess)) {
+        if (!AssignProcessToJobObject(m_hJob, pProcessInformation->hProcess)) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot assign the external helper to its containment "
-                    "job (Windows error %1)").arg(GetLastError());
+                              "Cannot assign the external helper to its containment "
+                              "job (Windows error %1)")
+                              .arg(GetLastError());
             }
             return false;
         }
@@ -725,12 +649,12 @@ public:
             TerminateJobObject(m_hJob, 1);
             return false;
         }
-        if (ResumeThread(pProcessInformation->hThread) ==
-            static_cast<DWORD>(-1)) {
+        if (ResumeThread(pProcessInformation->hThread) == static_cast<DWORD>(-1)) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot resume the contained external helper "
-                    "(Windows error %1)").arg(GetLastError());
+                              "Cannot resume the contained external helper "
+                              "(Windows error %1)")
+                              .arg(GetLastError());
             }
             TerminateJobObject(m_hJob, 1);
             return false;
@@ -741,19 +665,16 @@ public:
     bool hasActiveProcesses(bool *pResult, QString *pError) const
     {
         if (!pResult || !m_hJob || !m_bProcessAssigned) {
-            if (pError)
-                *pError = QStringLiteral(
-                    "The external-helper containment job is unavailable");
+            if (pError) *pError = QStringLiteral("The external-helper containment job is unavailable");
             return false;
         }
         JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting = {};
-        if (!QueryInformationJobObject(
-                m_hJob, JobObjectBasicAccountingInformation,
-                &accounting, sizeof(accounting), nullptr)) {
+        if (!QueryInformationJobObject(m_hJob, JobObjectBasicAccountingInformation, &accounting, sizeof(accounting), nullptr)) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot query the external-helper containment job "
-                    "(Windows error %1)").arg(GetLastError());
+                              "Cannot query the external-helper containment job "
+                              "(Windows error %1)")
+                              .arg(GetLastError());
             }
             return false;
         }
@@ -761,16 +682,11 @@ public:
         return true;
     }
 
-    bool terminateAndWait(QProcess *pProcess,
-                          void *pNativeProcessInformation,
-                          QString *pError)
+    bool terminateAndWait(QProcess *pProcess, void *pNativeProcessInformation, QString *pError)
     {
-        PROCESS_INFORMATION *pProcessInformation =
-            static_cast<PROCESS_INFORMATION *>(pNativeProcessInformation);
-        if (!m_bProcessAssigned && m_hJob && pProcessInformation &&
-            pProcessInformation->hProcess) {
-            if (AssignProcessToJobObject(m_hJob,
-                                         pProcessInformation->hProcess)) {
+        PROCESS_INFORMATION *pProcessInformation = static_cast<PROCESS_INFORMATION *>(pNativeProcessInformation);
+        if (!m_bProcessAssigned && m_hJob && pProcessInformation && pProcessInformation->hProcess) {
+            if (AssignProcessToJobObject(m_hJob, pProcessInformation->hProcess)) {
                 m_bProcessAssigned = true;
             }
         }
@@ -778,15 +694,12 @@ public:
         bool bTerminationStarted = false;
         if (m_bProcessAssigned && m_hJob) {
             bTerminationStarted = TerminateJobObject(m_hJob, 1) != FALSE;
-        } else if (pProcessInformation &&
-                   pProcessInformation->hProcess) {
+        } else if (pProcessInformation && pProcessInformation->hProcess) {
             // A handle-allowlist/setup failure leaves the root suspended, so
             // terminating that root is race-free even when Job assignment was
             // unavailable.
-            bTerminationStarted =
-                TerminateProcess(pProcessInformation->hProcess, 1) != FALSE;
-        } else if (pProcess &&
-                   (pProcess->state() != QProcess::NotRunning)) {
+            bTerminationStarted = TerminateProcess(pProcessInformation->hProcess, 1) != FALSE;
+        } else if (pProcess && (pProcess->state() != QProcess::NotRunning)) {
             pProcess->kill();
             bTerminationStarted = true;
         } else {
@@ -796,27 +709,25 @@ public:
         if (!bTerminationStarted) {
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot terminate the external-helper process tree "
-                    "(Windows error %1)").arg(GetLastError());
+                              "Cannot terminate the external-helper process tree "
+                              "(Windows error %1)")
+                              .arg(GetLastError());
             }
             return false;
         }
 
-        if (pProcess && (pProcess->state() != QProcess::NotRunning))
-            pProcess->waitForFinished(3000);
+        if (pProcess && (pProcess->state() != QProcess::NotRunning)) pProcess->waitForFinished(3000);
 
         if (m_bProcessAssigned && m_hJob) {
             QElapsedTimer timer;
             timer.start();
             for (;;) {
                 JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting = {};
-                if (!QueryInformationJobObject(
-                        m_hJob, JobObjectBasicAccountingInformation,
-                        &accounting, sizeof(accounting), nullptr)) {
+                if (!QueryInformationJobObject(m_hJob, JobObjectBasicAccountingInformation, &accounting, sizeof(accounting), nullptr)) {
                     if (pError) {
                         *pError = QStringLiteral(
-                            "Cannot verify external-helper process-tree "
-                            "termination (Windows error %1)")
+                                      "Cannot verify external-helper process-tree "
+                                      "termination (Windows error %1)")
                                       .arg(GetLastError());
                     }
                     return false;
@@ -833,8 +744,7 @@ public:
                 Sleep(10);
             }
         }
-        return !pProcess ||
-               (pProcess->state() == QProcess::NotRunning);
+        return !pProcess || (pProcess->state() == QProcess::NotRunning);
     }
 
 private:
@@ -845,26 +755,19 @@ private:
 #endif
 
 #ifdef Q_OS_UNIX
-class ExternalPosixProcessTreeGuard
-{
+class ExternalPosixProcessTreeGuard {
 public:
     ~ExternalPosixProcessTreeGuard()
     {
         bool bActive = false;
         QString sIgnoredError;
-        if (hasActiveProcesses(&bActive, &sIgnoredError) && bActive)
-            ::kill(-m_nProcessGroupId, SIGKILL);
+        if (hasActiveProcesses(&bActive, &sIgnoredError) && bActive) ::kill(-m_nProcessGroupId, SIGKILL);
     }
 
     bool capture(QProcess *pProcess, QString *pError)
     {
-        if (!pProcess || (pProcess->processId() <= 0) ||
-            (static_cast<quint64>(pProcess->processId()) >
-             static_cast<quint64>(
-                 (std::numeric_limits<pid_t>::max)()))) {
-            if (pError)
-                *pError = QStringLiteral(
-                    "Cannot retain the external-helper process-group ID");
+        if (!pProcess || (pProcess->processId() <= 0) || (static_cast<quint64>(pProcess->processId()) > static_cast<quint64>((std::numeric_limits<pid_t>::max)()))) {
+            if (pError) *pError = QStringLiteral("Cannot retain the external-helper process-group ID");
             return false;
         }
         m_nProcessGroupId = static_cast<pid_t>(pProcess->processId());
@@ -874,9 +777,7 @@ public:
     bool hasActiveProcesses(bool *pResult, QString *pError)
     {
         if (!pResult || (m_nProcessGroupId <= 0)) {
-            if (pError)
-                *pError = QStringLiteral(
-                    "The external-helper process group is unavailable");
+            if (pError) *pError = QStringLiteral("The external-helper process group is unavailable");
             return false;
         }
         errno = 0;
@@ -894,8 +795,9 @@ public:
         }
         if (pError) {
             *pError = QStringLiteral(
-                "Cannot query the external-helper process group "
-                "(errno %1)").arg(errno);
+                          "Cannot query the external-helper process group "
+                          "(errno %1)")
+                          .arg(errno);
         }
         return false;
     }
@@ -903,8 +805,7 @@ public:
     bool terminateAndWait(QProcess *pProcess, QString *pError)
     {
         if (m_nProcessGroupId <= 0) {
-            if (pProcess &&
-                (pProcess->state() != QProcess::NotRunning)) {
+            if (pProcess && (pProcess->state() != QProcess::NotRunning)) {
                 pProcess->kill();
                 return pProcess->waitForFinished(3000);
             }
@@ -914,15 +815,14 @@ public:
         if (::kill(-m_nProcessGroupId, SIGTERM) != 0) {
             if (errno == ESRCH) {
                 m_nProcessGroupId = -1;
-                if (pProcess &&
-                    (pProcess->state() != QProcess::NotRunning))
-                    pProcess->waitForFinished(100);
+                if (pProcess && (pProcess->state() != QProcess::NotRunning)) pProcess->waitForFinished(100);
                 return true;
             }
             if (pError) {
                 *pError = QStringLiteral(
-                    "Cannot terminate the external-helper process group "
-                    "(errno %1)").arg(errno);
+                              "Cannot terminate the external-helper process group "
+                              "(errno %1)")
+                              .arg(errno);
             }
             return false;
         }
@@ -934,24 +834,21 @@ public:
             bool bActive = false;
             if (!hasActiveProcesses(&bActive, pError)) return false;
             if (!bActive) {
-                if (pProcess &&
-                    (pProcess->state() != QProcess::NotRunning))
-                    pProcess->waitForFinished(100);
+                if (pProcess && (pProcess->state() != QProcess::NotRunning)) pProcess->waitForFinished(100);
                 return true;
             }
             if (!bSentKill && (timer.elapsed() >= 1000)) {
                 if (::kill(-m_nProcessGroupId, SIGKILL) != 0) {
                     if (errno == ESRCH) {
                         m_nProcessGroupId = -1;
-                        if (pProcess &&
-                            (pProcess->state() != QProcess::NotRunning))
-                            pProcess->waitForFinished(100);
+                        if (pProcess && (pProcess->state() != QProcess::NotRunning)) pProcess->waitForFinished(100);
                         return true;
                     }
                     if (pError) {
                         *pError = QStringLiteral(
-                            "Cannot kill the external-helper process group "
-                            "(errno %1)").arg(errno);
+                                      "Cannot kill the external-helper process group "
+                                      "(errno %1)")
+                                      .arg(errno);
                     }
                     return false;
                 }
@@ -964,11 +861,8 @@ public:
                         "within 3000 ms");
                 return false;
             }
-            if (pProcess &&
-                (pProcess->state() != QProcess::NotRunning))
-                pProcess->waitForFinished(10);
-            else
-                QThread::msleep(10);
+            if (pProcess && (pProcess->state() != QProcess::NotRunning)) pProcess->waitForFinished(10);
+            else QThread::msleep(10);
         }
     }
 
@@ -979,19 +873,18 @@ private:
 
 void stopProcess(QProcess *pProcess
 #ifdef Q_OS_WIN
-                 , ExternalProcessTreeGuard *pProcessTree,
-                 void *pNativeProcessInformation
+                 ,
+                 ExternalProcessTreeGuard *pProcessTree, void *pNativeProcessInformation
 #elif defined(Q_OS_UNIX)
-                 , ExternalPosixProcessTreeGuard *pProcessTree
+                 ,
+                 ExternalPosixProcessTreeGuard *pProcessTree
 #endif
-                 )
+)
 {
 #ifdef Q_OS_WIN
     if (pProcessTree) {
         QString sIgnoredError;
-        pProcessTree->terminateAndWait(pProcess,
-                                       pNativeProcessInformation,
-                                       &sIgnoredError);
+        pProcessTree->terminateAndWait(pProcess, pNativeProcessInformation, &sIgnoredError);
         return;
     }
 #elif defined(Q_OS_UNIX)
@@ -1019,10 +912,7 @@ enum PEA_REPORT_STATUS {
 PEA_REPORT_STATUS inspectPeaReport(const QString &sWorkingDirectory)
 {
     QString sReportPath;
-    QDirIterator iterator(
-        sWorkingDirectory,
-        QStringList() << QStringLiteral("*_Auto log UnPEA.txt"),
-        QDir::Files | QDir::Hidden | QDir::System);
+    QDirIterator iterator(sWorkingDirectory, QStringList() << QStringLiteral("*_Auto log UnPEA.txt"), QDir::Files | QDir::Hidden | QDir::System);
     while (iterator.hasNext()) {
         const QString sCandidate = iterator.next();
         if (!sReportPath.isEmpty()) return PEA_REPORT_FAILURE;
@@ -1031,41 +921,29 @@ PEA_REPORT_STATUS inspectPeaReport(const QString &sWorkingDirectory)
     if (sReportPath.isEmpty()) return PEA_REPORT_ABSENT;
 
     const QFileInfo reportInfo(sReportPath);
-    const QString sCanonicalRoot =
-        QFileInfo(sWorkingDirectory).canonicalFilePath();
+    const QString sCanonicalRoot = QFileInfo(sWorkingDirectory).canonicalFilePath();
     const QString sCanonicalReport = reportInfo.canonicalFilePath();
     const qint64 nReportLimit = 4LL * 1024LL * 1024LL;
-    if (!reportInfo.isFile() || reportInfo.isSymLink() ||
-        !isContainedPath(sCanonicalRoot, sCanonicalReport) ||
-        (reportInfo.size() < 0) || (reportInfo.size() > nReportLimit)) {
+    if (!reportInfo.isFile() || reportInfo.isSymLink() || !isContainedPath(sCanonicalRoot, sCanonicalReport) || (reportInfo.size() < 0) ||
+        (reportInfo.size() > nReportLimit)) {
         return PEA_REPORT_FAILURE;
     }
 
     QFile reportFile(sCanonicalReport);
-    if (!reportFile.open(QIODevice::ReadOnly) || reportFile.isSequential())
-        return PEA_REPORT_INCOMPLETE;
+    if (!reportFile.open(QIODevice::ReadOnly) || reportFile.isSequential()) return PEA_REPORT_INCOMPLETE;
     const QByteArray baReport = reportFile.readAll();
-    if ((baReport.size() != reportInfo.size()) || baReport.contains('\0'))
-        return PEA_REPORT_INCOMPLETE;
+    if ((baReport.size() != reportInfo.size()) || baReport.contains('\0')) return PEA_REPORT_INCOMPLETE;
 
-    const QByteArray baTerminal(
-        "Archive's stream correctly verified Done EXTRACT2DIR on archive");
-    if (baReport.contains(baTerminal) &&
-        baReport.contains("Volume is OK") &&
-        !baReport.contains("Wrong tag!")) {
+    const QByteArray baTerminal("Archive's stream correctly verified Done EXTRACT2DIR on archive");
+    if (baReport.contains(baTerminal) && baReport.contains("Volume is OK") && !baReport.contains("Wrong tag!")) {
         return PEA_REPORT_SUCCESS;
     }
-    if (baReport.contains("Done EXTRACT2DIR on archive"))
-        return PEA_REPORT_FAILURE;
+    if (baReport.contains("Done EXTRACT2DIR on archive")) return PEA_REPORT_FAILURE;
     return PEA_REPORT_INCOMPLETE;
 }
 
-bool validateToolExecutionPaths(const QString &sProgram,
-                                const QString &sWorkingDirectory,
-                                const QString &sAuditRoot,
-                                QString *pCanonicalProgram,
-                                QString *pCanonicalWorkingDirectory,
-                                QString *pError)
+bool validateToolExecutionPaths(const QString &sProgram, const QString &sWorkingDirectory, const QString &sAuditRoot, QString *pCanonicalProgram,
+                                QString *pCanonicalWorkingDirectory, QString *pError)
 {
     if (!pCanonicalProgram || !pCanonicalWorkingDirectory) return false;
     pCanonicalProgram->clear();
@@ -1073,34 +951,21 @@ bool validateToolExecutionPaths(const QString &sProgram,
 
     const QFileInfo programInfo(sProgram);
     const QString sCanonicalProgram = programInfo.canonicalFilePath();
-    if (!programInfo.exists() || !programInfo.isFile() ||
-        !programInfo.isExecutable() || programInfo.isSymLink() ||
-        sCanonicalProgram.isEmpty()) {
-        if (pError)
-            *pError = QStringLiteral(
-                "External archive helper is not an executable regular file");
+    if (!programInfo.exists() || !programInfo.isFile() || !programInfo.isExecutable() || programInfo.isSymLink() || sCanonicalProgram.isEmpty()) {
+        if (pError) *pError = QStringLiteral("External archive helper is not an executable regular file");
         return false;
     }
 
     const QFileInfo workingInfo(sWorkingDirectory);
-    const QString sCanonicalWorkingDirectory =
-        workingInfo.canonicalFilePath();
-    if (!workingInfo.exists() || !workingInfo.isDir() ||
-        workingInfo.isSymLink() || sCanonicalWorkingDirectory.isEmpty()) {
-        if (pError)
-            *pError = QStringLiteral(
-                "External archive helper working directory is invalid");
+    const QString sCanonicalWorkingDirectory = workingInfo.canonicalFilePath();
+    if (!workingInfo.exists() || !workingInfo.isDir() || workingInfo.isSymLink() || sCanonicalWorkingDirectory.isEmpty()) {
+        if (pError) *pError = QStringLiteral("External archive helper working directory is invalid");
         return false;
     }
 
     if (!sAuditRoot.isEmpty()) {
-        const QString sAbsoluteAuditRoot = QDir::cleanPath(
-            QDir::isAbsolutePath(sAuditRoot)
-                ? sAuditRoot
-                : QDir(sCanonicalWorkingDirectory).absoluteFilePath(
-                      sAuditRoot));
-        if (!isContainedPath(sCanonicalWorkingDirectory,
-                             sAbsoluteAuditRoot)) {
+        const QString sAbsoluteAuditRoot = QDir::cleanPath(QDir::isAbsolutePath(sAuditRoot) ? sAuditRoot : QDir(sCanonicalWorkingDirectory).absoluteFilePath(sAuditRoot));
+        if (!isContainedPath(sCanonicalWorkingDirectory, sAbsoluteAuditRoot)) {
             if (pError)
                 *pError = QStringLiteral(
                     "External archive audit root is outside its private "
@@ -1110,18 +975,10 @@ bool validateToolExecutionPaths(const QString &sProgram,
 
         const QFileInfo auditInfo(sAbsoluteAuditRoot);
         const QFileInfo auditParentInfo(auditInfo.absolutePath());
-        const bool bAuditIsWorkingDirectory =
-            sAbsoluteAuditRoot.compare(sCanonicalWorkingDirectory,
-                                       pathCaseSensitivity()) == 0;
-        if ((auditInfo.exists() &&
-             (auditInfo.isSymLink() ||
-              !isContainedPath(sCanonicalWorkingDirectory,
-                               auditInfo.canonicalFilePath()))) ||
-            (!bAuditIsWorkingDirectory &&
-             (!auditParentInfo.exists() || !auditParentInfo.isDir() ||
-              auditParentInfo.isSymLink() ||
-              !isContainedPath(sCanonicalWorkingDirectory,
-                               auditParentInfo.canonicalFilePath())))) {
+        const bool bAuditIsWorkingDirectory = sAbsoluteAuditRoot.compare(sCanonicalWorkingDirectory, pathCaseSensitivity()) == 0;
+        if ((auditInfo.exists() && (auditInfo.isSymLink() || !isContainedPath(sCanonicalWorkingDirectory, auditInfo.canonicalFilePath()))) ||
+            (!bAuditIsWorkingDirectory && (!auditParentInfo.exists() || !auditParentInfo.isDir() || auditParentInfo.isSymLink() ||
+                                           !isContainedPath(sCanonicalWorkingDirectory, auditParentInfo.canonicalFilePath())))) {
             if (pError)
                 *pError = QStringLiteral(
                     "External archive audit root is not a contained regular "
@@ -1135,22 +992,16 @@ bool validateToolExecutionPaths(const QString &sProgram,
     return true;
 }
 
-bool drainProcessOutput(QProcess *pProcess, qint64 *pnCaptured,
-                        QByteArray *pDiagnosticTail,
-                        QByteArray *pCapturedOutput, QString *pError)
+bool drainProcessOutput(QProcess *pProcess, qint64 *pnCaptured, QByteArray *pDiagnosticTail, QByteArray *pCapturedOutput, QString *pError)
 {
     if (!pProcess || !pnCaptured || !pDiagnosticTail) return false;
     while (pProcess->bytesAvailable() > 0) {
         const qint64 nRemaining = EXTERNAL_CAPTURE_LIMIT - *pnCaptured;
-        const qint64 nRequest = qMin<qint64>(
-            EXTERNAL_PIPE_READ_SIZE,
-            qMin<qint64>(pProcess->bytesAvailable(), nRemaining + 1));
+        const qint64 nRequest = qMin<qint64>(EXTERNAL_PIPE_READ_SIZE, qMin<qint64>(pProcess->bytesAvailable(), nRemaining + 1));
         const QByteArray baChunk = pProcess->read(nRequest);
         if (baChunk.isEmpty()) break;
         if (baChunk.size() > nRemaining) {
-            if (pError)
-                *pError = QStringLiteral(
-                    "External archive helper produced excessive output");
+            if (pError) *pError = QStringLiteral("External archive helper produced excessive output");
             return false;
         }
 
@@ -1158,82 +1009,53 @@ bool drainProcessOutput(QProcess *pProcess, qint64 *pnCaptured,
         if (pCapturedOutput) pCapturedOutput->append(baChunk);
         pDiagnosticTail->append(baChunk);
         if (pDiagnosticTail->size() > 1024) {
-            pDiagnosticTail->remove(0,
-                                    pDiagnosticTail->size() - 1024);
+            pDiagnosticTail->remove(0, pDiagnosticTail->size() - 1024);
         }
         if (pDiagnosticTail->contains("Enter decryption password:")) {
-            if (pError)
-                *pError = QStringLiteral(
-                    "External archive password is missing or incorrect");
+            if (pError) *pError = QStringLiteral("External archive password is missing or incorrect");
             return false;
         }
     }
     return true;
 }
 
-XExternalArchive::EXTERNAL_FAILURE classifyHelperExit(
-    XExternalArchive::BACKEND backend,
-    const QByteArray &baDiagnosticTail)
+XExternalArchive::EXTERNAL_FAILURE classifyHelperExit(XExternalArchive::BACKEND backend, const QByteArray &baDiagnosticTail)
 {
     const QByteArray baLower = baDiagnosticTail.toLower();
-    if (baLower.contains("password") ||
-        baLower.contains("archive seems encrypted")) {
+    if (baLower.contains("password") || baLower.contains("archive seems encrypted")) {
         return XExternalArchive::EXTERNAL_FAILURE_PASSWORD;
     }
 
     bool bArchiveRejected = false;
     if (backend == XExternalArchive::BACKEND_FREEARC) {
-        bArchiveRejected =
-            baLower.contains("isn't archive or this archive is corrupt") ||
-            baLower.contains("archive signature not found") ||
-            baLower.contains("archive is corrupt") ||
-            baLower.contains("crc failed in") ||
-            baLower.contains("data error in") ||
-            baLower.contains("file is broken");
+        bArchiveRejected = baLower.contains("isn't archive or this archive is corrupt") || baLower.contains("archive signature not found") ||
+                           baLower.contains("archive is corrupt") || baLower.contains("crc failed in") || baLower.contains("data error in") ||
+                           baLower.contains("file is broken");
     } else if (backend == XExternalArchive::BACKEND_ZPAQ) {
-        bArchiveRejected =
-            baLower.contains("not a zpaq") ||
-            baLower.contains("fragment checksum failed") ||
-            baLower.contains("bad checksum") ||
-             baLower.contains("unexpected end of compressed data") ||
-             baLower.contains("incomplete decompression") ||
-             baLower.contains("zpaqfranz error: empty block") ||
-             baLower.contains("archive block not found") ||
-             baLower.contains("archive corrupted") ||
-             baLower.contains("archive seems corrupt") ||
-             baLower.contains("unexpected eof");
+        bArchiveRejected = baLower.contains("not a zpaq") || baLower.contains("fragment checksum failed") || baLower.contains("bad checksum") ||
+                           baLower.contains("unexpected end of compressed data") || baLower.contains("incomplete decompression") ||
+                           baLower.contains("zpaqfranz error: empty block") || baLower.contains("archive block not found") || baLower.contains("archive corrupted") ||
+                           baLower.contains("archive seems corrupt") || baLower.contains("unexpected eof");
     }
-    return bArchiveRejected
-        ? XExternalArchive::EXTERNAL_FAILURE_ARCHIVE_REJECTED
-        : XExternalArchive::EXTERNAL_FAILURE_INFRASTRUCTURE;
+    return bArchiveRejected ? XExternalArchive::EXTERNAL_FAILURE_ARCHIVE_REJECTED : XExternalArchive::EXTERNAL_FAILURE_INFRASTRUCTURE;
 }
 
-bool runTool(XExternalArchive::BACKEND backend,
-             const QString &sProgram, const QStringList &listArguments,
-             const QString &sWorkingDirectory, const QString &sAuditRoot,
-             const XBinary::OUTPUT_POLICY &policy, bool bMonitorPeaReport,
-             XBinary::PDSTRUCT *pPdStruct, QByteArray *pCapturedOutput,
-             XExternalArchive::EXTERNAL_FAILURE *pFailure,
-             const QDeadlineTimer &aggregateDeadline,
-             const QProcessEnvironment *pChildEnvironment = nullptr)
+bool runTool(XExternalArchive::BACKEND backend, const QString &sProgram, const QStringList &listArguments, const QString &sWorkingDirectory, const QString &sAuditRoot,
+             const XBinary::OUTPUT_POLICY &policy, bool bMonitorPeaReport, XBinary::PDSTRUCT *pPdStruct, QByteArray *pCapturedOutput,
+             XExternalArchive::EXTERNAL_FAILURE *pFailure, const QDeadlineTimer &aggregateDeadline, const QProcessEnvironment *pChildEnvironment = nullptr)
 {
     if (pCapturedOutput) pCapturedOutput->clear();
-    if (pFailure)
-        *pFailure = XExternalArchive::EXTERNAL_FAILURE_INFRASTRUCTURE;
+    if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_INFRASTRUCTURE;
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if (pFailure)
-            *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
+        if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
         return false;
     }
     qint64 nTimeoutMs = externalTimeoutMs();
     if (!aggregateDeadline.isForever()) {
         const qint64 nRemainingMs = aggregateDeadline.remainingTime();
         if (nRemainingMs <= 0) {
-            if (pFailure)
-                *pFailure = XExternalArchive::EXTERNAL_FAILURE_TIMEOUT;
-            return setExternalError(
-                pPdStruct,
-                QStringLiteral("External archive helper operation timed out"));
+            if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_TIMEOUT;
+            return setExternalError(pPdStruct, QStringLiteral("External archive helper operation timed out"));
         }
         nTimeoutMs = qMin(nTimeoutMs, nRemainingMs);
     }
@@ -1243,20 +1065,14 @@ bool runTool(XExternalArchive::BACKEND backend,
     QString sCanonicalProgram;
     QString sCanonicalWorkingDirectory;
     QString sExecutionError;
-    if (!validateToolExecutionPaths(
-            sProgram, sWorkingDirectory, sAuditRoot,
-            &sCanonicalProgram, &sCanonicalWorkingDirectory,
-            &sExecutionError)) {
+    if (!validateToolExecutionPaths(sProgram, sWorkingDirectory, sAuditRoot, &sCanonicalProgram, &sCanonicalWorkingDirectory, &sExecutionError)) {
         return setExternalError(pPdStruct, sExecutionError);
     }
 
 #ifdef Q_OS_WIN
-    if (!setLowIntegrityDirectoryTree(sCanonicalWorkingDirectory,
-                                      &sExecutionError))
-        return setExternalError(pPdStruct, sExecutionError);
+    if (!setLowIntegrityDirectoryTree(sCanonicalWorkingDirectory, &sExecutionError)) return setExternalError(pPdStruct, sExecutionError);
     RestrictedChildHandleInheritance restrictedInheritance;
-    if (!restrictedInheritance.initialize(&sExecutionError))
-        return setExternalError(pPdStruct, sExecutionError);
+    if (!restrictedInheritance.initialize(&sExecutionError)) return setExternalError(pPdStruct, sExecutionError);
 #endif
 
     ExternalHelperProcess process;
@@ -1264,8 +1080,7 @@ bool runTool(XExternalArchive::BACKEND backend,
     // Declared after QProcess so kill-on-close runs before QProcess's own
     // destructor fallback on every early return.
     ExternalProcessTreeGuard processTree;
-    if (!processTree.isValid())
-        return setExternalError(pPdStruct, processTree.errorString());
+    if (!processTree.isValid()) return setExternalError(pPdStruct, processTree.errorString());
     void *pNativeProcessInformation = nullptr;
 #elif defined(Q_OS_UNIX)
     // Declared after QProcess so the process group is killed before QProcess's
@@ -1273,10 +1088,7 @@ bool runTool(XExternalArchive::BACKEND backend,
     ExternalPosixProcessTreeGuard processTree;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
     QProcess::UnixProcessParameters unixParameters;
-    unixParameters.flags =
-        QProcess::UnixProcessFlag::CreateNewSession |
-        QProcess::UnixProcessFlag::CloseFileDescriptors |
-        QProcess::UnixProcessFlag::ResetSignalHandlers;
+    unixParameters.flags = QProcess::UnixProcessFlag::CreateNewSession | QProcess::UnixProcessFlag::CloseFileDescriptors | QProcess::UnixProcessFlag::ResetSignalHandlers;
     unixParameters.lowestFileDescriptorToClose = 3;
     process.setUnixProcessParameters(unixParameters);
 #elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -1291,111 +1103,63 @@ bool runTool(XExternalArchive::BACKEND backend,
     process.setWorkingDirectory(sCanonicalWorkingDirectory);
     process.setProcessChannelMode(QProcess::MergedChannels);
 
-    const QProcessEnvironment sourceEnvironment =
-        pChildEnvironment ? *pChildEnvironment
-                          : QProcessEnvironment::systemEnvironment();
+    const QProcessEnvironment sourceEnvironment = pChildEnvironment ? *pChildEnvironment : QProcessEnvironment::systemEnvironment();
     QProcessEnvironment childEnvironment;
-    const QString sHelperDirectory =
-        QFileInfo(sCanonicalProgram).absolutePath();
+    const QString sHelperDirectory = QFileInfo(sCanonicalProgram).absolutePath();
 #ifdef Q_OS_WIN
     wchar_t awcWindowsDirectory[32768] = {};
     wchar_t awcSystemDirectory[32768] = {};
-    const UINT nWindowsDirectoryLength = GetWindowsDirectoryW(
-        awcWindowsDirectory,
-        static_cast<UINT>(sizeof(awcWindowsDirectory) /
-                          sizeof(awcWindowsDirectory[0])));
-    const UINT nSystemDirectoryLength = GetSystemDirectoryW(
-        awcSystemDirectory,
-        static_cast<UINT>(sizeof(awcSystemDirectory) /
-                          sizeof(awcSystemDirectory[0])));
-    if (!nWindowsDirectoryLength || !nSystemDirectoryLength ||
-        (nWindowsDirectoryLength >=
-         sizeof(awcWindowsDirectory) /
-             sizeof(awcWindowsDirectory[0])) ||
-        (nSystemDirectoryLength >=
-         sizeof(awcSystemDirectory) /
-             sizeof(awcSystemDirectory[0]))) {
-        return setExternalError(
-            pPdStruct,
-            QStringLiteral("Cannot construct a trusted helper environment"));
+    const UINT nWindowsDirectoryLength = GetWindowsDirectoryW(awcWindowsDirectory, static_cast<UINT>(sizeof(awcWindowsDirectory) / sizeof(awcWindowsDirectory[0])));
+    const UINT nSystemDirectoryLength = GetSystemDirectoryW(awcSystemDirectory, static_cast<UINT>(sizeof(awcSystemDirectory) / sizeof(awcSystemDirectory[0])));
+    if (!nWindowsDirectoryLength || !nSystemDirectoryLength || (nWindowsDirectoryLength >= sizeof(awcWindowsDirectory) / sizeof(awcWindowsDirectory[0])) ||
+        (nSystemDirectoryLength >= sizeof(awcSystemDirectory) / sizeof(awcSystemDirectory[0]))) {
+        return setExternalError(pPdStruct, QStringLiteral("Cannot construct a trusted helper environment"));
     }
-    const QString sWindowsDirectory = QDir::cleanPath(
-        QString::fromWCharArray(awcWindowsDirectory,
-                                nWindowsDirectoryLength));
-    const QString sSystemDirectory = QDir::cleanPath(
-        QString::fromWCharArray(awcSystemDirectory,
-                                nSystemDirectoryLength));
-    childEnvironment.insert(QStringLiteral("SystemRoot"),
-                            sWindowsDirectory);
-    childEnvironment.insert(QStringLiteral("WINDIR"),
-                            sWindowsDirectory);
+    const QString sWindowsDirectory = QDir::cleanPath(QString::fromWCharArray(awcWindowsDirectory, nWindowsDirectoryLength));
+    const QString sSystemDirectory = QDir::cleanPath(QString::fromWCharArray(awcSystemDirectory, nSystemDirectoryLength));
+    childEnvironment.insert(QStringLiteral("SystemRoot"), sWindowsDirectory);
+    childEnvironment.insert(QStringLiteral("WINDIR"), sWindowsDirectory);
     QString sSystemDrive = QDir(sWindowsDirectory).rootPath();
-    while (sSystemDrive.endsWith(QLatin1Char('/')) ||
-           sSystemDrive.endsWith(QLatin1Char('\\')))
-        sSystemDrive.chop(1);
-    childEnvironment.insert(QStringLiteral("SystemDrive"),
-                            sSystemDrive);
-    childEnvironment.insert(
-        QStringLiteral("COMSPEC"),
-        QDir(sSystemDirectory).filePath(QStringLiteral("cmd.exe")));
-    childEnvironment.insert(QStringLiteral("PATHEXT"),
-                            QStringLiteral(".COM;.EXE;.BAT;.CMD"));
-    childEnvironment.insert(
-        QStringLiteral("PATH"),
-        QStringList({sHelperDirectory, sSystemDirectory,
-                     sWindowsDirectory})
-            .join(QDir::listSeparator()));
+    while (sSystemDrive.endsWith(QLatin1Char('/')) || sSystemDrive.endsWith(QLatin1Char('\\'))) sSystemDrive.chop(1);
+    childEnvironment.insert(QStringLiteral("SystemDrive"), sSystemDrive);
+    childEnvironment.insert(QStringLiteral("COMSPEC"), QDir(sSystemDirectory).filePath(QStringLiteral("cmd.exe")));
+    childEnvironment.insert(QStringLiteral("PATHEXT"), QStringLiteral(".COM;.EXE;.BAT;.CMD"));
+    childEnvironment.insert(QStringLiteral("PATH"), QStringList({sHelperDirectory, sSystemDirectory, sWindowsDirectory}).join(QDir::listSeparator()));
 #else
-    childEnvironment.insert(
-        QStringLiteral("PATH"),
-        QStringList({sHelperDirectory, QStringLiteral("/usr/bin"),
-                     QStringLiteral("/bin")})
-            .join(QDir::listSeparator()));
+    childEnvironment.insert(QStringLiteral("PATH"), QStringList({sHelperDirectory, QStringLiteral("/usr/bin"), QStringLiteral("/bin")}).join(QDir::listSeparator()));
     childEnvironment.insert(QStringLiteral("LANG"), QStringLiteral("C"));
-    childEnvironment.insert(QStringLiteral("LC_ALL"),
-                            QStringLiteral("C"));
+    childEnvironment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
 #endif
     // FRANZKEY is forwarded only from an explicit per-child environment.
     // Default ambient invocations drop it, FREEARC, FRANZFRANZEN, and every
     // other arbitrary parent variable.
-    if (pChildEnvironment &&
-        sourceEnvironment.contains(QStringLiteral("FRANZKEY"))) {
-        childEnvironment.insert(
-            QStringLiteral("FRANZKEY"),
-            sourceEnvironment.value(
-                QStringLiteral("FRANZKEY")));
+    if (pChildEnvironment && sourceEnvironment.contains(QStringLiteral("FRANZKEY"))) {
+        childEnvironment.insert(QStringLiteral("FRANZKEY"), sourceEnvironment.value(QStringLiteral("FRANZKEY")));
     }
-    childEnvironment.insert(QStringLiteral("TEMP"),
-                            sCanonicalWorkingDirectory);
-    childEnvironment.insert(QStringLiteral("TMP"),
-                            sCanonicalWorkingDirectory);
+    childEnvironment.insert(QStringLiteral("TEMP"), sCanonicalWorkingDirectory);
+    childEnvironment.insert(QStringLiteral("TMP"), sCanonicalWorkingDirectory);
 #ifndef Q_OS_WIN
-    childEnvironment.insert(QStringLiteral("TMPDIR"),
-                            sCanonicalWorkingDirectory);
+    childEnvironment.insert(QStringLiteral("TMPDIR"), sCanonicalWorkingDirectory);
 #endif
     process.setProcessEnvironment(childEnvironment);
 
 #ifdef Q_OS_WIN
-    process.setCreateProcessArgumentsModifier(
-        [&pNativeProcessInformation, &restrictedInheritance,
-         &sExecutionError](QProcess::CreateProcessArguments *pArguments) {
-            pNativeProcessInformation = pArguments->processInformation;
-            if (!restrictedInheritance.configure(pArguments,
-                                                  &sExecutionError)) {
-                // Any fail-closed child remains suspended and inherits no
-                // ambient handles. The caller terminates it before returning.
-                pArguments->flags |= CREATE_SUSPENDED | CREATE_NO_WINDOW;
-                pArguments->inheritHandles = false;
-            }
-        });
+    process.setCreateProcessArgumentsModifier([&pNativeProcessInformation, &restrictedInheritance, &sExecutionError](QProcess::CreateProcessArguments *pArguments) {
+        pNativeProcessInformation = pArguments->processInformation;
+        if (!restrictedInheritance.configure(pArguments, &sExecutionError)) {
+            // Any fail-closed child remains suspended and inherits no
+            // ambient handles. The caller terminates it before returning.
+            pArguments->flags |= CREATE_SUSPENDED | CREATE_NO_WINDOW;
+            pArguments->inheritHandles = false;
+        }
+    });
 #endif
 
     process.start(QIODevice::ReadOnly);
 
     const auto stopHelper = [&]() {
 #ifdef Q_OS_WIN
-        stopProcess(&process, &processTree,
-                    pNativeProcessInformation);
+        stopProcess(&process, &processTree, pNativeProcessInformation);
 #elif defined(Q_OS_UNIX)
         stopProcess(&process, &processTree);
 #else
@@ -1404,13 +1168,10 @@ bool runTool(XExternalArchive::BACKEND backend,
     };
 
     bool bStarted = process.state() == QProcess::Running;
-    while (!bStarted && (process.state() == QProcess::Starting) &&
-           (timer.elapsed() < qMin<qint64>(5000, nTimeoutMs))) {
-        bStarted = process.waitForStarted(50) ||
-                   (process.state() == QProcess::Running);
+    while (!bStarted && (process.state() == QProcess::Starting) && (timer.elapsed() < qMin<qint64>(5000, nTimeoutMs))) {
+        bStarted = process.waitForStarted(50) || (process.state() == QProcess::Running);
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-            if (pFailure)
-                *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
+            if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
             stopHelper();
             return false;
         }
@@ -1419,29 +1180,18 @@ bool runTool(XExternalArchive::BACKEND backend,
     if (!bStarted) {
         stopHelper();
         if (timer.elapsed() >= nTimeoutMs) {
-            if (pFailure)
-                *pFailure = XExternalArchive::EXTERNAL_FAILURE_TIMEOUT;
-            return setExternalError(
-                pPdStruct,
-                QStringLiteral("External archive helper operation timed out"));
+            if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_TIMEOUT;
+            return setExternalError(pPdStruct, QStringLiteral("External archive helper operation timed out"));
         }
-        return setExternalError(
-            pPdStruct,
-            QStringLiteral("Cannot start external archive helper"));
+        return setExternalError(pPdStruct, QStringLiteral("Cannot start external archive helper"));
     }
 
 #ifdef Q_OS_WIN
     if (!restrictedInheritance.isConfigured()) {
         stopHelper();
-        return setExternalError(
-            pPdStruct,
-            sExecutionError.isEmpty()
-                ? QStringLiteral(
-                      "Cannot configure the external-helper handle allowlist")
-                : sExecutionError);
+        return setExternalError(pPdStruct, sExecutionError.isEmpty() ? QStringLiteral("Cannot configure the external-helper handle allowlist") : sExecutionError);
     }
-    if (!processTree.attachAndResume(pNativeProcessInformation,
-                                     &sExecutionError)) {
+    if (!processTree.attachAndResume(pNativeProcessInformation, &sExecutionError)) {
         stopHelper();
         return setExternalError(pPdStruct, sExecutionError);
     }
@@ -1460,22 +1210,15 @@ bool runTool(XExternalArchive::BACKEND backend,
     bool bResult = true;
 
     for (;;) {
-        if (process.state() != QProcess::NotRunning)
-            process.waitForFinished(50);
-        else
-            QThread::msleep(10);
+        if (process.state() != QProcess::NotRunning) process.waitForFinished(50);
+        else QThread::msleep(10);
 
         QString sOutputError;
-        if (!drainProcessOutput(&process, &nCaptured,
-                                &baDiagnosticTail, pCapturedOutput,
-                                &sOutputError)) {
+        if (!drainProcessOutput(&process, &nCaptured, &baDiagnosticTail, pCapturedOutput, &sOutputError)) {
             bResult = false;
             if (pFailure) {
-                *pFailure = sOutputError.contains(
-                                QStringLiteral("password"),
-                                Qt::CaseInsensitive)
-                                ? XExternalArchive::EXTERNAL_FAILURE_PASSWORD
-                                : XExternalArchive::EXTERNAL_FAILURE_RESOURCE_LIMIT;
+                *pFailure = sOutputError.contains(QStringLiteral("password"), Qt::CaseInsensitive) ? XExternalArchive::EXTERNAL_FAILURE_PASSWORD
+                                                                                                   : XExternalArchive::EXTERNAL_FAILURE_RESOURCE_LIMIT;
             }
             setExternalError(pPdStruct, sOutputError);
             break;
@@ -1483,15 +1226,13 @@ bool runTool(XExternalArchive::BACKEND backend,
 
         bool bTreeRunning = process.state() != QProcess::NotRunning;
 #ifdef Q_OS_WIN
-        if (!processTree.hasActiveProcesses(&bTreeRunning,
-                                            &sExecutionError)) {
+        if (!processTree.hasActiveProcesses(&bTreeRunning, &sExecutionError)) {
             bResult = false;
             setExternalError(pPdStruct, sExecutionError);
             break;
         }
 #elif defined(Q_OS_UNIX)
-        if (!processTree.hasActiveProcesses(&bTreeRunning,
-                                            &sExecutionError)) {
+        if (!processTree.hasActiveProcesses(&bTreeRunning, &sExecutionError)) {
             bResult = false;
             setExternalError(pPdStruct, sExecutionError);
             break;
@@ -1501,53 +1242,35 @@ bool runTool(XExternalArchive::BACKEND backend,
 
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             bResult = false;
-            if (pFailure)
-                *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
+            if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
             break;
         }
         if (timer.elapsed() >= nTimeoutMs) {
             bResult = false;
-            if (pFailure)
-                *pFailure = XExternalArchive::EXTERNAL_FAILURE_TIMEOUT;
-            setExternalError(pPdStruct,
-                             QStringLiteral("External archive helper operation timed out"));
+            if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_TIMEOUT;
+            setExternalError(pPdStruct, QStringLiteral("External archive helper operation timed out"));
             break;
         }
         if (auditTimer.elapsed() >= 250) {
-            if (bMonitorPeaReport &&
-                (inspectPeaReport(sWorkingDirectory) == PEA_REPORT_FAILURE)) {
+            if (bMonitorPeaReport && (inspectPeaReport(sWorkingDirectory) == PEA_REPORT_FAILURE)) {
                 bResult = false;
-                if (pFailure)
-                    *pFailure = XExternalArchive::EXTERNAL_FAILURE_ARCHIVE_REJECTED;
-                setExternalError(
-                    pPdStruct,
-                    QStringLiteral("PEA archive integrity verification failed"));
+                if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_ARCHIVE_REJECTED;
+                setExternalError(pPdStruct, QStringLiteral("PEA archive integrity verification failed"));
                 break;
             }
             if (!sAuditRoot.isEmpty() && QFileInfo::exists(sAuditRoot)) {
                 StageScanResult scanResult;
                 bool bScanTimedOut = false;
-                if (!scanStageTree(sAuditRoot, policy, QString(), false,
-                                   &scanResult, pPdStruct, &toolDeadline,
-                                   &bScanTimedOut)) {
+                if (!scanStageTree(sAuditRoot, policy, QString(), false, &scanResult, pPdStruct, &toolDeadline, &bScanTimedOut)) {
                     bResult = false;
-                    const bool bScanCanceled =
-                        !XBinary::isPdStructNotCanceled(pPdStruct);
+                    const bool bScanCanceled = !XBinary::isPdStructNotCanceled(pPdStruct);
                     if (pFailure) {
-                        *pFailure = bScanCanceled
-                            ? XExternalArchive::EXTERNAL_FAILURE_CANCELED
-                            : (bScanTimedOut
-                                   ? XExternalArchive::EXTERNAL_FAILURE_TIMEOUT
-                                   : XExternalArchive::EXTERNAL_FAILURE_RESOURCE_LIMIT);
+                        *pFailure = bScanCanceled ? XExternalArchive::EXTERNAL_FAILURE_CANCELED
+                                                  : (bScanTimedOut ? XExternalArchive::EXTERNAL_FAILURE_TIMEOUT : XExternalArchive::EXTERNAL_FAILURE_RESOURCE_LIMIT);
                     }
                     if (!bScanCanceled) {
-                        setExternalError(
-                            pPdStruct,
-                            bScanTimedOut
-                                ? QStringLiteral(
-                                      "External archive helper operation timed out")
-                                : QStringLiteral(
-                                      "External archive output failed safety limits"));
+                        setExternalError(pPdStruct, bScanTimedOut ? QStringLiteral("External archive helper operation timed out")
+                                                                  : QStringLiteral("External archive output failed safety limits"));
                     }
                     break;
                 }
@@ -1558,69 +1281,46 @@ bool runTool(XExternalArchive::BACKEND backend,
 
     if (!bResult) {
         stopHelper();
-        while (process.bytesAvailable() > 0)
-            process.read(qMin<qint64>(process.bytesAvailable(),
-                                      EXTERNAL_PIPE_READ_SIZE));
+        while (process.bytesAvailable() > 0) process.read(qMin<qint64>(process.bytesAvailable(), EXTERNAL_PIPE_READ_SIZE));
         return false;
     }
 
     QString sOutputError;
-    if (!drainProcessOutput(&process, &nCaptured, &baDiagnosticTail,
-                            pCapturedOutput, &sOutputError)) {
+    if (!drainProcessOutput(&process, &nCaptured, &baDiagnosticTail, pCapturedOutput, &sOutputError)) {
         if (pFailure) {
-            *pFailure = sOutputError.contains(
-                            QStringLiteral("password"),
-                            Qt::CaseInsensitive)
-                            ? XExternalArchive::EXTERNAL_FAILURE_PASSWORD
-                            : XExternalArchive::EXTERNAL_FAILURE_RESOURCE_LIMIT;
+            *pFailure = sOutputError.contains(QStringLiteral("password"), Qt::CaseInsensitive) ? XExternalArchive::EXTERNAL_FAILURE_PASSWORD
+                                                                                               : XExternalArchive::EXTERNAL_FAILURE_RESOURCE_LIMIT;
         }
         return setExternalError(pPdStruct, sOutputError);
     }
 
-    if ((process.exitStatus() != QProcess::NormalExit) ||
-        (process.exitCode() != 0)) {
+    if ((process.exitStatus() != QProcess::NormalExit) || (process.exitCode() != 0)) {
         if (pFailure) {
             if (process.exitStatus() != QProcess::NormalExit) {
-                *pFailure =
-                    XExternalArchive::EXTERNAL_FAILURE_INFRASTRUCTURE;
+                *pFailure = XExternalArchive::EXTERNAL_FAILURE_INFRASTRUCTURE;
             } else {
                 *pFailure = classifyHelperExit(backend, baDiagnosticTail);
             }
         }
-        return setExternalError(
-            pPdStruct,
-            QStringLiteral("External archive helper failed (exit code %1)")
-                .arg(process.exitCode()));
+        return setExternalError(pPdStruct, QStringLiteral("External archive helper failed (exit code %1)").arg(process.exitCode()));
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if (pFailure)
-            *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
+        if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
         return false;
     }
 
     if (!sAuditRoot.isEmpty()) {
         StageScanResult scanResult;
         bool bScanTimedOut = false;
-        if (!scanStageTree(sAuditRoot, policy, QString(), false,
-                           &scanResult, pPdStruct, &toolDeadline,
-                           &bScanTimedOut)) {
-            const bool bScanCanceled =
-                !XBinary::isPdStructNotCanceled(pPdStruct);
+        if (!scanStageTree(sAuditRoot, policy, QString(), false, &scanResult, pPdStruct, &toolDeadline, &bScanTimedOut)) {
+            const bool bScanCanceled = !XBinary::isPdStructNotCanceled(pPdStruct);
             if (pFailure) {
-                *pFailure = bScanCanceled
-                    ? XExternalArchive::EXTERNAL_FAILURE_CANCELED
-                    : (bScanTimedOut
-                           ? XExternalArchive::EXTERNAL_FAILURE_TIMEOUT
-                           : XExternalArchive::EXTERNAL_FAILURE_RESOURCE_LIMIT);
+                *pFailure = bScanCanceled ? XExternalArchive::EXTERNAL_FAILURE_CANCELED
+                                          : (bScanTimedOut ? XExternalArchive::EXTERNAL_FAILURE_TIMEOUT : XExternalArchive::EXTERNAL_FAILURE_RESOURCE_LIMIT);
             }
             if (bScanCanceled) return false;
-            return setExternalError(
-                pPdStruct,
-                bScanTimedOut
-                    ? QStringLiteral(
-                          "External archive helper operation timed out")
-                    : QStringLiteral(
-                          "External archive output failed safety limits"));
+            return setExternalError(pPdStruct, bScanTimedOut ? QStringLiteral("External archive helper operation timed out")
+                                                             : QStringLiteral("External archive output failed safety limits"));
         }
     }
     if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_NONE;
@@ -1638,17 +1338,13 @@ enum EXTERNAL_PARSE_RESULT {
     EXTERNAL_PARSE_RESOURCE_LIMIT
 };
 
-EXTERNAL_PARSE_RESULT parseZpaqList(
-    const QByteArray &baOutput,
-    const XBinary::OUTPUT_POLICY &policy,
-    QList<ExternalRecord> *pRecords)
+EXTERNAL_PARSE_RESULT parseZpaqList(const QByteArray &baOutput, const XBinary::OUTPUT_POLICY &policy, QList<ExternalRecord> *pRecords)
 {
     if (!pRecords) return EXTERNAL_PARSE_INVALID;
     pRecords->clear();
 
     const QString sOutput = QString::fromUtf8(baOutput);
-    if (sOutput.contains(QChar::ReplacementCharacter))
-        return EXTERNAL_PARSE_INVALID;
+    if (sOutput.contains(QChar::ReplacementCharacter)) return EXTERNAL_PARSE_INVALID;
 
     // -noattributes makes the stable 7.15 record grammar independent of the
     // archived platform. Without it, the attribute field is variable width
@@ -1660,25 +1356,20 @@ EXTERNAL_PARSE_RESULT parseZpaqList(
                        "(\\d+) (.*)$"));
     QSet<QString> setNames;
     qint64 nTotalSize = 0;
-    const QStringList listLines = sOutput.split(QRegularExpression(
-        QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
+    const QStringList listLines = sOutput.split(QRegularExpression(QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
     for (const QString &sLine : listLines) {
         const QRegularExpressionMatch match = expression.match(sLine);
         if (!match.hasMatch()) continue;
 
         bool bSizeOK = false;
         const qint64 nListedSize = match.captured(3).toLongLong(&bSizeOK);
-        if (!bSizeOK || (nListedSize < 0))
-            return EXTERNAL_PARSE_INVALID;
+        if (!bSizeOK || (nListedSize < 0)) return EXTERNAL_PARSE_INVALID;
 
         const QString sRawName = match.captured(4);
         const bool bIsFolder = sRawName.endsWith(QLatin1Char('/'));
         QString sName;
-        if (!normalizeZpaqExtractedName(sRawName, &sName))
-            return EXTERNAL_PARSE_INVALID;
-        const QString sKey = (pathCaseSensitivity() == Qt::CaseInsensitive)
-                                 ? sName.toCaseFolded()
-                                 : sName;
+        if (!normalizeZpaqExtractedName(sRawName, &sName)) return EXTERNAL_PARSE_INVALID;
+        const QString sKey = (pathCaseSensitivity() == Qt::CaseInsensitive) ? sName.toCaseFolded() : sName;
         if (setNames.contains(sKey)) return EXTERNAL_PARSE_INVALID;
         setNames.insert(sKey);
 
@@ -1687,18 +1378,12 @@ EXTERNAL_PARSE_RESULT parseZpaqList(
         record.sProvider = QStringLiteral("zpaqfranz");
         record.bIsFolder = bIsFolder;
         record.nUncompressedSize = record.bIsFolder ? 0 : nListedSize;
-        record.dateTime = QDateTime::fromString(
-            match.captured(1) + QLatin1Char('T') + match.captured(2) +
-                QLatin1Char('Z'),
-            Qt::ISODate);
+        record.dateTime = QDateTime::fromString(match.captured(1) + QLatin1Char('T') + match.captured(2) + QLatin1Char('Z'), Qt::ISODate);
         if (!record.dateTime.isValid()) return EXTERNAL_PARSE_INVALID;
 
-        if (!record.bIsFolder &&
-            !addWithLimit(record.nUncompressedSize, &nTotalSize))
-            return EXTERNAL_PARSE_RESOURCE_LIMIT;
+        if (!record.bIsFolder && !addWithLimit(record.nUncompressedSize, &nTotalSize)) return EXTERNAL_PARSE_RESOURCE_LIMIT;
         const qint64 nCount = pRecords->size() + 1LL;
-        if (!policyAllows(record.nUncompressedSize, nTotalSize, nCount,
-                          policy)) return EXTERNAL_PARSE_RESOURCE_LIMIT;
+        if (!policyAllows(record.nUncompressedSize, nTotalSize, nCount, policy)) return EXTERNAL_PARSE_RESOURCE_LIMIT;
         pRecords->append(record);
     }
 
@@ -1718,9 +1403,7 @@ EXTERNAL_PARSE_RESULT parseZpaqList(
     const QRegularExpression emptyListingExpression(
         QStringLiteral("(?m)^\\d+\\.\\d+ MB of \\d+\\.\\d+ MB "
                        "\\(0 files\\) shown\\r?$"));
-    return (emptyArchiveExpression.match(sOutput).hasMatch() &&
-            emptyListingExpression.match(sOutput).hasMatch())
-        ? EXTERNAL_PARSE_OK : EXTERNAL_PARSE_INVALID;
+    return (emptyArchiveExpression.match(sOutput).hasMatch() && emptyListingExpression.match(sOutput).hasMatch()) ? EXTERNAL_PARSE_OK : EXTERNAL_PARSE_INVALID;
 }
 
 bool decodeFreeArcOutput(const QByteArray &baOutput, QString *pOutput)
@@ -1731,13 +1414,10 @@ bool decodeFreeArcOutput(const QByteArray &baOutput, QString *pOutput)
         pOutput->clear();
         return true;
     }
-    const int nLength = MultiByteToWideChar(
-        CP_OEMCP, 0, baOutput.constData(), baOutput.size(), nullptr, 0);
+    const int nLength = MultiByteToWideChar(CP_OEMCP, 0, baOutput.constData(), baOutput.size(), nullptr, 0);
     if (nLength <= 0) return false;
     QVector<wchar_t> listCharacters(nLength);
-    if (MultiByteToWideChar(CP_OEMCP, 0, baOutput.constData(),
-                            baOutput.size(), listCharacters.data(), nLength) !=
-        nLength) return false;
+    if (MultiByteToWideChar(CP_OEMCP, 0, baOutput.constData(), baOutput.size(), listCharacters.data(), nLength) != nLength) return false;
     *pOutput = QString::fromWCharArray(listCharacters.constData(), nLength);
 #else
     *pOutput = QString::fromLocal8Bit(baOutput);
@@ -1750,8 +1430,7 @@ bool parseFreeArcNumber(const QString &sValue, qint64 *pnValue)
     if (!pnValue || sValue.isEmpty()) return false;
     const QStringList listGroups = sValue.split(QLatin1Char(','));
     if (listGroups.size() > 1) {
-        if (listGroups.first().isEmpty() || (listGroups.first().size() > 3))
-            return false;
+        if (listGroups.first().isEmpty() || (listGroups.first().size() > 3)) return false;
         for (qint32 i = 1; i < listGroups.size(); ++i) {
             if (listGroups.at(i).size() != 3) return false;
         }
@@ -1765,17 +1444,13 @@ bool parseFreeArcNumber(const QString &sValue, qint64 *pnValue)
     return true;
 }
 
-EXTERNAL_PARSE_RESULT parseFreeArcList(
-    const QByteArray &baOutput,
-    const XBinary::OUTPUT_POLICY &policy,
-    QList<ExternalRecord> *pRecords)
+EXTERNAL_PARSE_RESULT parseFreeArcList(const QByteArray &baOutput, const XBinary::OUTPUT_POLICY &policy, QList<ExternalRecord> *pRecords)
 {
     if (!pRecords) return EXTERNAL_PARSE_INVALID;
     pRecords->clear();
 
     QString sOutput;
-    if (!decodeFreeArcOutput(baOutput, &sOutput))
-        return EXTERNAL_PARSE_INVALID;
+    if (!decodeFreeArcOutput(baOutput, &sOutput)) return EXTERNAL_PARSE_INVALID;
     const QRegularExpression recordExpression(
         QStringLiteral("^(\\d{4}-\\d{2}-\\d{2}) "
                        "(\\d{2}:\\d{2}:\\d{2})\\s+"
@@ -1787,8 +1462,7 @@ EXTERNAL_PARSE_RESULT parseFreeArcList(
         QStringLiteral("^((?:\\d+|\\d{1,3}(?:,\\d{3})+)) files?, "
                        "((?:\\d+|\\d{1,3}(?:,\\d{3})+)) bytes, "
                        "((?:\\d+|\\d{1,3}(?:,\\d{3})+)) compressed$"));
-    const QRegularExpression headerExpression(
-        QStringLiteral("^Date/time\\s+Attr\\s+Size\\s+Packed\\s+CRC Filename$"));
+    const QRegularExpression headerExpression(QStringLiteral("^Date/time\\s+Attr\\s+Size\\s+Packed\\s+CRC Filename$"));
 
     QSet<QString> setNames;
     qint64 nTotalSize = 0;
@@ -1796,8 +1470,7 @@ EXTERNAL_PARSE_RESULT parseFreeArcList(
     qint64 nSummarySize = -1;
     bool bSawHeader = false;
     bool bSawSuccess = false;
-    const QStringList listLines = sOutput.split(
-        QRegularExpression(QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
+    const QStringList listLines = sOutput.split(QRegularExpression(QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
     for (const QString &sLine : listLines) {
         if (headerExpression.match(sLine).hasMatch()) {
             if (bSawHeader) return EXTERNAL_PARSE_INVALID;
@@ -1810,19 +1483,12 @@ EXTERNAL_PARSE_RESULT parseFreeArcList(
             continue;
         }
 
-        const QRegularExpressionMatch summaryMatch =
-            summaryExpression.match(sLine);
+        const QRegularExpressionMatch summaryMatch = summaryExpression.match(sLine);
         if (summaryMatch.hasMatch()) {
-            if (nSummaryCount >= 0 ||
-                !parseFreeArcNumber(summaryMatch.captured(1),
-                                    &nSummaryCount) ||
-                !parseFreeArcNumber(summaryMatch.captured(2),
-                                    &nSummarySize))
+            if (nSummaryCount >= 0 || !parseFreeArcNumber(summaryMatch.captured(1), &nSummaryCount) || !parseFreeArcNumber(summaryMatch.captured(2), &nSummarySize))
                 return EXTERNAL_PARSE_INVALID;
             qint64 nSummaryCompressed = 0;
-            if (!parseFreeArcNumber(summaryMatch.captured(3),
-                                    &nSummaryCompressed))
-                return EXTERNAL_PARSE_INVALID;
+            if (!parseFreeArcNumber(summaryMatch.captured(3), &nSummaryCompressed)) return EXTERNAL_PARSE_INVALID;
             continue;
         }
 
@@ -1831,17 +1497,13 @@ EXTERNAL_PARSE_RESULT parseFreeArcList(
 
         qint64 nSize = 0;
         qint64 nCompressedSize = 0;
-        if (!parseFreeArcNumber(match.captured(4), &nSize) ||
-            !parseFreeArcNumber(match.captured(5), &nCompressedSize)) {
+        if (!parseFreeArcNumber(match.captured(4), &nSize) || !parseFreeArcNumber(match.captured(5), &nCompressedSize)) {
             return EXTERNAL_PARSE_INVALID;
         }
 
         QString sName;
-        if (!normalizeRecordName(match.captured(8), &sName))
-            return EXTERNAL_PARSE_INVALID;
-        const QString sKey = (pathCaseSensitivity() == Qt::CaseInsensitive)
-                                 ? sName.toCaseFolded()
-                                 : sName;
+        if (!normalizeRecordName(match.captured(8), &sName)) return EXTERNAL_PARSE_INVALID;
+        const QString sKey = (pathCaseSensitivity() == Qt::CaseInsensitive) ? sName.toCaseFolded() : sName;
         if (setNames.contains(sKey)) return EXTERNAL_PARSE_INVALID;
         setNames.insert(sKey);
 
@@ -1849,46 +1511,33 @@ EXTERNAL_PARSE_RESULT parseFreeArcList(
         record.sName = sName;
         record.sProvider = QStringLiteral("FreeArc");
         record.bIsFolder = match.captured(3).contains(QLatin1Char('D'));
-        if (record.bIsFolder && (nSize != 0))
-            return EXTERNAL_PARSE_INVALID;
+        if (record.bIsFolder && (nSize != 0)) return EXTERNAL_PARSE_INVALID;
         record.nUncompressedSize = record.bIsFolder ? 0 : nSize;
         record.nCompressedSize = nCompressedSize;
-        record.dateTime = QDateTime::fromString(
-            match.captured(1) + QLatin1Char('T') + match.captured(2),
-            Qt::ISODate);
+        record.dateTime = QDateTime::fromString(match.captured(1) + QLatin1Char('T') + match.captured(2), Qt::ISODate);
         if (!record.dateTime.isValid()) return EXTERNAL_PARSE_INVALID;
 
-        if (!record.bIsFolder &&
-            !addWithLimit(record.nUncompressedSize, &nTotalSize))
-            return EXTERNAL_PARSE_RESOURCE_LIMIT;
+        if (!record.bIsFolder && !addWithLimit(record.nUncompressedSize, &nTotalSize)) return EXTERNAL_PARSE_RESOURCE_LIMIT;
         const qint64 nCount = pRecords->size() + 1LL;
-        if (!policyAllows(record.nUncompressedSize, nTotalSize, nCount,
-                          policy)) return EXTERNAL_PARSE_RESOURCE_LIMIT;
+        if (!policyAllows(record.nUncompressedSize, nTotalSize, nCount, policy)) return EXTERNAL_PARSE_RESOURCE_LIMIT;
         pRecords->append(record);
     }
 
-    if (!bSawHeader || !bSawSuccess || (nSummaryCount < 0) ||
-        (nSummarySize < 0) ||
-        (nSummaryCount != pRecords->size()) ||
-        (nSummarySize != nTotalSize)) return EXTERNAL_PARSE_INVALID;
+    if (!bSawHeader || !bSawSuccess || (nSummaryCount < 0) || (nSummarySize < 0) || (nSummaryCount != pRecords->size()) || (nSummarySize != nTotalSize))
+        return EXTERNAL_PARSE_INVALID;
     sortExternalRecords(pRecords);
     return EXTERNAL_PARSE_OK;
 }
 
-bool reconcileListedStage(const QList<ExternalRecord> &listManifest,
-                           QList<ExternalRecord> *pStageRecords,
-                           XBinary::PDSTRUCT *pPdStruct,
-                           const QDeadlineTimer *pDeadline,
-                           bool *pbTimedOut)
+bool reconcileListedStage(const QList<ExternalRecord> &listManifest, QList<ExternalRecord> *pStageRecords, XBinary::PDSTRUCT *pPdStruct, const QDeadlineTimer *pDeadline,
+                          bool *pbTimedOut)
 {
     if (pbTimedOut) *pbTimedOut = false;
-    if (!pStageRecords ||
-        (pStageRecords->size() < listManifest.size())) return false;
+    if (!pStageRecords || (pStageRecords->size() < listManifest.size())) return false;
     if (listManifest.isEmpty()) return pStageRecords->isEmpty();
 
     const auto canContinue = [&]() {
-        if (pDeadline && !pDeadline->isForever() &&
-            pDeadline->hasExpired()) {
+        if (pDeadline && !pDeadline->isForever() && pDeadline->hasExpired()) {
             if (pbTimedOut) *pbTimedOut = true;
             return false;
         }
@@ -1896,10 +1545,8 @@ bool reconcileListedStage(const QList<ExternalRecord> &listManifest,
     };
     if (!canContinue()) return false;
 
-    const auto recordLess = [](const ExternalRecord &a,
-                               const ExternalRecord &b) {
-        const int nCompare = QString::compare(a.sName, b.sName,
-                                               Qt::CaseSensitive);
+    const auto recordLess = [](const ExternalRecord &a, const ExternalRecord &b) {
+        const int nCompare = QString::compare(a.sName, b.sName, Qt::CaseSensitive);
         if (nCompare != 0) return nCompare < 0;
         return a.bIsFolder && !b.bIsFolder;
     };
@@ -1914,10 +1561,8 @@ bool reconcileListedStage(const QList<ExternalRecord> &listManifest,
         if (!canContinue()) return false;
         qint32 nSeparator = expected.sName.indexOf(QLatin1Char('/'));
         while (nSeparator > 0) {
-            setStrictAncestorFolders.insert(
-                expected.sName.left(nSeparator));
-            nSeparator = expected.sName.indexOf(
-                QLatin1Char('/'), nSeparator + 1);
+            setStrictAncestorFolders.insert(expected.sName.left(nSeparator));
+            nSeparator = expected.sName.indexOf(QLatin1Char('/'), nSeparator + 1);
         }
     }
 
@@ -1926,18 +1571,14 @@ bool reconcileListedStage(const QList<ExternalRecord> &listManifest,
     qint32 nExpectedIndex = 0;
     for (ExternalRecord actual : qAsConst(*pStageRecords)) {
         if (!canContinue()) return false;
-        if ((nExpectedIndex < listExpected.size()) &&
-            (actual.sName == listExpected.at(nExpectedIndex).sName)) {
-            const ExternalRecord &expected =
-                listExpected.at(nExpectedIndex++);
-            if ((actual.bIsFolder != expected.bIsFolder) ||
-                (actual.nUncompressedSize != expected.nUncompressedSize)) {
+        if ((nExpectedIndex < listExpected.size()) && (actual.sName == listExpected.at(nExpectedIndex).sName)) {
+            const ExternalRecord &expected = listExpected.at(nExpectedIndex++);
+            if ((actual.bIsFolder != expected.bIsFolder) || (actual.nUncompressedSize != expected.nUncompressedSize)) {
                 return false;
             }
             actual.sProvider = expected.sProvider;
             actual.nCompressedSize = expected.nCompressedSize;
-            if (expected.dateTime.isValid())
-                actual.dateTime = expected.dateTime;
+            if (expected.dateTime.isValid()) actual.dateTime = expected.dateTime;
             listReconciled.append(actual);
             continue;
         }
@@ -1960,18 +1601,14 @@ QString singleRecordName(QIODevice *pDevice)
     QString sName = XBinary::getDeviceFileBaseName(pDevice);
     if (sName.isEmpty()) sName = QStringLiteral("data");
     QString sNormalized;
-    if (!normalizeRecordName(sName, &sNormalized))
-        sNormalized = QStringLiteral("data");
+    if (!normalizeRecordName(sName, &sNormalized)) sNormalized = QStringLiteral("data");
     return sNormalized;
 }
 
 quint32 readBigEndian32(const QByteArray &baData)
 {
     if (baData.size() < 4) return 0;
-    return (quint32)(quint8)baData.at(0) << 24 |
-           (quint32)(quint8)baData.at(1) << 16 |
-           (quint32)(quint8)baData.at(2) << 8 |
-           (quint32)(quint8)baData.at(3);
+    return (quint32)(quint8)baData.at(0) << 24 | (quint32)(quint8)baData.at(1) << 16 | (quint32)(quint8)baData.at(2) << 8 | (quint32)(quint8)baData.at(3);
 }
 
 QString withTrailingSeparator(const QString &sPath)
@@ -1981,8 +1618,7 @@ QString withTrailingSeparator(const QString &sPath)
     return sResult;
 }
 
-bool helperContainsAsciiMarker(const QString &sPath,
-                               const QByteArray &baMarker)
+bool helperContainsAsciiMarker(const QString &sPath, const QByteArray &baMarker)
 {
     const qint64 nMaximumHelperSize = 128LL * 1024LL * 1024LL;
     const qint64 nReadSize = 64LL * 1024LL;
@@ -1990,8 +1626,7 @@ bool helperContainsAsciiMarker(const QString &sPath,
 
     QFile file(sPath);
     const qint64 nSize = file.size();
-    if ((nSize < baMarker.size()) || (nSize > nMaximumHelperSize) ||
-        !file.open(QIODevice::ReadOnly) || file.isSequential()) {
+    if ((nSize < baMarker.size()) || (nSize > nMaximumHelperSize) || !file.open(QIODevice::ReadOnly) || file.isSequential()) {
         return false;
     }
 
@@ -2029,10 +1664,7 @@ struct XExternalArchive::EXTERNAL_UNPACK_CONTEXT {
 };
 
 XExternalArchive::XExternalArchive(QIODevice *pDevice, BACKEND backend)
-    : XArchive(pDevice),
-      m_backend(backend),
-      m_helperDeadline(QDeadlineTimer::Forever),
-      m_lastExternalFailure(EXTERNAL_FAILURE_NONE)
+    : XArchive(pDevice), m_backend(backend), m_helperDeadline(QDeadlineTimer::Forever), m_lastExternalFailure(EXTERNAL_FAILURE_NONE)
 {
 }
 
@@ -2061,21 +1693,16 @@ void XExternalArchive::clearHelperDeadline()
     m_helperDeadline = QDeadlineTimer(QDeadlineTimer::Forever);
 }
 
-XExternalArchive::EXTERNAL_FAILURE
-XExternalArchive::getLastExternalFailure() const
+XExternalArchive::EXTERNAL_FAILURE XExternalArchive::getLastExternalFailure() const
 {
     return m_lastExternalFailure;
 }
 
-bool XExternalArchive::isDeferredArchiveMaterialized(
-    const UNPACK_STATE *pState) const
+bool XExternalArchive::isDeferredArchiveMaterialized(const UNPACK_STATE *pState) const
 {
-    if (!pState || !pState->pContext ||
-        ((m_backend != BACKEND_ZPAQ) &&
-         (m_backend != BACKEND_FREEARC))) return false;
+    if (!pState || !pState->pContext || ((m_backend != BACKEND_ZPAQ) && (m_backend != BACKEND_FREEARC))) return false;
 
-    const EXTERNAL_UNPACK_CONTEXT *pContext =
-        static_cast<const EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
+    const EXTERNAL_UNPACK_CONTEXT *pContext = static_cast<const EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
     return pContext->pArchiveStageDir != nullptr;
 }
 
@@ -2084,23 +1711,18 @@ void XExternalArchive::setLastExternalFailure(EXTERNAL_FAILURE failure)
     m_lastExternalFailure = failure;
 }
 
-QMap<XBinary::UNPACK_PROP, QVariant>
-XExternalArchive::getDefaultUnpackProperties()
+QMap<XBinary::UNPACK_PROP, QVariant> XExternalArchive::getDefaultUnpackProperties()
 {
     return XArchive::getDefaultUnpackProperties();
 }
 
-bool XExternalArchive::initUnpack(
-    UNPACK_STATE *pState,
-    const QMap<UNPACK_PROP, QVariant> &mapProperties,
-    PDSTRUCT *pPdStruct)
+bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XExternalArchive> guardedThis(this);
     m_lastExternalFailure = EXTERNAL_FAILURE_INFRASTRUCTURE;
-    if (!pState || (m_backend == BACKEND_UNKNOWN) ||
-        m_bUnpackOperationInProgress ||
-        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-         !ownsUnpackSource(pState))) return false;
+    if (!pState || (m_backend == BACKEND_UNKNOWN) || m_bUnpackOperationInProgress ||
+        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)))
+        return false;
 
     if (!finishUnpack(pState, nullptr) || !guardedThis) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
@@ -2110,135 +1732,90 @@ bool XExternalArchive::initUnpack(
     if (!pPdStruct) pPdStruct = &pdStructEmpty;
     if (!m_helperDeadline.isForever() && m_helperDeadline.hasExpired()) {
         m_lastExternalFailure = EXTERNAL_FAILURE_TIMEOUT;
-        return setExternalError(
-            pPdStruct, tr("External archive helper operation timed out"));
+        return setExternalError(pPdStruct, tr("External archive helper operation timed out"));
     }
-    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !guardedThis->isValid(pPdStruct) || !guardedThis) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) || !guardedThis->isValid(pPdStruct) || !guardedThis) return false;
 
     XBinary::OUTPUT_POLICY outputPolicy = {};
     if (!XBinary::resolveUnpackOutputPolicy(mapProperties, &outputPolicy)) {
         m_lastExternalFailure = EXTERNAL_FAILURE_RESOURCE_LIMIT;
-        return setExternalError(pPdStruct,
-                                tr("Invalid unpacked-output policy"));
+        return setExternalError(pPdStruct, tr("Invalid unpacked-output policy"));
     }
 
     const QString sHelperPath = resolveHelper(m_backend);
     if (sHelperPath.isEmpty()) {
         m_lastExternalFailure = EXTERNAL_FAILURE_INFRASTRUCTURE;
-        return setExternalError(
-            pPdStruct,
-            tr("%1 helper was not found. Install PeaZip or set XFU_PEAZIP_ROOT.")
-                .arg(backendName(m_backend)));
+        return setExternalError(pPdStruct, tr("%1 helper was not found. Install PeaZip or set XFU_PEAZIP_ROOT.").arg(backendName(m_backend)));
     }
 
     const bool bBound = bindUnpackSource(pState, pPdStruct);
     if (!guardedThis || !bBound) return false;
 
-    std::unique_ptr<EXTERNAL_UNPACK_CONTEXT> pContext(
-        new (std::nothrow) EXTERNAL_UNPACK_CONTEXT);
+    std::unique_ptr<EXTERNAL_UNPACK_CONTEXT> pContext(new (std::nothrow) EXTERNAL_UNPACK_CONTEXT);
     if (!pContext) {
         releaseUnpackSource(pState);
         return false;
     }
-    pContext->pTemporaryDir.reset(new (std::nothrow) QTemporaryDir(
-        QDir(QDir::tempPath()).filePath(
-            QStringLiteral("xfileunpacker-external-XXXXXX"))));
+    pContext->pTemporaryDir.reset(new (std::nothrow) QTemporaryDir(QDir(QDir::tempPath()).filePath(QStringLiteral("xfileunpacker-external-XXXXXX"))));
     if (!pContext->pTemporaryDir || !pContext->pTemporaryDir->isValid()) {
         releaseUnpackSource(pState);
-        return setExternalError(pPdStruct,
-                                tr("Cannot create a private extraction directory"));
+        return setExternalError(pPdStruct, tr("Cannot create a private extraction directory"));
     }
     pContext->sHelperPath = sHelperPath;
-    const QString sTextPassword =
-        mapProperties.value(UNPACK_PROP_PASSWORD).toString();
-    const QByteArray baPassword =
-        mapProperties.value(UNPACK_PROP_PASSWORD_BYTES).toByteArray();
+    const QString sTextPassword = mapProperties.value(UNPACK_PROP_PASSWORD).toString();
+    const QByteArray baPassword = mapProperties.value(UNPACK_PROP_PASSWORD_BYTES).toByteArray();
     if (!sTextPassword.isEmpty() && !baPassword.isEmpty()) {
         releaseUnpackSource(pState);
-        return setExternalError(
-            pPdStruct,
-            tr("Specify either a text or byte archive password, not both"));
+        return setExternalError(pPdStruct, tr("Specify either a text or byte archive password, not both"));
     }
     if (!baPassword.isEmpty()) {
         if (baPassword.contains('\0')) {
             releaseUnpackSource(pState);
-            return setExternalError(
-                pPdStruct,
-                tr("External archive helper passwords cannot contain NUL bytes"));
+            return setExternalError(pPdStruct, tr("External archive helper passwords cannot contain NUL bytes"));
         }
-        pContext->sPassword =
-            QString::fromUtf8(baPassword.constData(), baPassword.size());
+        pContext->sPassword = QString::fromUtf8(baPassword.constData(), baPassword.size());
         if (pContext->sPassword.toUtf8() != baPassword) {
             releaseUnpackSource(pState);
-            return setExternalError(
-                pPdStruct,
-                tr("External archive helper password bytes must be valid UTF-8"));
+            return setExternalError(pPdStruct, tr("External archive helper password bytes must be valid UTF-8"));
         }
     } else {
         if (sTextPassword.contains(QChar::Null)) {
             releaseUnpackSource(pState);
-            return setExternalError(
-                pPdStruct,
-                tr("External archive helper passwords cannot contain NUL characters"));
+            return setExternalError(pPdStruct, tr("External archive helper passwords cannot contain NUL characters"));
         }
         pContext->sPassword = sTextPassword;
     }
     pContext->outputPolicy = outputPolicy;
 
-    if ((m_backend == BACKEND_FREEARC) &&
-        !pContext->sPassword.isEmpty()) {
+    if ((m_backend == BACKEND_FREEARC) && !pContext->sPassword.isEmpty()) {
         // FreeArc derives the same key from an empty command-line password
         // followed by key-file bytes as it does from those bytes supplied via
         // -p. Keep the secret out of the process command line while preserving
         // the helper's native local-8-bit argv semantics.
-        QByteArray baFreeArcPassword =
-            pContext->sPassword.toLocal8Bit();
-        pContext->pFreeArcPasswordFile.reset(
-            new (std::nothrow) QTemporaryFile(
-                QDir(pContext->pTemporaryDir->path()).filePath(
-                    QStringLiteral("freearc-password-XXXXXX.key"))));
-        bool bPasswordFileReady =
-            !baFreeArcPassword.isEmpty() &&
-            pContext->pFreeArcPasswordFile &&
-            pContext->pFreeArcPasswordFile->open();
+        QByteArray baFreeArcPassword = pContext->sPassword.toLocal8Bit();
+        pContext->pFreeArcPasswordFile.reset(new (std::nothrow)
+                                                 QTemporaryFile(QDir(pContext->pTemporaryDir->path()).filePath(QStringLiteral("freearc-password-XXXXXX.key"))));
+        bool bPasswordFileReady = !baFreeArcPassword.isEmpty() && pContext->pFreeArcPasswordFile && pContext->pFreeArcPasswordFile->open();
         qint64 nPasswordWritten = 0;
-        while (bPasswordFileReady &&
-               (nPasswordWritten < baFreeArcPassword.size())) {
-            const qint64 nWritten =
-                pContext->pFreeArcPasswordFile->write(
-                    baFreeArcPassword.constData() + nPasswordWritten,
-                    baFreeArcPassword.size() - nPasswordWritten);
+        while (bPasswordFileReady && (nPasswordWritten < baFreeArcPassword.size())) {
+            const qint64 nWritten = pContext->pFreeArcPasswordFile->write(baFreeArcPassword.constData() + nPasswordWritten, baFreeArcPassword.size() - nPasswordWritten);
             if (nWritten <= 0) {
                 bPasswordFileReady = false;
                 break;
             }
             nPasswordWritten += nWritten;
         }
-        bPasswordFileReady =
-            bPasswordFileReady &&
-            (nPasswordWritten == baFreeArcPassword.size()) &&
-            pContext->pFreeArcPasswordFile->flush();
+        bPasswordFileReady = bPasswordFileReady && (nPasswordWritten == baFreeArcPassword.size()) && pContext->pFreeArcPasswordFile->flush();
 #ifndef Q_OS_WIN
         if (bPasswordFileReady) {
-            bPasswordFileReady = QFile::setPermissions(
-                pContext->pFreeArcPasswordFile->fileName(),
-                QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+            bPasswordFileReady = QFile::setPermissions(pContext->pFreeArcPasswordFile->fileName(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         }
 #endif
-        if (pContext->pFreeArcPasswordFile)
-            pContext->pFreeArcPasswordFile->close();
+        if (pContext->pFreeArcPasswordFile) pContext->pFreeArcPasswordFile->close();
         if (bPasswordFileReady) {
-            const QFileInfo passwordFileInfo(
-                pContext->pFreeArcPasswordFile->fileName());
-            bPasswordFileReady =
-                passwordFileInfo.isFile() &&
-                !passwordFileInfo.isSymLink() &&
-                (passwordFileInfo.size() == baFreeArcPassword.size()) &&
-                isContainedPath(
-                    QFileInfo(pContext->pTemporaryDir->path())
-                        .canonicalFilePath(),
-                    passwordFileInfo.canonicalFilePath());
+            const QFileInfo passwordFileInfo(pContext->pFreeArcPasswordFile->fileName());
+            bPasswordFileReady = passwordFileInfo.isFile() && !passwordFileInfo.isSymLink() && (passwordFileInfo.size() == baFreeArcPassword.size()) &&
+                                 isContainedPath(QFileInfo(pContext->pTemporaryDir->path()).canonicalFilePath(), passwordFileInfo.canonicalFilePath());
         }
         // Minimize additional plaintext copies. The context retains the
         // password only until the lazy archive stage has been materialized.
@@ -2246,44 +1823,34 @@ bool XExternalArchive::initUnpack(
         baFreeArcPassword.clear();
         if (!bPasswordFileReady) {
             releaseUnpackSource(pState);
-            return setExternalError(
-                pPdStruct,
-                tr("Cannot create a private FreeArc password file"));
+            return setExternalError(pPdStruct, tr("Cannot create a private FreeArc password file"));
         }
     }
-    if ((m_backend == BACKEND_ZPAQ) &&
-        !pContext->sPassword.isEmpty()) {
+    if ((m_backend == BACKEND_ZPAQ) && !pContext->sPassword.isEmpty()) {
         // zpaqfranz 64.8 introduced FRANZKEY as an exact fallback for -key.
         // The bundled PeaZip 62.x helper lacks it, so retain a compatible
         // command-line fallback only when the capability marker is absent.
-        pContext->bZpaqEnvironmentPassword = helperContainsAsciiMarker(
-            pContext->sHelperPath, QByteArray("FRANZKEY"));
+        pContext->bZpaqEnvironmentPassword = helperContainsAsciiMarker(pContext->sHelperPath, QByteArray("FRANZKEY"));
     }
 
     qint64 nInputSize = getFileFormatSize(pPdStruct);
     const qint64 nDeviceSize = getSize();
-    if (!guardedThis || (nInputSize <= 0) || (nInputSize > nDeviceSize))
-        nInputSize = nDeviceSize;
+    if (!guardedThis || (nInputSize <= 0) || (nInputSize > nDeviceSize)) nInputSize = nDeviceSize;
     if ((nInputSize < 0) || !guardedThis) {
         releaseUnpackSource(pState);
         return false;
     }
-    const QString sSuffix = getFileFormatExt().isEmpty()
-                                ? QStringLiteral("bin")
-                                : getFileFormatExt();
-    pContext->sInputPath = QDir(pContext->pTemporaryDir->path())
-                               .filePath(QStringLiteral("input.%1").arg(sSuffix));
+    const QString sSuffix = getFileFormatExt().isEmpty() ? QStringLiteral("bin") : getFileFormatExt();
+    pContext->sInputPath = QDir(pContext->pTemporaryDir->path()).filePath(QStringLiteral("input.%1").arg(sSuffix));
 
     QPointer<QIODevice> guardedSource(getDevice());
     if (!guardedSource || guardedSource->isSequential()) {
         releaseUnpackSource(pState);
-        return setExternalError(pPdStruct,
-                                tr("External archive input must be seekable"));
+        return setExternalError(pPdStruct, tr("External archive input must be seekable"));
     }
     const qint64 nOriginalPosition = guardedSource->pos();
     QFile inputFile(pContext->sInputPath);
-    bool bPrepared = inputFile.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
-                     guardedSource->seek(0);
+    bool bPrepared = inputFile.open(QIODevice::WriteOnly | QIODevice::Truncate) && guardedSource->seek(0);
     QByteArray baBuffer;
     if (bPrepared) {
         baBuffer.resize((int)EXTERNAL_COPY_BUFFER_SIZE);
@@ -2291,17 +1858,13 @@ bool XExternalArchive::initUnpack(
     }
     qint64 nCopied = 0;
     bool bCopyTimedOut = false;
-    while (bPrepared && guardedThis && guardedSource &&
-           (nCopied < nInputSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if (!m_helperDeadline.isForever() &&
-            m_helperDeadline.hasExpired()) {
+    while (bPrepared && guardedThis && guardedSource && (nCopied < nInputSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!m_helperDeadline.isForever() && m_helperDeadline.hasExpired()) {
             bCopyTimedOut = true;
             bPrepared = false;
             break;
         }
-        const qint64 nRequest = qMin<qint64>(baBuffer.size(),
-                                             nInputSize - nCopied);
+        const qint64 nRequest = qMin<qint64>(baBuffer.size(), nInputSize - nCopied);
         const qint64 nRead = guardedSource->read(baBuffer.data(), nRequest);
         if ((nRead <= 0) || (nRead > nRequest)) {
             bPrepared = false;
@@ -2309,9 +1872,7 @@ bool XExternalArchive::initUnpack(
         }
         qint64 nWrittenTotal = 0;
         while (bPrepared && (nWrittenTotal < nRead)) {
-            const qint64 nWritten = inputFile.write(
-                baBuffer.constData() + nWrittenTotal,
-                nRead - nWrittenTotal);
+            const qint64 nWritten = inputFile.write(baBuffer.constData() + nWrittenTotal, nRead - nWrittenTotal);
             if ((nWritten <= 0) || (nWritten > nRead - nWrittenTotal)) {
                 bPrepared = false;
                 break;
@@ -2320,25 +1881,18 @@ bool XExternalArchive::initUnpack(
         }
         nCopied += nRead;
     }
-    bPrepared = bPrepared && guardedThis && guardedSource &&
-                (nCopied == nInputSize) && inputFile.flush();
+    bPrepared = bPrepared && guardedThis && guardedSource && (nCopied == nInputSize) && inputFile.flush();
     inputFile.close();
-    if (guardedSource && (nOriginalPosition >= 0))
-        bPrepared = guardedSource->seek(nOriginalPosition) && bPrepared;
-    bPrepared = bPrepared && QFileInfo(pContext->sInputPath).isFile() &&
-                (QFileInfo(pContext->sInputPath).size() == nInputSize) &&
-                XBinary::isPdStructNotCanceled(pPdStruct);
-    if (!bPrepared || !guardedThis || !guardedSource ||
-        !isUnpackSourceCurrent(pState, pPdStruct)) {
+    if (guardedSource && (nOriginalPosition >= 0)) bPrepared = guardedSource->seek(nOriginalPosition) && bPrepared;
+    bPrepared =
+        bPrepared && QFileInfo(pContext->sInputPath).isFile() && (QFileInfo(pContext->sInputPath).size() == nInputSize) && XBinary::isPdStructNotCanceled(pPdStruct);
+    if (!bPrepared || !guardedThis || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct)) {
         if (guardedThis) releaseUnpackSource(pState);
         if (bCopyTimedOut) {
             m_lastExternalFailure = EXTERNAL_FAILURE_TIMEOUT;
-            return setExternalError(
-                pPdStruct,
-                tr("External archive helper operation timed out"));
+            return setExternalError(pPdStruct, tr("External archive helper operation timed out"));
         }
-        return setExternalError(pPdStruct,
-                                tr("Cannot materialize archive input"));
+        return setExternalError(pPdStruct, tr("Cannot materialize archive input"));
     }
 
     bool bInitialized = false;
@@ -2346,48 +1900,33 @@ bool XExternalArchive::initUnpack(
     if (m_backend == BACKEND_ZPAQ) {
         QByteArray baListOutput;
         QStringList listArguments;
-        listArguments << QStringLiteral("l") << pContext->sInputPath
-                      << QStringLiteral("-715")
-                      << QStringLiteral("-noattributes");
+        listArguments << QStringLiteral("l") << pContext->sInputPath << QStringLiteral("-715") << QStringLiteral("-noattributes");
         QProcessEnvironment passwordEnvironment;
         const QProcessEnvironment *pPasswordEnvironment = nullptr;
         if (!pContext->sPassword.isEmpty()) {
             if (pContext->bZpaqEnvironmentPassword) {
-                passwordEnvironment.insert(QStringLiteral("FRANZKEY"),
-                                           pContext->sPassword);
+                passwordEnvironment.insert(QStringLiteral("FRANZKEY"), pContext->sPassword);
                 pPasswordEnvironment = &passwordEnvironment;
             } else {
-                listArguments << QStringLiteral("-key")
-                              << pContext->sPassword;
+                listArguments << QStringLiteral("-key") << pContext->sPassword;
             }
         }
         QList<ExternalRecord> listManifest;
-        bInitialized = runTool(m_backend, pContext->sHelperPath, listArguments,
-                               sWorkDir, QString(), outputPolicy, false,
-                               pPdStruct, &baListOutput,
-                               &m_lastExternalFailure, m_helperDeadline,
-                               pPasswordEnvironment);
+        bInitialized = runTool(m_backend, pContext->sHelperPath, listArguments, sWorkDir, QString(), outputPolicy, false, pPdStruct, &baListOutput,
+                               &m_lastExternalFailure, m_helperDeadline, pPasswordEnvironment);
         if (bInitialized) {
-            const EXTERNAL_PARSE_RESULT parseResult =
-                parseZpaqList(baListOutput, outputPolicy, &listManifest);
+            const EXTERNAL_PARSE_RESULT parseResult = parseZpaqList(baListOutput, outputPolicy, &listManifest);
             if (parseResult != EXTERNAL_PARSE_OK) {
-                m_lastExternalFailure =
-                    (parseResult == EXTERNAL_PARSE_RESOURCE_LIMIT)
-                        ? EXTERNAL_FAILURE_RESOURCE_LIMIT
-                        : EXTERNAL_FAILURE_ARCHIVE_REJECTED;
+                m_lastExternalFailure = (parseResult == EXTERNAL_PARSE_RESOURCE_LIMIT) ? EXTERNAL_FAILURE_RESOURCE_LIMIT : EXTERNAL_FAILURE_ARCHIVE_REJECTED;
                 bInitialized = setExternalError(
-                    pPdStruct,
-                    (parseResult == EXTERNAL_PARSE_RESOURCE_LIMIT)
-                        ? tr("ZPAQ directory exceeds safety limits")
-                        : tr("Cannot read ZPAQ directory"));
+                    pPdStruct, (parseResult == EXTERNAL_PARSE_RESOURCE_LIMIT) ? tr("ZPAQ directory exceeds safety limits") : tr("Cannot read ZPAQ directory"));
             }
         }
         // zpaqfranz exposes an authoritative manifest. Keep init/listing
         // metadata-only and create the private extraction stage on the first
         // file request instead.
         if (bInitialized) pContext->listRecords = listManifest;
-    } else if ((m_backend == BACKEND_BCM) ||
-               (m_backend == BACKEND_LPAQ8)) {
+    } else if ((m_backend == BACKEND_BCM) || (m_backend == BACKEND_LPAQ8)) {
         ExternalRecord record;
         record.sName = singleRecordName(guardedSource.data());
         record.sProvider = backendName(m_backend);
@@ -2396,38 +1935,26 @@ bool XExternalArchive::initUnpack(
         QString sRecordError;
         if (m_backend == BACKEND_LPAQ8) {
             QFile headerFile(pContext->sInputPath);
-            const bool bHeaderReady =
-                headerFile.open(QIODevice::ReadOnly) && headerFile.seek(3);
-            const QByteArray baHeader = bHeaderReady
-                                            ? headerFile.read(5)
-                                            : QByteArray();
-            if (baHeader.size() != 5 || (baHeader.at(0) < '0') ||
-                (baHeader.at(0) > '9')) {
+            const bool bHeaderReady = headerFile.open(QIODevice::ReadOnly) && headerFile.seek(3);
+            const QByteArray baHeader = bHeaderReady ? headerFile.read(5) : QByteArray();
+            if (baHeader.size() != 5 || (baHeader.at(0) < '0') || (baHeader.at(0) > '9')) {
                 bRecordValid = false;
                 sRecordError = tr("Cannot read the LPAQ8 header");
             } else {
                 record.nUncompressedSize = readBigEndian32(baHeader.mid(1, 4));
                 const qint32 nLevel = baHeader.at(0) - '0';
-                const qint64 nRequiredMemory =
-                    (6LL + 3LL * (1LL << nLevel)) * 1024LL * 1024LL;
-                if ((outputPolicy.nMaxMemoryOutputSize >= 0) &&
-                    (nRequiredMemory > outputPolicy.nMaxMemoryOutputSize)) {
+                const qint64 nRequiredMemory = (6LL + 3LL * (1LL << nLevel)) * 1024LL * 1024LL;
+                if ((outputPolicy.nMaxMemoryOutputSize >= 0) && (nRequiredMemory > outputPolicy.nMaxMemoryOutputSize)) {
                     bRecordValid = false;
-                    sRecordError = tr(
-                        "LPAQ8 memory requirement exceeds the configured limit");
+                    sRecordError = tr("LPAQ8 memory requirement exceeds the configured limit");
                 }
             }
         }
 
         if (bRecordValid) {
-            const qint64 nKnownSize =
-                (record.nUncompressedSize < 0)
-                    ? 0
-                    : record.nUncompressedSize;
-            bRecordValid = policyAllows(nKnownSize, nKnownSize, 1,
-                                        outputPolicy);
-            if (!bRecordValid)
-                sRecordError = tr("Declared output exceeds safety limits");
+            const qint64 nKnownSize = (record.nUncompressedSize < 0) ? 0 : record.nUncompressedSize;
+            bRecordValid = policyAllows(nKnownSize, nKnownSize, 1, outputPolicy);
+            if (!bRecordValid) sRecordError = tr("Declared output exceeds safety limits");
         }
         bInitialized = bRecordValid;
         if (bInitialized) pContext->listRecords.append(record);
@@ -2437,30 +1964,19 @@ bool XExternalArchive::initUnpack(
         QStringList listArguments;
         listArguments << QStringLiteral("v") << QStringLiteral("-i0");
         if (pContext->pFreeArcPasswordFile) {
-            listArguments <<
-                (QStringLiteral("-kf") + QDir::toNativeSeparators(
-                    pContext->pFreeArcPasswordFile->fileName()));
+            listArguments << (QStringLiteral("-kf") + QDir::toNativeSeparators(pContext->pFreeArcPasswordFile->fileName()));
         }
         listArguments << QStringLiteral("--") << pContext->sInputPath;
 
         QList<ExternalRecord> listManifest;
-        bInitialized = runTool(m_backend, pContext->sHelperPath, listArguments,
-                               sWorkDir, QString(), outputPolicy, false,
-                               pPdStruct, &baListOutput,
+        bInitialized = runTool(m_backend, pContext->sHelperPath, listArguments, sWorkDir, QString(), outputPolicy, false, pPdStruct, &baListOutput,
                                &m_lastExternalFailure, m_helperDeadline);
         if (bInitialized) {
-            const EXTERNAL_PARSE_RESULT parseResult =
-                parseFreeArcList(baListOutput, outputPolicy, &listManifest);
+            const EXTERNAL_PARSE_RESULT parseResult = parseFreeArcList(baListOutput, outputPolicy, &listManifest);
             if (parseResult != EXTERNAL_PARSE_OK) {
-                m_lastExternalFailure =
-                    (parseResult == EXTERNAL_PARSE_RESOURCE_LIMIT)
-                        ? EXTERNAL_FAILURE_RESOURCE_LIMIT
-                        : EXTERNAL_FAILURE_ARCHIVE_REJECTED;
+                m_lastExternalFailure = (parseResult == EXTERNAL_PARSE_RESOURCE_LIMIT) ? EXTERNAL_FAILURE_RESOURCE_LIMIT : EXTERNAL_FAILURE_ARCHIVE_REJECTED;
                 bInitialized = setExternalError(
-                    pPdStruct,
-                    (parseResult == EXTERNAL_PARSE_RESOURCE_LIMIT)
-                        ? tr("FreeArc directory exceeds safety limits")
-                        : tr("Cannot read FreeArc directory"));
+                    pPdStruct, (parseResult == EXTERNAL_PARSE_RESOURCE_LIMIT) ? tr("FreeArc directory exceeds safety limits") : tr("Cannot read FreeArc directory"));
             }
         }
         // Header-encrypted archives require the password above because Arc
@@ -2469,55 +1985,32 @@ bool XExternalArchive::initUnpack(
         // or authenticate file bodies; first extraction does.
         if (bInitialized) pContext->listRecords = listManifest;
     } else if (m_backend == BACKEND_PEA) {
-        const QString sOutputRoot = QDir(sWorkDir).filePath(
-            QStringLiteral("expanded"));
+        const QString sOutputRoot = QDir(sWorkDir).filePath(QStringLiteral("expanded"));
         QStringList listArguments;
-        listArguments << QStringLiteral("UNPEA") << pContext->sInputPath
-                      << QDir::toNativeSeparators(sOutputRoot)
-                      << QStringLiteral("RESETDATE")
-                      << QStringLiteral("RESETATTR")
-                      << QStringLiteral("EXTRACT2DIR")
-                      << QStringLiteral("HIDDEN_REPORT")
-                      << pContext->sPassword << QStringLiteral("NOKEYFILE");
+        listArguments << QStringLiteral("UNPEA") << pContext->sInputPath << QDir::toNativeSeparators(sOutputRoot) << QStringLiteral("RESETDATE")
+                      << QStringLiteral("RESETATTR") << QStringLiteral("EXTRACT2DIR") << QStringLiteral("HIDDEN_REPORT") << pContext->sPassword
+                      << QStringLiteral("NOKEYFILE");
 
         QByteArray baHelperOutput;
-        bInitialized = runTool(m_backend, pContext->sHelperPath, listArguments,
-                               sWorkDir, sOutputRoot, outputPolicy,
-                               true, pPdStruct,
-                               &baHelperOutput, &m_lastExternalFailure,
-                               m_helperDeadline);
+        bInitialized = runTool(m_backend, pContext->sHelperPath, listArguments, sWorkDir, sOutputRoot, outputPolicy, true, pPdStruct, &baHelperOutput,
+                               &m_lastExternalFailure, m_helperDeadline);
         if (bInitialized && !verifyPeaReport(sWorkDir)) {
             m_lastExternalFailure = EXTERNAL_FAILURE_ARCHIVE_REJECTED;
-            bInitialized = setExternalError(
-                pPdStruct, tr("PEA helper did not verify the archive stream"));
+            bInitialized = setExternalError(pPdStruct, tr("PEA helper did not verify the archive stream"));
         }
         StageScanResult scanResult;
         if (bInitialized) {
             bool bScanTimedOut = false;
-            bInitialized = scanStageTree(
-                sOutputRoot, outputPolicy, backendName(m_backend), true,
-                &scanResult, pPdStruct, &m_helperDeadline,
-                &bScanTimedOut);
+            bInitialized = scanStageTree(sOutputRoot, outputPolicy, backendName(m_backend), true, &scanResult, pPdStruct, &m_helperDeadline, &bScanTimedOut);
             if (!bInitialized) {
-                const bool bScanCanceled =
-                    !XBinary::isPdStructNotCanceled(pPdStruct);
-                m_lastExternalFailure = bScanCanceled
-                    ? EXTERNAL_FAILURE_CANCELED
-                    : (bScanTimedOut
-                           ? EXTERNAL_FAILURE_TIMEOUT
-                           : EXTERNAL_FAILURE_RESOURCE_LIMIT);
-                if (bScanTimedOut && !bScanCanceled)
-                    setExternalError(
-                        pPdStruct,
-                        tr("External archive helper operation timed out"));
+                const bool bScanCanceled = !XBinary::isPdStructNotCanceled(pPdStruct);
+                m_lastExternalFailure = bScanCanceled ? EXTERNAL_FAILURE_CANCELED : (bScanTimedOut ? EXTERNAL_FAILURE_TIMEOUT : EXTERNAL_FAILURE_RESOURCE_LIMIT);
+                if (bScanTimedOut && !bScanCanceled) setExternalError(pPdStruct, tr("External archive helper operation timed out"));
             }
         }
         if (bInitialized) pContext->listRecords = scanResult.listRecords;
-        else if (XBinary::isPdStructNotCanceled(pPdStruct) &&
-                 XBinary::getPdStructErrorString(pPdStruct).isEmpty())
-            setExternalError(pPdStruct,
-                             tr("Cannot expand %1 archive directory")
-                                 .arg(backendName(m_backend)));
+        else if (XBinary::isPdStructNotCanceled(pPdStruct) && XBinary::getPdStructErrorString(pPdStruct).isEmpty())
+            setExternalError(pPdStruct, tr("Cannot expand %1 archive directory").arg(backendName(m_backend)));
         if (bInitialized && !pContext->sPassword.isEmpty()) {
             // PEA performs its only helper invocation during init. It has no
             // secure password transport, so do not retain a second plaintext
@@ -2527,12 +2020,9 @@ bool XExternalArchive::initUnpack(
         }
     }
 
-    if (bInitialized &&
-        ((m_backend == BACKEND_ZPAQ) ||
-         (m_backend == BACKEND_FREEARC))) {
+    if (bInitialized && ((m_backend == BACKEND_ZPAQ) || (m_backend == BACKEND_FREEARC))) {
         bool bHasFileRecord = false;
-        for (const ExternalRecord &record :
-             qAsConst(pContext->listRecords)) {
+        for (const ExternalRecord &record : qAsConst(pContext->listRecords)) {
             if (!record.bIsFolder) {
                 bHasFileRecord = true;
                 break;
@@ -2542,14 +2032,11 @@ bool XExternalArchive::initUnpack(
         // capable of authenticating a provisional SFX candidate. Verify them
         // now, while init can still reject it and try a later candidate.
         if (!bHasFileRecord) {
-            bInitialized = _materializeDeferredArchive(
-                pContext.get(), pState, pPdStruct);
+            bInitialized = _materializeDeferredArchive(pContext.get(), pState, pPdStruct);
         }
     }
 
-    if (!bInitialized || !guardedThis || !guardedSource ||
-        !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !isUnpackSourceCurrent(pState, pPdStruct)) {
+    if (!bInitialized || !guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
         if (guardedThis) releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
@@ -2568,13 +2055,9 @@ bool XExternalArchive::initUnpack(
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = pContext->listRecords.size();
     pState->pContext = pContext.release();
-    if (!validateAndFinalizeUnpackSource(
-            pState,
-            static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext),
-            pPdStruct)) {
+    if (!validateAndFinalizeUnpackSource(pState, static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext), pPdStruct)) {
         if (!guardedThis) return false;
-        EXTERNAL_UNPACK_CONTEXT *pFailedContext =
-            static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
+        EXTERNAL_UNPACK_CONTEXT *pFailedContext = static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
         pState->pContext = nullptr;
         releaseUnpackSource(pState);
         delete pFailedContext;
@@ -2584,60 +2067,38 @@ bool XExternalArchive::initUnpack(
     return true;
 }
 
-XBinary::ARCHIVERECORD XExternalArchive::infoCurrent(
-    UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+XBinary::ARCHIVERECORD XExternalArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     QPointer<XExternalArchive> guardedThis(this);
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
 
     ARCHIVERECORD result = {};
-    if (!pState || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return result;
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
+        (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
+        return result;
 
-    EXTERNAL_UNPACK_CONTEXT *pContext =
-        static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
+    EXTERNAL_UNPACK_CONTEXT *pContext = static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
     if (pState->nCurrentIndex >= pContext->listRecords.size()) return result;
-    const ExternalRecord &record =
-        pContext->listRecords.at(pState->nCurrentIndex);
+    const ExternalRecord &record = pContext->listRecords.at(pState->nCurrentIndex);
 
     result.nStreamOffset = pState->nCurrentIndex;
     result.nStreamSize = qMax<qint64>(record.nUncompressedSize, 0);
     result.mapProperties.insert(FPART_PROP_ORIGINALNAME, record.sName);
-    if (record.nCompressedSize >= 0)
-        result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE,
-                                    record.nCompressedSize);
-    if (record.nUncompressedSize >= 0)
-        result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE,
-                                    record.nUncompressedSize);
-    if (record.bIsFolder)
-        result.mapProperties.insert(FPART_PROP_ISFOLDER, true);
-    if (record.dateTime.isValid())
-        result.mapProperties.insert(FPART_PROP_MTIME, record.dateTime);
-    result.mapProperties.insert(
-        FPART_PROP_REPORTEDMETHOD,
-        QStringLiteral("%1 (PeaZip external helper)")
-            .arg(record.sProvider.isEmpty() ? backendName(m_backend)
-                                            : record.sProvider));
-    if (!XBinary::markArchiveStreamRecord(&result,
-                                          pState->nCurrentIndex))
-        return ARCHIVERECORD();
+    if (record.nCompressedSize >= 0) result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, record.nCompressedSize);
+    if (record.nUncompressedSize >= 0) result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, record.nUncompressedSize);
+    if (record.bIsFolder) result.mapProperties.insert(FPART_PROP_ISFOLDER, true);
+    if (record.dateTime.isValid()) result.mapProperties.insert(FPART_PROP_MTIME, record.dateTime);
+    result.mapProperties.insert(FPART_PROP_REPORTEDMETHOD,
+                                QStringLiteral("%1 (PeaZip external helper)").arg(record.sProvider.isEmpty() ? backendName(m_backend) : record.sProvider));
+    if (!XBinary::markArchiveStreamRecord(&result, pState->nCurrentIndex)) return ARCHIVERECORD();
     return result;
 }
 
-bool XExternalArchive::_materializeDeferredArchive(
-    EXTERNAL_UNPACK_CONTEXT *pContext, UNPACK_STATE *pState,
-    PDSTRUCT *pPdStruct)
+bool XExternalArchive::_materializeDeferredArchive(EXTERNAL_UNPACK_CONTEXT *pContext, UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     m_lastExternalFailure = EXTERNAL_FAILURE_INFRASTRUCTURE;
-    if (!pContext || !pState ||
-        ((m_backend != BACKEND_ZPAQ) &&
-         (m_backend != BACKEND_FREEARC)) ||
-        (pState->pContext && (pState->pContext != pContext))) return false;
+    if (!pContext || !pState || ((m_backend != BACKEND_ZPAQ) && (m_backend != BACKEND_FREEARC)) || (pState->pContext && (pState->pContext != pContext))) return false;
     if (pContext->pArchiveStageDir) {
         m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
         return true;
@@ -2645,20 +2106,14 @@ bool XExternalArchive::_materializeDeferredArchive(
 
     QPointer<XExternalArchive> guardedThis(this);
     QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedSource || !isUnpackSourceCurrent(pState, pPdStruct) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if (!XBinary::isPdStructNotCanceled(pPdStruct))
-            m_lastExternalFailure = EXTERNAL_FAILURE_CANCELED;
+    if (!guardedSource || !isUnpackSourceCurrent(pState, pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) m_lastExternalFailure = EXTERNAL_FAILURE_CANCELED;
         return false;
     }
 
-    std::unique_ptr<QTemporaryDir> pArchiveStage(
-        new (std::nothrow) QTemporaryDir(
-            QDir(pContext->pTemporaryDir->path()).filePath(
-                QStringLiteral("expanded-XXXXXX"))));
+    std::unique_ptr<QTemporaryDir> pArchiveStage(new (std::nothrow) QTemporaryDir(QDir(pContext->pTemporaryDir->path()).filePath(QStringLiteral("expanded-XXXXXX"))));
     if (!pArchiveStage || !pArchiveStage->isValid()) {
-        return setExternalError(
-            pPdStruct, tr("Cannot create archive extraction stage"));
+        return setExternalError(pPdStruct, tr("Cannot create archive extraction stage"));
     }
 
     const QString sArchiveStageRoot = pArchiveStage->path();
@@ -2669,20 +2124,14 @@ bool XExternalArchive::_materializeDeferredArchive(
     const QProcessEnvironment *pPasswordEnvironment = nullptr;
 
     if (m_backend == BACKEND_ZPAQ) {
-        listArguments
-            << QStringLiteral("x") << pContext->sInputPath
-            << QStringLiteral("-to")
-            << withTrailingSeparator(sArchiveStageRoot)
-            << QStringLiteral("-find") << QStringLiteral("./")
-            << QStringLiteral("-replace") << QString();
+        listArguments << QStringLiteral("x") << pContext->sInputPath << QStringLiteral("-to") << withTrailingSeparator(sArchiveStageRoot) << QStringLiteral("-find")
+                      << QStringLiteral("./") << QStringLiteral("-replace") << QString();
         if (!pContext->sPassword.isEmpty()) {
             if (pContext->bZpaqEnvironmentPassword) {
-                passwordEnvironment.insert(QStringLiteral("FRANZKEY"),
-                                           pContext->sPassword);
+                passwordEnvironment.insert(QStringLiteral("FRANZKEY"), pContext->sPassword);
                 pPasswordEnvironment = &passwordEnvironment;
             } else {
-                listArguments << QStringLiteral("-key")
-                              << pContext->sPassword;
+                listArguments << QStringLiteral("-key") << pContext->sPassword;
             }
         }
         // Keep listing and extraction on the same stable 7.15 command
@@ -2692,72 +2141,39 @@ bool XExternalArchive::_materializeDeferredArchive(
         // Prompt mode plus a closed stdin makes any path collision an
         // authoritative helper failure instead of silently overwriting a
         // previously extracted member.
-        listArguments << QStringLiteral("x") << QStringLiteral("-op")
-                      << QStringLiteral("-i0");
+        listArguments << QStringLiteral("x") << QStringLiteral("-op") << QStringLiteral("-i0");
         if (pContext->pFreeArcPasswordFile) {
-            listArguments <<
-                (QStringLiteral("-kf") +
-                 QDir::toNativeSeparators(
-                     pContext->pFreeArcPasswordFile->fileName()));
+            listArguments << (QStringLiteral("-kf") + QDir::toNativeSeparators(pContext->pFreeArcPasswordFile->fileName()));
         }
-        listArguments
-            << (QStringLiteral("-dp") +
-                QDir::toNativeSeparators(sArchiveStageRoot))
-            << QStringLiteral("--") << pContext->sInputPath;
+        listArguments << (QStringLiteral("-dp") + QDir::toNativeSeparators(sArchiveStageRoot)) << QStringLiteral("--") << pContext->sInputPath;
     }
 
-    if (!runTool(m_backend, pContext->sHelperPath, listArguments, sWorkDir,
-                 sArchiveStageRoot, pContext->outputPolicy, false,
-                 pPdStruct, &baHelperOutput, &m_lastExternalFailure,
-                 m_helperDeadline, pPasswordEnvironment)) return false;
-    if ((m_backend == BACKEND_FREEARC) &&
-        !baHelperOutput.contains("All OK")) {
+    if (!runTool(m_backend, pContext->sHelperPath, listArguments, sWorkDir, sArchiveStageRoot, pContext->outputPolicy, false, pPdStruct, &baHelperOutput,
+                 &m_lastExternalFailure, m_helperDeadline, pPasswordEnvironment))
+        return false;
+    if ((m_backend == BACKEND_FREEARC) && !baHelperOutput.contains("All OK")) {
         m_lastExternalFailure = EXTERNAL_FAILURE_ARCHIVE_REJECTED;
-        return setExternalError(
-            pPdStruct, tr("FreeArc helper did not verify the archive"));
+        return setExternalError(pPdStruct, tr("FreeArc helper did not verify the archive"));
     }
 
     StageScanResult scanResult;
     bool bScanTimedOut = false;
-    if (!scanStageTree(sArchiveStageRoot, pContext->outputPolicy,
-                       backendName(m_backend), true, &scanResult,
-                       pPdStruct, &m_helperDeadline,
-                       &bScanTimedOut)) {
-        const bool bScanCanceled =
-            !XBinary::isPdStructNotCanceled(pPdStruct);
-        m_lastExternalFailure = bScanCanceled
-            ? EXTERNAL_FAILURE_CANCELED
-            : (bScanTimedOut
-                   ? EXTERNAL_FAILURE_TIMEOUT
-                   : EXTERNAL_FAILURE_RESOURCE_LIMIT);
+    if (!scanStageTree(sArchiveStageRoot, pContext->outputPolicy, backendName(m_backend), true, &scanResult, pPdStruct, &m_helperDeadline, &bScanTimedOut)) {
+        const bool bScanCanceled = !XBinary::isPdStructNotCanceled(pPdStruct);
+        m_lastExternalFailure = bScanCanceled ? EXTERNAL_FAILURE_CANCELED : (bScanTimedOut ? EXTERNAL_FAILURE_TIMEOUT : EXTERNAL_FAILURE_RESOURCE_LIMIT);
         if (bScanCanceled) return false;
-        return setExternalError(
-            pPdStruct,
-            bScanTimedOut
-                ? tr("External archive helper operation timed out")
-                : tr("Extracted archive directory failed safety checks"));
+        return setExternalError(pPdStruct, bScanTimedOut ? tr("External archive helper operation timed out") : tr("Extracted archive directory failed safety checks"));
     }
     bool bReconcileTimedOut = false;
-    if (!reconcileListedStage(pContext->listRecords,
-                              &scanResult.listRecords, pPdStruct,
-                              &m_helperDeadline,
-                              &bReconcileTimedOut)) {
-        m_lastExternalFailure = bReconcileTimedOut
-            ? EXTERNAL_FAILURE_TIMEOUT
-            : (XBinary::isPdStructNotCanceled(pPdStruct)
-                   ? EXTERNAL_FAILURE_ARCHIVE_REJECTED
-                   : EXTERNAL_FAILURE_CANCELED);
+    if (!reconcileListedStage(pContext->listRecords, &scanResult.listRecords, pPdStruct, &m_helperDeadline, &bReconcileTimedOut)) {
+        m_lastExternalFailure =
+            bReconcileTimedOut ? EXTERNAL_FAILURE_TIMEOUT : (XBinary::isPdStructNotCanceled(pPdStruct) ? EXTERNAL_FAILURE_ARCHIVE_REJECTED : EXTERNAL_FAILURE_CANCELED);
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-        return setExternalError(
-            pPdStruct, bReconcileTimedOut
-                ? tr("External archive helper operation timed out")
-                : tr("Extracted archive directory does not match its listing"));
+        return setExternalError(pPdStruct,
+                                bReconcileTimedOut ? tr("External archive helper operation timed out") : tr("Extracted archive directory does not match its listing"));
     }
-    if (!guardedThis || !guardedSource ||
-        !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !isUnpackSourceCurrent(pState, pPdStruct)) {
-        if (!XBinary::isPdStructNotCanceled(pPdStruct))
-            m_lastExternalFailure = EXTERNAL_FAILURE_CANCELED;
+    if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct)) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) m_lastExternalFailure = EXTERNAL_FAILURE_CANCELED;
         return false;
     }
 
@@ -2773,50 +2189,38 @@ bool XExternalArchive::_materializeDeferredArchive(
     return true;
 }
 
-bool XExternalArchive::verifyDeferredArchive(
-    UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
+bool XExternalArchive::verifyDeferredArchive(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !isUnpackSourceCurrent(pState, pPdStruct)) {
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !isUnpackSourceCurrent(pState, pPdStruct)) {
         m_lastExternalFailure = EXTERNAL_FAILURE_INFRASTRUCTURE;
         return false;
     }
-    return _materializeDeferredArchive(
-        static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext),
-        pState, pPdStruct);
+    return _materializeDeferredArchive(static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext), pState, pPdStruct);
 }
 
-bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
-                                     PDSTRUCT *pPdStruct)
+bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     QPointer<XExternalArchive> guardedThis(this);
     m_lastExternalFailure = EXTERNAL_FAILURE_INFRASTRUCTURE;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !pDevice || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !pDevice || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords))
+        return false;
     pState->nCurrentOffset = 0;
 
     QPointer<QIODevice> guardedOutput(pDevice);
     QPointer<QIODevice> guardedSource(getDevice());
-    if (!guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackOutputSupported(guardedOutput.data()) ||
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) ||
-        !isUnpackSourceCurrent(pState, pPdStruct)) return false;
+    if (!guardedThis || !guardedOutput || !guardedSource || !isUnpackOutputSupported(guardedOutput.data()) ||
+        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data()) || !isUnpackSourceCurrent(pState, pPdStruct))
+        return false;
 
-    EXTERNAL_UNPACK_CONTEXT *pContext =
-        static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
+    EXTERNAL_UNPACK_CONTEXT *pContext = static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
     if (pState->nCurrentIndex >= pContext->listRecords.size()) return false;
-    ExternalRecord record =
-        pContext->listRecords.at(pState->nCurrentIndex);
+    ExternalRecord record = pContext->listRecords.at(pState->nCurrentIndex);
 
-    if (((m_backend == BACKEND_ZPAQ) ||
-         (m_backend == BACKEND_FREEARC)) &&
-        !pContext->pArchiveStageDir) {
-        if (!_materializeDeferredArchive(pContext, pState, pPdStruct) ||
-            !guardedThis || !guardedOutput || !guardedSource ||
+    if (((m_backend == BACKEND_ZPAQ) || (m_backend == BACKEND_FREEARC)) && !pContext->pArchiveStageDir) {
+        if (!_materializeDeferredArchive(pContext, pState, pPdStruct) || !guardedThis || !guardedOutput || !guardedSource ||
             (pState->nCurrentIndex >= pContext->listRecords.size()))
             return false;
         record = pContext->listRecords.at(pState->nCurrentIndex);
@@ -2825,72 +2229,47 @@ bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     if (record.bIsFolder) {
         QBuffer emptyStage;
         const bool bOpen = emptyStage.open(QIODevice::ReadWrite);
-        const bool bResult = bOpen && guardedThis && guardedOutput &&
-            publishUnpackOutput(&emptyStage, guardedOutput.data(), pState,
-                                pPdStruct);
+        const bool bResult = bOpen && guardedThis && guardedOutput && publishUnpackOutput(&emptyStage, guardedOutput.data(), pState, pPdStruct);
         if (bResult && guardedThis) pState->nCurrentOffset = 0;
-        if (bResult && guardedThis)
-            m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
+        if (bResult && guardedThis) m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
         return bResult && guardedThis;
     }
 
     QString sStagePath = record.sStagedPath;
     std::unique_ptr<QTemporaryDir> pRunDirectory;
     if (sStagePath.isEmpty()) {
-        if ((m_backend == BACKEND_ZPAQ) ||
-            (m_backend == BACKEND_FREEARC)) {
-            if (!_materializeDeferredArchive(pContext, pState, pPdStruct) ||
-                !guardedThis || !guardedOutput || !guardedSource) return false;
-            if (pState->nCurrentIndex >= pContext->listRecords.size())
-                return false;
+        if ((m_backend == BACKEND_ZPAQ) || (m_backend == BACKEND_FREEARC)) {
+            if (!_materializeDeferredArchive(pContext, pState, pPdStruct) || !guardedThis || !guardedOutput || !guardedSource) return false;
+            if (pState->nCurrentIndex >= pContext->listRecords.size()) return false;
             record = pContext->listRecords.at(pState->nCurrentIndex);
             sStagePath = record.sStagedPath;
         } else {
-            pRunDirectory.reset(new (std::nothrow) QTemporaryDir(
-                QDir(QDir::tempPath()).filePath(
-                    QStringLiteral("xfileunpacker-member-XXXXXX"))));
-            if (!pRunDirectory || !pRunDirectory->isValid())
-                return setExternalError(
-                    pPdStruct, tr("Cannot create member extraction stage"));
+            pRunDirectory.reset(new (std::nothrow) QTemporaryDir(QDir(QDir::tempPath()).filePath(QStringLiteral("xfileunpacker-member-XXXXXX"))));
+            if (!pRunDirectory || !pRunDirectory->isValid()) return setExternalError(pPdStruct, tr("Cannot create member extraction stage"));
             const QString sRunRoot = pRunDirectory->path();
             QStringList listArguments;
 
             if (m_backend == BACKEND_BCM) {
                 sStagePath = QDir(sRunRoot).filePath(QStringLiteral("output"));
-                listArguments << QStringLiteral("-d") << QStringLiteral("-f")
-                              << pContext->sInputPath << sStagePath;
+                listArguments << QStringLiteral("-d") << QStringLiteral("-f") << pContext->sInputPath << sStagePath;
             } else if (m_backend == BACKEND_LPAQ8) {
                 sStagePath = QDir(sRunRoot).filePath(QStringLiteral("output"));
-                listArguments << QStringLiteral("d") << pContext->sInputPath
-                              << sStagePath;
+                listArguments << QStringLiteral("d") << pContext->sInputPath << sStagePath;
             } else {
                 return false;
             }
 
-            if (!runTool(m_backend, pContext->sHelperPath, listArguments, sRunRoot,
-                         sRunRoot, pContext->outputPolicy, false, pPdStruct,
-                         nullptr, &m_lastExternalFailure,
-                         m_helperDeadline)) return false;
+            if (!runTool(m_backend, pContext->sHelperPath, listArguments, sRunRoot, sRunRoot, pContext->outputPolicy, false, pPdStruct, nullptr, &m_lastExternalFailure,
+                         m_helperDeadline))
+                return false;
 
             StageScanResult scanResult;
             bool bScanTimedOut = false;
-            if (!scanStageTree(sRunRoot, pContext->outputPolicy,
-                               backendName(m_backend), true, &scanResult,
-                               pPdStruct, &m_helperDeadline,
-                               &bScanTimedOut)) {
-                const bool bScanCanceled =
-                    !XBinary::isPdStructNotCanceled(pPdStruct);
-                m_lastExternalFailure = bScanCanceled
-                    ? EXTERNAL_FAILURE_CANCELED
-                    : (bScanTimedOut
-                           ? EXTERNAL_FAILURE_TIMEOUT
-                           : EXTERNAL_FAILURE_RESOURCE_LIMIT);
+            if (!scanStageTree(sRunRoot, pContext->outputPolicy, backendName(m_backend), true, &scanResult, pPdStruct, &m_helperDeadline, &bScanTimedOut)) {
+                const bool bScanCanceled = !XBinary::isPdStructNotCanceled(pPdStruct);
+                m_lastExternalFailure = bScanCanceled ? EXTERNAL_FAILURE_CANCELED : (bScanTimedOut ? EXTERNAL_FAILURE_TIMEOUT : EXTERNAL_FAILURE_RESOURCE_LIMIT);
                 if (bScanCanceled) return false;
-                return setExternalError(
-                    pPdStruct,
-                    bScanTimedOut
-                        ? tr("External archive helper operation timed out")
-                        : tr("Extracted member failed safety checks"));
+                return setExternalError(pPdStruct, bScanTimedOut ? tr("External archive helper operation timed out") : tr("Extracted member failed safety checks"));
             }
             QList<ExternalRecord> listFiles;
             for (const ExternalRecord &candidate : scanResult.listRecords) {
@@ -2898,71 +2277,50 @@ bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
             }
             if (listFiles.size() != 1) {
                 m_lastExternalFailure = EXTERNAL_FAILURE_ARCHIVE_REJECTED;
-                return setExternalError(
-                    pPdStruct,
-                    tr("External helper returned an unexpected member set"));
+                return setExternalError(pPdStruct, tr("External helper returned an unexpected member set"));
             }
             sStagePath = listFiles.first().sStagedPath;
         }
     }
 
     const QFileInfo stageInfo(sStagePath);
-    if (!stageInfo.isFile() || stageInfo.isSymLink() ||
-        (stageInfo.size() < 0) ||
-        ((record.nUncompressedSize >= 0) &&
-         (stageInfo.size() != record.nUncompressedSize)) ||
-        !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
-                                            stageInfo.size())) {
-        return setExternalError(pPdStruct,
-                                tr("Extracted member size is invalid"));
+    if (!stageInfo.isFile() || stageInfo.isSymLink() || (stageInfo.size() < 0) || ((record.nUncompressedSize >= 0) && (stageInfo.size() != record.nUncompressedSize)) ||
+        !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, stageInfo.size())) {
+        return setExternalError(pPdStruct, tr("Extracted member size is invalid"));
     }
 
-    const QString sExpectedRoot = pRunDirectory
-        ? pRunDirectory->path()
-        : (pContext->pArchiveStageDir
-               ? pContext->pArchiveStageDir->path()
-               : QFileInfo(pContext->sInputPath).absolutePath());
+    const QString sExpectedRoot =
+        pRunDirectory ? pRunDirectory->path() : (pContext->pArchiveStageDir ? pContext->pArchiveStageDir->path() : QFileInfo(pContext->sInputPath).absolutePath());
     const QString sCanonicalRoot = QFileInfo(sExpectedRoot).canonicalFilePath();
     const QString sCanonicalStage = stageInfo.canonicalFilePath();
-    if (!isContainedPath(sCanonicalRoot, sCanonicalStage))
-        return setExternalError(pPdStruct,
-                                tr("Extracted member escaped its private stage"));
+    if (!isContainedPath(sCanonicalRoot, sCanonicalStage)) return setExternalError(pPdStruct, tr("Extracted member escaped its private stage"));
 
     QFile stageFile(sCanonicalStage);
-    if (!stageFile.open(QIODevice::ReadOnly) || stageFile.isSequential() ||
-        (stageFile.size() != stageInfo.size()) || !stageFile.seek(0) ||
-        !guardedThis || !guardedOutput || !guardedSource ||
-        !isUnpackSourceCurrent(pState, pPdStruct)) return false;
+    if (!stageFile.open(QIODevice::ReadOnly) || stageFile.isSequential() || (stageFile.size() != stageInfo.size()) || !stageFile.seek(0) || !guardedThis ||
+        !guardedOutput || !guardedSource || !isUnpackSourceCurrent(pState, pPdStruct))
+        return false;
 
     const qint64 nSize = stageFile.size();
     // The external-helper route bypasses the base decode chain: the staged
     // bytes were produced by the sandboxed helper, so charge the operation
     // budget here - one entry, nSize produced bytes - before publication.
     if (pState->spOutputBudget) {
-        if (!pState->spOutputBudget->beginEntry(
-                pState->nCurrentIndex, record.sName)) {
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, record.sName)) {
             if (pState->spOutputBudget->isEnforcing()) {
-                XBinary::setPdStructErrorString(
-                    pPdStruct,
-                    tr("Unpacked output exceeds the configured limit"));
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
                 return false;
             }
-            XBinary::OUTPUT_BUDGET::noteShadowRefusal(
-                pState->spOutputBudget.data());
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
         }
         if (!pState->spOutputBudget->debit(nSize)) {
             if (pState->spOutputBudget->isEnforcing()) {
-                XBinary::setPdStructErrorString(
-                    pPdStruct,
-                    tr("Unpacked output exceeds the configured limit"));
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
                 return false;
             }
-            XBinary::OUTPUT_BUDGET::noteShadowRefusal(
-                pState->spOutputBudget.data());
+            XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
         }
     }
-    const bool bResult = publishUnpackOutput(
-        &stageFile, guardedOutput.data(), pState, pPdStruct);
+    const bool bResult = publishUnpackOutput(&stageFile, guardedOutput.data(), pState, pPdStruct);
     if (bResult && guardedThis) {
         pState->nCurrentOffset = nSize;
         m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
@@ -2970,32 +2328,26 @@ bool XExternalArchive::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
     return bResult && guardedThis;
 }
 
-bool XExternalArchive::moveToNext(UNPACK_STATE *pState,
-                                  PDSTRUCT *pPdStruct)
+bool XExternalArchive::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     QPointer<XExternalArchive> guardedThis(this);
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-    if (!operationGuard.isAcquired() || !pState || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!operationGuard.isAcquired() || !pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct) || !isUnpackSourceCurrent(pState, pPdStruct) ||
+        !guardedThis || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
+        return false;
     ++pState->nCurrentIndex;
     pState->nCurrentOffset = 0;
     return pState->nCurrentIndex < pState->nNumberOfRecords;
 }
 
-bool XExternalArchive::finishUnpack(UNPACK_STATE *pState,
-                                    PDSTRUCT *pPdStruct)
+bool XExternalArchive::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     Q_UNUSED(pPdStruct)
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
-    EXTERNAL_UNPACK_CONTEXT *pContext =
-        static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
+    EXTERNAL_UNPACK_CONTEXT *pContext = static_cast<EXTERNAL_UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
@@ -3003,11 +2355,8 @@ bool XExternalArchive::finishUnpack(UNPACK_STATE *pState,
     return true;
 }
 
-QList<XBinary::FPART_PROP>
-XExternalArchive::getAvailableFPARTProperties()
+QList<XBinary::FPART_PROP> XExternalArchive::getAvailableFPARTProperties()
 {
-    return {FPART_PROP_ORIGINALNAME, FPART_PROP_COMPRESSEDSIZE,
-            FPART_PROP_UNCOMPRESSEDSIZE, FPART_PROP_HANDLEMETHOD,
-            FPART_PROP_REPORTEDMETHOD, FPART_PROP_ISFOLDER,
-            FPART_PROP_MTIME};
+    return {FPART_PROP_ORIGINALNAME, FPART_PROP_COMPRESSEDSIZE, FPART_PROP_UNCOMPRESSEDSIZE, FPART_PROP_HANDLEMETHOD, FPART_PROP_REPORTEDMETHOD,
+            FPART_PROP_ISFOLDER,     FPART_PROP_MTIME};
 }

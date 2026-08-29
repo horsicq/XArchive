@@ -48,47 +48,27 @@ QString decodeAceOemName(const QByteArray &baData, const QString &sCodePage)
     // the original UnACE compatibility fallback; callers can select CP437 or
     // another Qt-supported OEM codec for archives created in other locales.
     static const quint16 g_anCP437HighBytes[128] = {
-        0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7,
-        0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5,
-        0x00C9, 0x00E6, 0x00C6, 0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9,
-        0x00FF, 0x00D6, 0x00DC, 0x00A2, 0x00A3, 0x00A5, 0x20A7, 0x0192,
-        0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1, 0x00AA, 0x00BA,
-        0x00BF, 0x2310, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB,
-        0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556,
-        0x2555, 0x2563, 0x2551, 0x2557, 0x255D, 0x255C, 0x255B, 0x2510,
-        0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x255E, 0x255F,
-        0x255A, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256C, 0x2567,
-        0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256B,
-        0x256A, 0x2518, 0x250C, 0x2588, 0x2584, 0x258C, 0x2590, 0x2580,
-        0x03B1, 0x00DF, 0x0393, 0x03C0, 0x03A3, 0x03C3, 0x03BC, 0x03C4,
-        0x03A6, 0x0398, 0x03A9, 0x03B4, 0x221E, 0x03C6, 0x03B5, 0x2229,
-        0x2261, 0x00B1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00F7, 0x2248,
-        0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00A0,
+        0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7, 0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5, 0x00C9, 0x00E6, 0x00C6,
+        0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9, 0x00FF, 0x00D6, 0x00DC, 0x00A2, 0x00A3, 0x00A5, 0x20A7, 0x0192, 0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1,
+        0x00AA, 0x00BA, 0x00BF, 0x2310, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB, 0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556, 0x2555,
+        0x2563, 0x2551, 0x2557, 0x255D, 0x255C, 0x255B, 0x2510, 0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x255E, 0x255F, 0x255A, 0x2554, 0x2569, 0x2566,
+        0x2560, 0x2550, 0x256C, 0x2567, 0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256B, 0x256A, 0x2518, 0x250C, 0x2588, 0x2584, 0x258C, 0x2590,
+        0x2580, 0x03B1, 0x00DF, 0x0393, 0x03C0, 0x03A3, 0x03C3, 0x03BC, 0x03C4, 0x03A6, 0x0398, 0x03A9, 0x03B4, 0x221E, 0x03C6, 0x03B5, 0x2229, 0x2261, 0x00B1,
+        0x2265, 0x2264, 0x2320, 0x2321, 0x00F7, 0x2248, 0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00A0,
     };
 
     static const quint16 g_anCP850HighBytes[128] = {
-        0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7,
-        0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5,
-        0x00C9, 0x00E6, 0x00C6, 0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9,
-        0x00FF, 0x00D6, 0x00DC, 0x00F8, 0x00A3, 0x00D8, 0x00D7, 0x0192,
-        0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1, 0x00AA, 0x00BA,
-        0x00BF, 0x00AE, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB,
-        0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x00C1, 0x00C2, 0x00C0,
-        0x00A9, 0x2563, 0x2551, 0x2557, 0x255D, 0x00A2, 0x00A5, 0x2510,
-        0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x00E3, 0x00C3,
-        0x255A, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256C, 0x00A4,
-        0x00F0, 0x00D0, 0x00CA, 0x00CB, 0x00C8, 0x0131, 0x00CD, 0x00CE,
-        0x00CF, 0x2518, 0x250C, 0x2588, 0x2584, 0x00A6, 0x00CC, 0x2580,
-        0x00D3, 0x00DF, 0x00D4, 0x00D2, 0x00F5, 0x00D5, 0x00B5, 0x00FE,
-        0x00DE, 0x00DA, 0x00DB, 0x00D9, 0x00FD, 0x00DD, 0x00AF, 0x00B4,
-        0x00AD, 0x00B1, 0x2017, 0x00BE, 0x00B6, 0x00A7, 0x00F7, 0x00B8,
-        0x00B0, 0x00A8, 0x00B7, 0x00B9, 0x00B3, 0x00B2, 0x25A0, 0x00A0,
+        0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7, 0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5, 0x00C9, 0x00E6, 0x00C6,
+        0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9, 0x00FF, 0x00D6, 0x00DC, 0x00F8, 0x00A3, 0x00D8, 0x00D7, 0x0192, 0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1,
+        0x00AA, 0x00BA, 0x00BF, 0x00AE, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB, 0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x00C1, 0x00C2, 0x00C0, 0x00A9,
+        0x2563, 0x2551, 0x2557, 0x255D, 0x00A2, 0x00A5, 0x2510, 0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x00E3, 0x00C3, 0x255A, 0x2554, 0x2569, 0x2566,
+        0x2560, 0x2550, 0x256C, 0x00A4, 0x00F0, 0x00D0, 0x00CA, 0x00CB, 0x00C8, 0x0131, 0x00CD, 0x00CE, 0x00CF, 0x2518, 0x250C, 0x2588, 0x2584, 0x00A6, 0x00CC,
+        0x2580, 0x00D3, 0x00DF, 0x00D4, 0x00D2, 0x00F5, 0x00D5, 0x00B5, 0x00FE, 0x00DE, 0x00DA, 0x00DB, 0x00D9, 0x00FD, 0x00DD, 0x00AF, 0x00B4, 0x00AD, 0x00B1,
+        0x2017, 0x00BE, 0x00B6, 0x00A7, 0x00F7, 0x00B8, 0x00B0, 0x00A8, 0x00B7, 0x00B9, 0x00B3, 0x00B2, 0x25A0, 0x00A0,
     };
 
-    const bool bCP437 = (sCodePage.compare(QStringLiteral("CP437"), Qt::CaseInsensitive) == 0) ||
-                        (sCodePage.compare(QStringLiteral("IBM437"), Qt::CaseInsensitive) == 0);
-    const bool bCP850 = sCodePage.isEmpty() ||
-                        (sCodePage.compare(QStringLiteral("CP850"), Qt::CaseInsensitive) == 0) ||
+    const bool bCP437 = (sCodePage.compare(QStringLiteral("CP437"), Qt::CaseInsensitive) == 0) || (sCodePage.compare(QStringLiteral("IBM437"), Qt::CaseInsensitive) == 0);
+    const bool bCP850 = sCodePage.isEmpty() || (sCodePage.compare(QStringLiteral("CP850"), Qt::CaseInsensitive) == 0) ||
                         (sCodePage.compare(QStringLiteral("IBM850"), Qt::CaseInsensitive) == 0);
 
 #if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
@@ -170,8 +150,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
     info.nHeadFlags = read_uint16(nOffset + 5, false);
     if (!guardedThis) return false;
 
-    if ((info.nHeadType != HEADTYPE_ARCHIVE) && (info.nHeadType != HEADTYPE_FILE) &&
-        (info.nHeadType != HEADTYPE_RECOVERY)) {
+    if ((info.nHeadType != HEADTYPE_ARCHIVE) && (info.nHeadType != HEADTYPE_FILE) && (info.nHeadType != HEADTYPE_RECOVERY)) {
         return false;
     }
 
@@ -182,8 +161,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    const quint32 nHeaderCRC =
-        XBinary::_getCRC32(baHeader, 0xFFFFFFFFU, XBinary::_getCRC32Table_EDB88320());
+    const quint32 nHeaderCRC = XBinary::_getCRC32(baHeader, 0xFFFFFFFFU, XBinary::_getCRC32Table_EDB88320());
 
     if (info.nHeadCRC != static_cast<quint16>(nHeaderCRC & 0xFFFFU)) {
         return false;
@@ -204,8 +182,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
 
     if (info.nHeadType == HEADTYPE_ARCHIVE) {
         // A main header never has generic ADD_SIZE; at +7 it contains ACESIGN.
-        if ((info.nHeadFlags & static_cast<quint16>(~ACE1_MAIN_ALLOWED_FLAGS)) ||
-            (info.nHeadSize < ACE1_MAIN_MIN_HEAD_SIZE)) {
+        if ((info.nHeadFlags & static_cast<quint16>(~ACE1_MAIN_ALLOWED_FLAGS)) || (info.nHeadSize < ACE1_MAIN_MIN_HEAD_SIZE)) {
             return false;
         }
 
@@ -256,15 +233,12 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
             if (!guardedThis) return false;
             info.nCommentOffset = nCommentSizeOffset + 2;
 
-            if ((info.nCommentSize > ACE1_MAX_COMMENT) ||
-                (info.nCommentSize > (info.nHeadSize - nVariableEnd - 2U))) {
+            if ((info.nCommentSize > ACE1_MAX_COMMENT) || (info.nCommentSize > (info.nHeadSize - nVariableEnd - 2U))) {
                 return false;
             }
         }
     } else if (info.nHeadType == HEADTYPE_FILE) {
-        if ((info.nHeadFlags & static_cast<quint16>(~ACE1_FILE_ALLOWED_FLAGS)) ||
-            !(info.nHeadFlags & FILEFLAG_ADDSIZE) ||
-            (info.nHeadSize < ACE1_FILE_MIN_HEAD_SIZE)) {
+        if ((info.nHeadFlags & static_cast<quint16>(~ACE1_FILE_ALLOWED_FLAGS)) || !(info.nHeadFlags & FILEFLAG_ADDSIZE) || (info.nHeadSize < ACE1_FILE_MIN_HEAD_SIZE)) {
             return false;
         }
 
@@ -290,8 +264,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
         if (!guardedThis) return false;
         info.nFileNameOffset = nOffset + 35;
 
-        if ((info.nFileNameSize > ACE1_MAX_FILENAME) ||
-            (info.nFileNameSize > (info.nHeadSize - ACE1_FILE_MIN_HEAD_SIZE))) {
+        if ((info.nFileNameSize > ACE1_MAX_FILENAME) || (info.nFileNameSize > (info.nHeadSize - ACE1_FILE_MIN_HEAD_SIZE))) {
             return false;
         }
 
@@ -316,8 +289,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
             if (!guardedThis) return false;
             info.nCommentOffset = nCommentSizeOffset + 2;
 
-            if ((info.nCommentSize > ACE1_MAX_COMMENT) ||
-                (info.nCommentSize > (info.nHeadSize - nVariableEnd - 2U))) {
+            if ((info.nCommentSize > ACE1_MAX_COMMENT) || (info.nCommentSize > (info.nHeadSize - nVariableEnd - 2U))) {
                 return false;
             }
         }
@@ -325,8 +297,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
     } else {
         // ACE 1.x recovery record (32-bit form): REC_BLK_SIZE aliases ADD_SIZE,
         // followed by ACESIGN, REL_STRT, CLUSTER, CL_SIZE and REC_CRC.
-        if ((info.nHeadFlags != FLAG_ADDSIZE) ||
-            (info.nHeadSize != ACE1_RECOVERY_MIN_HEAD_SIZE)) {
+        if ((info.nHeadFlags != FLAG_ADDSIZE) || (info.nHeadSize != ACE1_RECOVERY_MIN_HEAD_SIZE)) {
             return false;
         }
 
@@ -346,9 +317,7 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
         info.nRecoveryCRC = read_uint16(nOffset + 30, false);
         if (!guardedThis) return false;
 
-        const quint64 nExpectedRecoverySize =
-            static_cast<quint64>(info.nRecoveryBlockCount) * 2U +
-            static_cast<quint64>(info.nRecoveryClusterSize);
+        const quint64 nExpectedRecoverySize = static_cast<quint64>(info.nRecoveryBlockCount) * 2U + static_cast<quint64>(info.nRecoveryClusterSize);
         if (nExpectedRecoverySize != info.nAddSize) {
             return false;
         }
@@ -368,13 +337,11 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
 
             const qint32 nChunk = static_cast<qint32>(qMin(nCRCRemaining, (qint64)baCRCBuffer.size()));
             if (nChunk <= 0) return false;
-            const qint64 nRead =
-                read_array(nCRCOffset, baCRCBuffer.data(), nChunk);
+            const qint64 nRead = read_array(nCRCOffset, baCRCBuffer.data(), nChunk);
             if (!guardedThis || (nRead != nChunk)) {
                 return false;
             }
-            nRecoveryCRC = XBinary::_getCRC32(baCRCBuffer.constData(), nChunk, nRecoveryCRC,
-                                               XBinary::_getCRC32Table_EDB88320());
+            nRecoveryCRC = XBinary::_getCRC32(baCRCBuffer.constData(), nChunk, nRecoveryCRC, XBinary::_getCRC32Table_EDB88320());
             nCRCOffset += nChunk;
             nCRCRemaining -= nChunk;
         }
@@ -391,9 +358,8 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
 
 bool XACE::_isRawAce1Main(const BLOCK_INFO &info) const
 {
-    return (info.nOffset == 0) && (info.nHeadType == HEADTYPE_ARCHIVE) &&
-           !(info.nHeadFlags & ARCHFLAG_V20FORMAT) &&
-           (info.nVersionExtract >= 10) && (info.nVersionExtract < 20);
+    return (info.nOffset == 0) && (info.nHeadType == HEADTYPE_ARCHIVE) && !(info.nHeadFlags & ARCHFLAG_V20FORMAT) && (info.nVersionExtract >= 10) &&
+           (info.nVersionExtract < 20);
 }
 
 bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
@@ -438,17 +404,14 @@ bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
         BLOCK_INFO info = {};
 
         const bool bBlockRead = _readBlock(nOffset, &info, pPdStruct);
-        if (!guardedThis || !bBlockRead ||
-            (info.nHeadType == HEADTYPE_ARCHIVE)) {
+        if (!guardedThis || !bBlockRead || (info.nHeadType == HEADTYPE_ARCHIVE)) {
             pListBlocks->clear();
             return false;
         }
 
         if (info.nHeadType == HEADTYPE_FILE) {
-            const quint16 nSplitFlags = info.nHeadFlags &
-                                        (FILEFLAG_SPLIT_BEFORE | FILEFLAG_SPLIT_AFTER);
-            if ((nSplitFlags && !(mainInfo.nHeadFlags & ARCHFLAG_MULTIVOLUME)) ||
-                ((info.nHeadFlags & FILEFLAG_SPLIT_BEFORE) && (mainInfo.nVolumeNumber == 0)) ||
+            const quint16 nSplitFlags = info.nHeadFlags & (FILEFLAG_SPLIT_BEFORE | FILEFLAG_SPLIT_AFTER);
+            if ((nSplitFlags && !(mainInfo.nHeadFlags & ARCHFLAG_MULTIVOLUME)) || ((info.nHeadFlags & FILEFLAG_SPLIT_BEFORE) && (mainInfo.nVolumeNumber == 0)) ||
                 ((info.nHeadFlags & FILEFLAG_SOLID) && !(mainInfo.nHeadFlags & ARCHFLAG_SOLID))) {
                 pListBlocks->clear();
                 return false;
@@ -468,8 +431,7 @@ bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
     }
 
     const bool bRecoveryDeclared = (mainInfo.nHeadFlags & ARCHFLAG_RECOVERY) != 0;
-    if ((nOffset != nFileSize) || (bRecoveryDeclared != bHasRecoveryRecord) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if ((nOffset != nFileSize) || (bRecoveryDeclared != bHasRecoveryRecord) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         pListBlocks->clear();
         return false;
     }
@@ -600,12 +562,10 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
     // Only a state authenticated by this archive object's private source
     // session can own a context created by an earlier successful init.
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
-    UNPACK_CONTEXT *pOldContext =
-        static_cast<UNPACK_CONTEXT *>(pState->pContext);
+    UNPACK_CONTEXT *pOldContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
@@ -661,9 +621,7 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
     pState->pContext = pContext;
     pState->nNumberOfRecords = pContext->listFileBlocks.count();
-    pState->nCurrentOffset = pContext->listFileBlocks.isEmpty()
-                                 ? pContext->nArchiveSize
-                                 : pContext->listFileBlocks.constFirst().nOffset;
+    pState->nCurrentOffset = pContext->listFileBlocks.isEmpty() ? pContext->nArchiveSize : pContext->listFileBlocks.constFirst().nOffset;
     pState->mapArchiveProperties.insert(FPART_PROP_FLAGS, pContext->nArchiveFlags);
 
     if (pContext->nArchiveFlags & ARCHFLAG_SOLID) {
@@ -685,8 +643,7 @@ bool XACE::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     QPointer<XACE> guardedThis(this);
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     XBinary::ARCHIVERECORD result = {};
@@ -737,8 +694,7 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     // Volume 0 is part of the test: the first file block of a continuation
     // volume also has index 0, but it does depend on the previous volume's
     // dictionary, so it is genuinely solid.
-    const bool bSolidArchive = (pContext->nArchiveFlags & ARCHFLAG_SOLID) ||
-                               (info.nHeadFlags & FILEFLAG_SOLID);
+    const bool bSolidArchive = (pContext->nArchiveFlags & ARCHFLAG_SOLID) || (info.nHeadFlags & FILEFLAG_SOLID);
     const bool bFirstInSolidChain = (pState->nCurrentIndex == 0) && (pContext->nVolumeNumber == 0);
     const bool bSolid = bSolidArchive && (!bFirstInSolidChain);
 
@@ -770,9 +726,8 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
     const quint16 nDosTime = static_cast<quint16>(info.nFileTime & 0xFFFFU);
     const quint16 nDosDate = static_cast<quint16>(info.nFileTime >> 16);
-    const QDateTime dtMTime(
-        QDate(((nDosDate >> 9) & 0x7F) + 1980, (nDosDate >> 5) & 0x0F, nDosDate & 0x1F),
-        QTime((nDosTime >> 11) & 0x1F, (nDosTime >> 5) & 0x3F, (nDosTime & 0x1F) * 2));
+    const QDateTime dtMTime(QDate(((nDosDate >> 9) & 0x7F) + 1980, (nDosDate >> 5) & 0x0F, nDosDate & 0x1F),
+                            QTime((nDosTime >> 11) & 0x1F, (nDosTime >> 5) & 0x3F, (nDosTime & 0x1F) * 2));
 
     if (dtMTime.isValid()) {
         result.mapProperties.insert(FPART_PROP_DATETIME, dtMTime);
@@ -780,9 +735,8 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     }
 
     HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
-    const bool bUnsupportedFlags = bSolid || (info.nHeadFlags & FILEFLAG_PASSWORD) ||
-                                   (info.nHeadFlags & FILEFLAG_SPLIT_BEFORE) ||
-                                   (info.nHeadFlags & FILEFLAG_SPLIT_AFTER);
+    const bool bUnsupportedFlags =
+        bSolid || (info.nHeadFlags & FILEFLAG_PASSWORD) || (info.nHeadFlags & FILEFLAG_SPLIT_BEFORE) || (info.nHeadFlags & FILEFLAG_SPLIT_AFTER);
 
     if (!bUnsupportedFlags) {
         if (info.nTechType == CTYPE_STORED) {
@@ -811,8 +765,7 @@ bool XACE::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
 
-    if ((pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pContext->listFileBlocks.count())) {
+    if ((pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pContext->listFileBlocks.count())) {
         return false;
     }
 
@@ -840,10 +793,8 @@ bool XACE::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) return false;
-    UNPACK_CONTEXT *pContext =
-        static_cast<UNPACK_CONTEXT *>(pState->pContext);
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
+    UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
 
@@ -861,23 +812,17 @@ bool XACE::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
 QString XACE::structIDToString(quint32 nID)
 {
-    return XBinary::XCONVERT_idToTransString(
-        nID, _TABLE_XACE_STRUCTID,
-        sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XBinary::XCONVERT_idToTransString(nID, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
 QString XACE::structIDToFtString(quint32 nID)
 {
-    return XBinary::XCONVERT_idToFtString(
-        nID, _TABLE_XACE_STRUCTID,
-        sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XBinary::XCONVERT_idToFtString(nID, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
 quint32 XACE::ftStringToStructID(const QString &sFtString)
 {
-    return XCONVERT_ftStringToId(
-        sFtString, _TABLE_XACE_STRUCTID,
-        sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
+    return XCONVERT_ftStringToId(sFtString, _TABLE_XACE_STRUCTID, sizeof(_TABLE_XACE_STRUCTID) / sizeof(XBinary::XCONVERT));
 }
 
 QList<XBinary::XFHEADER> XACE::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct)
@@ -919,8 +864,7 @@ QList<XBinary::XFHEADER> XACE::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         xfHeader.nSize = listBlocks.constFirst().nHeaderSize;
         xfHeader.xfType = XFTYPE_HEADER;
         xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_HEADER, headerLoc);
-        xfHeader.sTag = xfHeaderToTag(
-            xfHeader, structIDToString(STRUCTID_HEADER), xfHeader.sParentTag);
+        xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_HEADER), xfHeader.sParentTag);
         listResult.append(xfHeader);
 
         if (xfStruct.bIsParent) {
@@ -955,12 +899,9 @@ QList<XBinary::XFHEADER> XACE::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
 
         if (!xfHeader.listRowLocations.isEmpty()) {
             xfHeader.xLoc = offsetToLoc(xfHeader.listRowLocations.constFirst());
-            xfHeader.nSize = _blockEnd(listBlocks.constLast()) -
-                             xfHeader.listRowLocations.constFirst();
-            xfHeader.listFields = getXFRecords(
-                xfStruct.fileType, STRUCTID_RECORD, xfHeader.xLoc);
-            xfHeader.sTag = xfHeaderToTag(
-                xfHeader, structIDToString(STRUCTID_RECORD), xfHeader.sParentTag);
+            xfHeader.nSize = _blockEnd(listBlocks.constLast()) - xfHeader.listRowLocations.constFirst();
+            xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_RECORD, xfHeader.xLoc);
+            xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_RECORD), xfHeader.sParentTag);
             listResult.append(xfHeader);
         }
     }
@@ -968,8 +909,7 @@ QList<XBinary::XFHEADER> XACE::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
     return listResult;
 }
 
-QList<XBinary::XFRECORD> XACE::getXFRecords(FT fileType, quint32 nStructID,
-                                             const XLOC &xLoc)
+QList<XBinary::XFRECORD> XACE::getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc)
 {
     Q_UNUSED(fileType)
 
@@ -986,8 +926,7 @@ QList<XBinary::XFRECORD> XACE::getXFRecords(FT fileType, quint32 nStructID,
         return listResult;
     }
 
-    if ((nStructID == STRUCTID_HEADER) && (info.nHeadType == HEADTYPE_ARCHIVE) &&
-        _isRawAce1Main(info)) {
+    if ((nStructID == STRUCTID_HEADER) && (info.nHeadType == HEADTYPE_ARCHIVE) && _isRawAce1Main(info)) {
         listResult.append({"HeadCRC", 0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"HeadSize", 2, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
         listResult.append({"HeadType", 4, 1, XFRECORD_FLAG_NONE, VT_UINT8});
@@ -1004,23 +943,18 @@ QList<XBinary::XFRECORD> XACE::getXFRecords(FT fileType, quint32 nStructID,
         listResult.append({"AVSize", 30, 1, XFRECORD_FLAG_SIZE, VT_UINT8});
 
         if (info.nAVSize) {
-            listResult.append({"AuthenticityVerification", 31, info.nAVSize,
-                               XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+            listResult.append({"AuthenticityVerification", 31, info.nAVSize, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
         }
 
         if (info.nHeadFlags & FLAG_COMMENT) {
             const qint32 nCommentSizeOffset = 31 + info.nAVSize;
-            listResult.append({"CommentSize", nCommentSizeOffset, 2,
-                               XFRECORD_FLAG_SIZE, VT_UINT16});
+            listResult.append({"CommentSize", nCommentSizeOffset, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
 
             if (info.nCommentSize) {
-                listResult.append({"CompressedComment", nCommentSizeOffset + 2,
-                                   info.nCommentSize, XFRECORD_FLAG_NONE,
-                                   VT_BYTE_ARRAY});
+                listResult.append({"CompressedComment", nCommentSizeOffset + 2, info.nCommentSize, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
             }
         }
-    } else if ((nStructID == STRUCTID_RECORD) &&
-               (info.nHeadType == HEADTYPE_FILE)) {
+    } else if ((nStructID == STRUCTID_RECORD) && (info.nHeadType == HEADTYPE_FILE)) {
         listResult.append({"HeadCRC", 0, 2, XFRECORD_FLAG_NONE, VT_UINT16});
         listResult.append({"HeadSize", 2, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
         listResult.append({"HeadType", 4, 1, XFRECORD_FLAG_NONE, VT_UINT8});
@@ -1037,19 +971,15 @@ QList<XBinary::XFRECORD> XACE::getXFRecords(FT fileType, quint32 nStructID,
         listResult.append({"FilenameSize", 33, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
 
         if (info.nFileNameSize) {
-            listResult.append({"Filename", 35, info.nFileNameSize,
-                               XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
+            listResult.append({"Filename", 35, info.nFileNameSize, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
         }
 
         if (info.nHeadFlags & FLAG_COMMENT) {
             const qint32 nCommentSizeOffset = 35 + info.nFileNameSize;
-            listResult.append({"CommentSize", nCommentSizeOffset, 2,
-                               XFRECORD_FLAG_SIZE, VT_UINT16});
+            listResult.append({"CommentSize", nCommentSizeOffset, 2, XFRECORD_FLAG_SIZE, VT_UINT16});
 
             if (info.nCommentSize) {
-                listResult.append({"CompressedComment", nCommentSizeOffset + 2,
-                                   info.nCommentSize, XFRECORD_FLAG_NONE,
-                                   VT_BYTE_ARRAY});
+                listResult.append({"CompressedComment", nCommentSizeOffset + 2, info.nCommentSize, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
             }
         }
     }
@@ -1062,8 +992,7 @@ static bool aceCanAppendPart(qint32 nLimit, const QList<XBinary::FPART> &listRes
     return (nLimit == -1) || (listResult.size() < nLimit);
 }
 
-QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
-                                         PDSTRUCT *pPdStruct)
+QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit, PDSTRUCT *pPdStruct)
 {
     QList<FPART> listResult;
     QList<BLOCK_INFO> listBlocks;
@@ -1106,8 +1035,7 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
             listResult.append(part);
         }
 
-        if ((nFileParts & FILEPART_STREAM) && aceCanAppendPart(nLimit, listResult) &&
-            (info.nHeadType == HEADTYPE_FILE)) {
+        if ((nFileParts & FILEPART_STREAM) && aceCanAppendPart(nLimit, listResult) && (info.nHeadType == HEADTYPE_FILE)) {
             FPART part = {};
             part.filePart = FILEPART_STREAM;
             part.nFileOffset = info.nDataOffset;
@@ -1115,23 +1043,17 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit,
             part.nVirtualAddress = XADDR_MAX;
             part.sName = sName;
             part.mapProperties.insert(FPART_PROP_ORIGINALNAME, sName);
-            part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE,
-                                      static_cast<qint64>(info.nAddSize));
-            part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE,
-                                      static_cast<qint64>(info.nUnpackedSize));
+            part.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, static_cast<qint64>(info.nAddSize));
+            part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, static_cast<qint64>(info.nUnpackedSize));
             part.mapProperties.insert(FPART_PROP_FLAGS, info.nHeadFlags);
             part.mapProperties.insert(FPART_PROP_RESULTCRC, info.nFileCRC);
-            part.mapProperties.insert(FPART_PROP_CRC_TYPE,
-                                      CRC_TYPE_FFFFFFFF_EDB88320_00000000);
-            part.mapProperties.insert(
-                FPART_PROP_WINDOWSIZE,
-                static_cast<qint64>(quint64(1) << ((info.nTechParameter & 15) + 10)));
+            part.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_00000000);
+            part.mapProperties.insert(FPART_PROP_WINDOWSIZE, static_cast<qint64>(quint64(1) << ((info.nTechParameter & 15) + 10)));
 
             HANDLE_METHOD method = HANDLE_METHOD_UNKNOWN;
             const bool bFirstInSolidChain = (nFileBlockIndex == 0) && (nMainVolumeNumber == 0);
-            const bool bUnsupported =
-                (((nArchiveFlags & ARCHFLAG_SOLID) || (info.nHeadFlags & FILEFLAG_SOLID)) && (!bFirstInSolidChain)) ||
-                (info.nHeadFlags & (FILEFLAG_PASSWORD | FILEFLAG_SPLIT_BEFORE | FILEFLAG_SPLIT_AFTER));
+            const bool bUnsupported = (((nArchiveFlags & ARCHFLAG_SOLID) || (info.nHeadFlags & FILEFLAG_SOLID)) && (!bFirstInSolidChain)) ||
+                                      (info.nHeadFlags & (FILEFLAG_PASSWORD | FILEFLAG_SPLIT_BEFORE | FILEFLAG_SPLIT_AFTER));
 
             if (!bUnsupported) {
                 if (info.nTechType == CTYPE_STORED) {
@@ -1196,8 +1118,7 @@ bool XACE::_isFileBlock(qint64 nOffset)
 {
     BLOCK_INFO info = {};
 
-    return _readBlock(nOffset, &info, nullptr) &&
-           (info.nHeadType == HEADTYPE_FILE);
+    return _readBlock(nOffset, &info, nullptr) && (info.nHeadType == HEADTYPE_FILE);
 }
 
 bool XACE::_isValidBlock(qint64 nOffset)
@@ -1211,8 +1132,7 @@ quint32 XACE::_getCompressedSize(qint64 nOffset)
 {
     BLOCK_INFO info = {};
 
-    if (!_readBlock(nOffset, &info, nullptr) ||
-        (info.nHeadType != HEADTYPE_FILE)) {
+    if (!_readBlock(nOffset, &info, nullptr) || (info.nHeadType != HEADTYPE_FILE)) {
         return 0;
     }
 
@@ -1223,8 +1143,7 @@ QString XACE::_getFileName(qint64 nOffset)
 {
     BLOCK_INFO info = {};
 
-    if (!_readBlock(nOffset, &info, nullptr) ||
-        (info.nHeadType != HEADTYPE_FILE)) {
+    if (!_readBlock(nOffset, &info, nullptr) || (info.nHeadType != HEADTYPE_FILE)) {
         return QString();
     }
 
@@ -1238,8 +1157,7 @@ QList<QString> XACE::getSearchSignatures()
     return {QStringLiteral("..............'**ACE**'")};
 }
 
-XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage,
-                              XADDR nModuleAddress)
+XBinary *XACE::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
 {
     Q_UNUSED(bIsImage)
     Q_UNUSED(nModuleAddress)
@@ -1257,12 +1175,9 @@ bool XACE::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;
@@ -1281,8 +1196,7 @@ void XACE::setInternalInfo(void *pInternalInfo)
 {
     if (pInternalInfo) {
         m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
-        XArchive::setInternalInfo(
-            static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
     } else {
         m_internalInfo = INTERNAL_INFO();
         XArchive::setInternalInfo(nullptr);

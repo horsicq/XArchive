@@ -29,23 +29,19 @@ XIT214Decoder::XIT214Decoder(QObject *parent) : QObject(parent)
 
 bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, quint8 nBits, bool bIs215, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
-        ((nBits != 8) && (nBits != 16)) || (pDecompressState->nInputOffset < 0) ||
-        (pDecompressState->nInputLimit < -1) ||
-        !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || ((nBits != 8) && (nBits != 16)) ||
+        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1) || !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) {
         return false;
     }
 
-    const qint64 nExpectedOutput =
-        pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
+    const qint64 nExpectedOutput = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong();
     const qint32 nBytesPerSample = nBits / 8;
     if ((nExpectedOutput < 0) || ((nExpectedOutput % nBytesPerSample) != 0)) {
         return false;
     }
 
     Algo_utils::prepareState(pDecompressState);
-    if (pDecompressState->bReadError || pDecompressState->bWriteError ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -53,11 +49,9 @@ bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qui
     QByteArray baOutput(nMaxBlockSamples * nBytesPerSample, 0);
     bool bResult = true;
 
-    while ((pDecompressState->nCountOutput < nExpectedOutput) && bResult &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((pDecompressState->nCountOutput < nExpectedOutput) && bResult && XBinary::isPdStructNotCanceled(pPdStruct)) {
         const qint64 nRemainingBytes = nExpectedOutput - pDecompressState->nCountOutput;
-        const qint32 nBlockSamples =
-            (qint32)(std::min)((qint64)nMaxBlockSamples, nRemainingBytes / nBytesPerSample);
+        const qint32 nBlockSamples = (qint32)(std::min)((qint64)nMaxBlockSamples, nRemainingBytes / nBytesPerSample);
         if (nBlockSamples <= 0) {
             bResult = false;
             break;
@@ -76,8 +70,7 @@ bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qui
             quint8 nD1 = 0;
             quint8 nD2 = 0;
 
-            while ((nBlockPosition < nBlockSamples) && !state.bError &&
-                   XBinary::isPdStructNotCanceled(pPdStruct)) {
+            while ((nBlockPosition < nBlockSamples) && !state.bError && XBinary::isPdStructNotCanceled(pPdStruct)) {
                 quint32 nValue = readbits(&state, nWidth);
                 if (state.bError) break;
 
@@ -133,8 +126,7 @@ bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qui
             quint16 nD1 = 0;
             quint16 nD2 = 0;
 
-            while ((nBlockPosition < nBlockSamples) && !state.bError &&
-                   XBinary::isPdStructNotCanceled(pPdStruct)) {
+            while ((nBlockPosition < nBlockSamples) && !state.bError && XBinary::isPdStructNotCanceled(pPdStruct)) {
                 quint32 nValue = readbits(&state, nWidth);
                 if (state.bError) break;
 
@@ -192,8 +184,7 @@ bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qui
             }
         }
 
-        if (state.bError || (nBlockPosition != nBlockSamples) ||
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (state.bError || (nBlockPosition != nBlockSamples) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             pDecompressState->bReadError = pDecompressState->bReadError || state.bError;
             bResult = false;
             break;
@@ -206,11 +197,9 @@ bool XIT214Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qui
         }
     }
 
-    const bool bInputConsumed = (pDecompressState->nInputLimit == -1)
-                                    ? pDecompressState->pDeviceInput->atEnd()
-                                    : (pDecompressState->nCountInput == pDecompressState->nInputLimit);
-    return bResult && bInputConsumed && (pDecompressState->nCountOutput == nExpectedOutput) &&
-           !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+    const bool bInputConsumed =
+        (pDecompressState->nInputLimit == -1) ? pDecompressState->pDeviceInput->atEnd() : (pDecompressState->nCountInput == pDecompressState->nInputLimit);
+    return bResult && bInputConsumed && (pDecompressState->nCountOutput == nExpectedOutput) && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
            XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
@@ -265,9 +254,7 @@ bool XIT214Decoder::readBlock(STATE *pState, XBinary::DATAPROCESS_STATE *pDecomp
     }
 
     const qint32 nInputBufferSize = (quint8)header[0] | ((qint32)(quint8)header[1] << 8);
-    if ((nInputBufferSize <= 0) ||
-        ((pDecompressState->nInputLimit != -1) &&
-         (nInputBufferSize > (pDecompressState->nInputLimit - pDecompressState->nCountInput)))) {
+    if ((nInputBufferSize <= 0) || ((pDecompressState->nInputLimit != -1) && (nInputBufferSize > (pDecompressState->nInputLimit - pDecompressState->nCountInput)))) {
         pDecompressState->bReadError = true;
         return false;
     }

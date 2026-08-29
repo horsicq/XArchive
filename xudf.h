@@ -223,6 +223,7 @@ private:
 
     QString m_sVolumeIdentifier;
     QString m_sVolumeSetIdentifier;
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

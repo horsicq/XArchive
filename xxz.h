@@ -127,6 +127,7 @@ private:
         qint64 nUncompressedSize;
         quint32 nCRC32;
     };
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

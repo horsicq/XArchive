@@ -35,15 +35,13 @@ bool isCompleteAPK(QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
     const qint64 nECDOffset = innerZip.findECDOffset(pPdStruct);
     if (nECDOffset < 0) return false;
 
-    QList<XArchive::RECORD> listRecords =
-        innerZip.getRecords(20000, pPdStruct);
+    QList<XArchive::RECORD> listRecords = innerZip.getRecords(20000, pPdStruct);
     return XAPK::isValid(pDevice, &listRecords, pPdStruct);
 }
 
 class DevicePositionGuard {
 public:
-    explicit DevicePositionGuard(QIODevice *pDevice)
-        : m_pDevice(pDevice), m_nPosition(-1)
+    explicit DevicePositionGuard(QIODevice *pDevice) : m_pDevice(pDevice), m_nPosition(-1)
     {
         if (m_pDevice && !m_pDevice->isSequential()) {
             m_nPosition = m_pDevice->pos();
@@ -62,63 +60,44 @@ private:
     qint64 m_nPosition;
 };
 
-bool isStoredRecordCRCValid(QIODevice *pDevice,
-                            const XArchive::RECORD &record,
-                            XBinary::PDSTRUCT *pPdStruct)
+bool isStoredRecordCRCValid(QIODevice *pDevice, const XArchive::RECORD &record, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDevice || (record.nDataOffset < 0) || (record.nDataSize <= 0) ||
-        (record.nDataSize != record.spInfo.nUncompressedSize) ||
-        !record.mapProperties.contains(XBinary::FPART_PROP_RESULTCRC) ||
-        !record.mapProperties.contains(XBinary::FPART_PROP_CRC_TYPE)) {
+    if (!pDevice || (record.nDataOffset < 0) || (record.nDataSize <= 0) || (record.nDataSize != record.spInfo.nUncompressedSize) ||
+        !record.mapProperties.contains(XBinary::FPART_PROP_RESULTCRC) || !record.mapProperties.contains(XBinary::FPART_PROP_CRC_TYPE)) {
         return false;
     }
 
     SubDevice dataDevice(pDevice, record.nDataOffset, record.nDataSize);
     if (!dataDevice.open(QIODevice::ReadOnly)) return false;
-    const XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)
-        record.mapProperties.value(XBinary::FPART_PROP_CRC_TYPE).toUInt();
-    const bool bValid = XBinary::checkCRC(
-        &dataDevice, crcType,
-        record.mapProperties.value(XBinary::FPART_PROP_RESULTCRC),
-        pPdStruct);
+    const XBinary::CRC_TYPE crcType = (XBinary::CRC_TYPE)record.mapProperties.value(XBinary::FPART_PROP_CRC_TYPE).toUInt();
+    const bool bValid = XBinary::checkCRC(&dataDevice, crcType, record.mapProperties.value(XBinary::FPART_PROP_RESULTCRC), pPdStruct);
     dataDevice.close();
     return bValid;
 }
 
-bool hasValidTableOfContents(QIODevice *pDevice, XZip *pOuterZip,
-                             const QList<XArchive::RECORD> *pListRecords,
-                             XBinary::PDSTRUCT *pPdStruct)
+bool hasValidTableOfContents(QIODevice *pDevice, XZip *pOuterZip, const QList<XArchive::RECORD> *pListRecords, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pDevice || !pOuterZip || !pListRecords) return false;
 
-    for (qint32 i = 0; (i < pListRecords->count()) &&
-                       XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+    for (qint32 i = 0; (i < pListRecords->count()) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         const XArchive::RECORD &record = pListRecords->at(i);
-        if ((record.spInfo.sRecordName != QLatin1String("toc.pb")) ||
-            (record.spInfo.nUncompressedSize <= 0) ||
-            (record.spInfo.nUncompressedSize > APKS_TOC_LIMIT) ||
-            (record.nDataSize <= 0) ||
-            (record.nDataSize > APKS_TOC_LIMIT) ||
-            record.mapProperties.value(
-                XBinary::FPART_PROP_ENCRYPTED, false).toBool() ||
-            (record.spInfo.compressMethod2 !=
-             XBinary::HANDLE_METHOD_UNKNOWN)) {
+        if ((record.spInfo.sRecordName != QLatin1String("toc.pb")) || (record.spInfo.nUncompressedSize <= 0) || (record.spInfo.nUncompressedSize > APKS_TOC_LIMIT) ||
+            (record.nDataSize <= 0) || (record.nDataSize > APKS_TOC_LIMIT) || record.mapProperties.value(XBinary::FPART_PROP_ENCRYPTED, false).toBool() ||
+            (record.spInfo.compressMethod2 != XBinary::HANDLE_METHOD_UNKNOWN)) {
             continue;
         }
 
         if (record.spInfo.compressMethod == XBinary::HANDLE_METHOD_STORE) {
             if (isStoredRecordCRCValid(pDevice, record, pPdStruct)) return true;
-        } else if (record.spInfo.compressMethod ==
-                   XBinary::HANDLE_METHOD_DEFLATE) {
-            const QByteArray baTOC = pOuterZip->decompress(
-                &record, pPdStruct, 0, APKS_TOC_LIMIT + 1);
+        } else if (record.spInfo.compressMethod == XBinary::HANDLE_METHOD_DEFLATE) {
+            const QByteArray baTOC = pOuterZip->decompress(&record, pPdStruct, 0, APKS_TOC_LIMIT + 1);
             if (baTOC.size() == record.spInfo.nUncompressedSize) return true;
         }
     }
 
     return false;
 }
-}
+}  // namespace
 
 XAPKS::XAPKS(QIODevice *pDevice) : XAPK(pDevice)
 {
@@ -166,8 +145,7 @@ bool XAPKS::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 
         if ((sFileName == QLatin1String("toc.pb")) && (record.spInfo.nUncompressedSize != 0)) {
             bHasTableOfContents = true;
-        } else if (sFileName.endsWith(QLatin1String(".apk"), Qt::CaseInsensitive) &&
-                   (record.spInfo.nUncompressedSize != 0)) {
+        } else if (sFileName.endsWith(QLatin1String(".apk"), Qt::CaseInsensitive) && (record.spInfo.nUncompressedSize != 0)) {
             bHasAPK = true;
         }
 
@@ -177,38 +155,28 @@ bool XAPKS::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
     return false;
 }
 
-bool XAPKS::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords,
-                    PDSTRUCT *pPdStruct)
+bool XAPKS::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     if (!pDevice || !isValid(pListRecords, pPdStruct)) return false;
     DevicePositionGuard positionGuard(pDevice);
 
     XZip outerZip(pDevice);
-    if (!hasValidTableOfContents(pDevice, &outerZip, pListRecords,
-                                 pPdStruct)) {
+    if (!hasValidTableOfContents(pDevice, &outerZip, pListRecords, pPdStruct)) {
         return false;
     }
     qint32 nCandidates = 0;
-    for (qint32 i = 0; (i < pListRecords->count()) &&
-                       XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+    for (qint32 i = 0; (i < pListRecords->count()) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         const RECORD &record = pListRecords->at(i);
-        if (!record.spInfo.sRecordName.endsWith(
-                QLatin1String(".apk"), Qt::CaseInsensitive) ||
-            (record.spInfo.nUncompressedSize <= 0) ||
-            record.mapProperties.value(
-                XBinary::FPART_PROP_ENCRYPTED, false).toBool() ||
-            (record.spInfo.compressMethod2 !=
-             XBinary::HANDLE_METHOD_UNKNOWN) ||
-            ((record.spInfo.compressMethod != XBinary::HANDLE_METHOD_STORE) &&
-             (record.spInfo.compressMethod != XBinary::HANDLE_METHOD_DEFLATE))) {
+        if (!record.spInfo.sRecordName.endsWith(QLatin1String(".apk"), Qt::CaseInsensitive) || (record.spInfo.nUncompressedSize <= 0) ||
+            record.mapProperties.value(XBinary::FPART_PROP_ENCRYPTED, false).toBool() || (record.spInfo.compressMethod2 != XBinary::HANDLE_METHOD_UNKNOWN) ||
+            ((record.spInfo.compressMethod != XBinary::HANDLE_METHOD_STORE) && (record.spInfo.compressMethod != XBinary::HANDLE_METHOD_DEFLATE))) {
             continue;
         }
 
         if (++nCandidates > APKS_APK_CANDIDATE_LIMIT) break;
 
         if (record.spInfo.compressMethod == XBinary::HANDLE_METHOD_STORE) {
-            if ((record.nDataOffset < 0) || (record.nDataSize <= 0) ||
-                (record.nDataSize != record.spInfo.nUncompressedSize)) {
+            if ((record.nDataOffset < 0) || (record.nDataSize <= 0) || (record.nDataSize != record.spInfo.nUncompressedSize)) {
                 continue;
             }
             if (!isStoredRecordCRCValid(pDevice, record, pPdStruct)) {
@@ -225,9 +193,7 @@ bool XAPKS::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords,
             // deflated outer member is supported only when both sides are
             // bounded, then decoded and CRC-authenticated in full before the
             // inner central directory and Android identity are trusted.
-            if ((record.nDataSize <= 0) ||
-                (record.nDataSize > APKS_DEFLATED_APK_LIMIT) ||
-                (record.spInfo.nUncompressedSize > APKS_DEFLATED_APK_LIMIT)) {
+            if ((record.nDataSize <= 0) || (record.nDataSize > APKS_DEFLATED_APK_LIMIT) || (record.spInfo.nUncompressedSize > APKS_DEFLATED_APK_LIMIT)) {
                 continue;
             }
             const QByteArray baAPK = outerZip.decompress(&record, pPdStruct);
@@ -287,12 +253,9 @@ bool XAPKS::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XAPK::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XAPK::INTERNAL_INFO *pInfo =
-            static_cast<XAPK::INTERNAL_INFO *>(
-                guardedThis->XAPK::getInternalInfo(pPdStruct));
+        XAPK::INTERNAL_INFO *pInfo = static_cast<XAPK::INTERNAL_INFO *>(guardedThis->XAPK::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XAPK::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XAPK::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

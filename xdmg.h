@@ -152,8 +152,7 @@ public:
 
     virtual QList<MAPMODE> getMapModesList() override;
     virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
-    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1,
-                                      PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     // Archive methods
     virtual quint64 getNumberOfRecords(PDSTRUCT *pPdStruct) override;
@@ -173,37 +172,24 @@ public:
     static BLOCK_DATA readBlockData(QIODevice *pDevice, qint64 nOffset);
 
 private:
-    bool _loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bRequireXml,
-                         PDSTRUCT *pPdStruct, qint64 *pKolyOffset = nullptr,
-                         qint64 *pArchiveBase = nullptr,
-                         bool bAllowEmbeddedBase = true,
-                         bool bValidateDataForkCRC = true);
-    bool _tryKolyCandidate(qint64 nSize, bool bRequireXml, bool bAllowEmbeddedBase,
-                           bool bValidateDataForkCRC, qint64 *pSelectedArchiveBase,
-                           PDSTRUCT *pPdStruct, qint64 nKolyOffset, bool bFrontKoly,
-                           KOLY_BLOCK *pCandidate, QByteArray *pCandidateXml);
+    bool _loadKolyAndXml(KOLY_BLOCK *pKolyBlock, QByteArray *pXmlData, bool bRequireXml, PDSTRUCT *pPdStruct, qint64 *pKolyOffset = nullptr,
+                         qint64 *pArchiveBase = nullptr, bool bAllowEmbeddedBase = true, bool bValidateDataForkCRC = true);
+    bool _tryKolyCandidate(qint64 nSize, bool bRequireXml, bool bAllowEmbeddedBase, bool bValidateDataForkCRC, qint64 *pSelectedArchiveBase, PDSTRUCT *pPdStruct,
+                           qint64 nKolyOffset, bool bFrontKoly, KOLY_BLOCK *pCandidate, QByteArray *pCandidateXml);
     qint64 _getKolyHeaderOffset(PDSTRUCT *pPdStruct);
-    static bool _searchTryExactImage(XDMG_SEARCH_CRC_CTX *pCtx, qint64 nOffset, qint64 nLength,
-                                     const KOLY_BLOCK &rawKoly, bool bFrontKoly,
-                                     const QMap<qint64, quint32> *pDataCRCs,
-                                     FFSEARCH_INFO *pInfo);
-    bool _loadPartitionMetadata(KOLY_BLOCK *pKolyBlock, QList<DMG_PARTITION_INFO> *pPartitions,
-                                PDSTRUCT *pPdStruct);
-    bool _parsePartition(const DMG_PARTITION_INFO &partitionInfo, const KOLY_BLOCK &kolyBlock,
-                         MISH_BLOCK *pMishBlock, QList<BLOCK_DATA> *pStripes, PDSTRUCT *pPdStruct);
-    bool _parseAllPartitions(const QList<DMG_PARTITION_INFO> &listPartitions, const KOLY_BLOCK &kolyBlock,
-                             QList<MISH_BLOCK> *pMishBlocks, QList<QList<BLOCK_DATA>> *pStripes,
-                             PDSTRUCT *pPdStruct);
+    static bool _searchTryExactImage(XDMG_SEARCH_CRC_CTX *pCtx, qint64 nOffset, qint64 nLength, const KOLY_BLOCK &rawKoly, bool bFrontKoly,
+                                     const QMap<qint64, quint32> *pDataCRCs, FFSEARCH_INFO *pInfo);
+    bool _loadPartitionMetadata(KOLY_BLOCK *pKolyBlock, QList<DMG_PARTITION_INFO> *pPartitions, PDSTRUCT *pPdStruct);
+    bool _parsePartition(const DMG_PARTITION_INFO &partitionInfo, const KOLY_BLOCK &kolyBlock, MISH_BLOCK *pMishBlock, QList<BLOCK_DATA> *pStripes, PDSTRUCT *pPdStruct);
+    bool _parseAllPartitions(const QList<DMG_PARTITION_INFO> &listPartitions, const KOLY_BLOCK &kolyBlock, QList<MISH_BLOCK> *pMishBlocks,
+                             QList<QList<BLOCK_DATA>> *pStripes, PDSTRUCT *pPdStruct);
     QList<DMG_PARTITION_INFO> _parseBlkxPartitions(const QByteArray &baXml, PDSTRUCT *pPdStruct);
-    QList<DMG_PARTITION_INFO> _parseResourceForkPartitions(const QByteArray &baResource,
-                                                           PDSTRUCT *pPdStruct);
-    bool _decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, qint64 nDataForkLength,
-                           qint64 nMishDataOffset, QIODevice *pDevice,
-                           const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties,
-                           PDSTRUCT *pPdStruct);
+    QList<DMG_PARTITION_INFO> _parseResourceForkPartitions(const QByteArray &baResource, PDSTRUCT *pPdStruct);
+    bool _decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, qint64 nDataForkLength, qint64 nMishDataOffset, QIODevice *pDevice,
+                           const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, PDSTRUCT *pPdStruct);
     bool _writeZeroes(QIODevice *pDevice, qint64 nSize, PDSTRUCT *pPdStruct);
-    bool _validatePartitionCRC(QIODevice *pDevice, const MISH_BLOCK &mishBlock,
-                               const QList<BLOCK_DATA> &listStripes, PDSTRUCT *pPdStruct);
+    bool _validatePartitionCRC(QIODevice *pDevice, const MISH_BLOCK &mishBlock, const QList<BLOCK_DATA> &listStripes, PDSTRUCT *pPdStruct);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

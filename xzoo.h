@@ -102,6 +102,7 @@ private:
 
     HANDLE_METHOD _methodToHandle(quint8 nMethod);
     bool _parseEntries(QList<ZOO_RECORD> *pListRecords, PDSTRUCT *pPdStruct);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

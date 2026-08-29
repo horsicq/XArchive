@@ -192,6 +192,7 @@ private:
     bool _parseRecord(qint64 nOffset, CPIO_RECORD_INFO *pInfo, PDSTRUCT *pPdStruct = nullptr);
     bool _scanArchive(qint32 nLimit, QList<RECORD> *pListRecords, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct);
     bool _isTrailerRecord(const QString &sFileName);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

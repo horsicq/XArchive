@@ -101,24 +101,24 @@ public:
 
     // Format-specific context structures
     struct CAB_UNPACK_CONTEXT {
-        QList<qint64> listFileOffsets;             // Offsets of CFFILE entries
-        QList<CFFILE> listFiles;                   // Validated CFFILE entries
-        QList<QString> listFileNames;               // Validated/decoded CFFILE names
-        QList<CFFOLDER> listFolders;               // Folder information
+        QList<qint64> listFileOffsets;                       // Offsets of CFFILE entries
+        QList<CFFILE> listFiles;                             // Validated CFFILE entries
+        QList<QString> listFileNames;                        // Validated/decoded CFFILE names
+        QList<CFFOLDER> listFolders;                         // Folder information
         QMap<quint16, QList<qint64> > mapFolderDataOffsets;  // Validated CFDATA offsets per folder
-        QMap<quint16, QByteArray> mapFolderCache;  // Decompressed folder data cache (folder index -> data)
-        QMap<quint16, qint64> mapFolderUncompressedSizes;  // Complete logical size of each solid folder
-        QMap<quint16, qint64> mapFolderStreamSizes;        // Exact validated CFDATA stream size
-        QMap<quint16, qint64> mapFolderDataSizes;          // Validated sum of CFDATA.cbUncomp values
-        QSet<quint16> setUnvalidatedFolderStreams;         // Directory-only state; unpacking is not permitted
-        qint32 nCurrentFileIndex;                  // Current file being processed
-        quint16 nCbCFHeader;                       // Size of per-cabinet reserved area (if flags & 0x0004)
-        quint8 nCbCFFolder;                        // Size of per-folder reserved area
-        quint8 nCbCFData;                          // Size of per-datablock reserved area
-        QList<qint64> listFolderOffsets;           // Offsets of validated CFFOLDER entries
-        qint64 nMainHeaderSize;                    // CFHEADER plus reserve/link fields
-        QList<qint64> listFileEnds;                // End offsets including NUL-terminated names
-        SOURCE_DEVICE_SNAPSHOT sourceSnapshot;      // Exact source/backing parsed by initUnpack
+        QMap<quint16, QByteArray> mapFolderCache;            // Decompressed folder data cache (folder index -> data)
+        QMap<quint16, qint64> mapFolderUncompressedSizes;    // Complete logical size of each solid folder
+        QMap<quint16, qint64> mapFolderStreamSizes;          // Exact validated CFDATA stream size
+        QMap<quint16, qint64> mapFolderDataSizes;            // Validated sum of CFDATA.cbUncomp values
+        QSet<quint16> setUnvalidatedFolderStreams;           // Directory-only state; unpacking is not permitted
+        qint32 nCurrentFileIndex;                            // Current file being processed
+        quint16 nCbCFHeader;                                 // Size of per-cabinet reserved area (if flags & 0x0004)
+        quint8 nCbCFFolder;                                  // Size of per-folder reserved area
+        quint8 nCbCFData;                                    // Size of per-datablock reserved area
+        QList<qint64> listFolderOffsets;                     // Offsets of validated CFFOLDER entries
+        qint64 nMainHeaderSize;                              // CFHEADER plus reserve/link fields
+        QList<qint64> listFileEnds;                          // End offsets including NUL-terminated names
+        SOURCE_DEVICE_SNAPSHOT sourceSnapshot;               // Exact source/backing parsed by initUnpack
     };
 
     struct CAB_PACK_CONTEXT {
@@ -180,8 +180,8 @@ private:
     bool _readCFFolderExact(qint64 nOffset, CFFOLDER *pResult, PDSTRUCT *pPdStruct = nullptr);
     bool _readCFDataExact(qint64 nOffset, CFDATA *pResult, PDSTRUCT *pPdStruct = nullptr);
     bool _readCFFILEExact(qint64 nOffset, CFFILE *pResult, PDSTRUCT *pPdStruct = nullptr);
-    qint64 _getStreamSize(qint64 nOffset, qint32 nCount, qint32 nReservedSize, qint64 nCabinetSize, qint64 *pUncompressedSize = nullptr,
-                          PDSTRUCT *pPdStruct = nullptr);
+    qint64 _getStreamSize(qint64 nOffset, qint32 nCount, qint32 nReservedSize, qint64 nCabinetSize, qint64 *pUncompressedSize = nullptr, PDSTRUCT *pPdStruct = nullptr);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

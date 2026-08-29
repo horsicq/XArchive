@@ -49,6 +49,7 @@ public:
     virtual QString getFileFormatExt() override;
     virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
     virtual QString getMIMEString() override;
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

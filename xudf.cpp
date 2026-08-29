@@ -327,8 +327,8 @@ QList<XBinary::XFRECORD> XUDF::getXFRecords(FT fileType, quint32 nStructID, cons
                            XFRECORD_FLAG_NONE, VT_UINT32});
     } else if (nStructID == STRUCTID_PRIMARY_VOLUME_DESCRIPTOR) {
         _addTagRecords(&listResult, (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, tag));
-        listResult.append({"nVolumeDescriptorSequenceNumber", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nVolumeDescriptorSequenceNumber), 4, XFRECORD_FLAG_COUNT,
-                           VT_UINT32});
+        listResult.append(
+            {"nVolumeDescriptorSequenceNumber", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nVolumeDescriptorSequenceNumber), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
         listResult.append(
             {"nPrimaryVolumeDescriptorNumber", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nPrimaryVolumeDescriptorNumber), 4, XFRECORD_FLAG_COUNT, VT_UINT32});
         listResult.append({"szVolumeIdentifier", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, szVolumeIdentifier), 32, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
@@ -340,10 +340,8 @@ QList<XBinary::XFRECORD> XUDF::getXFRecords(FT fileType, quint32 nStructID, cons
         listResult.append({"nCharacterSetList", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nCharacterSetList), 4, XFRECORD_FLAG_NONE, VT_UINT32});
         listResult.append({"nMaximumCharacterSetList", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nMaximumCharacterSetList), 4, XFRECORD_FLAG_NONE, VT_UINT32});
         listResult.append({"szVolumeSetIdentifier", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, szVolumeSetIdentifier), 128, XFRECORD_FLAG_NONE, VT_CHAR_ARRAY});
-        listResult.append(
-            {"nDescriptorCharacterSet", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nDescriptorCharacterSet), 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
-        listResult.append(
-            {"nExplanatoryCharacterSet", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nExplanatoryCharacterSet), 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nDescriptorCharacterSet", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nDescriptorCharacterSet), 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
+        listResult.append({"nExplanatoryCharacterSet", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nExplanatoryCharacterSet), 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
         listResult.append({"volumeAbstract.nLength", (qint32)(offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, volumeAbstract) + offsetof(UDF_EXTENT_AD, nLength)), 4,
                            XFRECORD_FLAG_SIZE, VT_UINT32});
         listResult.append({"volumeAbstract.nLocation", (qint32)(offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, volumeAbstract) + offsetof(UDF_EXTENT_AD, nLocation)), 4,
@@ -358,8 +356,8 @@ QList<XBinary::XFRECORD> XUDF::getXFRecords(FT fileType, quint32 nStructID, cons
         listResult.append(
             {"nImplementationIdentifier", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nImplementationIdentifier), 32, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
         listResult.append({"nImplementationUse", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nImplementationUse), 64, XFRECORD_FLAG_NONE, VT_BYTE_ARRAY});
-        listResult.append({"nPredecessorVolumeDescriptorSequenceLocation",
-                           (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nPredecessorVolumeDescriptorSequenceLocation), 4, XFRECORD_FLAG_NONE, VT_UINT32});
+        listResult.append({"nPredecessorVolumeDescriptorSequenceLocation", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nPredecessorVolumeDescriptorSequenceLocation),
+                           4, XFRECORD_FLAG_NONE, VT_UINT32});
         listResult.append({"nFlags", (qint32)offsetof(UDF_PRIMARY_VOLUME_DESCRIPTOR, nFlags), 2, XFRECORD_FLAG_NONE, VT_UINT16});
     } else if (nStructID == STRUCTID_FILE_ENTRY) {
         _addTagRecords(&listResult, (qint32)offsetof(UDF_FILE_ENTRY, tag));
@@ -517,8 +515,7 @@ bool XUDF::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // Refuse a state that belongs to someone else before touching anything:
     // without this a foreign state's context would be deleted below, and a
     // caller holding a copy of it would then double-free.
-    if (!pState || m_bUnpackOperationInProgress ||
-        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState))) {
         return false;
     }
     if (!guardedThis->finishUnpack(pState, nullptr) || !guardedThis || !guardedDevice) return false;
@@ -599,8 +596,7 @@ XBinary::ARCHIVERECORD XUDF::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
     if (!isUnpackSourceCurrent(pState, pPdStruct)) return result;
 
-    if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
-        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         UDF_UNPACK_CONTEXT *pContext = (UDF_UNPACK_CONTEXT *)pState->pContext;
 
         if ((pContext->nCurrentRecordIndex >= 0) && (pContext->nCurrentRecordIndex < pContext->listRecords.count()) &&
@@ -631,8 +627,7 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
             ARCHIVERECORD ar = pContext->listRecords.at(pContext->nCurrentRecordIndex);
 
             if (!ar.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) {
-                if (!XBinary::isUnpackOutputSizeAllowed(
-                        pState->mapUnpackProperties, ar.nStreamSize)) {
+                if (!XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, ar.nStreamSize)) {
                     return false;
                 }
 
@@ -640,12 +635,9 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 // gate; account the member here. Produced bytes are charged
                 // by _writeDevice through decompressState.spOutputBudget.
                 if (pState->spOutputBudget) {
-                    if (!pState->spOutputBudget->beginEntry(
-                            pState->nCurrentIndex,
-                            ar.mapProperties.value(XBinary::FPART_PROP_ORIGINALNAME).toString())) {
+                    if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, ar.mapProperties.value(XBinary::FPART_PROP_ORIGINALNAME).toString())) {
                         if (pState->spOutputBudget->isEnforcing()) {
-                            XBinary::setPdStructErrorString(
-                                pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                            XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
                             return false;
                         }
                         XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
@@ -676,8 +668,7 @@ bool XUDF::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
                 bResult = XStoreDecoder::decompress(&decompressState, pPdStruct);
 
                 if (bResult) {
-                    bResult = guardedThis && guardedSource && guardedOutput &&
-                              XBinary::isPdStructNotCanceled(pPdStruct) &&
+                    bResult = guardedThis && guardedSource && guardedOutput && XBinary::isPdStructNotCanceled(pPdStruct) &&
                               guardedThis->isUnpackSourceCurrent(pState, pPdStruct) &&
                               guardedThis->publishUnpackOutput(pWorkDevice, guardedOutput.data(), pState, pPdStruct);
                 }
@@ -705,8 +696,7 @@ bool XUDF::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     if (!isUnpackSourceCurrent(pState, pPdStruct)) return false;
 
-    if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) &&
-        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (isPdStructNotCanceled(pPdStruct) && pState && pState->pContext && (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         UDF_UNPACK_CONTEXT *pContext = (UDF_UNPACK_CONTEXT *)pState->pContext;
 
         pContext->nCurrentRecordIndex++;

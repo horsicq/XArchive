@@ -25,8 +25,7 @@ const qint64 JAR_MANIFEST_LIMIT = 16LL * 1024 * 1024;
 
 class DevicePositionGuard {
 public:
-    explicit DevicePositionGuard(QIODevice *pDevice)
-        : m_pDevice(pDevice), m_nPosition(-1)
+    explicit DevicePositionGuard(QIODevice *pDevice) : m_pDevice(pDevice), m_nPosition(-1)
     {
         if (m_pDevice && !m_pDevice->isSequential()) {
             m_nPosition = m_pDevice->pos();
@@ -44,7 +43,7 @@ private:
     QPointer<QIODevice> m_pDevice;
     qint64 m_nPosition;
 };
-}
+}  // namespace
 
 XBinary::XCONVERT _TABLE_XJAR_STRUCTID[] = {
     {XJAR::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -60,8 +59,7 @@ bool XJAR::isValid(PDSTRUCT *pPdStruct)
     XZip xzip(getDevice());
 
     if (xzip.isValid(pPdStruct)) {
-        QList<XArchive::RECORD> listArchiveRecords =
-            xzip.getRecords(20000, pPdStruct);
+        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, pPdStruct);
         return isValid(getDevice(), &listArchiveRecords, pPdStruct);
     }
 
@@ -79,12 +77,9 @@ bool XJAR::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     if (!pListRecords) return false;
 
-    for (qint32 i = 0; (i < pListRecords->count()) &&
-                       XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+    for (qint32 i = 0; (i < pListRecords->count()) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         const RECORD &record = pListRecords->at(i);
-        if ((record.spInfo.sRecordName ==
-             QLatin1String("META-INF/MANIFEST.MF")) &&
-            (record.spInfo.nUncompressedSize > 0)) {
+        if ((record.spInfo.sRecordName == QLatin1String("META-INF/MANIFEST.MF")) && (record.spInfo.nUncompressedSize > 0)) {
             return true;
         }
     }
@@ -92,28 +87,20 @@ bool XJAR::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
     return false;
 }
 
-bool XJAR::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords,
-                   PDSTRUCT *pPdStruct)
+bool XJAR::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     if (!pDevice || !isValid(pListRecords, pPdStruct)) return false;
     DevicePositionGuard positionGuard(pDevice);
 
-    const RECORD record = XArchive::getArchiveRecord(
-        QStringLiteral("META-INF/MANIFEST.MF"), pListRecords, pPdStruct);
-    if ((record.spInfo.sRecordName !=
-         QLatin1String("META-INF/MANIFEST.MF")) ||
-        (record.spInfo.nUncompressedSize <= 0) ||
-        (record.spInfo.nUncompressedSize > JAR_MANIFEST_LIMIT) ||
-        (record.nDataSize <= 0) || (record.nDataSize > JAR_MANIFEST_LIMIT) ||
-        record.mapProperties.value(
-            XBinary::FPART_PROP_ENCRYPTED, false).toBool() ||
-        (record.spInfo.compressMethod2 != XBinary::HANDLE_METHOD_UNKNOWN)) {
+    const RECORD record = XArchive::getArchiveRecord(QStringLiteral("META-INF/MANIFEST.MF"), pListRecords, pPdStruct);
+    if ((record.spInfo.sRecordName != QLatin1String("META-INF/MANIFEST.MF")) || (record.spInfo.nUncompressedSize <= 0) ||
+        (record.spInfo.nUncompressedSize > JAR_MANIFEST_LIMIT) || (record.nDataSize <= 0) || (record.nDataSize > JAR_MANIFEST_LIMIT) ||
+        record.mapProperties.value(XBinary::FPART_PROP_ENCRYPTED, false).toBool() || (record.spInfo.compressMethod2 != XBinary::HANDLE_METHOD_UNKNOWN)) {
         return false;
     }
 
     XZip zip(pDevice);
-    const QByteArray baManifest = zip.decompress(
-        &record, pPdStruct, 0, JAR_MANIFEST_LIMIT + 1);
+    const QByteArray baManifest = zip.decompress(&record, pPdStruct, 0, JAR_MANIFEST_LIMIT + 1);
     return baManifest.size() == record.spInfo.nUncompressedSize;
 }
 
@@ -236,12 +223,9 @@ bool XJAR::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XZip::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XZip::INTERNAL_INFO *pInfo =
-            static_cast<XZip::INTERNAL_INFO *>(
-                guardedThis->XZip::getInternalInfo(pPdStruct));
+        XZip::INTERNAL_INFO *pInfo = static_cast<XZip::INTERNAL_INFO *>(guardedThis->XZip::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XZip::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XZip::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

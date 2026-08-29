@@ -42,23 +42,15 @@ const quint8 ARJ_FLAG_GARBLE = 0x01;
 quint16 arjReadLe16(const QByteArray &baData, qint32 nOffset)
 {
     if ((nOffset < 0) || ((nOffset + 2) > baData.size())) return 0;
-    return static_cast<quint16>(
-        static_cast<quint8>(baData.at(nOffset)) |
-        (static_cast<quint16>(static_cast<quint8>(
-             baData.at(nOffset + 1))) << 8));
+    return static_cast<quint16>(static_cast<quint8>(baData.at(nOffset)) | (static_cast<quint16>(static_cast<quint8>(baData.at(nOffset + 1))) << 8));
 }
 
 quint32 arjReadLe32(const QByteArray &baData, qint32 nOffset)
 {
     if ((nOffset < 0) || ((nOffset + 4) > baData.size())) return 0;
-    return static_cast<quint32>(
-        static_cast<quint8>(baData.at(nOffset)) |
-        (static_cast<quint32>(static_cast<quint8>(
-             baData.at(nOffset + 1))) << 8) |
-        (static_cast<quint32>(static_cast<quint8>(
-             baData.at(nOffset + 2))) << 16) |
-        (static_cast<quint32>(static_cast<quint8>(
-             baData.at(nOffset + 3))) << 24));
+    return static_cast<quint32>(static_cast<quint8>(baData.at(nOffset)) | (static_cast<quint32>(static_cast<quint8>(baData.at(nOffset + 1))) << 8) |
+                                (static_cast<quint32>(static_cast<quint8>(baData.at(nOffset + 2))) << 16) |
+                                (static_cast<quint32>(static_cast<quint8>(baData.at(nOffset + 3))) << 24));
 }
 
 const qint64 ARJ_BASIC_FIRST_HEADER_SIZE = 0;
@@ -150,11 +142,9 @@ bool hasArjMarker(XARJ *pArj, qint64 nOffset)
     QPointer<XARJ> guardedArchive(pArj);
     if (!guardedArchive || (nOffset < 0)) return false;
     const qint64 nSize = guardedArchive->getSize();
-    if (!guardedArchive ||
-        (nOffset > (nSize - ARJ_ENTRY_PREFIX_SIZE))) return false;
+    if (!guardedArchive || (nOffset > (nSize - ARJ_ENTRY_PREFIX_SIZE))) return false;
     const QByteArray baMarker = guardedArchive->read_array(nOffset, 2);
-    return guardedArchive && (baMarker.size() == 2) &&
-           (static_cast<quint8>(baMarker.at(0)) == ARJ_MARKER_BYTE0) &&
+    return guardedArchive && (baMarker.size() == 2) && (static_cast<quint8>(baMarker.at(0)) == ARJ_MARKER_BYTE0) &&
            (static_cast<quint8>(baMarker.at(1)) == ARJ_MARKER_BYTE1);
 }
 
@@ -171,13 +161,11 @@ bool isEndOfArchiveHeader(quint16 nBasicHeaderSize)
 qint64 readEntryHeaderSize(XARJ *pArj, qint64 nOffset)
 {
     QPointer<XARJ> guardedArchive(pArj);
-    if (!guardedArchive || !hasArjMarker(guardedArchive.data(), nOffset) ||
-        !guardedArchive) {
+    if (!guardedArchive || !hasArjMarker(guardedArchive.data(), nOffset) || !guardedArchive) {
         return -1;
     }
 
-    quint16 nBasicHeaderSize = readBasicHeaderSize(
-        guardedArchive.data(), nOffset);
+    quint16 nBasicHeaderSize = readBasicHeaderSize(guardedArchive.data(), nOffset);
     if (!guardedArchive) return -1;
 
     if (isEndOfArchiveHeader(nBasicHeaderSize)) {
@@ -185,18 +173,14 @@ qint64 readEntryHeaderSize(XARJ *pArj, qint64 nOffset)
     }
 
     const qint64 nFileSize = guardedArchive->getSize();
-    if (!guardedArchive ||
-        (nOffset > nFileSize) ||
-        ((ARJ_ENTRY_PREFIX_SIZE + nBasicHeaderSize +
-          ARJ_HEADER_CRC_SIZE) > (nFileSize - nOffset))) {
+    if (!guardedArchive || (nOffset > nFileSize) || ((ARJ_ENTRY_PREFIX_SIZE + nBasicHeaderSize + ARJ_HEADER_CRC_SIZE) > (nFileSize - nOffset))) {
         return -1;
     }
 
     qint64 nPos = nOffset + ARJ_ENTRY_PREFIX_SIZE + nBasicHeaderSize + ARJ_HEADER_CRC_SIZE;
 
     while (true) {
-        if ((nPos > nFileSize) ||
-            (ARJ_EXT_HEADER_SIZE_FIELD_SIZE > (nFileSize - nPos))) {
+        if ((nPos > nFileSize) || (ARJ_EXT_HEADER_SIZE_FIELD_SIZE > (nFileSize - nPos))) {
             break;
         }
 
@@ -222,12 +206,10 @@ QString readEntryFileName(XARJ *pArj, qint64 nOffset)
 {
     QPointer<XARJ> guardedArchive(pArj);
     if (!guardedArchive) return QString();
-    quint8 nFirstHeaderSize = guardedArchive->read_uint8(
-        basicFieldOffset(nOffset, ARJ_BASIC_FIRST_HEADER_SIZE));
+    quint8 nFirstHeaderSize = guardedArchive->read_uint8(basicFieldOffset(nOffset, ARJ_BASIC_FIRST_HEADER_SIZE));
     if (!guardedArchive) return QString();
     qint64 nNameOffset = basicHeaderOffset(nOffset) + nFirstHeaderSize;
-    quint16 nBasicHeaderSize = readBasicHeaderSize(
-        guardedArchive.data(), nOffset);
+    quint16 nBasicHeaderSize = readBasicHeaderSize(guardedArchive.data(), nOffset);
     if (!guardedArchive) return QString();
     qint64 nMaxNameLen = (basicHeaderOffset(nOffset) + nBasicHeaderSize) - nNameOffset;
 
@@ -235,8 +217,7 @@ QString readEntryFileName(XARJ *pArj, qint64 nOffset)
         return QString();
     }
 
-    const QString sResult = guardedArchive->read_ansiString(
-        nNameOffset, (qint32)nMaxNameLen);
+    const QString sResult = guardedArchive->read_ansiString(nNameOffset, (qint32)nMaxNameLen);
     return guardedArchive ? sResult : QString();
 }
 
@@ -254,8 +235,7 @@ bool readEntryInfo(XARJ *pArj, qint64 nOffset, ARJ_ENTRY_INFO *pInfo)
     }
 
     info.nOffset = nOffset;
-    info.nBasicHeaderSize = readBasicHeaderSize(
-        guardedArchive.data(), nOffset);
+    info.nBasicHeaderSize = readBasicHeaderSize(guardedArchive.data(), nOffset);
     if (!guardedArchive) return false;
     info.bEndOfArchive = isEndOfArchiveHeader(info.nBasicHeaderSize);
     info.nHeaderSize = readEntryHeaderSize(guardedArchive.data(), nOffset);
@@ -274,30 +254,20 @@ bool readEntryInfo(XARJ *pArj, qint64 nOffset, ARJ_ENTRY_INFO *pInfo)
         return false;
     }
 
-    const QByteArray baBasicHeader = guardedArchive->read_array(
-        basicHeaderOffset(nOffset), info.nBasicHeaderSize);
-    if (!guardedArchive ||
-        (baBasicHeader.size() != info.nBasicHeaderSize)) return false;
-    info.nFirstHeaderSize = static_cast<quint8>(baBasicHeader.at(
-        ARJ_BASIC_FIRST_HEADER_SIZE));
+    const QByteArray baBasicHeader = guardedArchive->read_array(basicHeaderOffset(nOffset), info.nBasicHeaderSize);
+    if (!guardedArchive || (baBasicHeader.size() != info.nBasicHeaderSize)) return false;
+    info.nFirstHeaderSize = static_cast<quint8>(baBasicHeader.at(ARJ_BASIC_FIRST_HEADER_SIZE));
     info.nFlags = static_cast<quint8>(baBasicHeader.at(ARJ_BASIC_FLAGS));
     info.nMethod = static_cast<quint8>(baBasicHeader.at(ARJ_BASIC_METHOD));
-    info.nPasswordModifier = static_cast<quint8>(baBasicHeader.at(
-        ARJ_BASIC_PASSWORD_MODIFIER));
-    info.nDosDateTime = arjReadLe32(baBasicHeader,
-                                    ARJ_BASIC_DOS_DATE_TIME);
-    info.nCompressedSize = arjReadLe32(baBasicHeader,
-                                       ARJ_BASIC_COMPRESSED_SIZE);
-    info.nOriginalSize = arjReadLe32(baBasicHeader,
-                                     ARJ_BASIC_ORIGINAL_SIZE);
+    info.nPasswordModifier = static_cast<quint8>(baBasicHeader.at(ARJ_BASIC_PASSWORD_MODIFIER));
+    info.nDosDateTime = arjReadLe32(baBasicHeader, ARJ_BASIC_DOS_DATE_TIME);
+    info.nCompressedSize = arjReadLe32(baBasicHeader, ARJ_BASIC_COMPRESSED_SIZE);
+    info.nOriginalSize = arjReadLe32(baBasicHeader, ARJ_BASIC_ORIGINAL_SIZE);
     info.nCRC32 = arjReadLe32(baBasicHeader, ARJ_BASIC_CRC32);
-    if ((info.nFirstHeaderSize < 1) ||
-        (info.nFirstHeaderSize >= baBasicHeader.size())) return false;
+    if ((info.nFirstHeaderSize < 1) || (info.nFirstHeaderSize >= baBasicHeader.size())) return false;
     const QByteArray baName = baBasicHeader.mid(info.nFirstHeaderSize);
     const qint32 nNameEnd = baName.indexOf('\0');
-    info.sFileName = QString::fromLatin1(
-        baName.constData(),
-        (nNameEnd >= 0) ? nNameEnd : baName.size());
+    info.sFileName = QString::fromLatin1(baName.constData(), (nNameEnd >= 0) ? nNameEnd : baName.size());
 
     qint64 nStreamOffset = info.nOffset + info.nHeaderSize;
     qint64 nFileSize = guardedArchive->getSize();
@@ -330,13 +300,11 @@ qint64 firstFileRecordOffset(XARJ *pArj)
     // the "compressed/original size" positions actually hold archive datetimes,
     // so the file-record stream-size validation would spuriously reject it and
     // this function would fall back to 0 (breaking record enumeration).
-    if (!guardedArchive || !hasArjMarker(guardedArchive.data(), 0) ||
-        !guardedArchive) {
+    if (!guardedArchive || !hasArjMarker(guardedArchive.data(), 0) || !guardedArchive) {
         return 0;
     }
 
-    quint16 nBasicHeaderSize = readBasicHeaderSize(
-        guardedArchive.data(), 0);
+    quint16 nBasicHeaderSize = readBasicHeaderSize(guardedArchive.data(), 0);
     if (!guardedArchive) return 0;
 
     if (isEndOfArchiveHeader(nBasicHeaderSize)) {
@@ -366,8 +334,7 @@ qint32 countFileRecords(XARJ *pArj, qint64 nStartOffset, XBinary::PDSTRUCT *pPdS
     while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         ARJ_ENTRY_INFO info = {};
 
-        if (!readEntryInfo(guardedArchive.data(), nCurrentOffset, &info) ||
-            !guardedArchive || info.bEndOfArchive) {
+        if (!readEntryInfo(guardedArchive.data(), nCurrentOffset, &info) || !guardedArchive || info.bEndOfArchive) {
             break;
         }
 
@@ -605,13 +572,11 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     }
 
     if (pState) {
-        if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-            !guardedArchive->ownsUnpackSource(pState)) return false;
+        if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
         guardedArchive->releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-        const bool bBound = guardedArchive->bindUnpackSource(
-            pState, pPdStruct);
+        const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
         if (!guardedArchive || !bBound) return false;
 
         pState->nCurrentOffset = 0;
@@ -631,8 +596,7 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             return false;
         }
         pState->nCurrentOffset = nOffset;
-        pState->nNumberOfRecords = countFileRecords(
-            guardedArchive.data(), nOffset, pPdStruct, nullptr);
+        pState->nNumberOfRecords = countFileRecords(guardedArchive.data(), nOffset, pPdStruct, nullptr);
         if (!guardedArchive) {
             *pState = UNPACK_STATE();
             return false;
@@ -640,8 +604,7 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
         bResult = (pState->nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct);
         if (bResult) {
-            bResult = guardedArchive->validateAndFinalizeUnpackSource(
-                pState, pPdStruct);
+            bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pPdStruct);
             if (!guardedArchive) {
                 *pState = UNPACK_STATE();
                 return false;
@@ -658,8 +621,7 @@ bool XARJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
     QPointer<XARJ> guardedArchive(this);
 
@@ -669,9 +631,7 @@ XBinary::ARCHIVERECORD XARJ::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         ARJ_ENTRY_INFO info = {};
 
-        if (!readEntryInfo(guardedArchive.data(), pState->nCurrentOffset,
-                           &info) ||
-            !guardedArchive || info.bEndOfArchive) {
+        if (!readEntryInfo(guardedArchive.data(), pState->nCurrentOffset, &info) || !guardedArchive || info.bEndOfArchive) {
             return result;
         }
 
@@ -717,9 +677,7 @@ bool XARJ::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         ARJ_ENTRY_INFO info = {};
 
-        if (readEntryInfo(guardedArchive.data(), pState->nCurrentOffset,
-                          &info) &&
-            guardedArchive && !info.bEndOfArchive) {
+        if (readEntryInfo(guardedArchive.data(), pState->nCurrentOffset, &info) && guardedArchive && !info.bEndOfArchive) {
             pState->nCurrentOffset = entryEndOffset(info);
             pState->nCurrentIndex++;
 
@@ -741,8 +699,7 @@ bool XARJ::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
     releaseUnpackSource(pState);
     *pState = UNPACK_STATE();
 
@@ -987,12 +944,9 @@ bool XARJ::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

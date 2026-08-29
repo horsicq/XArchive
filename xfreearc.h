@@ -87,9 +87,9 @@ private:
     static const qint32 FREEARC_SIGNATURE_SIZE = 4;
     static const qint32 FREEARC_HEADER_SIZE = 8;  // magic(4) + flags(2) + version(2)
 
-    qint64 _findNextBlock(qint64 nOffset, qint64 nFileSize,
-                          PDSTRUCT *pPdStruct);
+    qint64 _findNextBlock(qint64 nOffset, qint64 nFileSize, PDSTRUCT *pPdStruct);
     QString _readCompressorString(qint64 nOffset, qint64 nMaxSize);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

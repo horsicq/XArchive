@@ -140,36 +140,27 @@ public:
     static const qint32 DECOMPRESS_BUFFERSIZE = 0x4000;  // TODO Check mb set/get ???
 
     bool captureSourceDeviceSnapshot(QIODevice *pDevice, SOURCE_DEVICE_SNAPSHOT *pSnapshot);
-    bool isSourceDeviceSnapshotCurrent(const SOURCE_DEVICE_SNAPSHOT &snapshot,
-                                       QIODevice *pCurrentDevice,
-                                       PDSTRUCT *pPdStruct = nullptr);
+    bool isSourceDeviceSnapshotCurrent(const SOURCE_DEVICE_SNAPSHOT &snapshot, QIODevice *pCurrentDevice, PDSTRUCT *pPdStruct = nullptr);
 
     // Bind a successful streaming initialization to both the source it parsed
     // and the exact UNPACK_STATE object that owns the live context.  Bitwise
     // state copies are never authorized to traverse or destroy that context.
     bool bindUnpackSource(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr);
-    bool getBoundUnpackSourceSnapshot(
-        const UNPACK_STATE *pState,
-        SOURCE_DEVICE_SNAPSHOT *pSnapshot) const;
+    bool getBoundUnpackSourceSnapshot(const UNPACK_STATE *pState, SOURCE_DEVICE_SNAPSHOT *pSnapshot) const;
     bool validateAndFinalizeUnpackSource(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr);
     template <typename T>
-    bool validateAndFinalizeUnpackSource(UNPACK_STATE *pState,
-                                         T *pContext,
-                                         PDSTRUCT *pPdStruct = nullptr)
+    bool validateAndFinalizeUnpackSource(UNPACK_STATE *pState, T *pContext, PDSTRUCT *pPdStruct = nullptr)
     {
-        if (!pState || !pContext ||
-            (pState->pContext != static_cast<void *>(pContext))) {
+        if (!pState || !pContext || (pState->pContext != static_cast<void *>(pContext))) {
             return false;
         }
 
         QPointer<XArchive> guardedArchive(this);
-        if (!registerUnpackContextCleanup(pState, pContext,
-                                          &deleteUnpackContext<T>)) {
+        if (!registerUnpackContextCleanup(pState, pContext, &deleteUnpackContext<T>)) {
             return false;
         }
 
-        const bool bValidated =
-            validateAndFinalizeUnpackSource(pState, pPdStruct);
+        const bool bValidated = validateAndFinalizeUnpackSource(pState, pPdStruct);
         if (!guardedArchive) {
             // Archive destruction transfers the registered context to the
             // shared operation guard.  The caller must not touch it.
@@ -187,8 +178,7 @@ public:
     bool isUnpackSourceCurrent(const UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr);
     bool ownsUnpackSource(const UNPACK_STATE *pState);
     void releaseUnpackSource(UNPACK_STATE *pState);
-    bool transferUnpackSourceOwnership(UNPACK_STATE *pFromState,
-                                       UNPACK_STATE *pToState);
+    bool transferUnpackSourceOwnership(UNPACK_STATE *pFromState, UNPACK_STATE *pToState);
 
 protected:
     struct UNPACK_GUARD_STATE {
@@ -199,13 +189,14 @@ protected:
             CONTEXT_DELETER pDeleter;
         };
 
-        UNPACK_GUARD_STATE()
-            : bOperationInProgress(false), bNestedInfoAuthorized(false),
-              bOwnerAlive(true), nPrivateRecordAuthorized(0)
+        UNPACK_GUARD_STATE() : bOperationInProgress(false), bNestedInfoAuthorized(false), bOwnerAlive(true), nPrivateRecordAuthorized(0)
         {
         }
 
-        ~UNPACK_GUARD_STATE() { cleanupContexts(); }
+        ~UNPACK_GUARD_STATE()
+        {
+            cleanupContexts();
+        }
 
         void cleanupContexts()
         {
@@ -242,11 +233,8 @@ protected:
     // authorization is held by the archive's own decode path.
     class PRIVATE_RECORD_AUTHORIZATION {
     public:
-        explicit PRIVATE_RECORD_AUTHORIZATION(
-            const QSharedPointer<UNPACK_GUARD_STATE> &pState)
-            : m_pState((pState && (pState->nPrivateRecordAuthorized >= 0))
-                           ? pState
-                           : QSharedPointer<UNPACK_GUARD_STATE>())
+        explicit PRIVATE_RECORD_AUTHORIZATION(const QSharedPointer<UNPACK_GUARD_STATE> &pState)
+            : m_pState((pState && (pState->nPrivateRecordAuthorized >= 0)) ? pState : QSharedPointer<UNPACK_GUARD_STATE>())
         {
             if (m_pState) m_pState->nPrivateRecordAuthorized++;
         }
@@ -258,10 +246,12 @@ protected:
             }
         }
 
-        bool isAuthorized() const { return !m_pState.isNull(); }
+        bool isAuthorized() const
+        {
+            return !m_pState.isNull();
+        }
 
-        static bool isHeldBy(
-            const QSharedPointer<UNPACK_GUARD_STATE> &pState)
+        static bool isHeldBy(const QSharedPointer<UNPACK_GUARD_STATE> &pState)
         {
             return pState && (pState->nPrivateRecordAuthorized > 0);
         }
@@ -277,9 +267,7 @@ protected:
         delete static_cast<T *>(pContext);
     }
 
-    bool registerUnpackContextCleanup(
-        UNPACK_STATE *pState, void *pContext,
-        UNPACK_GUARD_STATE::CONTEXT_DELETER pDeleter);
+    bool registerUnpackContextCleanup(UNPACK_STATE *pState, void *pContext, UNPACK_GUARD_STATE::CONTEXT_DELETER pDeleter);
     void unregisterUnpackContextCleanup(void *pContext);
 
     // Compatibility facade for existing format callsites.  Taking the
@@ -287,20 +275,16 @@ protected:
     // copy the shared heap state before any caller-controlled callback.
     class UNPACK_GUARD_FLAG {
     public:
-        UNPACK_GUARD_FLAG() : m_bNestedAuthorization(false) {}
-        UNPACK_GUARD_FLAG(
-            const QSharedPointer<UNPACK_GUARD_STATE> &pState,
-            bool bNestedAuthorization)
-            : m_pState(pState),
-              m_bNestedAuthorization(bNestedAuthorization)
+        UNPACK_GUARD_FLAG() : m_bNestedAuthorization(false)
+        {
+        }
+        UNPACK_GUARD_FLAG(const QSharedPointer<UNPACK_GUARD_STATE> &pState, bool bNestedAuthorization) : m_pState(pState), m_bNestedAuthorization(bNestedAuthorization)
         {
         }
 
         operator bool() const
         {
-            return m_pState && (m_bNestedAuthorization
-                ? m_pState->bNestedInfoAuthorized
-                : m_pState->bOperationInProgress);
+            return m_pState && (m_bNestedAuthorization ? m_pState->bNestedInfoAuthorized : m_pState->bOperationInProgress);
         }
 
         const QSharedPointer<UNPACK_GUARD_STATE> &state() const
@@ -323,14 +307,11 @@ protected:
     // replacement/rollback cannot be guaranteed and leaves an empty,
     // position-zero destination if publication itself fails.
     bool isUnpackOutputSupported(QIODevice *pDevice) const;
-    bool publishUnpackOutput(QIODevice *pStageDevice, QIODevice *pOutputDevice,
-                             const UNPACK_STATE *pState,
-                             PDSTRUCT *pPdStruct = nullptr);
+    bool publishUnpackOutput(QIODevice *pStageDevice, QIODevice *pOutputDevice, const UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr);
 
     bool isDeviceReplacementAllowed() const override
     {
-        return !m_pUnpackGuardState ||
-               !m_pUnpackGuardState->bOperationInProgress;
+        return !m_pUnpackGuardState || !m_pUnpackGuardState->bOperationInProgress;
     }
 
     // QIODevice implementations are caller-controlled and may re-enter an
@@ -339,9 +320,7 @@ protected:
     // across any such virtual call.
     class UNPACK_OPERATION_GUARD {
     public:
-        explicit UNPACK_OPERATION_GUARD(
-            const QSharedPointer<UNPACK_GUARD_STATE> &pState,
-            bool bInfoOperation = false)
+        explicit UNPACK_OPERATION_GUARD(const QSharedPointer<UNPACK_GUARD_STATE> &pState, bool bInfoOperation = false)
             : m_pState(pState), m_bAcquired(false), m_bAllowed(false)
         {
             if (!m_pState) return;
@@ -349,24 +328,16 @@ protected:
                 m_pState->bOperationInProgress = true;
                 m_bAcquired = true;
                 m_bAllowed = true;
-            } else if (bInfoOperation &&
-                       m_pState->bNestedInfoAuthorized) {
+            } else if (bInfoOperation && m_pState->bNestedInfoAuthorized) {
                 m_pState->bNestedInfoAuthorized = false;
                 m_bAllowed = true;
             }
         }
 
-        explicit UNPACK_OPERATION_GUARD(
-            UNPACK_GUARD_FLAG *pBusy,
-            UNPACK_GUARD_FLAG *pNestedInfoAuthorization = nullptr)
-            : UNPACK_OPERATION_GUARD(
-                  pBusy ? pBusy->state()
-                        : QSharedPointer<UNPACK_GUARD_STATE>(),
-                  pBusy && pNestedInfoAuthorization &&
-                      !pBusy->isNestedAuthorization() &&
-                      pNestedInfoAuthorization->isNestedAuthorization() &&
-                      (pBusy->state() ==
-                       pNestedInfoAuthorization->state()))
+        explicit UNPACK_OPERATION_GUARD(UNPACK_GUARD_FLAG *pBusy, UNPACK_GUARD_FLAG *pNestedInfoAuthorization = nullptr)
+            : UNPACK_OPERATION_GUARD(pBusy ? pBusy->state() : QSharedPointer<UNPACK_GUARD_STATE>(),
+                                     pBusy && pNestedInfoAuthorization && !pBusy->isNestedAuthorization() && pNestedInfoAuthorization->isNestedAuthorization() &&
+                                         (pBusy->state() == pNestedInfoAuthorization->state()))
         {
         }
 
@@ -375,8 +346,14 @@ protected:
             release();
         }
 
-        bool isAcquired() const { return m_bAcquired; }
-        bool isAllowed() const { return m_bAllowed; }
+        bool isAcquired() const
+        {
+            return m_bAcquired;
+        }
+        bool isAllowed() const
+        {
+            return m_bAllowed;
+        }
 
         // A guarded initializer may need to delegate terminal cleanup to its
         // public finishUnpack() implementation.  Release first so that the
@@ -402,27 +379,17 @@ protected:
 
     class UNPACK_INFO_AUTHORIZATION {
     public:
-        explicit UNPACK_INFO_AUTHORIZATION(
-            const QSharedPointer<UNPACK_GUARD_STATE> &pState)
-            : m_pState((pState && pState->bOperationInProgress &&
-                        !pState->bNestedInfoAuthorized)
-                           ? pState
-                           : QSharedPointer<UNPACK_GUARD_STATE>())
+        explicit UNPACK_INFO_AUTHORIZATION(const QSharedPointer<UNPACK_GUARD_STATE> &pState)
+            : m_pState((pState && pState->bOperationInProgress && !pState->bNestedInfoAuthorized) ? pState : QSharedPointer<UNPACK_GUARD_STATE>())
         {
             if (m_pState) m_pState->bNestedInfoAuthorized = true;
         }
 
-        UNPACK_INFO_AUTHORIZATION(
-            UNPACK_GUARD_FLAG *pBusy,
-            UNPACK_GUARD_FLAG *pNestedInfoAuthorization)
-            : UNPACK_INFO_AUTHORIZATION(
-                  (pBusy && pNestedInfoAuthorization &&
-                   !pBusy->isNestedAuthorization() &&
-                   pNestedInfoAuthorization->isNestedAuthorization() &&
-                   (pBusy->state() ==
-                    pNestedInfoAuthorization->state()))
-                      ? pBusy->state()
-                      : QSharedPointer<UNPACK_GUARD_STATE>())
+        UNPACK_INFO_AUTHORIZATION(UNPACK_GUARD_FLAG *pBusy, UNPACK_GUARD_FLAG *pNestedInfoAuthorization)
+            : UNPACK_INFO_AUTHORIZATION((pBusy && pNestedInfoAuthorization && !pBusy->isNestedAuthorization() && pNestedInfoAuthorization->isNestedAuthorization() &&
+                                         (pBusy->state() == pNestedInfoAuthorization->state()))
+                                            ? pBusy->state()
+                                            : QSharedPointer<UNPACK_GUARD_STATE>())
         {
         }
 
@@ -433,7 +400,10 @@ protected:
             if (m_pState) m_pState->bNestedInfoAuthorized = false;
         }
 
-        bool isAuthorized() const { return !m_pState.isNull(); }
+        bool isAuthorized() const
+        {
+            return !m_pState.isNull();
+        }
 
     private:
         QSharedPointer<UNPACK_GUARD_STATE> m_pState;
@@ -479,8 +449,7 @@ public:
     // already supplies defaults for the two preceding parameters - repeating it
     // there is a redefinition-of-default-argument error.
     static bool _decompressRecord(const RECORD *pRecord, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct, qint64 nDecompressedOffset,
-                                  qint64 nDecompressedLimit,
-                                  const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties = QMap<UNPACK_PROP, QVariant>());
+                                  qint64 nDecompressedLimit, const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties = QMap<UNPACK_PROP, QVariant>());
     static COMPRESS_RESULT _compress(HANDLE_METHOD compressMethod, QIODevice *pSourceDevice, QIODevice *pDestDevice, PDSTRUCT *pPdStruct = nullptr);
     static COMPRESS_RESULT _compress_deflate(QIODevice *pSourceDevice, QIODevice *pDestDevice, qint32 nLevel, qint32 nMethod, qint32 nWindowsBits, qint32 nMemLevel,
                                              qint32 nStrategy, PDSTRUCT *pPdStruct = nullptr);
@@ -499,10 +468,8 @@ public:
     // Resolve a tagged logical record by index through a fresh streaming
     // session.  The expected public record is re-read and matched exactly
     // before extraction; output remains transactional through finishUnpack().
-    bool unpackArchiveStreamRecord(
-        const ARCHIVERECORD &expectedRecord, QIODevice *pOutputDevice,
-        const QMap<UNPACK_PROP, QVariant> &mapProperties,
-        PDSTRUCT *pPdStruct = nullptr);
+    bool unpackArchiveStreamRecord(const ARCHIVERECORD &expectedRecord, QIODevice *pOutputDevice, const QMap<UNPACK_PROP, QVariant> &mapProperties,
+                                   PDSTRUCT *pPdStruct = nullptr);
     bool unpackToFolder(const QString &sResultPathName, PDSTRUCT *pPdStruct = nullptr);
     bool dumpToFile(const RECORD *pRecord, const QString &sFileName, PDSTRUCT *pPdStruct = nullptr);
     static RECORD getArchiveRecord(const QString &sRecordFileName, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct = nullptr);

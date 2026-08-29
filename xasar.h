@@ -84,7 +84,7 @@ private:
         QString sExternalLogicalName;
         QString sExternalFileName;
         QByteArray baExternalSHA256;
-        qint64 nOffset;   // absolute file offset
+        qint64 nOffset;  // absolute file offset
         qint64 nSize;
         bool bIsFolder;
         bool bIsExternal;
@@ -99,8 +99,8 @@ private:
 
     // Returns [jsonLength, jsonStringOffset] via out params; false if not ASAR.
     bool _readHeader(qint64 *pnJsonOffset, qint64 *pnJsonSize, qint64 *pnBlobOffset);
-    bool _walkTree(const class QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords,
-                   PDSTRUCT *pPdStruct, qint32 nDepth, bool bParentUnpacked = false);
+    bool _walkTree(const class QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords, PDSTRUCT *pPdStruct, qint32 nDepth,
+                   bool bParentUnpacked = false);
     bool _prepareExternalRecords(ASAR_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct);
     bool _resolveLinks(ASAR_UNPACK_CONTEXT *pContext);
 

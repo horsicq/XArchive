@@ -21,7 +21,7 @@
 #include "xarx.h"
 
 namespace {
-const qint64 ARX_MIN_HEADER = 24;      // through the name-length byte plus the checksum
+const qint64 ARX_MIN_HEADER = 24;       // through the name-length byte plus the checksum
 const qint32 ARX_MAX_MEMBERS = 100000;  // the same ceiling the other linked-list readers use
 }  // namespace
 
@@ -198,8 +198,7 @@ qint64 XARX::getFileFormatSize(PDSTRUCT *pPdStruct)
 bool XARX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XARX> guardedArchive(this);
-    if (!pState || m_bUnpackOperationInProgress ||
-        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
         return false;
     }
     if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
@@ -367,8 +366,7 @@ QList<XBinary::FPART> XARX::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
         nMaxOffset = member.nDataOffset + member.nCompressedSize;
     }
 
-    if ((nFileParts & FILEPART_OVERLAY) && (nMaxOffset > 0) && ((nMaxOffset + 1) < getSize()) &&
-        ((nLimit <= 0) || (listResult.size() < nLimit))) {
+    if ((nFileParts & FILEPART_OVERLAY) && (nMaxOffset > 0) && ((nMaxOffset + 1) < getSize()) && ((nLimit <= 0) || (listResult.size() < nLimit))) {
         FPART part = {};
         part.filePart = FILEPART_OVERLAY;
         part.nFileOffset = nMaxOffset + 1;  // past the terminator byte

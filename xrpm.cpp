@@ -25,9 +25,8 @@
 #include "xcpio.h"
 #include "xgzip.h"
 
-static XBinary::XCONVERT _TABLE_XRPM_STRUCTID[] = {{XRPM::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                   {XRPM::STRUCTID_LEAD, "LEAD", QString("LEAD")},
-                                                   {XRPM::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
+static XBinary::XCONVERT _TABLE_XRPM_STRUCTID[] = {
+    {XRPM::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")}, {XRPM::STRUCTID_LEAD, "LEAD", QString("LEAD")}, {XRPM::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
 
 static const qint64 N_RPM_LEAD_SIZE = 96;
 static const qint64 N_RPM_HEADER_INTRO_SIZE = 16;
@@ -53,14 +52,13 @@ bool hasCpioMagic(XBinary *pBinary, qint64 nOffset, qint64 nSize)
     const QByteArray baMagic = pBinary->read_array_process(nOffset, qMin<qint64>(6, nSize), nullptr);
     if (baMagic.size() >= 6) {
         const QByteArray baAscii = baMagic.left(6);
-        if ((baAscii == QByteArrayLiteral("070701")) || (baAscii == QByteArrayLiteral("070702")) ||
-            (baAscii == QByteArrayLiteral("070707")) || (baAscii == QByteArrayLiteral("070727"))) {
+        if ((baAscii == QByteArrayLiteral("070701")) || (baAscii == QByteArrayLiteral("070702")) || (baAscii == QByteArrayLiteral("070707")) ||
+            (baAscii == QByteArrayLiteral("070727"))) {
             return true;
         }
     }
     return (baMagic.size() >= 2) &&
-           ((((quint8)baMagic.at(0) == 0xC7) && ((quint8)baMagic.at(1) == 0x71)) ||
-            (((quint8)baMagic.at(0) == 0x71) && ((quint8)baMagic.at(1) == 0xC7)));
+           ((((quint8)baMagic.at(0) == 0xC7) && ((quint8)baMagic.at(1) == 0x71)) || (((quint8)baMagic.at(0) == 0x71) && ((quint8)baMagic.at(1) == 0xC7)));
 }
 }  // namespace
 
@@ -74,8 +72,7 @@ bool XRPM::isValid(PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((getSize() < N_RPM_LEAD_SIZE) || (read_uint8(0) != 0xED) || (read_uint8(1) != 0xAB) ||
-        (read_uint8(2) != 0xEE) || (read_uint8(3) != 0xDB)) {
+    if ((getSize() < N_RPM_LEAD_SIZE) || (read_uint8(0) != 0xED) || (read_uint8(1) != 0xAB) || (read_uint8(2) != 0xEE) || (read_uint8(3) != 0xDB)) {
         return false;
     }
 
@@ -125,8 +122,7 @@ qint64 XRPM::_readHeaderSize(qint64 nOffset)
         return -1;
     }
 
-    if ((read_uint8(nOffset) != 0x8E) || (read_uint8(nOffset + 1) != 0xAD) ||
-        (read_uint8(nOffset + 2) != 0xE8) || (read_uint8(nOffset + 3) != 1) ||
+    if ((read_uint8(nOffset) != 0x8E) || (read_uint8(nOffset + 1) != 0xAD) || (read_uint8(nOffset + 2) != 0xE8) || (read_uint8(nOffset + 3) != 1) ||
         (read_uint32(nOffset + 4, true) != 0)) {
         return -1;
     }
@@ -569,12 +565,10 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedArchive->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) {
         return false;
     }
-    RPM_UNPACK_CONTEXT *pOldContext =
-        static_cast<RPM_UNPACK_CONTEXT *>(pState->pContext);
+    RPM_UNPACK_CONTEXT *pOldContext = static_cast<RPM_UNPACK_CONTEXT *>(pState->pContext);
     guardedArchive->releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pOldContext;
@@ -657,10 +651,8 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             }
             const qint64 nStreamOffset = gzipRecord.nStreamOffset;
             const qint64 nStreamSize = gzipRecord.nStreamSize;
-            bGzipValid = (nStreamOffset >= 10) && (nStreamSize > 0) &&
-                         (nStreamOffset <= pContext->nPayloadSize) &&
-                         (nStreamSize <= (pContext->nPayloadSize - nStreamOffset)) &&
-                         ((nStreamOffset + nStreamSize) <= (pContext->nPayloadSize - 8));
+            bGzipValid = (nStreamOffset >= 10) && (nStreamSize > 0) && (nStreamOffset <= pContext->nPayloadSize) &&
+                         (nStreamSize <= (pContext->nPayloadSize - nStreamOffset)) && ((nStreamOffset + nStreamSize) <= (pContext->nPayloadSize - 8));
             // An RPM gzip payload owns one complete member.  Reject trailing
             // bytes instead of silently treating a second member or junk as
             // unauthenticated package data.
@@ -731,8 +723,7 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nTotalSize = nFileSize;
     pState->mapUnpackProperties = mapProperties;
 
-    if (!guardedArchive->validateAndFinalizeUnpackSource(
-            pState, pContext, pPdStruct)) {
+    if (!guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
         if (!guardedArchive) return false;
         pState->pContext = nullptr;
         guardedArchive->releaseUnpackSource(pState);
@@ -746,8 +737,7 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XRPM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
     QPointer<XRPM> guardedArchive(this);
 
@@ -762,9 +752,8 @@ XBinary::ARCHIVERECORD XRPM::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
     RPM_UNPACK_CONTEXT *pContext = (RPM_UNPACK_CONTEXT *)pState->pContext;
 
-    if ((pContext->nPayloadOffset < 0) || (pContext->nPayloadSize < 0) ||
-        (pContext->nPayloadOffset > nCurrentSize) || (pContext->nPayloadSize > (nCurrentSize - pContext->nPayloadOffset)) ||
-        (pContext->compressMethod == HANDLE_METHOD_UNKNOWN)) {
+    if ((pContext->nPayloadOffset < 0) || (pContext->nPayloadSize < 0) || (pContext->nPayloadOffset > nCurrentSize) ||
+        (pContext->nPayloadSize > (nCurrentSize - pContext->nPayloadOffset)) || (pContext->compressMethod == HANDLE_METHOD_UNKNOWN)) {
         return ARCHIVERECORD();
     }
 
@@ -814,8 +803,7 @@ bool XRPM::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
     guardedArchive->releaseUnpackSource(pState);
     if (pState->pContext) {
         RPM_UNPACK_CONTEXT *pContext = (RPM_UNPACK_CONTEXT *)pState->pContext;
@@ -842,12 +830,9 @@ bool XRPM::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

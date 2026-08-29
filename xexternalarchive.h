@@ -52,17 +52,11 @@ public:
     explicit XExternalArchive(QIODevice *pDevice, BACKEND backend);
 
     QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
-    bool initUnpack(UNPACK_STATE *pState,
-                    const QMap<UNPACK_PROP, QVariant> &mapProperties,
-                    PDSTRUCT *pPdStruct = nullptr) override;
-    ARCHIVERECORD infoCurrent(UNPACK_STATE *pState,
-                              PDSTRUCT *pPdStruct = nullptr) override;
-    bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice,
-                       PDSTRUCT *pPdStruct = nullptr) override;
-    bool moveToNext(UNPACK_STATE *pState,
-                    PDSTRUCT *pPdStruct = nullptr) override;
-    bool finishUnpack(UNPACK_STATE *pState,
-                      PDSTRUCT *pPdStruct = nullptr) override;
+    bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
+    bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     QList<FPART_PROP> getAvailableFPARTProperties() override;
 
     // XSFX gives all provisional candidates in one operation the same
@@ -78,8 +72,7 @@ public:
     // Authenticates/materializes a metadata-only FreeArc/ZPAQ context without
     // publishing a member. Used for empty and directory-only provisional SFX
     // candidates, whose normal streaming API has no file body to trigger it.
-    bool verifyDeferredArchive(UNPACK_STATE *pState,
-                               PDSTRUCT *pPdStruct = nullptr);
+    bool verifyDeferredArchive(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr);
 
 protected:
     BACKEND getExternalBackend() const;
@@ -87,9 +80,7 @@ protected:
 
 private:
     struct EXTERNAL_UNPACK_CONTEXT;
-    bool _materializeDeferredArchive(EXTERNAL_UNPACK_CONTEXT *pContext,
-                                     UNPACK_STATE *pState,
-                                     PDSTRUCT *pPdStruct);
+    bool _materializeDeferredArchive(EXTERNAL_UNPACK_CONTEXT *pContext, UNPACK_STATE *pState, PDSTRUCT *pPdStruct);
 
     BACKEND m_backend;
     QDeadlineTimer m_helperDeadline;

@@ -89,8 +89,7 @@ bool XTAR_LZ4::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XTARCOMPRESSED::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XTARCOMPRESSED::INTERNAL_INFO *pInfo =
-            static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
+        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
         static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }

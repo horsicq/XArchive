@@ -27,21 +27,21 @@
 
 namespace {
 
-const quint8 ARC_DLE = 0x90;                 // run-length escape
+const quint8 ARC_DLE = 0x90;  // run-length escape
 const qint32 ARC_OUTPUT_BUFFER_SIZE = 0x10000;
 
 const qint32 ARC_LZW_MIN_BITS = 9;
-const qint32 ARC_LZW_CRUNCH_MAX_BITS = 12;   // method 8
-const qint32 ARC_LZW_SQUASH_BITS = 13;       // method 9
-const quint32 ARC_LZW_CLEAR = 256;           // dynamic-width methods only
+const qint32 ARC_LZW_CRUNCH_MAX_BITS = 12;  // method 8
+const qint32 ARC_LZW_SQUASH_BITS = 13;      // method 9
+const quint32 ARC_LZW_CLEAR = 256;          // dynamic-width methods only
 const quint32 ARC_LZW_MAX_TABLE = 1u << ARC_LZW_SQUASH_BITS;
 
-const qint32 ARC_SQUEEZE_NUMVALS = 257;      // 256 byte values + the end marker
+const qint32 ARC_SQUEEZE_NUMVALS = 257;  // 256 byte values + the end marker
 const qint32 ARC_SQUEEZE_EOF = 256;
 
 struct ARC_PARAMS {
-    bool bRunLength;   // apply the outer run-length stage
-    bool bDynamic;     // start at 9 bits and widen, instead of a fixed width
+    bool bRunLength;  // apply the outer run-length stage
+    bool bDynamic;    // start at 9 bits and widen, instead of a fixed width
     qint32 nMaxBits;
     bool bLeadingMaxBitsByte;
 };
@@ -79,22 +79,33 @@ bool arcParams(qint32 nMethod, ARC_PARAMS *pParams)
 class ArcCodeReader {
 public:
     ArcCodeReader(class ArcSource *pSource, qint32 nInitBits, qint32 nMaxBits)
-        : m_pSource(pSource), m_nInitBits(nInitBits), m_nMaxBits(nMaxBits), m_nBits(nInitBits), m_nOffset(0), m_nSize(0),
-          m_bClearPending(false), m_nFreeEnt(0)
+        : m_pSource(pSource), m_nInitBits(nInitBits), m_nMaxBits(nMaxBits), m_nBits(nInitBits), m_nOffset(0), m_nSize(0), m_bClearPending(false), m_nFreeEnt(0)
     {
         m_nMaxMaxCode = (1u << nMaxBits);
         m_nMaxCode = maxCodeFor(nInitBits);
     }
 
-    void setFreeEnt(quint32 nFreeEnt) { m_nFreeEnt = nFreeEnt; }
-    void requestClear() { m_bClearPending = true; }
-    qint32 width() const { return m_nBits; }
+    void setFreeEnt(quint32 nFreeEnt)
+    {
+        m_nFreeEnt = nFreeEnt;
+    }
+    void requestClear()
+    {
+        m_bClearPending = true;
+    }
+    qint32 width() const
+    {
+        return m_nBits;
+    }
 
     // Returns false at end of input.
     bool read(quint32 *pCode);
 
 private:
-    quint32 maxCodeFor(qint32 nBits) const { return (nBits == m_nMaxBits) ? m_nMaxMaxCode : ((1u << nBits) - 1); }
+    quint32 maxCodeFor(qint32 nBits) const
+    {
+        return (nBits == m_nMaxBits) ? m_nMaxMaxCode : ((1u << nBits) - 1);
+    }
 
     class ArcSource *m_pSource;
     qint32 m_nInitBits;
@@ -115,8 +126,16 @@ private:
 class ArcSink {
 public:
     ArcSink(XBinary::DATAPROCESS_STATE *pState, bool bRunLength, bool bHasExpectedSize, qint64 nExpectedSize)
-        : m_pState(pState), m_bRunLength(bRunLength), m_bHasExpectedSize(bHasExpectedSize), m_nExpectedSize(nExpectedSize),
-          m_nProduced(0), m_bInRepeat(false), m_bHasLast(false), m_nLast(0), m_bOverflow(false), m_bFramingError(false)
+        : m_pState(pState),
+          m_bRunLength(bRunLength),
+          m_bHasExpectedSize(bHasExpectedSize),
+          m_nExpectedSize(nExpectedSize),
+          m_nProduced(0),
+          m_bInRepeat(false),
+          m_bHasLast(false),
+          m_nLast(0),
+          m_bOverflow(false),
+          m_bFramingError(false)
     {
         m_baOutput.reserve(ARC_OUTPUT_BUFFER_SIZE);
     }
@@ -165,11 +184,26 @@ public:
         return true;
     }
 
-    qint64 produced() const { return m_nProduced; }
-    bool isTruncated() const { return m_bInRepeat; }  // stream ended mid-escape
-    bool isOverflow() const { return m_bOverflow; }
-    bool isFramingError() const { return m_bFramingError; }
-    bool isComplete() const { return !m_bHasExpectedSize || (m_nProduced == m_nExpectedSize); }
+    qint64 produced() const
+    {
+        return m_nProduced;
+    }
+    bool isTruncated() const
+    {
+        return m_bInRepeat;
+    }  // stream ended mid-escape
+    bool isOverflow() const
+    {
+        return m_bOverflow;
+    }
+    bool isFramingError() const
+    {
+        return m_bFramingError;
+    }
+    bool isComplete() const
+    {
+        return !m_bHasExpectedSize || (m_nProduced == m_nExpectedSize);
+    }
 
 private:
     bool emit_(quint8 nByte)
@@ -205,7 +239,9 @@ private:
 // stop when the declared original size has been produced.
 class ArcSource {
 public:
-    explicit ArcSource(XBinary::DATAPROCESS_STATE *pState) : m_pState(pState), m_nBits(0), m_nBuffer(0), m_nBytesRead(0) {}
+    explicit ArcSource(XBinary::DATAPROCESS_STATE *pState) : m_pState(pState), m_nBits(0), m_nBuffer(0), m_nBytesRead(0)
+    {
+    }
 
     bool readByte(quint8 *pByte)
     {
@@ -321,7 +357,7 @@ bool arcDecodeSqueeze(ArcSource *pSource, ArcSink *pSink, XBinary::PDSTRUCT *pPd
         quint8 b = 0;
         if (!pSource->readByte(&a) || !pSource->readByte(&b)) return false;
         const qint32 nValue = (qint32)(qint16)((quint16)a | ((quint16)b << 8));
-        if (nValue >= nNodes) return false;                                   // forward index out of range
+        if (nValue >= nNodes) return false;                                     // forward index out of range
         if ((nValue < 0) && ((-(nValue + 1)) > ARC_SQUEEZE_EOF)) return false;  // leaf out of range
         listChild[(size_t)i] = nValue;
     }
@@ -493,7 +529,6 @@ bool XArcDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
 
     if (bResult && !pDecompressState->bWriteError && !sink.flush()) bResult = false;
 
-    return bResult && sink.isComplete() && !sink.isTruncated() && !sink.isOverflow() && !sink.isFramingError() &&
-           (pDecompressState->nCountOutput == sink.produced()) && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return bResult && sink.isComplete() && !sink.isTruncated() && !sink.isOverflow() && !sink.isFramingError() && (pDecompressState->nCountOutput == sink.produced()) &&
+           !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

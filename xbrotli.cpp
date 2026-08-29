@@ -27,12 +27,17 @@
 namespace {
 class BrotliDiscardDevice : public QIODevice {
 protected:
-    qint64 readData(char *, qint64) override { return -1; }
-    qint64 writeData(const char *, qint64 nSize) override { return (nSize >= 0) ? nSize : -1; }
+    qint64 readData(char *, qint64) override
+    {
+        return -1;
+    }
+    qint64 writeData(const char *, qint64 nSize) override
+    {
+        return (nSize >= 0) ? nSize : -1;
+    }
 };
 
-bool measureBrotliStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize,
-                         XBinary::PDSTRUCT *pPdStruct,
+bool measureBrotliStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize, XBinary::PDSTRUCT *pPdStruct,
                          const QMap<XBinary::UNPACK_PROP, QVariant> *pUnpackProperties = nullptr)
 {
     if (pnCompressedSize) *pnCompressedSize = 0;
@@ -56,9 +61,8 @@ bool measureBrotliStream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompres
     state.nInputLimit = nFileSize;
     state.nProcessedLimit = -1;
 
-    const bool bResult = XBrotliDecoder::decompress(&state, pPdStruct) &&
-                         (state.nCountInput >= 0) && (state.nCountInput <= nFileSize) &&
-                         (state.nCountOutput >= 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+    const bool bResult = XBrotliDecoder::decompress(&state, pPdStruct) && (state.nCountInput >= 0) && (state.nCountInput <= nFileSize) && (state.nCountOutput >= 0) &&
+                         XBinary::isPdStructNotCanceled(pPdStruct);
     if (bResult) {
         if (pnCompressedSize) *pnCompressedSize = state.nCountInput;
         if (pnUncompressedSize) *pnUncompressedSize = state.nCountOutput;
@@ -87,8 +91,7 @@ bool XBrotli::isValid(PDSTRUCT *pPdStruct)
     QPointer<QIODevice> guardedSource(getDevice());
     const qint64 nSize = getSize();
     if (!guardedThis || !guardedSource) return false;
-    const bool bResult = measureBrotliStream(
-        guardedSource.data(), nSize, nullptr, nullptr, pPdStruct);
+    const bool bResult = measureBrotliStream(guardedSource.data(), nSize, nullptr, nullptr, pPdStruct);
     return guardedThis && bResult;
 }
 
@@ -345,8 +348,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XBrotli::getDefaultUnpackProperties()
 bool XBrotli::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XBrotli> guardedThis(this);
-    if (!pState || m_bUnpackOperationInProgress ||
-        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
         return false;
     }
     const bool bFinished = finishUnpack(pState, nullptr);
@@ -369,9 +371,7 @@ bool XBrotli::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
     qint64 nCompressedSize = 0;
     qint64 nUncompressedSize = 0;
     QPointer<QIODevice> guardedSource(getDevice());
-    const bool bMeasured = guardedSource && measureBrotliStream(
-        guardedSource.data(), nFileSize, &nCompressedSize,
-        &nUncompressedSize, pPdStruct, &mapProperties);
+    const bool bMeasured = guardedSource && measureBrotliStream(guardedSource.data(), nFileSize, &nCompressedSize, &nUncompressedSize, pPdStruct, &mapProperties);
     if (!guardedThis) return false;
     if (!bMeasured) {
         releaseUnpackSource(pState);
@@ -409,14 +409,12 @@ bool XBrotli::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant>
 XBinary::ARCHIVERECORD XBrotli::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     QPointer<XBrotli> guardedThis(this);
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return result;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
@@ -442,19 +440,14 @@ XBinary::ARCHIVERECORD XBrotli::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
 bool XBrotli::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     QPointer<XBrotli> guardedThis(this);
-    if (!pState || !pState->pContext || !pDevice ||
-        !ownsUnpackSource(pState) ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!pState || !pState->pContext || !pDevice || !ownsUnpackSource(pState) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
+        return false;
 
-    const qint64 nCompressedSize =
-        static_cast<BROTLI_UNPACK_CONTEXT *>(pState->pContext)
-            ->nCompressedSize;
+    const qint64 nCompressedSize = static_cast<BROTLI_UNPACK_CONTEXT *>(pState->pContext)->nCompressedSize;
     // The base implementation owns the operation guard and performs the final
     // source/output validation after publication.  Do not make another
     // callback-bearing source check after that guard has been released.
-    const bool bResult = XArchive::unpackCurrent(
-        pState, pDevice, pPdStruct);
+    const bool bResult = XArchive::unpackCurrent(pState, pDevice, pPdStruct);
     if (!guardedThis) return false;
     if (bResult) pState->nCurrentOffset = nCompressedSize;
     return bResult;
@@ -466,12 +459,9 @@ bool XBrotli::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
-    if (!pState || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
 
     if (pState->nCurrentIndex < pState->nNumberOfRecords) ++pState->nCurrentIndex;
     return pState->nCurrentIndex < pState->nNumberOfRecords;
@@ -491,8 +481,7 @@ bool XBrotli::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
-    BROTLI_UNPACK_CONTEXT *pContext =
-        static_cast<BROTLI_UNPACK_CONTEXT *>(pState->pContext);
+    BROTLI_UNPACK_CONTEXT *pContext = static_cast<BROTLI_UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
 
@@ -545,12 +534,9 @@ bool XBrotli::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

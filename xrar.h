@@ -256,6 +256,7 @@ private:
     // Helper functions for packing
     QByteArray createFileBlock4(const QString &sFileName, qint64 nFileSize, quint32 nFileCRC, quint32 nFileTime, quint32 nAttributes);
     quint16 calculateCRC16(const QByteArray &data);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

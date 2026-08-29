@@ -33,9 +33,9 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
         Algo_utils::prepareState(pDecompressState);
 
         // LZSS parameters for SZDD format
-        const qint32 N_WINDOW_SIZE = 4096;     // Size of sliding window
-        const qint32 N_MATCH_MIN_LENGTH = 3;   // Minimum match length
-        const qint32 N_MATCH_BIAS = 16;        // MS LZSS copy offset bias
+        const qint32 N_WINDOW_SIZE = 4096;    // Size of sliding window
+        const qint32 N_MATCH_MIN_LENGTH = 3;  // Minimum match length
+        const qint32 N_MATCH_BIAS = 16;       // MS LZSS copy offset bias
 
         const qint64 nOutputLimit = pDecompressState->nProcessedLimit;
         qint64 nOutputCount = 0;
@@ -118,7 +118,7 @@ bool XLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBin
 
                 const quint8 nFirstByte = static_cast<quint8>(bytePos[0]);
                 const quint8 nSecondByte = static_cast<quint8>(bytePos[1]);
-                const quint16 nLen = (nSecondByte & 0x0F) + N_MATCH_MIN_LENGTH;      // 4-bit length + 3
+                const quint16 nLen = (nSecondByte & 0x0F) + N_MATCH_MIN_LENGTH;  // 4-bit length + 3
                 const qint32 nPos = ((((qint16)(nSecondByte & 0xF0) << 4) | nFirstByte) + N_MATCH_BIAS) & (N_WINDOW_SIZE - 1);
 
                 if ((nOutputLimit != -1) && (nOutputCount + nLen > nOutputLimit)) {

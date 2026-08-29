@@ -94,6 +94,7 @@ public:
     virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
 
     static QString cmethodToString(CMETHOD cmethod);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

@@ -28,13 +28,11 @@ bool isPeaNonStreamControl(quint8 nValue)
 
 bool isPeaStreamControl(quint8 nValue)
 {
-    return isPeaNonStreamControl(nValue) || ((nValue >= 0x30) && (nValue <= 0x33)) ||
-           ((nValue >= 0x41) && (nValue <= 0x4C));
+    return isPeaNonStreamControl(nValue) || ((nValue >= 0x30) && (nValue <= 0x33)) || ((nValue >= 0x41) && (nValue <= 0x4C));
 }
 }  // namespace
 
-XPEA::XPEA(QIODevice *pDevice)
-    : XExternalArchive(pDevice, BACKEND_PEA)
+XPEA::XPEA(QIODevice *pDevice) : XExternalArchive(pDevice, BACKEND_PEA)
 {
 }
 
@@ -63,23 +61,18 @@ qint64 XPEA::getFirstStreamTriggerOffset() const
 bool XPEA::isValid(PDSTRUCT *pPdStruct)
 {
     const qint64 nFileSize = getSize();
-    if (!isPdStructNotCanceled(pPdStruct) ||
-        (nFileSize < PEA_ARCHIVE_HEADER_SIZE + PEA_STREAM_FIXED_SIZE)) {
+    if (!isPdStructNotCanceled(pPdStruct) || (nFileSize < PEA_ARCHIVE_HEADER_SIZE + PEA_STREAM_FIXED_SIZE)) {
         return false;
     }
 
     const QByteArray baArchiveHeader = read_array(0, PEA_ARCHIVE_HEADER_SIZE);
-    if ((baArchiveHeader.size() != PEA_ARCHIVE_HEADER_SIZE) ||
-        ((quint8)baArchiveHeader.at(0) != 0xEA) ||
-        ((quint8)baArchiveHeader.at(1) != 1) ||
-        ((quint8)baArchiveHeader.at(2) > 6) ||
-        !isPeaNonStreamControl((quint8)baArchiveHeader.at(3))) {
+    if ((baArchiveHeader.size() != PEA_ARCHIVE_HEADER_SIZE) || ((quint8)baArchiveHeader.at(0) != 0xEA) || ((quint8)baArchiveHeader.at(1) != 1) ||
+        ((quint8)baArchiveHeader.at(2) > 6) || !isPeaNonStreamControl((quint8)baArchiveHeader.at(3))) {
         return false;
     }
 
     const qint64 nTriggerOffset = getFirstStreamTriggerOffset();
-    if ((nTriggerOffset < PEA_ARCHIVE_HEADER_SIZE + 2) ||
-        (nTriggerOffset > nFileSize - 8)) {
+    if ((nTriggerOffset < PEA_ARCHIVE_HEADER_SIZE + 2) || (nTriggerOffset > nFileSize - 8)) {
         return false;
     }
 
@@ -88,9 +81,8 @@ bool XPEA::isValid(PDSTRUCT *pPdStruct)
     const quint8 nStreamControl = read_uint8(nTriggerOffset + 6);
     const quint8 nObjectControl = read_uint8(nTriggerOffset + 7);
 
-    return isPdStructNotCanceled(pPdStruct) &&
-           (baTrigger == QByteArray("POD\0", 4)) && (nCompression <= 3) &&
-           isPeaStreamControl(nStreamControl) && isPeaNonStreamControl(nObjectControl);
+    return isPdStructNotCanceled(pPdStruct) && (baTrigger == QByteArray("POD\0", 4)) && (nCompression <= 3) && isPeaStreamControl(nStreamControl) &&
+           isPeaNonStreamControl(nObjectControl);
 }
 
 bool XPEA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)

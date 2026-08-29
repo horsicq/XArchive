@@ -67,10 +67,8 @@ protected:
             }
             qint64 nCRCOffset = 0;
             while (nCRCOffset < nWritten) {
-                const qint32 nCRCSize = (qint32)(std::min)(nWritten - nCRCOffset,
-                                                          (qint64)(std::numeric_limits<qint32>::max)());
-                m_nCRC32 = XBinary::_getCRC32(pData + nWrittenTotal + nCRCOffset, nCRCSize, m_nCRC32,
-                                              XBinary::_getCRC32Table_EDB88320());
+                const qint32 nCRCSize = (qint32)(std::min)(nWritten - nCRCOffset, (qint64)(std::numeric_limits<qint32>::max)());
+                m_nCRC32 = XBinary::_getCRC32(pData + nWrittenTotal + nCRCOffset, nCRCSize, m_nCRC32, XBinary::_getCRC32Table_EDB88320());
                 nCRCOffset += nCRCSize;
             }
             nWrittenTotal += nWritten;
@@ -91,8 +89,7 @@ bool lzipClearOutputDevice(QIODevice *pDevice)
     if (guardedDevice->isSequential()) {
         return guardedDevice && (guardedDevice->pos() == 0) && guardedDevice;
     }
-    return guardedDevice && XBinary::resize(guardedDevice.data(), 0) && guardedDevice &&
-           guardedDevice->seek(0) && guardedDevice;
+    return guardedDevice && XBinary::resize(guardedDevice.data(), 0) && guardedDevice && guardedDevice->seek(0) && guardedDevice;
 }
 }  // namespace
 
@@ -136,8 +133,7 @@ bool XLzip::getMembers(QList<LZIP_MEMBER> *pMembers, PDSTRUCT *pPdStruct)
     const qint32 nMaximumMembers = 1000000;
 
     while (nMemberEnd > 0) {
-        if (!XBinary::isPdStructNotCanceled(pPdStruct) || ((nMemberEnd < 36)) ||
-            (pMembers->size() >= nMaximumMembers)) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) || ((nMemberEnd < 36)) || (pMembers->size() >= nMaximumMembers)) {
             pMembers->clear();
             return false;
         }
@@ -147,8 +143,7 @@ bool XLzip::getMembers(QList<LZIP_MEMBER> *pMembers, PDSTRUCT *pPdStruct)
             pMembers->clear();
             return false;
         }
-        if ((nMemberSize64 < 36) || (nMemberSize64 > (quint64)nMemberEnd) ||
-            (nMemberSize64 > (quint64)(std::numeric_limits<qint64>::max)())) {
+        if ((nMemberSize64 < 36) || (nMemberSize64 > (quint64)nMemberEnd) || (nMemberSize64 > (quint64)(std::numeric_limits<qint64>::max)())) {
             pMembers->clear();
             return false;
         }
@@ -166,8 +161,8 @@ bool XLzip::getMembers(QList<LZIP_MEMBER> *pMembers, PDSTRUCT *pPdStruct)
             pMembers->clear();
             return false;
         }
-        if ((std::memcmp(header.magic, "LZIP", 4) != 0) || (header.nVersion != 1) ||
-            (nDictionarySize == 0) || (nUncompressedSize64 > (quint64)(std::numeric_limits<qint64>::max)())) {
+        if ((std::memcmp(header.magic, "LZIP", 4) != 0) || (header.nVersion != 1) || (nDictionarySize == 0) ||
+            (nUncompressedSize64 > (quint64)(std::numeric_limits<qint64>::max)())) {
             pMembers->clear();
             return false;
         }
@@ -520,9 +515,7 @@ bool XLzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         pPdStruct = &pdStructEmpty;
     }
 
-    if (!pState || m_bUnpackOperationInProgress ||
-        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-         !guardedThis->ownsUnpackSource(pState))) return false;
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState))) return false;
 
     // initUnpack may be called repeatedly with the same state.  Always release
     // the old format context and reset published state before validating the
@@ -591,25 +584,21 @@ bool XLzip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
 XBinary::ARCHIVERECORD XLzip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     QPointer<XLzip> guardedThis(this);
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) return result;
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) return result;
     const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return result;
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return result;
 
     LZIP_UNPACK_CONTEXT *pContext = static_cast<LZIP_UNPACK_CONTEXT *>(pState->pContext);
 
     // Concatenated lzip members form one logical data stream.
     result.nStreamOffset = 0;
     result.nStreamSize = pContext->nCompressedSize;
-    result.mapProperties[XBinary::FPART_PROP_ORIGINALNAME] =
-        XBinary::getDeviceFileBaseName(guardedThis->getDevice());
+    result.mapProperties[XBinary::FPART_PROP_ORIGINALNAME] = XBinary::getDeviceFileBaseName(guardedThis->getDevice());
     result.mapProperties[XBinary::FPART_PROP_COMPRESSEDSIZE] = pContext->nCompressedSize;
     result.mapProperties[XBinary::FPART_PROP_UNCOMPRESSEDSIZE] = pContext->nUncompressedSize;
     result.mapProperties[XBinary::FPART_PROP_HANDLEMETHOD] = XBinary::HANDLE_METHOD_LZIP;
@@ -634,26 +623,19 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     QPointer<QIODevice> guardedOutput(pDevice);
     QPointer<QIODevice> guardedSource(guardedThis->getDevice());
     if (!guardedOutput || !guardedSource) return false;
-    const bool bOutputSupported =
-        guardedThis->isUnpackOutputSupported(guardedOutput.data());
-    if (!guardedThis || !guardedOutput || !guardedSource ||
-        !bOutputSupported) return false;
-    const bool bAliases =
-        XBinary::devicesAlias(guardedSource.data(), guardedOutput.data());
+    const bool bOutputSupported = guardedThis->isUnpackOutputSupported(guardedOutput.data());
+    if (!guardedThis || !guardedOutput || !guardedSource || !bOutputSupported) return false;
+    const bool bAliases = XBinary::devicesAlias(guardedSource.data(), guardedOutput.data());
     if (!guardedThis || !guardedOutput || !guardedSource || bAliases) return false;
-    const bool bSourceCurrent =
-        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !guardedOutput || !guardedSource ||
-        !bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !guardedOutput || !guardedSource || !bSourceCurrent || !XBinary::isPdStructNotCanceled(pPdStruct) || (pState->nCurrentIndex < 0) ||
+        (pState->nCurrentIndex >= pState->nNumberOfRecords))
+        return false;
 
     LZIP_UNPACK_CONTEXT *pContext = static_cast<LZIP_UNPACK_CONTEXT *>(pState->pContext);
-    if ((pContext->nUncompressedSize < 0) ||
-        (pContext->nMemberSize < 0)) return false;
+    if ((pContext->nUncompressedSize < 0) || (pContext->nMemberSize < 0)) return false;
     const qint64 nMemberSize = pContext->nMemberSize;
-    if (!XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
-                                            pContext->nUncompressedSize)) {
+    if (!XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, pContext->nUncompressedSize)) {
         return false;
     }
 
@@ -661,9 +643,7 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     // the record here. Produced bytes are charged by _writeDevice through
     // state.spOutputBudget; the publish copy is never charged.
     if (pState->spOutputBudget) {
-        if (!pState->spOutputBudget->beginEntry(
-                pState->nCurrentIndex,
-                XBinary::getDeviceFileBaseName(guardedSource.data()))) {
+        if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, XBinary::getDeviceFileBaseName(guardedSource.data()))) {
             if (pState->spOutputBudget->isEnforcing()) {
                 XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
                 return false;
@@ -672,15 +652,12 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         }
     }
 
-    std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(
-        pContext->nUncompressedSize, pPdStruct));
+    std::unique_ptr<QIODevice> pStage(XBinary::createFileBuffer(pContext->nUncompressedSize, pPdStruct));
     if (!guardedThis || !pStage || !guardedOutput || !guardedSource) return false;
-    const bool bStageSourceCurrent =
-        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    const bool bStageSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
     if (!guardedThis || !bStageSourceCurrent) return false;
 
-    const bool bCheckCRC = XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties,
-                                                       XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
+    const bool bCheckCRC = XBinary::isUnpackCRCEnabled(pState->mapUnpackProperties, XBinary::CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
     bool bResult = true;
 
     for (const LZIP_MEMBER &member : pContext->listMembers) {
@@ -729,31 +706,23 @@ bool XLzip::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
         state.nProcessedOffset = 0;
         state.nProcessedLimit = -1;
 
-        bResult = XLZMADecoder::decompress(&state, baProperty, pPdStruct) &&
-                  guardedThis &&
-                  guardedOutput && guardedSource &&
-                  (state.nCountInput == member.nCompressedSize) &&
-                  (state.nCountOutput == member.nUncompressedSize) &&
-                  XBinary::isPdStructNotCanceled(pPdStruct);
+        bResult = XLZMADecoder::decompress(&state, baProperty, pPdStruct) && guardedThis && guardedOutput && guardedSource &&
+                  (state.nCountInput == member.nCompressedSize) && (state.nCountOutput == member.nUncompressedSize) && XBinary::isPdStructNotCanceled(pPdStruct);
         inputDevice.close();
         outputDevice.close();
         if (!guardedThis) return false;
 
         if (bResult && bCheckCRC && (outputDevice.getCRC32() != member.nCRC32)) {
-            XBinary::setPdStructErrorString(
-                pPdStruct, guardedThis->tr("CRC check failed"));
+            XBinary::setPdStructErrorString(pPdStruct, guardedThis->tr("CRC check failed"));
             bResult = false;
         }
         if (!bResult) break;
     }
 
     if (!bResult || !guardedThis || !guardedOutput || !guardedSource) return false;
-    const bool bFinalSourceCurrent =
-        guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !guardedOutput || !guardedSource ||
-        !bFinalSourceCurrent) return false;
-    const bool bPublished = guardedThis->publishUnpackOutput(
-        pStage.get(), guardedOutput.data(), pState, pPdStruct);
+    const bool bFinalSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
+    if (!guardedThis || !guardedOutput || !guardedSource || !bFinalSourceCurrent) return false;
+    const bool bPublished = guardedThis->publishUnpackOutput(pStage.get(), guardedOutput.data(), pState, pPdStruct);
     if (!guardedThis || !bPublished) return false;
 
     pState->nCurrentOffset = nMemberSize;
@@ -766,11 +735,9 @@ bool XLzip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
-    if (!pState || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
 
     pState->nCurrentIndex++;
     return pState->nCurrentIndex < pState->nNumberOfRecords;
@@ -785,11 +752,9 @@ bool XLzip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     Q_UNUSED(pPdStruct)
 
     if (!pState) return false;
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedThis->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedThis->ownsUnpackSource(pState)) return false;
 
-    LZIP_UNPACK_CONTEXT *pContext =
-        static_cast<LZIP_UNPACK_CONTEXT *>(pState->pContext);
+    LZIP_UNPACK_CONTEXT *pContext = static_cast<LZIP_UNPACK_CONTEXT *>(pState->pContext);
     pState->pContext = nullptr;
     guardedThis->releaseUnpackSource(pState);
     if (!guardedThis) return false;
@@ -827,12 +792,9 @@ bool XLzip::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

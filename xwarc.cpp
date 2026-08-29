@@ -36,12 +36,10 @@ QByteArray warcTrimFieldWhitespace(const QByteArray &value)
 {
     qint32 nStart = 0;
     qint32 nEnd = value.size();
-    while ((nStart < nEnd) &&
-           ((value.at(nStart) == ' ') || (value.at(nStart) == '\t'))) {
+    while ((nStart < nEnd) && ((value.at(nStart) == ' ') || (value.at(nStart) == '\t'))) {
         nStart++;
     }
-    while ((nEnd > nStart) &&
-           ((value.at(nEnd - 1) == ' ') || (value.at(nEnd - 1) == '\t'))) {
+    while ((nEnd > nStart) && ((value.at(nEnd - 1) == ' ') || (value.at(nEnd - 1) == '\t'))) {
         nEnd--;
     }
     return value.mid(nStart, nEnd - nStart);
@@ -64,10 +62,7 @@ bool warcIsHttpToken(const QByteArray &value)
     if (value.isEmpty()) return false;
     static const QByteArray allowedPunctuation("!#$%&'*+-.^_`|~");
     for (char c : value) {
-        if (((c >= '0') && (c <= '9')) ||
-            ((c >= 'A') && (c <= 'Z')) ||
-            ((c >= 'a') && (c <= 'z')) ||
-            allowedPunctuation.contains(c)) {
+        if (((c >= '0') && (c <= '9')) || ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')) || allowedPunctuation.contains(c)) {
             continue;
         }
         return false;
@@ -77,34 +72,24 @@ bool warcIsHttpToken(const QByteArray &value)
 
 bool warcIsHexDigit(char c)
 {
-    return ((c >= '0') && (c <= '9')) ||
-           ((c >= 'A') && (c <= 'F')) ||
-           ((c >= 'a') && (c <= 'f'));
+    return ((c >= '0') && (c <= '9')) || ((c >= 'A') && (c <= 'F')) || ((c >= 'a') && (c <= 'f'));
 }
 
 bool warcIsValidRecordId(const QByteArray &value)
 {
     const QByteArray recordId = warcTrimFieldWhitespace(value);
-    if ((recordId.size() < 4) ||
-        (recordId.size() > WARC_MAX_NAME_SIZE) ||
-        (recordId.at(0) != '<') ||
-        (recordId.at(recordId.size() - 1) != '>')) {
+    if ((recordId.size() < 4) || (recordId.size() > WARC_MAX_NAME_SIZE) || (recordId.at(0) != '<') || (recordId.at(recordId.size() - 1) != '>')) {
         return false;
     }
 
     const QByteArray uri = recordId.mid(1, recordId.size() - 2);
     const qint32 nColon = uri.indexOf(':');
-    if ((nColon <= 0) ||
-        !(((uri.at(0) >= 'A') && (uri.at(0) <= 'Z')) ||
-          ((uri.at(0) >= 'a') && (uri.at(0) <= 'z')))) {
+    if ((nColon <= 0) || !(((uri.at(0) >= 'A') && (uri.at(0) <= 'Z')) || ((uri.at(0) >= 'a') && (uri.at(0) <= 'z')))) {
         return false;
     }
     for (qint32 i = 1; i < nColon; i++) {
         const char c = uri.at(i);
-        if (!(((c >= 'A') && (c <= 'Z')) ||
-              ((c >= 'a') && (c <= 'z')) ||
-              ((c >= '0') && (c <= '9')) ||
-              (c == '+') || (c == '-') || (c == '.'))) {
+        if (!(((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')) || ((c >= '0') && (c <= '9')) || (c == '+') || (c == '-') || (c == '.'))) {
             return false;
         }
     }
@@ -113,15 +98,11 @@ bool warcIsValidRecordId(const QByteArray &value)
     for (qint32 i = nColon + 1; i < uri.size(); i++) {
         const char c = uri.at(i);
         if (c == '%') {
-            if ((i + 2 >= uri.size()) || !warcIsHexDigit(uri.at(i + 1)) ||
-                !warcIsHexDigit(uri.at(i + 2))) {
+            if ((i + 2 >= uri.size()) || !warcIsHexDigit(uri.at(i + 1)) || !warcIsHexDigit(uri.at(i + 2))) {
                 return false;
             }
             i += 2;
-        } else if (!(((c >= 'A') && (c <= 'Z')) ||
-                     ((c >= 'a') && (c <= 'z')) ||
-                     ((c >= '0') && (c <= '9')) ||
-                     uriPunctuation.contains(c))) {
+        } else if (!(((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')) || ((c >= '0') && (c <= '9')) || uriPunctuation.contains(c))) {
             return false;
         }
     }
@@ -138,11 +119,9 @@ bool warcIsSafeRelativePath(const QString &path)
         return false;
     }
 
-    const QStringList parts =
-        normalized.split(QLatin1Char('/'), Qt::KeepEmptyParts);
+    const QStringList parts = normalized.split(QLatin1Char('/'), Qt::KeepEmptyParts);
     for (const QString &part : parts) {
-        if (part.isEmpty() || (part == QLatin1String(".")) ||
-            (part == QLatin1String(".."))) {
+        if (part.isEmpty() || (part == QLatin1String(".")) || (part == QLatin1String(".."))) {
             return false;
         }
     }
@@ -243,14 +222,12 @@ bool XWARC::_parseDate(const QByteArray &value, QDateTime *pResult)
     const QByteArray date = warcTrimFieldWhitespace(value);
     const qint32 nSize = date.size();
     const bool bHasFraction = (nSize >= 22) && (nSize <= 30);
-    if ((nSize != 4) && (nSize != 7) && (nSize != 10) &&
-        (nSize != 17) && (nSize != 20) && !bHasFraction) {
+    if ((nSize != 4) && (nSize != 7) && (nSize != 10) && (nSize != 17) && (nSize != 20) && !bHasFraction) {
         return false;
     }
 
     const auto areDigits = [&date](qint32 nOffset, qint32 nCount) {
-        if ((nOffset < 0) || (nCount < 0) ||
-            (nOffset > date.size()) || (nCount > date.size() - nOffset)) {
+        if ((nOffset < 0) || (nCount < 0) || (nOffset > date.size()) || (nCount > date.size() - nOffset)) {
             return false;
         }
         for (qint32 i = 0; i < nCount; i++) {
@@ -268,8 +245,7 @@ bool XWARC::_parseDate(const QByteArray &value, QDateTime *pResult)
         if ((date.at(7) != '-') || !areDigits(8, 2)) return false;
     }
     if (nSize >= 17) {
-        if ((date.at(10) != 'T') || (date.at(13) != ':') ||
-            !areDigits(11, 2) || !areDigits(14, 2)) {
+        if ((date.at(10) != 'T') || (date.at(13) != ':') || !areDigits(11, 2) || !areDigits(14, 2)) {
             return false;
         }
     }
@@ -279,9 +255,7 @@ bool XWARC::_parseDate(const QByteArray &value, QDateTime *pResult)
         if ((date.at(16) != ':') || !areDigits(17, 2)) return false;
         if (nSize == 20) {
             if (date.at(19) != 'Z') return false;
-        } else if ((date.at(19) != '.') ||
-                   (date.at(nSize - 1) != 'Z') ||
-                   !areDigits(20, nSize - 21)) {
+        } else if ((date.at(19) != '.') || (date.at(nSize - 1) != 'Z') || !areDigits(20, nSize - 21)) {
             return false;
         }
     }
@@ -299,10 +273,7 @@ bool XWARC::_parseDate(const QByteArray &value, QDateTime *pResult)
         nMillisecond = milliseconds.toInt();
     }
 
-    if ((nYear < 1) || (nYear > 9999) ||
-        (nHour < 0) || (nHour > 23) ||
-        (nMinute < 0) || (nMinute > 59) ||
-        (nSecond < 0) || (nSecond > 59)) {
+    if ((nYear < 1) || (nYear > 9999) || (nHour < 0) || (nHour > 23) || (nMinute < 0) || (nMinute > 59) || (nSecond < 0) || (nSecond > 59)) {
         return false;
     }
 
@@ -326,9 +297,7 @@ bool XWARC::_mapTargetURI(const QByteArray &value, QString *pResult)
 
     for (char c : uri) {
         const quint8 nCharacter = (quint8)c;
-        if ((nCharacter == ' ') || (nCharacter == '\t') ||
-            (nCharacter == '\r') || (nCharacter == '\n') ||
-            (nCharacter == '\v') || (nCharacter == '\f')) {
+        if ((nCharacter == ' ') || (nCharacter == '\t') || (nCharacter == '\r') || (nCharacter == '\n') || (nCharacter == '\v') || (nCharacter == '\f')) {
             return false;
         }
     }
@@ -342,8 +311,7 @@ bool XWARC::_mapTargetURI(const QByteArray &value, QString *pResult)
 
     if (scheme == "file") {
         path = remainder;
-    } else if ((scheme == "http") || (scheme == "https") ||
-               (scheme == "ftp")) {
+    } else if ((scheme == "http") || (scheme == "https") || (scheme == "ftp")) {
         const qint32 nSlash = remainder.indexOf('/');
         if (nSlash < 0) return false;
         path = remainder.mid(nSlash + 1);
@@ -351,8 +319,7 @@ bool XWARC::_mapTargetURI(const QByteArray &value, QString *pResult)
         return false;
     }
 
-    if (path.isEmpty() || path.endsWith('/') ||
-        (path.size() > WARC_MAX_NAME_SIZE) || path.contains('\0')) {
+    if (path.isEmpty() || path.endsWith('/') || (path.size() > WARC_MAX_NAME_SIZE) || path.contains('\0')) {
         return false;
     }
 
@@ -365,12 +332,10 @@ bool XWARC::_mapTargetURI(const QByteArray &value, QString *pResult)
     return true;
 }
 
-bool XWARC::_readHeader(qint64 nOffset, QByteArray *pHeader,
-                        qint64 *pDataOffset, PDSTRUCT *pPdStruct)
+bool XWARC::_readHeader(qint64 nOffset, QByteArray *pHeader, qint64 *pDataOffset, PDSTRUCT *pPdStruct)
 {
     QPointer<XWARC> guardedThis(this);
-    if (!pHeader || !pDataOffset || (nOffset < 0) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pHeader || !pDataOffset || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -382,16 +347,11 @@ bool XWARC::_readHeader(qint64 nOffset, QByteArray *pHeader,
 
     qint64 nCurrentOffset = nOffset;
     qint32 nSearchOffset = 0;
-    while ((pHeader->size() < WARC_MAX_HEADER_SIZE) &&
-           (nCurrentOffset < nTotalSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
-        const qint32 nChunkSize = (qint32)qMin<qint64>(
-            qMin<qint64>(0x4000, nTotalSize - nCurrentOffset),
-            WARC_MAX_HEADER_SIZE - pHeader->size());
+    while ((pHeader->size() < WARC_MAX_HEADER_SIZE) && (nCurrentOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nChunkSize = (qint32)qMin<qint64>(qMin<qint64>(0x4000, nTotalSize - nCurrentOffset), WARC_MAX_HEADER_SIZE - pHeader->size());
         if (nChunkSize <= 0) return false;
 
-        const QByteArray chunk = read_array_process(
-            nCurrentOffset, nChunkSize, pPdStruct);
+        const QByteArray chunk = read_array_process(nCurrentOffset, nChunkSize, pPdStruct);
         if (!guardedThis || (chunk.size() != nChunkSize)) return false;
 
         const qint32 nOldSize = pHeader->size();
@@ -411,12 +371,10 @@ bool XWARC::_readHeader(qint64 nOffset, QByteArray *pHeader,
     return false;
 }
 
-bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
-                         bool *pVisible, PDSTRUCT *pPdStruct)
+bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry, bool *pVisible, PDSTRUCT *pPdStruct)
 {
     QPointer<XWARC> guardedThis(this);
-    if (!pEntry || !pVisible || (nOffset < 0) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pEntry || !pVisible || (nOffset < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -449,8 +407,7 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
 
         for (char c : line) {
             const quint8 nCharacter = (quint8)c;
-            if (((nCharacter < 0x20) && (nCharacter != '\t')) ||
-                (nCharacter == 0x7f)) {
+            if (((nCharacter < 0x20) && (nCharacter != '\t')) || (nCharacter == 0x7f)) {
                 return false;
             }
         }
@@ -478,13 +435,8 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
 
             const QByteArray normalizedKey = warcAsciiLower(key);
             previousFieldKey = normalizedKey;
-            const bool bCritical =
-                (normalizedKey == "warc-type") ||
-                (normalizedKey == "warc-target-uri") ||
-                (normalizedKey == "content-length") ||
-                (normalizedKey == "warc-date") ||
-                (normalizedKey == "warc-record-id") ||
-                (normalizedKey == "last-modified");
+            const bool bCritical = (normalizedKey == "warc-type") || (normalizedKey == "warc-target-uri") || (normalizedKey == "content-length") ||
+                                   (normalizedKey == "warc-date") || (normalizedKey == "warc-record-id") || (normalizedKey == "last-modified");
             if (bCritical) {
                 if (criticalFields.contains(normalizedKey)) return false;
                 criticalFields.insert(normalizedKey, line.mid(nColon + 1));
@@ -494,33 +446,24 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
         nLineNumber++;
     }
 
-    if (!bSawTerminator || (nLineNumber == 0) ||
-        !criticalFields.contains("warc-type") ||
-        !criticalFields.contains("warc-record-id") ||
-        !criticalFields.contains("content-length") ||
-        !criticalFields.contains("warc-date")) {
+    if (!bSawTerminator || (nLineNumber == 0) || !criticalFields.contains("warc-type") || !criticalFields.contains("warc-record-id") ||
+        !criticalFields.contains("content-length") || !criticalFields.contains("warc-date")) {
         return false;
     }
 
-    const QByteArray type = warcAsciiLower(
-        warcTrimFieldWhitespace(criticalFields.value("warc-type")));
-    const QByteArray recordId =
-        warcTrimFieldWhitespace(criticalFields.value("warc-record-id"));
+    const QByteArray type = warcAsciiLower(warcTrimFieldWhitespace(criticalFields.value("warc-type")));
+    const QByteArray recordId = warcTrimFieldWhitespace(criticalFields.value("warc-record-id"));
     if (!warcIsHttpToken(type) || !warcIsValidRecordId(recordId)) {
         return false;
     }
 
     qint64 nContentLength = -1;
-    if (!_parseUnsignedDecimal(
-            warcTrimFieldWhitespace(criticalFields.value("content-length")),
-            &nContentLength)) {
+    if (!_parseUnsignedDecimal(warcTrimFieldWhitespace(criticalFields.value("content-length")), &nContentLength)) {
         return false;
     }
 
     QDateTime created;
-    if (!bVersion11 &&
-        (warcTrimFieldWhitespace(criticalFields.value("warc-date")).size() !=
-         20)) {
+    if (!bVersion11 && (warcTrimFieldWhitespace(criticalFields.value("warc-date")).size() != 20)) {
         return false;
     }
     if (!_parseDate(criticalFields.value("warc-date"), &created)) {
@@ -536,45 +479,35 @@ bool XWARC::_parseRecord(qint64 nOffset, WARC_ENTRY *pEntry,
     }
 
     const qint64 nTotalSize = getSize();
-    if (!guardedThis || (nDataOffset < nOffset) ||
-        (nDataOffset > nTotalSize) ||
-        ((nTotalSize - nDataOffset) < 4) ||
-        (nContentLength > (nTotalSize - nDataOffset - 4))) {
+    if (!guardedThis || (nDataOffset < nOffset) || (nDataOffset > nTotalSize) || ((nTotalSize - nDataOffset) < 4) || (nContentLength > (nTotalSize - nDataOffset - 4))) {
         return false;
     }
 
     const qint64 nDataEnd = nDataOffset + nContentLength;
     const QByteArray separator = read_array_process(nDataEnd, 4, pPdStruct);
-    if (!guardedThis || (separator != "\r\n\r\n") ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedThis || (separator != "\r\n\r\n") || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     QString sFileName;
-    const bool bSupportedType =
-        (type == "resource") || (type == "response");
-    const bool bMapped = bSupportedType &&
-        criticalFields.contains("warc-target-uri") &&
-        _mapTargetURI(criticalFields.value("warc-target-uri"), &sFileName);
+    const bool bSupportedType = (type == "resource") || (type == "response");
+    const bool bMapped = bSupportedType && criticalFields.contains("warc-target-uri") && _mapTargetURI(criticalFields.value("warc-target-uri"), &sFileName);
 
     pEntry->nHeaderOffset = nOffset;
     pEntry->nHeaderSize = nDataOffset - nOffset;
     pEntry->nDataOffset = nDataOffset;
     pEntry->nDataSize = nContentLength;
     pEntry->nNextOffset = nDataEnd + 4;
-    pEntry->baRecordIdHash = QCryptographicHash::hash(
-        recordId, QCryptographicHash::Sha256);
+    pEntry->baRecordIdHash = QCryptographicHash::hash(recordId, QCryptographicHash::Sha256);
     pEntry->sFileName = sFileName;
     pEntry->created = created;
     pEntry->modified = modified;
     *pVisible = bMapped;
 
-    return (pEntry->nNextOffset > nOffset) &&
-           (pEntry->nNextOffset <= nTotalSize);
+    return (pEntry->nNextOffset > nOffset) && (pEntry->nNextOffset <= nTotalSize);
 }
 
-bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries,
-                         qint64 *pArchiveEnd, PDSTRUCT *pPdStruct)
+bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries, qint64 *pArchiveEnd, PDSTRUCT *pPdStruct)
 {
     QPointer<XWARC> guardedThis(this);
     if (pEntries) pEntries->clear();
@@ -587,8 +520,7 @@ bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries,
     qint64 nOffset = 0;
     qint32 nPhysicalRecords = 0;
     QSet<QByteArray> recordIds;
-    while ((nOffset < nTotalSize) &&
-           XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while ((nOffset < nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if (nPhysicalRecords >= WARC_MAX_RECORDS) {
             if (pEntries) pEntries->clear();
             return false;
@@ -596,11 +528,8 @@ bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries,
 
         WARC_ENTRY entry = {};
         bool bVisible = false;
-        const bool bParsed = _parseRecord(
-            nOffset, &entry, &bVisible, pPdStruct);
-        if (!guardedThis || !bParsed ||
-            (entry.nNextOffset <= nOffset) ||
-            (entry.nNextOffset > nTotalSize)) {
+        const bool bParsed = _parseRecord(nOffset, &entry, &bVisible, pPdStruct);
+        if (!guardedThis || !bParsed || (entry.nNextOffset <= nOffset) || (entry.nNextOffset > nTotalSize)) {
             if (pEntries) pEntries->clear();
             return false;
         }
@@ -615,9 +544,7 @@ bool XWARC::_scanArchive(QList<WARC_ENTRY> *pEntries,
         nPhysicalRecords++;
     }
 
-    const bool bResult = (nPhysicalRecords > 0) &&
-                         (nOffset == nTotalSize) &&
-                         XBinary::isPdStructNotCanceled(pPdStruct);
+    const bool bResult = (nPhysicalRecords > 0) && (nOffset == nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct);
     if (!bResult && pEntries) pEntries->clear();
     if (bResult && pArchiveEnd) *pArchiveEnd = nOffset;
     return bResult;
@@ -628,22 +555,18 @@ QMap<XBinary::UNPACK_PROP, QVariant> XWARC::getDefaultUnpackProperties()
     return XArchive::getDefaultUnpackProperties();
 }
 
-bool XWARC::initUnpack(UNPACK_STATE *pState,
-                       const QMap<UNPACK_PROP, QVariant> &mapProperties,
-                       PDSTRUCT *pPdStruct)
+bool XWARC::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XWARC> guardedThis(this);
     if (m_bUnpackOperationInProgress) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired() || !pState) return false;
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
 
-    WARC_UNPACK_CONTEXT *pOldContext =
-        static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
+    WARC_UNPACK_CONTEXT *pOldContext = static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
     *pState = UNPACK_STATE();
@@ -666,8 +589,7 @@ bool XWARC::initUnpack(UNPACK_STATE *pState,
     const qint64 nTotalSize = getSize();
     if (!guardedThis) return false;
 
-    WARC_UNPACK_CONTEXT *pContext =
-        new (std::nothrow) WARC_UNPACK_CONTEXT;
+    WARC_UNPACK_CONTEXT *pContext = new (std::nothrow) WARC_UNPACK_CONTEXT;
     if (!pContext) {
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
@@ -679,9 +601,7 @@ bool XWARC::initUnpack(UNPACK_STATE *pState,
     pState->pContext = pContext;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = listEntries.count();
-    pState->nCurrentOffset = listEntries.isEmpty()
-        ? nTotalSize
-        : listEntries.constFirst().nHeaderOffset;
+    pState->nCurrentOffset = listEntries.isEmpty() ? nTotalSize : listEntries.constFirst().nHeaderOffset;
     pState->nTotalSize = nTotalSize;
 
     if (!validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
@@ -696,12 +616,10 @@ bool XWARC::initUnpack(UNPACK_STATE *pState,
     return true;
 }
 
-XBinary::ARCHIVERECORD XWARC::infoCurrent(UNPACK_STATE *pState,
-                                          PDSTRUCT *pPdStruct)
+XBinary::ARCHIVERECORD XWARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     QPointer<XWARC> guardedThis(this);
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return ARCHIVERECORD();
 
     ARCHIVERECORD result = {};
@@ -713,29 +631,18 @@ XBinary::ARCHIVERECORD XWARC::infoCurrent(UNPACK_STATE *pState,
     const qint64 nCurrentSize = getSize();
     if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return result;
 
-    WARC_UNPACK_CONTEXT *pContext =
-        static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
-    if ((pState->nNumberOfRecords != pContext->listEntries.count()) ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pContext->listEntries.count())) {
+    WARC_UNPACK_CONTEXT *pContext = static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
+    if ((pState->nNumberOfRecords != pContext->listEntries.count()) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pContext->listEntries.count())) {
         return result;
     }
 
-    const WARC_ENTRY &entry =
-        pContext->listEntries.at(pState->nCurrentIndex);
+    const WARC_ENTRY &entry = pContext->listEntries.at(pState->nCurrentIndex);
     WARC_ENTRY parsed = {};
     bool bVisible = false;
-    const bool bParsed = _parseRecord(
-        entry.nHeaderOffset, &parsed, &bVisible, pPdStruct);
-    if (!guardedThis || !bParsed || !bVisible ||
-        (parsed.nHeaderOffset != entry.nHeaderOffset) ||
-        (parsed.nHeaderSize != entry.nHeaderSize) ||
-        (parsed.nDataOffset != entry.nDataOffset) ||
-        (parsed.nDataSize != entry.nDataSize) ||
-        (parsed.nNextOffset != entry.nNextOffset) ||
-        (parsed.baRecordIdHash != entry.baRecordIdHash) ||
-        (parsed.sFileName != entry.sFileName) ||
-        (parsed.created != entry.created) ||
+    const bool bParsed = _parseRecord(entry.nHeaderOffset, &parsed, &bVisible, pPdStruct);
+    if (!guardedThis || !bParsed || !bVisible || (parsed.nHeaderOffset != entry.nHeaderOffset) || (parsed.nHeaderSize != entry.nHeaderSize) ||
+        (parsed.nDataOffset != entry.nDataOffset) || (parsed.nDataSize != entry.nDataSize) || (parsed.nNextOffset != entry.nNextOffset) ||
+        (parsed.baRecordIdHash != entry.baRecordIdHash) || (parsed.sFileName != entry.sFileName) || (parsed.created != entry.created) ||
         (parsed.modified != entry.modified)) {
         return ARCHIVERECORD();
     }
@@ -770,19 +677,15 @@ bool XWARC::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     const qint64 nCurrentSize = getSize();
     if (!guardedThis || (pState->nTotalSize != nCurrentSize)) return false;
 
-    WARC_UNPACK_CONTEXT *pContext =
-        static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
-    if ((pState->nNumberOfRecords != pContext->listEntries.count()) ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
+    WARC_UNPACK_CONTEXT *pContext = static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
+    if ((pState->nNumberOfRecords != pContext->listEntries.count()) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) {
         return false;
     }
 
     pState->nCurrentIndex++;
     pContext->nCurrentRecord = pState->nCurrentIndex;
     if (pState->nCurrentIndex < pState->nNumberOfRecords) {
-        pState->nCurrentOffset =
-            pContext->listEntries.at(pState->nCurrentIndex).nHeaderOffset;
+        pState->nCurrentOffset = pContext->listEntries.at(pState->nCurrentIndex).nHeaderOffset;
         return true;
     }
 
@@ -797,13 +700,11 @@ bool XWARC::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     Q_UNUSED(pPdStruct)
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) {
         return false;
     }
 
-    WARC_UNPACK_CONTEXT *pContext =
-        static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
+    WARC_UNPACK_CONTEXT *pContext = static_cast<WARC_UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
     pState->nCurrentOffset = 0;
@@ -839,12 +740,9 @@ bool XWARC::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) =
-            *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;
@@ -862,8 +760,7 @@ void XWARC::setInternalInfo(void *pInternalInfo)
 {
     if (pInternalInfo) {
         m_internalInfo = *static_cast<INTERNAL_INFO *>(pInternalInfo);
-        XArchive::setInternalInfo(
-            static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
+        XArchive::setInternalInfo(static_cast<XArchive::INTERNAL_INFO *>(&m_internalInfo));
     } else {
         m_internalInfo = INTERNAL_INFO();
         XArchive::setInternalInfo(nullptr);

@@ -47,6 +47,7 @@ public:
 private:
     virtual QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
     virtual bool getOuterStreamInfo(qint64 &nOuterStreamOffset, qint64 &nOuterStreamSize, HANDLE_METHOD &handleMethod) override;
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

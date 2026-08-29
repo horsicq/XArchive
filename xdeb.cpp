@@ -102,14 +102,12 @@ bool XDEB::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 bool XDEB::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
-    if (!pListRecords || (pListRecords->count() < 3) || (pListRecords->count() > N_DEB_MAX_MEMBERS) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pListRecords || (pListRecords->count() < 3) || (pListRecords->count() > N_DEB_MAX_MEMBERS) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const RECORD &versionRecord = pListRecords->at(0);
-    if ((versionRecord.spInfo.sRecordName != QStringLiteral("debian-binary")) ||
-        (versionRecord.spInfo.nUncompressedSize != 4)) {
+    if ((versionRecord.spInfo.sRecordName != QStringLiteral("debian-binary")) || (versionRecord.spInfo.nUncompressedSize != 4)) {
         return false;
     }
 
@@ -213,12 +211,9 @@ bool XDEB::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->X_Ar::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        X_Ar::INTERNAL_INFO *pInfo =
-            static_cast<X_Ar::INTERNAL_INFO *>(
-                guardedThis->X_Ar::getInternalInfo(pPdStruct));
+        X_Ar::INTERNAL_INFO *pInfo = static_cast<X_Ar::INTERNAL_INFO *>(guardedThis->X_Ar::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<X_Ar::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<X_Ar::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

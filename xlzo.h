@@ -89,6 +89,7 @@ private:
         qint64 nUncompressedSize;
         QString sFileName;
     };
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

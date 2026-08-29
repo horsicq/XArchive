@@ -44,13 +44,7 @@ enum class KWAJ_RESULT {
 class KWAJBitReader {
 public:
     KWAJBitReader(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
-        : m_pState(pState),
-          m_pPdStruct(pPdStruct),
-          m_nInputPosition(0),
-          m_nInputSize(0),
-          m_nBitBuffer(0),
-          m_nBits(0),
-          m_bCleanEnd(false)
+        : m_pState(pState), m_pPdStruct(pPdStruct), m_nInputPosition(0), m_nInputSize(0), m_nBitBuffer(0), m_nBits(0), m_bCleanEnd(false)
     {
     }
 
@@ -78,7 +72,10 @@ public:
         return KWAJ_RESULT::OK;
     }
 
-    bool isCleanEnd() const { return m_bCleanEnd; }
+    bool isCleanEnd() const
+    {
+        return m_bCleanEnd;
+    }
 
 private:
     KWAJ_RESULT readByte(quint8 *pValue)
@@ -296,10 +293,8 @@ public:
 
     bool writeByte(quint8 nByte)
     {
-        if (!m_pState || !XBinary::isPdStructNotCanceled(m_pPdStruct) ||
-            (m_nProduced == (std::numeric_limits<qint64>::max)()) ||
-            (m_bHasExpectedSize && (m_nProduced >= m_nExpectedSize)) ||
-            ((m_nOutputLimit >= 0) && (m_nProduced >= m_nOutputLimit))) {
+        if (!m_pState || !XBinary::isPdStructNotCanceled(m_pPdStruct) || (m_nProduced == (std::numeric_limits<qint64>::max)()) ||
+            (m_bHasExpectedSize && (m_nProduced >= m_nExpectedSize)) || ((m_nOutputLimit >= 0) && (m_nProduced >= m_nOutputLimit))) {
             return false;
         }
 
@@ -318,15 +313,17 @@ public:
     bool flush()
     {
         if (m_nPosition == 0) return true;
-        if (!XBinary::isPdStructNotCanceled(m_pPdStruct) ||
-            (XBinary::_writeDevice(m_abOutput.data(), m_nPosition, m_pState) != m_nPosition)) {
+        if (!XBinary::isPdStructNotCanceled(m_pPdStruct) || (XBinary::_writeDevice(m_abOutput.data(), m_nPosition, m_pState) != m_nPosition)) {
             return false;
         }
         m_nPosition = 0;
         return true;
     }
 
-    qint64 produced() const { return m_nProduced; }
+    qint64 produced() const
+    {
+        return m_nProduced;
+    }
 
 private:
     XBinary::DATAPROCESS_STATE *m_pState;
@@ -346,8 +343,8 @@ XKWAJLZHDecoder::XKWAJLZHDecoder(QObject *parent) : QObject(parent)
 
 bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
-        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1)) {
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || (pDecompressState->nInputOffset < 0) ||
+        (pDecompressState->nInputLimit < -1)) {
         return false;
     }
 
@@ -392,8 +389,7 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
     if ((readHuffmanTree(&reader, anTypes[0], 16, &matchLength1Tree) != KWAJ_RESULT::OK) ||
         (readHuffmanTree(&reader, anTypes[1], 16, &matchLength2Tree) != KWAJ_RESULT::OK) ||
-        (readHuffmanTree(&reader, anTypes[2], 32, &literalLengthTree) != KWAJ_RESULT::OK) ||
-        (readHuffmanTree(&reader, anTypes[3], 64, &offsetTree) != KWAJ_RESULT::OK) ||
+        (readHuffmanTree(&reader, anTypes[2], 32, &literalLengthTree) != KWAJ_RESULT::OK) || (readHuffmanTree(&reader, anTypes[3], 64, &offsetTree) != KWAJ_RESULT::OK) ||
         (readHuffmanTree(&reader, anTypes[4], 256, &literalTree) != KWAJ_RESULT::OK)) {
         return false;
     }
@@ -517,16 +513,14 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
         }
     }
 
-    const bool bInputComplete = bCleanEnd && reader.isCleanEnd() &&
-                                ((pDecompressState->nInputLimit == -1) ||
-                                 (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+    const bool bInputComplete =
+        bCleanEnd && reader.isCleanEnd() && ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit));
     const bool bOutputComplete = !bHasExpectedSize || (output.produced() == nExpectedSize);
-    bool bResult = bInputComplete && bOutputComplete && !bDataError && !bIOError &&
-                   !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+    bool bResult = bInputComplete && bOutputComplete && !bDataError && !bIOError && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
                    XBinary::isPdStructNotCanceled(pPdStruct);
 
     if (bResult && !output.flush()) bResult = false;
 
-    return bResult && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-           (pDecompressState->nCountOutput == output.produced()) && XBinary::isPdStructNotCanceled(pPdStruct);
+    return bResult && !pDecompressState->bReadError && !pDecompressState->bWriteError && (pDecompressState->nCountOutput == output.produced()) &&
+           XBinary::isPdStructNotCanceled(pPdStruct);
 }

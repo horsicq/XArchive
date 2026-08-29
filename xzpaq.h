@@ -30,9 +30,7 @@ public:
     explicit XZPAQ(QIODevice *pDevice = nullptr);
 
     bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
-    bool initUnpack(UNPACK_STATE *pState,
-                    const QMap<UNPACK_PROP, QVariant> &mapProperties,
-                    PDSTRUCT *pPdStruct = nullptr) override;
+    bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     MODE getMode() override;
     ENDIAN getEndian() override;

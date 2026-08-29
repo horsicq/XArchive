@@ -60,19 +60,19 @@ const qint32 WZJPEG_OUTPUT_FLUSH_SIZE = 0x40000;
 // official specification (parameters kavg = 5, kmax = 11; index 48 is the
 // appended fixed-statistics entry).
 static const quint16 g_wzjpegLogP[49] = {
-    1024, 895, 795, 706, 628, 559, 493, 437, 379, 331, 287, 247, 212, 186, 158, 143, 127,  110, 98, 84, 72, 65, 59, 53, 48,
-    45,   42,  40,  37,  35,  33,  30,  28,  26,  23,  21,  19,  17,  15,  13,  11,  9,    7,   5,  4,  3,  2,  1,  1024,
+    1024, 895, 795, 706, 628, 559, 493, 437, 379, 331, 287, 247, 212, 186, 158, 143, 127, 110, 98, 84, 72, 65, 59, 53,   48,
+    45,   42,  40,  37,  35,  33,  30,  28,  26,  23,  21,  19,  17,  15,  13,  11,  9,   7,   5,  4,  3,  2,  1,  1024,
 };
 
 static const quint16 g_wzjpegLogQP[49] = {
-    0,    272,  502,  726,  941,  1150, 1371, 1578, 1819, 2044, 2278, 2521, 2765, 2971, 3227, 3382, 3566,  3788, 3965, 4200, 4435, 4590, 4737, 4899, 5050,
-    5147, 5250, 5325, 5441, 5527, 5617, 5758, 5863, 5976, 6157, 6295, 6447, 6616, 6806, 7024, 7278, 7585,  7972, 8495, 8884, 9309, 10065, 11689, 0,
+    0,    272,  502,  726,  941,  1150, 1371, 1578, 1819, 2044, 2278, 2521, 2765, 2971, 3227, 3382, 3566, 3788, 3965, 4200, 4435, 4590,  4737,  4899, 5050,
+    5147, 5250, 5325, 5441, 5527, 5617, 5758, 5863, 5976, 6157, 6295, 6447, 6616, 6806, 7024, 7278, 7585, 7972, 8495, 8884, 9309, 10065, 11689, 0,
 };
 
 static const quint16 g_wzjpegNMaxLP[49] = {
-    16384, 16110, 15105, 14826, 14444, 13975, 13804, 13547, 13265, 13240, 12915, 12844, 12720, 12648, 12482, 12441, 12319, 12320, 12250, 12180, 12168, 12155,
-    12154, 12084, 12096, 12105, 12096, 12080, 12062, 12075, 12078, 12060, 12068, 12090, 12075, 12075, 12103, 12121, 12150, 12181, 12221, 12294, 12411, 12615,
-    13120, 13113, 14574, 21860, 0,
+    16384, 16110, 15105, 14826, 14444, 13975, 13804, 13547, 13265, 13240, 12915, 12844, 12720, 12648, 12482, 12441, 12319,
+    12320, 12250, 12180, 12168, 12155, 12154, 12084, 12096, 12105, 12096, 12080, 12062, 12075, 12078, 12060, 12068, 12090,
+    12075, 12075, 12103, 12121, 12150, 12181, 12221, 12294, 12411, 12615, 13120, 13113, 14574, 21860, 0,
 };
 
 static const quint8 g_wzjpegHalfI[49] = {
@@ -85,7 +85,7 @@ static const quint8 g_wzjpegDblI[49] = {
 
 // Standard JPEG zigzag facts.
 static const quint8 g_wzjpegZigZag[8][8] = {
-    {0, 1, 5, 6, 14, 15, 27, 28},   {2, 4, 7, 13, 16, 26, 29, 42},  {3, 8, 12, 17, 25, 30, 41, 43}, {9, 11, 18, 24, 31, 40, 44, 53},
+    {0, 1, 5, 6, 14, 15, 27, 28},     {2, 4, 7, 13, 16, 26, 29, 42},    {3, 8, 12, 17, 25, 30, 41, 43},   {9, 11, 18, 24, 31, 40, 44, 53},
     {10, 19, 23, 32, 39, 45, 52, 54}, {20, 22, 33, 38, 46, 51, 55, 60}, {21, 34, 37, 47, 50, 56, 59, 61}, {35, 36, 48, 49, 57, 58, 62, 63},
 };
 
@@ -116,10 +116,10 @@ static const ISzAlloc g_wzjpegLzmaAllocator = {wzjpegLzmaAlloc, wzjpegLzmaFree};
 // Bounded sequential reader over the record's compressed extent.
 struct WZJPEG_INPUT {
     QIODevice *pDevice;
-    qint64 nNextOffset;    // next device offset to read from
-    qint64 nRemaining;     // bytes left in the extent; -1 = unbounded
-    qint64 nCountInput;    // bytes consumed
-    bool bReadError;       // device-level failure (not clean end of data)
+    qint64 nNextOffset;  // next device offset to read from
+    qint64 nRemaining;   // bytes left in the extent; -1 = unbounded
+    qint64 nCountInput;  // bytes consumed
+    bool bReadError;     // device-level failure (not clean end of data)
     quint8 baBuffer[0x10000];
     qint32 nBufferSize;
     qint32 nBufferPos;
@@ -792,8 +792,7 @@ static qint32 wzjpegAverage(qint32 k, const WZJPEG_BLOCK *pNorth, const WZJPEG_B
         const qint32 nUpLeft = wzjpegUpLeftOf(k);
         return ((wzjpegAbs(pNorth->c[nUp]) + wzjpegAbs(pWest->c[nUp])) * pQuant[nUp] / pQuant[k] +
                 (wzjpegAbs(pNorth->c[nLeft]) + wzjpegAbs(pWest->c[nLeft])) * pQuant[nLeft] / pQuant[k] +
-                (wzjpegAbs(pNorth->c[nUpLeft]) + wzjpegAbs(pWest->c[nUpLeft])) * pQuant[nUpLeft] / pQuant[k] + wzjpegAbs(pNorth->c[k]) + wzjpegAbs(pWest->c[k]) +
-                4) /
+                (wzjpegAbs(pNorth->c[nUpLeft]) + wzjpegAbs(pWest->c[nUpLeft])) * pQuant[nUpLeft] / pQuant[k] + wzjpegAbs(pNorth->c[k]) + wzjpegAbs(pWest->c[k]) + 4) /
                (2 * 4);
     }
 }
@@ -1391,8 +1390,8 @@ static bool wzjpegProcessStream(WZJPEG_SESSION *pSession, XBinary::PDSTRUCT *pPd
             SizeT nDestLen = (SizeT)nUncompressedSize;
             SizeT nSrcLen = (SizeT)nCompressedSize;
             ELzmaStatus lzmaStatus = LZMA_STATUS_NOT_SPECIFIED;
-            const SRes nRes = X_LzmaDecode((Byte *)baMetadata.data(), &nDestLen, (const Byte *)baCompressed.constData(), &nSrcLen, baProperties, 5,
-                                           LZMA_FINISH_END, &lzmaStatus, &g_wzjpegLzmaAllocator);
+            const SRes nRes = X_LzmaDecode((Byte *)baMetadata.data(), &nDestLen, (const Byte *)baCompressed.constData(), &nSrcLen, baProperties, 5, LZMA_FINISH_END,
+                                           &lzmaStatus, &g_wzjpegLzmaAllocator);
             if ((nRes != SZ_OK) || (nDestLen != (SizeT)nUncompressedSize)) return false;
         } else {
             if (!wzjpegInputReadFull(&pSession->input, (quint8 *)baMetadata.data(), nUncompressedSize)) return false;

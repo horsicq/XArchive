@@ -20,8 +20,7 @@
  */
 #include "xlpaq8.h"
 
-XLPAQ8::XLPAQ8(QIODevice *pDevice)
-    : XExternalArchive(pDevice, BACKEND_LPAQ8)
+XLPAQ8::XLPAQ8(QIODevice *pDevice) : XExternalArchive(pDevice, BACKEND_LPAQ8)
 {
 }
 
@@ -51,8 +50,7 @@ bool XLPAQ8::isValid(PDSTRUCT *pPdStruct)
     if (!isPdStructNotCanceled(pPdStruct) || (getSize() <= LPAQ8_HEADER_SIZE)) return false;
 
     const QByteArray baHeader = read_array(0, LPAQ8_HEADER_SIZE);
-    if ((baHeader.size() != LPAQ8_HEADER_SIZE) || (baHeader.at(0) != 'p') ||
-        (baHeader.at(1) != 'Q') || ((quint8)baHeader.at(2) != 8)) {
+    if ((baHeader.size() != LPAQ8_HEADER_SIZE) || (baHeader.at(0) != 'p') || (baHeader.at(1) != 'Q') || ((quint8)baHeader.at(2) != 8)) {
         return false;
     }
 
@@ -60,8 +58,7 @@ bool XLPAQ8::isValid(PDSTRUCT *pPdStruct)
     const quint32 nUncompressedSize = getUncompressedSize();
     const quint8 nDataMode = (quint8)baHeader.at(8);
 
-    return isPdStructNotCanceled(pPdStruct) && (nOption >= '0') && (nOption <= '9') &&
-           (nUncompressedSize <= 0x7FFFFFFFU) && (nDataMode <= 2);
+    return isPdStructNotCanceled(pPdStruct) && (nOption >= '0') && (nOption <= '9') && (nUncompressedSize <= 0x7FFFFFFFU) && (nDataMode <= 2);
 }
 
 bool XLPAQ8::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)

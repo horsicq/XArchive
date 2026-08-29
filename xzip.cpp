@@ -49,24 +49,15 @@ XBinary::XCONVERT _TABLE_XZip_STRUCTID[] = {
 };
 
 XBinary::XIDSTRING _TABLE_XZip_CMETHOD[] = {
-    {XZip::CMETHOD_STORE, "Store"},
-    {XZip::CMETHOD_SHRINK, "Shrink"},
-    {XZip::CMETHOD_REDUCED_1, "Reduced1"},
-    {XZip::CMETHOD_REDUCED_2, "Reduced2"},
-    {XZip::CMETHOD_REDUCED_3, "Reduced3"},
-    {XZip::CMETHOD_REDUCED_4, "Reduced4"},
-    {XZip::CMETHOD_IMPLODED, "Imploded"},
-    {XZip::CMETHOD_DEFLATE, "Deflate"},
-    {XZip::CMETHOD_DEFLATE64, "Deflate64"},
-    {XZip::CMETHOD_PKWARE_DCL_IMPLODING, "PKWareDCLImploding"},
-    {XZip::CMETHOD_BZIP2, "BZip2"},
-    {XZip::CMETHOD_LZMA, "LZMA"},
-    {XZip::CMETHOD_ZSTD, "Zstandard"},
-    {XZip::CMETHOD_XZ, "XZ"},
-    {XZip::CMETHOD_JPEG, "JPEG"},
-    {XZip::CMETHOD_WAVPACK, "WavPack"},
-    {XZip::CMETHOD_PPMD, "PPMd"},
-    {XZip::CMETHOD_AES, "AES"},
+    {XZip::CMETHOD_STORE, "Store"},         {XZip::CMETHOD_SHRINK, "Shrink"},
+    {XZip::CMETHOD_REDUCED_1, "Reduced1"},  {XZip::CMETHOD_REDUCED_2, "Reduced2"},
+    {XZip::CMETHOD_REDUCED_3, "Reduced3"},  {XZip::CMETHOD_REDUCED_4, "Reduced4"},
+    {XZip::CMETHOD_IMPLODED, "Imploded"},   {XZip::CMETHOD_DEFLATE, "Deflate"},
+    {XZip::CMETHOD_DEFLATE64, "Deflate64"}, {XZip::CMETHOD_PKWARE_DCL_IMPLODING, "PKWareDCLImploding"},
+    {XZip::CMETHOD_BZIP2, "BZip2"},         {XZip::CMETHOD_LZMA, "LZMA"},
+    {XZip::CMETHOD_ZSTD, "Zstandard"},      {XZip::CMETHOD_XZ, "XZ"},
+    {XZip::CMETHOD_JPEG, "JPEG"},           {XZip::CMETHOD_WAVPACK, "WavPack"},
+    {XZip::CMETHOD_PPMD, "PPMd"},           {XZip::CMETHOD_AES, "AES"},
 };
 
 XBinary::XIDSTRING _TABLE_XZip_FLAGS[] = {
@@ -113,8 +104,7 @@ quint16 readZipLE16(const char *pData)
 
 quint32 readZipLE32(const char *pData)
 {
-    return (quint32)(quint8)pData[0] | ((quint32)(quint8)pData[1] << 8) |
-           ((quint32)(quint8)pData[2] << 16) | ((quint32)(quint8)pData[3] << 24);
+    return (quint32)(quint8)pData[0] | ((quint32)(quint8)pData[1] << 8) | ((quint32)(quint8)pData[2] << 16) | ((quint32)(quint8)pData[3] << 24);
 }
 
 bool decodeZipUtf8Strict(const QByteArray &baData, QString *pResult)
@@ -188,22 +178,13 @@ bool decodeZipUtf8Strict(const QByteArray &baData, QString *pResult)
 QString decodeZipCP437(const QByteArray &baData)
 {
     static const quint16 g_anCP437HighBytes[128] = {
-        0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7,
-        0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5,
-        0x00C9, 0x00E6, 0x00C6, 0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9,
-        0x00FF, 0x00D6, 0x00DC, 0x00A2, 0x00A3, 0x00A5, 0x20A7, 0x0192,
-        0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1, 0x00AA, 0x00BA,
-        0x00BF, 0x2310, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB,
-        0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556,
-        0x2555, 0x2563, 0x2551, 0x2557, 0x255D, 0x255C, 0x255B, 0x2510,
-        0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x255E, 0x255F,
-        0x255A, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256C, 0x2567,
-        0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256B,
-        0x256A, 0x2518, 0x250C, 0x2588, 0x2584, 0x258C, 0x2590, 0x2580,
-        0x03B1, 0x00DF, 0x0393, 0x03C0, 0x03A3, 0x03C3, 0x03BC, 0x03C4,
-        0x03A6, 0x0398, 0x03A9, 0x03B4, 0x221E, 0x03C6, 0x03B5, 0x2229,
-        0x2261, 0x00B1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00F7, 0x2248,
-        0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00A0,
+        0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7, 0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5, 0x00C9, 0x00E6, 0x00C6,
+        0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9, 0x00FF, 0x00D6, 0x00DC, 0x00A2, 0x00A3, 0x00A5, 0x20A7, 0x0192, 0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1,
+        0x00AA, 0x00BA, 0x00BF, 0x2310, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB, 0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556, 0x2555,
+        0x2563, 0x2551, 0x2557, 0x255D, 0x255C, 0x255B, 0x2510, 0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x255E, 0x255F, 0x255A, 0x2554, 0x2569, 0x2566,
+        0x2560, 0x2550, 0x256C, 0x2567, 0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256B, 0x256A, 0x2518, 0x250C, 0x2588, 0x2584, 0x258C, 0x2590,
+        0x2580, 0x03B1, 0x00DF, 0x0393, 0x03C0, 0x03A3, 0x03C3, 0x03BC, 0x03C4, 0x03A6, 0x0398, 0x03A9, 0x03B4, 0x221E, 0x03C6, 0x03B5, 0x2229, 0x2261, 0x00B1,
+        0x2265, 0x2264, 0x2320, 0x2321, 0x00F7, 0x2248, 0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00A0,
     };
 
     QString sResult;
@@ -230,8 +211,7 @@ bool decodeZipFileName(const QByteArray &baRawName, quint16 nFlags, const QByteA
         sResult = decodeZipCP437(baRawName);
     }
 
-    const quint32 nRawNameCRC =
-        XBinary::_getCRC32(baRawName, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
+    const quint32 nRawNameCRC = XBinary::_getCRC32(baRawName, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
 
     qint32 nOffset = 0;
     while ((nOffset + 4) <= baExtraField.size()) {
@@ -260,12 +240,10 @@ bool decodeZipFileName(const QByteArray &baRawName, quint16 nFlags, const QByteA
     return true;
 }
 
-bool zipWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct,
-                 qint64 *pnWritten = nullptr)
+bool zipWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBinary::PDSTRUCT *pPdStruct, qint64 *pnWritten = nullptr)
 {
     if (pnWritten) *pnWritten = 0;
-    if (!pDevice || (nSize < 0) || ((nSize > 0) && !pData) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pDevice || (nSize < 0) || ((nSize > 0) && !pData) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -280,8 +258,7 @@ bool zipWriteAll(QIODevice *pDevice, const char *pData, qint64 nSize, XBinary::P
     return (nWritten == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-bool zipCopyExactly(QIODevice *pSource, QIODevice *pDest, qint64 nSize, XBinary::PDSTRUCT *pPdStruct,
-                    qint64 *pnWritten = nullptr)
+bool zipCopyExactly(QIODevice *pSource, QIODevice *pDest, qint64 nSize, XBinary::PDSTRUCT *pPdStruct, qint64 *pnWritten = nullptr)
 {
     if (pnWritten) *pnWritten = 0;
     if (!pSource || !pDest || (nSize < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
@@ -296,8 +273,7 @@ bool zipCopyExactly(QIODevice *pSource, QIODevice *pDest, qint64 nSize, XBinary:
         const qint64 nChunkSize = qMin<qint64>(nRemaining, nBufferSize);
         const qint64 nRead = pSource->read(pBuffer, nChunkSize);
         qint64 nChunkWritten = 0;
-        if ((nRead <= 0) || (nRead > nChunkSize) ||
-            !zipWriteAll(pDest, pBuffer, nRead, pPdStruct, &nChunkWritten)) {
+        if ((nRead <= 0) || (nRead > nChunkSize) || !zipWriteAll(pDest, pBuffer, nRead, pPdStruct, &nChunkWritten)) {
             if (pnWritten) *pnWritten += nChunkWritten;
             bResult = false;
             break;
@@ -315,14 +291,12 @@ bool zipCanAppendAt(QIODevice *pDevice, qint64 nStartPosition)
     if (!pDevice || !pDevice->isWritable() || (nStartPosition < 0)) return false;
     if (pDevice->isSequential()) return true;
 
-    return XBinary::isResizeEnable(pDevice) && (pDevice->pos() == nStartPosition) &&
-           (pDevice->size() == nStartPosition);
+    return XBinary::isResizeEnable(pDevice) && (pDevice->pos() == nStartPosition) && (pDevice->size() == nStartPosition);
 }
 
 bool zipRollbackWrite(QIODevice *pDevice, qint64 nStartPosition)
 {
-    if (!pDevice || pDevice->isSequential() || (nStartPosition < 0) ||
-        !XBinary::isResizeEnable(pDevice)) {
+    if (!pDevice || pDevice->isSequential() || (nStartPosition < 0) || !XBinary::isResizeEnable(pDevice)) {
         return false;
     }
 
@@ -338,12 +312,9 @@ void zipDeletePackContext(XZip::ZIP_PACK_CONTEXT *pContext)
 
 bool zipIsPackStateConsistent(const XBinary::PACK_STATE *pState, const XZip::ZIP_PACK_CONTEXT *pContext)
 {
-    if (!pState || !pContext || (pState->pContext != pContext) || !pContext->pListZipFileRecords ||
-        !pContext->pDevice || (pState->pDevice != pContext->pDevice) || !pState->pDevice->isWritable() ||
-        (pContext->nStartOffset < 0) || (pContext->nCurrentOffset < pContext->nStartOffset) ||
-        (pContext->nNumberOfRecords < 0) ||
-        (pContext->nNumberOfRecords != pContext->pListZipFileRecords->size()) ||
-        (pState->nCurrentOffset != pContext->nCurrentOffset) ||
+    if (!pState || !pContext || (pState->pContext != pContext) || !pContext->pListZipFileRecords || !pContext->pDevice || (pState->pDevice != pContext->pDevice) ||
+        !pState->pDevice->isWritable() || (pContext->nStartOffset < 0) || (pContext->nCurrentOffset < pContext->nStartOffset) || (pContext->nNumberOfRecords < 0) ||
+        (pContext->nNumberOfRecords != pContext->pListZipFileRecords->size()) || (pState->nCurrentOffset != pContext->nCurrentOffset) ||
         (pState->nNumberOfRecords != pContext->nNumberOfRecords)) {
         return false;
     }
@@ -352,8 +323,7 @@ bool zipIsPackStateConsistent(const XBinary::PACK_STATE *pState, const XZip::ZIP
     return zipCanAppendAt(pState->pDevice, pContext->nCurrentOffset);
 }
 
-void zipMarkPackWriteFailure(XBinary::PACK_STATE *pState, XZip::ZIP_PACK_CONTEXT *pContext,
-                             qint64 nStartPosition, qint64 nWritten)
+void zipMarkPackWriteFailure(XBinary::PACK_STATE *pState, XZip::ZIP_PACK_CONTEXT *pContext, qint64 nStartPosition, qint64 nWritten)
 {
     if (!pState || !pContext || (nStartPosition < 0) || (nWritten < 0)) return;
     if (zipRollbackWrite(pState->pDevice, nStartPosition)) return;
@@ -372,13 +342,11 @@ bool zipRestoreSourcePosition(QIODevice *pSource, bool bSequential, qint64 nOrig
     return bSequential || pSource->seek(nOriginalPosition);
 }
 
-bool zipStageSource(QIODevice *pSource, QTemporaryFile *pStage, qint64 nExpectedSize,
-                    XBinary::PDSTRUCT *pPdStruct, qint64 *pnSize, quint32 *pnCRC32)
+bool zipStageSource(QIODevice *pSource, QTemporaryFile *pStage, qint64 nExpectedSize, XBinary::PDSTRUCT *pPdStruct, qint64 *pnSize, quint32 *pnCRC32)
 {
     if (pnSize) *pnSize = 0;
     if (pnCRC32) *pnCRC32 = 0;
-    if (!pSource || !pStage || !pnSize || !pnCRC32 || !pSource->isReadable() ||
-        (nExpectedSize < -1) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pSource || !pStage || !pnSize || !pnCRC32 || !pSource->isReadable() || (nExpectedSize < -1) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -427,8 +395,7 @@ bool zipStageSource(QIODevice *pSource, QTemporaryFile *pStage, qint64 nExpected
             bResult = false;
             break;
         }
-        if ((quint64)nRead >= ((quint64)(std::numeric_limits<quint32>::max)() - (quint64)nTotal) ||
-            !zipWriteAll(pStage, pBuffer, nRead, pPdStruct)) {
+        if ((quint64)nRead >= ((quint64)(std::numeric_limits<quint32>::max)() - (quint64)nTotal) || !zipWriteAll(pStage, pBuffer, nRead, pPdStruct)) {
             bResult = false;
             break;
         }
@@ -448,37 +415,29 @@ bool zipStageSource(QIODevice *pSource, QTemporaryFile *pStage, qint64 nExpected
     return true;
 }
 
-bool zipGetCentralDirectorySizes(const QList<XZip::ZIPFILE_RECORD> *pRecords, const QByteArray &baComment,
-                                 qint64 nStartPosition, qint64 *pCentralSize, qint64 *pTotalSize)
+bool zipGetCentralDirectorySizes(const QList<XZip::ZIPFILE_RECORD> *pRecords, const QByteArray &baComment, qint64 nStartPosition, qint64 *pCentralSize,
+                                 qint64 *pTotalSize)
 {
-    if (!pRecords || !pCentralSize || !pTotalSize || (nStartPosition < 0) ||
-        ((quint64)nStartPosition >= (std::numeric_limits<quint32>::max)()) ||
-        (pRecords->size() >= (std::numeric_limits<quint16>::max)()) ||
-        (baComment.size() > (std::numeric_limits<quint16>::max)())) {
+    if (!pRecords || !pCentralSize || !pTotalSize || (nStartPosition < 0) || ((quint64)nStartPosition >= (std::numeric_limits<quint32>::max)()) ||
+        (pRecords->size() >= (std::numeric_limits<quint16>::max)()) || (baComment.size() > (std::numeric_limits<quint16>::max)())) {
         return false;
     }
 
     qint64 nCentralSize = 0;
     for (const XZip::ZIPFILE_RECORD &record : *pRecords) {
         const QByteArray baFileName = record.sFileName.toUtf8();
-        if (baFileName.isEmpty() || (baFileName.size() > (std::numeric_limits<quint16>::max)()) ||
-            ((qint64)record.method < 0) || ((qint64)record.method > (std::numeric_limits<quint16>::max)()) ||
-            (record.nCompressedSize < 0) ||
-            ((quint64)record.nCompressedSize >= (std::numeric_limits<quint32>::max)()) ||
-            (record.nUncompressedSize < 0) ||
-            ((quint64)record.nUncompressedSize >= (std::numeric_limits<quint32>::max)()) ||
-            (record.nHeaderOffset < 0) ||
+        if (baFileName.isEmpty() || (baFileName.size() > (std::numeric_limits<quint16>::max)()) || ((qint64)record.method < 0) ||
+            ((qint64)record.method > (std::numeric_limits<quint16>::max)()) || (record.nCompressedSize < 0) ||
+            ((quint64)record.nCompressedSize >= (std::numeric_limits<quint32>::max)()) || (record.nUncompressedSize < 0) ||
+            ((quint64)record.nUncompressedSize >= (std::numeric_limits<quint32>::max)()) || (record.nHeaderOffset < 0) ||
             ((quint64)record.nHeaderOffset >= (std::numeric_limits<quint32>::max)())) {
             return false;
         }
 
-        const qint64 nExpectedDataOffset = record.nHeaderOffset +
-                                           (qint64)sizeof(XZip::LOCALFILEHEADER) + baFileName.size();
-        if ((record.nHeaderOffset >= nStartPosition) || (record.nDataOffset != nExpectedDataOffset) ||
-            (record.nDataOffset > nStartPosition) ||
+        const qint64 nExpectedDataOffset = record.nHeaderOffset + (qint64)sizeof(XZip::LOCALFILEHEADER) + baFileName.size();
+        if ((record.nHeaderOffset >= nStartPosition) || (record.nDataOffset != nExpectedDataOffset) || (record.nDataOffset > nStartPosition) ||
             (record.nCompressedSize > (nStartPosition - record.nDataOffset)) ||
-            ((record.method == XZip::CMETHOD_STORE) && !(record.nFlags & 0x0001) &&
-             (record.nCompressedSize != record.nUncompressedSize))) {
+            ((record.method == XZip::CMETHOD_STORE) && !(record.nFlags & 0x0001) && (record.nCompressedSize != record.nUncompressedSize))) {
             return false;
         }
 
@@ -497,14 +456,12 @@ bool zipGetCentralDirectorySizes(const QList<XZip::ZIPFILE_RECORD> *pRecords, co
     return true;
 }
 
-bool zipBuildCentralDirectory(QIODevice *pDest, const QList<XZip::ZIPFILE_RECORD> *pRecords,
-                              const QByteArray &baComment, qint64 nStartPosition,
+bool zipBuildCentralDirectory(QIODevice *pDest, const QList<XZip::ZIPFILE_RECORD> *pRecords, const QByteArray &baComment, qint64 nStartPosition,
                               XBinary::PDSTRUCT *pPdStruct, qint64 *pTotalSize)
 {
     qint64 nCentralSize = 0;
     qint64 nResultSize = 0;
-    if (!pDest || !zipGetCentralDirectorySizes(pRecords, baComment, nStartPosition, &nCentralSize, &nResultSize) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pDest || !zipGetCentralDirectorySizes(pRecords, baComment, nStartPosition, &nCentralSize, &nResultSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -551,25 +508,19 @@ bool zipBuildCentralDirectory(QIODevice *pDest, const QList<XZip::ZIPFILE_RECORD
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-bool zipAppendCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pRecords,
-                               const QByteArray &baComment, qint64 nStartPosition,
-                               XBinary::PDSTRUCT *pPdStruct, qint64 *pnWritten,
-                               qint64 *pnTotalSize = nullptr)
+bool zipAppendCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pRecords, const QByteArray &baComment, qint64 nStartPosition, XBinary::PDSTRUCT *pPdStruct,
+                               qint64 *pnWritten, qint64 *pnTotalSize = nullptr)
 {
     if (pnWritten) *pnWritten = 0;
     if (pnTotalSize) *pnTotalSize = 0;
-    if (!pDest || !pRecords || !pDest->isWritable() || !zipCanAppendAt(pDest, nStartPosition) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pDest || !pRecords || !pDest->isWritable() || !zipCanAppendAt(pDest, nStartPosition) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     QTemporaryFile centralDirectory;
     qint64 nTotalSize = 0;
-    if (!centralDirectory.open() ||
-        !zipBuildCentralDirectory(&centralDirectory, pRecords, baComment, nStartPosition,
-                                  pPdStruct, &nTotalSize) ||
-        !centralDirectory.flush() || (centralDirectory.size() != nTotalSize) ||
-        !centralDirectory.seek(0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!centralDirectory.open() || !zipBuildCentralDirectory(&centralDirectory, pRecords, baComment, nStartPosition, pPdStruct, &nTotalSize) ||
+        !centralDirectory.flush() || (centralDirectory.size() != nTotalSize) || !centralDirectory.seek(0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -597,12 +548,9 @@ bool XZip::isValid(PDSTRUCT *pPdStruct)
     if (nECDOffset != -1) return true;
 
     if (nSize < (qint64)sizeof(quint32)) return false;
-    const QByteArray baSignature = XBinary::read_array_process(
-        guardedSource.data(), 0, sizeof(quint32), pPdStruct);
-    if (!guardedArchive || !guardedSource ||
-        (baSignature.size() != (qint64)sizeof(quint32)) ||
-        (XBinary::_read_uint32(
-             const_cast<char *>(baSignature.constData())) != SIGNATURE_LFD)) {
+    const QByteArray baSignature = XBinary::read_array_process(guardedSource.data(), 0, sizeof(quint32), pPdStruct);
+    if (!guardedArchive || !guardedSource || (baSignature.size() != (qint64)sizeof(quint32)) ||
+        (XBinary::_read_uint32(const_cast<char *>(baSignature.constData())) != SIGNATURE_LFD)) {
         return false;
     }
 
@@ -610,12 +558,10 @@ bool XZip::isValid(PDSTRUCT *pPdStruct)
     // require at least one complete local record instead of accepting a bare
     // four-byte PK signature.
     qint64 nRealSize = 0;
-    const qint32 nNumberOfRecords = guardedArchive->_getNumberOfLocalFileHeaders(
-        0, nSize, &nRealSize, pPdStruct);
+    const qint32 nNumberOfRecords = guardedArchive->_getNumberOfLocalFileHeaders(0, nSize, &nRealSize, pPdStruct);
     if (!guardedArchive || !guardedSource) return false;
     if ((nNumberOfRecords <= 0) || (nRealSize <= 0)) return false;
-    const bool bECDPresent = guardedArchive->_isECDSignaturePresent(
-        nRealSize, pPdStruct);
+    const bool bECDPresent = guardedArchive->_isECDSignaturePresent(nRealSize, pPdStruct);
     return guardedArchive && guardedSource && !bECDPresent;
 }
 
@@ -682,8 +628,7 @@ bool XZip::isEncrypted()
                 return true;
             }
 
-            qint64 nRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength + (qint64)cdfh.nExtraFieldLength +
-                                 (qint64)cdfh.nFileCommentLength;
+            qint64 nRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength + (qint64)cdfh.nExtraFieldLength + (qint64)cdfh.nFileCommentLength;
 
             if ((nRecordSize <= 0) || (nRecordSize > (nTotalSize - nOffset))) {
                 break;
@@ -856,13 +801,9 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
         for (int idx = 0, n = pListRecords->count(); idx < n; ++idx) {
             const RECORD &rec = pListRecords->at(idx);
             const QString &name = rec.spInfo.sRecordName;
-            if (!seenJarManifest &&
-                (name == QLatin1String("META-INF/MANIFEST.MF")) &&
-                (rec.spInfo.nUncompressedSize > 0)) seenJarManifest = true;
-            if (!seenApksTableOfContents && (name == QLatin1String("toc.pb")) &&
-                (rec.spInfo.nUncompressedSize != 0)) seenApksTableOfContents = true;
-            if (!seenApksPayload && name.endsWith(QLatin1String(".apk"), Qt::CaseInsensitive) &&
-                (rec.spInfo.nUncompressedSize != 0)) seenApksPayload = true;
+            if (!seenJarManifest && (name == QLatin1String("META-INF/MANIFEST.MF")) && (rec.spInfo.nUncompressedSize > 0)) seenJarManifest = true;
+            if (!seenApksTableOfContents && (name == QLatin1String("toc.pb")) && (rec.spInfo.nUncompressedSize != 0)) seenApksTableOfContents = true;
+            if (!seenApksPayload && name.endsWith(QLatin1String(".apk"), Qt::CaseInsensitive) && (rec.spInfo.nUncompressedSize != 0)) seenApksPayload = true;
         }
     }
 
@@ -871,8 +812,7 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
             result = FT_APK;
         } else if (XIPA::isValid(pDevice, pListRecords, pPdStruct)) {
             result = FT_IPA;
-        } else if (seenJarManifest &&
-                   XJAR::isValid(pDevice, pListRecords, pPdStruct)) {
+        } else if (seenJarManifest && XJAR::isValid(pDevice, pListRecords, pPdStruct)) {
             result = FT_JAR;
         } else {
             result = FT_ZIP;
@@ -885,8 +825,7 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
         // free to deflate entries, so an "all stored inner ZIPs" predicate can
         // never describe the real format.
         if ((result != FT_JAR) && (result != FT_APK) && (result != FT_IPA)) {
-            if (seenApksTableOfContents && seenApksPayload &&
-                XAPKS::isValid(pDevice, pListRecords, pPdStruct)) {
+            if (seenApksTableOfContents && seenApksPayload && XAPKS::isValid(pDevice, pListRecords, pPdStruct)) {
                 result = FT_APKS;
             }
         }
@@ -897,15 +836,13 @@ XBinary::FT XZip::_getFileType(QIODevice *pDevice, QList<RECORD> *pListRecords, 
 
 bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECORD *pZipFileRecord, PDSTRUCT *pPdStruct)
 {
-    if (!pSource || !pDest || !pZipFileRecord || !pSource->isReadable() || !pDest->isWritable() ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pSource || !pDest || !pZipFileRecord || !pSource->isReadable() || !pDest->isWritable() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     qint64 nStartPosition = pDest->pos();
     if (pDest->isSequential() && (nStartPosition < 0)) nStartPosition = pZipFileRecord->nHeaderOffset;
-    if (!zipCanAppendAt(pDest, nStartPosition) ||
-        ((quint64)nStartPosition >= (std::numeric_limits<quint32>::max)())) {
+    if (!zipCanAppendAt(pDest, nStartPosition) || ((quint64)nStartPosition >= (std::numeric_limits<quint32>::max)())) {
         return false;
     }
 
@@ -934,10 +871,8 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     QIODevice *pPayload = &stagedSource;
     if (record.method == CMETHOD_DEFLATE) {
         if (!compressedPayload.open() ||
-            (XArchive::_compress(XArchive::HANDLE_METHOD_DEFLATE, &stagedSource, &compressedPayload, pPdStruct) !=
-             XArchive::COMPRESS_RESULT_OK) ||
-            !compressedPayload.flush() || !compressedPayload.seek(0) ||
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+            (XArchive::_compress(XArchive::HANDLE_METHOD_DEFLATE, &stagedSource, &compressedPayload, pPdStruct) != XArchive::COMPRESS_RESULT_OK) ||
+            !compressedPayload.flush() || !compressedPayload.seek(0) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         pPayload = &compressedPayload;
@@ -946,9 +881,7 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     }
 
     record.nCompressedSize = pPayload->size();
-    if ((record.nCompressedSize < 0) ||
-        ((quint64)record.nCompressedSize >= (std::numeric_limits<quint32>::max)()) ||
-        !pPayload->seek(0)) {
+    if ((record.nCompressedSize < 0) || ((quint64)record.nCompressedSize >= (std::numeric_limits<quint32>::max)()) || !pPayload->seek(0)) {
         return false;
     }
 
@@ -973,8 +906,7 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     header.nFileNameLength = (quint16)baFileName.size();
 
     if (!zipWriteAll(pDest, reinterpret_cast<const char *>(&header), sizeof(header), pPdStruct) ||
-        !zipWriteAll(pDest, baFileName.constData(), baFileName.size(), pPdStruct) ||
-        !zipCopyExactly(pPayload, pDest, record.nCompressedSize, pPdStruct)) {
+        !zipWriteAll(pDest, baFileName.constData(), baFileName.size(), pPdStruct) || !zipCopyExactly(pPayload, pDest, record.nCompressedSize, pPdStruct)) {
         zipRollbackWrite(pDest, nStartPosition);
         return false;
     }
@@ -983,11 +915,9 @@ bool XZip::addLocalFileRecord(QIODevice *pSource, QIODevice *pDest, ZIPFILE_RECO
     return true;
 }
 
-bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords, const QString &sComment,
-                               PDSTRUCT *pPdStruct, qint64 nStartPosition)
+bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pListZipFileRecords, const QString &sComment, PDSTRUCT *pPdStruct, qint64 nStartPosition)
 {
-    if (!pDest || !pListZipFileRecords || !pDest->isWritable() ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pDest || !pListZipFileRecords || !pDest->isWritable() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -1004,8 +934,7 @@ bool XZip::addCentralDirectory(QIODevice *pDest, QList<XZip::ZIPFILE_RECORD> *pL
 
     const QByteArray baComment = sComment.toUtf8();
     qint64 nWritten = 0;
-    if (!zipAppendCentralDirectory(pDest, pListZipFileRecords, baComment, nStartPosition,
-                                   pPdStruct, &nWritten)) {
+    if (!zipAppendCentralDirectory(pDest, pListZipFileRecords, baComment, nStartPosition, pPdStruct, &nWritten)) {
         zipRollbackWrite(pDest, nStartPosition);
         return false;
     }
@@ -1054,8 +983,7 @@ XZip::CENTRALDIRECTORYFILEHEADER XZip::read_CENTRALDIRECTORYFILEHEADER(qint64 nO
 {
     Q_UNUSED(pPdStruct)
     CENTRALDIRECTORYFILEHEADER result = {};
-    if (read_array(nOffset, reinterpret_cast<char *>(&result),
-                   sizeof(result)) != sizeof(result)) {
+    if (read_array(nOffset, reinterpret_cast<char *>(&result), sizeof(result)) != sizeof(result)) {
         return CENTRALDIRECTORYFILEHEADER();
     }
 
@@ -1066,8 +994,7 @@ XZip::LOCALFILEHEADER XZip::read_LOCALFILEHEADER(qint64 nOffset, PDSTRUCT *pPdSt
 {
     Q_UNUSED(pPdStruct)
     LOCALFILEHEADER result = {};
-    if (read_array(nOffset, reinterpret_cast<char *>(&result),
-                   sizeof(result)) != sizeof(result)) {
+    if (read_array(nOffset, reinterpret_cast<char *>(&result), sizeof(result)) != sizeof(result)) {
         return LOCALFILEHEADER();
     }
 
@@ -1079,16 +1006,14 @@ XZip::AES_EXTRA_FIELD XZip::read_AES_EXTRA_FIELD(qint64 nOffset, PDSTRUCT *pPdSt
     Q_UNUSED(pPdStruct)
 
     AES_EXTRA_FIELD result = {};
-    if (read_array(nOffset, reinterpret_cast<char *>(&result),
-                   sizeof(result)) != sizeof(result)) {
+    if (read_array(nOffset, reinterpret_cast<char *>(&result), sizeof(result)) != sizeof(result)) {
         return AES_EXTRA_FIELD();
     }
 
     return result;
 }
 
-bool XZip::_readFileName(qint64 nFileNameOffset, qint64 nFileNameLength, quint16 nFlags,
-                         qint64 nExtraFieldOffset, qint64 nExtraFieldLength, QString *pFileName)
+bool XZip::_readFileName(qint64 nFileNameOffset, qint64 nFileNameLength, quint16 nFlags, qint64 nExtraFieldOffset, qint64 nExtraFieldLength, QString *pFileName)
 {
     QPointer<XZip> guardedArchive(this);
     if (!pFileName) {
@@ -1098,20 +1023,15 @@ bool XZip::_readFileName(qint64 nFileNameOffset, qint64 nFileNameLength, quint16
     pFileName->clear();
     const qint64 nFileSize = guardedArchive->getSize();
     if (!guardedArchive) return false;
-    if ((nFileNameOffset < 0) || (nFileNameLength < 0) || (nFileNameOffset > nFileSize) ||
-        (nFileNameLength > (nFileSize - nFileNameOffset)) || (nExtraFieldOffset < 0) ||
-        (nExtraFieldLength < 0) || (nExtraFieldOffset > nFileSize) ||
-        (nExtraFieldLength > (nFileSize - nExtraFieldOffset)) ||
-        (nFileNameLength > (qint64)(std::numeric_limits<qint32>::max)()) ||
-        (nExtraFieldLength > (qint64)(std::numeric_limits<qint32>::max)())) {
+    if ((nFileNameOffset < 0) || (nFileNameLength < 0) || (nFileNameOffset > nFileSize) || (nFileNameLength > (nFileSize - nFileNameOffset)) || (nExtraFieldOffset < 0) ||
+        (nExtraFieldLength < 0) || (nExtraFieldOffset > nFileSize) || (nExtraFieldLength > (nFileSize - nExtraFieldOffset)) ||
+        (nFileNameLength > (qint64)(std::numeric_limits<qint32>::max)()) || (nExtraFieldLength > (qint64)(std::numeric_limits<qint32>::max)())) {
         return false;
     }
 
-    const QByteArray baRawName = guardedArchive->read_array(
-        nFileNameOffset, nFileNameLength);
+    const QByteArray baRawName = guardedArchive->read_array(nFileNameOffset, nFileNameLength);
     if (!guardedArchive) return false;
-    const QByteArray baExtraField = guardedArchive->read_array(
-        nExtraFieldOffset, nExtraFieldLength);
+    const QByteArray baExtraField = guardedArchive->read_array(nExtraFieldOffset, nExtraFieldLength);
     if (!guardedArchive) return false;
     if ((baRawName.size() != nFileNameLength) || (baExtraField.size() != nExtraFieldLength)) {
         return false;
@@ -1120,16 +1040,13 @@ bool XZip::_readFileName(qint64 nFileNameOffset, qint64 nFileNameLength, quint16
     return decodeZipFileName(baRawName, nFlags, baExtraField, pFileName);
 }
 
-static bool zipReadExact(QPointer<XZip> *pGuardedArchive, QPointer<QIODevice> *pGuardedSource, qint64 nSize, XBinary::PDSTRUCT *pPdStruct,
-                         qint64 nOffset, qint64 nLength, QByteArray *pData)
+static bool zipReadExact(QPointer<XZip> *pGuardedArchive, QPointer<QIODevice> *pGuardedSource, qint64 nSize, XBinary::PDSTRUCT *pPdStruct, qint64 nOffset, qint64 nLength,
+                         QByteArray *pData)
 {
-    if (!pData || pGuardedArchive->isNull() || pGuardedSource->isNull() ||
-        (nOffset < 0) || (nLength < 0) || (nOffset > nSize) ||
-        (nLength > (nSize - nOffset))) return false;
-    *pData = XBinary::read_array_process(
-        pGuardedSource->data(), nOffset, nLength, pPdStruct);
-    return !pGuardedArchive->isNull() && !pGuardedSource->isNull() &&
-           (pData->size() == nLength);
+    if (!pData || pGuardedArchive->isNull() || pGuardedSource->isNull() || (nOffset < 0) || (nLength < 0) || (nOffset > nSize) || (nLength > (nSize - nOffset)))
+        return false;
+    *pData = XBinary::read_array_process(pGuardedSource->data(), nOffset, nLength, pPdStruct);
+    return !pGuardedArchive->isNull() && !pGuardedSource->isNull() && (pData->size() == nLength);
 }
 
 static bool zipLocalRangeLessThan(const QPair<qint64, qint64> &a, const QPair<qint64, qint64> &b)
@@ -1160,15 +1077,12 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
     {
         const qint64 nMaxECDSearchSize = 0xFFFF + (qint64)sizeof(ENDOFCENTRALDIRECTORYRECORD);
         const qint64 nSearchOffset = qMax((qint64)0, nSize - nMaxECDSearchSize);
-        const QByteArray baSearch = XBinary::read_array_process(
-            guardedSource.data(), nSearchOffset, nSize - nSearchOffset,
-            pPdStruct);
-        if (!guardedArchive || !guardedSource ||
-            (baSearch.size() != (nSize - nSearchOffset))) return -1;
+        const QByteArray baSearch = XBinary::read_array_process(guardedSource.data(), nSearchOffset, nSize - nSearchOffset, pPdStruct);
+        if (!guardedArchive || !guardedSource || (baSearch.size() != (nSize - nSearchOffset))) return -1;
 
         static const QByteArray baECDSignature("PK\x05\x06", 4);
         QList<qint32> listCandidates;
-        for (qint32 nPos = 0; nPos <= baSearch.size() - (qint32)baECDSignature.size(); ) {
+        for (qint32 nPos = 0; nPos <= baSearch.size() - (qint32)baECDSignature.size();) {
             const qint32 nFound = baSearch.indexOf(baECDSignature, nPos);
             if (nFound < 0) break;
             listCandidates.append(nFound);
@@ -1183,8 +1097,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
             }
 
             ENDOFCENTRALDIRECTORYRECORD ecd = {};
-            memcpy(&ecd, baSearch.constData() + (nCurrent - nSearchOffset),
-                   sizeof(ecd));
+            memcpy(&ecd, baSearch.constData() + (nCurrent - nSearchOffset), sizeof(ecd));
             const quint16 nCommentLength = ecd.nCommentLength;
             if ((qint64)nCommentLength > (nSize - nCurrent - (qint64)sizeof(ENDOFCENTRALDIRECTORYRECORD))) {
                 continue;
@@ -1200,8 +1113,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
             // Multi-disk and ZIP64 archives need different record layouts and
             // are not implemented by this reader. Do not reinterpret their
             // sentinel values as ordinary 32-bit offsets/counts.
-            if ((nDiskNumber != 0) || (nStartDisk != 0) || (nDiskRecords != nTotalRecords) ||
-                (nTotalRecords == 0xFFFF) || (nCentralDirectorySize == 0xFFFFFFFF) ||
+            if ((nDiskNumber != 0) || (nStartDisk != 0) || (nDiskRecords != nTotalRecords) || (nTotalRecords == 0xFFFF) || (nCentralDirectorySize == 0xFFFFFFFF) ||
                 (nOffsetToCentralDirectory == 0xFFFFFFFF)) {
                 continue;
             }
@@ -1214,8 +1126,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 continue;
             }
 
-            if ((nOffsetToCentralDirectory < 0) || (nOffsetToCentralDirectory > nCurrent) ||
-                ((qint64)nCentralDirectorySize != (nCurrent - nOffsetToCentralDirectory))) {
+            if ((nOffsetToCentralDirectory < 0) || (nOffsetToCentralDirectory > nCurrent) || ((qint64)nCentralDirectorySize != (nCurrent - nOffsetToCentralDirectory))) {
                 continue;
             }
 
@@ -1225,30 +1136,25 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
             QList<QPair<qint64, qint64>> listLocalRanges;
 
             for (quint32 i = 0; i < nTotalRecords; i++) {
-                if ((nCurrent - nCurrentHeaderOffset) <
-                    (qint64)sizeof(CENTRALDIRECTORYFILEHEADER)) {
+                if ((nCurrent - nCurrentHeaderOffset) < (qint64)sizeof(CENTRALDIRECTORYFILEHEADER)) {
                     bValid = false;
                     break;
                 }
 
                 QByteArray baCentralHeader;
-                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nCurrentHeaderOffset,
-                               sizeof(CENTRALDIRECTORYFILEHEADER),
-                               &baCentralHeader)) return -1;
+                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct, nCurrentHeaderOffset, sizeof(CENTRALDIRECTORYFILEHEADER), &baCentralHeader))
+                    return -1;
                 CENTRALDIRECTORYFILEHEADER cdfh = {};
                 memcpy(&cdfh, baCentralHeader.constData(), sizeof(cdfh));
                 if (cdfh.nSignature != SIGNATURE_CFD) {
                     bValid = false;
                     break;
                 }
-                qint64 nRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength + (qint64)cdfh.nExtraFieldLength +
-                                     (qint64)cdfh.nFileCommentLength;
+                qint64 nRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength + (qint64)cdfh.nExtraFieldLength + (qint64)cdfh.nFileCommentLength;
 
-                if ((cdfh.nStartDisk != 0) || (cdfh.nCompressedSize == 0xFFFFFFFF) ||
-                    (cdfh.nUncompressedSize == 0xFFFFFFFF) ||
+                if ((cdfh.nStartDisk != 0) || (cdfh.nCompressedSize == 0xFFFFFFFF) || (cdfh.nUncompressedSize == 0xFFFFFFFF) ||
                     (cdfh.nOffsetToLocalFileHeader == 0xFFFFFFFF) ||
-                    ((cdfh.nMethod == CMETHOD_STORE) && !(cdfh.nFlags & 0x0001) &&
-                     (cdfh.nCompressedSize != cdfh.nUncompressedSize)) ||
+                    ((cdfh.nMethod == CMETHOD_STORE) && !(cdfh.nFlags & 0x0001) && (cdfh.nCompressedSize != cdfh.nUncompressedSize)) ||
                     (nRecordSize > (nCurrent - nCurrentHeaderOffset))) {
                     bValid = false;
                     break;
@@ -1257,10 +1163,8 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 const qint64 nCentralNameOffset = nCurrentHeaderOffset + sizeof(CENTRALDIRECTORYFILEHEADER);
                 const qint64 nCentralExtraOffset = nCentralNameOffset + cdfh.nFileNameLength;
                 QString sDecodedName;
-                const bool bNameRead = guardedArchive->_readFileName(
-                    nCentralNameOffset, cdfh.nFileNameLength, cdfh.nFlags,
-                    nCentralExtraOffset, cdfh.nExtraFieldLength,
-                    &sDecodedName);
+                const bool bNameRead =
+                    guardedArchive->_readFileName(nCentralNameOffset, cdfh.nFileNameLength, cdfh.nFlags, nCentralExtraOffset, cdfh.nExtraFieldLength, &sDecodedName);
                 if (!guardedArchive || !guardedSource) return -1;
                 if (!bNameRead) {
                     bValid = false;
@@ -1268,8 +1172,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 }
 
                 qint64 nLocalHeaderOffset = cdfh.nOffsetToLocalFileHeader;
-                if ((nLocalHeaderOffset < 0) ||
-                    ((nOffsetToCentralDirectory - nLocalHeaderOffset) < (qint64)sizeof(LOCALFILEHEADER)) ||
+                if ((nLocalHeaderOffset < 0) || ((nOffsetToCentralDirectory - nLocalHeaderOffset) < (qint64)sizeof(LOCALFILEHEADER)) ||
                     setLocalHeaderOffsets.contains(nLocalHeaderOffset)) {
                     bValid = false;
                     break;
@@ -1277,32 +1180,25 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 setLocalHeaderOffsets.insert(nLocalHeaderOffset);
 
                 QByteArray baLocalHeader;
-                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nLocalHeaderOffset, sizeof(LOCALFILEHEADER),
-                               &baLocalHeader)) return -1;
+                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct, nLocalHeaderOffset, sizeof(LOCALFILEHEADER), &baLocalHeader)) return -1;
                 LOCALFILEHEADER lfh = {};
                 memcpy(&lfh, baLocalHeader.constData(), sizeof(lfh));
-                qint64 nLocalDataOffset =
-                    nLocalHeaderOffset + sizeof(LOCALFILEHEADER) + (qint64)lfh.nFileNameLength + (qint64)lfh.nExtraFieldLength;
+                qint64 nLocalDataOffset = nLocalHeaderOffset + sizeof(LOCALFILEHEADER) + (qint64)lfh.nFileNameLength + (qint64)lfh.nExtraFieldLength;
 
                 QByteArray baLocalName;
                 QByteArray baCentralName;
                 const bool bNamesRead =
-                    zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nLocalHeaderOffset + sizeof(LOCALFILEHEADER),
-                              lfh.nFileNameLength, &baLocalName) &&
-                    zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nCurrentHeaderOffset +
-                                  sizeof(CENTRALDIRECTORYFILEHEADER),
-                              cdfh.nFileNameLength, &baCentralName);
+                    zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct, nLocalHeaderOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength, &baLocalName) &&
+                    zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct, nCurrentHeaderOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdfh.nFileNameLength,
+                                 &baCentralName);
                 if (!guardedArchive || !guardedSource) return -1;
 
-                if (!bNamesRead || (lfh.nSignature != SIGNATURE_LFD) ||
-                    (lfh.nMinVersion != cdfh.nMinVersion) || (lfh.nMinOS != cdfh.nMinOS) ||
-                    (lfh.nFlags != cdfh.nFlags) || (lfh.nMethod != cdfh.nMethod) ||
-                    (lfh.nFileNameLength != cdfh.nFileNameLength) || (nLocalDataOffset > nOffsetToCentralDirectory) ||
-                    ((qint64)cdfh.nCompressedSize > (nOffsetToCentralDirectory - nLocalDataOffset)) ||
+                if (!bNamesRead || (lfh.nSignature != SIGNATURE_LFD) || (lfh.nMinVersion != cdfh.nMinVersion) || (lfh.nMinOS != cdfh.nMinOS) ||
+                    (lfh.nFlags != cdfh.nFlags) || (lfh.nMethod != cdfh.nMethod) || (lfh.nFileNameLength != cdfh.nFileNameLength) ||
+                    (nLocalDataOffset > nOffsetToCentralDirectory) || ((qint64)cdfh.nCompressedSize > (nOffsetToCentralDirectory - nLocalDataOffset)) ||
                     (baLocalName != baCentralName) ||
                     (!(lfh.nFlags & 0x0008) &&
-                     ((lfh.nCRC32 != cdfh.nCRC32) || (lfh.nCompressedSize != cdfh.nCompressedSize) ||
-                      (lfh.nUncompressedSize != cdfh.nUncompressedSize)))) {
+                     ((lfh.nCRC32 != cdfh.nCRC32) || (lfh.nCompressedSize != cdfh.nCompressedSize) || (lfh.nUncompressedSize != cdfh.nUncompressedSize)))) {
                     bValid = false;
                     break;
                 }
@@ -1311,8 +1207,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 if (lfh.nFlags & 0x0008) {
                     // With bit 3 set, local size/CRC fields are placeholders and
                     // the descriptor is the authenticated source of those values.
-                    if (((lfh.nCRC32 != 0) && (lfh.nCRC32 != cdfh.nCRC32)) ||
-                        ((lfh.nCompressedSize != 0) && (lfh.nCompressedSize != cdfh.nCompressedSize)) ||
+                    if (((lfh.nCRC32 != 0) && (lfh.nCRC32 != cdfh.nCRC32)) || ((lfh.nCompressedSize != 0) && (lfh.nCompressedSize != cdfh.nCompressedSize)) ||
                         ((lfh.nUncompressedSize != 0) && (lfh.nUncompressedSize != cdfh.nUncompressedSize))) {
                         bValid = false;
                         break;
@@ -1322,28 +1217,21 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                     bool bDescriptorValid = false;
                     qint64 nDescriptorSize = 0;
                     QByteArray baDescriptor;
-                    const qint64 nAvailableDescriptor =
-                        nOffsetToCentralDirectory - nDescriptorOffset;
-                    const qint64 nDescriptorReadSize =
-                        qMin<qint64>(16, qMax<qint64>(0, nAvailableDescriptor));
+                    const qint64 nAvailableDescriptor = nOffsetToCentralDirectory - nDescriptorOffset;
+                    const qint64 nDescriptorReadSize = qMin<qint64>(16, qMax<qint64>(0, nAvailableDescriptor));
                     if ((nDescriptorReadSize >= 12) &&
-                        !zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nDescriptorOffset, nDescriptorReadSize,
-                                   &baDescriptor)) return -1;
+                        !zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct, nDescriptorOffset, nDescriptorReadSize, &baDescriptor))
+                        return -1;
                     char *pDescriptor = baDescriptor.data();
-                    if ((baDescriptor.size() >= 16) &&
-                        (XBinary::_read_uint32(pDescriptor) == 0x08074B50) &&
-                        (XBinary::_read_uint32(pDescriptor + 4) == cdfh.nCRC32) &&
-                        (XBinary::_read_uint32(pDescriptor + 8) == cdfh.nCompressedSize) &&
-                        (XBinary::_read_uint32(pDescriptor + 12) == cdfh.nUncompressedSize)) {
-                            bDescriptorValid = true;
-                            nDescriptorSize = 16;
+                    if ((baDescriptor.size() >= 16) && (XBinary::_read_uint32(pDescriptor) == 0x08074B50) && (XBinary::_read_uint32(pDescriptor + 4) == cdfh.nCRC32) &&
+                        (XBinary::_read_uint32(pDescriptor + 8) == cdfh.nCompressedSize) && (XBinary::_read_uint32(pDescriptor + 12) == cdfh.nUncompressedSize)) {
+                        bDescriptorValid = true;
+                        nDescriptorSize = 16;
                     }
                     // A signature is optional, and a legitimate CRC may itself
                     // equal 0x08074B50. Check the unsigned form independently.
-                    if (!bDescriptorValid && (baDescriptor.size() >= 12) &&
-                        (XBinary::_read_uint32(pDescriptor) == cdfh.nCRC32) &&
-                        (XBinary::_read_uint32(pDescriptor + 4) == cdfh.nCompressedSize) &&
-                        (XBinary::_read_uint32(pDescriptor + 8) == cdfh.nUncompressedSize)) {
+                    if (!bDescriptorValid && (baDescriptor.size() >= 12) && (XBinary::_read_uint32(pDescriptor) == cdfh.nCRC32) &&
+                        (XBinary::_read_uint32(pDescriptor + 4) == cdfh.nCompressedSize) && (XBinary::_read_uint32(pDescriptor + 8) == cdfh.nUncompressedSize)) {
                         bDescriptorValid = true;
                         nDescriptorSize = 12;
                     }
@@ -1363,8 +1251,7 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 std::sort(listLocalRanges.begin(), listLocalRanges.end(), zipLocalRangeLessThan);
                 for (qint32 i = 0; i < listLocalRanges.size(); i++) {
                     const QPair<qint64, qint64> &range = listLocalRanges.at(i);
-                    if ((range.first < 0) || (range.second <= range.first) ||
-                        (range.second > nOffsetToCentralDirectory) ||
+                    if ((range.first < 0) || (range.second <= range.first) || (range.second > nOffsetToCentralDirectory) ||
                         ((i > 0) && (range.first < listLocalRanges.at(i - 1).second))) {
                         bValid = false;
                         break;
@@ -1381,22 +1268,19 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                 }
 
                 QByteArray baOptionalHeader;
-                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct,nCurrentHeaderOffset,
-                               qMin<qint64>(8, nCurrent - nCurrentHeaderOffset),
-                               &baOptionalHeader)) return -1;
-                const quint32 nSignature = XBinary::_read_uint32(
-                    baOptionalHeader.data());
+                if (!zipReadExact(&guardedArchive, &guardedSource, nSize, pPdStruct, nCurrentHeaderOffset, qMin<qint64>(8, nCurrent - nCurrentHeaderOffset),
+                                  &baOptionalHeader))
+                    return -1;
+                const quint32 nSignature = XBinary::_read_uint32(baOptionalHeader.data());
                 qint64 nRecordSize = 0;
                 if (nSignature == 0x05054B50) {  // central-directory digital signature
-                    nRecordSize = 6 + (qint64)XBinary::_read_uint16(
-                                              baOptionalHeader.data() + 4);
+                    nRecordSize = 6 + (qint64)XBinary::_read_uint16(baOptionalHeader.data() + 4);
                 } else if (nSignature == 0x08064B50) {  // archive extra data record
                     if ((nCurrent - nCurrentHeaderOffset) < 8) {
                         bValid = false;
                         break;
                     }
-                    nRecordSize = 8 + (qint64)XBinary::_read_uint32(
-                                              baOptionalHeader.data() + 4);
+                    nRecordSize = 8 + (qint64)XBinary::_read_uint32(baOptionalHeader.data() + 4);
                 } else {
                     bValid = false;
                     break;
@@ -1421,16 +1305,12 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
         m_internalInfo.nECDOffset = nResult;
     }
 
-    return guardedArchive && guardedSource &&
-                   XBinary::isPdStructNotCanceled(pPdStruct)
-               ? nResult
-               : -1;
+    return guardedArchive && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct) ? nResult : -1;
 }
 
 bool XZip::isAPK(qint64 nECDOffset, PDSTRUCT *pPdStruct)
 {
-    return _isRecordNamePresent(nECDOffset, "AndroidManifest.xml", "",
-                                pPdStruct, false, true);
+    return _isRecordNamePresent(nECDOffset, "AndroidManifest.xml", "", pPdStruct, false, true);
 }
 
 bool XZip::isIPA(qint64 nECDOffset, PDSTRUCT *pPdStruct)
@@ -1758,8 +1638,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
     qint64 nTotalSize = getSize();
 
     if (nECDOffset != -1) {
-        if ((nTotalSize >= (qint64)sizeof(ENDOFCENTRALDIRECTORYRECORD)) &&
-            (nECDOffset <= (nTotalSize - (qint64)sizeof(ENDOFCENTRALDIRECTORYRECORD)))) {
+        if ((nTotalSize >= (qint64)sizeof(ENDOFCENTRALDIRECTORYRECORD)) && (nECDOffset <= (nTotalSize - (qint64)sizeof(ENDOFCENTRALDIRECTORYRECORD)))) {
             quint16 nTotalNumberOfRecords = read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
             quint32 nSizeOfCentralDirectory = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nSizeOfCentralDirectory));
             quint32 nOffsetToCentralDirectory = read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
@@ -1780,25 +1659,20 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             }
 
             if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
-                if (((qint64)nOffsetToCentralDirectory < nECDOffset) &&
-                    ((qint64)nSizeOfCentralDirectory <= (nECDOffset - (qint64)nOffsetToCentralDirectory))) {
+                if (((qint64)nOffsetToCentralDirectory < nECDOffset) && ((qint64)nSizeOfCentralDirectory <= (nECDOffset - (qint64)nOffsetToCentralDirectory))) {
                     qint64 nOffset = nOffsetToCentralDirectory;
 
                     for (qint32 i = 0; (i < nTotalNumberOfRecords) && zipPartsCanAppend(nLimit, &listResult) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
                         if ((nOffset >= 0) && ((nECDOffset - nOffset) >= (qint64)sizeof(CENTRALDIRECTORYFILEHEADER))) {
                             CENTRALDIRECTORYFILEHEADER cdh = read_CENTRALDIRECTORYFILEHEADER(nOffset, pPdStruct);
-                            const qint64 nCentralRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) +
-                                                              (qint64)cdh.nFileNameLength +
-                                                              (qint64)cdh.nExtraFieldLength +
-                                                              (qint64)cdh.nFileCommentLength;
+                            const qint64 nCentralRecordSize =
+                                sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdh.nFileNameLength + (qint64)cdh.nExtraFieldLength + (qint64)cdh.nFileCommentLength;
 
-                            if ((cdh.nSignature == SIGNATURE_CFD) &&
-                                (nCentralRecordSize <= (nECDOffset - nOffset))) {
+                            if ((cdh.nSignature == SIGNATURE_CFD) && (nCentralRecordSize <= (nECDOffset - nOffset))) {
                                 const qint64 nCentralNameOffset = nOffset + sizeof(CENTRALDIRECTORYFILEHEADER);
                                 const qint64 nCentralExtraOffset = nCentralNameOffset + cdh.nFileNameLength;
                                 QString sOriginalName;
-                                if (!_readFileName(nCentralNameOffset, cdh.nFileNameLength, cdh.nFlags,
-                                                   nCentralExtraOffset, cdh.nExtraFieldLength, &sOriginalName)) {
+                                if (!_readFileName(nCentralNameOffset, cdh.nFileNameLength, cdh.nFlags, nCentralExtraOffset, cdh.nExtraFieldLength, &sOriginalName)) {
                                     break;
                                 }
 
@@ -1817,17 +1691,12 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
                                 qint64 nLocalOffset = cdh.nOffsetToLocalFileHeader;
 
-                                if ((nLocalOffset >= 0) &&
-                                    ((qint64)nOffsetToCentralDirectory - nLocalOffset >= (qint64)sizeof(LOCALFILEHEADER))) {
+                                if ((nLocalOffset >= 0) && ((qint64)nOffsetToCentralDirectory - nLocalOffset >= (qint64)sizeof(LOCALFILEHEADER))) {
                                     LOCALFILEHEADER lfh = read_LOCALFILEHEADER(nLocalOffset, pPdStruct);
-                                    const qint64 nLocalDataOffset = nLocalOffset + sizeof(LOCALFILEHEADER) +
-                                                                    (qint64)lfh.nFileNameLength +
-                                                                    (qint64)lfh.nExtraFieldLength;
+                                    const qint64 nLocalDataOffset = nLocalOffset + sizeof(LOCALFILEHEADER) + (qint64)lfh.nFileNameLength + (qint64)lfh.nExtraFieldLength;
 
-                                    if ((lfh.nSignature == SIGNATURE_LFD) &&
-                                        (nLocalDataOffset <= (qint64)nOffsetToCentralDirectory) &&
-                                        ((qint64)cdh.nCompressedSize <=
-                                         ((qint64)nOffsetToCentralDirectory - nLocalDataOffset))) {
+                                    if ((lfh.nSignature == SIGNATURE_LFD) && (nLocalDataOffset <= (qint64)nOffsetToCentralDirectory) &&
+                                        ((qint64)cdh.nCompressedSize <= ((qint64)nOffsetToCentralDirectory - nLocalDataOffset))) {
                                         if ((nFileParts & FILEPART_HEADER) || (nFileParts & FILEPART_STREAM)) {
                                             QString sName = QString("%1 %2").arg(tr("Stream")).arg(QString::number(i));
 
@@ -1858,8 +1727,8 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                                                 record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, cdh.nUncompressedSize);
 
                                                 qint64 nExtraFieldOffset = nOffset + sizeof(CENTRALDIRECTORYFILEHEADER) + cdh.nFileNameLength;
-                                                bool bHasUsableCRC = !((cdh.nMethod == CMETHOD_AES) &&
-                                                                       zipIsWinZipAesAe2(this, pPdStruct, nExtraFieldOffset, cdh.nExtraFieldLength));
+                                                bool bHasUsableCRC =
+                                                    !((cdh.nMethod == CMETHOD_AES) && zipIsWinZipAesAe2(this, pPdStruct, nExtraFieldOffset, cdh.nExtraFieldLength));
                                                 if (bHasUsableCRC) {
                                                     record.mapProperties.insert(FPART_PROP_RESULTCRC, cdh.nCRC32);
                                                     record.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
@@ -1897,8 +1766,7 @@ QList<XBinary::FPART> XZip::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                         const qint64 nFileNameOffset = nOffset + sizeof(LOCALFILEHEADER);
                         const qint64 nExtraFieldOffset = nFileNameOffset + lfh.nFileNameLength;
                         QString sOriginalName;
-                        if (!_readFileName(nFileNameOffset, lfh.nFileNameLength, lfh.nFlags,
-                                           nExtraFieldOffset, lfh.nExtraFieldLength, &sOriginalName)) {
+                        if (!_readFileName(nFileNameOffset, lfh.nFileNameLength, lfh.nFlags, nExtraFieldOffset, lfh.nExtraFieldLength, &sOriginalName)) {
                             break;
                         }
 
@@ -1988,10 +1856,7 @@ static bool zipIsRecordNameMatch(bool bStartWith, const QString &sRecordName1, c
     return (sRecordName == sRecordName1) || (!sRecordName2.isEmpty() && (sRecordName == sRecordName2));
 }
 
-bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1,
-                                QString sRecordName2,
-                                PDSTRUCT *pPdStruct, bool bStartWith,
-                                bool bRequireNonEmpty)
+bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1, QString sRecordName2, PDSTRUCT *pPdStruct, bool bStartWith, bool bRequireNonEmpty)
 {
     qint32 nLimit = 10000;  // TODO
     qint64 nTotalSize = getSize();
@@ -2015,13 +1880,10 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1,
             const qint64 nFileNameOffset = nOffset + sizeof(CENTRALDIRECTORYFILEHEADER);
             const qint64 nExtraFieldOffset = nFileNameOffset + cdh.nFileNameLength;
             QString sRecordName;
-            if (!_readFileName(nFileNameOffset, cdh.nFileNameLength, cdh.nFlags,
-                               nExtraFieldOffset, cdh.nExtraFieldLength, &sRecordName)) {
+            if (!_readFileName(nFileNameOffset, cdh.nFileNameLength, cdh.nFlags, nExtraFieldOffset, cdh.nExtraFieldLength, &sRecordName)) {
                 break;
             }
-            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2,
-                                     sRecordName) &&
-                (!bRequireNonEmpty || (cdh.nUncompressedSize > 0))) {
+            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2, sRecordName) && (!bRequireNonEmpty || (cdh.nUncompressedSize > 0))) {
                 return true;
             }
 
@@ -2051,13 +1913,10 @@ bool XZip::_isRecordNamePresent(qint64 nECDOffset, QString sRecordName1,
             const qint64 nFileNameOffset = nOffset + sizeof(LOCALFILEHEADER);
             const qint64 nExtraFieldOffset = nFileNameOffset + lfh.nFileNameLength;
             QString sRecordName;
-            if (!_readFileName(nFileNameOffset, lfh.nFileNameLength, lfh.nFlags,
-                               nExtraFieldOffset, lfh.nExtraFieldLength, &sRecordName)) {
+            if (!_readFileName(nFileNameOffset, lfh.nFileNameLength, lfh.nFlags, nExtraFieldOffset, lfh.nExtraFieldLength, &sRecordName)) {
                 break;
             }
-            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2,
-                                     sRecordName) &&
-                (!bRequireNonEmpty || (lfh.nUncompressedSize > 0))) {
+            if (zipIsRecordNameMatch(bStartWith, sRecordName1, sRecordName2, sRecordName) && (!bRequireNonEmpty || (lfh.nUncompressedSize > 0))) {
                 return true;
             }
 
@@ -2078,8 +1937,7 @@ qint32 XZip::_getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *
     const qint64 nDeviceSize = guardedSource->size();
     if (!guardedArchive || !guardedSource) return 0;
 
-    if ((nOffset >= 0) && (nSize >= 0) && (nOffset <= nDeviceSize) &&
-        (nSize <= (nDeviceSize - nOffset))) {
+    if ((nOffset >= 0) && (nSize >= 0) && (nOffset <= nDeviceSize) && (nSize <= (nDeviceSize - nOffset))) {
         qint64 nCurrentOffset = nOffset;
         qint64 nEndOffset = nOffset + nSize;
 
@@ -2088,11 +1946,8 @@ qint32 XZip::_getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *
                 break;
             }
 
-            const QByteArray baHeader = XBinary::read_array_process(
-                guardedSource.data(), nCurrentOffset,
-                sizeof(LOCALFILEHEADER), pPdStruct);
-            if (!guardedArchive || !guardedSource ||
-                (baHeader.size() != (qint64)sizeof(LOCALFILEHEADER))) {
+            const QByteArray baHeader = XBinary::read_array_process(guardedSource.data(), nCurrentOffset, sizeof(LOCALFILEHEADER), pPdStruct);
+            if (!guardedArchive || !guardedSource || (baHeader.size() != (qint64)sizeof(LOCALFILEHEADER))) {
                 return 0;
             }
             LOCALFILEHEADER lfh = {};
@@ -2118,9 +1973,7 @@ qint32 XZip::_getNumberOfLocalFileHeaders(qint64 nOffset, qint64 nSize, qint64 *
             const qint64 nFileNameOffset = nCurrentOffset + sizeof(LOCALFILEHEADER);
             const qint64 nExtraFieldOffset = nFileNameOffset + nLocalFileNameSize;
             QString sDecodedName;
-            const bool bNameRead = guardedArchive->_readFileName(
-                nFileNameOffset, nLocalFileNameSize, nFlags,
-                nExtraFieldOffset, nLocalExtraFieldSize, &sDecodedName);
+            const bool bNameRead = guardedArchive->_readFileName(nFileNameOffset, nLocalFileNameSize, nFlags, nExtraFieldOffset, nLocalExtraFieldSize, &sDecodedName);
             if (!guardedArchive || !guardedSource) return 0;
             if (!bNameRead) {
                 break;
@@ -2149,8 +2002,7 @@ bool XZip::_isECDSignaturePresent(qint64 nOffset, PDSTRUCT *pPdStruct)
     if ((nOffset < 0) || (nOffset >= nTotalSize)) return false;
 
     XBinary sourceBinary(guardedSource.data());
-    const qint64 nFound = sourceBinary.find_uint32(
-        nOffset, nTotalSize - nOffset, SIGNATURE_ECD, false, pPdStruct);
+    const qint64 nFound = sourceBinary.find_uint32(nOffset, nTotalSize - nOffset, SIGNATURE_ECD, false, pPdStruct);
     return guardedArchive && guardedSource && (nFound != -1);
 }
 
@@ -2198,15 +2050,13 @@ XArchive::HANDLE_METHOD XZip::zipToCompressMethod(quint16 nZipMethod, quint32 nF
 
 bool XZip::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pDevice || !pDevice->isWritable() ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pState || !pDevice || !pDevice->isWritable() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     qint64 nStartOffset = pDevice->pos();
     if (pDevice->isSequential() && (nStartOffset < 0)) nStartOffset = 0;
-    if (!zipCanAppendAt(pDevice, nStartOffset) ||
-        ((quint64)nStartOffset >= (std::numeric_limits<quint32>::max)())) return false;
+    if (!zipCanAppendAt(pDevice, nStartOffset) || ((quint64)nStartOffset >= (std::numeric_limits<quint32>::max)())) return false;
 
     ZIP_PACK_CONTEXT *pNewContext = new (std::nothrow) ZIP_PACK_CONTEXT();
     if (!pNewContext) return false;
@@ -2230,8 +2080,7 @@ bool XZip::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP
                 return false;
             }
         } else if ((pOldDevice == pDevice) &&
-                   (pOldContext->bFailed || (pOldContext->nCurrentOffset != pOldContext->nStartOffset) ||
-                    (pOldContext->nNumberOfRecords != 0))) {
+                   (pOldContext->bFailed || (pOldContext->nCurrentOffset != pOldContext->nStartOffset) || (pOldContext->nNumberOfRecords != 0))) {
             zipDeletePackContext(pNewContext);
             return false;
         }
@@ -2241,8 +2090,7 @@ bool XZip::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP
 
     nStartOffset = pDevice->pos();
     if (pDevice->isSequential() && (nStartOffset < 0)) nStartOffset = 0;
-    if (!zipCanAppendAt(pDevice, nStartOffset) ||
-        ((quint64)nStartOffset >= (std::numeric_limits<quint32>::max)())) {
+    if (!zipCanAppendAt(pDevice, nStartOffset) || ((quint64)nStartOffset >= (std::numeric_limits<quint32>::max)())) {
         zipDeletePackContext(pNewContext);
         *pState = PACK_STATE();
         return false;
@@ -2264,15 +2112,13 @@ bool XZip::initPack(PACK_STATE *pState, QIODevice *pDevice, const QMap<PACK_PROP
 
 bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pDevice || !pState->pDevice->isWritable() || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pState || !pState->pDevice || !pState->pDevice->isWritable() || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     ZIP_PACK_CONTEXT *pContext = static_cast<ZIP_PACK_CONTEXT *>(pState->pContext);
     QList<ZIPFILE_RECORD> *pListZipFileRecords = pContext->pListZipFileRecords;
-    if (pContext->bFailed || !zipIsPackStateConsistent(pState, pContext) ||
-        (pListZipFileRecords->size() >= ((std::numeric_limits<quint16>::max)() - 1)) ||
+    if (pContext->bFailed || !zipIsPackStateConsistent(pState, pContext) || (pListZipFileRecords->size() >= ((std::numeric_limits<quint16>::max)() - 1)) ||
         ((quint64)pContext->nCurrentOffset >= (std::numeric_limits<quint32>::max)())) {
         return false;
     }
@@ -2287,8 +2133,8 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     QString sStoredPath;
     PATH_MODE pathMode = (PATH_MODE)pState->mapProperties.value(PACK_PROP_PATHMODE, PATH_MODE_BASENAME).toInt();
     QString sBasePath = pState->mapProperties.value(PACK_PROP_BASEPATH).toString();
-    if ((pathMode != XBinary::PATH_MODE_DEFAULT) && (pathMode != XBinary::PATH_MODE_RELATIVE) &&
-        (pathMode != XBinary::PATH_MODE_BASENAME) && (pathMode != XBinary::PATH_MODE_ABSOLUTE)) {
+    if ((pathMode != XBinary::PATH_MODE_DEFAULT) && (pathMode != XBinary::PATH_MODE_RELATIVE) && (pathMode != XBinary::PATH_MODE_BASENAME) &&
+        (pathMode != XBinary::PATH_MODE_ABSOLUTE)) {
         return false;
     }
     HANDLE_METHOD compressMethod = (HANDLE_METHOD)pState->mapProperties.value(PACK_PROP_COMPRESSMETHOD, HANDLE_METHOD_DEFLATE).toInt();
@@ -2344,8 +2190,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     if (!file.open(QIODevice::ReadOnly)) return false;
     QTemporaryFile stagedSource;
     qint64 nStagedSize = 0;
-    if (!zipStageSource(&file, &stagedSource, nFileSize, pPdStruct, &nStagedSize, &zipFileRecord.nCRC32) ||
-        (nStagedSize != nFileSize)) {
+    if (!zipStageSource(&file, &stagedSource, nFileSize, pPdStruct, &nStagedSize, &zipFileRecord.nCRC32) || (nStagedSize != nFileSize)) {
         return false;
     }
     zipFileRecord.nUncompressedSize = nStagedSize;
@@ -2369,8 +2214,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
         compressState.pDeviceOutput = &compressedPayload;
         compressState.nInputOffset = 0;
         compressState.nInputLimit = nStagedSize;
-        if (!XDeflateDecoder::compress(&compressState, pPdStruct, nCompressionLevel) ||
-            !compressedPayload.flush() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!XDeflateDecoder::compress(&compressState, pPdStruct, nCompressionLevel) || !compressedPayload.flush() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         nPayloadSize = compressedPayload.size();
@@ -2385,8 +2229,8 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
         encryptState.pDeviceOutput = &encryptedPayload;
         encryptState.nInputOffset = 0;
         encryptState.nInputLimit = nPayloadSize;
-        if (!XZipCryptoDecoder::encrypt(&encryptState, sPassword, zipFileRecord.nCRC32, pPdStruct) ||
-            !encryptedPayload.flush() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (!XZipCryptoDecoder::encrypt(&encryptState, sPassword, zipFileRecord.nCRC32, pPdStruct) || !encryptedPayload.flush() ||
+            !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         nPayloadSize = encryptedPayload.size();
@@ -2402,9 +2246,7 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     zipFileRecord.nDataOffset = pState->nCurrentOffset + (qint64)sizeof(LOCALFILEHEADER) + baFileName.size();
 
     const qint64 nRecordSize = (qint64)sizeof(LOCALFILEHEADER) + baFileName.size() + nPayloadSize;
-    if ((nRecordSize <= 0) ||
-        ((quint64)nRecordSize >= ((quint64)(std::numeric_limits<quint32>::max)() -
-                                  (quint64)pContext->nCurrentOffset))) return false;
+    if ((nRecordSize <= 0) || ((quint64)nRecordSize >= ((quint64)(std::numeric_limits<quint32>::max)() - (quint64)pContext->nCurrentOffset))) return false;
 
     LOCALFILEHEADER localFileHeader = {};
     localFileHeader.nSignature = SIGNATURE_LFD;
@@ -2426,12 +2268,10 @@ bool XZip::addFile(PACK_STATE *pState, const QString &sFilePath, PDSTRUCT *pPdSt
     const qint64 nStartPosition = pContext->nCurrentOffset;
     qint64 nRecordWritten = 0;
     qint64 nPartWritten = 0;
-    bool bWriteOK = zipWriteAll(pState->pDevice, reinterpret_cast<const char *>(&localFileHeader),
-                                sizeof(localFileHeader), pPdStruct, &nPartWritten);
+    bool bWriteOK = zipWriteAll(pState->pDevice, reinterpret_cast<const char *>(&localFileHeader), sizeof(localFileHeader), pPdStruct, &nPartWritten);
     nRecordWritten += nPartWritten;
     if (bWriteOK) {
-        bWriteOK = zipWriteAll(pState->pDevice, baFileName.constData(), baFileName.size(),
-                               pPdStruct, &nPartWritten);
+        bWriteOK = zipWriteAll(pState->pDevice, baFileName.constData(), baFileName.size(), pPdStruct, &nPartWritten);
         nRecordWritten += nPartWritten;
     }
     if (bWriteOK) {
@@ -2460,8 +2300,7 @@ static void zipRestoreBasePath(XBinary::PACK_STATE *pState, bool bRestoreBasePat
 
 bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pDevice || !pState->pDevice->isWritable() || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pState || !pState->pDevice || !pState->pDevice->isWritable() || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -2478,8 +2317,8 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
     bool bRestoreBasePath = false;
     PATH_MODE pathMode = (PATH_MODE)pState->mapProperties.value(PACK_PROP_PATHMODE, PATH_MODE_BASENAME).toInt();
     QString sBasePath = pState->mapProperties.value(PACK_PROP_BASEPATH).toString();
-    if ((pathMode != XBinary::PATH_MODE_DEFAULT) && (pathMode != XBinary::PATH_MODE_RELATIVE) &&
-        (pathMode != XBinary::PATH_MODE_BASENAME) && (pathMode != XBinary::PATH_MODE_ABSOLUTE)) {
+    if ((pathMode != XBinary::PATH_MODE_DEFAULT) && (pathMode != XBinary::PATH_MODE_RELATIVE) && (pathMode != XBinary::PATH_MODE_BASENAME) &&
+        (pathMode != XBinary::PATH_MODE_ABSOLUTE)) {
         return false;
     }
 
@@ -2518,8 +2357,7 @@ bool XZip::addFolder(PACK_STATE *pState, const QString &sDirectoryPath, PDSTRUCT
 
 bool XZip::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    if (!pState || !pState->pDevice || !pState->pDevice->isWritable() || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pState || !pState->pDevice || !pState->pDevice->isWritable() || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
@@ -2530,8 +2368,7 @@ bool XZip::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
     qint64 nCentralDirectorySize = 0;
     qint64 nTotalSize = 0;
     const QByteArray baComment;
-    if (!zipGetCentralDirectorySizes(pListZipFileRecords, baComment, pContext->nCurrentOffset,
-                                     &nCentralDirectorySize, &nTotalSize)) {
+    if (!zipGetCentralDirectorySizes(pListZipFileRecords, baComment, pContext->nCurrentOffset, &nCentralDirectorySize, &nTotalSize)) {
         return false;
     }
     Q_UNUSED(nCentralDirectorySize)
@@ -2539,9 +2376,8 @@ bool XZip::finishPack(PACK_STATE *pState, PDSTRUCT *pPdStruct)
     const qint64 nStartPosition = pContext->nCurrentOffset;
     qint64 nWritten = 0;
     qint64 nBuiltSize = 0;
-    if (!zipAppendCentralDirectory(pState->pDevice, pListZipFileRecords, baComment, nStartPosition,
-                                   pPdStruct, &nWritten, &nBuiltSize) ||
-        (nBuiltSize != nTotalSize) || (nWritten != nTotalSize)) {
+    if (!zipAppendCentralDirectory(pState->pDevice, pListZipFileRecords, baComment, nStartPosition, pPdStruct, &nWritten, &nBuiltSize) || (nBuiltSize != nTotalSize) ||
+        (nWritten != nTotalSize)) {
         zipMarkPackWriteFailure(pState, pContext, nStartPosition, nWritten);
         return false;
     }
@@ -2637,12 +2473,10 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedArchive->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) {
         return false;
     }
-    ZIP_UNPACK_CONTEXT *pOldContext =
-        static_cast<ZIP_UNPACK_CONTEXT *>(pState->pContext);
+    ZIP_UNPACK_CONTEXT *pOldContext = static_cast<ZIP_UNPACK_CONTEXT *>(pState->pContext);
     guardedArchive->releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pOldContext;
@@ -2686,17 +2520,13 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     qint64 nCDFHOffset = 0;
 
     if (nECDOffset != -1) {
-        nCDFHOffset = (qint64)guardedArchive->read_uint32(
-            nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD,
-                                  nOffsetToCentralDirectory));
+        nCDFHOffset = (qint64)guardedArchive->read_uint32(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nOffsetToCentralDirectory));
         if (!guardedArchive) {
             *pState = UNPACK_STATE();
             return false;
         }
 
-        const quint16 nNumberOfRecords = guardedArchive->read_uint16(
-            nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD,
-                                  nTotalNumberOfRecords));
+        const quint16 nNumberOfRecords = guardedArchive->read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
         if (!guardedArchive) {
             *pState = UNPACK_STATE();
             return false;
@@ -2707,8 +2537,7 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         if (nNumberOfRecords == 0) {
             bIsECD = true;
         } else {
-            const quint32 nSignature =
-                guardedArchive->read_uint32(nCDFHOffset);
+            const quint32 nSignature = guardedArchive->read_uint32(nCDFHOffset);
             if (!guardedArchive) {
                 *pState = UNPACK_STATE();
                 return false;
@@ -2721,9 +2550,7 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
     if (bIsECD) {
         pState->nCurrentOffset = nCDFHOffset;
-        pState->nNumberOfRecords = guardedArchive->read_uint16(
-            nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD,
-                                  nTotalNumberOfRecords));
+        pState->nNumberOfRecords = guardedArchive->read_uint16(nECDOffset + offsetof(ENDOFCENTRALDIRECTORYRECORD, nTotalNumberOfRecords));
         if (!guardedArchive) {
             *pState = UNPACK_STATE();
             return false;
@@ -2738,21 +2565,18 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         // records, a central directory was present but failed authentication;
         // falling back would silently accept the damaged archive.
         qint64 nRealSize = 0;
-        pState->nNumberOfRecords = guardedArchive->_getNumberOfLocalFileHeaders(
-            0, pState->nTotalSize, &nRealSize, pPdStruct);
+        pState->nNumberOfRecords = guardedArchive->_getNumberOfLocalFileHeaders(0, pState->nTotalSize, &nRealSize, pPdStruct);
         if (!guardedArchive) {
             *pState = UNPACK_STATE();
             return false;
         }
         pState->nCurrentOffset = 0;
-        const bool bECDSignaturePresent =
-            guardedArchive->_isECDSignaturePresent(nRealSize, pPdStruct);
+        const bool bECDSignaturePresent = guardedArchive->_isECDSignaturePresent(nRealSize, pPdStruct);
         if (!guardedArchive) {
             *pState = UNPACK_STATE();
             return false;
         }
-        bResult = (pState->nNumberOfRecords > 0) &&
-                  !bECDSignaturePresent;
+        bResult = (pState->nNumberOfRecords > 0) && !bECDSignaturePresent;
     }
 
     if (bResult) {
@@ -2767,8 +2591,7 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         pContext->nCentralDirectoryEnd = bIsECD ? nECDOffset : 0;
         pState->mapUnpackProperties = mapProperties;
         pState->pContext = pContext;
-        if (!guardedArchive->validateAndFinalizeUnpackSource(
-                pState, pContext, pPdStruct)) {
+        if (!guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct)) {
             if (!guardedArchive) return false;
             pState->pContext = nullptr;
             guardedArchive->releaseUnpackSource(pState);
@@ -2786,8 +2609,7 @@ bool XZip::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
 
 XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     QPointer<XZip> guardedArchive(this);
@@ -2795,14 +2617,10 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     XBinary::ARCHIVERECORD result = {};
 
     bool bSourceCurrent = false;
-    if (pState && pState->pContext && guardedSource &&
-        XBinary::isPdStructNotCanceled(pPdStruct)) {
-        bSourceCurrent = guardedArchive->isUnpackSourceCurrent(
-            pState, pPdStruct);
+    if (pState && pState->pContext && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        bSourceCurrent = guardedArchive->isUnpackSourceCurrent(pState, pPdStruct);
     }
-    if (guardedArchive && guardedSource && bSourceCurrent &&
-        (pState->nCurrentIndex >= 0) &&
-        (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (guardedArchive && guardedSource && bSourceCurrent && (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         result.mapProperties = pState->mapArchiveProperties;  // Initialize with archive-level properties
         ZIP_UNPACK_CONTEXT *pContext = (ZIP_UNPACK_CONTEXT *)pState->pContext;
         bool bIsECD = pContext->bIsECD;
@@ -2830,21 +2648,16 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         if (bIsECD) {
             if ((pState->nCurrentOffset < pContext->nCentralDirectoryOffset) ||
                 ((pContext->nCentralDirectoryEnd - pState->nCurrentOffset) < (qint64)sizeof(CENTRALDIRECTORYFILEHEADER)) ||
-                (guardedArchive->read_uint32(pState->nCurrentOffset) !=
-                 SIGNATURE_CFD) || !guardedArchive || !guardedSource) {
+                (guardedArchive->read_uint32(pState->nCurrentOffset) != SIGNATURE_CFD) || !guardedArchive || !guardedSource) {
                 return XBinary::ARCHIVERECORD();
             }
 
-            CENTRALDIRECTORYFILEHEADER cdfh =
-                guardedArchive->read_CENTRALDIRECTORYFILEHEADER(
-                    pState->nCurrentOffset, pPdStruct);
-            if (!guardedArchive || !guardedSource)
-                return XBinary::ARCHIVERECORD();
-            qint64 nCentralRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength +
-                                       (qint64)cdfh.nExtraFieldLength + (qint64)cdfh.nFileCommentLength;
+            CENTRALDIRECTORYFILEHEADER cdfh = guardedArchive->read_CENTRALDIRECTORYFILEHEADER(pState->nCurrentOffset, pPdStruct);
+            if (!guardedArchive || !guardedSource) return XBinary::ARCHIVERECORD();
+            qint64 nCentralRecordSize =
+                sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength + (qint64)cdfh.nExtraFieldLength + (qint64)cdfh.nFileCommentLength;
             if ((nCentralRecordSize > (pContext->nCentralDirectoryEnd - pState->nCurrentOffset)) ||
-                ((qint64)cdfh.nOffsetToLocalFileHeader >
-                 (pContext->nCentralDirectoryOffset - (qint64)sizeof(LOCALFILEHEADER)))) {
+                ((qint64)cdfh.nOffsetToLocalFileHeader > (pContext->nCentralDirectoryOffset - (qint64)sizeof(LOCALFILEHEADER)))) {
                 return XBinary::ARCHIVERECORD();
             }
 
@@ -2867,11 +2680,8 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             nExtraFieldLength = cdfh.nExtraFieldLength;
             nFileCommentOffset = nExtraFieldOffset + nExtraFieldLength;
             nFileCommentLength = cdfh.nFileCommentLength;
-            if (!guardedArchive->_readFileName(
-                    pState->nCurrentOffset +
-                        sizeof(CENTRALDIRECTORYFILEHEADER),
-                    cdfh.nFileNameLength, cdfh.nFlags, nExtraFieldOffset,
-                    nExtraFieldLength, &sFileName) ||
+            if (!guardedArchive->_readFileName(pState->nCurrentOffset + sizeof(CENTRALDIRECTORYFILEHEADER), cdfh.nFileNameLength, cdfh.nFlags, nExtraFieldOffset,
+                                               nExtraFieldLength, &sFileName) ||
                 !guardedArchive || !guardedSource) {
                 return XBinary::ARCHIVERECORD();
             }
@@ -2879,18 +2689,14 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             nLocalHeaderOffset = pState->nCurrentOffset;
         }
 
-        LOCALFILEHEADER lfh = guardedArchive->read_LOCALFILEHEADER(
-            nLocalHeaderOffset, pPdStruct);
-        if (!guardedArchive || !guardedSource)
-            return XBinary::ARCHIVERECORD();
+        LOCALFILEHEADER lfh = guardedArchive->read_LOCALFILEHEADER(nLocalHeaderOffset, pPdStruct);
+        if (!guardedArchive || !guardedSource) return XBinary::ARCHIVERECORD();
         qint64 nLocalLimit = bIsECD ? pContext->nCentralDirectoryOffset : pState->nTotalSize;
-        if ((nLocalHeaderOffset < 0) || ((nLocalLimit - nLocalHeaderOffset) < (qint64)sizeof(LOCALFILEHEADER)) ||
-            (lfh.nSignature != SIGNATURE_LFD)) {
+        if ((nLocalHeaderOffset < 0) || ((nLocalLimit - nLocalHeaderOffset) < (qint64)sizeof(LOCALFILEHEADER)) || (lfh.nSignature != SIGNATURE_LFD)) {
             return XBinary::ARCHIVERECORD();
         }
 
-        qint64 nLocalDataOffset =
-            nLocalHeaderOffset + sizeof(LOCALFILEHEADER) + (qint64)lfh.nFileNameLength + (qint64)lfh.nExtraFieldLength;
+        qint64 nLocalDataOffset = nLocalHeaderOffset + sizeof(LOCALFILEHEADER) + (qint64)lfh.nFileNameLength + (qint64)lfh.nExtraFieldLength;
         quint32 nValidatedCompressedSize = bIsECD ? nCompressedSize : lfh.nCompressedSize;
         if ((nLocalDataOffset > nLocalLimit) || ((qint64)nValidatedCompressedSize > (nLocalLimit - nLocalDataOffset))) {
             return XBinary::ARCHIVERECORD();
@@ -2911,10 +2717,8 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             nExtraFieldLength = lfh.nExtraFieldLength;
             nFileCommentOffset = 0;
             nFileCommentLength = 0;
-            if (!guardedArchive->_readFileName(
-                    nLocalHeaderOffset + sizeof(LOCALFILEHEADER),
-                    lfh.nFileNameLength, lfh.nFlags, nExtraFieldOffset,
-                    nExtraFieldLength, &sFileName) ||
+            if (!guardedArchive->_readFileName(nLocalHeaderOffset + sizeof(LOCALFILEHEADER), lfh.nFileNameLength, lfh.nFlags, nExtraFieldOffset, nExtraFieldLength,
+                                               &sFileName) ||
                 !guardedArchive || !guardedSource) {
                 return XBinary::ARCHIVERECORD();
             }
@@ -2926,8 +2730,8 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         // them only via the external file attributes (as 7-Zip/Info-ZIP do). The
         // attributes are only trustworthy when read from the central directory.
         if (!bIsFolder && bIsECD && (nUncompressedSize == 0) && (nCompressedSize == 0)) {
-            bool bDosDirBit = (nExternalFileAttributes & 0x10) != 0;                    // FAT/NTFS FILE_ATTRIBUTE_DIRECTORY
-            bool bUnixDir = (((nExternalFileAttributes >> 16) & 0xF000) == 0x4000);     // Unix S_IFDIR
+            bool bDosDirBit = (nExternalFileAttributes & 0x10) != 0;                 // FAT/NTFS FILE_ATTRIBUTE_DIRECTORY
+            bool bUnixDir = (((nExternalFileAttributes >> 16) & 0xF000) == 0x4000);  // Unix S_IFDIR
             if (bDosDirBit || bUnixDir) {
                 bIsFolder = true;
             }
@@ -2983,10 +2787,8 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         result.mapProperties.insert(XBinary::FPART_PROP_FILECOMMENTLENGTH, nFileCommentLength);
 
         nExtraFieldLength = qMin(nExtraFieldLength, (qint64)0xFFFF);
-        const QByteArray baExtraField = guardedArchive->read_array(
-            nExtraFieldOffset, nExtraFieldLength);
-        if (!guardedArchive || !guardedSource ||
-            (baExtraField.size() != nExtraFieldLength)) {
+        const QByteArray baExtraField = guardedArchive->read_array(nExtraFieldOffset, nExtraFieldLength);
+        if (!guardedArchive || !guardedSource || (baExtraField.size() != nExtraFieldLength)) {
             return XBinary::ARCHIVERECORD();
         }
         char *pExtra = const_cast<char *>(baExtraField.constData());
@@ -3029,8 +2831,8 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             } else if (nHeaderID == 0x000A) {
                 // NTFS extra field: 4-byte reserved + TLV attribute entries
                 // Contains high-resolution MTIME, ATIME, CTIME as Windows FILETIMEs
-                if (nDataSize >= (4 + 4 + 24)) {                   // reserved(4) + tag(2)+size(2) + 3×FILETIME(24)
-                    qint64 nBase = i + 4 + 4;  // skip headerID(2)+dataSize(2)+reserved(4)
+                if (nDataSize >= (4 + 4 + 24)) {  // reserved(4) + tag(2)+size(2) + 3×FILETIME(24)
+                    qint64 nBase = i + 4 + 4;     // skip headerID(2)+dataSize(2)+reserved(4)
                     qint64 nBlockEnd = i + 4 + nDataSize;
                     while (nBase + 4 <= nBlockEnd) {
                         quint16 nAttrTag = XBinary::_read_uint16(pExtra + nBase);
@@ -3097,15 +2899,11 @@ XBinary::ARCHIVERECORD XZip::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         }
     }
 
-    if (!guardedArchive || !guardedSource ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedArchive || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return XBinary::ARCHIVERECORD();
     }
-    const bool bStillCurrent = guardedArchive->isUnpackSourceCurrent(
-        pState, pPdStruct);
-    return (bStillCurrent && guardedArchive && guardedSource)
-               ? result
-               : XBinary::ARCHIVERECORD();
+    const bool bStillCurrent = guardedArchive->isUnpackSourceCurrent(pState, pPdStruct);
+    return (bStillCurrent && guardedArchive && guardedSource) ? result : XBinary::ARCHIVERECORD();
 }
 
 bool XZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -3118,43 +2916,32 @@ bool XZip::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     bool bResult = false;
 
     bool bSourceCurrent = false;
-    if (pState && pState->pContext && guardedSource &&
-        XBinary::isPdStructNotCanceled(pPdStruct)) {
-        bSourceCurrent = guardedArchive->isUnpackSourceCurrent(
-            pState, pPdStruct);
+    if (pState && pState->pContext && guardedSource && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        bSourceCurrent = guardedArchive->isUnpackSourceCurrent(pState, pPdStruct);
     }
-    if (guardedArchive && guardedSource && bSourceCurrent &&
-        (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
+    if (guardedArchive && guardedSource && bSourceCurrent && (pState->nCurrentIndex >= 0) && (pState->nCurrentIndex < pState->nNumberOfRecords)) {
         ZIP_UNPACK_CONTEXT *pContext = (ZIP_UNPACK_CONTEXT *)pState->pContext;
         bool bIsECD = pContext->bIsECD;
 
         if (bIsECD) {
             if ((pState->nCurrentOffset < pContext->nCentralDirectoryOffset) ||
                 ((pContext->nCentralDirectoryEnd - pState->nCurrentOffset) < (qint64)sizeof(CENTRALDIRECTORYFILEHEADER)) ||
-                (guardedArchive->read_uint32(pState->nCurrentOffset) !=
-                 SIGNATURE_CFD) || !guardedArchive || !guardedSource) {
+                (guardedArchive->read_uint32(pState->nCurrentOffset) != SIGNATURE_CFD) || !guardedArchive || !guardedSource) {
                 return false;
             }
-            CENTRALDIRECTORYFILEHEADER cdfh =
-                guardedArchive->read_CENTRALDIRECTORYFILEHEADER(
-                    pState->nCurrentOffset, pPdStruct);
+            CENTRALDIRECTORYFILEHEADER cdfh = guardedArchive->read_CENTRALDIRECTORYFILEHEADER(pState->nCurrentOffset, pPdStruct);
             if (!guardedArchive || !guardedSource) return false;
-            qint64 nRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength +
-                                 (qint64)cdfh.nExtraFieldLength + (qint64)cdfh.nFileCommentLength;
+            qint64 nRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength + (qint64)cdfh.nExtraFieldLength + (qint64)cdfh.nFileCommentLength;
             if (nRecordSize > (pContext->nCentralDirectoryEnd - pState->nCurrentOffset)) return false;
             pState->nCurrentOffset += nRecordSize;
         } else {
-            if ((pState->nCurrentOffset < 0) ||
-                ((pState->nTotalSize - pState->nCurrentOffset) < (qint64)sizeof(LOCALFILEHEADER)) ||
-                (guardedArchive->read_uint32(pState->nCurrentOffset) !=
-                 SIGNATURE_LFD) || !guardedArchive || !guardedSource) {
+            if ((pState->nCurrentOffset < 0) || ((pState->nTotalSize - pState->nCurrentOffset) < (qint64)sizeof(LOCALFILEHEADER)) ||
+                (guardedArchive->read_uint32(pState->nCurrentOffset) != SIGNATURE_LFD) || !guardedArchive || !guardedSource) {
                 return false;
             }
-            LOCALFILEHEADER lfh = guardedArchive->read_LOCALFILEHEADER(
-                pState->nCurrentOffset, pPdStruct);
+            LOCALFILEHEADER lfh = guardedArchive->read_LOCALFILEHEADER(pState->nCurrentOffset, pPdStruct);
             if (!guardedArchive || !guardedSource) return false;
-            qint64 nRecordSize =
-                sizeof(LOCALFILEHEADER) + (qint64)lfh.nFileNameLength + (qint64)lfh.nExtraFieldLength + (qint64)lfh.nCompressedSize;
+            qint64 nRecordSize = sizeof(LOCALFILEHEADER) + (qint64)lfh.nFileNameLength + (qint64)lfh.nExtraFieldLength + (qint64)lfh.nCompressedSize;
             if (nRecordSize > (pState->nTotalSize - pState->nCurrentOffset)) return false;
             pState->nCurrentOffset += nRecordSize;
         }
@@ -3179,10 +2966,8 @@ bool XZip::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedArchive->ownsUnpackSource(pState)) return false;
-    ZIP_UNPACK_CONTEXT *pZipUnpackContext =
-        static_cast<ZIP_UNPACK_CONTEXT *>(pState->pContext);
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    ZIP_UNPACK_CONTEXT *pZipUnpackContext = static_cast<ZIP_UNPACK_CONTEXT *>(pState->pContext);
     guardedArchive->releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pZipUnpackContext;
@@ -3550,12 +3335,9 @@ bool XZip::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

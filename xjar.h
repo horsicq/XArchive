@@ -49,8 +49,7 @@ public:
     bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
     static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
     static bool isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
-    static bool isValid(QIODevice *pDevice, QList<RECORD> *pListRecords,
-                        PDSTRUCT *pPdStruct);
+    static bool isValid(QIODevice *pDevice, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct);
 
     FT getFileType() override;
     FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
@@ -63,6 +62,7 @@ public:
     QString structIDToString(quint32 nID) override;
     QString structIDToFtString(quint32 nID) override;
     quint32 ftStringToStructID(const QString &sFtString) override;
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

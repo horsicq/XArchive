@@ -36,8 +36,7 @@ const quint32 X_BROTLI_MT_HEADER_PAYLOAD_SIZE = 8U;
 const quint16 X_BROTLI_MT_CODEC_MAGIC = 0x5242U;  // "BR"
 const qint32 X_BROTLI_MT_HEADER_SIZE = 16;
 const qint32 X_BROTLI_MT_PROBE_SIZE = 272;
-const quint64 X_BROTLI_MAX_DECODER_MEMORY =
-    Q_UINT64_C(512) * 1024 * 1024;
+const quint64 X_BROTLI_MAX_DECODER_MEMORY = Q_UINT64_C(512) * 1024 * 1024;
 
 struct BrotliAllocationBudget {
     quint64 nUsed;
@@ -49,42 +48,32 @@ struct alignas(std::max_align_t) BrotliAllocationHeader {
     size_t nSize;
 };
 
-bool initBrotliAllocationBudget(
-    const XBinary::DATAPROCESS_STATE *pState,
-    BrotliAllocationBudget *pBudget)
+bool initBrotliAllocationBudget(const XBinary::DATAPROCESS_STATE *pState, BrotliAllocationBudget *pBudget)
 {
     if (!pState || !pBudget) return false;
 
     qint64 nOutputLimit = -1;
-    if (!XBinary::getUnpackOutputLimit(pState->mapUnpackProperties,
-                                       &nOutputLimit)) {
+    if (!XBinary::getUnpackOutputLimit(pState->mapUnpackProperties, &nOutputLimit)) {
         return false;
     }
 
     pBudget->nUsed = 0;
     pBudget->nLimit = X_BROTLI_MAX_DECODER_MEMORY;
     if (nOutputLimit >= 0) {
-        pBudget->nLimit = qMin(
-            pBudget->nLimit, (quint64)nOutputLimit);
+        pBudget->nLimit = qMin(pBudget->nLimit, (quint64)nOutputLimit);
     }
-    return pBudget->reservation.acquire(
-        pState->mapUnpackProperties, 0);
+    return pBudget->reservation.acquire(pState->mapUnpackProperties, 0);
 }
 
 void *brotliBoundedAlloc(void *pOpaque, size_t nSize)
 {
-    BrotliAllocationBudget *pBudget =
-        static_cast<BrotliAllocationBudget *>(pOpaque);
+    BrotliAllocationBudget *pBudget = static_cast<BrotliAllocationBudget *>(pOpaque);
     if (!pBudget) return nullptr;
 
     const quint64 nRequested = nSize ? (quint64)nSize : 1;
-    if ((nRequested > pBudget->nLimit) ||
-        (pBudget->nUsed > pBudget->nLimit - nRequested) ||
-        (pBudget->nUsed + nRequested >
-         (quint64)(std::numeric_limits<qint64>::max)()) ||
-        (nRequested >
-         (quint64)(std::numeric_limits<size_t>::max)() -
-             sizeof(BrotliAllocationHeader))) {
+    if ((nRequested > pBudget->nLimit) || (pBudget->nUsed > pBudget->nLimit - nRequested) ||
+        (pBudget->nUsed + nRequested > (quint64)(std::numeric_limits<qint64>::max)()) ||
+        (nRequested > (quint64)(std::numeric_limits<size_t>::max)() - sizeof(BrotliAllocationHeader))) {
         return nullptr;
     }
 
@@ -94,9 +83,7 @@ void *brotliBoundedAlloc(void *pOpaque, size_t nSize)
         return nullptr;
     }
 
-    BrotliAllocationHeader *pHeader =
-        static_cast<BrotliAllocationHeader *>(std::malloc(
-            sizeof(BrotliAllocationHeader) + (size_t)nRequested));
+    BrotliAllocationHeader *pHeader = static_cast<BrotliAllocationHeader *>(std::malloc(sizeof(BrotliAllocationHeader) + (size_t)nRequested));
     if (!pHeader) {
         pBudget->reservation.resize((qint64)nOldUsed);
         return nullptr;
@@ -109,10 +96,8 @@ void *brotliBoundedAlloc(void *pOpaque, size_t nSize)
 void brotliBoundedFree(void *pOpaque, void *pAddress)
 {
     if (!pAddress) return;
-    BrotliAllocationBudget *pBudget =
-        static_cast<BrotliAllocationBudget *>(pOpaque);
-    BrotliAllocationHeader *pHeader =
-        static_cast<BrotliAllocationHeader *>(pAddress) - 1;
+    BrotliAllocationBudget *pBudget = static_cast<BrotliAllocationBudget *>(pOpaque);
+    BrotliAllocationHeader *pHeader = static_cast<BrotliAllocationHeader *>(pAddress) - 1;
     if (pBudget && ((quint64)pHeader->nSize <= pBudget->nUsed)) {
         pBudget->nUsed -= (quint64)pHeader->nSize;
         pBudget->reservation.resize((qint64)pBudget->nUsed);
@@ -129,16 +114,13 @@ quint16 readUInt16LE(const char *pData)
 quint32 readUInt32LE(const char *pData)
 {
     const unsigned char *p = reinterpret_cast<const unsigned char *>(pData);
-    return static_cast<quint32>(p[0]) | (static_cast<quint32>(p[1]) << 8) |
-           (static_cast<quint32>(p[2]) << 16) | (static_cast<quint32>(p[3]) << 24);
+    return static_cast<quint32>(p[0]) | (static_cast<quint32>(p[1]) << 8) | (static_cast<quint32>(p[2]) << 16) | (static_cast<quint32>(p[3]) << 24);
 }
 
 bool isMtHeader(const char *pData, qint32 nSize)
 {
-    return pData && (nSize >= X_BROTLI_MT_HEADER_SIZE) &&
-           (readUInt32LE(pData) == X_BROTLI_MT_SKIPPABLE_MAGIC) &&
-           (readUInt32LE(pData + 4) == X_BROTLI_MT_HEADER_PAYLOAD_SIZE) &&
-           (readUInt16LE(pData + 12) == X_BROTLI_MT_CODEC_MAGIC);
+    return pData && (nSize >= X_BROTLI_MT_HEADER_SIZE) && (readUInt32LE(pData) == X_BROTLI_MT_SKIPPABLE_MAGIC) &&
+           (readUInt32LE(pData + 4) == X_BROTLI_MT_HEADER_PAYLOAD_SIZE) && (readUInt16LE(pData + 12) == X_BROTLI_MT_CODEC_MAGIC);
 }
 
 class BrotliInputBuffer {
@@ -234,11 +216,9 @@ private:
 // private brotli-mt header.  Match 7-Zip-zstd's content-based selection: only
 // select the framed path when the strict header is present and a bounded raw
 // Brotli probe rejects that prefix.
-bool isMtStream(BrotliInputBuffer *pInput,
-                XBinary::DATAPROCESS_STATE *pOutputState)
+bool isMtStream(BrotliInputBuffer *pInput, XBinary::DATAPROCESS_STATE *pOutputState)
 {
-    if (!pInput || !pOutputState ||
-        !isMtHeader(pInput->data(), pInput->available())) {
+    if (!pInput || !pOutputState || !isMtHeader(pInput->data(), pInput->available())) {
         return false;
     }
 
@@ -246,8 +226,7 @@ bool isMtStream(BrotliInputBuffer *pInput,
     if (!initBrotliAllocationBudget(pOutputState, &allocationBudget)) {
         return false;
     }
-    BrotliDecoderState *pState = BrotliDecoderCreateInstance(
-        brotliBoundedAlloc, brotliBoundedFree, &allocationBudget);
+    BrotliDecoderState *pState = BrotliDecoderCreateInstance(brotliBoundedAlloc, brotliBoundedFree, &allocationBudget);
     if (!pState) return false;
     if (!BrotliDecoderSetParameter(pState, BROTLI_DECODER_PARAM_LARGE_WINDOW, 1)) {
         BrotliDecoderDestroyInstance(pState);
@@ -269,8 +248,7 @@ bool isMtStream(BrotliInputBuffer *pInput,
         ret = BrotliDecoderDecompressStream(pState, &nAvailIn, &pNextIn, &nAvailOut, &pNextOut, nullptr);
         nProduced += static_cast<qint64>(sizeof(output) - nAvailOut);
 
-        if ((ret != BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) ||
-            ((nBeforeIn == nAvailIn) && (nAvailOut == sizeof(output))) || (nProduced >= 0x10000)) {
+        if ((ret != BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) || ((nBeforeIn == nAvailIn) && (nAvailOut == sizeof(output))) || (nProduced >= 0x10000)) {
             break;
         }
     } while (true);
@@ -279,12 +257,10 @@ bool isMtStream(BrotliInputBuffer *pInput,
     return ret == BROTLI_DECODER_RESULT_ERROR;
 }
 
-bool decodeBrotliStream(BrotliInputBuffer *pInput, qint64 nCompressedSize, qint64 nOutputLimit, qint64 nExpectedTotalOutput,
-                        QByteArray *pOutput, XBinary::DATAPROCESS_STATE *pState,
-                        XBinary::PDSTRUCT *pPdStruct)
+bool decodeBrotliStream(BrotliInputBuffer *pInput, qint64 nCompressedSize, qint64 nOutputLimit, qint64 nExpectedTotalOutput, QByteArray *pOutput,
+                        XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pInput || !pOutput || !pState || (nCompressedSize < -1) || (nOutputLimit < -1) ||
-        (nExpectedTotalOutput < -1)) {
+    if (!pInput || !pOutput || !pState || (nCompressedSize < -1) || (nOutputLimit < -1) || (nExpectedTotalOutput < -1)) {
         return false;
     }
 
@@ -292,8 +268,7 @@ bool decodeBrotliStream(BrotliInputBuffer *pInput, qint64 nCompressedSize, qint6
     if (!initBrotliAllocationBudget(pState, &allocationBudget)) {
         return false;
     }
-    BrotliDecoderState *pDecoder = BrotliDecoderCreateInstance(
-        brotliBoundedAlloc, brotliBoundedFree, &allocationBudget);
+    BrotliDecoderState *pDecoder = BrotliDecoderCreateInstance(brotliBoundedAlloc, brotliBoundedFree, &allocationBudget);
     if (!pDecoder) return false;
     if (!BrotliDecoderSetParameter(pDecoder, BROTLI_DECODER_PARAM_LARGE_WINDOW, 1)) {
         BrotliDecoderDestroyInstance(pDecoder);
@@ -306,14 +281,11 @@ bool decodeBrotliStream(BrotliInputBuffer *pInput, qint64 nCompressedSize, qint6
     BrotliDecoderResult ret = BROTLI_DECODER_RESULT_NEEDS_MORE_INPUT;
 
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        if ((nRemaining != 0) && (pInput->available() == 0) &&
-            (ret != BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) && !pInput->ensure(1)) {
+        if ((nRemaining != 0) && (pInput->available() == 0) && (ret != BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) && !pInput->ensure(1)) {
             break;
         }
 
-        const qint64 nAvailable64 = (nRemaining == -1)
-                                        ? static_cast<qint64>(pInput->available())
-                                        : (std::min)(static_cast<qint64>(pInput->available()), nRemaining);
+        const qint64 nAvailable64 = (nRemaining == -1) ? static_cast<qint64>(pInput->available()) : (std::min)(static_cast<qint64>(pInput->available()), nRemaining);
         if (nAvailable64 < 0) break;
 
         size_t nAvailIn = static_cast<size_t>(nAvailable64);
@@ -323,8 +295,7 @@ bool decodeBrotliStream(BrotliInputBuffer *pInput, qint64 nCompressedSize, qint6
         uint8_t *pNextOut = reinterpret_cast<uint8_t *>(pOutput->data());
 
         ret = BrotliDecoderDecompressStream(pDecoder, &nAvailIn, &pNextIn, &nAvailOut, &pNextOut, nullptr);
-        if ((ret == BROTLI_DECODER_RESULT_ERROR) || (nAvailIn > nBeforeIn) ||
-            (nAvailOut > static_cast<size_t>(pOutput->size()))) {
+        if ((ret == BROTLI_DECODER_RESULT_ERROR) || (nAvailIn > nBeforeIn) || (nAvailOut > static_cast<size_t>(pOutput->size()))) {
             break;
         }
 
@@ -338,13 +309,10 @@ bool decodeBrotliStream(BrotliInputBuffer *pInput, qint64 nCompressedSize, qint6
         }
         nFrameOutput += nProduced;
 
-        if ((nExpectedTotalOutput != -1) &&
-            ((pState->nCountOutput > nExpectedTotalOutput) ||
-             (nProduced > nExpectedTotalOutput - pState->nCountOutput))) {
+        if ((nExpectedTotalOutput != -1) && ((pState->nCountOutput > nExpectedTotalOutput) || (nProduced > nExpectedTotalOutput - pState->nCountOutput))) {
             break;
         }
-        if ((nProduced > 0) &&
-            (XBinary::_writeDevice(pOutput->constData(), static_cast<qint32>(nProduced), pState) != static_cast<qint32>(nProduced))) {
+        if ((nProduced > 0) && (XBinary::_writeDevice(pOutput->constData(), static_cast<qint32>(nProduced), pState) != static_cast<qint32>(nProduced))) {
             break;
         }
 
@@ -366,8 +334,7 @@ bool decodeBrotliStream(BrotliInputBuffer *pInput, qint64 nCompressedSize, qint6
     return bFinished && !pState->bReadError && !pState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-bool decodeMtStream(BrotliInputBuffer *pInput, qint64 nExpectedTotalOutput, QByteArray *pOutput,
-                    XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+bool decodeMtStream(BrotliInputBuffer *pInput, qint64 nExpectedTotalOutput, QByteArray *pOutput, XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
 {
     bool bSawFrame = false;
 
@@ -414,9 +381,8 @@ bool XBrotliDecoder::decompressBlock(const quint8 *pInput, qint64 nInputSize, qu
 
 bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
-        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1) ||
-        XBinary::isPdStructStopped(pPdStruct)) {
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || (pDecompressState->nInputOffset < 0) ||
+        (pDecompressState->nInputLimit < -1) || XBinary::isPdStructStopped(pPdStruct)) {
         return false;
     }
 
@@ -432,8 +398,7 @@ bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
     const qint32 nBufferSize = qBound(static_cast<qint32>(0x1000), nRequestedBufferSize, static_cast<qint32>(0x100000));
 
     XBinary::UNPACK_MEMORY_RESERVATION ioReservation;
-    if (!ioReservation.acquire(pDecompressState->mapUnpackProperties,
-                               (qint64)nBufferSize * 2)) {
+    if (!ioReservation.acquire(pDecompressState->mapUnpackProperties, (qint64)nBufferSize * 2)) {
         return false;
     }
 
@@ -455,12 +420,9 @@ bool XBrotliDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XB
         bDecoded = bDecoded && input.atEnd();
     }
 
-    const bool bExactInput = input.atEnd() &&
-                             ((pDecompressState->nInputLimit == -1) ||
-                              (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+    const bool bExactInput = input.atEnd() && ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit));
     const bool bExactOutput = (nExpectedOutput == -1) || (pDecompressState->nCountOutput == nExpectedOutput);
-    return bDecoded && bExactInput && bExactOutput && !pDecompressState->bReadError &&
-           !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
+    return bDecoded && bExactInput && bExactOutput && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 quint32 XBrotliDecoder::version()

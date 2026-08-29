@@ -25,8 +25,7 @@ const qint64 IPA_INFO_LIMIT = 16LL * 1024 * 1024;
 
 class DevicePositionGuard {
 public:
-    explicit DevicePositionGuard(QIODevice *pDevice)
-        : m_pDevice(pDevice), m_nPosition(-1)
+    explicit DevicePositionGuard(QIODevice *pDevice) : m_pDevice(pDevice), m_nPosition(-1)
     {
         if (m_pDevice && !m_pDevice->isSequential()) {
             m_nPosition = m_pDevice->pos();
@@ -52,18 +51,14 @@ bool isInfoPlistRecord(const XArchive::RECORD &record)
 
     const QString sPrefix = QStringLiteral("Payload/");
     const QString sSuffix = QStringLiteral("/Info.plist");
-    if (!sName.startsWith(sPrefix) || !sName.endsWith(sSuffix) ||
-        (record.spInfo.nUncompressedSize <= 0)) {
+    if (!sName.startsWith(sPrefix) || !sName.endsWith(sSuffix) || (record.spInfo.nUncompressedSize <= 0)) {
         return false;
     }
 
-    const QString sApplication = sName.mid(
-        sPrefix.size(), sName.size() - sPrefix.size() - sSuffix.size());
-    return !sApplication.contains(QLatin1Char('/')) &&
-           (sApplication.size() > 4) &&
-           sApplication.endsWith(QLatin1String(".app"));
+    const QString sApplication = sName.mid(sPrefix.size(), sName.size() - sPrefix.size() - sSuffix.size());
+    return !sApplication.contains(QLatin1Char('/')) && (sApplication.size() > 4) && sApplication.endsWith(QLatin1String(".app"));
 }
-}
+}  // namespace
 
 XIPA::XIPA(QIODevice *pDevice) : XJAR(pDevice)
 {
@@ -76,8 +71,7 @@ bool XIPA::isValid(PDSTRUCT *pPdStruct)
 
     XZip xzip(getDevice());
     if (xzip.isValid(pPdStruct)) {
-        QList<XArchive::RECORD> listArchiveRecords =
-            xzip.getRecords(20000, pPdStruct);
+        QList<XArchive::RECORD> listArchiveRecords = xzip.getRecords(20000, pPdStruct);
         bResult = isValid(getDevice(), &listArchiveRecords, pPdStruct);
     }
 
@@ -88,8 +82,7 @@ bool XIPA::isValid(QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     if (!pListRecords) return false;
 
-    for (qint32 i = 0; (i < pListRecords->count()) &&
-                       XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+    for (qint32 i = 0; (i < pListRecords->count()) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         const RECORD &record = pListRecords->at(i);
         if (isInfoPlistRecord(record)) return true;
     }
@@ -109,29 +102,21 @@ bool XIPA::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
     return xipa.isValid(pPdStruct);
 }
 
-bool XIPA::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords,
-                   PDSTRUCT *pPdStruct)
+bool XIPA::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords, PDSTRUCT *pPdStruct)
 {
     if (!pDevice || !pListRecords) return false;
     DevicePositionGuard positionGuard(pDevice);
     XZip zip(pDevice);
 
-    for (qint32 i = 0; (i < pListRecords->count()) &&
-                       XBinary::isPdStructNotCanceled(pPdStruct); i++) {
+    for (qint32 i = 0; (i < pListRecords->count()) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         const RECORD &record = pListRecords->at(i);
         if (!isInfoPlistRecord(record)) continue;
-        if ((record.spInfo.nUncompressedSize > IPA_INFO_LIMIT) ||
-            (record.nDataSize <= 0) ||
-            (record.nDataSize > IPA_INFO_LIMIT) ||
-            record.mapProperties.value(
-                XBinary::FPART_PROP_ENCRYPTED, false).toBool() ||
-            (record.spInfo.compressMethod2 !=
-             XBinary::HANDLE_METHOD_UNKNOWN)) {
+        if ((record.spInfo.nUncompressedSize > IPA_INFO_LIMIT) || (record.nDataSize <= 0) || (record.nDataSize > IPA_INFO_LIMIT) ||
+            record.mapProperties.value(XBinary::FPART_PROP_ENCRYPTED, false).toBool() || (record.spInfo.compressMethod2 != XBinary::HANDLE_METHOD_UNKNOWN)) {
             continue;
         }
 
-        const QByteArray baInfo = zip.decompress(
-            &record, pPdStruct, 0, IPA_INFO_LIMIT + 1);
+        const QByteArray baInfo = zip.decompress(&record, pPdStruct, 0, IPA_INFO_LIMIT + 1);
         if (baInfo.size() == record.spInfo.nUncompressedSize) return true;
     }
 
@@ -180,12 +165,9 @@ bool XIPA::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XJAR::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XJAR::INTERNAL_INFO *pInfo =
-            static_cast<XJAR::INTERNAL_INFO *>(
-                guardedThis->XJAR::getInternalInfo(pPdStruct));
+        XJAR::INTERNAL_INFO *pInfo = static_cast<XJAR::INTERNAL_INFO *>(guardedThis->XJAR::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XJAR::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XJAR::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

@@ -42,8 +42,8 @@ bool XSquashfs::isValid(PDSTRUCT *pPdStruct)
         // nMagic is 0x73717368, so the on-disk bytes are "hsqs" on little-endian images
         // (what mksquashfs and snap packages produce) and "sqsh" on big-endian ones.
         // Accept both; checking only "sqsh" rejects every standard image.
-        if (compareSignature(&memoryMap, "68737173", 0, pPdStruct) ||    // "hsqs" - little-endian
-            compareSignature(&memoryMap, "73717368", 0, pPdStruct)) {    // "sqsh" - big-endian
+        if (compareSignature(&memoryMap, "68737173", 0, pPdStruct) ||  // "hsqs" - little-endian
+            compareSignature(&memoryMap, "73717368", 0, pPdStruct)) {  // "sqsh" - big-endian
             bResult = true;
         }
     }
@@ -287,12 +287,9 @@ bool XSquashfs::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

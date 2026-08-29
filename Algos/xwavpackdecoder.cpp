@@ -151,7 +151,8 @@ static int wvClose(void *pId)
     return 0;  // caller owns the device
 }
 
-static WavpackStreamReader64 g_wvReader = {wvReadBytes, wvWriteBytes, wvGetPos, wvSetPosAbs, wvSetPosRel, wvPushBackByte, wvGetLength, wvCanSeek, wvTruncateHere, wvClose};
+static WavpackStreamReader64 g_wvReader = {wvReadBytes,    wvWriteBytes, wvGetPos,  wvSetPosAbs,    wvSetPosRel,
+                                           wvPushBackByte, wvGetLength,  wvCanSeek, wvTruncateHere, wvClose};
 
 static bool wvWriteAll(XBinary::DATAPROCESS_STATE *pState, const quint8 *pData, qint64 nSize, qint64 *pnTotalWritten)
 {

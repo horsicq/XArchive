@@ -291,6 +291,7 @@ private:
     // Format: AllAreDefined[1] + optional bitmap[ceil(n/8)] + values.
     static bool _decode7zTimeValue(const QByteArray &baData, qint32 nNumFiles, qint32 nFileIndex, quint64 *pResult);
     static bool _decode7zAttribValue(const QByteArray &baData, qint32 nNumFiles, qint32 nFileIndex, quint32 *pResult);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

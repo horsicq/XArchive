@@ -44,7 +44,7 @@ private:
     QPointer<QIODevice> m_pDevice;
     qint64 m_nPosition;
 };
-}
+}  // namespace
 
 XBinary::XCONVERT _TABLE_XNPM_STRUCTID[] = {
     {XNPM::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
@@ -92,8 +92,7 @@ bool XNPM::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords, PDSTRUCT *pP
     DevicePositionGuard positionGuard(pDevice);
 
     const RECORD record = XArchive::getArchiveRecord("package/package.json", pListRecords, pPdStruct);
-    if (record.spInfo.sRecordName.isEmpty() || (record.spInfo.nUncompressedSize == 0) ||
-        (record.spInfo.nUncompressedSize > NPM_PACKAGE_JSON_LIMIT)) {
+    if (record.spInfo.sRecordName.isEmpty() || (record.spInfo.nUncompressedSize == 0) || (record.spInfo.nUncompressedSize > NPM_PACKAGE_JSON_LIMIT)) {
         return false;
     }
 
@@ -106,10 +105,8 @@ bool XNPM::isValid(QIODevice *pDevice, QList<RECORD> *pListRecords, PDSTRUCT *pP
     if ((parseError.error != QJsonParseError::NoError) || !jsonDocument.isObject()) return false;
 
     const QJsonObject jsonObject = jsonDocument.object();
-    return jsonObject.value(QLatin1String("name")).isString() &&
-           !jsonObject.value(QLatin1String("name")).toString().trimmed().isEmpty() &&
-           jsonObject.value(QLatin1String("version")).isString() &&
-           !jsonObject.value(QLatin1String("version")).toString().trimmed().isEmpty();
+    return jsonObject.value(QLatin1String("name")).isString() && !jsonObject.value(QLatin1String("name")).toString().trimmed().isEmpty() &&
+           jsonObject.value(QLatin1String("version")).isString() && !jsonObject.value(QLatin1String("version")).toString().trimmed().isEmpty();
 }
 
 QString XNPM::getFileFormatExt()
@@ -190,12 +187,9 @@ bool XNPM::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XTAR_GZ::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XTAR_GZ::INTERNAL_INFO *pInfo =
-            static_cast<XTAR_GZ::INTERNAL_INFO *>(
-                guardedThis->XTAR_GZ::getInternalInfo(pPdStruct));
+        XTAR_GZ::INTERNAL_INFO *pInfo = static_cast<XTAR_GZ::INTERNAL_INFO *>(guardedThis->XTAR_GZ::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XTAR_GZ::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XTAR_GZ::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

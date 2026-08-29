@@ -27,12 +27,17 @@
 namespace {
 class Bzip2DiscardDevice : public QIODevice {
 protected:
-    qint64 readData(char *, qint64) override { return -1; }
-    qint64 writeData(const char *, qint64 nSize) override { return (nSize >= 0) ? nSize : -1; }
+    qint64 readData(char *, qint64) override
+    {
+        return -1;
+    }
+    qint64 writeData(const char *, qint64 nSize) override
+    {
+        return (nSize >= 0) ? nSize : -1;
+    }
 };
 
-bool measureBzip2Stream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize,
-                        XBinary::PDSTRUCT *pPdStruct,
+bool measureBzip2Stream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompressedSize, qint64 *pnUncompressedSize, XBinary::PDSTRUCT *pPdStruct,
                         const QMap<XBinary::UNPACK_PROP, QVariant> *pUnpackProperties = nullptr)
 {
     if (pnCompressedSize) *pnCompressedSize = 0;
@@ -55,9 +60,8 @@ bool measureBzip2Stream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompress
     state.nInputLimit = nFileSize;
     state.nProcessedLimit = -1;
 
-    const bool bResult = XBZIP2Decoder::decompress(&state, pPdStruct) &&
-                         (state.nCountInput >= 0) && (state.nCountInput <= nFileSize) &&
-                         (state.nCountOutput >= 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+    const bool bResult = XBZIP2Decoder::decompress(&state, pPdStruct) && (state.nCountInput >= 0) && (state.nCountInput <= nFileSize) && (state.nCountOutput >= 0) &&
+                         XBinary::isPdStructNotCanceled(pPdStruct);
     if (bResult) {
         if (pnCompressedSize) *pnCompressedSize = state.nCountInput;
         if (pnUncompressedSize) *pnUncompressedSize = state.nCountOutput;
@@ -85,11 +89,9 @@ bool XBZIP2::isValid(PDSTRUCT *pPdStruct)
     if (!guardedThis || (nSize < 14)) return false;
     _MEMORY_MAP memoryMap = XBinary::getMemoryMap(MAPMODE_UNKNOWN, pPdStruct);
     if (!guardedThis) return false;
-    const bool bPrimary =
-        compareSignature(&memoryMap, "'BZh'..314159265359", 0, pPdStruct);
+    const bool bPrimary = compareSignature(&memoryMap, "'BZh'..314159265359", 0, pPdStruct);
     if (!guardedThis || bPrimary) return guardedThis && bPrimary;
-    const bool bAlternate = compareSignature(
-        &memoryMap, "'BZh'..17724538509000000000", 0, pPdStruct);
+    const bool bAlternate = compareSignature(&memoryMap, "'BZh'..17724538509000000000", 0, pPdStruct);
     return guardedThis && bAlternate;
 }
 
@@ -376,8 +378,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XBZIP2::getDefaultUnpackProperties()
 bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XBZIP2> guardedThis(this);
-    if (!pState || m_bUnpackOperationInProgress ||
-        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState))) {
         return false;
     }
     const bool bFinished = finishUnpack(pState, nullptr);
@@ -405,9 +406,7 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     qint64 nCompressedSize = 0;
     qint64 nUncompressedSize = 0;
     QPointer<QIODevice> guardedSource(getDevice());
-    const bool bMeasured = guardedSource && measureBzip2Stream(
-        guardedSource.data(), nFileSize, &nCompressedSize,
-        &nUncompressedSize, pPdStruct, &mapProperties);
+    const bool bMeasured = guardedSource && measureBzip2Stream(guardedSource.data(), nFileSize, &nCompressedSize, &nUncompressedSize, pPdStruct, &mapProperties);
     if (!guardedThis) return false;
     if (!bMeasured) {
         releaseUnpackSource(pState);
@@ -446,14 +445,12 @@ bool XBZIP2::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
 XBinary::ARCHIVERECORD XBZIP2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
     QPointer<XBZIP2> guardedThis(this);
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
 
     XBinary::ARCHIVERECORD result = {};
 
-    if (!pState || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return result;
     }
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
@@ -479,19 +476,14 @@ XBinary::ARCHIVERECORD XBZIP2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
 bool XBZIP2::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     QPointer<XBZIP2> guardedThis(this);
-    if (!pState || !pState->pContext || !pDevice ||
-        !ownsUnpackSource(pState) ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!pState || !pState->pContext || !pDevice || !ownsUnpackSource(pState) || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords))
+        return false;
 
-    const qint64 nCompressedSize =
-        static_cast<BZIP2_UNPACK_CONTEXT *>(pState->pContext)
-            ->nCompressedSize;
+    const qint64 nCompressedSize = static_cast<BZIP2_UNPACK_CONTEXT *>(pState->pContext)->nCompressedSize;
     // The base implementation owns the operation guard and performs the final
     // source/output validation after publication.  Do not make another
     // callback-bearing source check after that guard has been released.
-    const bool bResult = XArchive::unpackCurrent(
-        pState, pDevice, pPdStruct);
+    const bool bResult = XArchive::unpackCurrent(pState, pDevice, pPdStruct);
     if (!guardedThis) return false;
     if (bResult) pState->nCurrentOffset = nCompressedSize;
     return bResult;
@@ -503,12 +495,9 @@ bool XBZIP2::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
-    if (!pState || !pState->pContext ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    if (!pState || !pState->pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
     const bool bSourceCurrent = isUnpackSourceCurrent(pState, pPdStruct);
-    if (!guardedThis || !bSourceCurrent ||
-        (pState->nCurrentIndex < 0) ||
-        (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
+    if (!guardedThis || !bSourceCurrent || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords)) return false;
 
     if (pState->nCurrentIndex < pState->nNumberOfRecords) ++pState->nCurrentIndex;
     return pState->nCurrentIndex < pState->nNumberOfRecords;
@@ -528,8 +517,7 @@ bool XBZIP2::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
 
-    BZIP2_UNPACK_CONTEXT *pContext =
-        static_cast<BZIP2_UNPACK_CONTEXT *>(pState->pContext);
+    BZIP2_UNPACK_CONTEXT *pContext = static_cast<BZIP2_UNPACK_CONTEXT *>(pState->pContext);
     releaseUnpackSource(pState);
     pState->pContext = nullptr;
 
@@ -571,12 +559,9 @@ bool XBZIP2::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

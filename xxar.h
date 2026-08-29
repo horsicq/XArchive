@@ -91,9 +91,9 @@ public:
 private:
     struct XAR_RECORD {
         QString sFileName;
-        qint64 nOffset;   // absolute (heap-relative + heap start)
-        qint64 nLength;   // stored (compressed) size on disk
-        qint64 nSize;     // uncompressed size
+        qint64 nOffset;  // absolute (heap-relative + heap start)
+        qint64 nLength;  // stored (compressed) size on disk
+        qint64 nSize;    // uncompressed size
         HANDLE_METHOD compressMethod;
         bool bIsFolder;
     };
@@ -106,6 +106,7 @@ private:
     QByteArray _readTOC(PDSTRUCT *pPdStruct);
     bool _parseTOC(const QByteArray &baXML, qint64 nHeapOffset, QList<XAR_RECORD> *pListRecords, PDSTRUCT *pPdStruct);
     HANDLE_METHOD _encodingToMethod(const QString &sStyle);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

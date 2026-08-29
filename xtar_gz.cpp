@@ -85,9 +85,7 @@ bool XTAR_GZ::getOuterStreamInfo(qint64 &nOuterStreamOffset, qint64 &nOuterStrea
 
 QIODevice *XTAR_GZ::decompressData(PDSTRUCT *pPdStruct)
 {
-    const PDSTRUCTLIFETIME progressLifetime =
-        pPdStruct ? retainPdStructLifetime(pPdStruct)
-                  : PDSTRUCTLIFETIME();
+    const PDSTRUCTLIFETIME progressLifetime = pPdStruct ? retainPdStructLifetime(pPdStruct) : PDSTRUCTLIFETIME();
     XGzip xgzip(getDevice());
 
     if (!xgzip.isValid(pPdStruct)) {
@@ -119,14 +117,10 @@ QIODevice *XTAR_GZ::decompressData(PDSTRUCT *pPdStruct)
         return nullptr;
     }
 
-    const quint32 nExpectedCRC = (quint32)(quint8)baFooter.at(0) |
-                                 ((quint32)(quint8)baFooter.at(1) << 8) |
-                                 ((quint32)(quint8)baFooter.at(2) << 16) |
-                                 ((quint32)(quint8)baFooter.at(3) << 24);
-    const quint32 nExpectedSize = (quint32)(quint8)baFooter.at(4) |
-                                  ((quint32)(quint8)baFooter.at(5) << 8) |
-                                  ((quint32)(quint8)baFooter.at(6) << 16) |
-                                  ((quint32)(quint8)baFooter.at(7) << 24);
+    const quint32 nExpectedCRC =
+        (quint32)(quint8)baFooter.at(0) | ((quint32)(quint8)baFooter.at(1) << 8) | ((quint32)(quint8)baFooter.at(2) << 16) | ((quint32)(quint8)baFooter.at(3) << 24);
+    const quint32 nExpectedSize =
+        (quint32)(quint8)baFooter.at(4) | ((quint32)(quint8)baFooter.at(5) << 8) | ((quint32)(quint8)baFooter.at(6) << 16) | ((quint32)(quint8)baFooter.at(7) << 24);
 
     QPointer<QIODevice> guardedResult(pResult);
     const qint64 nResultSize = guardedResult->size();
@@ -136,17 +130,13 @@ QIODevice *XTAR_GZ::decompressData(PDSTRUCT *pPdStruct)
         return nullptr;
     }
     const bool bCRCValid =
-        ((quint32)nResultSize == nExpectedSize) &&
-        XBinary::checkCRC(guardedResult.data(),
-                          CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF,
-                          nExpectedCRC, pPdStruct);
+        ((quint32)nResultSize == nExpectedSize) && XBinary::checkCRC(guardedResult.data(), CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF, nExpectedCRC, pPdStruct);
     if (!guardedResult) return nullptr;
     if (pPdStruct && !isPdStructLifetimeAlive(progressLifetime)) {
         delete guardedResult.data();
         return nullptr;
     }
-    const bool bFooterValid = bCRCValid &&
-                              XBinary::isPdStructNotCanceled(pPdStruct);
+    const bool bFooterValid = bCRCValid && XBinary::isPdStructNotCanceled(pPdStruct);
     if (!bFooterValid) {
         delete guardedResult.data();
         return nullptr;
@@ -163,12 +153,9 @@ bool XTAR_GZ::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XTARCOMPRESSED::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XTARCOMPRESSED::INTERNAL_INFO *pInfo =
-            static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(
-                guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
+        XTARCOMPRESSED::INTERNAL_INFO *pInfo = static_cast<XTARCOMPRESSED::INTERNAL_INFO *>(guardedThis->XTARCOMPRESSED::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XTARCOMPRESSED::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

@@ -124,6 +124,7 @@ private:
         QList<LZIP_MEMBER> listMembers;
     };
     bool getMembers(QList<LZIP_MEMBER> *pMembers, PDSTRUCT *pPdStruct);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

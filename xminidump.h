@@ -303,6 +303,7 @@ private:
         QList<MINIDUMP_DIRECTORY> listDirectories;  // Cached directory entries
         QList<qint32> listValidDirectoryIndexes;    // Public enumeration index -> directory entry
     };
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

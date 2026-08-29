@@ -29,21 +29,13 @@
 namespace {
 
 // Appendix A: position slots (42) and length slots (27).
-const quint32 POS_BASE[42] = {
-    0x00000, 0x00001, 0x00002, 0x00003, 0x00004, 0x00006, 0x00008, 0x0000c,
-    0x00010, 0x00018, 0x00020, 0x00030, 0x00040, 0x00060, 0x00080, 0x000c0,
-    0x00100, 0x00180, 0x00200, 0x00300, 0x00400, 0x00600, 0x00800, 0x00c00,
-    0x01000, 0x01800, 0x02000, 0x03000, 0x04000, 0x06000, 0x08000, 0x0c000,
-    0x10000, 0x18000, 0x20000, 0x30000, 0x40000, 0x60000, 0x80000, 0xc0000,
-    0x100000, 0x180000};
-const int POS_XB[42] = {
-    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9,
-    10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19};
-const quint32 LEN_BASE[27] = {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x0a, 0x0c, 0x0e, 0x12, 0x16,
-    0x1a, 0x1e, 0x26, 0x2e, 0x36, 0x3e, 0x4e, 0x5e, 0x6e, 0x7e, 0x9e, 0xbe, 0xde, 0xfe};
-const int LEN_XB[27] = {
-    0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+const quint32 POS_BASE[42] = {0x00000, 0x00001, 0x00002, 0x00003, 0x00004, 0x00006, 0x00008, 0x0000c, 0x00010, 0x00018, 0x00020, 0x00030, 0x00040,  0x00060,
+                              0x00080, 0x000c0, 0x00100, 0x00180, 0x00200, 0x00300, 0x00400, 0x00600, 0x00800, 0x00c00, 0x01000, 0x01800, 0x02000,  0x03000,
+                              0x04000, 0x06000, 0x08000, 0x0c000, 0x10000, 0x18000, 0x20000, 0x30000, 0x40000, 0x60000, 0x80000, 0xc0000, 0x100000, 0x180000};
+const int POS_XB[42] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19};
+const quint32 LEN_BASE[27] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x0a, 0x0c, 0x0e, 0x12, 0x16, 0x1a,
+                              0x1e, 0x26, 0x2e, 0x36, 0x3e, 0x4e, 0x5e, 0x6e, 0x7e, 0x9e, 0xbe, 0xde, 0xfe};
+const int LEN_XB[27] = {0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
 
 inline int numPositionSlots(int nOrder)
 {
@@ -120,7 +112,9 @@ struct QBitReader {
     qint64 nSize;
     qint64 nPos;  // bit index
 
-    QBitReader(const QByteArray &ba) : pData((const quint8 *)ba.constData()), nSize(ba.size()), nPos(0) {}
+    QBitReader(const QByteArray &ba) : pData((const quint8 *)ba.constData()), nSize(ba.size()), nPos(0)
+    {
+    }
 
     int getBit()
     {
@@ -148,7 +142,10 @@ struct QDecoder {
     QBitReader br;
     quint32 nL, nH, nC;
 
-    QDecoder(const QByteArray &ba) : br(ba), nL(0x0000), nH(0xFFFF) { nC = br.getBits(16); }
+    QDecoder(const QByteArray &ba) : br(ba), nL(0x0000), nH(0xFFFF)
+    {
+        nC = br.getBits(16);
+    }
 
     quint32 getFreq(quint32 nTotFreq)
     {
@@ -191,7 +188,10 @@ struct QDecoder {
         return nSym;
     }
 
-    quint32 getBitsRaw(int nCount) { return br.getBits(nCount); }
+    quint32 getBitsRaw(int nCount)
+    {
+        return br.getBits(nCount);
+    }
 };
 
 // The 9 adaptive models plus the persistent LZ history (which is exactly the
@@ -204,8 +204,7 @@ struct QuantumState {
     std::vector<QModel> pos;  // 3 position models (selectors 4/5/6)
     QModel length;
 
-    explicit QuantumState(int order)
-        : nOrder(order), nSlots(numPositionSlots(order)), selector(7, 0), length(27, 0)
+    explicit QuantumState(int order) : nOrder(order), nSlots(numPositionSlots(order)), selector(7, 0), length(27, 0)
     {
         for (int k = 0; k < 4; k++) lit.push_back(QModel(64, 64 * k));
         pos.push_back(QModel(std::min(nSlots, 24), 0));
@@ -262,8 +261,8 @@ bool decodeBlock(QuantumState &st, const QByteArray &baData, qint64 nOutLen, QBy
 
 }  // namespace
 
-bool XQuantumDecoder::decompressCABDataBlocks(const QList<QByteArray> &listCompressedBlocks, const QList<qint32> &listUncompressedSizes,
-                                              QByteArray *pbaUncompressed, qint32 nWindowBits, XBinary::PDSTRUCT *pPdStruct)
+bool XQuantumDecoder::decompressCABDataBlocks(const QList<QByteArray> &listCompressedBlocks, const QList<qint32> &listUncompressedSizes, QByteArray *pbaUncompressed,
+                                              qint32 nWindowBits, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pbaUncompressed) return false;
     pbaUncompressed->clear();

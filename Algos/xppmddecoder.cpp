@@ -2304,10 +2304,8 @@ void Ppmd8_UpdateModel(CPpmd8 *p)
             *text++ = p->FoundState->Symbol;
             p->Text = text;
             if (text >= p->UnitsStart) {
-                if (X_Ppmd8_IsGentee(p))
-                    Ppmd8_RestartModel(p);
-                else
-                    RESTORE_MODEL(c, CTX(minSuccessor)); /* check it */
+                if (X_Ppmd8_IsGentee(p)) Ppmd8_RestartModel(p);
+                else RESTORE_MODEL(c, CTX(minSuccessor)); /* check it */
                 return;
             }
             maxSuccessor = REF(text);
@@ -2329,10 +2327,8 @@ void Ppmd8_UpdateModel(CPpmd8 *p)
             if ((Byte *)Ppmd8_GetPtr(p, minSuccessor) < p->UnitsStart) {
                 PPMD8_CTX_PTR cs = Ppmd8_CreateSuccessors(p, SZ_False, s, p->MinContext);
                 if (!cs) {
-                    if (X_Ppmd8_IsGentee(p))
-                        Ppmd8_RestartModel(p);
-                    else
-                        RESTORE_MODEL(c, NULL);
+                    if (X_Ppmd8_IsGentee(p)) Ppmd8_RestartModel(p);
+                    else RESTORE_MODEL(c, NULL);
                     return;
                 }
                 minSuccessor = REF(cs);
@@ -2375,10 +2371,8 @@ void Ppmd8_UpdateModel(CPpmd8 *p)
                     void *ptr = Ppmd8_AllocUnits(p, i + 1);
                     void *oldPtr;
                     if (!ptr) {
-                        if (X_Ppmd8_IsGentee(p))
-                            Ppmd8_RestartModel(p);
-                        else
-                            RESTORE_MODEL(c, CTX(minSuccessor));
+                        if (X_Ppmd8_IsGentee(p)) Ppmd8_RestartModel(p);
+                        else RESTORE_MODEL(c, CTX(minSuccessor));
                         return;
                     }
                     oldPtr = STATS(c);
@@ -2397,10 +2391,8 @@ void Ppmd8_UpdateModel(CPpmd8 *p)
         } else {
             CPpmd_State *s = (CPpmd_State *)Ppmd8_AllocUnits(p, 0);
             if (!s) {
-                if (X_Ppmd8_IsGentee(p))
-                    Ppmd8_RestartModel(p);
-                else
-                    RESTORE_MODEL(c, CTX(minSuccessor));
+                if (X_Ppmd8_IsGentee(p)) Ppmd8_RestartModel(p);
+                else RESTORE_MODEL(c, CTX(minSuccessor));
                 return;
             }
             {
@@ -2975,17 +2967,14 @@ int X_Ppmd8g_DecodeSymbol(CPpmd8 *p)
 namespace {
 const quint64 PPMD_MAX_MODEL_MEMORY = Q_UINT64_C(256) * 1024 * 1024;
 
-bool isPpmdModelMemoryAllowed(
-    const XBinary::DATAPROCESS_STATE *pState, quint64 nSize)
+bool isPpmdModelMemoryAllowed(const XBinary::DATAPROCESS_STATE *pState, quint64 nSize)
 {
     if (!pState || (nSize == 0) || (nSize > PPMD_MAX_MODEL_MEMORY)) {
         return false;
     }
 
     qint64 nOutputLimit = -1;
-    return XBinary::getUnpackOutputLimit(pState->mapUnpackProperties,
-                                         &nOutputLimit) &&
-           ((nOutputLimit < 0) || (nSize <= (quint64)nOutputLimit));
+    return XBinary::getUnpackOutputLimit(pState->mapUnpackProperties, &nOutputLimit) && ((nOutputLimit < 0) || (nSize <= (quint64)nOutputLimit));
 }
 }  // namespace
 
@@ -3027,7 +3016,7 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
     // val = (Order - 1) + ((MemSizeMB - 1) << 4) + (Restor << 12)
     // Stored as 2 bytes little-endian
     quint16 nVal = nParamByte1 | (nParamByte2 << 8);
-    quint8 nOrder = (nVal & 0x0F) + 1;             // Bits 0-3: Order - 1
+    quint8 nOrder = (nVal & 0x0F) + 1;  // Bits 0-3: Order - 1
     // *PR: FIXED INVALID POINTER BUG
     // CHANGE: Upgraded from quint8 -> quint32 to prevent integer truncation
     quint32 nMemSizeMB = ((nVal >> 4) & 0xFF) + 1;  // Bits 4-11: MemSizeMB - 1
@@ -3055,8 +3044,7 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
     XPPMdModel model;
 
     XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
-    if (!memoryReservation.acquire(
-            pDecompressState->mapUnpackProperties, nMemSize)) {
+    if (!memoryReservation.acquire(pDecompressState->mapUnpackProperties, nMemSize)) {
         return false;
     }
 
@@ -3131,16 +3119,14 @@ bool XPPMdDecoder::decompressPPMD8(XBinary::DATAPROCESS_STATE *pDecompressState,
 
     // Check if we got the expected amount of data
     if (bSizeKnown) {
-        if ((nDecompressed != nUncompressedSize) || bInputError || !bSuccess || pDecompressState->bWriteError ||
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if ((nDecompressed != nUncompressedSize) || bInputError || !bSuccess || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         return true;
     }
 
     // If size is unknown, check if we successfully decoded something and there was no write error
-    return bSuccess && bEndOfStream && !bInputError && !pDecompressState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return bSuccess && bEndOfStream && !bInputError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState, const QByteArray &baProperty, XBinary::PDSTRUCT *pPdStruct)
@@ -3176,8 +3162,7 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
     XPPMd7Model model;
 
     XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
-    if (!memoryReservation.acquire(
-            pDecompressState->mapUnpackProperties, nMemSize)) {
+    if (!memoryReservation.acquire(pDecompressState->mapUnpackProperties, nMemSize)) {
         return false;
     }
 
@@ -3244,14 +3229,12 @@ bool XPPMdDecoder::decompressPPMD7(XBinary::DATAPROCESS_STATE *pDecompressState,
 
     // Verify size if known
     if (bSizeKnown) {
-        if ((nDecompressed != nUncompressedSize) || !bResult || bInputError || pDecompressState->bWriteError ||
-            !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if ((nDecompressed != nUncompressedSize) || !bResult || bInputError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
             return false;
         }
         return true;
     }
 
     // If size is unknown, check if we successfully decoded something and there was no write error
-    return bResult && bEndOfStream && !bInputError && !pDecompressState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return bResult && bEndOfStream && !bInputError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

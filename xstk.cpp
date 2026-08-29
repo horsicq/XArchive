@@ -22,8 +22,7 @@
 
 #include <new>
 
-static XBinary::XCONVERT _TABLE_XSTK_STRUCTID[] = {{XStk::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
-                                                   {XStk::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
+static XBinary::XCONVERT _TABLE_XSTK_STRUCTID[] = {{XStk::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")}, {XStk::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
 
 static quint32 stkReadLe32(const QByteArray &baData, qint32 nOffset)
 {
@@ -594,8 +593,7 @@ QMap<XBinary::UNPACK_PROP, QVariant> XStk::getDefaultUnpackProperties()
 bool XStk::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XStk> guardedArchive(this);
-    if (!pState || m_bUnpackOperationInProgress ||
-        ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
+    if (!pState || m_bUnpackOperationInProgress || ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState))) {
         return false;
     }
     if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;

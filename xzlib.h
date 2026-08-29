@@ -87,8 +87,7 @@ private:
     };
 
     static bool isPackStateConsistent(const PACK_STATE *pState, const ZLIB_PACK_CONTEXT *pContext);
-    bool _getStreamInfo(ZLIB_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct,
-                        const QMap<UNPACK_PROP, QVariant> *pUnpackProperties = nullptr);
+    bool _getStreamInfo(ZLIB_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct, const QMap<UNPACK_PROP, QVariant> *pUnpackProperties = nullptr);
 
 private:
     INTERNAL_INFO m_internalInfo;

@@ -43,8 +43,7 @@ static bool bcj2ReadExact(QIODevice *pInput, char *pData, qint64 nSize, XBinary:
     return (nDone == nSize) && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-static bool bcj2WriteOutput(QIODevice *pOutput, const char *pData, qint64 nSize,
-                            qint64 *pnOutputPos, XBinary::PDSTRUCT *pPdStruct)
+static bool bcj2WriteOutput(QIODevice *pOutput, const char *pData, qint64 nSize, qint64 *pnOutputPos, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pOutput || !pnOutputPos || (nSize < 0) || ((nSize > 0) && !pData)) return false;
 
@@ -55,8 +54,7 @@ static bool bcj2WriteOutput(QIODevice *pOutput, const char *pData, qint64 nSize,
         nDone += nWritten;
     }
 
-    if ((nDone != nSize) || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        (*pnOutputPos > (std::numeric_limits<qint64>::max)() - nDone)) return false;
+    if ((nDone != nSize) || !XBinary::isPdStructNotCanceled(pPdStruct) || (*pnOutputPos > (std::numeric_limits<qint64>::max)() - nDone)) return false;
     *pnOutputPos += nDone;
     return true;
 }
@@ -83,8 +81,7 @@ static bool bcj2IsExactEnd(QIODevice *pInput)
 
 static bool bcj2ResetOutput(QIODevice *pOutput)
 {
-    return pOutput && !pOutput->isSequential() && XBinary::isResizeEnable(pOutput) &&
-           XBinary::resize(pOutput, 0) && pOutput->seek(0);
+    return pOutput && !pOutput->isSequential() && XBinary::isResizeEnable(pOutput) && XBinary::resize(pOutput, 0) && pOutput->seek(0);
 }
 
 static bool bcj2Fail(QIODevice *pOutput)
@@ -103,8 +100,7 @@ bool XBCJ2Decoder::_rcInit(RC_STATE *pRC, XBinary::PDSTRUCT *pPdStruct)
     // Read 5 bytes: byte[0] is dummy (0x00), bytes[1..4] form the initial Code value.
     if (!pRC) return false;
     char buf[5] = {};
-    if (!pRC->pStream || !bcj2ReadExact(pRC->pStream, buf, sizeof(buf), pPdStruct) ||
-        ((quint8)buf[0] != 0)) {
+    if (!pRC->pStream || !bcj2ReadExact(pRC->pStream, buf, sizeof(buf), pPdStruct) || ((quint8)buf[0] != 0)) {
         pRC->bEof = true;
         pRC->nRange = 0;
         pRC->nCode = 0;
@@ -142,8 +138,7 @@ bool XBCJ2Decoder::_rcNormalize(RC_STATE *pRC, XBinary::PDSTRUCT *pPdStruct)
     return (pRC->nRange >= BCJ2_RC_RANGE_MIN) && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-bool XBCJ2Decoder::_rcDecodeBit(RC_STATE *pRC, quint32 *pProb, quint32 *pBit,
-                                XBinary::PDSTRUCT *pPdStruct)
+bool XBCJ2Decoder::_rcDecodeBit(RC_STATE *pRC, quint32 *pProb, quint32 *pBit, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pProb || !pBit || !_rcNormalize(pRC, pPdStruct)) return false;
 
@@ -166,13 +161,9 @@ bool XBCJ2Decoder::_rcDecodeBit(RC_STATE *pRC, quint32 *pProb, quint32 *pBit,
 bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QIODevice *pJmpStream, QIODevice *pRangeStream, QIODevice *pOutput, qint64 nOutputSize,
                               XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pMainStream || !pCallStream || !pJmpStream || !pRangeStream || !pOutput ||
-        !pMainStream->isOpen() || !pMainStream->isReadable() ||
-        !pCallStream->isOpen() || !pCallStream->isReadable() ||
-        !pJmpStream->isOpen() || !pJmpStream->isReadable() ||
-        !pRangeStream->isOpen() || !pRangeStream->isReadable() ||
-        !pOutput->isOpen() || !pOutput->isWritable() || pOutput->isSequential() ||
-        !XBinary::isResizeEnable(pOutput) || (nOutputSize < 0)) {
+    if (!pMainStream || !pCallStream || !pJmpStream || !pRangeStream || !pOutput || !pMainStream->isOpen() || !pMainStream->isReadable() || !pCallStream->isOpen() ||
+        !pCallStream->isReadable() || !pJmpStream->isOpen() || !pJmpStream->isReadable() || !pRangeStream->isOpen() || !pRangeStream->isReadable() ||
+        !pOutput->isOpen() || !pOutput->isWritable() || pOutput->isSequential() || !XBinary::isResizeEnable(pOutput) || (nOutputSize < 0)) {
         return false;
     }
 
@@ -187,14 +178,13 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
     const bool bCallSizeKnown = bcj2GetRemainingSize(pCallStream, &nCallRemaining);
     const bool bJmpSizeKnown = bcj2GetRemainingSize(pJmpStream, &nJmpRemaining);
     const bool bRangeSizeKnown = bcj2GetRemainingSize(pRangeStream, &nRangeRemaining);
-    if ((bCallSizeKnown && ((nCallRemaining & 3) != 0)) ||
-        (bJmpSizeKnown && ((nJmpRemaining & 3) != 0)) ||
-        (bRangeSizeKnown && (nRangeRemaining < 5))) return bcj2Fail(pOutput);
+    if ((bCallSizeKnown && ((nCallRemaining & 3) != 0)) || (bJmpSizeKnown && ((nJmpRemaining & 3) != 0)) || (bRangeSizeKnown && (nRangeRemaining < 5)))
+        return bcj2Fail(pOutput);
     if (bMainSizeKnown && bCallSizeKnown && bJmpSizeKnown) {
         const qint64 nMax = (std::numeric_limits<qint64>::max)();
-        if ((nMainRemaining > nMax - nCallRemaining) ||
-            (nMainRemaining + nCallRemaining > nMax - nJmpRemaining) ||
-            (nMainRemaining + nCallRemaining + nJmpRemaining != nOutputSize)) return bcj2Fail(pOutput);
+        if ((nMainRemaining > nMax - nCallRemaining) || (nMainRemaining + nCallRemaining > nMax - nJmpRemaining) ||
+            (nMainRemaining + nCallRemaining + nJmpRemaining != nOutputSize))
+            return bcj2Fail(pOutput);
     }
 
     // Initialise probability table: 256 slots for E8 (indexed by previous byte) + 1 for E9
@@ -293,11 +283,10 @@ bool XBCJ2Decoder::decompress(QIODevice *pMainStream, QIODevice *pCallStream, QI
         }
     }
 
-    if ((nOutputPos != nOutputSize) || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !_rcNormalize(&rc, pPdStruct) || rc.bEof || (rc.nCode != 0) ||
-        !bcj2IsExactEnd(pMainStream) || !bcj2IsExactEnd(pCallStream) ||
-        !bcj2IsExactEnd(pJmpStream) || !bcj2IsExactEnd(pRangeStream) ||
-        (pOutput->pos() != nOutputSize) || (pOutput->size() != nOutputSize)) return bcj2Fail(pOutput);
+    if ((nOutputPos != nOutputSize) || !XBinary::isPdStructNotCanceled(pPdStruct) || !_rcNormalize(&rc, pPdStruct) || rc.bEof || (rc.nCode != 0) ||
+        !bcj2IsExactEnd(pMainStream) || !bcj2IsExactEnd(pCallStream) || !bcj2IsExactEnd(pJmpStream) || !bcj2IsExactEnd(pRangeStream) || (pOutput->pos() != nOutputSize) ||
+        (pOutput->size() != nOutputSize))
+        return bcj2Fail(pOutput);
 
     return true;
 }

@@ -106,6 +106,7 @@ private:
     static bool failAddFileWrite(PACK_STATE *pState, AR_PACK_CONTEXT *pContext, qint64 nStartPosition, qint64 nRecordWritten);
     FRECORD readFRECORD(qint64 nOffset);
     static FRECORD createHeader(const QString &sFileName, qint64 nFileSize, quint32 nMode, qint64 nMTime);
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

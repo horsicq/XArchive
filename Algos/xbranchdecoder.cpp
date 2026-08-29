@@ -269,16 +269,13 @@ bool readTransformInput(XBinary::DATAPROCESS_STATE *pState, QByteArray *pData, X
             pState->bReadError = true;
             return false;
         }
-        if (!pState->pDeviceInput->isSequential() &&
-            ((nDeviceSize < 0) || (pState->nInputOffset > nDeviceSize) || (nInputSize > (nDeviceSize - pState->nInputOffset)))) {
+        if (!pState->pDeviceInput->isSequential() && ((nDeviceSize < 0) || (pState->nInputOffset > nDeviceSize) || (nInputSize > (nDeviceSize - pState->nInputOffset)))) {
             pState->bReadError = true;
             return false;
         }
     }
 
-    if ((nInputSize < 0) || (nInputSize > BRANCH_MAX_BUFFERED_SIZE) ||
-        !XBinary::isUnpackOutputSizeAllowed(
-            pState->mapUnpackProperties, nInputSize) ||
+    if ((nInputSize < 0) || (nInputSize > BRANCH_MAX_BUFFERED_SIZE) || !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, nInputSize) ||
         (nInputSize > (std::numeric_limits<qint32>::max)())) {
         return false;
     }
@@ -310,8 +307,7 @@ bool readTransformInput(XBinary::DATAPROCESS_STATE *pState, QByteArray *pData, X
         nReadTotal += nRead;
     }
 
-    return (nReadTotal == nInputSize) && (pState->nCountInput == nInputSize) && !pState->bReadError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return (nReadTotal == nInputSize) && (pState->nCountInput == nInputSize) && !pState->bReadError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool writeTransformOutput(XBinary::DATAPROCESS_STATE *pState, const QByteArray &baData, XBinary::PDSTRUCT *pPdStruct)
@@ -327,8 +323,7 @@ bool writeTransformOutput(XBinary::DATAPROCESS_STATE *pState, const QByteArray &
         nOffset += nChunkSize;
     }
 
-    return (nOffset == baData.size()) && (pState->nCountOutput == baData.size()) && !pState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return (nOffset == baData.size()) && (pState->nCountOutput == baData.size()) && !pState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 }  // namespace

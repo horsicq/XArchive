@@ -51,6 +51,7 @@ public:
 
 private:
     virtual QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

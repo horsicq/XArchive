@@ -4240,21 +4240,17 @@ static bool _decompressBuffer(UCL_DECOMPRESS_ROUTINE pRoutine, const unsigned ch
 
 bool XUCLDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
-        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1) ||
-        (XBinary::getBufferSize(pPdStruct) <= 0)) {
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || (pDecompressState->nInputOffset < 0) ||
+        (pDecompressState->nInputLimit < -1) || (XBinary::getBufferSize(pPdStruct) <= 0)) {
         return false;
     }
 
-    qint64 nExpectedOutputSize =
-        pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
+    qint64 nExpectedOutputSize = pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
     if ((nExpectedOutputSize <= 0) && (pDecompressState->nProcessedLimit > 0)) {
         nExpectedOutputSize = pDecompressState->nProcessedLimit;
     }
-    if ((nExpectedOutputSize <= 0) ||
-        (nExpectedOutputSize > (qint64)(std::numeric_limits<qint32>::max)()) ||
-        ((pDecompressState->nInputLimit != -1) &&
-         (pDecompressState->nInputLimit > (qint64)(std::numeric_limits<qint32>::max)()))) {
+    if ((nExpectedOutputSize <= 0) || (nExpectedOutputSize > (qint64)(std::numeric_limits<qint32>::max)()) ||
+        ((pDecompressState->nInputLimit != -1) && (pDecompressState->nInputLimit > (qint64)(std::numeric_limits<qint32>::max)()))) {
         return false;
     }
 
@@ -4272,30 +4268,25 @@ bool XUCLDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     }
 
     Algo_utils::prepareState(pDecompressState);
-    if (pDecompressState->bReadError || pDecompressState->bWriteError ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (pDecompressState->bReadError || pDecompressState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     QByteArray baInput;
-    if (!Algo_utils::readInputData(pDecompressState, &baInput, pPdStruct) || baInput.isEmpty() ||
-        pDecompressState->bReadError || !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        ((pDecompressState->nInputLimit != -1) &&
-         (pDecompressState->nCountInput != pDecompressState->nInputLimit))) {
+    if (!Algo_utils::readInputData(pDecompressState, &baInput, pPdStruct) || baInput.isEmpty() || pDecompressState->bReadError ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) || ((pDecompressState->nInputLimit != -1) && (pDecompressState->nCountInput != pDecompressState->nInputLimit))) {
         return false;
     }
 
     QByteArray baOutput((qint32)nExpectedOutputSize, 0);
     quint32 nDecodedSize = (quint32)nExpectedOutputSize;
     UCL_DECOMPRESS_ROUTINE pRoutine = _getDecompressRoutine(method);
-    if (!_decompressBuffer(pRoutine, (const unsigned char *)baInput.constData(), (quint32)baInput.size(),
-                           (unsigned char *)baOutput.data(), &nDecodedSize) ||
+    if (!_decompressBuffer(pRoutine, (const unsigned char *)baInput.constData(), (quint32)baInput.size(), (unsigned char *)baOutput.data(), &nDecodedSize) ||
         (nDecodedSize != (quint32)nExpectedOutputSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const qint32 nOutputSize = baOutput.size();
-    return (XBinary::_writeDevice(baOutput.constData(), nOutputSize, pDecompressState) == nOutputSize) &&
-           !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return (XBinary::_writeDevice(baOutput.constData(), nOutputSize, pDecompressState) == nOutputSize) && !pDecompressState->bReadError &&
+           !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

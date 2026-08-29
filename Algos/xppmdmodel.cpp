@@ -121,8 +121,7 @@ qint32 XPPMdModel::decodeSymbol()
     }
 
     // Use 7-Zip's proven decoder
-    int nSymbol =
-        m_pPrivate->bGentee ? X_Ppmd8g_DecodeSymbol(&m_pPrivate->sPpmd) : X_Ppmd8_DecodeSymbol(&m_pPrivate->sPpmd);
+    int nSymbol = m_pPrivate->bGentee ? X_Ppmd8g_DecodeSymbol(&m_pPrivate->sPpmd) : X_Ppmd8_DecodeSymbol(&m_pPrivate->sPpmd);
 
     return m_pPrivate->sInputStream.bError ? -2 : nSymbol;
 }

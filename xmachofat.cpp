@@ -44,8 +44,7 @@ XMACHOFat::XMACHOFat(QIODevice *pDevice) : XArchive(pDevice)
 
 bool XMACHOFat::isValid(PDSTRUCT *pPdStruct)
 {
-    return XBinary::isPdStructNotCanceled(pPdStruct) &&
-           (_getValidatedArchitectureCount(pPdStruct, true) != 0);
+    return XBinary::isPdStructNotCanceled(pPdStruct) && (_getValidatedArchitectureCount(pPdStruct, true) != 0);
 }
 
 bool XMACHOFat::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
@@ -349,8 +348,9 @@ bool XMACHOFat::_isArchitectureRangeValid(const ARCHITECTURE_RECORD &record)
     const qint64 nFileSize = getSize();
     bool bIs64 = false;
     bool bIsBigEndian = false;
-    if ((nFileSize < 0) || (record.cputype == 0) || (record.size == 0) || (record.align > 63) ||
-        !_getFatFormat(&bIs64, &bIsBigEndian) || (bIs64 && (record.reserved != 0))) return false;
+    if ((nFileSize < 0) || (record.cputype == 0) || (record.size == 0) || (record.align > 63) || !_getFatFormat(&bIs64, &bIsBigEndian) ||
+        (bIs64 && (record.reserved != 0)))
+        return false;
 
     const quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
     const quint64 nRecordSize = bIs64 ? sizeof(XMACH_DEF::fat_arch_64) : sizeof(XMACH_DEF::fat_arch);
@@ -358,8 +358,7 @@ bool XMACHOFat::_isArchitectureRangeValid(const ARCHITECTURE_RECORD &record)
     const quint64 nAlignmentMask = record.align ? (((quint64)1 << record.align) - 1) : 0;
 
     const quint64 nUnsignedFileSize = (quint64)nFileSize;
-    return (record.offset >= nTableEnd) && ((record.offset & nAlignmentMask) == 0) &&
-           (record.offset <= nUnsignedFileSize) &&
+    return (record.offset >= nTableEnd) && ((record.offset & nAlignmentMask) == 0) && (record.offset <= nUnsignedFileSize) &&
            (record.size <= (nUnsignedFileSize - record.offset));
 }
 
@@ -375,8 +374,7 @@ quint32 XMACHOFat::_getValidatedArchitectureCount(PDSTRUCT *pPdStruct, bool bVal
     const qint64 nRecordSize = bIs64 ? (qint64)sizeof(XMACH_DEF::fat_arch_64) : (qint64)sizeof(XMACH_DEF::fat_arch);
     const quint32 nNumberOfRecords = read_uint32(offsetof(XMACH_DEF::fat_header, nfat_arch), bIsBigEndian);
 
-    if ((nNumberOfRecords == 0) || (nNumberOfRecords > MACHOFAT_MAX_ARCHITECTURES) ||
-        (nFileSize < (qint64)sizeof(XMACH_DEF::fat_header)) ||
+    if ((nNumberOfRecords == 0) || (nNumberOfRecords > MACHOFAT_MAX_ARCHITECTURES) || (nFileSize < (qint64)sizeof(XMACH_DEF::fat_header)) ||
         ((quint64)nNumberOfRecords > (quint64)((nFileSize - (qint64)sizeof(XMACH_DEF::fat_header)) / nRecordSize))) {
         return 0;
     }
@@ -579,8 +577,8 @@ QList<XBinary::XFHEADER> XMACHOFat::getXFHeaders(const XFSTRUCT &xfStruct, PDSTR
             xfHeader.nSize = sizeof(XMACH_DEF::fat_header);
             xfHeader.xfType = XFTYPE_HEADER;
             xfHeader.listFields = getXFRecords(xfStruct.fileType, STRUCTID_HEADER, headerLoc);
-            xfHeader.listDataSt.append({0, 0, XFDATASTYPE_LIST, _TABLE_XMACHOFAT_HeaderMagics,
-                                        (qint32)(sizeof(_TABLE_XMACHOFAT_HeaderMagics) / sizeof(XBinary::XIDSTRING))});
+            xfHeader.listDataSt.append(
+                {0, 0, XFDATASTYPE_LIST, _TABLE_XMACHOFAT_HeaderMagics, (qint32)(sizeof(_TABLE_XMACHOFAT_HeaderMagics) / sizeof(XBinary::XIDSTRING))});
             xfHeader.sTag = xfHeaderToTag(xfHeader, structIDToString(STRUCTID_HEADER), xfHeader.sParentTag);
             listResult.append(xfHeader);
         }
@@ -685,8 +683,7 @@ bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedArchive->ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
     guardedArchive->releaseUnpackSource(pState);
     *pState = UNPACK_STATE();
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
@@ -695,8 +692,7 @@ bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
     pState->nCurrentOffset = 0;
     pState->nCurrentIndex = 0;
-    pState->nNumberOfRecords =
-        (qint32)guardedArchive->getNumberOfRecords(pPdStruct);
+    pState->nNumberOfRecords = (qint32)guardedArchive->getNumberOfRecords(pPdStruct);
     if (!guardedArchive) {
         *pState = UNPACK_STATE();
         return false;
@@ -715,8 +711,7 @@ bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
         return false;
     }
 
-    const bool bFinalized = guardedArchive->validateAndFinalizeUnpackSource(
-        pState, pPdStruct);
+    const bool bFinalized = guardedArchive->validateAndFinalizeUnpackSource(pState, pPdStruct);
     if (!guardedArchive) {
         *pState = UNPACK_STATE();
         return false;
@@ -732,8 +727,7 @@ bool XMACHOFat::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVarian
 
 XBinary::ARCHIVERECORD XMACHOFat::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
     QPointer<XMACHOFat> guardedArchive(this);
 
@@ -745,8 +739,7 @@ XBinary::ARCHIVERECORD XMACHOFat::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pP
     }
 
     ARCHITECTURE_RECORD architecture = {};
-    if (!guardedArchive->_readArchitectureRecord(pState->nCurrentIndex, &architecture) || !guardedArchive ||
-        !guardedArchive->_isArchitectureRangeValid(architecture)) {
+    if (!guardedArchive->_readArchitectureRecord(pState->nCurrentIndex, &architecture) || !guardedArchive || !guardedArchive->_isArchitectureRangeValid(architecture)) {
         return XBinary::ARCHIVERECORD();
     }
 
@@ -788,8 +781,7 @@ bool XMACHOFat::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !ownsUnpackSource(pState)) return false;
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
     releaseUnpackSource(pState);
     *pState = UNPACK_STATE();
 
@@ -824,12 +816,9 @@ bool XMACHOFat::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

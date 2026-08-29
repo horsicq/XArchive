@@ -107,15 +107,17 @@ public:
     bool flush()
     {
         if (m_nPosition == 0) return true;
-        if (!XBinary::isPdStructNotCanceled(m_pPdStruct) ||
-            (XBinary::_writeDevice(m_abOutput.data(), m_nPosition, m_pState) != m_nPosition)) {
+        if (!XBinary::isPdStructNotCanceled(m_pPdStruct) || (XBinary::_writeDevice(m_abOutput.data(), m_nPosition, m_pState) != m_nPosition)) {
             return false;
         }
         m_nPosition = 0;
         return true;
     }
 
-    qint64 produced() const { return m_nProduced; }
+    qint64 produced() const
+    {
+        return m_nProduced;
+    }
 
 private:
     XBinary::DATAPROCESS_STATE *m_pState;
@@ -135,8 +137,8 @@ XKWAJLZSSDecoder::XKWAJLZSSDecoder(QObject *parent) : QObject(parent)
 
 bool XKWAJLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {
-    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput ||
-        (pDecompressState->nInputOffset < 0) || (pDecompressState->nInputLimit < -1)) {
+    if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput || (pDecompressState->nInputOffset < 0) ||
+        (pDecompressState->nInputLimit < -1)) {
         return false;
     }
 
@@ -277,11 +279,9 @@ bool XKWAJLZSSDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
     }
 
     const bool bOutputComplete = !bHasExpectedSize || (output.produced() == nExpectedSize);
-    bool bResult = bCleanEnd && bOutputComplete && !bDataError && !bIOError &&
-                   !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+    bool bResult = bCleanEnd && bOutputComplete && !bDataError && !bIOError && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
                    XBinary::isPdStructNotCanceled(pPdStruct);
     if (bResult && !output.flush()) bResult = false;
 
-    return bResult && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct);
+    return bResult && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

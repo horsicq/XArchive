@@ -93,8 +93,8 @@ private:
 
     struct STK_RECORD {
         QString sFileName;
-        qint64 nDataOffset;         // stream start (offset+4 for compressed, past the uint32 size prefix)
-        qint64 nStreamSize;         // stored/compressed stream size (input to the decoder)
+        qint64 nDataOffset;  // stream start (offset+4 for compressed, past the uint32 size prefix)
+        qint64 nStreamSize;  // stored/compressed stream size (input to the decoder)
         qint64 nUncompressedSize;
         bool bCompressed;
     };

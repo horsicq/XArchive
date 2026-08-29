@@ -238,8 +238,7 @@ bool XDOS16::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> 
     }
 
     for (const RECORD &record : listRecords) {
-        if ((record.nDataOffset < 0) || (record.nDataSize < 0) || (record.nDataOffset > nSourceSize) ||
-            (record.nDataSize > (nSourceSize - record.nDataOffset))) {
+        if ((record.nDataOffset < 0) || (record.nDataSize < 0) || (record.nDataOffset > nSourceSize) || (record.nDataSize > (nSourceSize - record.nDataOffset))) {
             guardedThis->releaseUnpackSource(pState);
             delete pContext;
             *pState = UNPACK_STATE();
@@ -821,12 +820,9 @@ bool XDOS16::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XArchive::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XArchive::INTERNAL_INFO *pInfo =
-            static_cast<XArchive::INTERNAL_INFO *>(
-                guardedThis->XArchive::getInternalInfo(pPdStruct));
+        XArchive::INTERNAL_INFO *pInfo = static_cast<XArchive::INTERNAL_INFO *>(guardedThis->XArchive::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XArchive::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XArchive::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

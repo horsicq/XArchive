@@ -112,6 +112,7 @@ private:
         HANDLE_METHOD compressMethod;
         QString sFileName;
     };
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

@@ -152,8 +152,7 @@ ISzAlloc *Algo_utils::ppmdAlloc()
     return &g_ppmdAlloc;
 }
 
-bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nBufferSize,
-                                XBinary::PDSTRUCT *pPdStruct)
+bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nBufferSize, XBinary::PDSTRUCT *pPdStruct)
 {
     if (!pState || !pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
@@ -214,8 +213,7 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
         }
 
         ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
-        const SRes ret = X_LzmaDec_DecodeToBuf(pState, (Byte *)baOutput.data(), &outProcessed, (const Byte *)baPending.constData(), &inProcessed,
-                                               finishMode, &status);
+        const SRes ret = X_LzmaDec_DecodeToBuf(pState, (Byte *)baOutput.data(), &outProcessed, (const Byte *)baPending.constData(), &inProcessed, finishMode, &status);
         if ((ret != 0) || (inProcessed > (SizeT)baPending.size()) || (outProcessed > (SizeT)nBufferSize)) {
             return false;
         }
@@ -232,9 +230,8 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
 
         lastStatus = status;
         const bool bBoundedInputConsumed = (pDecompressState->nInputLimit != -1) && bInputExhausted && baPending.isEmpty();
-        const bool bFinished = (status == LZMA_STATUS_FINISHED_WITH_MARK) ||
-                               ((status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK) && (nExpectedOutput >= 0) &&
-                                (nTotalOutput == nExpectedOutput) && bBoundedInputConsumed);
+        const bool bFinished = (status == LZMA_STATUS_FINISHED_WITH_MARK) || ((status == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK) && (nExpectedOutput >= 0) &&
+                                                                              (nTotalOutput == nExpectedOutput) && bBoundedInputConsumed);
         if (bFinished) {
             rewindUnusedInput(pDecompressState, baPending.size());
             baPending.clear();
@@ -256,8 +253,7 @@ bool Algo_utils::decompressLZMA(CLzmaDec *pState, XBinary::DATAPROCESS_STATE *pD
     }
 
     if (nExpectedOutput >= 0) {
-        return (nTotalOutput == nExpectedOutput) &&
-               ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
+        return (nTotalOutput == nExpectedOutput) && ((lastStatus == LZMA_STATUS_FINISHED_WITH_MARK) || (lastStatus == LZMA_STATUS_MAYBE_FINISHED_WITHOUT_MARK));
     }
 
     return lastStatus == LZMA_STATUS_FINISHED_WITH_MARK;
@@ -324,8 +320,7 @@ bool Algo_utils::decompressLZMA2(CLzma2Dec *pState, XBinary::DATAPROCESS_STATE *
         }
 
         ELzmaStatus status = LZMA_STATUS_NOT_SPECIFIED;
-        const SRes ret = X_Lzma2Dec_DecodeToBuf(pState, (Byte *)baOutput.data(), &outProcessed, (const Byte *)baPending.constData(), &inProcessed,
-                                                finishMode, &status);
+        const SRes ret = X_Lzma2Dec_DecodeToBuf(pState, (Byte *)baOutput.data(), &outProcessed, (const Byte *)baPending.constData(), &inProcessed, finishMode, &status);
         if ((ret != 0) || (inProcessed > (SizeT)baPending.size()) || (outProcessed > (SizeT)nBufferSize)) {
             return false;
         }
@@ -484,16 +479,12 @@ int Algo_utils::deflate64WriteFunc(void *pOutDesc, unsigned char *pBuffer, unsig
         return 1;
     }
 
-    return (XBinary::_writeDevice((char *)pBuffer, (qint32)nSize, pDecompressState) == (qint32)nSize) &&
-                   !pDecompressState->bWriteError
-               ? 0
-               : 1;
+    return (XBinary::_writeDevice((char *)pBuffer, (qint32)nSize, pDecompressState) == (qint32)nSize) && !pDecompressState->bWriteError ? 0 : 1;
 }
 
 bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct, int nCompressionLevel, int nWindowBits)
 {
-    if (!pCompressState || !pCompressState->pDeviceInput || !pCompressState->pDeviceOutput ||
-        (pCompressState->nInputOffset < 0) || (pCompressState->nInputLimit < -1)) {
+    if (!pCompressState || !pCompressState->pDeviceInput || !pCompressState->pDeviceOutput || (pCompressState->nInputOffset < 0) || (pCompressState->nInputLimit < -1)) {
         return false;
     }
 
@@ -503,8 +494,7 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
     pCompressState->nCountOutput = 0;
 
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    if (!pCompressState->pDeviceInput->seek(pCompressState->nInputOffset) &&
-        (pCompressState->pDeviceInput->pos() != pCompressState->nInputOffset)) {
+    if (!pCompressState->pDeviceInput->seek(pCompressState->nInputOffset) && (pCompressState->pDeviceInput->pos() != pCompressState->nInputOffset)) {
         pCompressState->bReadError = true;
         return false;
     }
@@ -544,8 +534,7 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
             if (nToRead > 0) {
                 nRead = XBinary::_readDevice(pInputBuffer, nToRead, pCompressState);
                 if (nRead < 0) break;
-            } else if ((pCompressState->nInputLimit != -1) &&
-                       (pCompressState->nCountInput != pCompressState->nInputLimit)) {
+            } else if ((pCompressState->nInputLimit != -1) && (pCompressState->nCountInput != pCompressState->nInputLimit)) {
                 pCompressState->bReadError = true;
                 break;
             }
@@ -572,11 +561,9 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
                 const qint32 nCompressed = N_ALGO_UTILS_BUFFER_SIZE - static_cast<qint32>(stream.avail_out);
                 qint64 nWrittenTotal = 0;
                 while ((nWrittenTotal < nCompressed) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                    const qint64 nWritten = pCompressState->pDeviceOutput->write(pOutputBuffer + nWrittenTotal,
-                                                                                nCompressed - nWrittenTotal);
+                    const qint64 nWritten = pCompressState->pDeviceOutput->write(pOutputBuffer + nWrittenTotal, nCompressed - nWrittenTotal);
                     if ((nWritten <= 0) || (nWritten > (nCompressed - nWrittenTotal)) ||
-                        (pCompressState->nCountOutput >
-                         ((std::numeric_limits<qint64>::max)() - nWritten))) {
+                        (pCompressState->nCountOutput > ((std::numeric_limits<qint64>::max)() - nWritten))) {
                         pCompressState->bWriteError = true;
                         break;
                     }
@@ -586,8 +573,7 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
                 if (pCompressState->bWriteError || (nWrittenTotal != nCompressed)) break;
             } while ((stream.avail_out == 0) && (ret != Z_STREAM_END));
 
-            if (pCompressState->bReadError || pCompressState->bWriteError ||
-                ((ret != Z_OK) && (ret != Z_STREAM_END))) {
+            if (pCompressState->bReadError || pCompressState->bWriteError || ((ret != Z_OK) && (ret != Z_STREAM_END))) {
                 break;
             }
         } while (ret != Z_STREAM_END);
@@ -598,8 +584,7 @@ bool Algo_utils::compressDeflate(XBinary::DATAPROCESS_STATE *pCompressState, XBi
     delete[] pInputBuffer;
     delete[] pOutputBuffer;
 
-    return (ret == Z_STREAM_END) && bInputFinished && !pCompressState->bReadError && !pCompressState->bWriteError &&
-           XBinary::isPdStructNotCanceled(pPdStruct) &&
+    return (ret == Z_STREAM_END) && bInputFinished && !pCompressState->bReadError && !pCompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct) &&
            ((pCompressState->nInputLimit == -1) || (pCompressState->nCountInput == pCompressState->nInputLimit));
 }
 

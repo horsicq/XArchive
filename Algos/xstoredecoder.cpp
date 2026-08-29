@@ -42,8 +42,7 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
         // bounded member whose declared output size disagrees before writing
         // anything; otherwise a truncated member could be reported as a
         // successful shorter file.
-        if (bHasExpectedSize && ((nExpectedSize < 0) ||
-                                 ((pDecompressState->nInputLimit != -1) && (nExpectedSize != pDecompressState->nInputLimit)))) {
+        if (bHasExpectedSize && ((nExpectedSize < 0) || ((pDecompressState->nInputLimit != -1) && (nExpectedSize != pDecompressState->nInputLimit)))) {
             return false;
         }
 
@@ -68,8 +67,7 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
         Algo_utils::prepareState(pDecompressState);
 
         // Copy data from input to output
-        for (qint64 nOffset = 0;
-             ((pDecompressState->nInputLimit == -1) || (nOffset < pDecompressState->nInputLimit)) && XBinary::isPdStructNotCanceled(pPdStruct);) {
+        for (qint64 nOffset = 0; ((pDecompressState->nInputLimit == -1) || (nOffset < pDecompressState->nInputLimit)) && XBinary::isPdStructNotCanceled(pPdStruct);) {
             qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
 
             if (nBufferSize <= 0) {
@@ -93,8 +91,7 @@ bool XStoreDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 
         const bool bInputComplete = (pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit);
         const bool bOutputSizeMatches = !bHasExpectedSize || (pDecompressState->nCountOutput == nExpectedSize);
-        bResult = bInputComplete && bOutputSizeMatches && XBinary::isPdStructNotCanceled(pPdStruct) && !pDecompressState->bReadError &&
-                  !pDecompressState->bWriteError;
+        bResult = bInputComplete && bOutputSizeMatches && XBinary::isPdStructNotCanceled(pPdStruct) && !pDecompressState->bReadError && !pDecompressState->bWriteError;
 
         delete[] bufferIn;
     }

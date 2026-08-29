@@ -1897,9 +1897,8 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 {
     bool bResult = false;
 
-    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput &&
-        (pDecompressState->nInputOffset >= 0) && (pDecompressState->nInputLimit >= -1) &&
-        XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && (pDecompressState->nInputOffset >= 0) &&
+        (pDecompressState->nInputLimit >= -1) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         const qint32 nRequestedBufferSize = XBinary::getBufferSize(pPdStruct);
         if (nRequestedBufferSize <= 0) return false;
         const qint32 _nBufferSize = qBound((qint32)0x1000, nRequestedBufferSize, (qint32)0x100000);
@@ -1981,15 +1980,13 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
 
             X_BZ2_bzDecompressEnd(&strm);
 
-            const bool bConsumedInput = (strm.avail_in == 0) &&
-                                        ((pDecompressState->nInputLimit == -1) ||
-                                         (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+            const bool bConsumedInput =
+                (strm.avail_in == 0) && ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit));
             const bool bExpectedOutput = !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) ||
                                          ((pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() >= 0) &&
-                                          (pDecompressState->nCountOutput ==
-                                           pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
-            bResult = (ret == BZ_STREAM_END) && bConsumedInput && bExpectedOutput && !pDecompressState->bReadError &&
-                      !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
+                                          (pDecompressState->nCountOutput == pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
+            bResult = (ret == BZ_STREAM_END) && bConsumedInput && bExpectedOutput && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
+                      XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         delete[] bufferIn;

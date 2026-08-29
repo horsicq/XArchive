@@ -44,7 +44,9 @@ const qint64 TARCOMPRESSED_MAX_DECOMPRESSED_SIZE = Q_INT64_C(512) * 1024 * 1024;
 
 class BoundedTarOutputBuffer : public QBuffer {
 public:
-    BoundedTarOutputBuffer(QByteArray *pData, qint64 nLimit) : QBuffer(pData), m_nLimit(nLimit), m_bLimitExceeded(false) {}
+    BoundedTarOutputBuffer(QByteArray *pData, qint64 nLimit) : QBuffer(pData), m_nLimit(nLimit), m_bLimitExceeded(false)
+    {
+    }
 
     bool seek(qint64 nPosition) override
     {
@@ -56,14 +58,16 @@ public:
         return QBuffer::seek(nPosition);
     }
 
-    bool isLimitExceeded() const { return m_bLimitExceeded; }
+    bool isLimitExceeded() const
+    {
+        return m_bLimitExceeded;
+    }
 
 protected:
     qint64 writeData(const char *pData, qint64 nMaximumSize) override
     {
         const qint64 nPosition = pos();
-        if ((nMaximumSize < 0) || ((nMaximumSize > 0) && !pData) || (nPosition < 0) ||
-            (nPosition > m_nLimit) || (nMaximumSize > (m_nLimit - nPosition))) {
+        if ((nMaximumSize < 0) || ((nMaximumSize > 0) && !pData) || (nPosition < 0) || (nPosition > m_nLimit) || (nMaximumSize > (m_nLimit - nPosition))) {
             m_bLimitExceeded = true;
             return -1;
         }
@@ -82,8 +86,7 @@ private:
 // HANDLE_METHOD_ARCHIVE_STREAM - which, together with its no-extent
 // coordinates, is what makes every offset-based consumer fail closed.
 // A listing can still say which compressor wraps the TAR.
-XBinary::HANDLE_METHOD tarcContainerCodec(
-    XTARCOMPRESSED::COMPRESSION_TYPE compressionType)
+XBinary::HANDLE_METHOD tarcContainerCodec(XTARCOMPRESSED::COMPRESSION_TYPE compressionType)
 {
     XBinary::HANDLE_METHOD result = XBinary::HANDLE_METHOD_UNKNOWN;
 
@@ -140,8 +143,7 @@ bool XTARCOMPRESSED::isValid(PDSTRUCT *pPdStruct)
 {
     QPointer<XTARCOMPRESSED> guardedArchive(this);
     QPointer<QIODevice> guardedDevice(guardedArchive->getDevice());
-    if (!guardedDevice || guardedDevice->isSequential() ||
-        !guardedArchive || !guardedDevice) {
+    if (!guardedDevice || guardedDevice->isSequential() || !guardedArchive || !guardedDevice) {
         return false;
     }
 
@@ -152,15 +154,12 @@ bool XTARCOMPRESSED::isValid(PDSTRUCT *pPdStruct)
 
     UNPACK_STATE state = {};
     const QMap<UNPACK_PROP, QVariant> mapProperties;
-    bool bResult = guardedArchive->initUnpack(
-        &state, mapProperties, pPdStruct);
+    bool bResult = guardedArchive->initUnpack(&state, mapProperties, pPdStruct);
     if (!guardedArchive) return false;
-    const bool bFinished = guardedArchive->finishUnpack(
-        &state, pPdStruct);
+    const bool bFinished = guardedArchive->finishUnpack(&state, pPdStruct);
     if (!guardedArchive || !guardedDevice || !bFinished) return false;
 
-    if (!guardedDevice->seek(nOriginalPosition) ||
-        !guardedArchive || !guardedDevice) {
+    if (!guardedDevice->seek(nOriginalPosition) || !guardedArchive || !guardedDevice) {
         bResult = false;
     }
 
@@ -183,11 +182,9 @@ bool XTARCOMPRESSED::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    const COMPRESSION_TYPE compressionType = detectCompressionType(
-        guardedDevice.data());
+    const COMPRESSION_TYPE compressionType = detectCompressionType(guardedDevice.data());
     if (!guardedDevice) return false;
-    QPointer<XArchive> guardedArchive(getCompressionClassInstance(
-        compressionType, guardedDevice.data()));
+    QPointer<XArchive> guardedArchive(getCompressionClassInstance(compressionType, guardedDevice.data()));
 
     if (!guardedArchive) {
         return false;
@@ -195,19 +192,16 @@ bool XTARCOMPRESSED::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
     UNPACK_STATE state = {};
     const QMap<UNPACK_PROP, QVariant> mapProperties;
-    bool bResult = guardedArchive->initUnpack(
-        &state, mapProperties, pPdStruct);
+    bool bResult = guardedArchive->initUnpack(&state, mapProperties, pPdStruct);
     if (guardedArchive) {
-        const bool bFinished = guardedArchive->finishUnpack(
-            &state, pPdStruct);
+        const bool bFinished = guardedArchive->finishUnpack(&state, pPdStruct);
         if (!guardedArchive || !bFinished) bResult = false;
     } else {
         bResult = false;
     }
     if (guardedArchive) delete guardedArchive.data();
 
-    if (!guardedDevice || !guardedDevice->seek(nOriginalPosition) ||
-        !guardedDevice) {
+    if (!guardedDevice || !guardedDevice->seek(nOriginalPosition) || !guardedDevice) {
         bResult = false;
     }
 
@@ -222,8 +216,7 @@ XTARCOMPRESSED::COMPRESSION_TYPE XTARCOMPRESSED::detectCompressionType(QIODevice
     }
 
     qint64 nOffset = guardedDevice->pos();
-    if (!guardedDevice || (nOffset < 0) ||
-        !guardedDevice->seek(0) || !guardedDevice) {
+    if (!guardedDevice || (nOffset < 0) || !guardedDevice->seek(0) || !guardedDevice) {
         return COMPRESSION_UNKNOWN;
     }
 
@@ -263,8 +256,8 @@ XTARCOMPRESSED::COMPRESSION_TYPE XTARCOMPRESSED::detectCompressionType(QIODevice
         } else if (bRead3 && (nByte0 == 0x28) && (nByte1 == 0xB5) && (nByte2 == 0x2F) && (nByte3 == 0xFD)) {
             result = COMPRESSION_ZSTD;
         } else if (bRead3 && (((nByte0 == 0x04) && (nByte1 == 0x22) && (nByte2 == 0x4D) && (nByte3 == 0x18)) ||
-                             ((nByte0 == 0x02) && (nByte1 == 0x21) && (nByte2 == 0x4C) && (nByte3 == 0x18)) ||
-                             ((nByte0 >= 0x50) && (nByte0 <= 0x5F) && (nByte1 == 0x2A) && (nByte2 == 0x4D) && (nByte3 == 0x18)))) {
+                              ((nByte0 == 0x02) && (nByte1 == 0x21) && (nByte2 == 0x4C) && (nByte3 == 0x18)) ||
+                              ((nByte0 >= 0x50) && (nByte0 <= 0x5F) && (nByte1 == 0x2A) && (nByte2 == 0x4D) && (nByte3 == 0x18)))) {
             result = COMPRESSION_LZ4;
         }
     }
@@ -340,33 +333,25 @@ bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
 {
     QPointer<XTARCOMPRESSED> guardedArchive(this);
     if (!pState || m_bUnpackOperationInProgress) return false;
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedArchive->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) {
         return false;
     }
-    if (!guardedArchive->finishUnpack(pState, nullptr) ||
-        !guardedArchive) return false;
+    if (!guardedArchive->finishUnpack(pState, nullptr) || !guardedArchive) return false;
     UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
     if (!operationGuard.isAcquired()) return false;
 
     qint64 nConfiguredOutputLimit = -1;
-    if (!XBinary::getUnpackOutputLimit(mapProperties,
-                                       &nConfiguredOutputLimit)) {
+    if (!XBinary::getUnpackOutputLimit(mapProperties, &nConfiguredOutputLimit)) {
         return false;
     }
     guardedArchive->m_nMaterializedOutputLimit =
-        (nConfiguredOutputLimit >= 0)
-            ? qMin(TARCOMPRESSED_MAX_DECOMPRESSED_SIZE,
-                   nConfiguredOutputLimit)
-            : TARCOMPRESSED_MAX_DECOMPRESSED_SIZE;
+        (nConfiguredOutputLimit >= 0) ? qMin(TARCOMPRESSED_MAX_DECOMPRESSED_SIZE, nConfiguredOutputLimit) : TARCOMPRESSED_MAX_DECOMPRESSED_SIZE;
 
     QPointer<QIODevice> guardedOriginal(guardedArchive->getDevice());
-    if (!guardedOriginal ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedOriginal || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
-    const bool bBound = guardedArchive->bindUnpackSource(
-        pState, pPdStruct);
+    const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
     if (!guardedArchive || !guardedOriginal || !bBound) return false;
 
     TARC_INITUNPACK_FAIL_CONTEXT failContext = {};
@@ -395,8 +380,7 @@ bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     }
 
     guardedArchive->m_pOriginalDevice = guardedOriginal;
-    QPointer<QIODevice> guardedDecompressed(
-        guardedArchive->decompressData(pPdStruct));
+    QPointer<QIODevice> guardedDecompressed(guardedArchive->decompressData(pPdStruct));
     if (!guardedArchive) {
         if (guardedDecompressed) delete guardedDecompressed.data();
         *pState = UNPACK_STATE();
@@ -404,8 +388,7 @@ bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     }
     guardedArchive->m_pDecompressedData = guardedDecompressed;
 
-    if (!guardedDecompressed || !guardedOriginal ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!guardedDecompressed || !guardedOriginal || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return tarcFailInitUnpack(&failContext);
     }
 
@@ -414,8 +397,7 @@ bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
     // invalidates the source snapshot held by the hardened extraction path.
     XTAR materializedArchive(guardedDecompressed.data());
     UNPACK_STATE materializedState = {};
-    bool bResult = materializedArchive.initUnpack(
-        &materializedState, mapProperties, pPdStruct);
+    bool bResult = materializedArchive.initUnpack(&materializedState, mapProperties, pPdStruct);
 
     if (!guardedArchive || !guardedDecompressed || !guardedOriginal) {
         materializedArchive.finishUnpack(&materializedState, nullptr);
@@ -423,24 +405,16 @@ bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
         return false;
     }
 
-    bResult = bResult && materializedState.pContext &&
-              (materializedState.nCurrentIndex == 0) &&
-              (materializedState.nNumberOfRecords > 0) &&
-              (materializedState.nCurrentIndex <
-               materializedState.nNumberOfRecords) &&
-              (materializedState.nCurrentOffset >= 0) &&
-              (materializedState.nTotalSize >= 0) &&
-              (materializedState.nCurrentOffset <=
-               materializedState.nTotalSize);
+    bResult = bResult && materializedState.pContext && (materializedState.nCurrentIndex == 0) && (materializedState.nNumberOfRecords > 0) &&
+              (materializedState.nCurrentIndex < materializedState.nNumberOfRecords) && (materializedState.nCurrentOffset >= 0) && (materializedState.nTotalSize >= 0) &&
+              (materializedState.nCurrentOffset <= materializedState.nTotalSize);
 
     if (bResult) {
-        UNPACK_CONTEXT *pContext =
-            static_cast<UNPACK_CONTEXT *>(materializedState.pContext);
+        UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(materializedState.pContext);
         qint64 nOuterStreamOffset = 0;
         qint64 nOuterStreamSize = 0;
         HANDLE_METHOD outerHandleMethod = HANDLE_METHOD_UNKNOWN;
-        (void)guardedArchive->getOuterStreamInfo(
-            nOuterStreamOffset, nOuterStreamSize, outerHandleMethod);
+        (void)guardedArchive->getOuterStreamInfo(nOuterStreamOffset, nOuterStreamSize, outerHandleMethod);
         if (!guardedArchive || !guardedOriginal || !guardedDecompressed) {
             *pState = UNPACK_STATE();
             return false;
@@ -457,8 +431,7 @@ bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
         materializedArchive.releaseUnpackSource(&materializedState);
         materializedState.pContext = nullptr;
         pState->pContext = pContext;
-        bResult = guardedArchive->validateAndFinalizeUnpackSource(
-            pState, pContext, pPdStruct);
+        bResult = guardedArchive->validateAndFinalizeUnpackSource(pState, pContext, pPdStruct);
         if (!guardedArchive) {
             return false;
         }
@@ -475,18 +448,14 @@ bool XTARCOMPRESSED::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QV
 
 XBinary::ARCHIVERECORD XTARCOMPRESSED::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 {
-    UNPACK_OPERATION_GUARD operationGuard(
-        &m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
     if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
     QPointer<XTARCOMPRESSED> guardedArchive(this);
 
-    if (!pState ||
-        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedArchive) {
+    if (!pState || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) {
         return XBinary::ARCHIVERECORD{};
     }
-    QPointer<QIODevice> guardedDecompressed(
-        guardedArchive->m_pDecompressedData);
+    QPointer<QIODevice> guardedDecompressed(guardedArchive->m_pDecompressedData);
     QPointer<QIODevice> guardedOriginal(guardedArchive->m_pOriginalDevice);
     if (!guardedDecompressed || !guardedOriginal) {
         return XBinary::ARCHIVERECORD{};
@@ -495,29 +464,21 @@ XBinary::ARCHIVERECORD XTARCOMPRESSED::infoCurrent(UNPACK_STATE *pState, PDSTRUC
     UNPACK_STATE materializedState = *pState;
     materializedState.pContext = nullptr;
     materializedState.baUnpackSourceToken.clear();
-    const bool bMaterializedBound =
-        materializedArchive.bindUnpackSource(&materializedState, pPdStruct);
+    const bool bMaterializedBound = materializedArchive.bindUnpackSource(&materializedState, pPdStruct);
     if (bMaterializedBound) materializedState.pContext = pState->pContext;
-    if (!bMaterializedBound ||
-        !materializedArchive.validateAndFinalizeUnpackSource(
-            &materializedState, pPdStruct) ||
-        !guardedArchive || !guardedDecompressed || !guardedOriginal) {
+    if (!bMaterializedBound || !materializedArchive.validateAndFinalizeUnpackSource(&materializedState, pPdStruct) || !guardedArchive || !guardedDecompressed ||
+        !guardedOriginal) {
         materializedArchive.releaseUnpackSource(&materializedState);
         return XBinary::ARCHIVERECORD{};
     }
-    XBinary::ARCHIVERECORD result =
-        materializedArchive.infoCurrent(&materializedState, pPdStruct);
+    XBinary::ARCHIVERECORD result = materializedArchive.infoCurrent(&materializedState, pPdStruct);
     materializedArchive.releaseUnpackSource(&materializedState);
     if (!guardedArchive || !guardedDecompressed || !guardedOriginal) {
         return XBinary::ARCHIVERECORD{};
     }
     const qint64 nDecompressedSize = guardedDecompressed->size();
-    if (!guardedArchive || !guardedDecompressed || !guardedOriginal ||
-        result.mapProperties.isEmpty() || (result.nStreamOffset < 0) ||
-        (result.nStreamSize < 0) || (nDecompressedSize < 0) ||
-        (result.nStreamOffset > nDecompressedSize) ||
-        (result.nStreamSize >
-         (nDecompressedSize - result.nStreamOffset))) {
+    if (!guardedArchive || !guardedDecompressed || !guardedOriginal || result.mapProperties.isEmpty() || (result.nStreamOffset < 0) || (result.nStreamSize < 0) ||
+        (nDecompressedSize < 0) || (result.nStreamOffset > nDecompressedSize) || (result.nStreamSize > (nDecompressedSize - result.nStreamOffset))) {
         return XBinary::ARCHIVERECORD{};
     }
     // Everything above was measured on m_pDecompressedData, a PRIVATE buffer
@@ -527,8 +488,7 @@ XBinary::ARCHIVERECORD XTARCOMPRESSED::infoCurrent(UNPACK_STATE *pState, PDSTRUC
     // member's exact length, which is corruption at the correct size and is
     // undetectable for a format (TAR) that publishes no payload checksum.
     const qint64 nOriginalSize = guardedOriginal->size();
-    if (!guardedArchive || !guardedDecompressed || !guardedOriginal ||
-        (nOriginalSize < 0)) {
+    if (!guardedArchive || !guardedDecompressed || !guardedOriginal || (nOriginalSize < 0)) {
         return XBinary::ARCHIVERECORD{};
     }
 
@@ -546,32 +506,22 @@ XBinary::ARCHIVERECORD XTARCOMPRESSED::infoCurrent(UNPACK_STATE *pState, PDSTRUC
     // the five index-paired families no longer have.  Public callers therefore
     // get the same index-paired archive-stream record those families get; the
     // solid decode below is unchanged and still runs for real extraction.
-    if ((guardedArchive->m_nOuterStreamSize > 0) &&
-        (guardedArchive->m_outerHandleMethod != HANDLE_METHOD_UNKNOWN) &&
-        guardedArchive->isSolidRecordAuthorized()) {
+    if ((guardedArchive->m_nOuterStreamSize > 0) && (guardedArchive->m_outerHandleMethod != HANDLE_METHOD_UNKNOWN) && guardedArchive->isSolidRecordAuthorized()) {
         // The republished extent has to be fully addressable on the original
         // compressed device, otherwise the pairing is not established.
-        if ((guardedArchive->m_nOuterStreamOffset < 0) ||
-            (guardedArchive->m_nOuterStreamOffset > nOriginalSize) ||
-            (guardedArchive->m_nOuterStreamSize >
-             (nOriginalSize - guardedArchive->m_nOuterStreamOffset))) {
+        if ((guardedArchive->m_nOuterStreamOffset < 0) || (guardedArchive->m_nOuterStreamOffset > nOriginalSize) ||
+            (guardedArchive->m_nOuterStreamSize > (nOriginalSize - guardedArchive->m_nOuterStreamOffset))) {
             return XBinary::ARCHIVERECORD{};
         }
         result.mapProperties.insert(FPART_PROP_SUBSTREAMOFFSET, result.nStreamOffset);
-        result.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
-                                    (quint32)guardedArchive->m_outerHandleMethod);
+        result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, (quint32)guardedArchive->m_outerHandleMethod);
         result.mapProperties.insert(FPART_PROP_ISSOLID, true);
         result.mapProperties.insert(FPART_PROP_SOLIDFOLDERINDEX, (qint64)0);
-        result.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE,
-                                    nDecompressedSize);
+        result.mapProperties.insert(FPART_PROP_STREAMUNPACKEDSIZE, nDecompressedSize);
         // Same display statement as the archive-stream branch below: the
         // republished extent is the container's single compressed stream, not
         // this member's own packed bytes.
-        result.mapProperties.insert(
-            FPART_PROP_INFO,
-            QString("%1 (whole-archive stream)")
-                .arg(XBinary::handleMethodToString(
-                    guardedArchive->m_outerHandleMethod)));
+        result.mapProperties.insert(FPART_PROP_INFO, QString("%1 (whole-archive stream)").arg(XBinary::handleMethodToString(guardedArchive->m_outerHandleMethod)));
         result.nStreamOffset = guardedArchive->m_nOuterStreamOffset;
         result.nStreamSize = guardedArchive->m_nOuterStreamSize;
     } else {
@@ -583,8 +533,7 @@ XBinary::ARCHIVERECORD XTARCOMPRESSED::infoCurrent(UNPACK_STATE *pState, PDSTRUC
         // way to extract it is back through this archive's own session
         // (_unpackRecordByIndex).  Offset-based decoding of such a record is
         // refused outright.
-        if (!XBinary::markArchiveStreamRecord(&result,
-                                              pState->nCurrentIndex)) {
+        if (!XBinary::markArchiveStreamRecord(&result, pState->nCurrentIndex)) {
             return XBinary::ARCHIVERECORD{};
         }
         // The record now carries no extent at all - not the private decoded
@@ -602,17 +551,12 @@ XBinary::ARCHIVERECORD XTARCOMPRESSED::infoCurrent(UNPACK_STATE *pState, PDSTRUC
         // plausible-looking prefix of the decoded TAR at exactly the member's
         // declared size - wrong bytes at the right size, the very failure this
         // record shape exists to prevent.  Only a descriptive string is safe.
-        const HANDLE_METHOD containerCodec =
-            tarcContainerCodec(guardedArchive->m_compressionType);
+        const HANDLE_METHOD containerCodec = tarcContainerCodec(guardedArchive->m_compressionType);
         if (containerCodec != HANDLE_METHOD_UNKNOWN) {
-            result.mapProperties.insert(
-                FPART_PROP_INFO,
-                QString("%1 (whole-archive stream)")
-                    .arg(XBinary::handleMethodToString(containerCodec)));
+            result.mapProperties.insert(FPART_PROP_INFO, QString("%1 (whole-archive stream)").arg(XBinary::handleMethodToString(containerCodec)));
         }
     }
-    if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedArchive || !guardedDecompressed || !guardedOriginal) {
+    if (!guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive || !guardedDecompressed || !guardedOriginal) {
         return XBinary::ARCHIVERECORD{};
     }
     return result;
@@ -627,8 +571,7 @@ QIODevice *XTARCOMPRESSED::getRecordStreamDevice(UNPACK_STATE *pState)
     // on the original compressed file - is now built exclusively for this
     // class's own decode (see infoCurrent), so this answer is about that
     // internal shape; no published record carries an extent on either device.
-    if ((m_nOuterStreamSize > 0) &&
-        (m_outerHandleMethod != HANDLE_METHOD_UNKNOWN)) {
+    if ((m_nOuterStreamSize > 0) && (m_outerHandleMethod != HANDLE_METHOD_UNKNOWN)) {
         return m_pOriginalDevice.data();
     }
 
@@ -649,42 +592,29 @@ bool XTARCOMPRESSED::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     if (!operationGuard.isAcquired()) return false;
     QPointer<XTARCOMPRESSED> guardedArchive(this);
 
-    if (!pState ||
-        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedArchive) {
+    if (!pState || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) {
         return false;
     }
-    QPointer<QIODevice> guardedDecompressed(
-        guardedArchive->m_pDecompressedData);
+    QPointer<QIODevice> guardedDecompressed(guardedArchive->m_pDecompressedData);
     QPointer<QIODevice> guardedOriginal(guardedArchive->m_pOriginalDevice);
     if (!guardedDecompressed || !guardedOriginal) return false;
     XTAR materializedArchive(guardedDecompressed.data());
     UNPACK_STATE materializedState = *pState;
     materializedState.pContext = nullptr;
     materializedState.baUnpackSourceToken.clear();
-    const bool bMaterializedBound =
-        materializedArchive.bindUnpackSource(&materializedState, pPdStruct);
+    const bool bMaterializedBound = materializedArchive.bindUnpackSource(&materializedState, pPdStruct);
     if (bMaterializedBound) materializedState.pContext = pState->pContext;
-    if (!bMaterializedBound ||
-        !materializedArchive.validateAndFinalizeUnpackSource(
-            &materializedState, pPdStruct) ||
-        !guardedArchive || !guardedDecompressed || !guardedOriginal) {
+    if (!bMaterializedBound || !materializedArchive.validateAndFinalizeUnpackSource(&materializedState, pPdStruct) || !guardedArchive || !guardedDecompressed ||
+        !guardedOriginal) {
         materializedArchive.releaseUnpackSource(&materializedState);
         return false;
     }
-    const bool bResult = materializedArchive.moveToNext(
-        &materializedState, pPdStruct);
+    const bool bResult = materializedArchive.moveToNext(&materializedState, pPdStruct);
     materializedArchive.releaseUnpackSource(&materializedState);
-    if (!guardedArchive || !guardedDecompressed || !guardedOriginal ||
-        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedArchive || (materializedState.nCurrentIndex < 0) ||
-        (materializedState.nNumberOfRecords <= 0) ||
-        (materializedState.nCurrentIndex >
-         materializedState.nNumberOfRecords) ||
-        (materializedState.nCurrentOffset < 0) ||
-        (materializedState.nTotalSize < 0) ||
-        (materializedState.nCurrentOffset >
-         materializedState.nTotalSize)) return false;
+    if (!guardedArchive || !guardedDecompressed || !guardedOriginal || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive ||
+        (materializedState.nCurrentIndex < 0) || (materializedState.nNumberOfRecords <= 0) || (materializedState.nCurrentIndex > materializedState.nNumberOfRecords) ||
+        (materializedState.nCurrentOffset < 0) || (materializedState.nTotalSize < 0) || (materializedState.nCurrentOffset > materializedState.nTotalSize))
+        return false;
     pState->nCurrentOffset = materializedState.nCurrentOffset;
     pState->nCurrentIndex = materializedState.nCurrentIndex;
     return bResult;
@@ -694,33 +624,23 @@ bool XTARCOMPRESSED::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
 {
     QPointer<XTARCOMPRESSED> guardedArchive(this);
     QPointer<QIODevice> guardedOutput(pDevice);
-    if (!pState || !guardedOutput ||
-        !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
-        !guardedArchive) {
+    if (!pState || !guardedOutput || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive) {
         return false;
     }
     QPointer<QIODevice> guardedOriginal(guardedArchive->m_pOriginalDevice);
-    QPointer<QIODevice> guardedDecompressed(
-        guardedArchive->m_pDecompressedData);
-    if (!guardedOriginal || !guardedDecompressed ||
-        !guardedOutput->isOpen() || !guardedArchive || !guardedOutput ||
-        !guardedOutput->isWritable() || !guardedArchive || !guardedOutput ||
-        guardedOutput->isSequential() || !guardedArchive || !guardedOutput) {
+    QPointer<QIODevice> guardedDecompressed(guardedArchive->m_pDecompressedData);
+    if (!guardedOriginal || !guardedDecompressed || !guardedOutput->isOpen() || !guardedArchive || !guardedOutput || !guardedOutput->isWritable() || !guardedArchive ||
+        !guardedOutput || guardedOutput->isSequential() || !guardedArchive || !guardedOutput) {
         return false;
     }
     const QIODevice::OpenMode outputMode = guardedOutput->openMode();
-    if (!guardedArchive || !guardedOutput ||
-        (outputMode & (QIODevice::Append | QIODevice::Text)) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct) ||
-        !guardedOriginal || !guardedDecompressed) return false;
-    const bool bAliases = XBinary::devicesAlias(
-        guardedOriginal.data(), guardedOutput.data());
-    if (!guardedArchive || !guardedOutput || !guardedOriginal ||
-        !guardedDecompressed || bAliases) return false;
+    if (!guardedArchive || !guardedOutput || (outputMode & (QIODevice::Append | QIODevice::Text)) || !XBinary::isPdStructNotCanceled(pPdStruct) || !guardedOriginal ||
+        !guardedDecompressed)
+        return false;
+    const bool bAliases = XBinary::devicesAlias(guardedOriginal.data(), guardedOutput.data());
+    if (!guardedArchive || !guardedOutput || !guardedOriginal || !guardedDecompressed || bAliases) return false;
 
-    const bool bHasOuterStream =
-        (guardedArchive->m_nOuterStreamSize > 0) &&
-        (guardedArchive->m_outerHandleMethod != HANDLE_METHOD_UNKNOWN);
+    const bool bHasOuterStream = (guardedArchive->m_nOuterStreamSize > 0) && (guardedArchive->m_outerHandleMethod != HANDLE_METHOD_UNKNOWN);
     bool bResult = false;
 
     if (bHasOuterStream) {
@@ -735,21 +655,16 @@ bool XTARCOMPRESSED::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
         // because it is the code that actually decodes that stream and cuts
         // this member out of it.  Nothing escapes: the record never leaves
         // XArchive::unpackCurrent().
-        PRIVATE_RECORD_AUTHORIZATION solidAuthorization(
-            guardedArchive->m_pUnpackGuardState);
+        PRIVATE_RECORD_AUTHORIZATION solidAuthorization(guardedArchive->m_pUnpackGuardState);
         if (!solidAuthorization.isAuthorized()) return false;
-        bResult = guardedArchive->XTAR::unpackCurrent(
-            pState, guardedOutput.data(), pPdStruct);
-        if (!guardedArchive || !guardedOutput || !guardedOriginal ||
-            !guardedDecompressed) return false;
+        bResult = guardedArchive->XTAR::unpackCurrent(pState, guardedOutput.data(), pPdStruct);
+        if (!guardedArchive || !guardedOutput || !guardedOriginal || !guardedDecompressed) return false;
     } else {
         // The local TAR view owns its own source token.  Keeping the outer
         // archive bound to the compressed source avoids generation changes
         // and lets reentrant finish/setDevice attempts fail at this guard.
         UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress);
-        if (!operationGuard.isAcquired() ||
-            !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) ||
-            !guardedArchive || !guardedDecompressed || !guardedOriginal) {
+        if (!operationGuard.isAcquired() || !guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) || !guardedArchive || !guardedDecompressed || !guardedOriginal) {
             return false;
         }
 
@@ -757,24 +672,17 @@ bool XTARCOMPRESSED::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
         UNPACK_STATE materializedState = *pState;
         materializedState.pContext = nullptr;
         materializedState.baUnpackSourceToken.clear();
-        const bool bMaterializedBound = materializedArchive.bindUnpackSource(
-            &materializedState, pPdStruct);
+        const bool bMaterializedBound = materializedArchive.bindUnpackSource(&materializedState, pPdStruct);
         if (bMaterializedBound) materializedState.pContext = pState->pContext;
-        if (!bMaterializedBound ||
-            !materializedArchive.validateAndFinalizeUnpackSource(
-                &materializedState, pPdStruct) ||
-            !guardedArchive || !guardedOutput || !guardedOriginal ||
-            !guardedDecompressed) {
+        if (!bMaterializedBound || !materializedArchive.validateAndFinalizeUnpackSource(&materializedState, pPdStruct) || !guardedArchive || !guardedOutput ||
+            !guardedOriginal || !guardedDecompressed) {
             materializedArchive.releaseUnpackSource(&materializedState);
             return false;
         }
-        bResult = materializedArchive.unpackCurrent(
-            &materializedState, guardedOutput.data(), pPdStruct);
+        bResult = materializedArchive.unpackCurrent(&materializedState, guardedOutput.data(), pPdStruct);
         materializedArchive.releaseUnpackSource(&materializedState);
 
-        if (guardedArchive && guardedOutput && guardedOriginal &&
-            guardedDecompressed && bResult &&
-            guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) &&
+        if (guardedArchive && guardedOutput && guardedOriginal && guardedDecompressed && bResult && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) &&
             guardedArchive) {
             pState->nCurrentOffset = materializedState.nCurrentOffset;
         } else {
@@ -786,11 +694,8 @@ bool XTARCOMPRESSED::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDS
         }
     }
 
-    return bResult && guardedArchive && guardedOutput && guardedOriginal &&
-           guardedDecompressed &&
-           guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) &&
-           guardedArchive && guardedOutput && guardedOriginal &&
-           guardedDecompressed;
+    return bResult && guardedArchive && guardedOutput && guardedOriginal && guardedDecompressed && guardedArchive->isUnpackSourceCurrent(pState, pPdStruct) &&
+           guardedArchive && guardedOutput && guardedOriginal && guardedDecompressed;
 }
 
 bool XTARCOMPRESSED::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
@@ -802,19 +707,16 @@ bool XTARCOMPRESSED::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     Q_UNUSED(pPdStruct)
 
     if (!pState) return false;
-    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) &&
-        !guardedArchive->ownsUnpackSource(pState)) {
+    if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) {
         return false;
     }
-    UNPACK_CONTEXT *pContext =
-        static_cast<UNPACK_CONTEXT *>(pState->pContext);
+    UNPACK_CONTEXT *pContext = static_cast<UNPACK_CONTEXT *>(pState->pContext);
     guardedArchive->releaseUnpackSource(pState);
     pState->pContext = nullptr;
     delete pContext;
 
     if (guardedArchive->m_pDecompressedData) {
-        QPointer<QIODevice> guardedDecompressed(
-            guardedArchive->m_pDecompressedData);
+        QPointer<QIODevice> guardedDecompressed(guardedArchive->m_pDecompressedData);
         guardedArchive->m_pDecompressedData = nullptr;
         if (guardedDecompressed) delete guardedDecompressed.data();
         if (!guardedArchive) {
@@ -857,8 +759,7 @@ QIODevice *XTARCOMPRESSED::decompressByMethod(HANDLE_METHOD handleMethod, qint64
 
     const qint64 nDeviceSize = guardedDevice->size();
     if (!guardedArchive || !guardedDevice) return nullptr;
-    if ((nOffset < 0) || (nInputSize <= 0) || (nDeviceSize < 0) || (nOffset > nDeviceSize) ||
-        (nInputSize > (nDeviceSize - nOffset))) {
+    if ((nOffset < 0) || (nInputSize <= 0) || (nDeviceSize < 0) || (nOffset > nDeviceSize) || (nInputSize > (nDeviceSize - nOffset))) {
         return nullptr;
     }
 
@@ -877,8 +778,7 @@ QIODevice *XTARCOMPRESSED::decompressByMethod(HANDLE_METHOD handleMethod, qint64
     state.nInputLimit = nInputSize;
     state.nProcessedOffset = 0;
     state.nProcessedLimit = -1;
-    state.mapUnpackProperties.insert(UNPACK_PROP_MAX_OUTPUT_SIZE,
-                                     nOutputLimit);
+    state.mapUnpackProperties.insert(UNPACK_PROP_MAX_OUTPUT_SIZE, nOutputLimit);
     state.mapProperties.insert(FPART_PROP_HANDLEMETHOD, handleMethod);
 
     XDecompress decompress;
@@ -894,10 +794,8 @@ QIODevice *XTARCOMPRESSED::decompressByMethod(HANDLE_METHOD handleMethod, qint64
     // reported failure.  Do not admit a parseable TAR prefix from a truncated or
     // checksum-invalid compressed stream, and require the exact bounded source
     // extent to have been consumed.
-    const bool bComplete = bDecoded && !state.bReadError && !state.bWriteError && !output.isLimitExceeded() &&
-                           XBinary::isPdStructNotCanceled(pPdStruct) && (state.nCountInput == nInputSize) &&
-                           (state.nCountOutput == baData.size()) && (state.nCountOutput > 0) &&
-                           (state.nCountOutput <= nOutputLimit);
+    const bool bComplete = bDecoded && !state.bReadError && !state.bWriteError && !output.isLimitExceeded() && XBinary::isPdStructNotCanceled(pPdStruct) &&
+                           (state.nCountInput == nInputSize) && (state.nCountOutput == baData.size()) && (state.nCountOutput > 0) && (state.nCountOutput <= nOutputLimit);
     if (!bComplete) {
         baData.clear();
         return nullptr;
@@ -931,12 +829,9 @@ bool XTARCOMPRESSED::handleInternalInfo(PDSTRUCT *pPdStruct)
     if (!isInternalInfoHandled()) {
         bResult = guardedThis->XTAR::handleInternalInfo(pPdStruct);
         if (!guardedThis || !bResult) return false;
-        XTAR::INTERNAL_INFO *pInfo =
-            static_cast<XTAR::INTERNAL_INFO *>(
-                guardedThis->XTAR::getInternalInfo(pPdStruct));
+        XTAR::INTERNAL_INFO *pInfo = static_cast<XTAR::INTERNAL_INFO *>(guardedThis->XTAR::getInternalInfo(pPdStruct));
         if (!guardedThis || !pInfo) return false;
-        static_cast<XTAR::INTERNAL_INFO &>(
-            guardedThis->m_internalInfo) = *pInfo;
+        static_cast<XTAR::INTERNAL_INFO &>(guardedThis->m_internalInfo) = *pInfo;
     }
 
     return guardedThis && bResult;

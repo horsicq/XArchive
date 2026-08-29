@@ -47,6 +47,7 @@ public:
 
 private:
     QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
+
 private:
     INTERNAL_INFO m_internalInfo;
 };

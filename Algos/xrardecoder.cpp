@@ -478,11 +478,8 @@ void rar_Unpack::UnpWriteData(quint8 *Data, size_t Size)
 bool rar_Unpack::WriteOutput(const quint8 *pData, size_t nSize)
 {
     if (WriteError) return false;
-    if (!m_pDeviceOutput || ((nSize > 0) && !pData) ||
-        (nSize > (size_t)(std::numeric_limits<qint64>::max)()) ||
-        (ExpectedFileSize < 0) || (PublishedFileSize < 0) ||
-        (PublishedFileSize > ExpectedFileSize) ||
-        ((qint64)nSize > (ExpectedFileSize - PublishedFileSize))) {
+    if (!m_pDeviceOutput || ((nSize > 0) && !pData) || (nSize > (size_t)(std::numeric_limits<qint64>::max)()) || (ExpectedFileSize < 0) || (PublishedFileSize < 0) ||
+        (PublishedFileSize > ExpectedFileSize) || ((qint64)nSize > (ExpectedFileSize - PublishedFileSize))) {
         WriteError = true;
         return false;
     }
