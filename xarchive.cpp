@@ -26,6 +26,7 @@
 #include "Algos/xcoktellzdecoder.h"
 #include "Algos/xwinzipjpegdecoder.h"
 #include "Algos/xwavpackdecoder.h"
+#include "Algos/xamigalzxdecoder.h"
 
 #include <algorithm>
 #include <limits>
@@ -1512,6 +1513,29 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
+    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_AMIGA_LZX) {
+        XBinary::DATAPROCESS_STATE decompressState = {};
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_AMIGA_LZX);
+        decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
+        decompressState.pDeviceInput = pDecompressStruct->pSourceDevice;
+        decompressState.pDeviceOutput = pDecompressStruct->pDestDevice;
+        decompressState.nInputOffset = 0;
+        decompressState.nInputLimit = nDefaultInputLimit;
+        decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
+        decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
+
+        if (XAmigaLZXDecoder::decompress(&decompressState, pPdStruct)) {
+            pDecompressStruct->nInSize = decompressState.nCountInput;
+            pDecompressStruct->nOutSize = decompressState.nCountOutput;
+            pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);
+            result = COMPRESS_RESULT_OK;
+        } else if (decompressState.bReadError) {
+            result = COMPRESS_RESULT_READERROR;
+        } else if (decompressState.bWriteError) {
+            result = COMPRESS_RESULT_WRITEERROR;
+        } else {
+            result = COMPRESS_RESULT_DATAERROR;
+        }
     } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_PPMD8) {
         XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_PPMD8);
@@ -1537,7 +1561,8 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
                 result = COMPRESS_RESULT_DATAERROR;
             }
         }
-    } else if (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_DEFLATE) {
+    } else if ((pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_DEFLATE) ||
+               (pDecompressStruct->spInfo.compressMethod == HANDLE_METHOD_WISE_DEFLATE)) {
         XBinary::DATAPROCESS_STATE decompressState = {};
         decompressState.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_DEFLATE);
         decompressState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, pDecompressStruct->spInfo.nUncompressedSize);
@@ -1548,7 +1573,10 @@ XArchive::COMPRESS_RESULT XArchive::_decompress(DECOMPRESSSTRUCT *pDecompressStr
         decompressState.nProcessedOffset = pDecompressStruct->nDecompressedOffset;
         decompressState.nProcessedLimit = pDecompressStruct->nDecompressedLimit;
 
-        if (XDeflateDecoder::decompress(&decompressState, pPdStruct)) {
+        if (XDeflateDecoder::decompress(
+                &decompressState, pPdStruct,
+                pDecompressStruct->spInfo.compressMethod ==
+                    HANDLE_METHOD_WISE_DEFLATE)) {
             pDecompressStruct->nInSize = decompressState.nCountInput;
             pDecompressStruct->nOutSize = decompressState.nCountOutput;
             pDecompressStruct->bLimit = (pDecompressStruct->nDecompressedLimit != -1) && (decompressState.nCountOutput >= nWindowEnd);

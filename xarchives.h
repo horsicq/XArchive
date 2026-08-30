@@ -55,8 +55,10 @@ public:
     static bool decompressToFile(const QString &sFileName, const QString &sRecordFileName, const QString &sResultFileName, XBinary::PDSTRUCT *pPdStruct = nullptr,
                                  const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties = QMap<XBinary::UNPACK_PROP, QVariant>());
     static bool decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    // pnSkippedEntries (optional): members skipped by
+    // UNPACK_PROP_CONTINUEONERROR on a successful best-effort run.
     static bool decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties,
-                                   XBinary::PDSTRUCT *pPdStruct = nullptr);
+                                   XBinary::PDSTRUCT *pPdStruct = nullptr, qint32 *pnSkippedEntries = nullptr);
     static bool decompressToFolder(const QString &sFileName, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(const QString &sFileName, const QString &sResultFileFolder, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties,
                                    XBinary::PDSTRUCT *pPdStruct = nullptr);

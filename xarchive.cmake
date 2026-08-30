@@ -19,12 +19,61 @@ if (NOT DEFINED XZIP_SOURCES)
     set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XZIP_SOURCES})
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/ancient.cmake")
+set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XARCHIVE_ANCIENT_SOURCES})
+include("${CMAKE_CURRENT_LIST_DIR}/deark.cmake")
+set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XARCHIVE_DEARK_SOURCES})
+include("${CMAKE_CURRENT_LIST_DIR}/libdsk.cmake")
+set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XARCHIVE_LIBDSK_SOURCES})
+
 #include(${CMAKE_CURRENT_LIST_DIR}/../Formats/exec/xmach.cmake)
 
 set(XARCHIVE_SOURCES
     ${XARCHIVE_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/x_ar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/x_ar.h
+    ${CMAKE_CURRENT_LIST_DIR}/xancient.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xancient.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlegacyencoded.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlegacyencoded.h
+    ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xcompactproarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xcompactproarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xdiskdoublerarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xdiskdoublerarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmaclegacydecoders.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmaclegacydecoders.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpaxdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpaxdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvisedeflatedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvisedeflatedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/xpyinstallercarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xpyinstallercarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xwisesfxarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xwisesfxarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlegacystorearchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlegacystorearchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xconcatziparchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xconcatziparchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xdiskjugglerarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xdiskjugglerarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xapplesingle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xapplesingle.h
+    ${CMAKE_CURRENT_LIST_DIR}/x2img.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/x2img.h
+    ${CMAKE_CURRENT_LIST_DIR}/xpyz.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xpyz.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlzxarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlzxarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xmacbinary.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xmacbinary.h
+    ${CMAKE_CURRENT_LIST_DIR}/xresourcefork.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xresourcefork.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlbr.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlbr.h
     ${CMAKE_CURRENT_LIST_DIR}/xseaarc.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xseaarc.h
     ${CMAKE_CURRENT_LIST_DIR}/xexternalarchive.cpp
@@ -57,6 +106,14 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/games/xwad.h
     ${CMAKE_CURRENT_LIST_DIR}/games/xgrp.cpp
     ${CMAKE_CURRENT_LIST_DIR}/games/xgrp.h
+    ${CMAKE_CURRENT_LIST_DIR}/games/xhog.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/games/xhog.h
+    ${CMAKE_CURRENT_LIST_DIR}/games/xwolfvswap.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/games/xwolfvswap.h
+    ${CMAKE_CURRENT_LIST_DIR}/games/xwintermutedcp.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/games/xwintermutedcp.h
+    ${CMAKE_CURRENT_LIST_DIR}/games/xt64.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/games/xt64.h
     ${CMAKE_CURRENT_LIST_DIR}/games/xgamestorearchive_p.cpp
     ${CMAKE_CURRENT_LIST_DIR}/games/xgamestorearchive_p.h
     ${CMAKE_CURRENT_LIST_DIR}/games/xckp.cpp

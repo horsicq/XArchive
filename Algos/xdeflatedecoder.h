@@ -28,7 +28,9 @@ class XDeflateDecoder : public QObject {
     Q_OBJECT
 public:
     explicit XDeflateDecoder(QObject *parent = nullptr);
-    static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState,
+                           XBinary::PDSTRUCT *pPdStruct = nullptr,
+                           bool bAcceptExactOutputAtEOF = false);
     static bool decompress64(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompress_zlib(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool compress(XBinary::DATAPROCESS_STATE *pCompressState, XBinary::PDSTRUCT *pPdStruct = nullptr, int nCompressionLevel = Z_DEFAULT_COMPRESSION);

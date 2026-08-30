@@ -419,8 +419,9 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
 }
 
 bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties,
-                                   XBinary::PDSTRUCT *pPdStruct)
+                                   XBinary::PDSTRUCT *pPdStruct, qint32 *pnSkippedEntries)
 {
+    if (pnSkippedEntries) *pnSkippedEntries = 0;
     if (!pDevice) return false;
 
     XBinary::PDSTRUCT pdStructEmpty = {};
@@ -434,7 +435,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
     XBinary *pBinary = XFormats::createClass(fileType, pDevice);
 
     if (pBinary && XFormats::isStaticUnpacker(fileType)) {
-        const bool bResult = pBinary->unpackToFolder(sResultFileFolder, mapProperties, pPdStruct);
+        const bool bResult = pBinary->unpackToFolder(sResultFileFolder, mapProperties, pPdStruct, pnSkippedEntries);
         delete pBinary;
         return bResult;
     }
@@ -449,7 +450,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
     // property-aware implementation inherited from XBinary.  Call the base
     // implementation explicitly so passwords and the other unpack options are
     // preserved for the complete streaming operation.
-    bool bResult = pArchive->XBinary::unpackToFolder(sResultFileFolder, mapProperties, pPdStruct);
+    bool bResult = pArchive->XBinary::unpackToFolder(sResultFileFolder, mapProperties, pPdStruct, pnSkippedEntries);
 
     // Keep compatibility with formats that only implement the legacy RECORD
     // API.  Property-aware streaming is always attempted first; the legacy
@@ -661,6 +662,65 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_QUAKE_PAK);
     result.insert(XBinary::FT_DOOM_WAD);
     result.insert(XBinary::FT_BUILD_GRP);
+    result.insert(XBinary::FT_DESCENT_HOG);
+    result.insert(XBinary::FT_WOLF_VSWAP);
+    result.insert(XBinary::FT_WINTERMUTE_DCP);
+    result.insert(XBinary::FT_PYINSTALLER_PYZ);
+    result.insert(XBinary::FT_AMIGA_LZX);
+    result.insert(XBinary::FT_DEARK_LEGACY_ARCHIVE);
+    result.insert(XBinary::FT_LIBDSK_IMAGE);
+    result.insert(XBinary::FT_COMPACT_PRO);
+    result.insert(XBinary::FT_DISK_DOUBLER);
+    result.insert(XBinary::FT_DISK_DOUBLER_DDA2);
+    result.insert(XBinary::FT_LEGACY_CAT);
+    result.insert(XBinary::FT_KA_ARCHIVE);
+    result.insert(XBinary::FT_MLB_ARCHIVE);
+    result.insert(XBinary::FT_LEGACY_RES);
+    result.insert(XBinary::FT_LEGACY_RSC);
+    result.insert(XBinary::FT_SHRINKWRAP_IMAGE);
+    result.insert(XBinary::FT_LPAK);
+    result.insert(XBinary::FT_DISKJUGGLER_CDI);
+    result.insert(XBinary::FT_INSTALLSHIELD_BOOT);
+    result.insert(XBinary::FT_SABDU_IMAGE);
+    result.insert(XBinary::FT_COMPAQ_LZH);
+    result.insert(XBinary::FT_WISE_SFX);
+    result.insert(XBinary::FT_EPFS_ARCHIVE);
+    result.insert(XBinary::FT_STUNTS_DSI);
+    result.insert(XBinary::FT_FINSTALL_ARCHIVE);
+    result.insert(XBinary::FT_IS_STORED);
+    result.insert(XBinary::FT_INSTALLSHIELD3_ARCHIVE);
+    result.insert(XBinary::FT_EMT_IMAGE);
+    result.insert(XBinary::FT_GPFPACK);
+    result.insert(XBinary::FT_PAX);
+    result.insert(XBinary::FT_SCF);
+    result.insert(XBinary::FT_SOLITAIRE_DELUXE);
+    result.insert(XBinary::FT_INSTALIT_DATA);
+    result.insert(XBinary::FT_ARCV);
+    result.insert(XBinary::FT_PIMP_SFX);
+    result.insert(XBinary::FT_VISE_SFX);
+    result.insert(XBinary::FT_FTCOMP);
+    result.insert(XBinary::FT_DN_ARCHIVE);
+    result.insert(XBinary::FT_FPAK);
+    result.insert(XBinary::FT_SOFTPAQ1_SFX);
+    result.insert(XBinary::FT_INSTALIT_SFX);
+    result.insert(XBinary::FT_LIF_COMPRESSED);
+    result.insert(XBinary::FT_JASC_ARCHIVE);
+    result.insert(XBinary::FT_SSM_MODULE);
+    result.insert(XBinary::FT_LHASFX);
+    result.insert(XBinary::FT_C64_T64);
+    result.insert(XBinary::FT_APPLESINGLE);
+    result.insert(XBinary::FT_APPLE_2IMG);
+    result.insert(XBinary::FT_MACBINARY);
+    result.insert(XBinary::FT_RESOURCE_FORK);
+    result.insert(XBinary::FT_CPM_LBR);
+    result.insert(XBinary::FT_DMS);
+    result.insert(XBinary::FT_PP20);
+    result.insert(XBinary::FT_RNC);
+    result.insert(XBinary::FT_TPWM);
+    result.insert(XBinary::FT_FREEZE);
+    result.insert(XBinary::FT_UNIX_PACK);
+    result.insert(XBinary::FT_BINHEX);
+    result.insert(XBinary::FT_BTOA);
     result.insert(XBinary::FT_RIB);
     result.insert(XBinary::FT_PARSEC_ARCHIVE);
     result.insert(XBinary::FT_PMM);

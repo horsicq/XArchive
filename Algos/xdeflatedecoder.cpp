@@ -10392,7 +10392,9 @@ XDeflateDecoder::XDeflateDecoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState,
+                                 XBinary::PDSTRUCT *pPdStruct,
+                                 bool bAcceptExactOutputAtEOF)
 {
     bool bResult = false;
 
@@ -10419,7 +10421,22 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
                 strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
 
                 if (strm.avail_in == 0) {
-                    ret = Z_ERRNO;
+                    const bool bExpectedSizeDefined =
+                        pDecompressState->mapProperties.contains(
+                            XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
+                    const qint64 nExpectedSize = bExpectedSizeDefined
+                        ? pDecompressState->mapProperties
+                              .value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)
+                              .toLongLong()
+                        : -1;
+                    if (bAcceptExactOutputAtEOF && nExpectedSize >= 0 &&
+                        pDecompressState->nCountInput ==
+                            pDecompressState->nInputLimit &&
+                        pDecompressState->nCountOutput == nExpectedSize) {
+                        ret = Z_STREAM_END;
+                    } else {
+                        ret = Z_ERRNO;
+                    }
                     break;
                 }
 
@@ -10464,6 +10481,15 @@ bool XDeflateDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
             X_inflateEnd(&strm);
 
             bResult = (ret == Z_STREAM_END);
+            if (bResult && bAcceptExactOutputAtEOF) {
+                const qint64 nExpectedSize = pDecompressState->mapProperties
+                    .value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, -1)
+                    .toLongLong();
+                bResult = nExpectedSize >= 0 &&
+                          pDecompressState->nCountInput ==
+                              pDecompressState->nInputLimit &&
+                          pDecompressState->nCountOutput == nExpectedSize;
+            }
         }
 
         delete[] bufferIn;

@@ -52,6 +52,8 @@ public:
         CMETHOD_CRUNCHED3 = 7,  // Crunched with pack
         CMETHOD_CRUNCHED4 = 8,  // Crunched (LZW dynamic)
         CMETHOD_SQUASHED = 9,   // Squashed (LZW 13-bit)
+        CMETHOD_CRUSHED = 10,   // PAK: Crushed
+        CMETHOD_DISTILLED = 11  // PAK: Distilled
     };
 
     explicit XSEAARC(QIODevice *pDevice = nullptr);

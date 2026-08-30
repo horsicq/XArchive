@@ -111,6 +111,8 @@ set(XZIP_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrunlengthdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xamigalzxdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xamigalzxdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbrotlidecoder.cpp

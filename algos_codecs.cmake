@@ -51,6 +51,13 @@ if(NOT TARGET zlib)
     target_include_directories(zlib PUBLIC "${XARCHIVE_ALGOS_DIR}/include")
     set_target_properties(zlib PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 14
         POSITION_INDEPENDENT_CODE ON AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
+    # The amalgamated inflate/deflate implementation is prohibitively slow at
+    # -O0 (large installer streams can take minutes merely to enumerate). Keep
+    # debug information, but optimize this third-party codec target just as the
+    # system zlib builds used by release distributions are optimized.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(zlib PRIVATE "$<$<CONFIG:Debug>:-O2>")
+    endif()
     if(MSVC)
         target_compile_definitions(zlib PRIVATE _CRT_SECURE_NO_WARNINGS)
     endif()

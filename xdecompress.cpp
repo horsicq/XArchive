@@ -23,13 +23,22 @@
 #include "xpng.h"
 #include "Algos/algo_utils.h"
 #include "Algos/xkwajlzssdecoder.h"
+#include "Algos/xlzssdecoder.h"
 #include "Algos/xkwajlzhdecoder.h"
 #include "Algos/xcoktellzdecoder.h"
 #include "Algos/xwinzipjpegdecoder.h"
 #include "Algos/xwavpackdecoder.h"
+#include "Algos/xamigalzxdecoder.h"
+#include "Algos/xmaclegacydecoders.h"
+#include "Algos/xpaxdecoder.h"
+#include "Algos/xvisedeflatedecoder.h"
 #include <QCoreApplication>
 #include <QPointer>
+#include <QVector>
+#include <QtEndian>
 #include <algorithm>
+#include <array>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <new>
@@ -471,6 +480,103 @@ static bool decPrepareBoundedInput(QIODevice *pDevice, qint64 nOffset, qint64 nL
     *pnEffectiveLimit = nLimit;
     return true;
 }
+
+static bool decGpfPack(const QByteArray &packed, qint32 expectedSize,
+                       QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!output || expectedSize < 1 || packed.size() < 5) return false;
+    QByteArray result;
+    result.reserve(expectedSize);
+    qint64 offset = 0;
+    while (offset < packed.size() &&
+           XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (packed.size() - offset < 4) return false;
+        const uchar *base = reinterpret_cast<const uchar *>(packed.constData());
+        const quint32 compressedBits = qFromLittleEndian<quint32>(base + offset);
+        offset += 4;
+        const qint64 compressedBytes = (qint64(compressedBits) + 7) / 8;
+        if (!compressedBits || compressedBytes < 1 ||
+            compressedBytes > packed.size() - offset) return false;
+        const uchar *data = base + offset;
+        QVector<quint16> prefix(4096, 0);
+        QByteArray suffix(4096, 0);
+        QByteArray stack(8192, 0);
+        QByteArray block;
+        block.reserve(8192);
+        quint32 bitPosition = 0;
+        quint32 codeBits = 9;
+        quint32 nextCode = 258;
+        quint32 previousCode = 0;
+        quint8 previousFirst = 0;
+        bool havePrevious = false;
+
+        auto getCode = [&](quint32 *code) -> bool {
+            if (!code || bitPosition + codeBits > compressedBits) return false;
+            quint32 value = 0;
+            for (quint32 i = 0; i < codeBits; ++i) {
+                const quint32 bit = bitPosition + i;
+                value = (value << 1) |
+                        ((data[bit >> 3] >> (7U - (bit & 7U))) & 1U);
+            }
+            bitPosition += codeBits;
+            *code = value;
+            return true;
+        };
+
+        while (bitPosition < compressedBits) {
+            quint32 code = 0;
+            if (!getCode(&code)) return false;
+            if (code == 256) {
+                codeBits = 9;
+                nextCode = 258;
+                havePrevious = false;
+                continue;
+            }
+            if (code == 257 || (!havePrevious && code > 0xffU)) return false;
+
+            quint32 stackSize = 0;
+            quint32 current = code;
+            if (havePrevious && current == nextCode) {
+                stack[stackSize++] = char(previousFirst);
+                current = previousCode;
+            } else if (current >= nextCode) {
+                return false;
+            }
+            while (current > 0xffU) {
+                if (current >= nextCode || current >= 4096 ||
+                    stackSize >= quint32(stack.size())) return false;
+                stack[qint32(stackSize++)] = suffix.at(qint32(current));
+                current = prefix.at(qint32(current));
+            }
+            if (stackSize >= quint32(stack.size())) return false;
+            stack[qint32(stackSize++)] = char(current);
+            const quint8 firstCharacter = quint8(current);
+            if (stackSize > quint32(8192 - block.size())) return false;
+            while (stackSize) block.append(stack.at(qint32(--stackSize)));
+
+            if (havePrevious) {
+                if (nextCode >= 4092) return false;
+                prefix[qint32(nextCode)] = quint16(previousCode);
+                suffix[qint32(nextCode)] = char(firstCharacter);
+                ++nextCode;
+                if (codeBits < 12 &&
+                    nextCode >= ((1U << codeBits) - 1U)) ++codeBits;
+            }
+            previousCode = code;
+            previousFirst = firstCharacter;
+            havePrevious = true;
+        }
+        if (bitPosition != compressedBits || block.isEmpty()) return false;
+        offset += compressedBytes;
+        if (offset < packed.size() && block.size() != 8192) return false;
+        if (block.size() > expectedSize - result.size()) return false;
+        result.append(block);
+    }
+    if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
+        offset != packed.size() || result.size() != expectedSize) return false;
+    *output = result;
+    return true;
+}
 }  // namespace
 
 XDecompress::XDecompress(QObject *parent) : QObject(parent)
@@ -485,6 +591,748 @@ XDecompress::XDecompress(QObject *parent) : QObject(parent)
 static bool decIsValidBufferSize(qint64 nSize)
 {
     return (nSize >= 0) && (nSize <= (std::numeric_limits<qint32>::max)());
+}
+
+static bool decStuntsReadLength(const QByteArray &data, qint32 *pOffset,
+                                qint32 *pLength)
+{
+    if (!pOffset || !pLength || *pOffset < 0 ||
+        *pOffset > data.size() - 3) return false;
+    const uchar *p = reinterpret_cast<const uchar *>(data.constData()) +
+                     *pOffset;
+    *pLength = qint32(p[0]) | (qint32(p[1]) << 8) |
+               (qint32(p[2]) << 16);
+    *pOffset += 3;
+    return true;
+}
+
+// Decode DSI's canonical variable-length codes.  The stream maintains a
+// 16-bit, MSB-first look-ahead word; widths above eight bits are resolved by
+// the two recurrence tables built from the width distribution.
+static bool decStuntsVLE(const QByteArray &source, qint32 sourceOffset,
+                         qint32 outputSize, QByteArray *pOutput,
+                         XBinary::PDSTRUCT *pPdStruct,
+                         bool reverseBitOrder)
+{
+    if (!pOutput || outputSize < 0 || sourceOffset < 0 ||
+        sourceOffset >= source.size()) return false;
+    qint32 pos = sourceOffset;
+    const quint8 levelsHeader = quint8(source.at(pos++));
+    const bool deltaSymbols = levelsHeader & 0x80U;
+    const quint8 widthsLength = levelsHeader & 0x7fU;
+    if (!widthsLength || widthsLength > 15 ||
+        pos > source.size() - widthsLength) return false;
+
+    QByteArray distribution(widthsLength, 0);
+    QVector<quint16> escapeBase(16, 0);
+    QVector<quint16> escapeLimit(16, 0);
+    qint32 increment = 0;
+    qint32 alphabetSize = 0;
+    for (qint32 i = 0; i < widthsLength; ++i) {
+        increment *= 2;
+        escapeBase[i] = quint16(alphabetSize - increment);
+        const quint8 count = quint8(source.at(pos++));
+        distribution[i] = char(count);
+        increment += count;
+        alphabetSize += count;
+        escapeLimit[i] = quint16(increment);
+        if (alphabetSize > 256 || increment > 0xffff) return false;
+    }
+    if (alphabetSize < 2 || pos > source.size() - alphabetSize - 2)
+        return false;
+    const QByteArray alphabet = source.mid(pos, alphabetSize);
+    pos += alphabetSize;
+
+    QByteArray symbols(256, 0);
+    QByteArray widths(256, char(0x40));
+    qint32 tableIndex = 0;
+    qint32 alphabetIndex = 0;
+    qint32 repetitions = 0x80;
+    const qint32 directWidths = (std::min)(qint32(widthsLength), 8);
+    for (qint32 width = 1; width <= directWidths;
+         ++width, repetitions >>= 1) {
+        const qint32 groups = quint8(distribution.at(width - 1));
+        for (qint32 group = 0; group < groups; ++group) {
+            if (alphabetIndex >= alphabetSize ||
+                tableIndex > 256 - repetitions) return false;
+            for (qint32 j = 0; j < repetitions; ++j) {
+                symbols[tableIndex] = alphabet.at(alphabetIndex);
+                widths[tableIndex++] = char(width);
+            }
+            ++alphabetIndex;
+        }
+    }
+
+    qint32 paddingReads = 0;
+    auto readBitByte = [&](quint8 *pValue) -> bool {
+        if (!pValue) return false;
+        quint8 value = 0;
+        if (pos < source.size()) {
+            value = quint8(source.at(pos++));
+        } else {
+            // The original 16-bit decoder always fetches a look-ahead byte,
+            // even when the last code already completed the requested output.
+            // Treat at most two such bytes as zero padding, never as an
+            // unbounded source for a truncated stream.
+            if (paddingReads >= 2) return false;
+            ++paddingReads;
+            ++pos;
+        }
+        if (reverseBitOrder) {
+            value = quint8(((value & 0x55U) << 1) |
+                           ((value >> 1) & 0x55U));
+            value = quint8(((value & 0x33U) << 2) |
+                           ((value >> 2) & 0x33U));
+            value = quint8((value << 4) | (value >> 4));
+        }
+        *pValue = value;
+        return true;
+    };
+
+    quint8 currentWidth = 8;
+    quint8 nextWidth = 0;
+    quint8 firstByte = 0;
+    quint8 secondByte = 0;
+    if (!readBitByte(&firstByte) || !readBitByte(&secondByte)) return false;
+    quint16 currentWord = quint16(firstByte) << 8;
+    currentWord |= secondByte;
+    QByteArray result(outputSize, 0);
+    qint32 outputPos = 0;
+    quint8 previousOutput = 0;
+
+    while (outputPos < outputSize) {
+        if ((outputPos & 0x3fff) == 0 &&
+            !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        quint8 code = quint8(currentWord >> 8);
+        nextWidth = quint8(widths.at(code));
+        if (nextWidth > 8) {
+            if (nextWidth != 0x40U) return false;
+            code = quint8(currentWord);
+            currentWord >>= 8;
+            qint32 index = 7;
+            bool found = false;
+            while (!found) {
+                if (!currentWidth) {
+                    if (!readBitByte(&code)) return false;
+                    currentWidth = 8;
+                }
+                currentWord = quint16((quint32(currentWord) << 1) |
+                                      ((code & 0x80U) ? 1U : 0U));
+                code = quint8(code << 1);
+                --currentWidth;
+                ++index;
+                if (index >= widthsLength || index >= 16) return false;
+                if (currentWord < escapeLimit.at(index)) {
+                    currentWord = quint16(currentWord +
+                                          escapeBase.at(index));
+                    if (currentWord >= alphabetSize) return false;
+                    quint8 value = quint8(alphabet.at(currentWord));
+                    if (deltaSymbols) value = quint8(previousOutput + value);
+                    previousOutput = value;
+                    result[outputPos++] = char(value);
+                    found = true;
+                }
+            }
+            quint8 followingByte = 0;
+            if (!readBitByte(&followingByte)) return false;
+            currentWord = quint16((quint16(code) << currentWidth) |
+                                  followingByte);
+            nextWidth = 8 - currentWidth;
+            currentWidth = 8;
+        } else {
+            if (!nextWidth) return false;
+            quint8 value = quint8(symbols.at(code));
+            if (deltaSymbols) value = quint8(previousOutput + value);
+            previousOutput = value;
+            result[outputPos++] = char(value);
+            if (currentWidth < nextWidth) {
+                currentWord = quint16(currentWord << currentWidth);
+                nextWidth -= currentWidth;
+                currentWidth = 8;
+                quint8 followingByte = 0;
+                if (!readBitByte(&followingByte)) return false;
+                currentWord |= followingByte;
+            }
+        }
+        currentWord = quint16(currentWord << nextWidth);
+        currentWidth -= nextWidth;
+    }
+
+    *pOutput = result;
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+static bool decStuntsRLE(const QByteArray &source, qint32 sourceOffset,
+                         qint32 outputSize, QByteArray *pOutput,
+                         XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pOutput || outputSize < 0 || sourceOffset < 0) return false;
+    qint32 pos = sourceOffset;
+    qint32 declaredSourceSize = 0;
+    if (!decStuntsReadLength(source, &pos, &declaredSourceSize) ||
+        declaredSourceSize < 1 || pos > source.size() - 2) return false;
+    const quint8 reserved = quint8(source.at(pos++));
+    const quint8 escapeHeader = quint8(source.at(pos++));
+    const qint32 escapeCount = escapeHeader & 0x7fU;
+    if (reserved || escapeCount < 1 || escapeCount > 10 ||
+        pos > source.size() - escapeCount) return false;
+    const QByteArray escapes = source.mid(pos, escapeCount);
+    pos += escapeCount;
+
+    QByteArray sequenceExpanded;
+    const QByteArray *pFinalSource = &source;
+    qint32 finalPos = pos;
+    if (!(escapeHeader & 0x80U)) {
+        if (escapeCount < 2) return false;
+        const quint8 sequenceEscape = quint8(escapes.at(1));
+        sequenceExpanded.reserve(outputSize);
+        while (pos < source.size()) {
+            if ((sequenceExpanded.size() & 0x3fff) == 0 &&
+                !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+            const quint8 value = quint8(source.at(pos++));
+            if (value != sequenceEscape) {
+                if (sequenceExpanded.size() >= outputSize) return false;
+                sequenceExpanded.append(char(value));
+                continue;
+            }
+            const qint32 sequenceStart = pos;
+            while (pos < source.size() &&
+                   quint8(source.at(pos)) != sequenceEscape) {
+                if (sequenceExpanded.size() >= outputSize) return false;
+                sequenceExpanded.append(source.at(pos++));
+            }
+            if (pos >= source.size()) return false;
+            const qint32 sequenceLength = pos - sequenceStart;
+            ++pos;
+            if (pos >= source.size()) return false;
+            qint32 repeat = quint8(source.at(pos++)) - 1;
+            if (sequenceLength < 1 ||
+                qint64(repeat) * sequenceLength >
+                    outputSize - sequenceExpanded.size()) return false;
+            while (repeat-- > 0)
+                sequenceExpanded.append(source.constData() + sequenceStart,
+                                        sequenceLength);
+        }
+        pFinalSource = &sequenceExpanded;
+        finalPos = 0;
+    }
+
+    QByteArray lookup(256, 0);
+    for (qint32 i = 0; i < escapeCount; ++i)
+        lookup[quint8(escapes.at(i))] = char(i + 1);
+    QByteArray result(outputSize, 0);
+    qint32 outputPos = 0;
+    while (outputPos < outputSize) {
+        if ((outputPos & 0x3fff) == 0 &&
+            !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (finalPos >= pFinalSource->size()) return false;
+        quint8 value = quint8(pFinalSource->at(finalPos++));
+        const qint32 escapeIndex = quint8(lookup.at(value));
+        if (!escapeIndex) {
+            result[outputPos++] = char(value);
+            continue;
+        }
+        qint32 repeat = 0;
+        if (escapeIndex == 1) {
+            if (finalPos > pFinalSource->size() - 2) return false;
+            repeat = quint8(pFinalSource->at(finalPos++));
+            value = quint8(pFinalSource->at(finalPos++));
+        } else if (escapeIndex == 3) {
+            if (finalPos > pFinalSource->size() - 3) return false;
+            repeat = quint8(pFinalSource->at(finalPos)) |
+                     (qint32(quint8(pFinalSource->at(finalPos + 1))) << 8);
+            finalPos += 2;
+            value = quint8(pFinalSource->at(finalPos++));
+        } else {
+            if (finalPos >= pFinalSource->size()) return false;
+            repeat = escapeIndex - 1;
+            value = quint8(pFinalSource->at(finalPos++));
+        }
+        if (repeat < 0 || repeat > outputSize - outputPos) return false;
+        if (repeat) std::memset(result.data() + outputPos, value, repeat);
+        outputPos += repeat;
+    }
+    *pOutput = result;
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+static bool decStuntsDSI(const QByteArray &packed, qint32 expectedSize,
+                         QByteArray *pOutput,
+                         XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pOutput || expectedSize < 1 || packed.size() < 4) return false;
+    qint32 pos = 0;
+    qint32 passes = 1;
+    const quint8 first = quint8(packed.at(0));
+    if (first & 0x80U) {
+        passes = first & 0x7fU;
+        if (passes < 1 || passes > 8) return false;
+        pos = 1;
+        qint32 finalSize = 0;
+        if (!decStuntsReadLength(packed, &pos, &finalSize) ||
+            finalSize != expectedSize) return false;
+    }
+
+    QByteArray current = packed;
+    for (qint32 pass = 0; pass < passes; ++pass) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
+            pos >= current.size()) return false;
+        const quint8 type = quint8(current.at(pos++));
+        qint32 passSize = 0;
+        if ((type != 1 && type != 2) ||
+            !decStuntsReadLength(current, &pos, &passSize) ||
+            passSize < 1 || !decIsValidBufferSize(passSize) ||
+            (pass + 1 == passes && passSize != expectedSize)) return false;
+        QByteArray decoded;
+        bool ok = type == 1
+            ? decStuntsRLE(current, pos, passSize, &decoded, pPdStruct)
+            : decStuntsVLE(current, pos, passSize, &decoded, pPdStruct,
+                           false);
+        // BB Stunts 1.0 and earlier DSI games store each Huffman byte with
+        // its bits reversed.  Prefer the later order, but retry when decoding
+        // fails or cannot produce the header required by the following pass.
+        if (type == 2 &&
+            (!ok || (pass + 1 < passes &&
+                     (decoded.size() < 4 ||
+                      (quint8(decoded.at(0)) != 1 &&
+                       quint8(decoded.at(0)) != 2))))) {
+            decoded.clear();
+            ok = decStuntsVLE(current, pos, passSize, &decoded, pPdStruct,
+                              true);
+        }
+        if (!ok || decoded.size() != passSize) return false;
+        current = decoded;
+        pos = 0;
+    }
+    if (current.size() != expectedSize) return false;
+    *pOutput = current;
+    return true;
+}
+
+// Bounds-oriented PKWARE Data Compression Library decoder, adapted from
+// Mark Adler's zlib-licensed blast 1.3 algorithm.  TTCOMP/InstallShield 3
+// members include the literal-mode and dictionary-bit selectors as their
+// first two bytes and use fixed canonical trees (not ZIP method 6 trees).
+const int DEC_DCL_MAX_BITS = 13;
+struct DecDclHuffman {
+    std::array<short, DEC_DCL_MAX_BITS + 1> count;
+    std::array<short, 256> symbol;
+};
+
+static bool decDclConstruct(DecDclHuffman *table, const uchar *repeat,
+                            int repeatCount)
+{
+    if (!table || !repeat || repeatCount <= 0) return false;
+    std::array<short, 256> lengths = {};
+    int symbols = 0;
+    for (int i = 0; i < repeatCount; ++i) {
+        const int run = (repeat[i] >> 4) + 1;
+        const int length = repeat[i] & 15;
+        if (length > DEC_DCL_MAX_BITS ||
+            symbols > int(lengths.size()) - run) return false;
+        for (int j = 0; j < run; ++j) lengths[symbols++] = short(length);
+    }
+    table->count.fill(0);
+    table->symbol.fill(0);
+    for (int i = 0; i < symbols; ++i) ++table->count[lengths[i]];
+    if (table->count[0] == symbols) return false;
+    int left = 1;
+    for (int length = 1; length <= DEC_DCL_MAX_BITS; ++length) {
+        left = (left << 1) - table->count[length];
+        if (left < 0) return false;
+    }
+    std::array<short, DEC_DCL_MAX_BITS + 1> offsets = {};
+    offsets[1] = 0;
+    for (int length = 1; length < DEC_DCL_MAX_BITS; ++length)
+        offsets[length + 1] = offsets[length] + table->count[length];
+    for (int i = 0; i < symbols; ++i) {
+        const int length = lengths[i];
+        if (length) table->symbol[offsets[length]++] = short(i);
+    }
+    return true;
+}
+
+struct DecDclTables {
+    DecDclHuffman literal;
+    DecDclHuffman length;
+    DecDclHuffman distance;
+    bool valid = false;
+    DecDclTables()
+    {
+        static const uchar literalLengths[] = {
+            11,124,8,7,28,7,188,13,76,4,10,8,12,10,12,10,8,23,8,9,
+            7,6,7,8,7,6,55,8,23,24,12,11,7,9,11,12,6,7,22,5,7,24,
+            6,11,9,6,7,22,7,11,38,7,9,8,25,11,8,11,9,12,8,12,5,38,
+            5,38,5,11,7,5,6,21,6,10,53,8,7,24,10,27,44,253,253,253,
+            252,252,252,13,12,45,12,45,12,61,12,45,44,173};
+        static const uchar lengthLengths[] = {2,35,36,53,38,23};
+        static const uchar distanceLengths[] = {2,20,53,230,247,151,248};
+        valid = decDclConstruct(&literal, literalLengths,
+                                int(sizeof(literalLengths))) &&
+                decDclConstruct(&length, lengthLengths,
+                                int(sizeof(lengthLengths))) &&
+                decDclConstruct(&distance, distanceLengths,
+                                int(sizeof(distanceLengths)));
+    }
+};
+
+class DecDclBits {
+public:
+    explicit DecDclBits(const QByteArray &data)
+        : bytes(reinterpret_cast<const uchar *>(data.constData())),
+          size(data.size()) {}
+    bool read(int count, int *value)
+    {
+        if (!value || count < 0 || count > 16) return false;
+        while (bitCount < count) {
+            if (position >= size) return false;
+            buffer |= quint32(bytes[position++]) << bitCount;
+            bitCount += 8;
+        }
+        *value = count ? int(buffer & ((1U << count) - 1U)) : 0;
+        buffer >>= count;
+        bitCount -= count;
+        return true;
+    }
+private:
+    const uchar *bytes = nullptr;
+    int size = 0;
+    int position = 0;
+    quint32 buffer = 0;
+    int bitCount = 0;
+};
+
+static bool decDclSymbol(DecDclBits *bits, const DecDclHuffman &table,
+                         int *symbol)
+{
+    if (!bits || !symbol) return false;
+    int code = 0, first = 0, index = 0;
+    for (int length = 1; length <= DEC_DCL_MAX_BITS; ++length) {
+        int bit = 0;
+        if (!bits->read(1, &bit)) return false;
+        code |= bit ^ 1;
+        const int count = table.count[length];
+        if (code < first + count) {
+            const int symbolIndex = index + code - first;
+            if (symbolIndex < 0 || symbolIndex >= int(table.symbol.size()))
+                return false;
+            *symbol = table.symbol[symbolIndex];
+            return true;
+        }
+        index += count;
+        first = (first + count) << 1;
+        code <<= 1;
+    }
+    return false;
+}
+
+static bool decPkwareDcl(const QByteArray &packed, qint32 expectedSize,
+                         QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!output || expectedSize < 0 || packed.size() < 3) return false;
+    static const DecDclTables tables;
+    if (!tables.valid) return false;
+    DecDclBits bits(packed);
+    int literalMode = 0, dictionaryBits = 0;
+    if (!bits.read(8, &literalMode) || !bits.read(8, &dictionaryBits) ||
+        literalMode < 0 || literalMode > 1 ||
+        dictionaryBits < 4 || dictionaryBits > 6) return false;
+    static const int baseLength[16] =
+        {3,2,4,5,6,7,8,9,10,12,16,24,40,72,136,264};
+    static const int extraLength[16] =
+        {0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8};
+    QByteArray result;
+    result.reserve(expectedSize);
+    for (;;) {
+        if ((result.size() & 0x3fff) == 0 &&
+            !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        int isMatch = 0;
+        if (!bits.read(1, &isMatch)) return false;
+        if (!isMatch) {
+            int literal = 0;
+            if ((literalMode &&
+                 !decDclSymbol(&bits, tables.literal, &literal)) ||
+                (!literalMode && !bits.read(8, &literal)) ||
+                literal < 0 || literal > 255 ||
+                result.size() >= expectedSize) return false;
+            result.append(char(literal));
+            continue;
+        }
+        int lengthSymbol = 0;
+        if (!decDclSymbol(&bits, tables.length, &lengthSymbol) ||
+            lengthSymbol < 0 || lengthSymbol >= 16) return false;
+        int extra = 0;
+        if (!bits.read(extraLength[lengthSymbol], &extra)) return false;
+        int length = baseLength[lengthSymbol] + extra;
+        if (length == 519) break;
+        int distanceSymbol = 0;
+        if (!decDclSymbol(&bits, tables.distance, &distanceSymbol) ||
+            distanceSymbol < 0 || distanceSymbol >= 64) return false;
+        const int lowBits = length == 2 ? 2 : dictionaryBits;
+        int distanceLow = 0;
+        if (!bits.read(lowBits, &distanceLow)) return false;
+        const int distance = (distanceSymbol << lowBits) + distanceLow + 1;
+        if (distance <= 0 || distance > result.size() ||
+            length > expectedSize - result.size()) return false;
+        while (length-- > 0)
+            result.append(result.at(result.size() - distance));
+    }
+    if (result.size() != expectedSize) return false;
+    *output = result;
+    return true;
+}
+
+static bool decArcvLzhuf(const QByteArray &packed, qint32 expectedSize,
+                         QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
+{
+    // Eschalon Setup 1.10 uses a compact member of the Yoshizaki LZHUF
+    // family.  Its alphabet differs from LHA -lh1-: 256 is EOF, 257..286
+    // encode lengths 3..32, and the initial 4 KiB dictionary cursor is N-T.
+    enum {
+        N = 4096,
+        F = 32,
+        N_CHAR = 287,
+        T = N_CHAR * 2 - 1,
+        R = T - 1,
+        MAX_FREQ = 0x8000
+    };
+    if (!output || expectedSize < 1 || packed.isEmpty()) return false;
+    const uchar *input =
+        reinterpret_cast<const uchar *>(packed.constData());
+    qint64 bitPosition = 0;
+    const qint64 bitLimit = qint64(packed.size()) * 8;
+    auto readBit = [&]() -> int {
+        if (bitPosition >= bitLimit) return -1;
+        const int value =
+            (input[bitPosition >> 3] >> (7 - (bitPosition & 7))) & 1;
+        ++bitPosition;
+        return value;
+    };
+
+    std::array<int, T + 1> frequency = {};
+    std::array<int, T + N_CHAR> parent = {};
+    std::array<int, T> child = {};
+    std::array<quint8, 256> positionLength = {};
+    std::array<quint8, 256> positionCode = {};
+    std::array<quint8, N> dictionary = {};
+
+    const int symbolsPerLength[6] = {1, 3, 8, 12, 24, 16};
+    int prefix = 0;
+    int symbol = 0;
+    for (int length = 3; length <= 8; ++length) {
+        const int span = 1 << (8 - length);
+        for (int j = 0; j < symbolsPerLength[length - 3]; ++j) {
+            for (int k = 0; k < span; ++k) {
+                positionLength[prefix] = quint8(length);
+                positionCode[prefix] = quint8(symbol);
+                ++prefix;
+            }
+            ++symbol;
+        }
+    }
+    if (prefix != 256 || symbol != 64) return false;
+
+    for (int i = 0; i < N_CHAR; ++i) {
+        frequency[i] = 1;
+        child[i] = i + T;
+        parent[i + T] = i;
+    }
+    for (int i = 0, j = N_CHAR; j <= R; i += 2, ++j) {
+        frequency[j] = frequency[i] + frequency[i + 1];
+        child[j] = i;
+        parent[i] = parent[i + 1] = j;
+    }
+    frequency[T] = 0xffff;
+    parent[R] = 0;
+    dictionary.fill(0x20);
+
+    auto reconstruct = [&]() {
+        int leafCount = 0;
+        for (int i = 0; i < T; ++i) {
+            if (child[i] >= T) {
+                frequency[leafCount] = (frequency[i] + 1) / 2;
+                child[leafCount] = child[i];
+                ++leafCount;
+            }
+        }
+        for (int i = 0, node = N_CHAR; node < T; i += 2, ++node) {
+            const int sum = frequency[i] + frequency[i + 1];
+            int insertion = node - 1;
+            while (insertion >= 0 && sum < frequency[insertion])
+                --insertion;
+            ++insertion;
+            for (int move = node; move > insertion; --move) {
+                frequency[move] = frequency[move - 1];
+                child[move] = child[move - 1];
+            }
+            frequency[insertion] = sum;
+            child[insertion] = i;
+        }
+        for (int i = 0; i < T; ++i) {
+            const int node = child[i];
+            parent[node] = i;
+            if (node < T) parent[node + 1] = i;
+        }
+    };
+
+    auto update = [&](int character) {
+        if (frequency[R] == MAX_FREQ) reconstruct();
+        int current = parent[character + T];
+        do {
+            const int updated = ++frequency[current];
+            int next = current + 1;
+            if (updated > frequency[next]) {
+                while (updated > frequency[next + 1]) ++next;
+                frequency[current] = frequency[next];
+                frequency[next] = updated;
+                const int oldChild = child[current];
+                parent[oldChild] = next;
+                if (oldChild < T) parent[oldChild + 1] = next;
+                const int newChild = child[next];
+                child[next] = oldChild;
+                parent[newChild] = current;
+                if (newChild < T) parent[newChild + 1] = current;
+                child[current] = newChild;
+                current = next;
+            }
+            current = parent[current];
+        } while (current != 0);
+    };
+
+    auto decodeCharacter = [&]() -> int {
+        int current = child[R];
+        while (current < T) {
+            const int bit = readBit();
+            if (bit < 0) return -1;
+            current = child[current + bit];
+        }
+        current -= T;
+        update(current);
+        return current;
+    };
+    auto decodePosition = [&]() -> int {
+        int firstByte = 0;
+        for (int i = 0; i < 8; ++i) {
+            const int bit = readBit();
+            if (bit < 0) return -1;
+            firstByte = (firstByte << 1) | bit;
+        }
+        int result = int(positionCode[firstByte]) << 6;
+        int remaining = int(positionLength[firstByte]) - 2;
+        int shifted = firstByte;
+        while (remaining-- > 0) {
+            const int bit = readBit();
+            if (bit < 0) return -1;
+            shifted = (shifted << 1) | bit;
+        }
+        return result | (shifted & 0x3f);
+    };
+
+    QByteArray result(expectedSize, 0);
+    int writePosition = N - T;
+    qint32 produced = 0;
+    while (produced < expectedSize) {
+        if ((produced & 0x3fff) == 0 &&
+            !XBinary::isPdStructNotCanceled(pPdStruct))
+            return false;
+        const int character = decodeCharacter();
+        if (character < 0 || character == 256) return false;
+        if (character < 256) {
+            result[produced++] = char(character);
+            dictionary[writePosition] = quint8(character);
+            writePosition = (writePosition + 1) & (N - 1);
+            continue;
+        }
+        const int encodedPosition = decodePosition();
+        const int length = character - 254;
+        if (encodedPosition < 0 || length < 3 || length > F ||
+            length > expectedSize - produced)
+            return false;
+        const int source =
+            (writePosition - encodedPosition - 1) & (N - 1);
+        for (int i = 0; i < length; ++i) {
+            const quint8 value = dictionary[(source + i) & (N - 1)];
+            result[produced++] = char(value);
+            dictionary[writePosition] = value;
+            writePosition = (writePosition + 1) & (N - 1);
+        }
+    }
+    *output = result;
+    return true;
+}
+
+static bool decEmtRecord(const QByteArray &packed, qint64 *position,
+                         qint32 outputSize, QByteArray *output)
+{
+    if (!position || !output || outputSize < 0 || *position < 0 ||
+        *position >= packed.size()) return false;
+    QByteArray result;
+    result.reserve(outputSize);
+    qint64 pos = *position;
+    while (result.size() < outputSize) {
+        if (pos >= packed.size()) return false;
+        const quint8 value = quint8(packed.at(pos++));
+        if (value != 0xf1U) {
+            result.append(char(value));
+            continue;
+        }
+        if (pos > packed.size() - 2) return false;
+        const quint8 repeated = quint8(packed.at(pos++));
+        const quint8 count = quint8(packed.at(pos++));
+        if (count > outputSize - result.size()) return false;
+        if (count) result.append(QByteArray(count, char(repeated)));
+    }
+    *position = pos;
+    *output = result;
+    return true;
+}
+
+static bool decEmtImage(const QByteArray &packed, qint32 expectedSize,
+                        QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
+{
+    static const QByteArray fileSignature(
+        "\\\\z\xc5\xd4\xe3\x40\xf0\xf0\xf1\xf0\xf0\xf1", 13);
+    static const QByteArray recordSignature(
+        "\xf1\x00\x03\x24\x80\x00\x31", 7);
+    if (!output || expectedSize < 9216 || expectedSize % 9216 ||
+        !packed.startsWith(fileSignature)) return false;
+    qint64 pos = packed.indexOf(recordSignature);
+    if (pos < 0 || pos > 4096) return false;
+    const qint32 trackCount = expectedSize / 9216;
+    QByteArray result;
+    result.reserve(expectedSize);
+    for (qint32 track = 0; track < trackCount; ++track) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        QByteArray record;
+        if (!decEmtRecord(packed, &pos,
+                          track + 1 == trackCount ? 0x247e : 0x2480,
+                          &record) || record.size() < 126 + 9216 ||
+            quint8(record.at(1)) != 0 ||
+            quint8(record.at(2)) != 0 ||
+            quint8(record.at(3)) != 0x24 ||
+            quint8(record.at(4)) != 0x80 ||
+            quint8(record.at(5)) != 0 ||
+            quint8(record.at(6)) != 0x31 ||
+            quint8(record.at(7)) != quint8(track / 2) ||
+            quint8(record.at(8)) != quint8(track & 1))
+            return false;
+        result.append(record.constData() + 126, 9216);
+        if (track == 0) {
+            const uchar *boot = reinterpret_cast<const uchar *>(
+                result.constData());
+            const quint32 bytesPerSector =
+                qFromLittleEndian<quint16>(boot + 11);
+            quint32 totalSectors = qFromLittleEndian<quint16>(boot + 19);
+            if (!totalSectors)
+                totalSectors = qFromLittleEndian<quint32>(boot + 32);
+            if (qint64(bytesPerSector) * totalSectors != expectedSize ||
+                qFromLittleEndian<quint16>(boot + 24) *
+                    bytesPerSector != 9216) return false;
+        }
+    }
+    if (result.size() != expectedSize) return false;
+    *output = result;
+    return true;
 }
 
 static const qint64 DEC_CAB_MAX_FOLDER_SIZE = 512LL * 1024 * 1024;
@@ -1884,6 +2732,25 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_KWAJ_LZSS) {
         bResult = XKWAJLZSSDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZSS_SZDD) {
+        // Some container formats (for example InstallShield setup.boot)
+        // embed only the compressed portion of an SZDD stream.  Route those
+        // bounded member streams through the same decoder used by XSZDD.
+        // SZDD has no end marker, so its declared output size is also the
+        // decoder's termination condition.  The generic processed limit is a
+        // caller output cap and can be much larger than the member itself.
+        bool bSizeOk = false;
+        const qint64 nDeclaredSize = pState->mapProperties.value(
+            XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bSizeOk);
+        if (bSizeOk && nDeclaredSize >= 0 &&
+            XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties,
+                                               nDeclaredSize)) {
+            const qint64 nSavedProcessedLimit = pState->nProcessedLimit;
+            pState->nProcessedLimit = nDeclaredSize;
+            bResult = XLZSSDecoder::decompress(pState, pPdStruct) &&
+                      (pState->nCountOutput == nDeclaredSize);
+            pState->nProcessedLimit = nSavedProcessedLimit;
+        }
     } else if (compressMethod == XBinary::HANDLE_METHOD_COKTEL_LZ) {
         bResult = XCoktelLZDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_WINZIP_JPEG) {
@@ -1994,12 +2861,320 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_XZ) {
         bResult = XLZMADecoder::decompressXZ(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_AMIGA_LZX) {
+        bResult = XAmigaLZXDecoder::decompress(pState, pPdStruct);
+    } else if ((compressMethod == XBinary::HANDLE_METHOD_CDI_2336) ||
+               (compressMethod == XBinary::HANDLE_METHOD_CDI_MODE1_2352) ||
+               (compressMethod == XBinary::HANDLE_METHOD_CDI_MODE2_2352)) {
+        const qint32 sectorSize =
+            compressMethod == XBinary::HANDLE_METHOD_CDI_2336 ? 2336 : 2352;
+        const qint32 payloadOffset =
+            compressMethod == XBinary::HANDLE_METHOD_CDI_2336 ? 8
+            : (compressMethod == XBinary::HANDLE_METHOD_CDI_MODE1_2352
+                   ? 16 : 24);
+        qint64 packedSize = 0;
+        if (!bUncompressedSizeDefined || nUncompressedSize < 0 ||
+            !decPrepareBoundedInput(pState->pDeviceInput,
+                                    pState->nInputOffset,
+                                    pState->nInputLimit, &packedSize) ||
+            (packedSize % sectorSize) ||
+            (packedSize / sectorSize >
+             (std::numeric_limits<qint64>::max)() / 2048) ||
+            nUncompressedSize != (packedSize / sectorSize) * 2048) {
+            pState->bReadError = true;
+            return false;
+        }
+        QByteArray sector(sectorSize, 0);
+        qint64 consumed = 0;
+        bResult = true;
+        while (bResult && consumed < packedSize &&
+               XBinary::isPdStructNotCanceled(pPdStruct)) {
+            qint64 readCount = 0;
+            if (!decReadExactAt(pState->pDeviceInput,
+                                pState->nInputOffset + consumed,
+                                sector.data(), sectorSize, pState,
+                                pPdStruct, &readCount)) {
+                consumed += readCount;
+                bResult = false;
+                break;
+            }
+            consumed += sectorSize;
+            if (XBinary::_writeDevice(sector.constData() + payloadOffset,
+                                      2048, pState) != 2048) {
+                bResult = false;
+            }
+        }
+        pState->nCountInput = consumed;
+        bResult = bResult && (consumed == packedSize) &&
+                  (pState->nCountOutput == nUncompressedSize) &&
+                  XBinary::isPdStructNotCanceled(pPdStruct);
+    } else if ((compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_RLE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_LZH) ||
+               (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_ADN) ||
+               (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_DDN) ||
+               (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_COMPACT_PRO) ||
+               (compressMethod == XBinary::HANDLE_METHOD_LPAK_LZSS) ||
+               (compressMethod == XBinary::HANDLE_METHOD_EPFS_LZW) ||
+               (compressMethod == XBinary::HANDLE_METHOD_STUNTS_DSI) ||
+               (compressMethod == XBinary::HANDLE_METHOD_XOR_A9) ||
+               (compressMethod == XBinary::HANDLE_METHOD_PKWARE_DCL_IMPLODE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_EMT_RLE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_GPFPACK_LZW) ||
+               (compressMethod == XBinary::HANDLE_METHOD_PAX_LZF) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ARCV_LZHUF) ||
+               (compressMethod == XBinary::HANDLE_METHOD_VISE_DEFLATE)) {
+        qint64 nPackedSize = 0;
+        if (!bUncompressedSizeDefined || !decIsValidBufferSize(nUncompressedSize) ||
+            !decPrepareBoundedInput(pState->pDeviceInput, pState->nInputOffset,
+                                    pState->nInputLimit, &nPackedSize) ||
+            !decIsValidBufferSize(nPackedSize) ||
+            nPackedSize > (std::numeric_limits<qint64>::max)() - nUncompressedSize) {
+            pState->bReadError = true;
+            return false;
+        }
+        XBinary::UNPACK_MEMORY_RESERVATION reservation;
+        qint64 nReservationSize = nPackedSize + nUncompressedSize;
+        if (compressMethod == XBinary::HANDLE_METHOD_STUNTS_DSI) {
+            if (nUncompressedSize >
+                ((std::numeric_limits<qint64>::max)() - nPackedSize) / 2)
+                return false;
+            nReservationSize = nPackedSize + nUncompressedSize * 2;
+        }
+        if (!reservation.acquire(pState->mapUnpackProperties,
+                                 nReservationSize)) {
+            return false;
+        }
+        QByteArray packed(qint32(nPackedSize), 0);
+        qint64 nConsumed = 0;
+        if (nPackedSize &&
+            !decReadExactAt(pState->pDeviceInput, pState->nInputOffset,
+                            packed.data(), nPackedSize, pState, pPdStruct,
+                            &nConsumed)) {
+            pState->nCountInput = nConsumed;
+            return false;
+        }
+        QByteArray unpacked;
+        if (compressMethod == XBinary::HANDLE_METHOD_EMT_RLE) {
+            bResult = decEmtImage(packed, qint32(nUncompressedSize),
+                                  &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_GPFPACK_LZW) {
+            bResult = decGpfPack(packed, qint32(nUncompressedSize),
+                                 &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_PAX_LZF) {
+            bResult = XPaxDecoder::decode(
+                packed, qint32(nUncompressedSize), &unpacked, nullptr,
+                pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_ARCV_LZHUF) {
+            bResult = decArcvLzhuf(packed, qint32(nUncompressedSize),
+                                  &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_VISE_DEFLATE) {
+            bResult = XViseDeflateDecoder::decode(
+                packed, nUncompressedSize, &unpacked, nullptr, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_PKWARE_DCL_IMPLODE) {
+            bResult = decPkwareDcl(packed, qint32(nUncompressedSize),
+                                   &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_XOR_A9) {
+            if (nPackedSize != nUncompressedSize) {
+                bResult = false;
+            } else {
+                unpacked = packed;
+                for (qint32 i = 0; i < unpacked.size(); ++i)
+                    unpacked[i] = char(quint8(unpacked.at(i)) ^ 0xa9U);
+                bResult = true;
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_RLE) {
+            bResult = XMacLegacyDecoders::decodeCompactPro(
+                packed, nUncompressedSize, false, 0x1fff0, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_LZH) {
+            bResult = XMacLegacyDecoders::decodeCompactPro(
+                packed, nUncompressedSize, true, 0x1fff0, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_ADN) {
+            bResult = XMacLegacyDecoders::decodeDiskDoublerADn(
+                packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_DDN) {
+            bResult = XMacLegacyDecoders::decodeDiskDoublerDDn(
+                packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_EPFS_LZW) {
+            // East Point Software's LZW variant. The two control codes track
+            // the current all-ones code width, and reset clears only the
+            // dictionary (not the width). Derived from the original decoder
+            // and the Apache-2.0 CTPAX-X reference implementation.
+            const quint32 dictionaryCapacity = 0x4680;
+            const quint32 stackCapacity = 0x0fa0;
+            QVector<quint16> prefix(qint32(dictionaryCapacity), 0);
+            QByteArray suffix(qint32(dictionaryCapacity), 0);
+            QByteArray stack(qint32(stackCapacity), 0);
+            unpacked.reserve(qint32(nUncompressedSize));
+            quint64 bitBuffer = 0;
+            quint32 bitCount = 0;
+            quint32 inputPos = 0;
+            quint32 codeBits = 9;
+            quint32 maxValue = (1U << codeBits) - 1U;
+            quint32 resetCode = maxValue - 1U;
+            quint32 increaseCode = maxValue - 2U;
+            quint32 nextCode = 256;
+            auto getCode = [&](quint32 *pCode) -> bool {
+                if (!pCode) return false;
+                while (bitCount < codeBits) {
+                    if (inputPos >= quint32(packed.size())) return false;
+                    bitBuffer = (bitBuffer << 8) |
+                                quint8(packed.at(qint32(inputPos++)));
+                    bitCount += 8;
+                }
+                bitCount -= codeBits;
+                *pCode = quint32((bitBuffer >> bitCount) & maxValue);
+                return true;
+            };
+            quint32 code = 0;
+            bResult = (nUncompressedSize == 0);
+            if (!bResult && getCode(&code) && code <= 0xffU) {
+                unpacked.append(char(code));
+                quint32 previousCode = code;
+                quint8 firstCharacter = quint8(code);
+                bResult = true;
+                while (bResult && unpacked.size() < nUncompressedSize) {
+                    if (!getCode(&code)) {
+                        bResult = false;
+                        break;
+                    }
+                    if (code == maxValue) break;
+                    if (code == resetCode) {
+                        nextCode = 256;
+                        if (!getCode(&code) || code > 0xffU) {
+                            bResult = false;
+                            break;
+                        }
+                        unpacked.append(char(code));
+                        previousCode = code;
+                        firstCharacter = quint8(code);
+                        continue;
+                    }
+                    quint32 stackSize = 0;
+                    quint32 current = code;
+                    if (current >= nextCode) {
+                        if (stackSize >= stackCapacity) {
+                            bResult = false;
+                            break;
+                        }
+                        stack[qint32(stackSize++)] = char(firstCharacter);
+                        current = previousCode;
+                    }
+                    while (current > 0xffU) {
+                        if (current >= dictionaryCapacity ||
+                            stackSize >= stackCapacity) {
+                            bResult = false;
+                            break;
+                        }
+                        stack[qint32(stackSize++)] = suffix.at(qint32(current));
+                        current = prefix.at(qint32(current));
+                    }
+                    if (!bResult || stackSize >= stackCapacity) {
+                        bResult = false;
+                        break;
+                    }
+                    stack[qint32(stackSize++)] = char(current);
+                    firstCharacter = quint8(current);
+                    if (stackSize > quint32(nUncompressedSize - unpacked.size())) {
+                        bResult = false;
+                        break;
+                    }
+                    while (stackSize) unpacked.append(stack.at(qint32(--stackSize)));
+                    if (nextCode < dictionaryCapacity) {
+                        prefix[qint32(nextCode)] = quint16(previousCode);
+                        suffix[qint32(nextCode)] = char(firstCharacter);
+                    }
+                    ++nextCode;
+                    if (nextCode > increaseCode && codeBits < 14) {
+                        ++codeBits;
+                        maxValue = (1U << codeBits) - 1U;
+                        resetCode = maxValue - 1U;
+                        increaseCode = maxValue - 2U;
+                    }
+                    previousCode = code;
+                }
+                bResult = bResult &&
+                          (unpacked.size() == nUncompressedSize);
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_STUNTS_DSI) {
+            bResult = decStuntsDSI(packed, qint32(nUncompressedSize),
+                                   &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_LPAK_LZSS) {
+            // Haruhiko Okumura's original 4 KiB LZSS stream: flags are
+            // consumed least-significant bit first, the dictionary begins
+            // with spaces, and matches encode a 12-bit position plus a
+            // 4-bit length (3..18).
+            QByteArray window(4096, ' ');
+            unpacked.reserve(qint32(nUncompressedSize));
+            qint32 inputPos = 0;
+            qint32 windowPos = 4096 - 18;
+            quint32 flags = 0;
+            bResult = true;
+            while (bResult && unpacked.size() < nUncompressedSize) {
+                flags >>= 1;
+                if (!(flags & 0x100U)) {
+                    if (inputPos >= packed.size()) {
+                        bResult = false;
+                        break;
+                    }
+                    flags = quint8(packed.at(inputPos++)) | 0xff00U;
+                }
+                if (flags & 1U) {
+                    if (inputPos >= packed.size()) {
+                        bResult = false;
+                        break;
+                    }
+                    const char value = packed.at(inputPos++);
+                    unpacked.append(value);
+                    window[windowPos] = value;
+                    windowPos = (windowPos + 1) & 4095;
+                } else {
+                    if (inputPos > packed.size() - 2) {
+                        bResult = false;
+                        break;
+                    }
+                    qint32 matchPos = quint8(packed.at(inputPos++));
+                    const quint8 code = quint8(packed.at(inputPos++));
+                    matchPos |= (code & 0xf0U) << 4;
+                    const qint32 matchLength = (code & 0x0fU) + 3;
+                    if (matchLength > nUncompressedSize - unpacked.size()) {
+                        bResult = false;
+                        break;
+                    }
+                    for (qint32 i = 0; i < matchLength; ++i) {
+                        const char value = window[(matchPos + i) & 4095];
+                        unpacked.append(value);
+                        window[windowPos] = value;
+                        windowPos = (windowPos + 1) & 4095;
+                    }
+                }
+            }
+            bResult = bResult && (inputPos == packed.size()) &&
+                      (unpacked.size() == nUncompressedSize);
+        } else {
+            if (packed.size() < 16) return false;
+            quint32 nPreambleSum = 0;
+            for (qint32 i = 0; i < 16; ++i)
+                nPreambleSum += quint8(packed.at(i));
+            bResult = XMacLegacyDecoders::decodeCompactPro(
+                packed.mid(16), nUncompressedSize, nPreambleSum == 0,
+                0xfff0, &unpacked);
+        }
+        pState->nCountInput = bResult ? nPackedSize : nConsumed;
+        if (bResult && (unpacked.size() == nUncompressedSize)) {
+            bResult = XBinary::_writeDevice(unpacked.constData(),
+                                            unpacked.size(), pState) ==
+                      unpacked.size();
+        } else {
+            bResult = false;
+        }
     } else if (compressMethod == XBinary::HANDLE_METHOD_PPMD7) {
         bResult = XPPMdDecoder::decompressPPMD7(pState, baProperty, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_PPMD8) {
         bResult = XPPMdDecoder::decompressPPMD8(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_DEFLATE) {
         bResult = XDeflateDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_WISE_DEFLATE) {
+        bResult = XDeflateDecoder::decompress(pState, pPdStruct, true);
     } else if (compressMethod == XBinary::HANDLE_METHOD_DEFLATE64) {
         bResult = XDeflateDecoder::decompress64(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_IT214_8) {

@@ -572,10 +572,21 @@ bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, X
         bDataError = !pDecompressState->bWriteError;
     }
 
+    // Some stand-alone LIF/DC wrappers retain one zero byte after the LZD
+    // end code.  It is container padding, not another code.  Consume bounded
+    // zero padding so an otherwise complete stream does not fail the generic
+    // exact-input check.
+    bool bPaddingOK = reader.hasOnlyZeroPadding();
+    while (bPaddingOK && bExplicitEOFSeen && pDecompressState->nInputLimit != -1 &&
+           pDecompressState->nCountInput < pDecompressState->nInputLimit) {
+        char cPadding = 0;
+        if (XBinary::_readDevice(&cPadding, 1, pDecompressState) != 1 || cPadding != 0) bPaddingOK = false;
+    }
+
     const bool bInputComplete =
         (pDecompressState->nInputLimit == -1) ? pDecompressState->pDeviceInput->atEnd() : (pDecompressState->nCountInput == pDecompressState->nInputLimit);
     const bool bOutputComplete = !bHasExpectedSize || (nProduced == nExpectedSize);
 
-    return bInitialClearSeen && bExplicitEOFSeen && reader.hasOnlyZeroPadding() && bInputComplete && bOutputComplete && (pDecompressState->nCountOutput == nProduced) &&
+    return bInitialClearSeen && bExplicitEOFSeen && bPaddingOK && bInputComplete && bOutputComplete && (pDecompressState->nCountOutput == nProduced) &&
            !bDataError && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct);
 }

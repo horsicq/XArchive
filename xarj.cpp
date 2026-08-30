@@ -436,7 +436,31 @@ bool XARJ::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 qint64 XARJ::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    return _calculateRawSize(pPdStruct);
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) pPdStruct = &pdStructEmpty;
+    if (!isValid(pPdStruct) || !XBinary::isPdStructNotCanceled(pPdStruct)) return 0;
+
+    const qint64 nFileSize = getSize();
+    qint64 nCurrentOffset = firstFileRecordOffset(this);
+    qint64 nArchiveSize = nCurrentOffset;
+    qint32 nNumberOfRecords = 0;
+
+    while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        ARJ_ENTRY_INFO info = {};
+        if (!readEntryInfo(this, nCurrentOffset, &info)) break;
+
+        if (info.bEndOfArchive) {
+            return nCurrentOffset + info.nHeaderSize;
+        }
+
+        nArchiveSize = entryEndOffset(info);
+        if ((nArchiveSize <= nCurrentOffset) || (nArchiveSize > nFileSize)) break;
+
+        nCurrentOffset = nArchiveSize;
+        nNumberOfRecords++;
+    }
+
+    return ((nNumberOfRecords > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) ? nArchiveSize : 0;
 }
 
 QList<XBinary::MAPMODE> XARJ::getMapModesList()
@@ -864,7 +888,11 @@ QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
     qint64 nFileSize = getSize();
     qint64 nCurrentOffset = firstFileRecordOffset(this);
-    qint64 nMaxOffset = 0;
+    const qint64 nArchiveSize = getFileFormatSize(pPdStruct);
+
+    if ((nFileParts & FILEPART_HEADER) && arjCanAppendPart(nLimit, listResult) && (nCurrentOffset > 0)) {
+        listResult.append(createFilePart(FILEPART_HEADER, 0, nCurrentOffset, tr("Archive header")));
+    }
 
     while ((nCurrentOffset < nFileSize) && arjCanAppendPart(nLimit, listResult) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         ARJ_ENTRY_INFO info = {};
@@ -888,13 +916,16 @@ QList<XBinary::FPART> XARJ::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
             listResult.append(createFilePart(FILEPART_REGION, nCurrentOffset, info.nHeaderSize + info.nCompressedSize, info.sFileName));
         }
 
-        nMaxOffset = entryEndOffset(info);
-        nCurrentOffset = nMaxOffset;
+        nCurrentOffset = entryEndOffset(info);
+    }
+
+    if ((nFileParts & FILEPART_DATA) && arjCanAppendPart(nLimit, listResult) && (nArchiveSize > 0)) {
+        listResult.append(createFilePart(FILEPART_DATA, 0, nArchiveSize, tr("Data")));
     }
 
     if ((nFileParts & FILEPART_OVERLAY) && arjCanAppendPart(nLimit, listResult)) {
-        if (nMaxOffset < nFileSize) {
-            listResult.append(createFilePart(FILEPART_OVERLAY, nMaxOffset, nFileSize - nMaxOffset, tr("Overlay")));
+        if ((nArchiveSize >= 0) && (nArchiveSize < nFileSize)) {
+            listResult.append(createFilePart(FILEPART_OVERLAY, nArchiveSize, nFileSize - nArchiveSize, tr("Overlay")));
         }
     }
 

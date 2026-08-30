@@ -26,9 +26,10 @@
 #include <QHash>
 #include <QSet>
 
-// Shared implementation detail for simple, store-only game archive readers.
-// It is deliberately non-instantiable: format recognition and table parsing
-// remain in the concrete classes.
+// Shared implementation detail for simple, store-only archive readers. It
+// originated with the game formats, but also serves structurally equivalent
+// legacy containers. It is deliberately non-instantiable: format recognition
+// and table parsing remain in the concrete classes.
 class XGameStoreArchiveBase : public XArchive {
 public:
     struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
@@ -67,10 +68,18 @@ public:
 
 protected:
     struct ENTRY {
-        qint64 nHeaderOffset;
-        qint64 nHeaderSize;
-        qint64 nDataOffset;
-        qint64 nDataSize;
+        qint64 nHeaderOffset = 0;
+        qint64 nHeaderSize = 0;
+        qint64 nDataOffset = 0;
+        qint64 nDataSize = 0;
+        qint64 nUncompressedSize = -1;
+        HANDLE_METHOD handleMethod = HANDLE_METHOD_STORE;
+        qint64 nSubstreamOffset = -1;
+        qint64 nStreamUnpackedSize = -1;
+        qint64 nSolidFolderIndex = -1;
+        bool bIsSolid = false;
+        bool bCRC32Defined = false;
+        quint32 nCRC32 = 0;
         QString sFileName;
     };
 

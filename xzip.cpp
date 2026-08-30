@@ -1151,8 +1151,10 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                     break;
                 }
                 qint64 nRecordSize = sizeof(CENTRALDIRECTORYFILEHEADER) + (qint64)cdfh.nFileNameLength + (qint64)cdfh.nExtraFieldLength + (qint64)cdfh.nFileCommentLength;
-
-                if ((cdfh.nStartDisk != 0) || (cdfh.nCompressedSize == 0xFFFFFFFF) || (cdfh.nUncompressedSize == 0xFFFFFFFF) ||
+                // InstallShield 3's single-volume ZIP writer used one-based
+                // disk numbers in central records while its EOCD used the
+                // standard zero-based value. Accept exactly that legacy 1.
+                if ((cdfh.nStartDisk > 1) || (cdfh.nCompressedSize == 0xFFFFFFFF) || (cdfh.nUncompressedSize == 0xFFFFFFFF) ||
                     (cdfh.nOffsetToLocalFileHeader == 0xFFFFFFFF) ||
                     ((cdfh.nMethod == CMETHOD_STORE) && !(cdfh.nFlags & 0x0001) && (cdfh.nCompressedSize != cdfh.nUncompressedSize)) ||
                     (nRecordSize > (nCurrent - nCurrentHeaderOffset))) {
@@ -1193,8 +1195,17 @@ qint64 XZip::findECDOffset(PDSTRUCT *pPdStruct)
                                  &baCentralName);
                 if (!guardedArchive || !guardedSource) return -1;
 
+                // Old InstallShield ZIP emitters sometimes retained Deflate's
+                // compressor-option bits (1-2) only in the local header. They
+                // do not affect decoding; all semantic/security flags must
+                // still agree with the central directory.
+                const bool bFlagsCompatible =
+                    (lfh.nFlags == cdfh.nFlags) ||
+                    ((lfh.nMethod == CMETHOD_DEFLATE) &&
+                     (((lfh.nFlags ^ cdfh.nFlags) & quint16(~0x0006U)) == 0));
+
                 if (!bNamesRead || (lfh.nSignature != SIGNATURE_LFD) || (lfh.nMinVersion != cdfh.nMinVersion) || (lfh.nMinOS != cdfh.nMinOS) ||
-                    (lfh.nFlags != cdfh.nFlags) || (lfh.nMethod != cdfh.nMethod) || (lfh.nFileNameLength != cdfh.nFileNameLength) ||
+                    !bFlagsCompatible || (lfh.nMethod != cdfh.nMethod) || (lfh.nFileNameLength != cdfh.nFileNameLength) ||
                     (nLocalDataOffset > nOffsetToCentralDirectory) || ((qint64)cdfh.nCompressedSize > (nOffsetToCentralDirectory - nLocalDataOffset)) ||
                     (baLocalName != baCentralName) ||
                     (!(lfh.nFlags & 0x0008) &&

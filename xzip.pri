@@ -32,6 +32,7 @@ HEADERS += \
     $$PWD/Algos/xasciihexdecoder.h \
     $$PWD/Algos/xrunlengthdecoder.h \
     $$PWD/Algos/xstoredecoder.h \
+    $$PWD/Algos/xamigalzxdecoder.h \
     $$PWD/Algos/xbzip2decoder.h \
     $$PWD/Algos/xbrotlidecoder.h \
     $$PWD/Algos/xlzssdecoder.h \
@@ -93,6 +94,7 @@ SOURCES += \
     $$PWD/Algos/xasciihexdecoder.cpp \
     $$PWD/Algos/xrunlengthdecoder.cpp \
     $$PWD/Algos/xstoredecoder.cpp \
+    $$PWD/Algos/xamigalzxdecoder.cpp \
     $$PWD/Algos/xbzip2decoder.cpp \
     $$PWD/Algos/xbrotlidecoder.cpp \
     $$PWD/Algos/xlzssdecoder.cpp \

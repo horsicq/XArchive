@@ -93,7 +93,11 @@ bool XSEAARC::isValid(PDSTRUCT *pPdStruct)
                     }
 
                     if (bValidName) {
-                        bResult = true;
+                        // A two-byte method marker and a printable string are
+                        // common inside executable code and compressed data.
+                        // Require a completely bounded member chain followed
+                        // by ARC's mandatory 1A 00 terminator.
+                        bResult = (getFileFormatSize(pPdStruct) > 0);
                     }
                 }
             }
@@ -116,7 +120,36 @@ bool XSEAARC::isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 
 qint64 XSEAARC::getFileFormatSize(PDSTRUCT *pPdStruct)
 {
-    return _calculateRawSize(pPdStruct);
+    PDSTRUCT pdStructEmpty = XBinary::createPdStruct();
+    if (!pPdStruct) pPdStruct = &pdStructEmpty;
+
+    const qint64 nFileSize = getSize();
+    qint64 nCurrentOffset = 0;
+    qint32 nNumberOfRecords = 0;
+
+    while ((nCurrentOffset < nFileSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if ((nFileSize - nCurrentOffset) < 2) break;
+
+        const quint8 nMarker = read_uint8(nCurrentOffset);
+        const quint8 nMethod = read_uint8(nCurrentOffset + 1);
+
+        if (nMarker != 0x1A) break;
+        if (nMethod == CMETHOD_END) return (nNumberOfRecords > 0) ? (nCurrentOffset + 2) : 0;
+        if (!_isValidMethod(nMethod)) break;
+
+        const qint64 nHeaderSize = _getHeaderSize(nMethod);
+        if ((nHeaderSize <= 0) || (nHeaderSize > (nFileSize - nCurrentOffset))) break;
+
+        const quint32 nCompressedSize = read_uint32(nCurrentOffset + 15, false);
+        if ((qint64)nCompressedSize > (nFileSize - nCurrentOffset - nHeaderSize)) break;
+
+        nCurrentOffset += nHeaderSize + (qint64)nCompressedSize;
+        nNumberOfRecords++;
+    }
+
+    // Reaching EOF or an unrelated byte sequence is not a valid substitute
+    // for the standard 1A 00 end marker, particularly during SFX carving.
+    return 0;
 }
 
 QList<XBinary::MAPMODE> XSEAARC::getMapModesList()
@@ -692,7 +725,7 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
 
     qint64 nFileSize = getSize();
     qint64 nCurrentOffset = 0;
-    qint64 nMaxOffset = 0;
+    const qint64 nArchiveSize = getFileFormatSize(pPdStruct);
 
     while ((nCurrentOffset < nFileSize) && seaCanAppend(nLimit, listResult) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((nFileSize - nCurrentOffset) < 2) {
@@ -711,7 +744,13 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
         }
 
         qint32 nHeaderSize = _getHeaderSize(nMethod);
+        if ((nHeaderSize <= 0) || (nHeaderSize > (nFileSize - nCurrentOffset))) {
+            break;
+        }
         quint32 nCompressedSize = read_uint32(nCurrentOffset + 15, false);
+        if ((qint64)nCompressedSize > (nFileSize - nCurrentOffset - nHeaderSize)) {
+            break;
+        }
         quint32 nUncompressedSize = nCompressedSize;
 
         if (nMethod >= CMETHOD_STORE) {
@@ -759,17 +798,26 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
             listResult.append(record);
         }
 
-        nMaxOffset = nCurrentOffset + nHeaderSize + nCompressedSize;
         nCurrentOffset += (nHeaderSize + nCompressedSize);
     }
 
+    if ((nFileParts & FILEPART_DATA) && seaCanAppend(nLimit, listResult) && (nArchiveSize > 0)) {
+        FPART record = {};
+        record.filePart = FILEPART_DATA;
+        record.nFileOffset = 0;
+        record.nFileSize = nArchiveSize;
+        record.nVirtualAddress = XADDR_MAX;
+        record.sName = tr("Data");
+        listResult.append(record);
+    }
+
     // Add overlay if any
-    if ((nFileParts & FILEPART_OVERLAY) && seaCanAppend(nLimit, listResult) && (nMaxOffset < nFileSize)) {
+    if ((nFileParts & FILEPART_OVERLAY) && seaCanAppend(nLimit, listResult) && (nArchiveSize >= 0) && (nArchiveSize < nFileSize)) {
         FPART record = {};
 
         record.filePart = FILEPART_OVERLAY;
-        record.nFileOffset = nMaxOffset;
-        record.nFileSize = nFileSize - nMaxOffset;
+        record.nFileOffset = nArchiveSize;
+        record.nFileSize = nFileSize - nArchiveSize;
         record.nVirtualAddress = XADDR_MAX;
         record.sName = tr("Overlay");
 
@@ -794,6 +842,8 @@ QString XSEAARC::cmethodToString(CMETHOD cmethod)
         case CMETHOD_CRUNCHED3: sResult = "Crunched with pack"; break;
         case CMETHOD_CRUNCHED4: sResult = "Crunched (LZW dynamic)"; break;
         case CMETHOD_SQUASHED: sResult = "Squashed (LZW 13-bit)"; break;
+        case CMETHOD_CRUSHED: sResult = "Crushed"; break;
+        case CMETHOD_DISTILLED: sResult = "Distilled"; break;
     }
 
     return sResult;
@@ -821,6 +871,8 @@ XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
         case CMETHOD_CRUNCHED3: return HANDLE_METHOD_UNKNOWN;
         case CMETHOD_CRUNCHED4: return HANDLE_METHOD_ARC_CRUNCH_DYN;
         case CMETHOD_SQUASHED: return HANDLE_METHOD_ARC_SQUASH;
+        case CMETHOD_CRUSHED:
+        case CMETHOD_DISTILLED: return HANDLE_METHOD_UNKNOWN;
         default: return HANDLE_METHOD_UNKNOWN;
     }
 }
@@ -828,7 +880,7 @@ XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
 qint32 XSEAARC::_getHeaderSize(quint8 nMethod)
 {
     // Method 1 (old store): no original size field = 25 bytes header
-    // Methods 2-9: has original size field = 29 bytes header
+    // Methods 2-11: has original size field = 29 bytes header
     if (nMethod == CMETHOD_STORE_OLD) {
         return 25;
     }
@@ -838,7 +890,7 @@ qint32 XSEAARC::_getHeaderSize(quint8 nMethod)
 
 bool XSEAARC::_isValidMethod(quint8 nMethod)
 {
-    return (nMethod >= CMETHOD_STORE_OLD) && (nMethod <= CMETHOD_SQUASHED);
+    return (nMethod >= CMETHOD_STORE_OLD) && (nMethod <= CMETHOD_DISTILLED);
 }
 
 QList<QString> XSEAARC::getSearchSignatures()

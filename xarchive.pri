@@ -14,8 +14,33 @@ DEPENDPATH += $$PWD/Algos/include
     include($$PWD/xzip.pri)
 }
 
+include($$PWD/ancient.pri)
+include($$PWD/deark.pri)
+include($$PWD/libdsk.pri)
+
 HEADERS += \
     $$PWD/x_ar.h \
+    $$PWD/xancient.h \
+    $$PWD/xlegacyencoded.h \
+    $$PWD/xdearkarchive.h \
+    $$PWD/xlibdskarchive.h \
+    $$PWD/xcompactproarchive.h \
+    $$PWD/xdiskdoublerarchive.h \
+    $$PWD/Algos/xmaclegacydecoders.h \
+    $$PWD/Algos/xpaxdecoder.h \
+    $$PWD/Algos/xvisedeflatedecoder.h \
+    $$PWD/xpyinstallercarchive.h \
+    $$PWD/xwisesfxarchive.h \
+    $$PWD/xlegacystorearchive.h \
+    $$PWD/xconcatziparchive.h \
+    $$PWD/xdiskjugglerarchive.h \
+    $$PWD/xapplesingle.h \
+    $$PWD/x2img.h \
+    $$PWD/xpyz.h \
+    $$PWD/xlzxarchive.h \
+    $$PWD/xmacbinary.h \
+    $$PWD/xresourcefork.h \
+    $$PWD/xlbr.h \
     $$PWD/xseaarc.h \
     $$PWD/xexternalarchive.h \
     $$PWD/xfreearc.h \
@@ -32,6 +57,10 @@ HEADERS += \
     $$PWD/games/xpak.h \
     $$PWD/games/xwad.h \
     $$PWD/games/xgrp.h \
+    $$PWD/games/xhog.h \
+    $$PWD/games/xwolfvswap.h \
+    $$PWD/games/xwintermutedcp.h \
+    $$PWD/games/xt64.h \
     $$PWD/games/xgamestorearchive_p.h \
     $$PWD/games/xckp.h \
     $$PWD/games/xedp.h \
@@ -91,6 +120,27 @@ HEADERS += \
 
 SOURCES += \
     $$PWD/x_ar.cpp \
+    $$PWD/xancient.cpp \
+    $$PWD/xlegacyencoded.cpp \
+    $$PWD/xdearkarchive.cpp \
+    $$PWD/xlibdskarchive.cpp \
+    $$PWD/xcompactproarchive.cpp \
+    $$PWD/xdiskdoublerarchive.cpp \
+    $$PWD/Algos/xmaclegacydecoders.cpp \
+    $$PWD/Algos/xpaxdecoder.cpp \
+    $$PWD/Algos/xvisedeflatedecoder.cpp \
+    $$PWD/xpyinstallercarchive.cpp \
+    $$PWD/xwisesfxarchive.cpp \
+    $$PWD/xlegacystorearchive.cpp \
+    $$PWD/xconcatziparchive.cpp \
+    $$PWD/xdiskjugglerarchive.cpp \
+    $$PWD/xapplesingle.cpp \
+    $$PWD/x2img.cpp \
+    $$PWD/xpyz.cpp \
+    $$PWD/xlzxarchive.cpp \
+    $$PWD/xmacbinary.cpp \
+    $$PWD/xresourcefork.cpp \
+    $$PWD/xlbr.cpp \
     $$PWD/xseaarc.cpp \
     $$PWD/xexternalarchive.cpp \
     $$PWD/xfreearc.cpp \
@@ -107,6 +157,10 @@ SOURCES += \
     $$PWD/games/xpak.cpp \
     $$PWD/games/xwad.cpp \
     $$PWD/games/xgrp.cpp \
+    $$PWD/games/xhog.cpp \
+    $$PWD/games/xwolfvswap.cpp \
+    $$PWD/games/xwintermutedcp.cpp \
+    $$PWD/games/xt64.cpp \
     $$PWD/games/xgamestorearchive_p.cpp \
     $$PWD/games/xckp.cpp \
     $$PWD/games/xedp.cpp \

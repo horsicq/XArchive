@@ -42,3 +42,21 @@ set(ZSTD_BUILD_TESTS OFF CACHE BOOL "Build zstd tests" FORCE)
 # 309 externals they reference between them -- including ERR_getErrorString,
 # which zstddeclib.cpp provides -- so nothing here resolved against the 3.4 MB
 # library. XBinaryViewer links libzstd_static directly and is unaffected.
+
+include("${CMAKE_CURRENT_LIST_DIR}/deark.cmake")
+set(XARCHIVE_SOURCES
+    ${XARCHIVE_SOURCES}
+    ${XARCHIVE_DEARK_SOURCES}
+    ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xcompactproarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xcompactproarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xdiskdoublerarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xdiskdoublerarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmaclegacydecoders.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmaclegacydecoders.h)
+list(APPEND XARCHIVE_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/xpyinstallercarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xpyinstallercarchive.h)
