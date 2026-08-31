@@ -12,6 +12,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/time.h>
+// clock_gettime()/struct timespec. Included explicitly rather than relying on
+// <sys/time.h> to pull it in, which is not guaranteed outside glibc.
+#include <time.h>
 #include <unistd.h>
 #include <utime.h>
 #include <errno.h>
@@ -303,18 +306,29 @@ void de_update_file_attribs2(dbuf *f)
 // Keep this function in sync with xdearkengine_win_p.cpp.
 void de_current_time_to_timestamp(struct de_timestamp *ts)
 {
-	struct timeval tv;
+	// clock_gettime(), not gettimeofday(). gettimeofday() was REMOVED from
+	// POSIX in POSIX.1-2008, and xdearkengine_config_p.h defines
+	// _POSIX_C_SOURCE 200809L before any libc header is reached. glibc keeps
+	// the declaration visible anyway, but FreeBSD honours the level strictly:
+	// that define clears __BSD_VISIBLE, <sys/time.h> stops declaring
+	// gettimeofday, and the DIE-engine FreeBSD job failed with
+	//
+	//     error: use of undeclared identifier 'gettimeofday'
+	//
+	// clock_gettime() is the POSIX.1-2008 replacement, so it is visible at
+	// exactly the standard level this engine already asks for.
+	struct timespec tp;
 	int ret;
 
-	de_zeromem(&tv, sizeof(struct timeval));
-	ret = gettimeofday(&tv, NULL);
+	de_zeromem(&tp, sizeof(struct timespec));
+	ret = clock_gettime(CLOCK_REALTIME, &tp);
 	if(ret!=0) {
 		de_zeromem(ts, sizeof(struct de_timestamp));
 		return;
 	}
 
-	de_unix_time_to_timestamp((i64)tv.tv_sec, ts, 0x1);
-	de_timestamp_set_subsec(ts, ((double)tv.tv_usec)/1000000.0);
+	de_unix_time_to_timestamp((i64)tp.tv_sec, ts, 0x1);
+	de_timestamp_set_subsec(ts, ((double)tp.tv_nsec)/1000000000.0);
 }
 
 void de_exitprocess(int s)
