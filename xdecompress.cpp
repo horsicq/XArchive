@@ -29,9 +29,19 @@
 #include "Algos/xwinzipjpegdecoder.h"
 #include "Algos/xwavpackdecoder.h"
 #include "Algos/xamigalzxdecoder.h"
+#include "Algos/xmi10decoder.h"
+#include "Algos/xfpakdecoder.h"
+#include "Algos/xftcompdecoder.h"
+#include "Algos/xdndecoder.h"
+#include "Algos/xsqzdecoder.h"
+#include "Algos/xflsdecoder.h"
+#include "Algos/xpakdecoder.h"
+#include "Algos/xssmdecoder.h"
 #include "Algos/xmaclegacydecoders.h"
 #include "Algos/xpaxdecoder.h"
 #include "Algos/xvisedeflatedecoder.h"
+#include "Algos/xancientdecoder.h"
+#include "Algos/xrtpatchdecoder.h"
 #include <QCoreApplication>
 #include <QPointer>
 #include <QVector>
@@ -263,6 +273,58 @@ static bool decProgressAlive(XBinary::PDSTRUCT *pPdStruct, const XBinary::PDSTRU
     return !pPdStruct || XBinary::isPdStructLifetimeAlive(lifetime);
 }
 
+class DecProgressAlivePredicate {
+public:
+    DecProgressAlivePredicate(XBinary::PDSTRUCT *pPdStruct, const XBinary::PDSTRUCTLIFETIME &lifetime) : m_pPdStruct(pPdStruct), m_lifetime(lifetime)
+    {
+    }
+
+    bool operator()() const
+    {
+        return decProgressAlive(m_pPdStruct, m_lifetime);
+    }
+
+private:
+    XBinary::PDSTRUCT *m_pPdStruct;
+    const XBinary::PDSTRUCTLIFETIME &m_lifetime;
+};
+
+class DecDeviceProgressAlivePredicate {
+public:
+    DecDeviceProgressAlivePredicate(const QPointer<QIODevice> &guardedDevice, XBinary::PDSTRUCT *pPdStruct, const XBinary::PDSTRUCTLIFETIME &lifetime)
+        : m_guardedDevice(guardedDevice), m_pPdStruct(pPdStruct), m_lifetime(lifetime)
+    {
+    }
+
+    bool operator()() const
+    {
+        return m_guardedDevice && decProgressAlive(m_pPdStruct, m_lifetime);
+    }
+
+private:
+    const QPointer<QIODevice> &m_guardedDevice;
+    XBinary::PDSTRUCT *m_pPdStruct;
+    const XBinary::PDSTRUCTLIFETIME &m_lifetime;
+};
+
+class DecOwnerProgressAlivePredicate {
+public:
+    DecOwnerProgressAlivePredicate(const QPointer<XDecompress> &guardedOwner, XBinary::PDSTRUCT *pPdStruct, const XBinary::PDSTRUCTLIFETIME &lifetime)
+        : m_guardedOwner(guardedOwner), m_pPdStruct(pPdStruct), m_lifetime(lifetime)
+    {
+    }
+
+    bool operator()() const
+    {
+        return m_guardedOwner && decProgressAlive(m_pPdStruct, m_lifetime);
+    }
+
+private:
+    const QPointer<XDecompress> &m_guardedOwner;
+    XBinary::PDSTRUCT *m_pPdStruct;
+    const XBinary::PDSTRUCTLIFETIME &m_lifetime;
+};
+
 static DecCRCResult decCheckCRCValue(XBinary::CRC_TYPE crcType, const QVariant &value, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct,
                                      const XBinary::DATAPROCESS_STATE *pState)
 {
@@ -283,7 +345,7 @@ static DecCRCResult decCheckCRCValue(XBinary::CRC_TYPE crcType, const QVariant &
 
     QPointer<QIODevice> guardedDevice(pDevice);
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    const auto contextAlive = [&]() { return guardedDevice && decProgressAlive(pPdStruct, progressLifetime); };
+    const DecDeviceProgressAlivePredicate contextAlive(guardedDevice, pPdStruct, progressLifetime);
 
     if (!guardedDevice) return DecCRCResult::NotReadable;
     const bool bReadable = guardedDevice->isReadable();
@@ -415,6 +477,46 @@ private:
     XBinary::PDSTRUCTLIFETIME m_progressLifetime;
 };
 
+class DecProcessContextAlivePredicate {
+public:
+    DecProcessContextAlivePredicate(const QPointer<XDecompress> &guardedOwner, const DecProcessStateTransaction &transaction)
+        : m_guardedOwner(guardedOwner), m_transaction(transaction)
+    {
+    }
+
+    bool operator()() const
+    {
+        return m_guardedOwner && m_transaction.isAlive();
+    }
+
+private:
+    const QPointer<XDecompress> &m_guardedOwner;
+    const DecProcessStateTransaction &m_transaction;
+};
+
+class DecConsumedCounter {
+public:
+    DecConsumedCounter(qint64 *pnConsumed, XBinary::DATAPROCESS_STATE *pState) : m_pnConsumed(pnConsumed), m_pState(pState)
+    {
+    }
+
+    bool operator()(qint64 nAmount) const
+    {
+        if (!m_pnConsumed) return true;
+        const qint64 nMax = (std::numeric_limits<qint64>::max)();
+        if ((*m_pnConsumed < 0) || (nAmount < 0) || (nAmount > nMax - *m_pnConsumed)) {
+            m_pState->bReadError = true;
+            return false;
+        }
+        *m_pnConsumed += nAmount;
+        return true;
+    }
+
+private:
+    qint64 *m_pnConsumed;
+    XBinary::DATAPROCESS_STATE *m_pState;
+};
+
 // True for the record shape XBinary::markArchiveStreamRecord() publishes: a
 // member of a private decoded stream, addressable only through its owning
 // archive session (XBinary::_unpackRecordByIndex) and never by coordinates.
@@ -481,6 +583,234 @@ static bool decPrepareBoundedInput(QIODevice *pDevice, qint64 nOffset, qint64 nL
     return true;
 }
 
+class DecGpfCodeReader {
+public:
+    DecGpfCodeReader(const uchar *pData, quint32 nCompressedBits, quint32 *pnBitPosition, const quint32 *pnCodeBits)
+        : m_pData(pData), m_nCompressedBits(nCompressedBits), m_pnBitPosition(pnBitPosition), m_pnCodeBits(pnCodeBits)
+    {
+    }
+
+    bool operator()(quint32 *pnCode) const
+    {
+        if (!pnCode || (*m_pnBitPosition + *m_pnCodeBits > m_nCompressedBits)) return false;
+        quint32 nValue = 0;
+        for (quint32 i = 0; i < *m_pnCodeBits; ++i) {
+            const quint32 nBit = *m_pnBitPosition + i;
+            nValue = (nValue << 1) | ((m_pData[nBit >> 3] >> (7U - (nBit & 7U))) & 1U);
+        }
+        *m_pnBitPosition += *m_pnCodeBits;
+        *pnCode = nValue;
+        return true;
+    }
+
+private:
+    const uchar *m_pData;
+    quint32 m_nCompressedBits;
+    quint32 *m_pnBitPosition;
+    const quint32 *m_pnCodeBits;
+};
+
+class DecStuntsByteReader {
+public:
+    DecStuntsByteReader(const QByteArray &source, qint32 *pnPosition, qint32 *pnPaddingReads, bool bReverseBitOrder)
+        : m_source(source), m_pnPosition(pnPosition), m_pnPaddingReads(pnPaddingReads), m_bReverseBitOrder(bReverseBitOrder)
+    {
+    }
+
+    bool operator()(quint8 *pValue) const
+    {
+        if (!pValue) return false;
+        quint8 nValue = 0;
+        if (*m_pnPosition < m_source.size()) {
+            nValue = quint8(m_source.at((*m_pnPosition)++));
+        } else {
+            // The original 16-bit decoder always fetches a look-ahead byte,
+            // even when the last code already completed the requested output.
+            // Treat at most two such bytes as zero padding, never as an
+            // unbounded source for a truncated stream.
+            if (*m_pnPaddingReads >= 2) return false;
+            ++*m_pnPaddingReads;
+            ++*m_pnPosition;
+        }
+        if (m_bReverseBitOrder) {
+            nValue = quint8(((nValue & 0x55U) << 1) | ((nValue >> 1) & 0x55U));
+            nValue = quint8(((nValue & 0x33U) << 2) | ((nValue >> 2) & 0x33U));
+            nValue = quint8((nValue << 4) | (nValue >> 4));
+        }
+        *pValue = nValue;
+        return true;
+    }
+
+private:
+    const QByteArray &m_source;
+    qint32 *m_pnPosition;
+    qint32 *m_pnPaddingReads;
+    bool m_bReverseBitOrder;
+};
+
+class DecArcvLzhufContext {
+public:
+    DecArcvLzhufContext(const uchar *pInput, qint64 nBitLimit, int nMaximumFrequency, int nCharacterCount, int nTreeSize, int nRoot,
+                        int *pFrequency, int *pParent, int *pChild, const quint8 *pPositionLength, const quint8 *pPositionCode)
+        : m_pInput(pInput),
+          m_nBitPosition(0),
+          m_nBitLimit(nBitLimit),
+          m_nMaximumFrequency(nMaximumFrequency),
+          m_nCharacterCount(nCharacterCount),
+          m_nTreeSize(nTreeSize),
+          m_nRoot(nRoot),
+          m_pFrequency(pFrequency),
+          m_pParent(pParent),
+          m_pChild(pChild),
+          m_pPositionLength(pPositionLength),
+          m_pPositionCode(pPositionCode)
+    {
+    }
+
+    int decodeCharacter()
+    {
+        int nCurrent = m_pChild[m_nRoot];
+        while (nCurrent < m_nTreeSize) {
+            const int nBit = readBit();
+            if (nBit < 0) return -1;
+            nCurrent = m_pChild[nCurrent + nBit];
+        }
+        nCurrent -= m_nTreeSize;
+        update(nCurrent);
+        return nCurrent;
+    }
+
+    int decodePosition()
+    {
+        int nFirstByte = 0;
+        for (int i = 0; i < 8; ++i) {
+            const int nBit = readBit();
+            if (nBit < 0) return -1;
+            nFirstByte = (nFirstByte << 1) | nBit;
+        }
+        const int nResult = int(m_pPositionCode[nFirstByte]) << 6;
+        int nRemaining = int(m_pPositionLength[nFirstByte]) - 2;
+        int nShifted = nFirstByte;
+        while (nRemaining-- > 0) {
+            const int nBit = readBit();
+            if (nBit < 0) return -1;
+            nShifted = (nShifted << 1) | nBit;
+        }
+        return nResult | (nShifted & 0x3f);
+    }
+
+private:
+    int readBit()
+    {
+        if (m_nBitPosition >= m_nBitLimit) return -1;
+        const int nValue = (m_pInput[m_nBitPosition >> 3] >> (7 - (m_nBitPosition & 7))) & 1;
+        ++m_nBitPosition;
+        return nValue;
+    }
+
+    void reconstruct()
+    {
+        int nLeafCount = 0;
+        for (int i = 0; i < m_nTreeSize; ++i) {
+            if (m_pChild[i] >= m_nTreeSize) {
+                m_pFrequency[nLeafCount] = (m_pFrequency[i] + 1) / 2;
+                m_pChild[nLeafCount] = m_pChild[i];
+                ++nLeafCount;
+            }
+        }
+        for (int i = 0, nNode = m_nCharacterCount; nNode < m_nTreeSize; i += 2, ++nNode) {
+            const int nSum = m_pFrequency[i] + m_pFrequency[i + 1];
+            int nInsertion = nNode - 1;
+            while ((nInsertion >= 0) && (nSum < m_pFrequency[nInsertion])) --nInsertion;
+            ++nInsertion;
+            for (int nMove = nNode; nMove > nInsertion; --nMove) {
+                m_pFrequency[nMove] = m_pFrequency[nMove - 1];
+                m_pChild[nMove] = m_pChild[nMove - 1];
+            }
+            m_pFrequency[nInsertion] = nSum;
+            m_pChild[nInsertion] = i;
+        }
+        for (int i = 0; i < m_nTreeSize; ++i) {
+            const int nNode = m_pChild[i];
+            m_pParent[nNode] = i;
+            if (nNode < m_nTreeSize) m_pParent[nNode + 1] = i;
+        }
+    }
+
+    void update(int nCharacter)
+    {
+        if (m_pFrequency[m_nRoot] == m_nMaximumFrequency) reconstruct();
+        int nCurrent = m_pParent[nCharacter + m_nTreeSize];
+        do {
+            const int nUpdated = ++m_pFrequency[nCurrent];
+            int nNext = nCurrent + 1;
+            if (nUpdated > m_pFrequency[nNext]) {
+                while (nUpdated > m_pFrequency[nNext + 1]) ++nNext;
+                m_pFrequency[nCurrent] = m_pFrequency[nNext];
+                m_pFrequency[nNext] = nUpdated;
+                const int nOldChild = m_pChild[nCurrent];
+                m_pParent[nOldChild] = nNext;
+                if (nOldChild < m_nTreeSize) m_pParent[nOldChild + 1] = nNext;
+                const int nNewChild = m_pChild[nNext];
+                m_pChild[nNext] = nOldChild;
+                m_pParent[nNewChild] = nCurrent;
+                if (nNewChild < m_nTreeSize) m_pParent[nNewChild + 1] = nCurrent;
+                m_pChild[nCurrent] = nNewChild;
+                nCurrent = nNext;
+            }
+            nCurrent = m_pParent[nCurrent];
+        } while (nCurrent != 0);
+    }
+
+    const uchar *m_pInput;
+    qint64 m_nBitPosition;
+    qint64 m_nBitLimit;
+    int m_nMaximumFrequency;
+    int m_nCharacterCount;
+    int m_nTreeSize;
+    int m_nRoot;
+    int *m_pFrequency;
+    int *m_pParent;
+    int *m_pChild;
+    const quint8 *m_pPositionLength;
+    const quint8 *m_pPositionCode;
+};
+
+class DecEpfsCodeReader {
+public:
+    DecEpfsCodeReader(const QByteArray &packed, quint64 *pnBitBuffer, quint32 *pnBitCount, quint32 *pnInputPosition, const quint32 *pnCodeBits,
+                      const quint32 *pnMaximumValue)
+        : m_packed(packed),
+          m_pnBitBuffer(pnBitBuffer),
+          m_pnBitCount(pnBitCount),
+          m_pnInputPosition(pnInputPosition),
+          m_pnCodeBits(pnCodeBits),
+          m_pnMaximumValue(pnMaximumValue)
+    {
+    }
+
+    bool operator()(quint32 *pnCode) const
+    {
+        if (!pnCode) return false;
+        while (*m_pnBitCount < *m_pnCodeBits) {
+            if (*m_pnInputPosition >= quint32(m_packed.size())) return false;
+            *m_pnBitBuffer = (*m_pnBitBuffer << 8) | quint8(m_packed.at(qint32((*m_pnInputPosition)++)));
+            *m_pnBitCount += 8;
+        }
+        *m_pnBitCount -= *m_pnCodeBits;
+        *pnCode = quint32((*m_pnBitBuffer >> *m_pnBitCount) & *m_pnMaximumValue);
+        return true;
+    }
+
+private:
+    const QByteArray &m_packed;
+    quint64 *m_pnBitBuffer;
+    quint32 *m_pnBitCount;
+    quint32 *m_pnInputPosition;
+    const quint32 *m_pnCodeBits;
+    const quint32 *m_pnMaximumValue;
+};
+
 static bool decGpfPack(const QByteArray &packed, qint32 expectedSize,
                        QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
 {
@@ -510,18 +840,7 @@ static bool decGpfPack(const QByteArray &packed, qint32 expectedSize,
         quint8 previousFirst = 0;
         bool havePrevious = false;
 
-        auto getCode = [&](quint32 *code) -> bool {
-            if (!code || bitPosition + codeBits > compressedBits) return false;
-            quint32 value = 0;
-            for (quint32 i = 0; i < codeBits; ++i) {
-                const quint32 bit = bitPosition + i;
-                value = (value << 1) |
-                        ((data[bit >> 3] >> (7U - (bit & 7U))) & 1U);
-            }
-            bitPosition += codeBits;
-            *code = value;
-            return true;
-        };
+        const DecGpfCodeReader getCode(data, compressedBits, &bitPosition, &codeBits);
 
         while (bitPosition < compressedBits) {
             quint32 code = 0;
@@ -664,30 +983,7 @@ static bool decStuntsVLE(const QByteArray &source, qint32 sourceOffset,
     }
 
     qint32 paddingReads = 0;
-    auto readBitByte = [&](quint8 *pValue) -> bool {
-        if (!pValue) return false;
-        quint8 value = 0;
-        if (pos < source.size()) {
-            value = quint8(source.at(pos++));
-        } else {
-            // The original 16-bit decoder always fetches a look-ahead byte,
-            // even when the last code already completed the requested output.
-            // Treat at most two such bytes as zero padding, never as an
-            // unbounded source for a truncated stream.
-            if (paddingReads >= 2) return false;
-            ++paddingReads;
-            ++pos;
-        }
-        if (reverseBitOrder) {
-            value = quint8(((value & 0x55U) << 1) |
-                           ((value >> 1) & 0x55U));
-            value = quint8(((value & 0x33U) << 2) |
-                           ((value >> 2) & 0x33U));
-            value = quint8((value << 4) | (value >> 4));
-        }
-        *pValue = value;
-        return true;
-    };
+    const DecStuntsByteReader readBitByte(source, &pos, &paddingReads, reverseBitOrder);
 
     quint8 currentWidth = 8;
     quint8 nextWidth = 0;
@@ -1082,36 +1378,32 @@ static bool decPkwareDcl(const QByteArray &packed, qint32 expectedSize,
     return true;
 }
 
-static bool decArcvLzhuf(const QByteArray &packed, qint32 expectedSize,
+static bool decArcvLzhuf(const QByteArray &packed, qint32 expectedSize, bool bWide,
                          QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
 {
-    // Eschalon Setup 1.10 uses a compact member of the Yoshizaki LZHUF
-    // family.  Its alphabet differs from LHA -lh1-: 256 is EOF, 257..286
-    // encode lengths 3..32, and the initial 4 KiB dictionary cursor is N-T.
+    // Eschalon Setup 1.10 uses a member of the Yoshizaki LZHUF family. The
+    // compact sub-variant has 287 symbols (256 literals, 256=EOF, 257..286 =
+    // lengths 3..32, F=32); the stock sub-variant has 315 symbols
+    // (257..314 = lengths 3..60, F=60). Buffers are sized for the wide
+    // maximum; N_CHAR/F/T/R are chosen at runtime by bWide.
     enum {
         N = 4096,
-        F = 32,
-        N_CHAR = 287,
-        T = N_CHAR * 2 - 1,
-        R = T - 1,
-        MAX_FREQ = 0x8000
+        MAX_FREQ = 0x8000,
+        N_CHAR_MAX = 315,
+        T_MAX = N_CHAR_MAX * 2 - 1  // 629
     };
+    const int F = bWide ? 60 : 32;
+    const int N_CHAR = bWide ? 315 : 287;
+    const int T = N_CHAR * 2 - 1;
+    const int R = T - 1;
     if (!output || expectedSize < 1 || packed.isEmpty()) return false;
     const uchar *input =
         reinterpret_cast<const uchar *>(packed.constData());
-    qint64 bitPosition = 0;
     const qint64 bitLimit = qint64(packed.size()) * 8;
-    auto readBit = [&]() -> int {
-        if (bitPosition >= bitLimit) return -1;
-        const int value =
-            (input[bitPosition >> 3] >> (7 - (bitPosition & 7))) & 1;
-        ++bitPosition;
-        return value;
-    };
 
-    std::array<int, T + 1> frequency = {};
-    std::array<int, T + N_CHAR> parent = {};
-    std::array<int, T> child = {};
+    std::array<int, T_MAX + 1> frequency = {};
+    std::array<int, T_MAX + N_CHAR_MAX> parent = {};
+    std::array<int, T_MAX> child = {};
     std::array<quint8, 256> positionLength = {};
     std::array<quint8, 256> positionCode = {};
     std::array<quint8, N> dictionary = {};
@@ -1145,88 +1437,8 @@ static bool decArcvLzhuf(const QByteArray &packed, qint32 expectedSize,
     frequency[T] = 0xffff;
     parent[R] = 0;
     dictionary.fill(0x20);
-
-    auto reconstruct = [&]() {
-        int leafCount = 0;
-        for (int i = 0; i < T; ++i) {
-            if (child[i] >= T) {
-                frequency[leafCount] = (frequency[i] + 1) / 2;
-                child[leafCount] = child[i];
-                ++leafCount;
-            }
-        }
-        for (int i = 0, node = N_CHAR; node < T; i += 2, ++node) {
-            const int sum = frequency[i] + frequency[i + 1];
-            int insertion = node - 1;
-            while (insertion >= 0 && sum < frequency[insertion])
-                --insertion;
-            ++insertion;
-            for (int move = node; move > insertion; --move) {
-                frequency[move] = frequency[move - 1];
-                child[move] = child[move - 1];
-            }
-            frequency[insertion] = sum;
-            child[insertion] = i;
-        }
-        for (int i = 0; i < T; ++i) {
-            const int node = child[i];
-            parent[node] = i;
-            if (node < T) parent[node + 1] = i;
-        }
-    };
-
-    auto update = [&](int character) {
-        if (frequency[R] == MAX_FREQ) reconstruct();
-        int current = parent[character + T];
-        do {
-            const int updated = ++frequency[current];
-            int next = current + 1;
-            if (updated > frequency[next]) {
-                while (updated > frequency[next + 1]) ++next;
-                frequency[current] = frequency[next];
-                frequency[next] = updated;
-                const int oldChild = child[current];
-                parent[oldChild] = next;
-                if (oldChild < T) parent[oldChild + 1] = next;
-                const int newChild = child[next];
-                child[next] = oldChild;
-                parent[newChild] = current;
-                if (newChild < T) parent[newChild + 1] = current;
-                child[current] = newChild;
-                current = next;
-            }
-            current = parent[current];
-        } while (current != 0);
-    };
-
-    auto decodeCharacter = [&]() -> int {
-        int current = child[R];
-        while (current < T) {
-            const int bit = readBit();
-            if (bit < 0) return -1;
-            current = child[current + bit];
-        }
-        current -= T;
-        update(current);
-        return current;
-    };
-    auto decodePosition = [&]() -> int {
-        int firstByte = 0;
-        for (int i = 0; i < 8; ++i) {
-            const int bit = readBit();
-            if (bit < 0) return -1;
-            firstByte = (firstByte << 1) | bit;
-        }
-        int result = int(positionCode[firstByte]) << 6;
-        int remaining = int(positionLength[firstByte]) - 2;
-        int shifted = firstByte;
-        while (remaining-- > 0) {
-            const int bit = readBit();
-            if (bit < 0) return -1;
-            shifted = (shifted << 1) | bit;
-        }
-        return result | (shifted & 0x3f);
-    };
+    DecArcvLzhufContext decoder(input, bitLimit, MAX_FREQ, N_CHAR, T, R, frequency.data(), parent.data(), child.data(), positionLength.data(),
+                                 positionCode.data());
 
     QByteArray result(expectedSize, 0);
     int writePosition = N - T;
@@ -1235,7 +1447,7 @@ static bool decArcvLzhuf(const QByteArray &packed, qint32 expectedSize,
         if ((produced & 0x3fff) == 0 &&
             !XBinary::isPdStructNotCanceled(pPdStruct))
             return false;
-        const int character = decodeCharacter();
+        const int character = decoder.decodeCharacter();
         if (character < 0 || character == 256) return false;
         if (character < 256) {
             result[produced++] = char(character);
@@ -1243,7 +1455,7 @@ static bool decArcvLzhuf(const QByteArray &packed, qint32 expectedSize,
             writePosition = (writePosition + 1) & (N - 1);
             continue;
         }
-        const int encodedPosition = decodePosition();
+        const int encodedPosition = decoder.decodePosition();
         const int length = character - 254;
         if (encodedPosition < 0 || length < 3 || length > F ||
             length > expectedSize - produced)
@@ -1259,6 +1471,11 @@ static bool decArcvLzhuf(const QByteArray &packed, qint32 expectedSize,
     }
     *output = result;
     return true;
+}
+
+bool XDecompress::decompressArcvLzhuf(const QByteArray &packed, qint32 nRawSize, bool bWide, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct)
+{
+    return decArcvLzhuf(packed, nRawSize, bWide, pOutput, pPdStruct);
 }
 
 static bool decEmtRecord(const QByteArray &packed, qint64 *position,
@@ -1367,7 +1584,7 @@ static bool decReadExactAt(QIODevice *pDevice, qint64 nOffset, char *pData, qint
 
     QPointer<QIODevice> guardedDevice(pDevice);
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    const auto isProgressAlive = [&]() -> bool { return !pPdStruct || XBinary::isPdStructLifetimeAlive(progressLifetime); };
+    const DecProgressAlivePredicate isProgressAlive(pPdStruct, progressLifetime);
     const bool bSeeked = guardedDevice->seek(nOffset);
     if (!guardedDevice || !isProgressAlive()) return false;
     if (!bSeeked) {
@@ -1378,16 +1595,7 @@ static bool decReadExactAt(QIODevice *pDevice, qint64 nOffset, char *pData, qint
         }
     }
 
-    const auto addConsumed = [pnConsumed, pState](qint64 nAmount) -> bool {
-        if (!pnConsumed) return true;
-        const qint64 nMax = (std::numeric_limits<qint64>::max)();
-        if ((*pnConsumed < 0) || (nAmount < 0) || (nAmount > nMax - *pnConsumed)) {
-            pState->bReadError = true;
-            return false;
-        }
-        *pnConsumed += nAmount;
-        return true;
-    };
+    const DecConsumedCounter addConsumed(pnConsumed, pState);
 
     qint64 nReadTotal = 0;
     while ((nReadTotal < nSize) && isProgressAlive() && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -1420,7 +1628,7 @@ static bool decEmitByteArray(const QByteArray &baData, qint64 nDataOffset, qint6
     }
 
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    const auto isProgressAlive = [&]() -> bool { return !pPdStruct || XBinary::isPdStructLifetimeAlive(progressLifetime); };
+    const DecProgressAlivePredicate isProgressAlive(pPdStruct, progressLifetime);
 
     qint64 nOffset = 0;
     while ((nOffset < nDataSize) && isProgressAlive() && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -1530,7 +1738,7 @@ static bool decEmitDevice(QIODevice *pSource, qint64 nOffset, qint64 nSize, XBin
     QPointer<QIODevice> guardedSource(pSource);
     QPointer<QIODevice> guardedOutput(pState->pDeviceOutput);
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    const auto isProgressAlive = [&]() -> bool { return !pPdStruct || XBinary::isPdStructLifetimeAlive(progressLifetime); };
+    const DecProgressAlivePredicate isProgressAlive(pPdStruct, progressLifetime);
     if (!guardedSource || !guardedOutput || !isProgressAlive()) return false;
 
     pState->bReadError = false;
@@ -2073,7 +2281,7 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     }
 
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    const auto isContextAlive = [&]() -> bool { return guardedThis && stateTransaction.isAlive(); };
+    const DecProcessContextAlivePredicate isContextAlive(guardedThis, stateTransaction);
 
     pState->bReadError = false;
     pState->bWriteError = false;
@@ -2505,7 +2713,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
     pState = stateTransaction.state();
     QPointer<XDecompress> guardedThis(this);
     const XBinary::PDSTRUCTLIFETIME progressLifetime = pPdStruct ? XBinary::retainPdStructLifetime(pPdStruct) : XBinary::PDSTRUCTLIFETIME();
-    const auto isContextAlive = [&]() -> bool { return guardedThis && (!pPdStruct || XBinary::isPdStructLifetimeAlive(progressLifetime)); };
+    const DecOwnerProgressAlivePredicate isContextAlive(guardedThis, pPdStruct, progressLifetime);
 
     DecInputStateGuard inputStateGuard(pState);
     bool bResult = false;
@@ -2863,6 +3071,28 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XLZMADecoder::decompressXZ(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_AMIGA_LZX) {
         bResult = XAmigaLZXDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_MI10) {
+        bResult = XMI10Decoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_FTCOMP_FT19) {
+        bResult = XFtcompDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_DN_COMPRESSED) {
+        bResult = XDNDecoder::decompress(pState, pPdStruct);
+    } else if ((compressMethod >= XBinary::HANDLE_METHOD_SQZ1) &&
+               (compressMethod <= XBinary::HANDLE_METHOD_SQZ4)) {
+        const qint32 nMethod =
+            static_cast<qint32>(compressMethod) -
+            static_cast<qint32>(XBinary::HANDLE_METHOD_SQZ1) + 1;
+        bResult = XSQZDecoder::decompress(pState, nMethod, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_FLS_LZ) {
+        bResult = XFLSDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_PAK_CRUSHED) {
+        bResult = XPakDecoder::decompress(pState, 10, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_PAK_DISTILLED) {
+        bResult = XPakDecoder::decompress(pState, 11, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_SSM_PICTOOLS) {
+        bResult = XSSMDecoder::decompress(pState, 3, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_SSM_PICTOOLS5) {
+        bResult = XSSMDecoder::decompress(pState, 5, pPdStruct);
     } else if ((compressMethod == XBinary::HANDLE_METHOD_CDI_2336) ||
                (compressMethod == XBinary::HANDLE_METHOD_CDI_MODE1_2352) ||
                (compressMethod == XBinary::HANDLE_METHOD_CDI_MODE2_2352)) {
@@ -2917,12 +3147,18 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                (compressMethod == XBinary::HANDLE_METHOD_EPFS_LZW) ||
                (compressMethod == XBinary::HANDLE_METHOD_STUNTS_DSI) ||
                (compressMethod == XBinary::HANDLE_METHOD_XOR_A9) ||
+               (compressMethod == XBinary::HANDLE_METHOD_IS_SKIN_XOR) ||
                (compressMethod == XBinary::HANDLE_METHOD_PKWARE_DCL_IMPLODE) ||
                (compressMethod == XBinary::HANDLE_METHOD_EMT_RLE) ||
                (compressMethod == XBinary::HANDLE_METHOD_GPFPACK_LZW) ||
                (compressMethod == XBinary::HANDLE_METHOD_PAX_LZF) ||
                (compressMethod == XBinary::HANDLE_METHOD_ARCV_LZHUF) ||
-               (compressMethod == XBinary::HANDLE_METHOD_VISE_DEFLATE)) {
+               (compressMethod == XBinary::HANDLE_METHOD_ARCV_LZHUF60) ||
+               (compressMethod == XBinary::HANDLE_METHOD_VISE_DEFLATE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_FPAK_COMPRESSED) ||
+               (compressMethod == XBinary::HANDLE_METHOD_RTPATCH_TEXT) ||
+                (compressMethod == XBinary::HANDLE_METHOD_RNC) ||
+                (compressMethod == XBinary::HANDLE_METHOD_RTPATCH)) {
         qint64 nPackedSize = 0;
         if (!bUncompressedSizeDefined || !decIsValidBufferSize(nUncompressedSize) ||
             !decPrepareBoundedInput(pState->pDeviceInput, pState->nInputOffset,
@@ -2954,7 +3190,65 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             return false;
         }
         QByteArray unpacked;
-        if (compressMethod == XBinary::HANDLE_METHOD_EMT_RLE) {
+        if (compressMethod == XBinary::HANDLE_METHOD_FPAK_COMPRESSED) {
+            bResult = XFpakDecoder::decode(
+                packed, nUncompressedSize, &unpacked, nullptr, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_RTPATCH) {
+            bResult = XRTPatchDecoder::decode(
+                packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_RTPATCH_TEXT) {
+            bResult = packed.size() >= 2;
+            qint32 nPosition = 2;
+            const quint16 nLineCount = bResult
+                ? qFromLittleEndian<quint16>(
+                      reinterpret_cast<const uchar *>(packed.constData()))
+                : 0;
+            bResult = bResult && (nLineCount > 0) &&
+                      (nLineCount <= 4096);
+            unpacked.reserve(qint32(nUncompressedSize));
+            for (quint16 i = 0; bResult && (i < nLineCount); ++i) {
+                if (nPosition >= packed.size()) {
+                    bResult = false;
+                    break;
+                }
+                const quint8 nLength =
+                    static_cast<quint8>(packed.at(nPosition++));
+                if ((nLength == 0) ||
+                    (nPosition > packed.size() - nLength) ||
+                    (packed.at(nPosition + nLength - 1) != '\0')) {
+                    bResult = false;
+                    break;
+                }
+                for (quint8 j = 0; j + 1 < nLength; ++j) {
+                    if (packed.at(nPosition + j) == '\0') {
+                        bResult = false;
+                        break;
+                    }
+                }
+                if (!bResult ||
+                    ((nLength - 1) > nUncompressedSize - unpacked.size()) ||
+                    (2 > nUncompressedSize - unpacked.size() -
+                             (nLength - 1))) {
+                    bResult = false;
+                    break;
+                }
+                unpacked.append(packed.constData() + nPosition,
+                                nLength - 1);
+                unpacked.append("\r\n", 2);
+                nPosition += nLength;
+            }
+            bResult = bResult && (nPosition == packed.size()) &&
+                      (unpacked.size() == nUncompressedSize);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_RNC) {
+            XAncientDecoder::INFO decoderInfo;
+            XAncientDecoder::DECODE_ERROR decoderError =
+                XAncientDecoder::ERROR_NONE;
+            bResult = XAncientDecoder::decode(
+                packed, XAncientDecoder::TYPE_RNC, &unpacked,
+                &decoderInfo, &decoderError, true) &&
+                (decoderInfo.imageOffset == 0) &&
+                (decoderInfo.imageSize == nUncompressedSize);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_EMT_RLE) {
             bResult = decEmtImage(packed, qint32(nUncompressedSize),
                                   &unpacked, pPdStruct);
         } else if (compressMethod == XBinary::HANDLE_METHOD_GPFPACK_LZW) {
@@ -2964,8 +3258,10 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             bResult = XPaxDecoder::decode(
                 packed, qint32(nUncompressedSize), &unpacked, nullptr,
                 pPdStruct);
-        } else if (compressMethod == XBinary::HANDLE_METHOD_ARCV_LZHUF) {
+        } else if ((compressMethod == XBinary::HANDLE_METHOD_ARCV_LZHUF) ||
+                   (compressMethod == XBinary::HANDLE_METHOD_ARCV_LZHUF60)) {
             bResult = decArcvLzhuf(packed, qint32(nUncompressedSize),
+                                  (compressMethod == XBinary::HANDLE_METHOD_ARCV_LZHUF60),
                                   &unpacked, pPdStruct);
         } else if (compressMethod == XBinary::HANDLE_METHOD_VISE_DEFLATE) {
             bResult = XViseDeflateDecoder::decode(
@@ -2980,6 +3276,23 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 unpacked = packed;
                 for (qint32 i = 0; i < unpacked.size(); ++i)
                     unpacked[i] = char(quint8(unpacked.at(i)) ^ 0xa9U);
+                bResult = true;
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_IS_SKIN_XOR) {
+            if (nPackedSize != nUncompressedSize) {
+                bResult = false;
+            } else {
+                static constexpr quint8 key[] = {
+                    0x2a, 0x58, 0x95, 0xcb,
+                    0x3a, 0xf9, 0xb3, 0xca
+                };
+                unpacked = packed;
+                for (qint32 i = 0; i < unpacked.size(); ++i) {
+                    const quint8 value = quint8(unpacked.at(i)) ^
+                        key[quint64(pState->nInputOffset + i) & 7U];
+                    unpacked[i] = char(quint8((value >> 4U) |
+                                              (value << 4U)));
+                }
                 bResult = true;
             }
         } else if (compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_RLE) {
@@ -3013,18 +3326,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             quint32 resetCode = maxValue - 1U;
             quint32 increaseCode = maxValue - 2U;
             quint32 nextCode = 256;
-            auto getCode = [&](quint32 *pCode) -> bool {
-                if (!pCode) return false;
-                while (bitCount < codeBits) {
-                    if (inputPos >= quint32(packed.size())) return false;
-                    bitBuffer = (bitBuffer << 8) |
-                                quint8(packed.at(qint32(inputPos++)));
-                    bitCount += 8;
-                }
-                bitCount -= codeBits;
-                *pCode = quint32((bitBuffer >> bitCount) & maxValue);
-                return true;
-            };
+            const DecEpfsCodeReader getCode(packed, &bitBuffer, &bitCount, &inputPos, &codeBits, &maxValue);
             quint32 code = 0;
             bResult = (nUncompressedSize == 0);
             if (!bResult && getCode(&code) && code <= 0xffU) {
@@ -3220,10 +3522,14 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XLZHDecoder::decompress(pState, 4, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH5) {
         bResult = XLZHDecoder::decompress(pState, 5, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_SPIS_RLE) {
+        bResult = XSPISRLEDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH6) {
         bResult = XLZHDecoder::decompress(pState, 6, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH7) {
         bResult = XLZHDecoder::decompress(pState, 7, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_JASC_COMPRESSED) {
+        bResult = XLZHDecoder::decompress(pState, 5, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ZOO_LZH) {
         bResult = XLZHDecoder::decompress(pState, 5, pPdStruct, XLZHDecoder::TERMINATION_ZERO_BLOCK);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ZOO_LZD) {
@@ -4175,35 +4481,6 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         if (!guardedInput || !guardedOutput || !isContextAlive()) return false;
         bResult = !bLzipSequential && decPrepareBoundedInput(guardedInput.data(), nInputOffset, pState->nInputLimit, &nInputSize) && (nInputSize >= 36);
 
-        const auto readExactAt = [pState, &guardedInput, &guardedOutput, &isContextAlive](qint64 nOffset, char *pData, qint32 nSize) -> bool {
-            if (!pState || !guardedInput || !guardedOutput || !isContextAlive() || !pData || (nOffset < 0) || (nSize <= 0)) {
-                if (pState) pState->bReadError = true;
-                return false;
-            }
-            const bool bSeeked = guardedInput->seek(nOffset);
-            if (!guardedInput || !guardedOutput || !isContextAlive() || !bSeeked) return false;
-
-            qint32 nReadTotal = 0;
-            while (nReadTotal < nSize) {
-                const qint64 nRead = guardedInput->read(pData + nReadTotal, nSize - nReadTotal);
-                if (!guardedInput || !guardedOutput || !isContextAlive()) return false;
-                if ((nRead <= 0) || (nRead > (nSize - nReadTotal))) {
-                    pState->bReadError = true;
-                    return false;
-                }
-                nReadTotal += (qint32)nRead;
-            }
-            return true;
-        };
-        const auto readLE32 = [](const char *pData) -> quint32 {
-            return (quint32)(quint8)pData[0] | ((quint32)(quint8)pData[1] << 8) | ((quint32)(quint8)pData[2] << 16) | ((quint32)(quint8)pData[3] << 24);
-        };
-        const auto readLE64 = [](const char *pData) -> quint64 {
-            quint64 nValue = 0;
-            for (qint32 i = 0; i < 8; i++) nValue |= ((quint64)(quint8)pData[i] << (i * 8));
-            return nValue;
-        };
-
         QList<LzipMember> listMembers;
         qint64 nTotalUncompressedSize = 0;
         qint64 nMemberEnd = bResult ? nInputOffset + nInputSize : nInputOffset;
@@ -4330,6 +4607,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             if (!bResult) pState->bReadError = true;
         }
     } else {
+        const QString sMessage = QString("%1: %2").arg(tr("Unknown compression method")).arg(XBinary::handleMethodToString(compressMethod));
+        XBinary::setPdStructErrorString(pPdStruct, sMessage);
 #ifdef QT_DEBUG
         qDebug() << "Unknown compression method" << XBinary::handleMethodToString(compressMethod);
 #endif
@@ -4337,7 +4616,6 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         // caller-owned state. Nested multiDecompress() calls suppress the
         // signal; the public entry point returns immediately after reporting.
         if (g_nDecSignalSuppressionDepth == 0) {
-            const QString sMessage = QString("%1: %2").arg(tr("Unknown compression method")).arg(XBinary::handleMethodToString(compressMethod));
             inputStateGuard.dismiss();
             if (!guardedThis || !isContextAlive()) return false;
             Q_EMIT guardedThis->errorMessage(sMessage);

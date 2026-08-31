@@ -84,6 +84,7 @@ private:
     static bool readFilterDepth(QIODevice *pDevice, qint32 *pnDepth);
     static bool publicStateMatchesInner(const UNPACK_STATE *pState, const FILTERED_UNPACK_CONTEXT *pContext);
     static void copyInnerState(UNPACK_STATE *pState, const FILTERED_UNPACK_CONTEXT *pContext);
+    static bool failUnpackInitialization(XFilteredArchive *pArchive, UNPACK_STATE *pState);
 
     QBuffer *materializeLayer(QIODevice *pInputDevice, FT fileType, const QMap<UNPACK_PROP, QVariant> &mapProperties, UNPACK_STATE *pOuterState, PDSTRUCT *pPdStruct);
 

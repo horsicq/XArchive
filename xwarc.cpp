@@ -57,6 +57,18 @@ QByteArray warcAsciiLower(const QByteArray &value)
     return result;
 }
 
+bool warcAreDigits(const QByteArray &date, qint32 nOffset, qint32 nCount)
+{
+    if ((nOffset < 0) || (nCount < 0) || (nOffset > date.size()) || (nCount > date.size() - nOffset)) {
+        return false;
+    }
+    for (qint32 i = 0; i < nCount; i++) {
+        const char c = date.at(nOffset + i);
+        if ((c < '0') || (c > '9')) return false;
+    }
+    return true;
+}
+
 bool warcIsHttpToken(const QByteArray &value)
 {
     if (value.isEmpty()) return false;
@@ -226,36 +238,25 @@ bool XWARC::_parseDate(const QByteArray &value, QDateTime *pResult)
         return false;
     }
 
-    const auto areDigits = [&date](qint32 nOffset, qint32 nCount) {
-        if ((nOffset < 0) || (nCount < 0) || (nOffset > date.size()) || (nCount > date.size() - nOffset)) {
-            return false;
-        }
-        for (qint32 i = 0; i < nCount; i++) {
-            const char c = date.at(nOffset + i);
-            if ((c < '0') || (c > '9')) return false;
-        }
-        return true;
-    };
-
-    if (!areDigits(0, 4)) return false;
+    if (!warcAreDigits(date, 0, 4)) return false;
     if (nSize >= 7) {
-        if ((date.at(4) != '-') || !areDigits(5, 2)) return false;
+        if ((date.at(4) != '-') || !warcAreDigits(date, 5, 2)) return false;
     }
     if (nSize >= 10) {
-        if ((date.at(7) != '-') || !areDigits(8, 2)) return false;
+        if ((date.at(7) != '-') || !warcAreDigits(date, 8, 2)) return false;
     }
     if (nSize >= 17) {
-        if ((date.at(10) != 'T') || (date.at(13) != ':') || !areDigits(11, 2) || !areDigits(14, 2)) {
+        if ((date.at(10) != 'T') || (date.at(13) != ':') || !warcAreDigits(date, 11, 2) || !warcAreDigits(date, 14, 2)) {
             return false;
         }
     }
     if (nSize == 17) {
         if (date.at(16) != 'Z') return false;
     } else if (nSize >= 20) {
-        if ((date.at(16) != ':') || !areDigits(17, 2)) return false;
+        if ((date.at(16) != ':') || !warcAreDigits(date, 17, 2)) return false;
         if (nSize == 20) {
             if (date.at(19) != 'Z') return false;
-        } else if ((date.at(19) != '.') || (date.at(nSize - 1) != 'Z') || !areDigits(20, nSize - 21)) {
+        } else if ((date.at(19) != '.') || (date.at(nSize - 1) != 'Z') || !warcAreDigits(date, 20, nSize - 21)) {
             return false;
         }
     }

@@ -475,6 +475,7 @@ bool XSZDD::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
             return false;
         }
         pContext->sFileName = XBinary::getDeviceFileBaseName(guardedSource.data());
+        if (pContext->sFileName.isEmpty()) pContext->sFileName = QStringLiteral("szdd_data");
         pContext->nCompressedSize = nSize - pContext->nHeaderSize;
         pContext->nUncompressedSize = guardedArchive->read_uint32(nUncompressedOffset);
         if (!guardedArchive || !guardedSource) {

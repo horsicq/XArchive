@@ -33,7 +33,6 @@
 #include <QSet>
 #include <QVector>
 #include <cmath>
-#include <functional>
 #include <limits>
 #include <new>
 
@@ -329,6 +328,14 @@ XASAR::XASAR(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
+struct XASAR::LINK_CONTEXT
+{
+    ASAR_UNPACK_CONTEXT *pUnpackContext;
+    const QHash<QString, qint32> *pRecordMap;
+    QSet<QString> *pAllNames;
+    qint32 nOriginalRecordCount;
+};
+
 bool XASAR::_readHeader(qint64 *pnJsonOffset, qint64 *pnJsonSize, qint64 *pnBlobOffset)
 {
     QPointer<XASAR> guardedThis(this);
@@ -549,6 +556,113 @@ bool XASAR::_prepareExternalRecords(ASAR_UNPACK_CONTEXT *pContext, PDSTRUCT *pPd
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
+bool XASAR::_resolvePath(LINK_CONTEXT *pLinkContext,
+                         const QString &sInputPath,
+                         qint32 nInitialLinkDepth,
+                         qint32 *pnTargetIndex, QString *pFinalPath)
+{
+    if (pnTargetIndex) *pnTargetIndex = -1;
+    if (pFinalPath) pFinalPath->clear();
+    if (!pLinkContext || !pLinkContext->pUnpackContext ||
+        !pLinkContext->pRecordMap || !pnTargetIndex || !pFinalPath ||
+        (nInitialLinkDepth < 0) ||
+        (nInitialLinkDepth > ASAR_MAX_LINK_DEPTH)) return false;
+    QString sCurrentPath;
+    if (!asarNormalizeLinkPath(sInputPath, &sCurrentPath)) return false;
+
+    QSet<QString> setVisited;
+    qint32 nLinkDepth = nInitialLinkDepth;
+    for (;;) {
+        if (setVisited.contains(sCurrentPath)) return false;
+        setVisited.insert(sCurrentPath);
+
+        const qint32 nExactIndex = pLinkContext->pRecordMap->value(sCurrentPath, -1);
+        if (nExactIndex >= 0) {
+            const ASAR_RECORD &record =
+                pLinkContext->pUnpackContext->listRecords.at(nExactIndex);
+            if (!record.bIsLink) {
+                *pnTargetIndex = nExactIndex;
+                *pFinalPath = sCurrentPath;
+                return true;
+            }
+            if (++nLinkDepth > ASAR_MAX_LINK_DEPTH) return false;
+            sCurrentPath = record.sLinkName;
+            continue;
+        }
+
+        bool bRewritten = false;
+        qint32 nSlash = sCurrentPath.lastIndexOf(QLatin1Char('/'));
+        while (nSlash > 0) {
+            const QString sPrefix = sCurrentPath.left(nSlash);
+            const qint32 nPrefixIndex =
+                pLinkContext->pRecordMap->value(sPrefix, -1);
+            if ((nPrefixIndex >= 0) &&
+                pLinkContext->pUnpackContext->listRecords.at(nPrefixIndex).bIsLink) {
+                if (++nLinkDepth > ASAR_MAX_LINK_DEPTH) return false;
+                QString sRewrittenPath;
+                if (!asarNormalizeLinkPath(
+                        pLinkContext->pUnpackContext->listRecords.at(nPrefixIndex).sLinkName +
+                            QLatin1Char('/') + sCurrentPath.mid(nSlash + 1),
+                        &sRewrittenPath))
+                    return false;
+                sCurrentPath = sRewrittenPath;
+                bRewritten = true;
+                break;
+            }
+            nSlash = sCurrentPath.lastIndexOf(QLatin1Char('/'), nSlash - 1);
+        }
+        if (!bRewritten) return false;
+    }
+}
+
+bool XASAR::_expandDirectory(LINK_CONTEXT *pLinkContext,
+                             const QString &sAliasPath,
+                             const QString &sTargetFolderPath,
+                             QSet<QString> *pAncestry, qint32 nDepth)
+{
+    if (!pLinkContext || !pLinkContext->pUnpackContext ||
+        !pLinkContext->pAllNames || !pAncestry ||
+        (nDepth > ASAR_MAX_TREE_DEPTH) ||
+        pAncestry->contains(sTargetFolderPath)) return false;
+    pAncestry->insert(sTargetFolderPath);
+    const QString sPrefix = sTargetFolderPath + QLatin1Char('/');
+
+    for (qint32 j = 0; j < pLinkContext->nOriginalRecordCount; ++j) {
+        const QString sSourcePath =
+            pLinkContext->pUnpackContext->listRecords.at(j).sFileName;
+        if (!sSourcePath.startsWith(sPrefix)) continue;
+        const QString sSuffix = sSourcePath.mid(sPrefix.size());
+        if (sSuffix.isEmpty() || sSuffix.contains(QLatin1Char('/'))) continue;
+
+        qint32 nTargetIndex = -1;
+        QString sResolvedChildPath;
+        if (!_resolvePath(pLinkContext, sSourcePath, 0, &nTargetIndex,
+                          &sResolvedChildPath) || (nTargetIndex < 0))
+            return false;
+        const QString sDestinationPath =
+            sAliasPath + QLatin1Char('/') + sSuffix;
+        if (pLinkContext->pAllNames->contains(sDestinationPath) ||
+            (pLinkContext->pUnpackContext->listRecords.size() >= ASAR_MAX_RECORDS))
+            return false;
+
+        ASAR_RECORD materialized =
+            pLinkContext->pUnpackContext->listRecords.at(nTargetIndex);
+        materialized.sFileName = sDestinationPath;
+        materialized.sLinkName = sSourcePath;
+        materialized.bIsLink = true;
+        pLinkContext->pUnpackContext->listRecords.append(materialized);
+        pLinkContext->pAllNames->insert(sDestinationPath);
+
+        if (materialized.bIsFolder &&
+            !_expandDirectory(pLinkContext, sDestinationPath,
+                              sResolvedChildPath, pAncestry, nDepth + 1))
+            return false;
+    }
+
+    pAncestry->remove(sTargetFolderPath);
+    return true;
+}
+
 bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
 {
     if (!pContext) return false;
@@ -563,51 +677,8 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
         mapRecords.insert(sNormalizedPath, i);
     }
 
-    const auto resolvePath = [&](const QString &sInputPath, qint32 nInitialLinkDepth, qint32 *pnTargetIndex, QString *pFinalPath) -> bool {
-        if (pnTargetIndex) *pnTargetIndex = -1;
-        if (pFinalPath) pFinalPath->clear();
-        if (!pnTargetIndex || !pFinalPath || (nInitialLinkDepth < 0) || (nInitialLinkDepth > ASAR_MAX_LINK_DEPTH)) return false;
-        QString sCurrentPath;
-        if (!asarNormalizeLinkPath(sInputPath, &sCurrentPath)) return false;
-
-        QSet<QString> setVisited;
-        qint32 nLinkDepth = nInitialLinkDepth;
-        for (;;) {
-            if (setVisited.contains(sCurrentPath)) return false;
-            setVisited.insert(sCurrentPath);
-
-            const qint32 nExactIndex = mapRecords.value(sCurrentPath, -1);
-            if (nExactIndex >= 0) {
-                const ASAR_RECORD &record = pContext->listRecords.at(nExactIndex);
-                if (!record.bIsLink) {
-                    *pnTargetIndex = nExactIndex;
-                    *pFinalPath = sCurrentPath;
-                    return true;
-                }
-                if (++nLinkDepth > ASAR_MAX_LINK_DEPTH) return false;
-                sCurrentPath = record.sLinkName;
-                continue;
-            }
-
-            bool bRewritten = false;
-            qint32 nSlash = sCurrentPath.lastIndexOf(QLatin1Char('/'));
-            while (nSlash > 0) {
-                const QString sPrefix = sCurrentPath.left(nSlash);
-                const qint32 nPrefixIndex = mapRecords.value(sPrefix, -1);
-                if ((nPrefixIndex >= 0) && pContext->listRecords.at(nPrefixIndex).bIsLink) {
-                    if (++nLinkDepth > ASAR_MAX_LINK_DEPTH) return false;
-                    QString sRewrittenPath;
-                    if (!asarNormalizeLinkPath(pContext->listRecords.at(nPrefixIndex).sLinkName + QLatin1Char('/') + sCurrentPath.mid(nSlash + 1), &sRewrittenPath))
-                        return false;
-                    sCurrentPath = sRewrittenPath;
-                    bRewritten = true;
-                    break;
-                }
-                nSlash = sCurrentPath.lastIndexOf(QLatin1Char('/'), nSlash - 1);
-            }
-            if (!bRewritten) return false;
-        }
-    };
+    LINK_CONTEXT linkContext = {pContext, &mapRecords, nullptr,
+                                nOriginalRecordCount};
 
     for (qint32 i = 0; i < nOriginalRecordCount; ++i) {
         ASAR_RECORD &linkRecord = pContext->listRecords[i];
@@ -619,7 +690,8 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
 
         qint32 nTargetIndex = -1;
         QString sFinalPath;
-        if (!resolvePath(sTargetPath, 1, &nTargetIndex, &sFinalPath) || (nTargetIndex < 0)) return false;
+        if (!_resolvePath(&linkContext, sTargetPath, 1, &nTargetIndex,
+                          &sFinalPath) || (nTargetIndex < 0)) return false;
         const ASAR_RECORD target = pContext->listRecords.at(nTargetIndex);
         linkRecord.nOffset = target.nOffset;
         linkRecord.nSize = target.nSize;
@@ -632,46 +704,19 @@ bool XASAR::_resolveLinks(ASAR_UNPACK_CONTEXT *pContext)
 
     const QStringList listRecordNames = mapRecords.keys();
     QSet<QString> setAllNames(listRecordNames.cbegin(), listRecordNames.cend());
-    std::function<bool(const QString &, const QString &, QSet<QString> *, qint32)> expandDirectory;
-    expandDirectory = [&](const QString &sAliasPath, const QString &sTargetFolderPath, QSet<QString> *pAncestry, qint32 nDepth) -> bool {
-        if (!pAncestry || (nDepth > ASAR_MAX_TREE_DEPTH) || pAncestry->contains(sTargetFolderPath)) return false;
-        pAncestry->insert(sTargetFolderPath);
-        const QString sPrefix = sTargetFolderPath + QLatin1Char('/');
-
-        for (qint32 j = 0; j < nOriginalRecordCount; ++j) {
-            const QString sSourcePath = pContext->listRecords.at(j).sFileName;
-            if (!sSourcePath.startsWith(sPrefix)) continue;
-            const QString sSuffix = sSourcePath.mid(sPrefix.size());
-            if (sSuffix.isEmpty() || sSuffix.contains(QLatin1Char('/'))) continue;
-
-            qint32 nTargetIndex = -1;
-            QString sResolvedChildPath;
-            if (!resolvePath(sSourcePath, 0, &nTargetIndex, &sResolvedChildPath) || (nTargetIndex < 0)) return false;
-            const QString sDestinationPath = sAliasPath + QLatin1Char('/') + sSuffix;
-            if (setAllNames.contains(sDestinationPath) || (pContext->listRecords.size() >= ASAR_MAX_RECORDS)) return false;
-
-            ASAR_RECORD materialized = pContext->listRecords.at(nTargetIndex);
-            materialized.sFileName = sDestinationPath;
-            materialized.sLinkName = sSourcePath;
-            materialized.bIsLink = true;
-            pContext->listRecords.append(materialized);
-            setAllNames.insert(sDestinationPath);
-
-            if (materialized.bIsFolder && !expandDirectory(sDestinationPath, sResolvedChildPath, pAncestry, nDepth + 1)) return false;
-        }
-
-        pAncestry->remove(sTargetFolderPath);
-        return true;
-    };
+    linkContext.pAllNames = &setAllNames;
 
     for (qint32 i = 0; i < nOriginalRecordCount; ++i) {
         const ASAR_RECORD linkRecord = pContext->listRecords.at(i);
         if (!linkRecord.bIsLink || !linkRecord.bIsFolder) continue;
         qint32 nTargetIndex = -1;
         QString sFinalPath;
-        if (!resolvePath(linkRecord.sLinkName, 1, &nTargetIndex, &sFinalPath) || (nTargetIndex < 0) || !pContext->listRecords.at(nTargetIndex).bIsFolder) return false;
+        if (!_resolvePath(&linkContext, linkRecord.sLinkName, 1,
+                          &nTargetIndex, &sFinalPath) || (nTargetIndex < 0) ||
+            !pContext->listRecords.at(nTargetIndex).bIsFolder) return false;
         QSet<QString> setAncestry;
-        if (!expandDirectory(linkRecord.sFileName, sFinalPath, &setAncestry, 0)) return false;
+        if (!_expandDirectory(&linkContext, linkRecord.sFileName, sFinalPath,
+                              &setAncestry, 0)) return false;
     }
 
     return true;

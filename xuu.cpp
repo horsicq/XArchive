@@ -19,6 +19,7 @@ const qint64 UU_MAX_PREAMBLE = Q_INT64_C(128) * 1024;
 const qint64 UU_MAX_LINE = Q_INT64_C(1024) * 1024;
 const qint64 UU_MAX_DECODED_SIZE = Q_INT64_C(512) * 1024 * 1024;
 const qint32 UU_MAX_FILTER_DEPTH = 4;
+const qint32 UU_MAX_BLOCKS = 65536;
 const char UU_DEPTH_PROPERTY[] = "_xfileunpacker_filter_depth";
 
 bool appendBounded(QByteArray *pOutput, char value, qint64 nOutputLimit)
@@ -37,7 +38,7 @@ QByteArray stripLineEnding(QByteArray line)
 
 }  // namespace
 
-XUU::UU_UNPACK_CONTEXT::UU_UNPACK_CONTEXT() : pDecodedDevice(nullptr), pInnerArchive(nullptr), innerState(), sDeclaredName(), bDirectPayload(false)
+XUU::UU_UNPACK_CONTEXT::UU_UNPACK_CONTEXT() : pDecodedDevice(nullptr), pInnerArchive(nullptr), innerState(), listBlocks(), bDirectPayload(false)
 {
 }
 
@@ -103,24 +104,33 @@ qint32 XUU::base64Value(quint8 value)
     return -1;
 }
 
-bool XUU::decodeTransport(QByteArray *pOutput, QString *pDeclaredName, qint64 nOutputLimit, PDSTRUCT *pPdStruct)
+bool XUU::decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *pDeclaredName, qint64 nOutputLimit, qint64 *pnNextSearchOffset,
+                            bool *pbHeaderFound, PDSTRUCT *pPdStruct)
 {
     QPointer<XUU> guardedThis(this);
     QPointer<QIODevice> guardedDevice(getDevice());
-    if (!pOutput || !pDeclaredName || (nOutputLimit < 0) || !guardedDevice || guardedDevice->isSequential() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!pOutput || !pDeclaredName || !pnNextSearchOffset || !pbHeaderFound || (nSearchOffset < 0) || (nOutputLimit < 0) || !guardedDevice ||
+        guardedDevice->isSequential() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
 
     const qint64 nOriginalPosition = guardedDevice->pos();
-    if ((nOriginalPosition < 0) || !guardedDevice->seek(0)) return false;
+    if ((nOriginalPosition < 0) || !guardedDevice->seek(nSearchOffset)) return false;
 
     pOutput->clear();
     pDeclaredName->clear();
+    *pnNextSearchOffset = nSearchOffset;
+    *pbHeaderFound = false;
     bool bHeaderFound = false;
     bool bBase64 = false;
     qint64 nScanned = 0;
+    // Keep the initial false-positive surface bounded, but after one complete
+    // block the caller advances nSearchOffset and every remaining line belongs
+    // to an already-recognized transport. Scan that remainder once so a large
+    // inter-block comment cannot make later members disappear silently.
+    const qint64 nHeaderScanLimit = (nSearchOffset == 0) ? UU_MAX_PREAMBLE : qMax<qint64>(0, guardedDevice->size() - nSearchOffset);
 
-    while (!guardedDevice->atEnd() && (nScanned <= UU_MAX_PREAMBLE) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    while (!guardedDevice->atEnd() && (nScanned <= nHeaderScanLimit) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         QByteArray line = guardedDevice->readLine(UU_MAX_LINE + 2);
         if (!guardedThis || !guardedDevice || line.isEmpty() || ((line.size() > UU_MAX_LINE) && !line.endsWith('\n'))) {
             guardedDevice->seek(nOriginalPosition);
@@ -129,6 +139,7 @@ bool XUU::decodeTransport(QByteArray *pOutput, QString *pDeclaredName, qint64 nO
         nScanned += line.size();
         if (parseHeader(line, &bBase64, pDeclaredName)) {
             bHeaderFound = true;
+            *pbHeaderFound = true;
             break;
         }
     }
@@ -234,6 +245,7 @@ bool XUU::decodeTransport(QByteArray *pOutput, QString *pDeclaredName, qint64 nO
     }
 
 decode_finished:
+    if (guardedDevice) *pnNextSearchOffset = guardedDevice->pos();
     if (guardedDevice) guardedDevice->seek(nOriginalPosition);
     if (!guardedThis || !guardedDevice || !bComplete || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         pOutput->clear();
@@ -241,6 +253,48 @@ decode_finished:
         return false;
     }
     return true;
+}
+
+bool XUU::decodeTransports(QList<UU_BLOCK> *pBlocks, qint64 nEntryLimit, qint64 nAggregateLimit, qint32 nBlockLimit, PDSTRUCT *pPdStruct)
+{
+    if (!pBlocks || (nEntryLimit < 0) || (nAggregateLimit < 0) || (nBlockLimit < 0) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    pBlocks->clear();
+
+    QPointer<XUU> guardedThis(this);
+    QPointer<QIODevice> guardedDevice(getDevice());
+    if (!guardedThis || !guardedDevice || guardedDevice->isSequential()) return false;
+    const qint64 nDeviceSize = guardedDevice->size();
+    if (!guardedThis || !guardedDevice || (nDeviceSize < 0)) return false;
+
+    qint64 nSearchOffset = 0;
+    qint64 nRemainingLimit = nAggregateLimit;
+    while ((nSearchOffset < nDeviceSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        UU_BLOCK block;
+        qint64 nNextSearchOffset = nSearchOffset;
+        bool bHeaderFound = false;
+        // Once the configured member count is reached, continue scanning only
+        // to distinguish a harmless footer from an additional block. A zero
+        // decode allowance refuses the first byte of any extra non-empty block
+        // without allocating it; an extra empty block is rejected below.
+        const qint64 nBlockOutputLimit = (pBlocks->count() >= nBlockLimit) ? 0 : qMin(nEntryLimit, nRemainingLimit);
+        const bool bDecoded = decodeTransportAt(nSearchOffset, &block.baDecoded, &block.sDeclaredName, nBlockOutputLimit, &nNextSearchOffset, &bHeaderFound, pPdStruct);
+        if (!guardedThis || !guardedDevice || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (!bDecoded) {
+            // No later valid header is normal termination. Once a header has
+            // been accepted, however, a malformed/truncated block must make
+            // the whole transport fail instead of silently publishing only
+            // the preceding files.
+            if (bHeaderFound) return false;
+            break;
+        }
+        if (pBlocks->count() >= nBlockLimit) return false;
+        if ((nNextSearchOffset <= nSearchOffset) || block.sDeclaredName.isEmpty() || (block.baDecoded.size() > nRemainingLimit)) return false;
+        nRemainingLimit -= block.baDecoded.size();
+        pBlocks->append(block);
+        nSearchOffset = nNextSearchOffset;
+    }
+
+    return guardedThis && guardedDevice && !pBlocks->isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
 bool XUU::isValid(PDSTRUCT *pPdStruct)
@@ -311,18 +365,25 @@ bool XUU::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
         return false;
     }
 
-    qint64 nConfiguredLimit = -1;
-    if (!getUnpackOutputLimit(mapProperties, &nConfiguredLimit)) {
+    qint64 nLegacyOutputLimit = -1;
+    OUTPUT_POLICY outputPolicy = {};
+    if (!getUnpackOutputLimit(mapProperties, &nLegacyOutputLimit) || !resolveUnpackOutputPolicy(mapProperties, &outputPolicy)) {
+        setPdStructErrorString(pPdStruct, tr("Invalid unpacked-output limit"));
         delete pContext;
         releaseUnpackSource(pState);
         *pState = UNPACK_STATE();
         return false;
     }
-    const qint64 nTransportLimit = (nConfiguredLimit < 0) ? UU_MAX_DECODED_SIZE : qMin(UU_MAX_DECODED_SIZE, nConfiguredLimit);
+    qint64 nEntryLimit = UU_MAX_DECODED_SIZE;
+    qint64 nAggregateLimit = UU_MAX_DECODED_SIZE;
+    qint32 nBlockLimit = UU_MAX_BLOCKS;
+    if (nLegacyOutputLimit >= 0) nEntryLimit = qMin(nEntryLimit, nLegacyOutputLimit);
+    if (outputPolicy.nMaxEntryOutputSize >= 0) nEntryLimit = qMin(nEntryLimit, outputPolicy.nMaxEntryOutputSize);
+    if (outputPolicy.nMaxMemoryOutputSize >= 0) nAggregateLimit = qMin(nAggregateLimit, outputPolicy.nMaxMemoryOutputSize);
+    if (outputPolicy.nMaxTotalOutputSize >= 0) nAggregateLimit = qMin(nAggregateLimit, outputPolicy.nMaxTotalOutputSize);
+    if (outputPolicy.nMaxEntryCount >= 0) nBlockLimit = (qint32)qMin<qint64>(nBlockLimit, outputPolicy.nMaxEntryCount);
 
-    QByteArray decoded;
-    QString declaredName;
-    bool bResult = decodeTransport(&decoded, &declaredName, nTransportLimit, pPdStruct);
+    bool bResult = decodeTransports(&pContext->listBlocks, nEntryLimit, nAggregateLimit, nBlockLimit, pPdStruct);
     QPointer<QIODevice> guardedSource(getDevice());
     qint32 nDepth = guardedSource ? guardedSource->property(UU_DEPTH_PROPERTY).toInt() : 0;
     if (!guardedThis || !guardedSource || !bResult || (nDepth >= UU_MAX_FILTER_DEPTH)) {
@@ -334,16 +395,19 @@ bool XUU::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
 
     pContext->pDecodedDevice = new (std::nothrow) QBuffer();
     if (pContext->pDecodedDevice) {
-        pContext->pDecodedDevice->setData(decoded);
+        pContext->pDecodedDevice->setData(pContext->listBlocks.isEmpty() ? QByteArray() : pContext->listBlocks.first().baDecoded);
         pContext->pDecodedDevice->setProperty(UU_DEPTH_PROPERTY, nDepth + 1);
         bResult = pContext->pDecodedDevice->open(QIODevice::ReadOnly);
     } else {
         bResult = false;
     }
 
-    pContext->sDeclaredName = declaredName;
     FT innerType = FT_UNKNOWN;
-    if (bResult) {
+    // A single transport block retains the historical filter behaviour: if
+    // its decoded bytes are themselves an archive, expose that archive's
+    // records. Multiple blocks are a file bundle and their declared names are
+    // the member model, so do not collapse the first one into a nested view.
+    if (bResult && (pContext->listBlocks.count() == 1)) {
         innerType = XFormats::getPrefFileType(pContext->pDecodedDevice, FT_FLAG_ARCHIVES, pPdStruct);
     }
     if (!guardedThis || !guardedSource) bResult = false;
@@ -369,7 +433,7 @@ bool XUU::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
     if (guardedThis && guardedSource && bResult) {
         nOuterSize = guardedSource->size();
     }
-    if (!guardedThis || !guardedSource || !bResult || (nOuterSize < 0) || pContext->sDeclaredName.isEmpty() ||
+    if (!guardedThis || !guardedSource || !bResult || (nOuterSize < 0) || pContext->listBlocks.isEmpty() ||
         (!pContext->bDirectPayload && ((pContext->innerState.nNumberOfRecords < 0) || (pContext->innerState.nCurrentIndex != 0) ||
                                        (pContext->innerState.nCurrentIndex > pContext->innerState.nNumberOfRecords)))) {
         delete pContext;
@@ -380,7 +444,7 @@ bool XUU::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
 
     pState->mapUnpackProperties = pContext->bDirectPayload ? mapProperties : pContext->innerState.mapUnpackProperties;
     pState->mapArchiveProperties = pContext->bDirectPayload ? QMap<FPART_PROP, QVariant>() : pContext->innerState.mapArchiveProperties;
-    const qint32 nRecords = pContext->bDirectPayload ? 1 : pContext->innerState.nNumberOfRecords;
+    const qint32 nRecords = pContext->bDirectPayload ? pContext->listBlocks.count() : pContext->innerState.nNumberOfRecords;
     pState->nCurrentOffset = nRecords == 0 ? nOuterSize : 0;
     pState->nTotalSize = nOuterSize;
     pState->nCurrentIndex = pContext->bDirectPayload ? 0 : pContext->innerState.nCurrentIndex;
@@ -406,22 +470,23 @@ XBinary::ARCHIVERECORD XUU::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruc
     UU_UNPACK_CONTEXT *pContext = static_cast<UU_UNPACK_CONTEXT *>(pState->pContext);
     if (!pContext || !pContext->pDecodedDevice || (pContext->innerState.nCurrentIndex != pState->nCurrentIndex) ||
         (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords)) {
-        if (!pContext || !pContext->bDirectPayload || !pContext->pDecodedDevice || pContext->pInnerArchive || (pState->nCurrentIndex != 0) ||
-            (pState->nNumberOfRecords != 1)) {
+        if (!pContext || !pContext->bDirectPayload || !pContext->pDecodedDevice || pContext->pInnerArchive ||
+            (pState->nNumberOfRecords != pContext->listBlocks.count()) || (pState->nCurrentIndex >= pContext->listBlocks.count())) {
             return ARCHIVERECORD();
         }
-        const qint64 nDecodedSize = pContext->pDecodedDevice->size();
-        if ((nDecodedSize < 0) || pContext->sDeclaredName.isEmpty()) {
+        const UU_BLOCK &block = pContext->listBlocks.at(pState->nCurrentIndex);
+        const qint64 nDecodedSize = block.baDecoded.size();
+        if ((nDecodedSize < 0) || block.sDeclaredName.isEmpty()) {
             return ARCHIVERECORD();
         }
         ARCHIVERECORD record = {};
         record.nStreamOffset = 0;
         record.nStreamSize = nDecodedSize;
-        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, pContext->sDeclaredName);
+        record.mapProperties.insert(FPART_PROP_ORIGINALNAME, block.sDeclaredName);
         record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nDecodedSize);
         record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nDecodedSize);
         record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE);
-        if (!XBinary::markArchiveStreamRecord(&record, 0)) {
+        if (!XBinary::markArchiveStreamRecord(&record, pState->nCurrentIndex)) {
             return ARCHIVERECORD();
         }
         return record;
@@ -445,12 +510,13 @@ bool XUU::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
     if (!operationGuard.isAcquired() || !pState || !pDevice || !isUnpackSourceCurrent(pState, pPdStruct) || devicesAlias(getDevice(), pDevice)) return false;
     UU_UNPACK_CONTEXT *pContext = static_cast<UU_UNPACK_CONTEXT *>(pState->pContext);
     if (!pContext || !pContext->pDecodedDevice || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
-        (pContext->bDirectPayload ? (pContext->pInnerArchive || (pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1))
+        (pContext->bDirectPayload ? (pContext->pInnerArchive || (pState->nNumberOfRecords != pContext->listBlocks.count()))
                                   : (!pContext->pInnerArchive || (pContext->innerState.nCurrentIndex != pState->nCurrentIndex) ||
                                      (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords))))
         return false;
     if (pContext->bDirectPayload) {
-        const qint64 nDecodedSize = pContext->pDecodedDevice->size();
+        const UU_BLOCK &block = pContext->listBlocks.at(pState->nCurrentIndex);
+        const qint64 nDecodedSize = block.baDecoded.size();
         if ((nDecodedSize < 0) || !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, nDecodedSize)) {
             return false;
         }
@@ -458,7 +524,7 @@ bool XUU::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
         // must charge the operation budget itself: one entry, nDecodedSize
         // produced bytes (publishUnpackOutput never debits the copy).
         if (pState->spOutputBudget) {
-            if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, pContext->sDeclaredName)) {
+            if (!pState->spOutputBudget->beginEntry(pState->nCurrentIndex, block.sDeclaredName)) {
                 if (pState->spOutputBudget->isEnforcing()) {
                     XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
                     return false;
@@ -473,7 +539,10 @@ bool XUU::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdS
                 XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
             }
         }
-        const bool bResult = publishUnpackOutput(pContext->pDecodedDevice, pDevice, pState, pPdStruct);
+        QBuffer decodedDevice;
+        decodedDevice.setData(block.baDecoded);
+        if (!decodedDevice.open(QIODevice::ReadOnly)) return false;
+        const bool bResult = publishUnpackOutput(&decodedDevice, pDevice, pState, pPdStruct);
         // publishUnpackOutput() finishes with the outer source-authentication
         // check. Do not perform another callback-bearing source read after the
         // caller-owned destination has been committed.
@@ -499,14 +568,18 @@ bool XUU::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     if (!operationGuard.isAcquired() || !pState || !isUnpackSourceCurrent(pState, pPdStruct)) return false;
     UU_UNPACK_CONTEXT *pContext = static_cast<UU_UNPACK_CONTEXT *>(pState->pContext);
     if (!pContext || (pState->nCurrentIndex < 0) || (pState->nCurrentIndex >= pState->nNumberOfRecords) ||
-        (pContext->bDirectPayload ? (pContext->pInnerArchive || (pState->nCurrentIndex != 0) || (pState->nNumberOfRecords != 1))
+        (pContext->bDirectPayload ? (pContext->pInnerArchive || (pState->nNumberOfRecords != pContext->listBlocks.count()))
                                   : (!pContext->pInnerArchive || (pContext->innerState.nCurrentIndex != pState->nCurrentIndex) ||
                                      (pContext->innerState.nNumberOfRecords != pState->nNumberOfRecords))))
         return false;
     if (pContext->bDirectPayload) {
-        pState->nCurrentIndex = 1;
-        pState->nCurrentOffset = pState->nTotalSize;
-        return false;
+        ++pState->nCurrentIndex;
+        if (pState->nCurrentIndex >= pState->nNumberOfRecords) {
+            pState->nCurrentOffset = pState->nTotalSize;
+            return false;
+        }
+        pState->nCurrentOffset = 0;
+        return true;
     }
     const qint32 nPreviousIndex = pState->nCurrentIndex;
     const bool bResult = pContext->pInnerArchive->moveToNext(&pContext->innerState, pPdStruct);

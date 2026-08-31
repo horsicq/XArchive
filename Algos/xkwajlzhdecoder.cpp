@@ -44,7 +44,14 @@ enum class KWAJ_RESULT {
 class KWAJBitReader {
 public:
     KWAJBitReader(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
-        : m_pState(pState), m_pPdStruct(pPdStruct), m_nInputPosition(0), m_nInputSize(0), m_nBitBuffer(0), m_nBits(0), m_bCleanEnd(false)
+        : m_pState(pState),
+          m_pPdStruct(pPdStruct),
+          m_nInputPosition(0),
+          m_nInputSize(0),
+          m_nBitBuffer(0),
+          m_nBits(0),
+          m_bCleanEnd(false),
+          m_bPastEnd(false)
     {
     }
 
@@ -77,6 +84,11 @@ public:
         return m_bCleanEnd;
     }
 
+    bool isPastEnd() const
+    {
+        return m_bPastEnd;
+    }
+
 private:
     KWAJ_RESULT readByte(quint8 *pValue)
     {
@@ -85,7 +97,9 @@ private:
         if (m_nInputPosition >= m_nInputSize) {
             if ((m_pState->nInputLimit != -1) && (m_pState->nCountInput >= m_pState->nInputLimit)) {
                 m_bCleanEnd = true;
-                return KWAJ_RESULT::END;
+                m_bPastEnd = true;
+                *pValue = 0;
+                return KWAJ_RESULT::OK;
             }
 
             qint32 nRequest = KWAJ_INPUT_BUFFER_SIZE;
@@ -93,7 +107,9 @@ private:
                 const qint64 nRemaining = m_pState->nInputLimit - m_pState->nCountInput;
                 if (nRemaining <= 0) {
                     m_bCleanEnd = true;
-                    return KWAJ_RESULT::END;
+                    m_bPastEnd = true;
+                    *pValue = 0;
+                    return KWAJ_RESULT::OK;
                 }
                 if (nRemaining < nRequest) nRequest = (qint32)nRemaining;
             }
@@ -102,7 +118,9 @@ private:
             if (nRead <= 0) {
                 if ((nRead == 0) && !m_pState->bReadError) {
                     m_bCleanEnd = true;
-                    return KWAJ_RESULT::END;
+                    m_bPastEnd = true;
+                    *pValue = 0;
+                    return KWAJ_RESULT::OK;
                 }
                 return KWAJ_RESULT::IO_ERROR;
             }
@@ -123,6 +141,7 @@ private:
     quint32 m_nBitBuffer;
     qint32 m_nBits;
     bool m_bCleanEnd;
+    bool m_bPastEnd;
 };
 
 class KWAJHuffmanTree {
@@ -377,6 +396,7 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
     for (qint32 i = 0; i < 6; i++) {
         if (reader.readBits(4, &anTypes[i]) != KWAJ_RESULT::OK) return false;
     }
+    if (reader.isPastEnd()) return false;
     for (qint32 i = 0; i < 5; i++) {
         if (anTypes[i] > 3) return false;
     }
@@ -393,6 +413,7 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
         (readHuffmanTree(&reader, anTypes[4], 256, &literalTree) != KWAJ_RESULT::OK)) {
         return false;
     }
+    if (reader.isPastEnd()) return false;
 
     std::array<quint8, KWAJ_WINDOW_SIZE> abWindow;
     abWindow.fill(KWAJ_WINDOW_FILL);
@@ -404,9 +425,11 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
     KWAJOutput output(pDecompressState, pPdStruct, bHasExpectedSize, nExpectedSize, nOutputLimit);
 
     while (!bCleanEnd && !bDataError && !bIOError && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        std::array<quint8, 32> abToken = {};
+        qint32 nTokenSize = 0;
         quint32 nLengthCode = 0;
         KWAJ_RESULT result = (bUseSecondMatchTree ? matchLength2Tree : matchLength1Tree).decode(&reader, &nLengthCode);
-        if (result == KWAJ_RESULT::END) {
+        if ((result == KWAJ_RESULT::END) || reader.isPastEnd()) {
             bCleanEnd = true;
             break;
         }
@@ -423,8 +446,8 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
             const qint32 nMatchLength = (qint32)nLengthCode + 2;
             quint32 nOffsetHigh = 0;
             result = offsetTree.decode(&reader, &nOffsetHigh);
-            if (result == KWAJ_RESULT::END) {
-                bDataError = true;
+            if ((result == KWAJ_RESULT::END) || reader.isPastEnd()) {
+                bCleanEnd = true;
                 break;
             }
             if (result == KWAJ_RESULT::IO_ERROR) {
@@ -438,8 +461,8 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
             quint32 nOffsetLow = 0;
             result = reader.readBits(6, &nOffsetLow);
-            if (result == KWAJ_RESULT::END) {
-                bDataError = true;
+            if ((result == KWAJ_RESULT::END) || reader.isPastEnd()) {
+                bCleanEnd = true;
                 break;
             }
             if (result == KWAJ_RESULT::IO_ERROR) {
@@ -461,18 +484,20 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
                 const quint8 nByte = abWindow[(nWindowPosition + KWAJ_WINDOW_SIZE - nOffset) & KWAJ_WINDOW_MASK];
                 abWindow[nWindowPosition] = nByte;
                 nWindowPosition = (nWindowPosition + 1) & KWAJ_WINDOW_MASK;
-                if (!output.writeByte(nByte)) {
-                    bDataError = !pDecompressState->bWriteError;
-                    bIOError = pDecompressState->bWriteError;
-                    break;
-                }
+                abToken[nTokenSize++] = nByte;
+            }
+            for (qint32 i = 0; i < nTokenSize; i++) {
+                if (output.writeByte(abToken[i])) continue;
+                bDataError = !pDecompressState->bWriteError;
+                bIOError = pDecompressState->bWriteError;
+                break;
             }
             bUseSecondMatchTree = false;
         } else {
             quint32 nLiteralLengthCode = 0;
             result = literalLengthTree.decode(&reader, &nLiteralLengthCode);
-            if (result == KWAJ_RESULT::END) {
-                bDataError = true;
+            if ((result == KWAJ_RESULT::END) || reader.isPastEnd()) {
+                bCleanEnd = true;
                 break;
             }
             if (result == KWAJ_RESULT::IO_ERROR) {
@@ -486,11 +511,15 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
             const qint32 nLiteralCount = (qint32)nLiteralLengthCode + 1;
             bUseSecondMatchTree = (nLiteralCount != 32);
+            if (!output.canEmit(nLiteralCount)) {
+                bDataError = true;
+                break;
+            }
             for (qint32 i = 0; i < nLiteralCount; i++) {
                 quint32 nLiteral = 0;
                 result = literalTree.decode(&reader, &nLiteral);
-                if (result == KWAJ_RESULT::END) {
-                    bDataError = true;
+                if ((result == KWAJ_RESULT::END) || reader.isPastEnd()) {
+                    bCleanEnd = true;
                     break;
                 }
                 if (result == KWAJ_RESULT::IO_ERROR) {
@@ -504,17 +533,21 @@ bool XKWAJLZHDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, X
 
                 abWindow[nWindowPosition] = (quint8)nLiteral;
                 nWindowPosition = (nWindowPosition + 1) & KWAJ_WINDOW_MASK;
-                if (!output.writeByte((quint8)nLiteral)) {
-                    bDataError = !pDecompressState->bWriteError;
-                    bIOError = pDecompressState->bWriteError;
-                    break;
-                }
+                abToken[nTokenSize++] = (quint8)nLiteral;
+            }
+            if (bCleanEnd || bDataError || bIOError) break;
+            for (qint32 i = 0; i < nTokenSize; i++) {
+                if (output.writeByte(abToken[i])) continue;
+                bDataError = !pDecompressState->bWriteError;
+                bIOError = pDecompressState->bWriteError;
+                break;
             }
         }
     }
 
-    const bool bInputComplete =
-        bCleanEnd && reader.isCleanEnd() && ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+    const bool bInputComplete = bCleanEnd && reader.isCleanEnd() &&
+                                (!bHasExpectedSize || (pDecompressState->nInputLimit == -1) ||
+                                 (pDecompressState->nCountInput == pDecompressState->nInputLimit));
     const bool bOutputComplete = !bHasExpectedSize || (output.produced() == nExpectedSize);
     bool bResult = bInputComplete && bOutputComplete && !bDataError && !bIOError && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
                    XBinary::isPdStructNotCanceled(pPdStruct);

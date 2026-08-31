@@ -650,7 +650,7 @@ bool XMTree::_scanArchive(QList<MTREE_ENTRY> *pEntries, qint64 *pArchiveEnd, PDS
         nEntryCount++;
 
         if (sPath == QLatin1String(".")) {
-            for (auto it = options.constBegin(); it != options.constEnd(); ++it) {
+            for (QMap<QByteArray, MTREE_OPTION>::const_iterator it = options.constBegin(); it != options.constEnd(); ++it) {
                 rootOptions.insert(it.key(), it.value());
             }
             if (!rootOptions.contains("type") || (rootOptions.value("type").baValue != "dir")) {
@@ -670,7 +670,7 @@ bool XMTree::_scanArchive(QList<MTREE_ENTRY> *pEntries, qint64 *pArchiveEnd, PDS
             }
             mergedOptions = resolvedOptions.at(nExistingIndex);
         }
-        for (auto it = options.constBegin(); it != options.constEnd(); ++it) {
+        for (QMap<QByteArray, MTREE_OPTION>::const_iterator it = options.constBegin(); it != options.constEnd(); ++it) {
             mergedOptions.insert(it.key(), it.value());
         }
         if (!mergedOptions.contains("type")) {

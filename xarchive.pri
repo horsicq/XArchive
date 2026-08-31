@@ -5,32 +5,32 @@ DEPENDPATH += $$PWD/Algos
 INCLUDEPATH += $$PWD/Algos/include
 DEPENDPATH += $$PWD/Algos/include
 
-# The ZIP + decompression core (XZip family, XArchive base, XCompress/
-# XDecompress, ALL Algos decoders, and xbinary/xoptions/xpng/xjavaclass/
-# xandroidbinary) lives in xzip.pri so it can be used WITHOUT the USE_ARCHIVE
-# define; this file adds the remaining archive formats on top.
+# The shared core (all classes relocated to Formats, XCompress/XDecompress,
+# ALL Algos decoders, and xbinary/xoptions/xpng/xjavaclass/xandroidbinary)
+# lives in xzip.pri so it can be used WITHOUT the USE_ARCHIVE define; this file
+# adds only the formats that remain in XArchive.
 !contains(XCONFIG, xzip) {
     XCONFIG += xzip
     include($$PWD/xzip.pri)
 }
 
-include($$PWD/ancient.pri)
 include($$PWD/deark.pri)
-include($$PWD/libdsk.pri)
+include($$PWD/legacydisk.pri)
 
 HEADERS += \
     $$PWD/x_ar.h \
     $$PWD/xancient.h \
     $$PWD/xlegacyencoded.h \
     $$PWD/xdearkarchive.h \
+    $$PWD/xdskexp.h \
     $$PWD/xlibdskarchive.h \
     $$PWD/xcompactproarchive.h \
     $$PWD/xdiskdoublerarchive.h \
-    $$PWD/Algos/xmaclegacydecoders.h \
-    $$PWD/Algos/xpaxdecoder.h \
-    $$PWD/Algos/xvisedeflatedecoder.h \
+    $$PWD/xfls.h \
     $$PWD/xpyinstallercarchive.h \
     $$PWD/xwisesfxarchive.h \
+    $$PWD/xis3sfxarchive.h \
+    $$PWD/xis14sfxarchive.h \
     $$PWD/xlegacystorearchive.h \
     $$PWD/xconcatziparchive.h \
     $$PWD/xdiskjugglerarchive.h \
@@ -38,9 +38,14 @@ HEADERS += \
     $$PWD/x2img.h \
     $$PWD/xpyz.h \
     $$PWD/xlzxarchive.h \
+    $$PWD/xmi10archive.h \
     $$PWD/xmacbinary.h \
     $$PWD/xresourcefork.h \
     $$PWD/xlbr.h \
+    $$PWD/xrtpatch.h \
+    $$PWD/xrncarchive.h \
+    $$PWD/xarq.h \
+    $$PWD/xsqz.h \
     $$PWD/xseaarc.h \
     $$PWD/xexternalarchive.h \
     $$PWD/xfreearc.h \
@@ -70,11 +75,9 @@ HEADERS += \
     $$PWD/games/xpmm.h \
     $$PWD/xwarc.h \
     $$PWD/xmtree.h \
+    $$PWD/xshar.h \
     $$PWD/xuu.h \
     $$PWD/xdeb.h \
-    $$PWD/xdos16.h \
-    $$PWD/xgzip.h \
-    $$PWD/xiso9660.h \
     $$PWD/xudf.h \
     $$PWD/xwim.h \
     $$PWD/xrpm.h \
@@ -86,13 +89,9 @@ HEADERS += \
     $$PWD/xlha.h \
     $$PWD/xsar.h \
     $$PWD/xarx.h \
-    $$PWD/xmachofat.h \
     $$PWD/xrar.h \
     $$PWD/xsevenzip.h \
     $$PWD/xsquashfs.h \
-    $$PWD/xtar.h \
-    $$PWD/xtarcompressed.h \
-    $$PWD/xtar_gz.h \
     $$PWD/xtar_bzip2.h \
     $$PWD/xtar_lzip.h \
     $$PWD/xtar_lzma.h \
@@ -100,8 +99,6 @@ HEADERS += \
     $$PWD/xtar_xz.h \
     $$PWD/xtar_zstd.h \
     $$PWD/xtar_lz4.h \
-    $$PWD/xtar_compress.h \
-    $$PWD/xnpm.h \
     $$PWD/xszdd.h \
     $$PWD/xbzip2.h \
     $$PWD/xbrotli.h \
@@ -123,14 +120,15 @@ SOURCES += \
     $$PWD/xancient.cpp \
     $$PWD/xlegacyencoded.cpp \
     $$PWD/xdearkarchive.cpp \
+    $$PWD/xdskexp.cpp \
     $$PWD/xlibdskarchive.cpp \
     $$PWD/xcompactproarchive.cpp \
     $$PWD/xdiskdoublerarchive.cpp \
-    $$PWD/Algos/xmaclegacydecoders.cpp \
-    $$PWD/Algos/xpaxdecoder.cpp \
-    $$PWD/Algos/xvisedeflatedecoder.cpp \
+    $$PWD/xfls.cpp \
     $$PWD/xpyinstallercarchive.cpp \
     $$PWD/xwisesfxarchive.cpp \
+    $$PWD/xis3sfxarchive.cpp \
+    $$PWD/xis14sfxarchive.cpp \
     $$PWD/xlegacystorearchive.cpp \
     $$PWD/xconcatziparchive.cpp \
     $$PWD/xdiskjugglerarchive.cpp \
@@ -138,9 +136,14 @@ SOURCES += \
     $$PWD/x2img.cpp \
     $$PWD/xpyz.cpp \
     $$PWD/xlzxarchive.cpp \
+    $$PWD/xmi10archive.cpp \
     $$PWD/xmacbinary.cpp \
     $$PWD/xresourcefork.cpp \
     $$PWD/xlbr.cpp \
+    $$PWD/xrtpatch.cpp \
+    $$PWD/xrncarchive.cpp \
+    $$PWD/xarq.cpp \
+    $$PWD/xsqz.cpp \
     $$PWD/xseaarc.cpp \
     $$PWD/xexternalarchive.cpp \
     $$PWD/xfreearc.cpp \
@@ -170,11 +173,9 @@ SOURCES += \
     $$PWD/games/xpmm.cpp \
     $$PWD/xwarc.cpp \
     $$PWD/xmtree.cpp \
+    $$PWD/xshar.cpp \
     $$PWD/xuu.cpp \
     $$PWD/xdeb.cpp \
-    $$PWD/xdos16.cpp \
-    $$PWD/xgzip.cpp \
-    $$PWD/xiso9660.cpp \
     $$PWD/xudf.cpp \
     $$PWD/xwim.cpp \
     $$PWD/xrpm.cpp \
@@ -186,13 +187,9 @@ SOURCES += \
     $$PWD/xlha.cpp \
     $$PWD/xsar.cpp \
     $$PWD/xarx.cpp \
-    $$PWD/xmachofat.cpp \
     $$PWD/xrar.cpp \
     $$PWD/xsevenzip.cpp \
     $$PWD/xsquashfs.cpp \
-    $$PWD/xtar.cpp \
-    $$PWD/xtarcompressed.cpp \
-    $$PWD/xtar_gz.cpp \
     $$PWD/xtar_bzip2.cpp \
     $$PWD/xtar_lzip.cpp \
     $$PWD/xtar_lzma.cpp \
@@ -200,8 +197,6 @@ SOURCES += \
     $$PWD/xtar_xz.cpp \
     $$PWD/xtar_zstd.cpp \
     $$PWD/xtar_lz4.cpp \
-    $$PWD/xtar_compress.cpp \
-    $$PWD/xnpm.cpp \
     $$PWD/xszdd.cpp \
     $$PWD/xbzip2.cpp \
     $$PWD/xbrotli.cpp \
@@ -217,11 +212,6 @@ SOURCES += \
     $$PWD/xcompressz.cpp \
     $$PWD/xminidump.cpp \
     $$PWD/xdmg.cpp
-
-!contains(XCONFIG, xmach) {
-    XCONFIG += xmach
-    include($$PWD/../Formats/exec/xmach.pri) # MACHFAT archive contains Mach-O
-}
 
 DISTFILES += \
     $$PWD/LICENSE \

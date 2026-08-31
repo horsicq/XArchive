@@ -1,10 +1,11 @@
-# ZIP + decompression core: XZip (with its XJAR/XAPK/XAPKS/XIPA family), the
-# XArchive base class, XCompress/XDecompress and ALL Algos decoders.
+# Archive-format core shared by Formats and XArchive: all classes relocated to
+# Formats (XArchive, the ZIP family, GZIP, compressed-TAR/NPM formats, ISO9660,
+# MACHOFat, DOS16, Deflate and store decoders), their TAR support,
+# XCompress/XDecompress and ALL Algos decoders.
 #
-# This unit works WITHOUT the USE_ARCHIVE define: consumers that only need ZIP
-# parsing and the Deflate/store/... decoders include this file instead of
-# xarchive.cmake. xarchive.cmake composes this file and adds the other archive
-# formats (rar/7z/tar/iso/...) on top; USE_ARCHIVE keeps gating those.
+# This unit works WITHOUT the USE_ARCHIVE define. xarchive.cmake composes it
+# and adds the archive formats that remain in XArchive (rar/7z/tar/...) on top;
+# USE_ARCHIVE keeps gating those remaining formats.
 #
 # Link requirements: the decoder amalgamations reference the zlib / bzip2 /
 # lzma / ppmd targets defined in algos_codecs.cmake -- a standalone consumer
@@ -19,6 +20,14 @@
 include_directories(${CMAKE_CURRENT_LIST_DIR})
 include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/include/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/../Formats)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/../Formats/archives)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/../Formats/Algos)
+
+# XDecompress dispatches these codecs even for ZIP-only consumers, so their
+# implementations belong to the ZIP/decompression core rather than only to
+# the wider archive-format layer.
+include("${CMAKE_CURRENT_LIST_DIR}/ancient.cmake")
 
 if (NOT DEFINED XBINARY_SOURCES)
     include(${CMAKE_CURRENT_LIST_DIR}/../Formats/xbinary.cmake)
@@ -30,6 +39,15 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../Formats/exec)
 if (NOT DEFINED XOPTIONS_SOURCES)
     include(${CMAKE_CURRENT_LIST_DIR}/../XOptions/xoptions.cmake)
     set(XZIP_SOURCES ${XZIP_SOURCES} ${XOPTIONS_SOURCES})
+endif()
+
+# XMACHOFat calls non-inline helpers from XMACH. Full XFormats consumers own
+# those sources already; direct core/XArchive consumers need them composed here.
+if (NOT DEFINED XFORMATS_SOURCES)
+    if (NOT DEFINED XMACH_SOURCES)
+        include(${CMAKE_CURRENT_LIST_DIR}/../Formats/exec/xmach.cmake)
+    endif()
+    set(XZIP_SOURCES ${XZIP_SOURCES} ${XMACH_SOURCES})
 endif()
 
 if (NOT DEFINED XFORMATS_SOURCES)
@@ -55,24 +73,43 @@ endif()
 
 set(XZIP_SOURCES
     ${XZIP_SOURCES}
-    ${CMAKE_CURRENT_LIST_DIR}/xarchive.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xarchive.h
+    ${XARCHIVE_ANCIENT_SOURCES}
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/xarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/xarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcompress.h
     ${CMAKE_CURRENT_LIST_DIR}/xdecompress.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xdecompress.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompresseddevice.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcompresseddevice.h
-    ${CMAKE_CURRENT_LIST_DIR}/xzip.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xzip.h
-    ${CMAKE_CURRENT_LIST_DIR}/xjar.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xjar.h
-    ${CMAKE_CURRENT_LIST_DIR}/xapk.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xapk.h
-    ${CMAKE_CURRENT_LIST_DIR}/xapks.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xapks.h
-    ${CMAKE_CURRENT_LIST_DIR}/xipa.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xipa.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtar.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtar.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtarcompressed.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtarcompressed.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xzip.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xzip.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xjar.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xjar.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xapk.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xapk.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xapks.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xapks.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xipa.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xipa.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xgzip.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xgzip.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xiso9660.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xiso9660.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtar_gz.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtar_gz.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtar_compress.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtar_compress.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xnpm.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xnpm.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/exec/xmachofat.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/exec/xmachofat.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/exec/xdos16.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/exec/xdos16.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/algo_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/algo_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xalgo_local.h
@@ -95,8 +132,8 @@ set(XZIP_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrardecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xit214decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xit214decoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xdeflatedecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xdeflatedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/Algos/xdeflatedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/Algos/xdeflatedecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/ximplodedecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/ximplodedecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzmadecoder.cpp
@@ -109,10 +146,36 @@ set(XZIP_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xasciihexdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrunlengthdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xrunlengthdecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xstoredecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/Algos/xstoredecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/../Formats/Algos/xstoredecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xspisrledecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xspisrledecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xamigalzxdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xamigalzxdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmaclegacydecoders.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmaclegacydecoders.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpaxdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpaxdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvisedeflatedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvisedeflatedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmi10decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmi10decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xfpakdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xfpakdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xftcompdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xftcompdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xdndecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xdndecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsqzdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsqzdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xflsdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xflsdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpakdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpakdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xssmdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xssmdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xrtpatchdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xrtpatchdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbzip2decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbrotlidecoder.cpp

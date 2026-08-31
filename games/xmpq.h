@@ -21,7 +21,7 @@
 #ifndef XMPQ_H
 #define XMPQ_H
 
-#include "../xarchive.h"
+#include "xarchive.h"
 
 // Native reader for classic Blizzard MPQ archives.  The implementation does
 // not depend on StormLib: it validates and decrypts the classic hash/block
@@ -117,6 +117,17 @@ private:
         MPQ_HEADER header;
         QList<MPQ_ENTRY> listEntries;
     };
+
+    struct DECODE_IO_CONTEXT;
+
+    static void registerName(const QVector<MPQ_HASH_ENTRY> &vectorHashes,
+                             QHash<quint32, QString> *pNames,
+                             const QByteArray &baName);
+    static bool entryOrderLess(const MPQ_ENTRY &a, const MPQ_ENTRY &b);
+    bool readBlockData(DECODE_IO_CONTEXT *pContext, quint64 nRelativeOffset,
+                       quint64 nSize, QByteArray *pData);
+    bool writeDecodedData(DECODE_IO_CONTEXT *pContext,
+                          const QByteArray &baData);
 
     bool scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
                      PDSTRUCT *pPdStruct);

@@ -183,8 +183,146 @@ bool bigfAccountOutput(XBinary::UNPACK_STATE *pState, qint64 nSize)
 
 }  // namespace
 
+struct XBIGF::LZW_CONTEXT
+{
+    QPointer<XBIGF> guardedArchive;
+    QPointer<QIODevice> guardedSource;
+    QPointer<QIODevice> guardedOutput;
+    const BIGF_BLOCK *pBlock;
+    QByteArray *pInputBuffer;
+    QByteArray *pPhrase;
+    QVector<quint32> *pPrefixes;
+    QByteArray *pSuffixes;
+    PDSTRUCT *pPdStruct;
+    qint64 nInputLoaded;
+    qint32 nInputPosition;
+    qint32 nInputAvailable;
+    quint64 nBitBuffer;
+    qint32 nBitsAvailable;
+    quint64 nBitsConsumed;
+};
+
 XBIGF::XBIGF(QIODevice *pDevice) : XArchive(pDevice)
 {
+}
+
+bool XBIGF::entryOffsetLess(const BIGF_ENTRY &a, const BIGF_ENTRY &b)
+{
+    if (a.nDataOffset != b.nDataOffset) return a.nDataOffset < b.nDataOffset;
+    return a.nStoredSize < b.nStoredSize;
+}
+
+bool XBIGF::resetLzwDictionary(LZW_CONTEXT *pContext)
+{
+    if (!pContext || !pContext->pPrefixes || !pContext->pSuffixes) return false;
+    try {
+        pContext->pPrefixes->resize(BIGF_LZW_FIRST_CODE);
+        pContext->pSuffixes->resize(BIGF_LZW_FIRST_CODE);
+    } catch (const std::bad_alloc &) {
+        return false;
+    }
+    for (quint32 i = 0; i < 256; ++i) {
+        (*pContext->pPrefixes)[(qint32)i] = BIGF_INVALID_PREFIX;
+        (*pContext->pSuffixes)[(qint32)i] = (char)i;
+    }
+    (*pContext->pPrefixes)[(qint32)BIGF_LZW_CLEAR_CODE] = BIGF_INVALID_PREFIX;
+    (*pContext->pSuffixes)[(qint32)BIGF_LZW_CLEAR_CODE] = 0;
+    return true;
+}
+
+bool XBIGF::readLzwByte(LZW_CONTEXT *pContext, quint8 *pValue)
+{
+    if (!pContext || !pValue || !pContext->guardedArchive ||
+        !pContext->guardedSource || !pContext->guardedOutput ||
+        !pContext->pBlock || !pContext->pInputBuffer) return false;
+    if (pContext->nInputPosition >= pContext->nInputAvailable) {
+        if (pContext->nInputLoaded >= pContext->pBlock->nCompressedSize)
+            return false;
+        const qint64 nRequest = qMin<qint64>(
+            pContext->pInputBuffer->size(),
+            pContext->pBlock->nCompressedSize - pContext->nInputLoaded);
+        const qint64 nRead = safeReadData(
+            pContext->guardedSource.data(),
+            pContext->pBlock->nDataOffset + pContext->nInputLoaded,
+            pContext->pInputBuffer->data(), nRequest, pContext->pPdStruct);
+        if (!pContext->guardedArchive || !pContext->guardedSource ||
+            !pContext->guardedOutput || (nRead != nRequest)) return false;
+        pContext->nInputLoaded += nRead;
+        pContext->nInputPosition = 0;
+        pContext->nInputAvailable = (qint32)nRead;
+    }
+    *pValue = (quint8)pContext->pInputBuffer->at(pContext->nInputPosition++);
+    return true;
+}
+
+bool XBIGF::readLzwBits(LZW_CONTEXT *pContext, qint32 nWidth, quint32 *pCode)
+{
+    if (!pContext || !pCode || (nWidth <= 0) || (nWidth > 32)) return false;
+    while (pContext->nBitsAvailable < nWidth) {
+        quint8 nByte = 0;
+        if (!readLzwByte(pContext, &nByte)) return false;
+        pContext->nBitBuffer |= ((quint64)nByte << pContext->nBitsAvailable);
+        pContext->nBitsAvailable += 8;
+    }
+    const quint64 nMask = (Q_UINT64_C(1) << nWidth) - 1;
+    *pCode = (quint32)(pContext->nBitBuffer & nMask);
+    pContext->nBitBuffer >>= nWidth;
+    pContext->nBitsAvailable -= nWidth;
+    pContext->nBitsConsumed += nWidth;
+    return true;
+}
+
+bool XBIGF::alignLzwInput(LZW_CONTEXT *pContext)
+{
+    if (!pContext) return false;
+    const qint32 nDiscard = (qint32)((8 - (pContext->nBitsConsumed & 7)) & 7);
+    while (pContext->nBitsAvailable < nDiscard) {
+        quint8 nByte = 0;
+        if (!readLzwByte(pContext, &nByte)) return false;
+        pContext->nBitBuffer |= ((quint64)nByte << pContext->nBitsAvailable);
+        pContext->nBitsAvailable += 8;
+    }
+    pContext->nBitBuffer >>= nDiscard;
+    pContext->nBitsAvailable -= nDiscard;
+    pContext->nBitsConsumed += nDiscard;
+    return true;
+}
+
+bool XBIGF::appendLzwDictionary(LZW_CONTEXT *pContext, quint32 nPrefix,
+                                quint8 nSuffix)
+{
+    if (!pContext || !pContext->pPrefixes || !pContext->pSuffixes ||
+        (pContext->pPrefixes->size() != pContext->pSuffixes->size()) ||
+        (pContext->pPrefixes->size() >= (1 << BIGF_LZW_MAX_BITS)))
+        return false;
+    try {
+        pContext->pPrefixes->append(nPrefix);
+        pContext->pSuffixes->append((char)nSuffix);
+    } catch (const std::bad_alloc &) {
+        return false;
+    }
+    return true;
+}
+
+bool XBIGF::decodeLzwPhrase(LZW_CONTEXT *pContext, quint32 nCode,
+                            quint8 *pFirstCharacter)
+{
+    if (!pContext || !pFirstCharacter || !pContext->pPrefixes ||
+        !pContext->pSuffixes || !pContext->pPhrase ||
+        (nCode >= (quint32)pContext->pPrefixes->size())) return false;
+    pContext->pPhrase->clear();
+    quint32 nSteps = 0;
+    while (nCode >= BIGF_LZW_FIRST_CODE) {
+        if ((nCode >= (quint32)pContext->pPrefixes->size()) ||
+            (++nSteps > (quint32)pContext->pPrefixes->size())) return false;
+        pContext->pPhrase->append(pContext->pSuffixes->at((qint32)nCode));
+        nCode = pContext->pPrefixes->at((qint32)nCode);
+    }
+    if (nCode >= BIGF_LZW_CLEAR_CODE) return false;
+    pContext->pPhrase->append((char)nCode);
+    *pFirstCharacter =
+        (quint8)pContext->pPhrase->at(pContext->pPhrase->size() - 1);
+    return true;
 }
 
 bool XBIGF::readZeroTerminatedName(qint64 nOffset, qint64 nLimit,
@@ -464,12 +602,7 @@ bool XBIGF::scanArchive(BIGF_HEADER *pHeader,
     if (nDirectoryCursor != nDirectoryEnd) return false;
 
     QList<BIGF_ENTRY> listByOffset = listEntries;
-    std::sort(listByOffset.begin(), listByOffset.end(),
-              [](const BIGF_ENTRY &a, const BIGF_ENTRY &b) {
-                  if (a.nDataOffset != b.nDataOffset)
-                      return a.nDataOffset < b.nDataOffset;
-                  return a.nStoredSize < b.nStoredSize;
-              });
+    std::sort(listByOffset.begin(), listByOffset.end(), entryOffsetLess);
     qint64 nPreviousEnd = header.nDataOffset;
     for (const BIGF_ENTRY &entry : listByOffset) {
         if ((entry.nStoredSize > 0) &&
@@ -824,126 +957,11 @@ bool XBIGF::unpackLzwBlock(const BIGF_BLOCK &block,
     } catch (const std::bad_alloc &) {
         return false;
     }
-
-    const auto resetDictionary = [&]() -> bool {
-        try {
-            listPrefixes.resize(BIGF_LZW_FIRST_CODE);
-            baSuffixes.resize(BIGF_LZW_FIRST_CODE);
-        } catch (const std::bad_alloc &) {
-            return false;
-        }
-        for (quint32 i = 0; i < 256; ++i) {
-            listPrefixes[(qint32)i] = BIGF_INVALID_PREFIX;
-            baSuffixes[(qint32)i] = (char)i;
-        }
-        listPrefixes[(qint32)BIGF_LZW_CLEAR_CODE] =
-            BIGF_INVALID_PREFIX;
-        baSuffixes[(qint32)BIGF_LZW_CLEAR_CODE] = 0;
-        return true;
-    };
-    if (!resetDictionary()) return false;
-
-    qint64 nInputLoaded = 0;
-    qint32 nInputPosition = 0;
-    qint32 nInputAvailable = 0;
-    quint64 nBitBuffer = 0;
-    qint32 nBitsAvailable = 0;
-    quint64 nBitsConsumed = 0;
-
-    const auto readByte = [&](quint8 *pValue) -> bool {
-        if (!pValue || !guardedThis || !guardedSource ||
-            !guardedOutput) {
-            return false;
-        }
-        if (nInputPosition >= nInputAvailable) {
-            if (nInputLoaded >= block.nCompressedSize) return false;
-            const qint64 nRequest = qMin<qint64>(
-                baInputBuffer.size(),
-                block.nCompressedSize - nInputLoaded);
-            const qint64 nRead = safeReadData(
-                guardedSource.data(),
-                block.nDataOffset + nInputLoaded,
-                baInputBuffer.data(), nRequest, pPdStruct);
-            if (!guardedThis || !guardedSource || !guardedOutput ||
-                (nRead != nRequest)) {
-                return false;
-            }
-            nInputLoaded += nRead;
-            nInputPosition = 0;
-            nInputAvailable = (qint32)nRead;
-        }
-        *pValue = (quint8)baInputBuffer.at(nInputPosition++);
-        return true;
-    };
-
-    const auto readBits = [&](qint32 nWidth, quint32 *pCode) -> bool {
-        if (!pCode || (nWidth <= 0) || (nWidth > 32)) return false;
-        while (nBitsAvailable < nWidth) {
-            quint8 nByte = 0;
-            if (!readByte(&nByte)) return false;
-            nBitBuffer |= ((quint64)nByte << nBitsAvailable);
-            nBitsAvailable += 8;
-        }
-        const quint64 nMask = (Q_UINT64_C(1) << nWidth) - 1;
-        *pCode = (quint32)(nBitBuffer & nMask);
-        nBitBuffer >>= nWidth;
-        nBitsAvailable -= nWidth;
-        nBitsConsumed += nWidth;
-        return true;
-    };
-
-    const auto alignInput = [&]() -> bool {
-        const qint32 nDiscard =
-            (qint32)((8 - (nBitsConsumed & 7)) & 7);
-        while (nBitsAvailable < nDiscard) {
-            quint8 nByte = 0;
-            if (!readByte(&nByte)) return false;
-            nBitBuffer |= ((quint64)nByte << nBitsAvailable);
-            nBitsAvailable += 8;
-        }
-        nBitBuffer >>= nDiscard;
-        nBitsAvailable -= nDiscard;
-        nBitsConsumed += nDiscard;
-        return true;
-    };
-
-    const auto appendDictionary = [&](quint32 nPrefix,
-                                      quint8 nSuffix) -> bool {
-        if ((listPrefixes.size() != baSuffixes.size()) ||
-            (listPrefixes.size() >= (1 << BIGF_LZW_MAX_BITS))) {
-            return false;
-        }
-        try {
-            listPrefixes.append(nPrefix);
-            baSuffixes.append((char)nSuffix);
-        } catch (const std::bad_alloc &) {
-            return false;
-        }
-        return true;
-    };
-
-    const auto decodePhrase = [&](quint32 nCode,
-                                  quint8 *pFirstCharacter) -> bool {
-        if (!pFirstCharacter ||
-            (nCode >= (quint32)listPrefixes.size())) {
-            return false;
-        }
-        baPhrase.clear();
-        quint32 nSteps = 0;
-        while (nCode >= BIGF_LZW_FIRST_CODE) {
-            if ((nCode >= (quint32)listPrefixes.size()) ||
-                (++nSteps > (quint32)listPrefixes.size())) {
-                return false;
-            }
-            baPhrase.append(baSuffixes.at((qint32)nCode));
-            nCode = listPrefixes.at((qint32)nCode);
-        }
-        if (nCode >= BIGF_LZW_CLEAR_CODE) return false;
-        baPhrase.append((char)nCode);
-        *pFirstCharacter =
-            (quint8)baPhrase.at(baPhrase.size() - 1);
-        return true;
-    };
+    LZW_CONTEXT lzwContext = {guardedThis, guardedSource, guardedOutput,
+                              &block, &baInputBuffer, &baPhrase,
+                              &listPrefixes, &baSuffixes, pPdStruct,
+                              0, 0, 0, 0, 0, 0};
+    if (!resetLzwDictionary(&lzwContext)) return false;
 
     qint32 nCodeWidth = BIGF_LZW_INITIAL_BITS;
     quint32 nPreviousCode = 0;
@@ -955,9 +973,10 @@ bool XBIGF::unpackLzwBlock(const BIGF_BLOCK &block,
            guardedSource && guardedOutput &&
            isPdStructNotCanceled(pPdStruct)) {
         quint32 nCode = 0;
-        if (!readBits(nCodeWidth, &nCode)) return false;
+        if (!readLzwBits(&lzwContext, nCodeWidth, &nCode)) return false;
         if (nCode == BIGF_LZW_CLEAR_CODE) {
-            if (!alignInput() || !resetDictionary()) return false;
+            if (!alignLzwInput(&lzwContext) ||
+                !resetLzwDictionary(&lzwContext)) return false;
             nCodeWidth = BIGF_LZW_INITIAL_BITS;
             bHasPreviousCode = false;
             continue;
@@ -968,18 +987,18 @@ bool XBIGF::unpackLzwBlock(const BIGF_BLOCK &block,
         quint8 nFirstCharacter = 0;
         bool bAddedEntry = false;
         if (nCode < nDictionarySize) {
-            if (!decodePhrase(nCode, &nFirstCharacter)) return false;
+            if (!decodeLzwPhrase(&lzwContext, nCode, &nFirstCharacter)) return false;
             if (bHasPreviousCode) {
-                if (!appendDictionary(nPreviousCode,
-                                      nFirstCharacter)) {
+                if (!appendLzwDictionary(&lzwContext, nPreviousCode,
+                                         nFirstCharacter)) {
                     return false;
                 }
                 bAddedEntry = true;
             }
         } else if ((nCode == nDictionarySize) && bHasPreviousCode) {
-            if (!appendDictionary(nPreviousCode,
-                                  nPreviousFirstCharacter) ||
-                !decodePhrase(nCode, &nFirstCharacter)) {
+            if (!appendLzwDictionary(&lzwContext, nPreviousCode,
+                                     nPreviousFirstCharacter) ||
+                !decodeLzwPhrase(&lzwContext, nCode, &nFirstCharacter)) {
                 return false;
             }
             bAddedEntry = true;

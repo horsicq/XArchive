@@ -400,7 +400,11 @@ XBinary::ARCHIVERECORD XSEAARC::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdS
         result.mapProperties.insert(XBinary::FPART_PROP_CRC_TYPE, XBinary::CRC_TYPE_CRC16ARC);
         result.mapProperties.insert(XBinary::FPART_PROP_TYPE, (quint32)nMethod);
 
-        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, _methodToHandle(nMethod));
+        const XBinary::HANDLE_METHOD handleMethod = _methodToHandle(nMethod);
+        result.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, handleMethod);
+        if (handleMethod == XBinary::HANDLE_METHOD_UNKNOWN) {
+            result.mapProperties.insert(XBinary::FPART_PROP_REPORTEDMETHOD, cmethodToString((CMETHOD)nMethod) + QStringLiteral(" (unsupported)"));
+        }
 
         // Convert DOS date/time to QDateTime
         // DOS date: bits 15-9=year(from 1980), bits 8-5=month, bits 4-0=day
@@ -781,7 +785,11 @@ QList<XBinary::FPART> XSEAARC::getFileParts(quint32 nFileParts, qint32 nLimit, P
             record.sName = sFileName;
             record.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, (qint64)nUncompressedSize);
             record.mapProperties.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, (qint64)nCompressedSize);
-            record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, _methodToHandle(nMethod));
+            const XBinary::HANDLE_METHOD handleMethod = _methodToHandle(nMethod);
+            record.mapProperties.insert(XBinary::FPART_PROP_HANDLEMETHOD, handleMethod);
+            if (handleMethod == XBinary::HANDLE_METHOD_UNKNOWN) {
+                record.mapProperties.insert(XBinary::FPART_PROP_REPORTEDMETHOD, cmethodToString((CMETHOD)nMethod) + QStringLiteral(" (unsupported)"));
+            }
 
             listResult.append(record);
         }
@@ -852,8 +860,8 @@ QString XSEAARC::cmethodToString(CMETHOD cmethod)
 // Anything without a decoder must map to HANDLE_METHOD_UNKNOWN rather than be
 // left unset: an unset property makes the shared decompressor fall back to
 // STORE, which would copy the still-compressed bytes out as if they were the
-// file.  Methods 6 and 7 differ only in the encoder's hash function and share
-// one decoder.
+// file. The original hash-table Crunch methods 5-7 remain explicit unknowns;
+// PAK's later Crushed and Distilled methods have dedicated decoders.
 XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
 {
     switch (nMethod) {
@@ -871,8 +879,8 @@ XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
         case CMETHOD_CRUNCHED3: return HANDLE_METHOD_UNKNOWN;
         case CMETHOD_CRUNCHED4: return HANDLE_METHOD_ARC_CRUNCH_DYN;
         case CMETHOD_SQUASHED: return HANDLE_METHOD_ARC_SQUASH;
-        case CMETHOD_CRUSHED:
-        case CMETHOD_DISTILLED: return HANDLE_METHOD_UNKNOWN;
+        case CMETHOD_CRUSHED: return HANDLE_METHOD_PAK_CRUSHED;
+        case CMETHOD_DISTILLED: return HANDLE_METHOD_PAK_DISTILLED;
         default: return HANDLE_METHOD_UNKNOWN;
     }
 }

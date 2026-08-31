@@ -271,6 +271,13 @@ XFilteredArchive::XFilteredArchive(QIODevice *pDevice, FT outerFileTypeHint) : X
 {
 }
 
+bool XFilteredArchive::failUnpackInitialization(XFilteredArchive *pArchive, UNPACK_STATE *pState)
+{
+    if (pArchive) pArchive->releaseUnpackSource(pState);
+    if (pState) *pState = UNPACK_STATE();
+    return false;
+}
+
 XFilteredArchive::~XFilteredArchive()
 {
 }
@@ -666,22 +673,16 @@ bool XFilteredArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     const bool bBound = guardedThis->bindUnpackSource(pState, pPdStruct);
     if (!guardedThis || !guardedSource || !bBound) return false;
 
-    const auto failInitialization = [&]() -> bool {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
-        *pState = UNPACK_STATE();
-        return false;
-    };
-
     qint32 nDepth = 0;
     if (!readFilterDepth(guardedSource.data(), &nDepth) || !guardedThis || !guardedSource) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     FT currentType = detectNativeFileType(guardedSource.data(), pPdStruct);
     if (!guardedThis || !guardedSource || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedSource ||
         ((m_outerFileTypeHint != FT_UNKNOWN) && (!isFilterFileType(m_outerFileTypeHint) || (currentType != m_outerFileTypeHint))) ||
         isDedicatedCompressedTarFileType(currentType) || !isFilterFileType(currentType)) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
     const FT outerFileType = currentType;
 
@@ -689,37 +690,37 @@ bool XFilteredArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     std::unique_ptr<QBuffer> pCurrentOwned;
     while (isFilterFileType(filterEnvelopeType(currentType))) {
         if ((nDepth < 0) || (nDepth >= FILTERED_MAX_DEPTH) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-            return failInitialization();
+            return failUnpackInitialization(guardedThis.data(), pState);
         }
 
         const FT layerType = filterEnvelopeType(currentType);
 
         std::unique_ptr<QBuffer> pDecoded(guardedThis->materializeLayer(pCurrentDevice, layerType, mapProperties, pState, pPdStruct));
         if (!guardedThis || !guardedSource || !pDecoded) {
-            return failInitialization();
+            return failUnpackInitialization(guardedThis.data(), pState);
         }
 
         ++nDepth;
         pDecoded->setProperty(FILTERED_DEPTH_PROPERTY, nDepth);
         if (pDecoded->property(FILTERED_DEPTH_PROPERTY).toInt() != nDepth) {
-            return failInitialization();
+            return failUnpackInitialization(guardedThis.data(), pState);
         }
 
         pCurrentOwned.swap(pDecoded);
         pCurrentDevice = pCurrentOwned.get();
         currentType = detectNativeFileType(pCurrentDevice, pPdStruct);
         if (!guardedThis || !guardedSource || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedSource || (currentType == FT_UNKNOWN)) {
-            return failInitialization();
+            return failUnpackInitialization(guardedThis.data(), pState);
         }
     }
 
     const FT innerFileType = currentType;
     if (!pCurrentOwned || !XFormats::isArchive(innerFileType) || isFilterFileType(innerFileType)) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     std::unique_ptr<FILTERED_UNPACK_CONTEXT> pContext(new (std::nothrow) FILTERED_UNPACK_CONTEXT());
-    if (!pContext) return failInitialization();
+    if (!pContext) return failUnpackInitialization(guardedThis.data(), pState);
     pContext->pDecodedDevice = pCurrentOwned.release();
     pContext->outerFileType = outerFileType;
     pContext->innerFileType = innerFileType;
@@ -729,19 +730,19 @@ bool XFilteredArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     QPointer<XArchive> guardedInner(pContext->pInnerArchive);
     QPointer<QIODevice> guardedDecoded(pContext->pDecodedDevice);
     if (!guardedInner || !guardedDecoded || !guardedThis || !guardedSource) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     bool bResult = guardedInner->initUnpack(&pContext->innerState, mapProperties, pPdStruct);
     if (bResult && guardedInner) pContext->bInnerInitialized = true;
     if (!guardedThis || !guardedSource || !guardedInner || !guardedDecoded || !bResult || !XBinary::isPdStructNotCanceled(pPdStruct) ||
         !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) || !guardedThis || !guardedSource) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     const qint64 nDecodedSize = guardedDecoded->size();
     if (!guardedThis || !guardedSource || !guardedInner || !guardedDecoded || (nDecodedSize < 0)) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
     const qint32 nInnerRecords = pContext->innerState.nNumberOfRecords;
     bResult = (pContext->innerState.nCurrentIndex == 0) && (nInnerRecords >= 0) && (pContext->innerState.nCurrentOffset >= 0) &&
@@ -759,12 +760,12 @@ bool XFilteredArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
                   (pContext->innerState.nNumberOfRecords == nInnerRecords) && XBinary::isPdStructNotCanceled(pPdStruct) &&
                   guardedThis->isUnpackSourceCurrent(pState, pPdStruct) && guardedThis && guardedSource && guardedInner && guardedDecoded;
     }
-    if (!bResult) return failInitialization();
+    if (!bResult) return failUnpackInitialization(guardedThis.data(), pState);
 
     const bool bPositionRestored = guardedSource->seek(nOriginalPosition);
     if (!guardedThis || !guardedSource || !guardedInner || !guardedDecoded || !bPositionRestored || !guardedThis->isUnpackSourceCurrent(pState, pPdStruct) ||
         !guardedThis || !guardedSource) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     copyInnerState(pState, pContext.get());

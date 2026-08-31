@@ -43,10 +43,16 @@ set(ZSTD_BUILD_TESTS OFF CACHE BOOL "Build zstd tests" FORCE)
 # which zstddeclib.cpp provides -- so nothing here resolved against the 3.4 MB
 # library. XBinaryViewer links libzstd_static directly and is unaffected.
 
+include("${CMAKE_CURRENT_LIST_DIR}/ancient.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/deark.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/legacydisk.cmake")
 set(XARCHIVE_SOURCES
     ${XARCHIVE_SOURCES}
+    ${XARCHIVE_ANCIENT_SOURCES}
     ${XARCHIVE_DEARK_SOURCES}
+    ${XARCHIVE_LEGACYDISK_SOURCES}
+    ${CMAKE_CURRENT_LIST_DIR}/xancient.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xancient.h
     ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.cpp

@@ -29,6 +29,39 @@ XKWAJ::XKWAJ(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
+bool XKWAJ::failUnpackInitialization(XKWAJ *pArchive, UNPACK_STATE *pState)
+{
+    if (pArchive) pArchive->releaseUnpackSource(pState);
+    if (pState) *pState = UNPACK_STATE();
+    return false;
+}
+
+bool XKWAJ::hasExtensionBytes(qint64 nExtensionOffset, qint64 nDataOffset, qint64 nSize)
+{
+    return (nSize >= 0) && (nExtensionOffset <= nDataOffset) &&
+           (nSize <= (nDataOffset - nExtensionOffset));
+}
+
+bool XKWAJ::skipExtensionBytes(qint64 nDataOffset, qint64 nSize, qint64 *pExtensionOffset)
+{
+    if (!pExtensionOffset || !hasExtensionBytes(*pExtensionOffset, nDataOffset, nSize)) return false;
+    *pExtensionOffset += nSize;
+    return true;
+}
+
+bool XKWAJ::readBoundedExtensionString(qint64 nDataOffset, qint64 *pExtensionOffset,
+                                       qint32 nMaximumBytes, QString *pString)
+{
+    if (!pExtensionOffset || !pString || !hasExtensionBytes(*pExtensionOffset, nDataOffset, 1)) return false;
+    const qint32 nReadSize = (qint32)qMin<qint64>(nMaximumBytes, nDataOffset - *pExtensionOffset);
+    const QByteArray baString = read_array(*pExtensionOffset, nReadSize);
+    if (baString.size() != nReadSize) return false;
+    const qint32 nTerminator = baString.indexOf('\0');
+    if (nTerminator < 0) return false;
+    *pString = QString::fromLatin1(baString.constData(), nTerminator);
+    return skipExtensionBytes(nDataOffset, nTerminator + 1, pExtensionOffset);
+}
+
 bool XKWAJ::isValid(PDSTRUCT *pPdStruct)
 {
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -333,28 +366,22 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         return false;
     }
 
-    const auto failInitialization = [&]() -> bool {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
-        *pState = UNPACK_STATE();
-        return false;
-    };
-
     const qint64 nFileSize = guardedThis->getSize();
     if (!guardedThis || (nFileSize < (qint64)sizeof(KWAJ_HEADER))) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     const quint16 nCompType = guardedThis->read_uint16(offsetof(KWAJ_HEADER, comp_type));
-    if (!guardedThis) return failInitialization();
+    if (!guardedThis) return failUnpackInitialization(guardedThis.data(), pState);
     const qint64 nDataOffset = guardedThis->read_uint16(offsetof(KWAJ_HEADER, data_offset));
-    if (!guardedThis) return failInitialization();
+    if (!guardedThis) return failUnpackInitialization(guardedThis.data(), pState);
     const quint16 nHeaderFlags = guardedThis->read_uint16(offsetof(KWAJ_HEADER, header_flags));
-    if (!guardedThis) return failInitialization();
+    if (!guardedThis) return failUnpackInitialization(guardedThis.data(), pState);
 
     const quint16 nKnownHeaderFlags =
         HDR_FLAG_HASLENGTH | HDR_FLAG_HASUNKNOWN1 | HDR_FLAG_HASUNKNOWN2 | HDR_FLAG_HASFILENAME | HDR_FLAG_HASFILEEXT | HDR_FLAG_HASEXTRATEXT;
     if ((nCompType > COMP_TYPE_MSZIP) || (nDataOffset < (qint64)sizeof(KWAJ_HEADER)) || (nDataOffset > nFileSize) || ((nHeaderFlags & ~nKnownHeaderFlags) != 0)) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     qint64 nUncompressedSize = 0;
@@ -364,64 +391,51 @@ bool XKWAJ::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
     // are searched only within their format-defined 8.3 limits so malformed
     // metadata can never consume payload bytes.
     qint64 nExtOffset = sizeof(KWAJ_HEADER);
-    const auto hasExtensionBytes = [&](qint64 nSize) -> bool { return (nSize >= 0) && (nExtOffset <= nDataOffset) && (nSize <= (nDataOffset - nExtOffset)); };
-    const auto skipExtensionBytes = [&](qint64 nSize) -> bool {
-        if (!hasExtensionBytes(nSize)) return false;
-        nExtOffset += nSize;
-        return true;
-    };
 
     if (bHasUncompressedSize) {
-        if (!hasExtensionBytes(4)) return failInitialization();
+        if (!hasExtensionBytes(nExtOffset, nDataOffset, 4)) return failUnpackInitialization(guardedThis.data(), pState);
         nUncompressedSize = guardedThis->read_uint32(nExtOffset);
-        if (!guardedThis || !skipExtensionBytes(4)) return failInitialization();
+        if (!guardedThis || !skipExtensionBytes(nDataOffset, 4, &nExtOffset)) return failUnpackInitialization(guardedThis.data(), pState);
     }
-    if ((nHeaderFlags & HDR_FLAG_HASUNKNOWN1) && !skipExtensionBytes(2)) {
-        return failInitialization();
+    if ((nHeaderFlags & HDR_FLAG_HASUNKNOWN1) && !skipExtensionBytes(nDataOffset, 2, &nExtOffset)) {
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
     if (nHeaderFlags & HDR_FLAG_HASUNKNOWN2) {
-        if (!hasExtensionBytes(2)) return failInitialization();
+        if (!hasExtensionBytes(nExtOffset, nDataOffset, 2)) return failUnpackInitialization(guardedThis.data(), pState);
         const quint16 nLength = guardedThis->read_uint16(nExtOffset);
-        if (!guardedThis || !skipExtensionBytes(2) || !skipExtensionBytes(nLength)) {
-            return failInitialization();
+        if (!guardedThis || !skipExtensionBytes(nDataOffset, 2, &nExtOffset) ||
+            !skipExtensionBytes(nDataOffset, nLength, &nExtOffset)) {
+            return failUnpackInitialization(guardedThis.data(), pState);
         }
     }
 
-    const auto readBoundedString = [&](qint32 nMaximumBytes, QString *pString) -> bool {
-        if (!pString || !hasExtensionBytes(1)) return false;
-        const qint32 nReadSize = (qint32)qMin<qint64>(nMaximumBytes, nDataOffset - nExtOffset);
-        const QByteArray baString = guardedThis->read_array(nExtOffset, nReadSize);
-        if (!guardedThis || (baString.size() != nReadSize)) return false;
-        const qint32 nTerminator = baString.indexOf('\0');
-        if (nTerminator < 0) return false;
-        *pString = QString::fromLatin1(baString.constData(), nTerminator);
-        return skipExtensionBytes(nTerminator + 1);
-    };
-
     QString sName;
-    if ((nHeaderFlags & HDR_FLAG_HASFILENAME) && !readBoundedString(9, &sName)) {
-        return failInitialization();
+    if ((nHeaderFlags & HDR_FLAG_HASFILENAME) &&
+        !guardedThis->readBoundedExtensionString(nDataOffset, &nExtOffset, 9, &sName)) {
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
     if (nHeaderFlags & HDR_FLAG_HASFILEEXT) {
         QString sExt;
-        if (!readBoundedString(4, &sExt)) return failInitialization();
+        if (!guardedThis->readBoundedExtensionString(nDataOffset, &nExtOffset, 4, &sExt))
+            return failUnpackInitialization(guardedThis.data(), pState);
         if (!sExt.isEmpty()) sName += QString(".") + sExt;
     }
     if (nHeaderFlags & HDR_FLAG_HASEXTRATEXT) {
-        if (!hasExtensionBytes(2)) return failInitialization();
+        if (!hasExtensionBytes(nExtOffset, nDataOffset, 2)) return failUnpackInitialization(guardedThis.data(), pState);
         const quint16 nLength = guardedThis->read_uint16(nExtOffset);
-        if (!guardedThis || !skipExtensionBytes(2) || !skipExtensionBytes(nLength)) {
-            return failInitialization();
+        if (!guardedThis || !skipExtensionBytes(nDataOffset, 2, &nExtOffset) ||
+            !skipExtensionBytes(nDataOffset, nLength, &nExtOffset)) {
+            return failUnpackInitialization(guardedThis.data(), pState);
         }
     }
 
     if (nExtOffset > nDataOffset) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     if (sName.isEmpty()) {
         sName = XBinary::getDeviceFileBaseName(guardedThis->getDevice());
-        if (!guardedThis) return failInitialization();
+        if (!guardedThis) return failUnpackInitialization(guardedThis.data(), pState);
         if (sName.isEmpty()) sName = "kwaj_data";
     }
 

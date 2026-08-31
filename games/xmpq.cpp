@@ -123,23 +123,41 @@ bool mpqToQint64(quint64 nValue, qint64 *pResult)
     return true;
 }
 
+std::array<quint32, 0x500> mpqCreateCryptTable()
+{
+    std::array<quint32, 0x500> result = {};
+    quint32 nSeed = 0x00100001U;
+    for (quint32 i = 0; i < 0x100; ++i) {
+        quint32 nIndex = i;
+        for (quint32 j = 0; j < 5; ++j, nIndex += 0x100) {
+            nSeed = (nSeed * 125U + 3U) % 0x002AAAABU;
+            const quint32 nHigh = (nSeed & 0xFFFFU) << 16;
+            nSeed = (nSeed * 125U + 3U) % 0x002AAAABU;
+            result[nIndex] = nHigh | (nSeed & 0xFFFFU);
+        }
+    }
+    return result;
+}
+
 const std::array<quint32, 0x500> &mpqCryptTable()
 {
-    static const std::array<quint32, 0x500> table = []() {
-        std::array<quint32, 0x500> result = {};
-        quint32 nSeed = 0x00100001U;
-        for (quint32 i = 0; i < 0x100; ++i) {
-            quint32 nIndex = i;
-            for (quint32 j = 0; j < 5; ++j, nIndex += 0x100) {
-                nSeed = (nSeed * 125U + 3U) % 0x002AAAABU;
-                const quint32 nHigh = (nSeed & 0xFFFFU) << 16;
-                nSeed = (nSeed * 125U + 3U) % 0x002AAAABU;
-                result[nIndex] = nHigh | (nSeed & 0xFFFFU);
-            }
-        }
-        return result;
-    }();
+    static const std::array<quint32, 0x500> table = mpqCreateCryptTable();
     return table;
+}
+
+void mpqAddCandidate(QList<qint64> *pCandidates, qint64 nDeviceSize,
+                     qint64 nOffset)
+{
+    if (pCandidates && (nOffset >= 0) && (nOffset <= nDeviceSize - 32) &&
+        !pCandidates->contains(nOffset)) {
+        pCandidates->append(nOffset);
+    }
+}
+
+bool mpqFail(XBinary::PDSTRUCT *pPdStruct, const QString &sMessage)
+{
+    XBinary::setPdStructErrorString(pPdStruct, sMessage);
+    return false;
 }
 
 quint8 mpqNormalizeHashCharacter(quint8 nCharacter)
@@ -700,9 +718,84 @@ QString mpqUniqueName(const QString &sName, QSet<QString> *pUsedNames)
 }
 }  // namespace
 
+struct XMPQ::DECODE_IO_CONTEXT
+{
+    QPointer<XMPQ> guardedArchive;
+    QPointer<QIODevice> guardedOutput;
+    const MPQ_HEADER *pHeader;
+    const MPQ_ENTRY *pEntry;
+    PDSTRUCT *pPdStruct;
+    qint64 nOutputOffset;
+};
+
 XMPQ::XMPQ(QIODevice *pDevice) : XArchive(pDevice)
 {
     setFileType(FT_MPQ);
+}
+
+void XMPQ::registerName(const QVector<MPQ_HASH_ENTRY> &vectorHashes,
+                        QHash<quint32, QString> *pNames,
+                        const QByteArray &baName)
+{
+    if (!pNames) return;
+    QString sSafeName;
+    if (!mpqIsSafeName(baName, &sSafeName)) return;
+    const quint32 nHashA = mpqHashString(baName, 1);
+    const quint32 nHashB = mpqHashString(baName, 2);
+    for (int i = 0; i < vectorHashes.size(); ++i) {
+        const MPQ_HASH_ENTRY &hashEntry = vectorHashes.at(i);
+        if ((hashEntry.nBlockIndex != MPQ_HASH_ENTRY_FREE) &&
+            (hashEntry.nBlockIndex != MPQ_HASH_ENTRY_DELETED) &&
+            (hashEntry.nHashA == nHashA) &&
+            (hashEntry.nHashB == nHashB) &&
+            !pNames->contains(static_cast<quint32>(i))) {
+            pNames->insert(static_cast<quint32>(i), sSafeName);
+        }
+    }
+}
+
+bool XMPQ::entryOrderLess(const MPQ_ENTRY &a, const MPQ_ENTRY &b)
+{
+    if (a.nBlockIndex != b.nBlockIndex) return a.nBlockIndex < b.nBlockIndex;
+    if (a.nLocale != b.nLocale) return a.nLocale < b.nLocale;
+    return a.nHashIndex < b.nHashIndex;
+}
+
+bool XMPQ::readBlockData(DECODE_IO_CONTEXT *pContext,
+                         quint64 nRelativeOffset, quint64 nSize,
+                         QByteArray *pData)
+{
+    if (pData) pData->clear();
+    if (!pContext || !pData || !pContext->guardedArchive ||
+        !pContext->pHeader || !pContext->pEntry ||
+        !mpqRangeWithin(pContext->pEntry->block.nCompressedSize,
+                        nRelativeOffset, nSize) ||
+        (nSize > static_cast<quint64>((std::numeric_limits<int>::max)())))
+        return false;
+    const quint64 nAbsolute =
+        static_cast<quint64>(pContext->pHeader->nHeaderOffset) +
+        pContext->pEntry->block.nFileOffset + nRelativeOffset;
+    qint64 nAbsoluteSigned = 0;
+    if (!mpqToQint64(nAbsolute, &nAbsoluteSigned)) return false;
+    *pData = read_array_process(nAbsoluteSigned, static_cast<qint64>(nSize),
+                                pContext->pPdStruct);
+    return pContext->guardedArchive &&
+           (pData->size() == static_cast<qint64>(nSize));
+}
+
+bool XMPQ::writeDecodedData(DECODE_IO_CONTEXT *pContext,
+                            const QByteArray &baData)
+{
+    if (!pContext || !pContext->guardedArchive || !pContext->guardedOutput ||
+        !XBinary::isPdStructNotCanceled(pContext->pPdStruct)) return false;
+    if (baData.isEmpty()) return true;
+    const qint64 nWritten = safeWriteData(
+        pContext->guardedOutput.data(), pContext->nOutputOffset,
+        baData.constData(), baData.size(), pContext->pPdStruct);
+    if (!pContext->guardedArchive || !pContext->guardedOutput ||
+        (nWritten != baData.size())) return false;
+    pContext->nOutputOffset += nWritten;
+    return true;
 }
 
 bool XMPQ::isValid(PDSTRUCT *pPdStruct)
@@ -736,26 +829,21 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
         !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
     QList<qint64> listCandidates;
-    auto addCandidate = [&listCandidates, nDeviceSize](qint64 nOffset) {
-        if ((nOffset >= 0) && (nOffset <= nDeviceSize - 32) &&
-            !listCandidates.contains(nOffset)) {
-            listCandidates.append(nOffset);
-        }
-    };
     if ((baSearch.size() >= 4) &&
         (memcmp(baSearch.constData(), "MPQ\x1A", 4) == 0)) {
-        addCandidate(0);
+        mpqAddCandidate(&listCandidates, nDeviceSize, 0);
     }
     if ((baSearch.size() >= 16) &&
         (memcmp(baSearch.constData(), "MPQ\x1B", 4) == 0)) {
         const uchar *pUserData = reinterpret_cast<const uchar *>(
             baSearch.constData());
-        addCandidate(mpqReadLE32(pUserData + 8));
+        mpqAddCandidate(&listCandidates, nDeviceSize,
+                        mpqReadLE32(pUserData + 8));
     }
     for (qint64 nOffset = 0; nOffset <= nSearchSize - 4;
          nOffset += 0x200) {
         if (memcmp(baSearch.constData() + nOffset, "MPQ\x1A", 4) == 0)
-            addCandidate(nOffset);
+            mpqAddCandidate(&listCandidates, nDeviceSize, nOffset);
     }
 
     for (qint64 nCandidate : listCandidates) {
@@ -948,27 +1036,14 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
 
         if (pEntries) {
             QHash<quint32, QString> mapNames;
-            auto registerName = [&vectorHashes, &mapNames](
-                                    const QByteArray &baName) {
-                QString sSafeName;
-                if (!mpqIsSafeName(baName, &sSafeName)) return;
-                const quint32 nHashA = mpqHashString(baName, 1);
-                const quint32 nHashB = mpqHashString(baName, 2);
-                for (int i = 0; i < vectorHashes.size(); ++i) {
-                    const MPQ_HASH_ENTRY &hashEntry = vectorHashes.at(i);
-                    if ((hashEntry.nBlockIndex != MPQ_HASH_ENTRY_FREE) &&
-                        (hashEntry.nBlockIndex != MPQ_HASH_ENTRY_DELETED) &&
-                        (hashEntry.nHashA == nHashA) &&
-                        (hashEntry.nHashB == nHashB) &&
-                        !mapNames.contains(static_cast<quint32>(i))) {
-                        mapNames.insert(static_cast<quint32>(i), sSafeName);
-                    }
-                }
-            };
-            registerName(QByteArrayLiteral("(listfile)"));
-            registerName(QByteArrayLiteral("(attributes)"));
-            registerName(QByteArrayLiteral("(signature)"));
-            registerName(QByteArrayLiteral("(patch_metadata)"));
+            registerName(vectorHashes, &mapNames,
+                         QByteArrayLiteral("(listfile)"));
+            registerName(vectorHashes, &mapNames,
+                         QByteArrayLiteral("(attributes)"));
+            registerName(vectorHashes, &mapNames,
+                         QByteArrayLiteral("(signature)"));
+            registerName(vectorHashes, &mapNames,
+                         QByteArrayLiteral("(patch_metadata)"));
 
             MPQ_ENTRY listFileEntry = {};
             bool bListFilePresent = false;
@@ -1005,7 +1080,8 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
                         for (QByteArray baLine : listLines) {
                             if (baLine.endsWith('\r')) baLine.chop(1);
                             baLine = baLine.trimmed();
-                            if (!baLine.isEmpty()) registerName(baLine);
+                            if (!baLine.isEmpty())
+                                registerName(vectorHashes, &mapNames, baLine);
                         }
                     }
                 }
@@ -1028,14 +1104,7 @@ bool XMPQ::scanArchive(MPQ_HEADER *pHeader, QList<MPQ_ENTRY> *pEntries,
                 }
             }
             if (!bTablesValid) continue;
-            std::sort(listEntries.begin(), listEntries.end(),
-                      [](const MPQ_ENTRY &a, const MPQ_ENTRY &b) {
-                          if (a.nBlockIndex != b.nBlockIndex)
-                              return a.nBlockIndex < b.nBlockIndex;
-                          if (a.nLocale != b.nLocale)
-                              return a.nLocale < b.nLocale;
-                          return a.nHashIndex < b.nHashIndex;
-                      });
+            std::sort(listEntries.begin(), listEntries.end(), entryOrderLess);
         }
 
         const bool bRestored = positionGuard.restore();
@@ -1077,48 +1146,8 @@ bool XMPQ::decodeEntry(
     const bool bEncrypted = (nFlags & MPQ_FILE_ENCRYPTED) != 0;
     const bool bCompressed = (nFlags & MPQ_FILE_COMPRESS_MASK) != 0;
     const bool bSingleUnit = (nFlags & MPQ_FILE_SINGLE_UNIT) != 0;
-    qint64 nOutputOffset = 0;
-
-    auto fail = [pPdStruct](const QString &sMessage) {
-        XBinary::setPdStructErrorString(pPdStruct, sMessage);
-        return false;
-    };
-    auto readBlockData = [this, &guardedThis, &header, &entry,
-                          pPdStruct](quint64 nRelativeOffset,
-                                     quint64 nSize,
-                                     QByteArray *pData) {
-        if (pData) pData->clear();
-        if (!pData || !guardedThis ||
-            !mpqRangeWithin(entry.block.nCompressedSize,
-                            nRelativeOffset, nSize) ||
-            (nSize > static_cast<quint64>(
-                 (std::numeric_limits<int>::max)()))) {
-            return false;
-        }
-        const quint64 nAbsolute =
-            static_cast<quint64>(header.nHeaderOffset) +
-            entry.block.nFileOffset + nRelativeOffset;
-        qint64 nAbsoluteSigned = 0;
-        if (!mpqToQint64(nAbsolute, &nAbsoluteSigned)) return false;
-        *pData = read_array_process(
-            nAbsoluteSigned, static_cast<qint64>(nSize), pPdStruct);
-        return guardedThis &&
-               (pData->size() == static_cast<qint64>(nSize));
-    };
-    auto writeOutput = [this, &guardedThis, &guardedOutput,
-                        &nOutputOffset, pPdStruct](
-                           const QByteArray &baData) {
-        if (!guardedThis || !guardedOutput ||
-            !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-        if (baData.isEmpty()) return true;
-        const qint64 nWritten = safeWriteData(
-            guardedOutput.data(), nOutputOffset,
-            baData.constData(), baData.size(), pPdStruct);
-        if (!guardedThis || !guardedOutput ||
-            (nWritten != baData.size())) return false;
-        nOutputOffset += nWritten;
-        return true;
-    };
+    DECODE_IO_CONTEXT ioContext = {guardedThis, guardedOutput, &header,
+                                   &entry, pPdStruct, 0};
 
     if (nFileSize == 0) return nCompressedSize == 0;
 
@@ -1133,18 +1162,18 @@ bool XMPQ::decodeEntry(
     if (bSingleUnit) {
         if (nCompressedSize > static_cast<quint32>(
                 (std::numeric_limits<int>::max)())) {
-            return fail(tr("MPQ single-unit member is too large"));
+            return mpqFail(pPdStruct, tr("MPQ single-unit member is too large"));
         }
         QByteArray baRaw;
-        if (!readBlockData(0, nCompressedSize, &baRaw))
-            return fail(tr("Cannot read MPQ member data"));
+        if (!readBlockData(&ioContext, 0, nCompressedSize, &baRaw))
+            return mpqFail(pPdStruct, tr("Cannot read MPQ member data"));
         if (bEncrypted) {
             if (!bFileKeyKnown) {
-                return fail(tr("MPQ encrypted single-unit member needs "
-                               "its original filename"));
+                return mpqFail(pPdStruct, tr("MPQ encrypted single-unit member needs "
+                                             "its original filename"));
             }
             if (!mpqDecryptBlock(&baRaw, nFileKey))
-                return fail(tr("Cannot decrypt MPQ member"));
+                return mpqFail(pPdStruct, tr("Cannot decrypt MPQ member"));
         }
 
         QByteArray baDecoded;
@@ -1154,17 +1183,17 @@ bool XMPQ::decodeEntry(
                 !mpqDecodeCompressedSector(
                     baRaw, static_cast<qint32>(nFileSize), nFlags,
                     mapProperties, pPdStruct, &baDecoded)) {
-                return fail(tr("Unsupported or damaged MPQ compression"));
+                return mpqFail(pPdStruct, tr("Unsupported or damaged MPQ compression"));
             }
         } else {
             if (baRaw.size() < static_cast<qint64>(nFileSize))
-                return fail(tr("Truncated MPQ member"));
+                return mpqFail(pPdStruct, tr("Truncated MPQ member"));
             baDecoded = baRaw.left(static_cast<int>(nFileSize));
         }
-        if (!writeOutput(baDecoded))
-            return fail(tr("Cannot write unpacked MPQ member"));
+        if (!writeDecodedData(&ioContext, baDecoded))
+            return mpqFail(pPdStruct, tr("Cannot write unpacked MPQ member"));
         return guardedThis && guardedOutput &&
-               (nOutputOffset == nFileSize);
+               (ioContext.nOutputOffset == nFileSize);
     }
 
     const quint32 nSectorSize = header.nSectorSize;
@@ -1173,7 +1202,7 @@ bool XMPQ::decodeEntry(
         nSectorSize;
     if ((nSectorSize == 0) ||
         (nSectorCount64 > (std::numeric_limits<quint32>::max)())) {
-        return fail(tr("Invalid MPQ sector geometry"));
+        return mpqFail(pPdStruct, tr("Invalid MPQ sector geometry"));
     }
     const quint32 nSectorCount = static_cast<quint32>(nSectorCount64);
 
@@ -1186,24 +1215,24 @@ bool XMPQ::decodeEntry(
         if ((nInitialTableSize64 > nCompressedSize) ||
             (nInitialTableSize64 > static_cast<quint64>(
                  (std::numeric_limits<int>::max)()))) {
-            return fail(tr("Invalid MPQ sector table"));
+            return mpqFail(pPdStruct, tr("Invalid MPQ sector table"));
         }
         quint32 nTableSize = static_cast<quint32>(nInitialTableSize64);
         QByteArray baSectorTable;
-        if (!readBlockData(0, nTableSize, &baSectorTable))
-            return fail(tr("Cannot read MPQ sector table"));
+        if (!readBlockData(&ioContext, 0, nTableSize, &baSectorTable))
+            return mpqFail(pPdStruct, tr("Cannot read MPQ sector table"));
 
         if (bEncrypted && !bFileKeyKnown) {
             if (!mpqDetectFileKeyBySectorTable(
                     baSectorTable, nSectorSize, nTableSize, &nFileKey)) {
-                return fail(tr("Cannot recover MPQ sector encryption key"));
+                return mpqFail(pPdStruct, tr("Cannot recover MPQ sector encryption key"));
             }
             bFileKeyKnown = true;
         }
         if (bEncrypted &&
             (!bFileKeyKnown ||
              !mpqDecryptBlock(&baSectorTable, nFileKey - 1U))) {
-            return fail(tr("Cannot decrypt MPQ sector table"));
+            return mpqFail(pPdStruct, tr("Cannot decrypt MPQ sector table"));
         }
 
         quint32 nFirstOffset = mpqReadLE32(
@@ -1213,11 +1242,11 @@ bool XMPQ::decodeEntry(
             (nAlignedFirstOffset <= nTableSize + 0x400U) &&
             (nAlignedFirstOffset <= nCompressedSize)) {
             nTableSize = nAlignedFirstOffset;
-            if (!readBlockData(0, nTableSize, &baSectorTable))
-                return fail(tr("Cannot read extended MPQ sector table"));
+            if (!readBlockData(&ioContext, 0, nTableSize, &baSectorTable))
+                return mpqFail(pPdStruct, tr("Cannot read extended MPQ sector table"));
             if (bEncrypted &&
                 !mpqDecryptBlock(&baSectorTable, nFileKey - 1U)) {
-                return fail(tr("Cannot decrypt extended MPQ sector table"));
+                return mpqFail(pPdStruct, tr("Cannot decrypt extended MPQ sector table"));
             }
             nFirstOffset = mpqReadLE32(
                 reinterpret_cast<const uchar *>(
@@ -1229,7 +1258,7 @@ bool XMPQ::decodeEntry(
              static_cast<qint64>(nRequiredTableSize)) ||
             (nFirstOffset < nRequiredTableSize) ||
             (nFirstOffset > nCompressedSize)) {
-            return fail(tr("Damaged MPQ sector table"));
+            return mpqFail(pPdStruct, tr("Damaged MPQ sector table"));
         }
 
         QVector<quint32> vectorOffsets;
@@ -1243,7 +1272,7 @@ bool XMPQ::decodeEntry(
             const quint32 nEnd = vectorOffsets.at(static_cast<int>(i + 1U));
             if ((nEnd < nBegin) || (nEnd > nCompressedSize) ||
                 (nEnd - nBegin > nSectorSize)) {
-                return fail(tr("Damaged MPQ sector offsets"));
+                return mpqFail(pPdStruct, tr("Damaged MPQ sector offsets"));
             }
         }
 
@@ -1255,41 +1284,41 @@ bool XMPQ::decodeEntry(
             const quint32 nRawSize = nEnd - nBegin;
             const quint32 nExpected = qMin(nSectorSize, nRemaining);
             QByteArray baRaw;
-            if (!readBlockData(nBegin, nRawSize, &baRaw))
-                return fail(tr("Cannot read MPQ sector"));
+            if (!readBlockData(&ioContext, nBegin, nRawSize, &baRaw))
+                return mpqFail(pPdStruct, tr("Cannot read MPQ sector"));
             if (bEncrypted && !mpqDecryptBlock(&baRaw, nFileKey + i))
-                return fail(tr("Cannot decrypt MPQ sector"));
+                return mpqFail(pPdStruct, tr("Cannot decrypt MPQ sector"));
 
             QByteArray baDecoded;
             if (nRawSize < nExpected) {
                 if (!mpqDecodeCompressedSector(
                         baRaw, static_cast<qint32>(nExpected), nFlags,
                         mapProperties, pPdStruct, &baDecoded)) {
-                    return fail(tr("Unsupported or damaged MPQ sector "
-                                   "compression"));
+                    return mpqFail(pPdStruct, tr("Unsupported or damaged MPQ sector "
+                                                 "compression"));
                 }
             } else if (nRawSize == nExpected) {
                 baDecoded = baRaw;
             } else {
-                return fail(tr("Invalid MPQ sector size"));
+                return mpqFail(pPdStruct, tr("Invalid MPQ sector size"));
             }
-            if (!writeOutput(baDecoded))
-                return fail(tr("Cannot write unpacked MPQ sector"));
+            if (!writeDecodedData(&ioContext, baDecoded))
+                return mpqFail(pPdStruct, tr("Cannot write unpacked MPQ sector"));
             nRemaining -= nExpected;
         }
         return guardedThis && guardedOutput && (nRemaining == 0) &&
-               (nOutputOffset == nFileSize);
+               (ioContext.nOutputOffset == nFileSize);
     }
 
     if (nCompressedSize < nFileSize)
-        return fail(tr("Truncated stored MPQ member"));
+        return mpqFail(pPdStruct, tr("Truncated stored MPQ member"));
     if (bEncrypted && !bFileKeyKnown) {
         const quint32 nProbeSize = qMin(nSectorSize, nFileSize);
         QByteArray baProbe;
-        if (!readBlockData(0, nProbeSize, &baProbe) ||
+        if (!readBlockData(&ioContext, 0, nProbeSize, &baProbe) ||
             !mpqDetectFileKeyByMagic(baProbe, nFileSize, &nFileKey)) {
-            return fail(tr("MPQ encrypted stored member needs its original "
-                           "filename"));
+            return mpqFail(pPdStruct, tr("MPQ encrypted stored member needs its original "
+                                         "filename"));
         }
         bFileKeyKnown = true;
     }
@@ -1300,21 +1329,21 @@ bool XMPQ::decodeEntry(
     while (nRemaining) {
         const quint32 nChunkSize = qMin(nSectorSize, nRemaining);
         QByteArray baChunk;
-        if (!readBlockData(nRawOffset, nChunkSize, &baChunk))
-            return fail(tr("Cannot read stored MPQ sector"));
+        if (!readBlockData(&ioContext, nRawOffset, nChunkSize, &baChunk))
+            return mpqFail(pPdStruct, tr("Cannot read stored MPQ sector"));
         if (bEncrypted &&
             (!bFileKeyKnown ||
              !mpqDecryptBlock(&baChunk, nFileKey + nSectorIndex))) {
-            return fail(tr("Cannot decrypt stored MPQ sector"));
+            return mpqFail(pPdStruct, tr("Cannot decrypt stored MPQ sector"));
         }
-        if (!writeOutput(baChunk))
-            return fail(tr("Cannot write stored MPQ sector"));
+        if (!writeDecodedData(&ioContext, baChunk))
+            return mpqFail(pPdStruct, tr("Cannot write stored MPQ sector"));
         nRawOffset += nChunkSize;
         nRemaining -= nChunkSize;
         nSectorIndex++;
     }
     return guardedThis && guardedOutput &&
-           (nOutputOffset == nFileSize);
+           (ioContext.nOutputOffset == nFileSize);
 }
 
 XBinary::FT XMPQ::getFileType()

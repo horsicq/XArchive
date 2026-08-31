@@ -229,6 +229,10 @@ public:
     // LHA -lh1- (LArc-compatible): 4 KiB LZSS + adaptive Huffman (LZHUF). This method predates
     // the block-based static-Huffman lh4/5/6/7 the state machine above handles, so it has its
     // own self-contained decoder. The uncompressed size is taken from FPART_PROP_UNCOMPRESSEDSIZE.
+    // lh1MeasureStream validates one size-delimited output and reports the byte-aligned input
+    // extent needed by containers that do not store compressed member sizes.
+    static qint64 lh1MeasureStream(const quint8 *pData, qint64 nMaxSize, qint64 nUncompressedSize,
+                                   XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 

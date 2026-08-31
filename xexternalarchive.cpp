@@ -78,14 +78,17 @@ struct StageScanResult {
     qint64 nEntryCount = 0;
 };
 
+bool externalRecordLess(const ExternalRecord &a, const ExternalRecord &b)
+{
+    const int nCompare = QString::compare(a.sName, b.sName, Qt::CaseSensitive);
+    if (nCompare != 0) return nCompare < 0;
+    return a.bIsFolder && !b.bIsFolder;
+}
+
 void sortExternalRecords(QList<ExternalRecord> *pRecords)
 {
     if (!pRecords) return;
-    std::sort(pRecords->begin(), pRecords->end(), [](const ExternalRecord &a, const ExternalRecord &b) {
-        const int nCompare = QString::compare(a.sName, b.sName, Qt::CaseSensitive);
-        if (nCompare != 0) return nCompare < 0;
-        return a.bIsFolder && !b.bIsFolder;
-    });
+    std::sort(pRecords->begin(), pRecords->end(), externalRecordLess);
 }
 
 QString backendName(XExternalArchive::BACKEND backend)
@@ -515,33 +518,9 @@ public:
         }
 
         m_listInheritedHandles.clear();
-        const auto appendHandle = [&](HANDLE hHandle, const QString &sName) -> bool {
-            if (!hHandle || (hHandle == INVALID_HANDLE_VALUE)) {
-                if (pError) {
-                    *pError = QStringLiteral(
-                                  "QProcess supplied an invalid external-helper %1 "
-                                  "handle")
-                                  .arg(sName);
-                }
-                return false;
-            }
-            DWORD nFlags = 0;
-            if (!GetHandleInformation(hHandle, &nFlags) || !(nFlags & HANDLE_FLAG_INHERIT)) {
-                if (pError) {
-                    *pError = QStringLiteral(
-                                  "QProcess supplied a non-inheritable external-helper "
-                                  "%1 handle (Windows error %2)")
-                                  .arg(sName)
-                                  .arg(GetLastError());
-                }
-                return false;
-            }
-            if (!m_listInheritedHandles.contains(hHandle)) m_listInheritedHandles.append(hHandle);
-            return true;
-        };
-
-        if (!appendHandle(pStartupInfo->hStdInput, QStringLiteral("stdin")) || !appendHandle(pStartupInfo->hStdOutput, QStringLiteral("stdout")) ||
-            !appendHandle(pStartupInfo->hStdError, QStringLiteral("stderr")))
+        if (!appendHandle(pStartupInfo->hStdInput, QStringLiteral("stdin"), pError) ||
+            !appendHandle(pStartupInfo->hStdOutput, QStringLiteral("stdout"), pError) ||
+            !appendHandle(pStartupInfo->hStdError, QStringLiteral("stderr"), pError))
             return false;
 
         m_startupInfo = {};
@@ -572,12 +551,70 @@ public:
     }
 
 private:
+    bool appendHandle(HANDLE hHandle, const QString &sName, QString *pError)
+    {
+        if (!hHandle || (hHandle == INVALID_HANDLE_VALUE)) {
+            if (pError) {
+                *pError = QStringLiteral(
+                              "QProcess supplied an invalid external-helper %1 "
+                              "handle")
+                              .arg(sName);
+            }
+            return false;
+        }
+        DWORD nFlags = 0;
+        if (!GetHandleInformation(hHandle, &nFlags) ||
+            !(nFlags & HANDLE_FLAG_INHERIT)) {
+            if (pError) {
+                *pError = QStringLiteral(
+                              "QProcess supplied a non-inheritable external-helper "
+                              "%1 handle (Windows error %2)")
+                              .arg(sName)
+                              .arg(GetLastError());
+            }
+            return false;
+        }
+        if (!m_listInheritedHandles.contains(hHandle))
+            m_listInheritedHandles.append(hHandle);
+        return true;
+    }
+
     void *m_pAttributeStorage = nullptr;
     LPPROC_THREAD_ATTRIBUTE_LIST m_pAttributeList = nullptr;
     bool m_bAttributeListInitialized = false;
     STARTUPINFOEXW m_startupInfo = {};
     QVector<HANDLE> m_listInheritedHandles;
     bool m_bConfigured = false;
+};
+
+class RestrictedProcessArgumentsModifier
+{
+public:
+    RestrictedProcessArgumentsModifier(void **ppNativeProcessInformation,
+                                       RestrictedChildHandleInheritance *pInheritance,
+                                       QString *pExecutionError)
+        : m_ppNativeProcessInformation(ppNativeProcessInformation),
+          m_pInheritance(pInheritance), m_pExecutionError(pExecutionError)
+    {
+    }
+
+    void operator()(QProcess::CreateProcessArguments *pArguments) const
+    {
+        if (m_ppNativeProcessInformation)
+            *m_ppNativeProcessInformation = pArguments ? pArguments->processInformation : nullptr;
+        if (!m_pInheritance ||
+            !m_pInheritance->configure(pArguments, m_pExecutionError)) {
+            if (pArguments) {
+                pArguments->flags |= CREATE_SUSPENDED | CREATE_NO_WINDOW;
+                pArguments->inheritHandles = false;
+            }
+        }
+    }
+
+private:
+    void **m_ppNativeProcessInformation;
+    RestrictedChildHandleInheritance *m_pInheritance;
+    QString *m_pExecutionError;
 };
 
 class ExternalProcessTreeGuard {
@@ -871,6 +908,13 @@ private:
 };
 #endif
 
+#if defined(Q_OS_UNIX) && (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)) && (QT_VERSION < QT_VERSION_CHECK(6, 6, 0))
+void configureExternalChildSession()
+{
+    if (::setsid() == -1) ::_exit(127);
+}
+#endif
+
 void stopProcess(QProcess *pProcess
 #ifdef Q_OS_WIN
                  ,
@@ -901,6 +945,53 @@ void stopProcess(QProcess *pProcess
         pProcess->waitForFinished(3000);
     }
 }
+
+class ExternalProcessStopper
+{
+public:
+#ifdef Q_OS_WIN
+    ExternalProcessStopper(QProcess *pProcess,
+                           ExternalProcessTreeGuard *pProcessTree,
+                           void **ppNativeProcessInformation)
+        : m_pProcess(pProcess), m_pProcessTree(pProcessTree),
+          m_ppNativeProcessInformation(ppNativeProcessInformation)
+    {
+    }
+#elif defined(Q_OS_UNIX)
+    ExternalProcessStopper(QProcess *pProcess,
+                           ExternalPosixProcessTreeGuard *pProcessTree)
+        : m_pProcess(pProcess), m_pProcessTree(pProcessTree)
+    {
+    }
+#else
+    explicit ExternalProcessStopper(QProcess *pProcess)
+        : m_pProcess(pProcess)
+    {
+    }
+#endif
+
+    void stop() const
+    {
+#ifdef Q_OS_WIN
+        stopProcess(m_pProcess, m_pProcessTree,
+                    m_ppNativeProcessInformation
+                        ? *m_ppNativeProcessInformation : nullptr);
+#elif defined(Q_OS_UNIX)
+        stopProcess(m_pProcess, m_pProcessTree);
+#else
+        stopProcess(m_pProcess);
+#endif
+    }
+
+private:
+    QProcess *m_pProcess;
+#ifdef Q_OS_WIN
+    ExternalProcessTreeGuard *m_pProcessTree;
+    void **m_ppNativeProcessInformation;
+#elif defined(Q_OS_UNIX)
+    ExternalPosixProcessTreeGuard *m_pProcessTree;
+#endif
+};
 
 enum PEA_REPORT_STATUS {
     PEA_REPORT_ABSENT = 0,
@@ -1092,10 +1183,17 @@ bool runTool(XExternalArchive::BACKEND backend, const QString &sProgram, const Q
     unixParameters.lowestFileDescriptorToClose = 3;
     process.setUnixProcessParameters(unixParameters);
 #elif QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    process.setChildProcessModifier([]() {
-        if (::setsid() == -1) ::_exit(127);
-    });
+    process.setChildProcessModifier(configureExternalChildSession);
 #endif
+#endif
+
+#ifdef Q_OS_WIN
+    ExternalProcessStopper processStopper(&process, &processTree,
+                                          &pNativeProcessInformation);
+#elif defined(Q_OS_UNIX)
+    ExternalProcessStopper processStopper(&process, &processTree);
+#else
+    ExternalProcessStopper processStopper(&process);
 #endif
 
     process.setProgram(sCanonicalProgram);
@@ -1144,41 +1242,25 @@ bool runTool(XExternalArchive::BACKEND backend, const QString &sProgram, const Q
     process.setProcessEnvironment(childEnvironment);
 
 #ifdef Q_OS_WIN
-    process.setCreateProcessArgumentsModifier([&pNativeProcessInformation, &restrictedInheritance, &sExecutionError](QProcess::CreateProcessArguments *pArguments) {
-        pNativeProcessInformation = pArguments->processInformation;
-        if (!restrictedInheritance.configure(pArguments, &sExecutionError)) {
-            // Any fail-closed child remains suspended and inherits no
-            // ambient handles. The caller terminates it before returning.
-            pArguments->flags |= CREATE_SUSPENDED | CREATE_NO_WINDOW;
-            pArguments->inheritHandles = false;
-        }
-    });
+    const RestrictedProcessArgumentsModifier argumentsModifier(
+        &pNativeProcessInformation, &restrictedInheritance, &sExecutionError);
+    process.setCreateProcessArgumentsModifier(argumentsModifier);
 #endif
 
     process.start(QIODevice::ReadOnly);
-
-    const auto stopHelper = [&]() {
-#ifdef Q_OS_WIN
-        stopProcess(&process, &processTree, pNativeProcessInformation);
-#elif defined(Q_OS_UNIX)
-        stopProcess(&process, &processTree);
-#else
-        stopProcess(&process);
-#endif
-    };
 
     bool bStarted = process.state() == QProcess::Running;
     while (!bStarted && (process.state() == QProcess::Starting) && (timer.elapsed() < qMin<qint64>(5000, nTimeoutMs))) {
         bStarted = process.waitForStarted(50) || (process.state() == QProcess::Running);
         if (!XBinary::isPdStructNotCanceled(pPdStruct)) {
             if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_CANCELED;
-            stopHelper();
+            processStopper.stop();
             return false;
         }
     }
     bStarted = bStarted || (process.state() == QProcess::Running);
     if (!bStarted) {
-        stopHelper();
+        processStopper.stop();
         if (timer.elapsed() >= nTimeoutMs) {
             if (pFailure) *pFailure = XExternalArchive::EXTERNAL_FAILURE_TIMEOUT;
             return setExternalError(pPdStruct, QStringLiteral("External archive helper operation timed out"));
@@ -1188,16 +1270,16 @@ bool runTool(XExternalArchive::BACKEND backend, const QString &sProgram, const Q
 
 #ifdef Q_OS_WIN
     if (!restrictedInheritance.isConfigured()) {
-        stopHelper();
+        processStopper.stop();
         return setExternalError(pPdStruct, sExecutionError.isEmpty() ? QStringLiteral("Cannot configure the external-helper handle allowlist") : sExecutionError);
     }
     if (!processTree.attachAndResume(pNativeProcessInformation, &sExecutionError)) {
-        stopHelper();
+        processStopper.stop();
         return setExternalError(pPdStruct, sExecutionError);
     }
 #elif defined(Q_OS_UNIX)
     if (!processTree.capture(&process, &sExecutionError)) {
-        stopHelper();
+        processStopper.stop();
         return setExternalError(pPdStruct, sExecutionError);
     }
 #endif
@@ -1280,7 +1362,7 @@ bool runTool(XExternalArchive::BACKEND backend, const QString &sProgram, const Q
     }
 
     if (!bResult) {
-        stopHelper();
+        processStopper.stop();
         while (process.bytesAvailable() > 0) process.read(qMin<qint64>(process.bytesAvailable(), EXTERNAL_PIPE_READ_SIZE));
         return false;
     }
@@ -1529,6 +1611,16 @@ EXTERNAL_PARSE_RESULT parseFreeArcList(const QByteArray &baOutput, const XBinary
     return EXTERNAL_PARSE_OK;
 }
 
+bool externalCanContinue(XBinary::PDSTRUCT *pPdStruct,
+                         const QDeadlineTimer *pDeadline, bool *pbTimedOut)
+{
+    if (pDeadline && !pDeadline->isForever() && pDeadline->hasExpired()) {
+        if (pbTimedOut) *pbTimedOut = true;
+        return false;
+    }
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
 bool reconcileListedStage(const QList<ExternalRecord> &listManifest, QList<ExternalRecord> *pStageRecords, XBinary::PDSTRUCT *pPdStruct, const QDeadlineTimer *pDeadline,
                           bool *pbTimedOut)
 {
@@ -1536,29 +1628,16 @@ bool reconcileListedStage(const QList<ExternalRecord> &listManifest, QList<Exter
     if (!pStageRecords || (pStageRecords->size() < listManifest.size())) return false;
     if (listManifest.isEmpty()) return pStageRecords->isEmpty();
 
-    const auto canContinue = [&]() {
-        if (pDeadline && !pDeadline->isForever() && pDeadline->hasExpired()) {
-            if (pbTimedOut) *pbTimedOut = true;
-            return false;
-        }
-        return XBinary::isPdStructNotCanceled(pPdStruct);
-    };
-    if (!canContinue()) return false;
-
-    const auto recordLess = [](const ExternalRecord &a, const ExternalRecord &b) {
-        const int nCompare = QString::compare(a.sName, b.sName, Qt::CaseSensitive);
-        if (nCompare != 0) return nCompare < 0;
-        return a.bIsFolder && !b.bIsFolder;
-    };
+    if (!externalCanContinue(pPdStruct, pDeadline, pbTimedOut)) return false;
 
     QList<ExternalRecord> listExpected = listManifest;
-    std::sort(listExpected.begin(), listExpected.end(), recordLess);
-    std::sort(pStageRecords->begin(), pStageRecords->end(), recordLess);
-    if (!canContinue()) return false;
+    std::sort(listExpected.begin(), listExpected.end(), externalRecordLess);
+    std::sort(pStageRecords->begin(), pStageRecords->end(), externalRecordLess);
+    if (!externalCanContinue(pPdStruct, pDeadline, pbTimedOut)) return false;
 
     QSet<QString> setStrictAncestorFolders;
     for (const ExternalRecord &expected : qAsConst(listExpected)) {
-        if (!canContinue()) return false;
+        if (!externalCanContinue(pPdStruct, pDeadline, pbTimedOut)) return false;
         qint32 nSeparator = expected.sName.indexOf(QLatin1Char('/'));
         while (nSeparator > 0) {
             setStrictAncestorFolders.insert(expected.sName.left(nSeparator));
@@ -1570,7 +1649,7 @@ bool reconcileListedStage(const QList<ExternalRecord> &listManifest, QList<Exter
     listReconciled.reserve(listExpected.size());
     qint32 nExpectedIndex = 0;
     for (ExternalRecord actual : qAsConst(*pStageRecords)) {
-        if (!canContinue()) return false;
+        if (!externalCanContinue(pPdStruct, pDeadline, pbTimedOut)) return false;
         if ((nExpectedIndex < listExpected.size()) && (actual.sName == listExpected.at(nExpectedIndex).sName)) {
             const ExternalRecord &expected = listExpected.at(nExpectedIndex++);
             if ((actual.bIsFolder != expected.bIsFolder) || (actual.nUncompressedSize != expected.nUncompressedSize)) {

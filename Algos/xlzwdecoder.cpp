@@ -404,6 +404,68 @@ private:
     qint32 m_nBits;
     quint64 m_nBuffer;
 };
+
+bool zooLzdFlushOutput(QByteArray *pOutput,
+                       XBinary::DATAPROCESS_STATE *pState)
+{
+    if (!pOutput || !pState) return false;
+    if (pOutput->isEmpty()) return true;
+    const qint32 nSize = pOutput->size();
+    if (XBinary::_writeDevice(pOutput->constData(), nSize, pState) != nSize) {
+        return false;
+    }
+    pOutput->clear();
+    return true;
+}
+
+bool zooLzdEmitByte(quint8 nByte, QByteArray *pOutput,
+                    XBinary::DATAPROCESS_STATE *pState,
+                    qint64 *pProduced, bool bHasExpectedSize,
+                    qint64 nExpectedSize)
+{
+    if (!pOutput || !pState || !pProduced ||
+        (*pProduced == (std::numeric_limits<qint64>::max)()) ||
+        (bHasExpectedSize && (*pProduced >= nExpectedSize))) {
+        return false;
+    }
+    pOutput->append(static_cast<char>(nByte));
+    ++(*pProduced);
+    return (pOutput->size() < ZOO_LZD_OUTPUT_BUFFER_SIZE) ||
+           zooLzdFlushOutput(pOutput, pState);
+}
+
+bool zooLzdExpandCode(quint32 nCode, quint32 nNextCode,
+                      const std::vector<quint16> &prefix,
+                      const std::vector<quint8> &suffix,
+                      std::vector<quint8> *pDecodeStack,
+                      quint32 *pStackSize, quint8 *pFirstByte)
+{
+    if (!pDecodeStack || !pStackSize || !pFirstByte ||
+        (prefix.size() < ZOO_LZD_TABLE_SIZE) ||
+        (suffix.size() < ZOO_LZD_TABLE_SIZE) ||
+        (pDecodeStack->size() < ZOO_LZD_TABLE_SIZE)) {
+        return false;
+    }
+    quint32 nStackSize = 0;
+    quint32 nDepth = 0;
+
+    while (nCode >= ZOO_LZD_FIRST_FREE) {
+        if ((nCode >= nNextCode) ||
+            (nStackSize >= ZOO_LZD_TABLE_SIZE) ||
+            (++nDepth > ZOO_LZD_TABLE_SIZE)) {
+            return false;
+        }
+        (*pDecodeStack)[nStackSize++] = suffix[nCode];
+        nCode = prefix[nCode];
+    }
+    if ((nCode >= 256) || (nStackSize >= ZOO_LZD_TABLE_SIZE)) {
+        return false;
+    }
+    (*pDecodeStack)[nStackSize++] = static_cast<quint8>(nCode);
+    *pStackSize = nStackSize;
+    *pFirstByte = static_cast<quint8>(nCode);
+    return true;
+}
 }  // namespace
 
 // ZOO method 1 (LZD) is a distinct 13-bit, LSB-first LZW stream.  It starts
@@ -440,40 +502,6 @@ bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, X
     bool bExplicitEOFSeen = false;
     bool bDataError = false;
 
-    const auto flushOutput = [&]() -> bool {
-        if (baOutput.isEmpty()) return true;
-        const qint32 nSize = baOutput.size();
-        if (XBinary::_writeDevice(baOutput.constData(), nSize, pDecompressState) != nSize) return false;
-        baOutput.clear();
-        return true;
-    };
-
-    const auto emitByte = [&](quint8 nByte) -> bool {
-        if ((nProduced == (std::numeric_limits<qint64>::max)()) || (bHasExpectedSize && (nProduced >= nExpectedSize))) {
-            return false;
-        }
-        baOutput.append((char)nByte);
-        nProduced++;
-        return (baOutput.size() < ZOO_LZD_OUTPUT_BUFFER_SIZE) || flushOutput();
-    };
-
-    const auto expandCode = [&](quint32 nCode, quint32 *pStackSize, quint8 *pFirstByte) -> bool {
-        if (!pStackSize || !pFirstByte) return false;
-        quint32 nStackSize = 0;
-        quint32 nDepth = 0;
-
-        while (nCode >= ZOO_LZD_FIRST_FREE) {
-            if ((nCode >= nNextCode) || (nStackSize >= ZOO_LZD_TABLE_SIZE) || (++nDepth > ZOO_LZD_TABLE_SIZE)) return false;
-            decodeStack[nStackSize++] = suffix[nCode];
-            nCode = prefix[nCode];
-        }
-        if ((nCode >= 256) || (nStackSize >= ZOO_LZD_TABLE_SIZE)) return false;
-        decodeStack[nStackSize++] = (quint8)nCode;
-        *pStackSize = nStackSize;
-        *pFirstByte = (quint8)nCode;
-        return true;
-    };
-
     while (XBinary::isPdStructNotCanceled(pPdStruct)) {
         quint32 nCode = 0;
         if (!reader.readCode(nCodeWidth, &nCode)) break;
@@ -506,7 +534,9 @@ bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, X
                 bDataError = true;
                 break;
             }
-            if (!emitByte((quint8)nCode)) {
+            if (!zooLzdEmitByte(static_cast<quint8>(nCode), &baOutput,
+                                pDecompressState, &nProduced,
+                                bHasExpectedSize, nExpectedSize)) {
                 bDataError = !pDecompressState->bWriteError;
                 break;
             }
@@ -524,32 +554,44 @@ bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, X
         quint8 nFirstByte = 0;
 
         if (nCode < nNextCode) {
-            if (!expandCode(nCode, &nStackSize, &nFirstByte)) {
+            if (!zooLzdExpandCode(nCode, nNextCode, prefix, suffix,
+                                  &decodeStack, &nStackSize, &nFirstByte)) {
                 bDataError = true;
                 break;
             }
             bool bEmitOK = true;
             while (nStackSize > 0) {
-                if (!emitByte(decodeStack[--nStackSize])) {
+                if (!zooLzdEmitByte(decodeStack[--nStackSize], &baOutput,
+                                    pDecompressState, &nProduced,
+                                    bHasExpectedSize, nExpectedSize)) {
                     bEmitOK = false;
                     break;
                 }
             }
             if (!bEmitOK) bDataError = !pDecompressState->bWriteError;
         } else if (nCode == nNextCode) {
-            if (!expandCode((quint32)nPreviousCode, &nStackSize, &nFirstByte)) {
+            if (!zooLzdExpandCode(static_cast<quint32>(nPreviousCode),
+                                  nNextCode, prefix, suffix, &decodeStack,
+                                  &nStackSize, &nFirstByte)) {
                 bDataError = true;
                 break;
             }
             bool bEmitOK = true;
             while (nStackSize > 0) {
-                if (!emitByte(decodeStack[--nStackSize])) {
+                if (!zooLzdEmitByte(decodeStack[--nStackSize], &baOutput,
+                                    pDecompressState, &nProduced,
+                                    bHasExpectedSize, nExpectedSize)) {
                     bEmitOK = false;
                     break;
                 }
             }
             if (!bEmitOK) bDataError = !pDecompressState->bWriteError;
-            if (!pDecompressState->bWriteError && !bDataError && !emitByte(nFirstByte)) bDataError = !pDecompressState->bWriteError;
+            if (!pDecompressState->bWriteError && !bDataError &&
+                !zooLzdEmitByte(nFirstByte, &baOutput, pDecompressState,
+                                &nProduced, bHasExpectedSize,
+                                nExpectedSize)) {
+                bDataError = !pDecompressState->bWriteError;
+            }
         } else {
             bDataError = true;
             break;
@@ -568,20 +610,16 @@ bool XLZWDecoder::decompress_zoo(XBinary::DATAPROCESS_STATE *pDecompressState, X
     }
 
     if (!bDataError && bExplicitEOFSeen && XBinary::isPdStructNotCanceled(pPdStruct) && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-        !flushOutput()) {
+        !zooLzdFlushOutput(&baOutput, pDecompressState)) {
         bDataError = !pDecompressState->bWriteError;
     }
 
-    // Some stand-alone LIF/DC wrappers retain one zero byte after the LZD
-    // end code.  It is container padding, not another code.  Consume bounded
-    // zero padding so an otherwise complete stream does not fail the generic
-    // exact-input check.
-    bool bPaddingOK = reader.hasOnlyZeroPadding();
-    while (bPaddingOK && bExplicitEOFSeen && pDecompressState->nInputLimit != -1 &&
-           pDecompressState->nCountInput < pDecompressState->nInputLimit) {
-        char cPadding = 0;
-        if (XBinary::_readDevice(&cPadding, 1, pDecompressState) != 1 || cPadding != 0) bPaddingOK = false;
-    }
+    // Only the unused bits in the byte containing EOF belong to the LZD
+    // stream.  Whole trailing bytes are container data and must be excluded
+    // by the owning format parser (LIF/DC does this explicitly).  Accepting a
+    // zero byte here made a malformed ZOO member indistinguishable from a
+    // correctly framed stream.
+    const bool bPaddingOK = reader.hasOnlyZeroPadding();
 
     const bool bInputComplete =
         (pDecompressState->nInputLimit == -1) ? pDecompressState->pDeviceInput->atEnd() : (pDecompressState->nCountInput == pDecompressState->nInputLimit);

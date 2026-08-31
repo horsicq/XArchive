@@ -259,7 +259,12 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
          (fileType != FT_INSTALLSHIELD_BOOT) &&
          (fileType != FT_SABDU_IMAGE) &&
          (fileType != FT_COMPAQ_LZH) &&
+         (fileType != FT_INSA) &&
          (fileType != FT_WISE_SFX) &&
+         (fileType != FT_INSTALLSHIELD3_SFX) &&
+         (fileType != FT_IS14_SFX) &&
+         (fileType != FT_GPINSTALL_SFX) &&
+         (fileType != FT_INSTALLSHIELD_LAUNCHER) &&
          (fileType != FT_EPFS_ARCHIVE) &&
          (fileType != FT_STUNTS_DSI) &&
          (fileType != FT_FINSTALL_ARCHIVE) &&
@@ -275,6 +280,10 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
          (fileType != FT_PIMP_SFX) &&
          (fileType != FT_VISE_SFX) &&
          (fileType != FT_FTCOMP) &&
+         (fileType != FT_FLS) &&
+         (fileType != FT_RTPATCH) &&
+         (fileType != FT_RNC) &&
+         (fileType != FT_MI10) &&
          (fileType != FT_DN_ARCHIVE) &&
          (fileType != FT_FPAK) &&
          (fileType != FT_SOFTPAQ1_SFX) &&
@@ -282,6 +291,8 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
          (fileType != FT_LIF_COMPRESSED) &&
          (fileType != FT_JASC_ARCHIVE) &&
          (fileType != FT_SSM_MODULE) &&
+         (fileType != FT_SSBOB) &&
+         (fileType != FT_IS_SKIN) &&
          (fileType != FT_MACBINARY) && (fileType != FT_RESOURCE_FORK) &&
          (fileType != FT_CPM_LBR) &&
          (fileType != FT_PARSEC_ARCHIVE) && (fileType != FT_PMM)) ||
@@ -332,7 +343,8 @@ XBinary::ENDIAN XGameStoreArchiveBase::getEndian()
         (fileType == FT_DISK_DOUBLER) ||
         (fileType == FT_DISK_DOUBLER_DDA2) ||
         (fileType == FT_SHRINKWRAP_IMAGE) ||
-        (fileType == FT_LPAK) || (fileType == FT_PAX)) return ENDIAN_BIG;
+        (fileType == FT_LPAK) || (fileType == FT_PAX) ||
+        (fileType == FT_RNC) || (fileType == FT_MI10)) return ENDIAN_BIG;
     return ENDIAN_LITTLE;
 }
 
@@ -370,7 +382,12 @@ QString XGameStoreArchiveBase::getFileFormatExt()
     if (fileType == FT_INSTALLSHIELD_BOOT) return QStringLiteral("boot");
     if (fileType == FT_SABDU_IMAGE) return QStringLiteral("sdu");
     if (fileType == FT_COMPAQ_LZH) return QStringLiteral("lzh");
+    if (fileType == FT_INSA) return QStringLiteral("dat");
     if (fileType == FT_WISE_SFX) return QStringLiteral("exe");
+    if (fileType == FT_INSTALLSHIELD3_SFX) return QStringLiteral("exe");
+    if (fileType == FT_IS14_SFX) return QStringLiteral("exe");
+    if (fileType == FT_GPINSTALL_SFX) return QStringLiteral("exe");
+    if (fileType == FT_INSTALLSHIELD_LAUNCHER) return QStringLiteral("exe");
     if (fileType == FT_EPFS_ARCHIVE) return QStringLiteral("epf");
     if (fileType == FT_STUNTS_DSI) return QStringLiteral("pes");
     if (fileType == FT_FINSTALL_ARCHIVE) return QStringLiteral("disk");
@@ -386,6 +403,10 @@ QString XGameStoreArchiveBase::getFileFormatExt()
     if (fileType == FT_PIMP_SFX) return QStringLiteral("exe");
     if (fileType == FT_VISE_SFX) return QStringLiteral("exe");
     if (fileType == FT_FTCOMP) return QStringLiteral("_");
+    if (fileType == FT_FLS) return QStringLiteral("fls");
+    if (fileType == FT_RTPATCH) return QStringLiteral("rtp");
+    if (fileType == FT_RNC) return QStringLiteral("rnc");
+    if (fileType == FT_MI10) return QStringLiteral("mi");
     if (fileType == FT_DN_ARCHIVE) return QStringLiteral("138");
     if (fileType == FT_FPAK) return QStringLiteral("pak");
     if (fileType == FT_SOFTPAQ1_SFX) return QStringLiteral("exe");
@@ -393,6 +414,8 @@ QString XGameStoreArchiveBase::getFileFormatExt()
     if (fileType == FT_LIF_COMPRESSED) return QStringLiteral("lif");
     if (fileType == FT_JASC_ARCHIVE) return QStringLiteral("cmp");
     if (fileType == FT_SSM_MODULE) return QStringLiteral("ssm");
+    if (fileType == FT_SSBOB) return QStringLiteral("fss");
+    if (fileType == FT_IS_SKIN) return QStringLiteral("skin");
     if (fileType == FT_MACBINARY) return QStringLiteral("bin");
     if (fileType == FT_RESOURCE_FORK) return QStringLiteral("rsrc");
     if (fileType == FT_CPM_LBR) return QStringLiteral("lbr");
@@ -456,8 +479,18 @@ QString XGameStoreArchiveBase::getFileFormatExtsString()
         return QStringLiteral("SAB Diskette Utility image (*.sdu)");
     if (fileType == FT_COMPAQ_LZH)
         return QStringLiteral("Compaq LZH compressed file (*.*!;*.lzh)");
+    if (fileType == FT_INSA)
+        return QStringLiteral("INSA installer data archive (*.dat)");
     if (fileType == FT_WISE_SFX)
         return QStringLiteral("Wise installer executable archive (*.exe)");
+    if (fileType == FT_INSTALLSHIELD3_SFX)
+        return QStringLiteral("InstallShield 3 SFX (*.exe)");
+    if (fileType == FT_IS14_SFX)
+        return QStringLiteral("InstallShield Setup Player 2K2 SFX (*.exe)");
+    if (fileType == FT_GPINSTALL_SFX)
+        return QStringLiteral("GP-Install self-extracting installer (*.exe)");
+    if (fileType == FT_INSTALLSHIELD_LAUNCHER)
+        return QStringLiteral("InstallShield Setup Launcher self-extracting archive (*.exe)");
     if (fileType == FT_EPFS_ARCHIVE)
         return QStringLiteral("East Point Software EPFS archive (*.epf)");
     if (fileType == FT_STUNTS_DSI)
@@ -488,6 +521,14 @@ QString XGameStoreArchiveBase::getFileFormatExtsString()
         return QStringLiteral("Windows Installer VISE self-extracting archive (*.exe)");
     if (fileType == FT_FTCOMP)
         return QStringLiteral("IBM OS/2 PACK2 archive (*._*;*.___)");
+    if (fileType == FT_FLS)
+        return QStringLiteral("IBM SaveRam/SaveRam2 FLS archive (*.fls;*._*)");
+    if (fileType == FT_RTPATCH)
+        return QStringLiteral("Pocket Soft RTPatch package (*.rtp;*.stp)");
+    if (fileType == FT_RNC)
+        return QStringLiteral("Rob Northen multi-file archive (*.rnc)");
+    if (fileType == FT_MI10)
+        return QStringLiteral("Amiga MI10 crunched block chain (*.mi)");
     if (fileType == FT_DN_ARCHIVE)
         return QStringLiteral("DOS Navigator installer archive (*.138)");
     if (fileType == FT_FPAK)
@@ -502,6 +543,10 @@ QString XGameStoreArchiveBase::getFileFormatExtsString()
         return QStringLiteral("JASC installer archive (*.cmp;*.inf)");
     if (fileType == FT_SSM_MODULE)
         return QStringLiteral("PICTools SSM compressed module (*.ssm)");
+    if (fileType == FT_SSBOB)
+        return QStringLiteral("SSBOB slideshow package (*.fss)");
+    if (fileType == FT_IS_SKIN)
+        return QStringLiteral("InstallShield setup skin (skin, isn)");
     if (fileType == FT_MACBINARY)
         return QStringLiteral("MacBinary (*.bin;*.macbin;*.mac)");
     if (fileType == FT_RESOURCE_FORK)
@@ -569,8 +614,18 @@ QString XGameStoreArchiveBase::getMIMEString()
         return QStringLiteral("application/x-sabdu-image");
     if (fileType == FT_COMPAQ_LZH)
         return QStringLiteral("application/x-compaq-lzh");
+    if (fileType == FT_INSA)
+        return QStringLiteral("application/x-insa");
     if (fileType == FT_WISE_SFX)
         return QStringLiteral("application/x-wise-installer");
+    if (fileType == FT_INSTALLSHIELD3_SFX)
+        return QStringLiteral("application/x-installshield3-sfx");
+    if (fileType == FT_IS14_SFX)
+        return QStringLiteral("application/x-installshield-setup-player-sfx");
+    if (fileType == FT_GPINSTALL_SFX)
+        return QStringLiteral("application/x-gpinstall-sfx");
+    if (fileType == FT_INSTALLSHIELD_LAUNCHER)
+        return QStringLiteral("application/x-installshield-launcher");
     if (fileType == FT_EPFS_ARCHIVE)
         return QStringLiteral("application/x-epfs-archive");
     if (fileType == FT_STUNTS_DSI)
@@ -601,6 +656,14 @@ QString XGameStoreArchiveBase::getMIMEString()
         return QStringLiteral("application/x-vise-sfx");
     if (fileType == FT_FTCOMP)
         return QStringLiteral("application/x-os2-pack2");
+    if (fileType == FT_FLS)
+        return QStringLiteral("application/x-saveram-fls");
+    if (fileType == FT_RTPATCH)
+        return QStringLiteral("application/x-rtpatch");
+    if (fileType == FT_RNC)
+        return QStringLiteral("application/x-rnc");
+    if (fileType == FT_MI10)
+        return QStringLiteral("application/x-amiga-mi10");
     if (fileType == FT_DN_ARCHIVE)
         return QStringLiteral("application/x-dos-navigator-installer");
     if (fileType == FT_FPAK)
@@ -615,6 +678,10 @@ QString XGameStoreArchiveBase::getMIMEString()
         return QStringLiteral("application/x-jasc-installer-archive");
     if (fileType == FT_SSM_MODULE)
         return QStringLiteral("application/x-pictools-ssm");
+    if (fileType == FT_SSBOB)
+        return QStringLiteral("application/x-ssbob-slideshow");
+    if (fileType == FT_IS_SKIN)
+        return QStringLiteral("application/x-installshield-skin");
     if (fileType == FT_MACBINARY)
         return QStringLiteral("application/x-macbinary");
     if (fileType == FT_RESOURCE_FORK)
@@ -642,6 +709,16 @@ XBinary::OSNAME XGameStoreArchiveBase::getOsName()
 
 QString XGameStoreArchiveBase::getVersion()
 {
+    if (getFileType() == FT_INSTALLSHIELD3_SFX) return QStringLiteral("3");
+    if (getFileType() == FT_IS14_SFX) return QStringLiteral("7");
+    if (getFileType() == FT_RTPATCH) {
+        const quint16 nVersion = read_uint16(2);
+        if (nVersion >= 100) {
+            return QStringLiteral("%1.%2")
+                .arg(nVersion / 100)
+                .arg(nVersion % 100, 2, 10, QLatin1Char('0'));
+        }
+    }
     return QString();
 }
 
@@ -688,6 +765,14 @@ QList<QString> XGameStoreArchiveBase::getSearchSignatures()
         listResult.append(QStringLiteral("'CPQ_LZH'"));
     } else if (fileType == FT_WISE_SFX) {
         listResult.append(QStringLiteral("'WiseMain'"));
+    } else if (fileType == FT_INSTALLSHIELD3_SFX) {
+        listResult.append(QStringLiteral("9401000006000000"));
+    } else if (fileType == FT_IS14_SFX) {
+        listResult.append(QStringLiteral("4D5A*'InstallShield Setup Player 2K2'"));
+    } else if (fileType == FT_GPINSTALL_SFX) {
+        listResult.append(QStringLiteral("4D5A*'SPIS'1A'LH5'"));
+    } else if (fileType == FT_INSTALLSHIELD_LAUNCHER) {
+        listResult.append(QStringLiteral("4D5A*'InstallShield'00"));
     } else if (fileType == FT_EPFS_ARCHIVE) {
         listResult.append(QStringLiteral("'EPFS'"));
     } else if (fileType == FT_FINSTALL_ARCHIVE) {
@@ -714,6 +799,14 @@ QList<QString> XGameStoreArchiveBase::getSearchSignatures()
         listResult.append(QStringLiteral("4D5A*'ESIV'"));
     } else if (fileType == FT_FTCOMP) {
         listResult.append(QStringLiteral("A596FDFF"));
+    } else if (fileType == FT_FLS) {
+        listResult.append(QStringLiteral("'SaveRam'"));
+    } else if (fileType == FT_RTPATCH) {
+        listResult.append(QStringLiteral("'K*'"));
+    } else if (fileType == FT_RNC) {
+        listResult.append(QStringLiteral("'RNCA'"));
+    } else if (fileType == FT_MI10) {
+        listResult.append(QStringLiteral("'MI10'"));
     } else if (fileType == FT_DN_ARCHIVE) {
         listResult.append(QStringLiteral("848D0102"));
     } else if (fileType == FT_FPAK) {
@@ -728,6 +821,8 @@ QList<QString> XGameStoreArchiveBase::getSearchSignatures()
         listResult.append(QStringLiteral("(16|17|18|19|1A|1B)*"));
     } else if (fileType == FT_SSM_MODULE) {
         listResult.append(QStringLiteral("'SSM'00"));
+    } else if (fileType == FT_SSBOB) {
+        listResult.append(QStringLiteral("'SSBOB'"));
     } else if (fileType == FT_CPM_LBR) {
         listResult.append(QStringLiteral("00'           '0000"));
     } else if (fileType == FT_PMM) {
@@ -882,6 +977,15 @@ XBinary::ARCHIVERECORD XGameStoreArchiveBase::infoCurrent(
             static_cast<quint32>(CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF));
         result.mapProperties.insert(FPART_PROP_RESULTCRC, entry.nCRC32);
     }
+    if (!entry.sChecksum.isEmpty() && !entry.sChecksumType.isEmpty()) {
+        result.mapProperties.insert(FPART_PROP_CHECKSUM, entry.sChecksum);
+        result.mapProperties.insert(FPART_PROP_CHECKSUMTYPE,
+                                    entry.sChecksumType);
+    }
+    if (entry.mtDateTime.isValid()) {
+        result.mapProperties.insert(FPART_PROP_DATETIME, entry.mtDateTime);
+        result.mapProperties.insert(FPART_PROP_MTIME, entry.mtDateTime);
+    }
     result.mapProperties.insert(FPART_PROP_HEADER_OFFSET,
                                 entry.nHeaderOffset);
     result.mapProperties.insert(FPART_PROP_HEADER_SIZE, entry.nHeaderSize);
@@ -968,6 +1072,8 @@ XGameStoreArchiveBase::getAvailableFPARTProperties()
     listResult.append(FPART_PROP_SOLIDFOLDERINDEX);
     listResult.append(FPART_PROP_CRC_TYPE);
     listResult.append(FPART_PROP_RESULTCRC);
+    listResult.append(FPART_PROP_DATETIME);
+    listResult.append(FPART_PROP_MTIME);
     return listResult;
 }
 

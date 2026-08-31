@@ -53,6 +53,7 @@
 #include "Algos/xbranchdecoder.h"
 #include "Algos/xlzxdecoder.h"
 #include "Algos/xquantumdecoder.h"
+#include "Algos/xspisrledecoder.h"
 
 class XDecompress : public QObject {
     Q_OBJECT
@@ -71,6 +72,9 @@ public:
     bool checkCRC(XBinary::CRC_TYPE crcType, QVariant value, QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct = nullptr,
                   const XBinary::DATAPROCESS_STATE *pState = nullptr);
     QByteArray decomressToByteArray(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
+    // Trial-decode an ARCV LZHUF stream (bWide selects the F=60 sub-variant).
+    // Used by the ARCV reader to disambiguate the two sub-variants by checksum.
+    static bool decompressArcvLzhuf(const QByteArray &packed, qint32 nRawSize, bool bWide, QByteArray *pOutput, XBinary::PDSTRUCT *pPdStruct);
     qint64 getCompressedDataSize(QIODevice *pDevice, qint64 nOffset, qint64 nSize, XBinary::HANDLE_METHOD compressMethod, XBinary::PDSTRUCT *pPdStruct);
 
 private:

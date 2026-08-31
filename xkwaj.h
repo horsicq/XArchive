@@ -104,6 +104,11 @@ public:
 
 private:
     HANDLE_METHOD _compTypeToMethod(quint16 nCompType);
+    static bool failUnpackInitialization(XKWAJ *pArchive, UNPACK_STATE *pState);
+    static bool hasExtensionBytes(qint64 nExtensionOffset, qint64 nDataOffset, qint64 nSize);
+    static bool skipExtensionBytes(qint64 nDataOffset, qint64 nSize, qint64 *pExtensionOffset);
+    bool readBoundedExtensionString(qint64 nDataOffset, qint64 *pExtensionOffset,
+                                    qint32 nMaximumBytes, QString *pString);
 
     struct KWAJ_UNPACK_CONTEXT {
         qint64 nDataOffset = 0;

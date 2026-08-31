@@ -21,6 +21,8 @@
 #include "xlha.h"
 #include "xdecompress.h"
 
+#include <limits>
+
 XBinary::XCONVERT _TABLE_XLHA_STRUCTID[] = {
     {XLHA::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")},
     {XLHA::STRUCTID_HEADER, "HEADER", QString("Header")},
@@ -52,13 +54,21 @@ XLHA::XLHA(QIODevice *pDevice) : XArchive(pDevice)
 qint64 XLHA::_getLevel1ExtHeadersSize(qint64 nOffset, qint64 nBaseHeaderSize)
 {
     QPointer<XLHA> guardedArchive(this);
+    const qint64 nFileSize = guardedArchive->getSize();
+    if (!guardedArchive || (nFileSize < 0) || (nOffset < 0) || (nOffset > nFileSize) || (nBaseHeaderSize < 0) || (nBaseHeaderSize > nFileSize - nOffset)) return -1;
     qint64 nExtTotal = 0;
     qint64 nFnLen = (qint64)guardedArchive->read_uint8(nOffset + 21);
     if (!guardedArchive) return -1;
+    if ((nOffset > nFileSize - 27) || (nFnLen > nFileSize - nOffset - 27)) return -1;
     qint64 nNextHdrSize = (qint64)guardedArchive->read_uint16(nOffset + 25 + nFnLen, false);
     if (!guardedArchive) return -1;
     qint64 nExtOffset = nOffset + nBaseHeaderSize;
+    qint32 nHeaderCount = 0;
     while (nNextHdrSize > 0) {
+        if ((++nHeaderCount > 65536) || (nNextHdrSize < 2) || (nExtOffset < 0) || (nExtOffset > nFileSize) || (nNextHdrSize > nFileSize - nExtOffset) ||
+            (nExtTotal > (std::numeric_limits<qint64>::max)() - nNextHdrSize)) {
+            return -1;
+        }
         nExtTotal += nNextHdrSize;
         nExtOffset += nNextHdrSize;
         nNextHdrSize = (qint64)guardedArchive->read_uint16(nExtOffset - 2, false);

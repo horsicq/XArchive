@@ -53,18 +53,25 @@ public:
     bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
+    struct UU_BLOCK {
+        QByteArray baDecoded;
+        QString sDeclaredName;
+    };
+
     struct UU_UNPACK_CONTEXT {
         QBuffer *pDecodedDevice;
         XArchive *pInnerArchive;
         UNPACK_STATE innerState;
-        QString sDeclaredName;
+        QList<UU_BLOCK> listBlocks;
         bool bDirectPayload;
 
         UU_UNPACK_CONTEXT();
         ~UU_UNPACK_CONTEXT();
     };
 
-    bool decodeTransport(QByteArray *pOutput, QString *pDeclaredName, qint64 nOutputLimit, PDSTRUCT *pPdStruct);
+    bool decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *pDeclaredName, qint64 nOutputLimit, qint64 *pnNextSearchOffset,
+                           bool *pbHeaderFound, PDSTRUCT *pPdStruct);
+    bool decodeTransports(QList<UU_BLOCK> *pBlocks, qint64 nEntryLimit, qint64 nAggregateLimit, qint32 nBlockLimit, PDSTRUCT *pPdStruct);
     static bool parseHeader(const QByteArray &line, bool *pbBase64, QString *pName);
     static qint32 base64Value(quint8 value);
 };

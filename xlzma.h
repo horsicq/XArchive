@@ -88,6 +88,8 @@ public:
     QList<FPART_PROP> getAvailableFPARTProperties() override;
 
 private:
+    static bool failUnpackInitialization(XLZMA *pArchive, UNPACK_STATE *pState);
+
     struct LZMA_UNPACK_CONTEXT {
         qint64 nCompressedSize;
         qint64 nUncompressedSize;

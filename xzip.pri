@@ -1,10 +1,11 @@
-# ZIP + decompression core: XZip (with its XJAR/XAPK/XAPKS/XIPA family), the
-# XArchive base class, XCompress/XDecompress and ALL Algos decoders.
+# Archive-format core shared by Formats and XArchive: all classes relocated to
+# Formats (XArchive, the ZIP family, GZIP, compressed-TAR/NPM formats, ISO9660,
+# MACHOFat, DOS16, Deflate and store decoders), their TAR support,
+# XCompress/XDecompress and ALL Algos decoders.
 #
-# This unit works WITHOUT the USE_ARCHIVE define: consumers that only need ZIP
-# parsing and the Deflate/store/... decoders include this file instead of
-# xarchive.pri. xarchive.pri composes this file and adds the other archive
-# formats (rar/7z/tar/iso/...) on top; USE_ARCHIVE keeps gating those.
+# This unit works WITHOUT the USE_ARCHIVE define. xarchive.pri composes it and
+# adds the archive formats that remain in XArchive (rar/7z/tar/...) on top;
+# USE_ARCHIVE keeps gating those remaining formats.
 
 INCLUDEPATH += $$PWD
 DEPENDPATH += $$PWD
@@ -12,6 +13,18 @@ INCLUDEPATH += $$PWD/Algos
 DEPENDPATH += $$PWD/Algos
 INCLUDEPATH += $$PWD/Algos/include
 DEPENDPATH += $$PWD/Algos/include
+INCLUDEPATH += $$PWD/../Formats
+DEPENDPATH += $$PWD/../Formats
+INCLUDEPATH += $$PWD/../Formats/archives
+DEPENDPATH += $$PWD/../Formats/archives
+INCLUDEPATH += $$PWD/../Formats/Algos
+DEPENDPATH += $$PWD/../Formats/Algos
+INCLUDEPATH += $$PWD/../Formats/exec
+DEPENDPATH += $$PWD/../Formats/exec
+
+# XDecompress references the Ancient-backed and legacy Mac/PAX/Vise codecs
+# even when the consumer only composes the ZIP core.
+include($$PWD/ancient.pri)
 
 HEADERS += \
     $$PWD/Algos/algo_utils.h \
@@ -24,15 +37,28 @@ HEADERS += \
     $$PWD/Algos/xkwajlzhdecoder.h \
     $$PWD/Algos/xrardecoder.h \
     $$PWD/Algos/xit214decoder.h \
-    $$PWD/Algos/xdeflatedecoder.h \
+    $$PWD/../Formats/Algos/xdeflatedecoder.h \
     $$PWD/Algos/ximplodedecoder.h \
     $$PWD/Algos/xlzmadecoder.h \
     $$PWD/Algos/xlzwdecoder.h \
     $$PWD/Algos/xascii85decoder.h \
     $$PWD/Algos/xasciihexdecoder.h \
     $$PWD/Algos/xrunlengthdecoder.h \
-    $$PWD/Algos/xstoredecoder.h \
+    $$PWD/../Formats/Algos/xstoredecoder.h \
+    $$PWD/Algos/xspisrledecoder.h \
     $$PWD/Algos/xamigalzxdecoder.h \
+    $$PWD/Algos/xmaclegacydecoders.h \
+    $$PWD/Algos/xpaxdecoder.h \
+    $$PWD/Algos/xvisedeflatedecoder.h \
+    $$PWD/Algos/xmi10decoder.h \
+    $$PWD/Algos/xfpakdecoder.h \
+    $$PWD/Algos/xftcompdecoder.h \
+    $$PWD/Algos/xdndecoder.h \
+    $$PWD/Algos/xsqzdecoder.h \
+    $$PWD/Algos/xflsdecoder.h \
+    $$PWD/Algos/xpakdecoder.h \
+    $$PWD/Algos/xssmdecoder.h \
+    $$PWD/Algos/xrtpatchdecoder.h \
     $$PWD/Algos/xbzip2decoder.h \
     $$PWD/Algos/xbrotlidecoder.h \
     $$PWD/Algos/xlzssdecoder.h \
@@ -66,15 +92,24 @@ HEADERS += \
     $$PWD/Algos/xucldecoder_acc.h \
     $$PWD/Algos/xlzodecoder.h \
     $$PWD/Algos/xcompressdecoder.h \
-    $$PWD/xarchive.h \
+    $$PWD/../Formats/xarchive.h \
     $$PWD/xcompress.h \
     $$PWD/xdecompress.h \
     $$PWD/xcompresseddevice.h \
-    $$PWD/xzip.h \
-    $$PWD/xjar.h \
-    $$PWD/xapk.h \
-    $$PWD/xapks.h \
-    $$PWD/xipa.h
+    $$PWD/../Formats/archives/xtar.h \
+    $$PWD/../Formats/archives/xtarcompressed.h \
+    $$PWD/../Formats/archives/xzip.h \
+    $$PWD/../Formats/archives/xjar.h \
+    $$PWD/../Formats/archives/xapk.h \
+    $$PWD/../Formats/archives/xapks.h \
+    $$PWD/../Formats/archives/xipa.h \
+    $$PWD/../Formats/archives/xgzip.h \
+    $$PWD/../Formats/archives/xiso9660.h \
+    $$PWD/../Formats/archives/xtar_gz.h \
+    $$PWD/../Formats/archives/xtar_compress.h \
+    $$PWD/../Formats/archives/xnpm.h \
+    $$PWD/../Formats/exec/xmachofat.h \
+    $$PWD/../Formats/exec/xdos16.h
 
 SOURCES += \
     $$PWD/Algos/algo_utils.cpp \
@@ -86,15 +121,28 @@ SOURCES += \
     $$PWD/Algos/xkwajlzhdecoder.cpp \
     $$PWD/Algos/xrardecoder.cpp \
     $$PWD/Algos/xit214decoder.cpp \
-    $$PWD/Algos/xdeflatedecoder.cpp \
+    $$PWD/../Formats/Algos/xdeflatedecoder.cpp \
     $$PWD/Algos/ximplodedecoder.cpp \
     $$PWD/Algos/xlzmadecoder.cpp \
     $$PWD/Algos/xlzwdecoder.cpp \
     $$PWD/Algos/xascii85decoder.cpp \
     $$PWD/Algos/xasciihexdecoder.cpp \
     $$PWD/Algos/xrunlengthdecoder.cpp \
-    $$PWD/Algos/xstoredecoder.cpp \
+    $$PWD/../Formats/Algos/xstoredecoder.cpp \
+    $$PWD/Algos/xspisrledecoder.cpp \
     $$PWD/Algos/xamigalzxdecoder.cpp \
+    $$PWD/Algos/xmaclegacydecoders.cpp \
+    $$PWD/Algos/xpaxdecoder.cpp \
+    $$PWD/Algos/xvisedeflatedecoder.cpp \
+    $$PWD/Algos/xmi10decoder.cpp \
+    $$PWD/Algos/xfpakdecoder.cpp \
+    $$PWD/Algos/xftcompdecoder.cpp \
+    $$PWD/Algos/xdndecoder.cpp \
+    $$PWD/Algos/xsqzdecoder.cpp \
+    $$PWD/Algos/xflsdecoder.cpp \
+    $$PWD/Algos/xpakdecoder.cpp \
+    $$PWD/Algos/xssmdecoder.cpp \
+    $$PWD/Algos/xrtpatchdecoder.cpp \
     $$PWD/Algos/xbzip2decoder.cpp \
     $$PWD/Algos/xbrotlidecoder.cpp \
     $$PWD/Algos/xlzssdecoder.cpp \
@@ -126,19 +174,33 @@ SOURCES += \
     $$PWD/Algos/lz4declib.cpp \
     $$PWD/Algos/wavpackdeclib.cpp \
     $$PWD/Algos/lz5lizarddeclib.cpp \
-    $$PWD/xarchive.cpp \
+    $$PWD/../Formats/xarchive.cpp \
     $$PWD/xcompress.cpp \
     $$PWD/xdecompress.cpp \
     $$PWD/xcompresseddevice.cpp \
-    $$PWD/xzip.cpp \
-    $$PWD/xjar.cpp \
-    $$PWD/xapk.cpp \
-    $$PWD/xapks.cpp \
-    $$PWD/xipa.cpp
+    $$PWD/../Formats/archives/xtar.cpp \
+    $$PWD/../Formats/archives/xtarcompressed.cpp \
+    $$PWD/../Formats/archives/xzip.cpp \
+    $$PWD/../Formats/archives/xjar.cpp \
+    $$PWD/../Formats/archives/xapk.cpp \
+    $$PWD/../Formats/archives/xapks.cpp \
+    $$PWD/../Formats/archives/xipa.cpp \
+    $$PWD/../Formats/archives/xgzip.cpp \
+    $$PWD/../Formats/archives/xiso9660.cpp \
+    $$PWD/../Formats/archives/xtar_gz.cpp \
+    $$PWD/../Formats/archives/xtar_compress.cpp \
+    $$PWD/../Formats/archives/xnpm.cpp \
+    $$PWD/../Formats/exec/xmachofat.cpp \
+    $$PWD/../Formats/exec/xdos16.cpp
 
 !contains(XCONFIG, xbinary) {
     XCONFIG += xbinary
     include($$PWD/../Formats/xbinary.pri)
+}
+
+!contains(XCONFIG, xmach) {
+    XCONFIG += xmach
+    include($$PWD/../Formats/exec/xmach.pri) # XMACHOFat calls XMACH helpers
 }
 
 !contains(XCONFIG, xoptions) {

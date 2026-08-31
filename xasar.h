@@ -78,6 +78,8 @@ public:
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
+    struct LINK_CONTEXT;
+
     struct ASAR_RECORD {
         QString sFileName;
         QString sLinkName;
@@ -102,6 +104,13 @@ private:
     bool _walkTree(const class QJsonObject &objFiles, const QString &sParent, qint64 nBlobOffset, QList<ASAR_RECORD> *pListRecords, PDSTRUCT *pPdStruct, qint32 nDepth,
                    bool bParentUnpacked = false);
     bool _prepareExternalRecords(ASAR_UNPACK_CONTEXT *pContext, PDSTRUCT *pPdStruct);
+    bool _resolvePath(LINK_CONTEXT *pLinkContext, const QString &sInputPath,
+                      qint32 nInitialLinkDepth, qint32 *pnTargetIndex,
+                      QString *pFinalPath);
+    bool _expandDirectory(LINK_CONTEXT *pLinkContext,
+                          const QString &sAliasPath,
+                          const QString &sTargetFolderPath,
+                          QSet<QString> *pAncestry, qint32 nDepth);
     bool _resolveLinks(ASAR_UNPACK_CONTEXT *pContext);
 
 private:

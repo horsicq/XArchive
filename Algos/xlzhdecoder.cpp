@@ -1285,17 +1285,20 @@ struct Lzhuf {
 
     bool decode(QByteArray *pOut, qint64 nTextSize, XBinary::PDSTRUCT *pPdStruct)
     {
-        if (!pOut || (nTextSize < 0) || (nTextSize > LH1_MAX_UNPACKED_BUFFER_SIZE)) {
+        if ((nTextSize < 0) || (nTextSize > LH1_MAX_UNPACKED_BUFFER_SIZE)) {
             return false;
         }
 
         for (int i = 0; i < N - LZF; i++) textBuf[i] = ' ';
         int r = N - LZF;
         qint64 count = 0;
-        // Allocate the exact result once. nTextSize is validated above against
-        // LH1_MAX_UNPACKED_BUFFER_SIZE, so the allocation size is bounded.
-        // This also avoids growth reallocations while decoding.
-        pOut->resize((int)nTextSize);
+        if (pOut) {
+            // Allocate the exact result once. nTextSize is validated above
+            // against LH1_MAX_UNPACKED_BUFFER_SIZE, so the allocation size is
+            // bounded. A null output measures a stream without materializing
+            // the decoded member.
+            pOut->resize((int)nTextSize);
+        }
         while (count < nTextSize) {
             if (((count & 0x3FFF) == 0) && !XBinary::isPdStructNotCanceled(pPdStruct)) {
                 return false;
@@ -1306,7 +1309,7 @@ struct Lzhuf {
                 return false;
             }
             if (c < 256) {
-                (*pOut)[(int)count] = (char)c;
+                if (pOut) (*pOut)[(int)count] = (char)c;
                 textBuf[r++] = (quint8)c;
                 r &= (N - 1);
                 count++;
@@ -1322,7 +1325,7 @@ struct Lzhuf {
                 }
                 for (int k = 0; k < j; k++) {
                     quint8 cc = textBuf[(i + k) & (N - 1)];
-                    (*pOut)[(int)count] = (char)cc;
+                    if (pOut) (*pOut)[(int)count] = (char)cc;
                     textBuf[r++] = cc;
                     r &= (N - 1);
                     count++;
@@ -1334,6 +1337,28 @@ struct Lzhuf {
     }
 };
 }  // namespace
+
+qint64 XLZHDecoder::lh1MeasureStream(const quint8 *pData, qint64 nMaxSize,
+                                     qint64 nUncompressedSize,
+                                     XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pData || nMaxSize < 1 ||
+        nMaxSize > (std::numeric_limits<qint64>::max)() / 8 ||
+        nUncompressedSize < 1 ||
+        nUncompressedSize > LH1_MAX_UNPACKED_BUFFER_SIZE ||
+        !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return -1;
+    }
+
+    std::unique_ptr<Lzhuf> pDecoder(new (std::nothrow) Lzhuf(pData, nMaxSize));
+    if (!pDecoder || !pDecoder->decode(nullptr, nUncompressedSize, pPdStruct)) {
+        return -1;
+    }
+
+    const qint64 nConsumed = (pDecoder->bitsConsumed + 7) / 8;
+    if (nConsumed < 1 || nConsumed > nMaxSize) return -1;
+    return nConsumed;
+}
 
 bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
 {

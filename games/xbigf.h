@@ -21,7 +21,7 @@
 #ifndef XBIGF_H
 #define XBIGF_H
 
-#include "../xarchive.h"
+#include "xarchive.h"
 
 // Ptero-Engine BIGF/ZBL resource archive, normally stored as .CBF.
 //
@@ -106,6 +106,18 @@ private:
         BIGF_HEADER header;
         qint64 nDeviceSize;
     };
+
+    struct LZW_CONTEXT;
+
+    static bool entryOffsetLess(const BIGF_ENTRY &a, const BIGF_ENTRY &b);
+    bool resetLzwDictionary(LZW_CONTEXT *pContext);
+    bool readLzwByte(LZW_CONTEXT *pContext, quint8 *pValue);
+    bool readLzwBits(LZW_CONTEXT *pContext, qint32 nWidth, quint32 *pCode);
+    bool alignLzwInput(LZW_CONTEXT *pContext);
+    bool appendLzwDictionary(LZW_CONTEXT *pContext, quint32 nPrefix,
+                             quint8 nSuffix);
+    bool decodeLzwPhrase(LZW_CONTEXT *pContext, quint32 nCode,
+                         quint8 *pFirstCharacter);
 
     bool scanArchive(BIGF_HEADER *pHeader, QList<BIGF_ENTRY> *pEntries,
                      PDSTRUCT *pPdStruct);

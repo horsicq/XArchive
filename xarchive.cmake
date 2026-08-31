@@ -10,23 +10,19 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/include/)
 # zlib headers moved to Algos/include with its sources; that path is already
 # on the include list above.
 
-# The ZIP + decompression core (XZip family, XArchive base, XCompress/
-# XDecompress, ALL Algos decoders, and xbinary/xoptions) lives in xzip.cmake so
-# it can be used WITHOUT the USE_ARCHIVE define; this file adds the remaining
-# archive formats on top.
+# The shared core (all classes relocated to Formats, XCompress/XDecompress,
+# ALL Algos decoders, and xbinary/xoptions) lives in xzip.cmake so it can be
+# used WITHOUT the USE_ARCHIVE define; this file adds only the formats that
+# remain in XArchive.
 if (NOT DEFINED XZIP_SOURCES)
     include(${CMAKE_CURRENT_LIST_DIR}/xzip.cmake)
     set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XZIP_SOURCES})
 endif()
 
-include("${CMAKE_CURRENT_LIST_DIR}/ancient.cmake")
-set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XARCHIVE_ANCIENT_SOURCES})
 include("${CMAKE_CURRENT_LIST_DIR}/deark.cmake")
 set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XARCHIVE_DEARK_SOURCES})
-include("${CMAKE_CURRENT_LIST_DIR}/libdsk.cmake")
-set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XARCHIVE_LIBDSK_SOURCES})
-
-#include(${CMAKE_CURRENT_LIST_DIR}/../Formats/exec/xmach.cmake)
+include("${CMAKE_CURRENT_LIST_DIR}/legacydisk.cmake")
+set(XARCHIVE_SOURCES ${XARCHIVE_SOURCES} ${XARCHIVE_LEGACYDISK_SOURCES})
 
 set(XARCHIVE_SOURCES
     ${XARCHIVE_SOURCES}
@@ -38,22 +34,24 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xlegacyencoded.h
     ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xdskexp.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xdskexp.h
     ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompactproarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcompactproarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xdiskdoublerarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xdiskdoublerarchive.h
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmaclegacydecoders.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xmaclegacydecoders.h
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpaxdecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpaxdecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvisedeflatedecoder.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvisedeflatedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/xfls.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xfls.h
     ${CMAKE_CURRENT_LIST_DIR}/xpyinstallercarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xpyinstallercarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xwisesfxarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xwisesfxarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xis3sfxarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xis3sfxarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xis14sfxarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xis14sfxarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xlegacystorearchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlegacystorearchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xconcatziparchive.cpp
@@ -68,12 +66,22 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xpyz.h
     ${CMAKE_CURRENT_LIST_DIR}/xlzxarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlzxarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xmi10archive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xmi10archive.h
     ${CMAKE_CURRENT_LIST_DIR}/xmacbinary.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xmacbinary.h
     ${CMAKE_CURRENT_LIST_DIR}/xresourcefork.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xresourcefork.h
     ${CMAKE_CURRENT_LIST_DIR}/xlbr.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlbr.h
+    ${CMAKE_CURRENT_LIST_DIR}/xrtpatch.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xrtpatch.h
+    ${CMAKE_CURRENT_LIST_DIR}/xrncarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xrncarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xarq.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xarq.h
+    ${CMAKE_CURRENT_LIST_DIR}/xsqz.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xsqz.h
     ${CMAKE_CURRENT_LIST_DIR}/xseaarc.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xseaarc.h
     ${CMAKE_CURRENT_LIST_DIR}/xexternalarchive.cpp
@@ -132,14 +140,12 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xwarc.h
     ${CMAKE_CURRENT_LIST_DIR}/xmtree.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xmtree.h
+    ${CMAKE_CURRENT_LIST_DIR}/xshar.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xshar.h
     ${CMAKE_CURRENT_LIST_DIR}/xuu.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xuu.h
     ${CMAKE_CURRENT_LIST_DIR}/xdeb.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xdeb.h
-    ${CMAKE_CURRENT_LIST_DIR}/xgzip.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xgzip.h
-    ${CMAKE_CURRENT_LIST_DIR}/xiso9660.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xiso9660.h
     ${CMAKE_CURRENT_LIST_DIR}/xudf.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xudf.h
     ${CMAKE_CURRENT_LIST_DIR}/xwim.cpp
@@ -162,24 +168,14 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xarx.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xarx.h
     ${CMAKE_CURRENT_LIST_DIR}/xlha.h
-    ${CMAKE_CURRENT_LIST_DIR}/xmachofat.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xmachofat.h
     ${CMAKE_CURRENT_LIST_DIR}/xrar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xrar.h
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xsevenzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xsquashfs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xsquashfs.h
-    ${CMAKE_CURRENT_LIST_DIR}/xtar.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xtar.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar_bzip2.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xtar_bzip2.h
-    ${CMAKE_CURRENT_LIST_DIR}/xtar_compress.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xtar_compress.h
-    ${CMAKE_CURRENT_LIST_DIR}/xtar_gz.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xtar_gz.h
-    ${CMAKE_CURRENT_LIST_DIR}/xtarcompressed.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xtarcompressed.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar_lzip.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xtar_lzip.h
     ${CMAKE_CURRENT_LIST_DIR}/xtar_lzma.cpp
@@ -208,10 +204,6 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xcompressz.h
     ${CMAKE_CURRENT_LIST_DIR}/xzlib.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xzlib.h
-    ${CMAKE_CURRENT_LIST_DIR}/xnpm.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xnpm.h
-    ${CMAKE_CURRENT_LIST_DIR}/xdos16.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xdos16.h
     ${CMAKE_CURRENT_LIST_DIR}/xszdd.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xszdd.h
     ${CMAKE_CURRENT_LIST_DIR}/xbzip2.cpp

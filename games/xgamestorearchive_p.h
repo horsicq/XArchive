@@ -21,7 +21,7 @@
 #ifndef XGAMESTOREARCHIVE_P_H
 #define XGAMESTOREARCHIVE_P_H
 
-#include "../xarchive.h"
+#include "xarchive.h"
 
 #include <QHash>
 #include <QSet>
@@ -80,6 +80,9 @@ protected:
         bool bIsSolid = false;
         bool bCRC32Defined = false;
         quint32 nCRC32 = 0;
+        QString sChecksum;
+        QString sChecksumType;
+        QDateTime mtDateTime;
         QString sFileName;
     };
 

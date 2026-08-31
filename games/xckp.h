@@ -21,7 +21,7 @@
 #ifndef XCKP_H
 #define XCKP_H
 
-#include "../xarchive.h"
+#include "xarchive.h"
 
 // CKP and EdgeDataPak use the same store-only resource table.  CKP obfuscates
 // single-byte names while EDP applies the same transform to UTF-16LE code

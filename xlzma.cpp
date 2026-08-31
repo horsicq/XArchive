@@ -210,6 +210,13 @@ XLZMA::XLZMA(QIODevice *pDevice) : XArchive(pDevice)
 {
 }
 
+bool XLZMA::failUnpackInitialization(XLZMA *pArchive, UNPACK_STATE *pState)
+{
+    if (pArchive) pArchive->releaseUnpackSource(pState);
+    if (pState) *pState = UNPACK_STATE();
+    return false;
+}
+
 XLZMA::~XLZMA()
 {
 }
@@ -505,27 +512,21 @@ bool XLZMA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         *pState = UNPACK_STATE();
         return false;
     }
-    const auto failInitialization = [&]() -> bool {
-        if (guardedThis) guardedThis->releaseUnpackSource(pState);
-        *pState = UNPACK_STATE();
-        return false;
-    };
-
     QPointer<QIODevice> guardedSource(guardedThis->getDevice());
-    if (!guardedThis || !guardedSource) return failInitialization();
+    if (!guardedThis || !guardedSource) return failUnpackInitialization(guardedThis.data(), pState);
     const qint64 nFileSize = guardedSource->size();
     if (!guardedThis || !guardedSource || (nFileSize <= LZMA_ALONE_HEADER_SIZE)) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     const QByteArray baHeader = guardedThis->read_array_process(0, LZMA_ALONE_HEADER_SIZE, pPdStruct);
     if (!guardedThis || !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
     QByteArray baProperties;
     qint64 nDeclaredSize = -1;
     if (!parseLzmaAloneHeader(baHeader, &baProperties, &nDeclaredSize)) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     qint64 nCompressedSize = 0;
@@ -534,19 +535,19 @@ bool XLZMA::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &
         measureLzmaAloneStream(guardedSource.data(), nFileSize, baProperties, nDeclaredSize, &nCompressedSize, &nUncompressedSize, pPdStruct, &mapProperties);
     if (!guardedThis || !guardedSource || !bMeasured || (nCompressedSize <= 0) || (nCompressedSize > (nFileSize - LZMA_ALONE_HEADER_SIZE)) || (nUncompressedSize < 0) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
     const bool bSourceCurrent = guardedThis->isUnpackSourceCurrent(pState, pPdStruct);
     if (!guardedThis || !guardedSource || !bSourceCurrent) {
-        return failInitialization();
+        return failUnpackInitialization(guardedThis.data(), pState);
     }
 
     QString sFileName = XBinary::getDeviceFileBaseName(guardedSource.data());
-    if (!guardedThis || !guardedSource) return failInitialization();
+    if (!guardedThis || !guardedSource) return failUnpackInitialization(guardedThis.data(), pState);
     if (sFileName.isEmpty()) sFileName = QStringLiteral("stream");
 
     LZMA_UNPACK_CONTEXT *pContext = new (std::nothrow) LZMA_UNPACK_CONTEXT();
-    if (!pContext) return failInitialization();
+    if (!pContext) return failUnpackInitialization(guardedThis.data(), pState);
     pContext->nCompressedSize = nCompressedSize;
     pContext->nUncompressedSize = nUncompressedSize;
     pContext->baProperties = baProperties;

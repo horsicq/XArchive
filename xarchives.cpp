@@ -58,7 +58,11 @@ bool hasAuthoritativeStreamingReader(XBinary::FT fileType)
         case XBinary::FT_MPQ:
         case XBinary::FT_BIGF:
         case XBinary::FT_RIB:
+        case XBinary::FT_SPIS:
+        case XBinary::FT_SPISSFX:
         case XBinary::FT_PARSEC_ARCHIVE:
+        case XBinary::FT_RTPATCH:
+        case XBinary::FT_RTPATCHSFX:
         case XBinary::FT_PMM: return true;
         default: return false;
     }
@@ -431,6 +435,15 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
 
+    // Validate caller-supplied ceilings before probing or constructing a
+    // format handler. Otherwise a malformed aggregate/count limit can be
+    // overwritten by detection diagnostics or bypassed by the legacy fallback.
+    XBinary::OUTPUT_POLICY outputPolicy = {};
+    if (!XBinary::resolveUnpackOutputPolicy(mapProperties, &outputPolicy)) {
+        XBinary::setPdStructErrorString(pPdStruct, tr("Invalid unpacked-output limit"));
+        return false;
+    }
+
     const XBinary::FT fileType = preferredUnpackerFileType(pDevice, pPdStruct);
     XBinary *pBinary = XFormats::createClass(fileType, pDevice);
 
@@ -658,6 +671,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_STK);
     result.insert(XBinary::FT_WARC);
     result.insert(XBinary::FT_MTREE);
+    result.insert(XBinary::FT_SHAR);
     result.insert(XBinary::FT_UU);
     result.insert(XBinary::FT_QUAKE_PAK);
     result.insert(XBinary::FT_DOOM_WAD);
@@ -667,7 +681,9 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_WINTERMUTE_DCP);
     result.insert(XBinary::FT_PYINSTALLER_PYZ);
     result.insert(XBinary::FT_AMIGA_LZX);
+    result.insert(XBinary::FT_MI10);
     result.insert(XBinary::FT_DEARK_LEGACY_ARCHIVE);
+    result.insert(XBinary::FT_DSKEXP);
     result.insert(XBinary::FT_LIBDSK_IMAGE);
     result.insert(XBinary::FT_COMPACT_PRO);
     result.insert(XBinary::FT_DISK_DOUBLER);
@@ -683,7 +699,19 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_INSTALLSHIELD_BOOT);
     result.insert(XBinary::FT_SABDU_IMAGE);
     result.insert(XBinary::FT_COMPAQ_LZH);
+    result.insert(XBinary::FT_INSA);
     result.insert(XBinary::FT_WISE_SFX);
+    result.insert(XBinary::FT_INSTALLSHIELD3_SFX);
+    result.insert(XBinary::FT_IS14_SFX);
+    result.insert(XBinary::FT_PE32_SETUPFACTORY);
+    result.insert(XBinary::FT_PE64_SETUPFACTORY);
+    result.insert(XBinary::FT_GPINSTALL_SFX);
+    result.insert(XBinary::FT_SPIS);
+    result.insert(XBinary::FT_SPISSFX);
+    result.insert(XBinary::FT_ARQSFX);
+    result.insert(XBinary::FT_SQZSFX);
+    result.insert(XBinary::FT_RTPATCHSFX);
+    result.insert(XBinary::FT_INSTALLSHIELD_LAUNCHER);
     result.insert(XBinary::FT_EPFS_ARCHIVE);
     result.insert(XBinary::FT_STUNTS_DSI);
     result.insert(XBinary::FT_FINSTALL_ARCHIVE);
@@ -699,6 +727,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_PIMP_SFX);
     result.insert(XBinary::FT_VISE_SFX);
     result.insert(XBinary::FT_FTCOMP);
+    result.insert(XBinary::FT_FLS);
     result.insert(XBinary::FT_DN_ARCHIVE);
     result.insert(XBinary::FT_FPAK);
     result.insert(XBinary::FT_SOFTPAQ1_SFX);
@@ -706,6 +735,8 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_LIF_COMPRESSED);
     result.insert(XBinary::FT_JASC_ARCHIVE);
     result.insert(XBinary::FT_SSM_MODULE);
+    result.insert(XBinary::FT_SSBOB);
+    result.insert(XBinary::FT_IS_SKIN);
     result.insert(XBinary::FT_LHASFX);
     result.insert(XBinary::FT_C64_T64);
     result.insert(XBinary::FT_APPLESINGLE);
@@ -713,6 +744,9 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_MACBINARY);
     result.insert(XBinary::FT_RESOURCE_FORK);
     result.insert(XBinary::FT_CPM_LBR);
+    result.insert(XBinary::FT_RTPATCH);
+    result.insert(XBinary::FT_ARQ);
+    result.insert(XBinary::FT_SQZ);
     result.insert(XBinary::FT_DMS);
     result.insert(XBinary::FT_PP20);
     result.insert(XBinary::FT_RNC);

@@ -4205,7 +4205,15 @@ static size_t ZSTD_decodeFrameHeader_Part2(ZSTD_DCtx* zc, const void* src, size_
     size_t result;
     if (srcSize != zc->headerSize) return ERROR(srcSize_wrong);
     result = ZSTD_getFrameParams(&(zc->params), src, srcSize);
-    if ((MEM_32bits()) && (zc->params.windowLog > 25)) return ERROR(frameParameter_unsupported);
+    /*
+     * The v0.4 frame descriptor can legitimately request windowLog 26
+     * (64 MiB).  The buffered decoder uses size_t offsets and allocates that
+     * history window directly, so it is representable on 32-bit targets.  The
+     * integrating XZstdDecoder validates and reserves the declared window
+     * before reaching this point; retaining the historical 32 MiB guard made
+     * an otherwise valid, fully budgeted boundary frame fail only on x86.
+     */
+    if ((MEM_32bits()) && (zc->params.windowLog > 26)) return ERROR(frameParameter_unsupported);
     return result;
 }
 
