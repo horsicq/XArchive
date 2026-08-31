@@ -1,0 +1,3303 @@
+// This file is part of Deark.
+// Copyright (C) 2021 Jason Summers
+// See xdearkdecoder.LICENSE for terms of use.
+
+// This file is for miscellaneous small archive-format modules.
+
+#include <xdearkengine_private_p.h>
+#include <xdearkengine_fmtutil_p.h>
+#include <xdearkengine_fmtutilarchive_p.h>
+DE_DECLARE_MODULE(de_module_cpshrink);
+DE_DECLARE_MODULE(de_module_dwc);
+DE_DECLARE_MODULE(de_module_edi_pack);
+DE_DECLARE_MODULE(de_module_qip);
+DE_DECLARE_MODULE(de_module_pcxlib);
+DE_DECLARE_MODULE(de_module_gxlib);
+DE_DECLARE_MODULE(de_module_mdcd);
+DE_DECLARE_MODULE(de_module_cazip);
+DE_DECLARE_MODULE(de_module_cmz);
+DE_DECLARE_MODULE(de_module_pcshrink);
+DE_DECLARE_MODULE(de_module_arcv);
+DE_DECLARE_MODULE(de_module_ain);
+DE_DECLARE_MODULE(de_module_hta);
+DE_DECLARE_MODULE(de_module_hit);
+DE_DECLARE_MODULE(de_module_binary_ii);
+DE_DECLARE_MODULE(de_module_tc_trs80);
+DE_DECLARE_MODULE(de_module_ea_arch);
+DE_DECLARE_MODULE(de_module_zpk2);
+DE_DECLARE_MODULE(de_module_iconheaven);
+DE_DECLARE_MODULE(de_module_cork);
+
+static int dclimplode_header_at(deark *c, i64 pos)
+{
+	u8 b;
+
+	b = de_getbyte(pos);
+	if(b>1) return 0;
+	b = de_getbyte(pos+1);
+	if(b<4 || b>6) return 0;
+	return 1;
+}
+
+static void dclimplode_decompressor_fn(struct de_arch_member_data *md)
+{
+	fmtutil_dclimplode_codectype1(md->c, md->dcmpri, md->dcmpro, md->dres, NULL);
+}
+
+static void dbg_timestamp(deark *c, struct de_timestamp *ts, const char *name)
+{
+	char timestamp_buf[64];
+
+	de_timestamp_to_string(ts, timestamp_buf, sizeof(timestamp_buf), 0);
+	de_dbg(c, "%s: %s", name, timestamp_buf);
+}
+
+// **************************************************************************
+// CP Shrink (.cpz)
+// **************************************************************************
+
+static void cpshrink_decompressor_fn(struct de_arch_member_data *md)
+{
+	deark *c = md->c;
+
+	switch(md->cmpr_meth) {
+	case 0:
+	case 1:
+		fmtutil_dclimplode_codectype1(c, md->dcmpri, md->dcmpro, md->dres, NULL);
+		break;
+	case 2:
+		fmtutil_decompress_uncompressed(c, md->dcmpri, md->dcmpro, md->dres, 0);
+		break;
+	default:
+		de_dfilter_set_generic_error(c, md->dres, NULL);
+	}
+}
+
+// Caller creates/destroys md, and sets a few fields.
+static void cpshrink_do_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	i64 pos = md->member_hdr_pos;
+	UI cdata_crc_reported;
+	UI cdata_crc_calc;
+
+	int saved_indent_level;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	md->cmpr_pos = d->cmpr_data_curpos;
+
+	de_dbg(c, "member #%u: hdr at %" I64_FMT ", cmpr data at %" I64_FMT,
+		(UI)md->member_idx, md->member_hdr_pos, md->cmpr_pos);
+	de_dbg_indent(c, 1);
+
+	cdata_crc_reported = (u32)de_getu32le_p(&pos);
+	de_dbg(c, "CRC of cmpr. data (reported): 0x%08x", (UI)cdata_crc_reported);
+
+	dbuf_read_to_ucstring(c->infile, pos, 15, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	pos += 15;
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+
+	md->cmpr_meth = (UI)de_getbyte_p(&pos);
+	de_dbg(c, "cmpr. method: %u", md->cmpr_meth);
+
+	de_arch_read_field_orig_len_p(md, &pos);
+	de_arch_read_field_cmpr_len_p(md, &pos);
+	d->cmpr_data_curpos += md->cmpr_len;
+
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_DT, &pos);
+
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		d->fatalerrflag = 1;
+		goto done;
+	}
+
+	de_crcobj_reset(d->crco);
+	de_crcobj_addslice(d->crco, c->infile, md->cmpr_pos, md->cmpr_len);
+	cdata_crc_calc = de_crcobj_getval(d->crco);
+	de_dbg(c, "CRC of cmpr. data (calculated): 0x%08x", (UI)cdata_crc_calc);
+	if(cdata_crc_calc!=cdata_crc_reported) {
+		de_err(c, "File data CRC check failed (expected 0x%08x, got 0x%08x). "
+			"CPZ file may be corrupted.", (UI)cdata_crc_reported,
+			(UI)cdata_crc_calc);
+	}
+
+	md->dfn = cpshrink_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static void de_run_cpshrink(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	i64 pos;
+	i64 member_hdrs_pos;
+	i64 member_hdrs_len;
+	u32 member_hdrs_crc_reported;
+	u32 member_hdrs_crc_calc;
+	i64 i;
+	int saved_indent_level;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	pos = 0;
+	de_dbg(c, "archive header at %d", (int)pos);
+	de_dbg_indent(c, 1);
+	// Not sure if this is a 16-bit, or 32-bit, field, but CP Shrink doesn't
+	// work right if the 2 bytes at offset 2 are not 0.
+	d->num_members = de_getu32le_p(&pos);
+	de_dbg(c, "number of members: %" I64_FMT, d->num_members);
+	if(d->num_members<1 || d->num_members>0xffff) {
+		de_err(c, "Bad member file count");
+		goto done;
+	}
+	member_hdrs_crc_reported = (u32)de_getu32le_p(&pos);
+	de_dbg(c, "member hdrs crc (reported): 0x%08x", (UI)member_hdrs_crc_reported);
+	de_dbg_indent(c, -1);
+
+	member_hdrs_pos = pos;
+	member_hdrs_len = d->num_members * 32;
+	d->cmpr_data_curpos = member_hdrs_pos+member_hdrs_len;
+
+	de_dbg(c, "member headers at %" I64_FMT, member_hdrs_pos);
+	de_dbg_indent(c, 1);
+	d->crco = de_crcobj_create(c, DE_CRCOBJ_CRC32_IEEE);
+	de_crcobj_addslice(d->crco, c->infile, member_hdrs_pos, member_hdrs_len);
+	member_hdrs_crc_calc = de_crcobj_getval(d->crco);
+	de_dbg(c, "member hdrs crc (calculated): 0x%08x", (UI)member_hdrs_crc_calc);
+	if(member_hdrs_crc_calc!=member_hdrs_crc_reported) {
+		de_err(c, "Header CRC check failed (expected 0x%08x, got 0x%08x). "
+			"This is not a valid CP Shrink file", (UI)member_hdrs_crc_reported,
+			(UI)member_hdrs_crc_calc);
+	}
+	de_dbg_indent(c, -1);
+
+	de_dbg(c, "cmpr data starts at %" I64_FMT, d->cmpr_data_curpos);
+
+	for(i=0; i<d->num_members; i++) {
+		struct de_arch_member_data *md;
+
+		md = de_arch_create_md(c, d);
+		md->member_idx = i;
+		md->member_hdr_pos = pos;
+		pos += 32;
+
+		cpshrink_do_member(c, d, md);
+		de_arch_destroy_md(c, md);
+		if(d->fatalerrflag) goto done;
+	}
+
+done:
+	de_arch_destroy_lctx(c, d);
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static int de_identify_cpshrink(deark *c)
+{
+	i64 n;
+
+	if(!de_input_file_has_ext(c, "cpz")) return 0;
+	n = de_getu32le(0);
+	if(n<1 || n>0xffff) return 0;
+	if(de_getbyte(27)>2) return 0; // cmpr meth of 1st file
+	return 25;
+}
+
+void de_module_cpshrink(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "cpshrink";
+	mi->desc = "CP Shrink .CPZ";
+	mi->run_fn = de_run_cpshrink;
+	mi->identify_fn = de_identify_cpshrink;
+}
+
+// **************************************************************************
+// DWC archive
+// **************************************************************************
+
+static void dwc_decompressor_fn(struct de_arch_member_data *md)
+{
+	deark *c = md->c;
+
+	if(md->cmpr_meth==1) {
+		struct de_lzw_params delzwp;
+
+		de_zeromem(&delzwp, sizeof(struct de_lzw_params));
+		delzwp.fmt = DE_LZWFMT_DWC;
+		fmtutil_decompress_lzw(c, md->dcmpri, md->dcmpro, md->dres, &delzwp);
+	}
+	else if(md->cmpr_meth==2) {
+		fmtutil_decompress_uncompressed(c, md->dcmpri, md->dcmpro, md->dres, 0);
+	}
+	else {
+		de_dfilter_set_generic_error(c, md->dres, NULL);
+	}
+}
+
+static void squash_slashes(de_ucstring *s)
+{
+	i64 i;
+
+	for(i=0; i<s->len; i++) {
+		if(s->str[i]=='/') {
+			s->str[i] = '_';
+		}
+	}
+}
+
+// Set md->filename to the full-path filename, using tmpfn_path + tmpfn_base.
+static void dwc_process_filename(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	ucstring_empty(md->filename);
+	squash_slashes(md->tmpfn_base);
+	if(ucstring_isempty(md->tmpfn_path)) {
+		ucstring_append_ucstring(md->filename, md->tmpfn_base);
+		return;
+	}
+
+	md->set_name_flags |= DE_SNFLAG_FULLPATH;
+	ucstring_append_ucstring(md->filename, md->tmpfn_path);
+	de_arch_fixup_path(md->filename, 0x1);
+	if(ucstring_isempty(md->tmpfn_base)) {
+		ucstring_append_char(md->filename, '_');
+	}
+	else {
+		ucstring_append_ucstring(md->filename, md->tmpfn_base);
+	}
+}
+
+static void do_dwc_member(deark *c, de_arch_lctx *d, i64 pos1, i64 fhsize)
+{
+	i64 pos = pos1;
+	struct de_arch_member_data *md = NULL;
+	i64 cmt_len = 0;
+	i64 path_len = 0;
+	UI cdata_crc_reported = 0;
+	UI cdata_crc_calc;
+	u8 have_cdata_crc = 0;
+	u8 b;
+	de_ucstring *comment = NULL;
+
+	md = de_arch_create_md(c, d);
+
+	de_dbg(c, "member header at %" I64_FMT, pos1);
+	de_dbg_indent(c, 1);
+	md->tmpfn_base = ucstring_create(c);
+	dbuf_read_to_ucstring(c->infile, pos, 12, md->tmpfn_base, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->tmpfn_base));
+	// tentative md->filename (could be used by error messages)
+	ucstring_append_ucstring(md->filename, md->tmpfn_base);
+	pos += 13;
+
+	de_arch_read_field_orig_len_p(md, &pos);
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_UNIX, &pos);
+	de_arch_read_field_cmpr_len_p(md, &pos);
+	md->cmpr_pos = de_getu32le_p(&pos);
+	de_dbg(c, "cmpr. data pos: %" I64_FMT, md->cmpr_pos);
+
+	b = de_getbyte_p(&pos);
+	md->cmpr_meth = ((UI)b) & 0x0f;
+	de_dbg(c, "cmpr. method: %u", md->cmpr_meth);
+	md->file_flags = ((UI)b) >> 4;
+	de_dbg(c, "flags: 0x%x", md->file_flags);
+	if(md->file_flags & 0x4) {
+		md->is_encrypted = 1;
+	}
+
+	if(fhsize>=31) {
+		cmt_len = (i64)de_getbyte_p(&pos);
+		de_dbg(c, "comment len: %d", (int)cmt_len);
+	}
+	if(fhsize>=32) {
+		path_len = (i64)de_getbyte_p(&pos);
+		de_dbg(c, "path len: %d", (int)path_len);
+	}
+	if(fhsize>=34) {
+		cdata_crc_reported = (u32)de_getu16le_p(&pos);
+		de_dbg(c, "CRC of cmpr. data (reported): 0x%04x", (UI)cdata_crc_reported);
+		have_cdata_crc = 1;
+	}
+
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		goto done;
+	}
+
+	if(path_len>1) {
+		md->tmpfn_path = ucstring_create(c);
+		dbuf_read_to_ucstring(c->infile, md->cmpr_pos+md->cmpr_len,
+			path_len-1,
+			md->tmpfn_path, DE_CONVFLAG_STOP_AT_NUL, d->input_encoding);
+		de_dbg(c, "path: \"%s\"", ucstring_getpsz_d(md->tmpfn_path));
+	}
+	if(cmt_len>1) {
+		comment = ucstring_create(c);
+		dbuf_read_to_ucstring(c->infile, md->cmpr_pos+md->cmpr_len+path_len,
+			cmt_len-1, comment, DE_CONVFLAG_STOP_AT_NUL, d->input_encoding);
+		de_dbg(c, "comment: \"%s\"", ucstring_getpsz_d(comment));
+	}
+
+	dwc_process_filename(c, d, md);
+
+	if(have_cdata_crc) {
+		if(!d->crco) {
+			d->crco = de_crcobj_create(c, DE_CRCOBJ_CRC16_ARC);
+		}
+		de_crcobj_reset(d->crco);
+		de_crcobj_addslice(d->crco, c->infile, md->cmpr_pos, md->cmpr_len);
+		cdata_crc_calc = de_crcobj_getval(d->crco);
+		de_dbg(c, "CRC of cmpr. data (calculated): 0x%04x", (UI)cdata_crc_calc);
+		if(cdata_crc_calc!=cdata_crc_reported) {
+			de_err(c, "File data CRC check failed (expected 0x%04x, got 0x%04x). "
+				"DWC file may be corrupted.", (UI)cdata_crc_reported,
+				(UI)cdata_crc_calc);
+		}
+	}
+
+	if(d->private1) {
+		md->dfn = dwc_decompressor_fn;
+		de_arch_extract_member_file(md);
+	}
+
+done:
+	de_dbg_indent(c, -1);
+	de_arch_destroy_md(c, md);
+	ucstring_destroy(comment);
+}
+
+static int has_dwc_sig(deark *c)
+{
+	return !dbuf_memcmp(c->infile, c->infile->len-3, (const u8*)"DWC", 3);
+}
+
+static void de_run_dwc(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	i64 trailer_pos;
+	i64 trailer_len;
+	i64 nmembers;
+	i64 fhsize; // size of each file header
+	i64 pos;
+	i64 i;
+	struct de_timestamp tmpts;
+	int need_errmsg = 0;
+	int saved_indent_level;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+	d->private1 = de_get_ext_option_bool(c, "dwc:extract", 0);
+
+	if(!has_dwc_sig(c)) {
+		de_err(c, "Not a DWC file");
+		goto done;
+	}
+	de_declare_fmt(c, "DWC archive");
+
+	if(!d->private1) {
+		de_info(c, "Note: Use \"-opt dwc:extract\" to attempt decompression "
+			"(works for most small files).");
+	}
+
+	de_dbg(c, "trailer");
+	de_dbg_indent(c, 1);
+
+	pos = c->infile->len - 27; // Position of the "trailer size" field
+	trailer_len = de_getu16le_p(&pos); // Usually 27
+	trailer_pos = c->infile->len - trailer_len;
+	de_dbg(c, "size: %" I64_FMT " (starts at %" I64_FMT ")", trailer_len, trailer_pos);
+	if(trailer_len<27 || trailer_pos<0) {
+		need_errmsg = 1;
+		goto done;
+	}
+
+	fhsize = (i64)de_getbyte_p(&pos);
+	de_dbg(c, "file header entry size: %d", (int)fhsize);
+	if(fhsize<30) {
+		need_errmsg = 1;
+		goto done;
+	}
+
+	pos += 13; // TODO?: name of header file ("h" command)
+	de_arch_read_field_dttm_p(d, &tmpts, "archive last-modified", DE_ARCH_TSTYPE_UNIX, &pos);
+
+	nmembers = de_getu16le_p(&pos);
+	de_dbg(c, "number of member files: %d", (int)nmembers);
+	de_dbg_indent(c, -1);
+
+	pos = trailer_pos - fhsize*nmembers;
+	if(pos<0) {
+		need_errmsg = 1;
+		goto done;
+	}
+	for(i=0; i<nmembers; i++) {
+		do_dwc_member(c, d, pos, fhsize);
+		if(d->fatalerrflag) goto done;
+		pos += fhsize;
+	}
+
+done:
+	if(need_errmsg) {
+		de_err(c, "Bad DWC file");
+	}
+	de_arch_destroy_lctx(c, d);
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static int de_identify_dwc(deark *c)
+{
+	i64 tsize;
+	int has_ext;
+	u8 dsize;
+
+	if(!has_dwc_sig(c)) return 0;
+	tsize = de_getu16le(c->infile->len-27);
+	if(tsize<27 || tsize>c->infile->len) return 0;
+	dsize = de_getbyte(c->infile->len-25);
+	if(dsize<30) return 0;
+	has_ext = de_input_file_has_ext(c, "dwc");
+	if(tsize==27 && dsize==34) {
+		if(has_ext) return 100;
+		return 60;
+	}
+	if(has_ext) return 10;
+	return 0;
+}
+
+static void de_help_dwc(deark *c)
+{
+	de_msg(c, "-opt dwc:extract : Try to decompress");
+}
+
+void de_module_dwc(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "dwc";
+	mi->desc = "DWC compressed archive";
+	mi->run_fn = de_run_dwc;
+	mi->identify_fn = de_identify_dwc;
+	mi->help_fn = de_help_dwc;
+	mi->flags |= DE_MODFLAG_WARNPARSEONLY;
+}
+
+// **************************************************************************
+// EDI Install [Pro] packed file / EDI Pack / EDI LZSS / EDI LZSSLib
+// **************************************************************************
+
+static const u8 *g_edilzss_sig = (const u8*)"EDILZSS";
+
+static void edi_pack_decompressor_fn(struct de_arch_member_data *md)
+{
+	struct de_lzss1_params params;
+
+	de_zeromem(&params, sizeof(struct de_lzss1_params));
+	// (Haven't tried to figure out what the init params should be, if
+	// it matters.)
+	params.hst_init1 = DE_LSZZINIT_SPACES;
+	params.hst_init2 = DE_LSZZINIT_SPACES;
+	fmtutil_lzss1_codectype1(md->c, md->dcmpri, md->dcmpro, md->dres,
+		(void*)&params);
+}
+
+// This basically checks for a valid DOS filename.
+// EDI Pack is primarily a Windows 3.x format -- I'm not sure what filenames are
+// allowed.
+static int edi_is_filename_at(deark *c, de_arch_lctx *d, i64 pos)
+{
+	u8 buf[13];
+	size_t i;
+	int found_nul = 0;
+	int found_dot = 0;
+	int base_len = 0;
+	int ext_len = 0;
+
+	if(pos+13 > c->infile->len) return 0;
+	de_read(buf, pos, 13);
+
+	for(i=0; i<13; i++) {
+		u8 b;
+
+		b = buf[i];
+		if(b==0) {
+			found_nul = 1;
+			break;
+		}
+		else if(b=='.') {
+			if(found_dot) return 0;
+			found_dot = 1;
+		}
+		else if(b<33 || b=='"' || b=='*' || b=='+' || b==',' || b=='/' ||
+			b==':' || b==';' || b=='<' || b=='=' || b=='>' || b=='?' ||
+			b=='[' || b=='\\' || b==']' || b=='|' || b==127)
+		{
+			return 0;
+		}
+		else {
+			// TODO: Are capital letters allowed in this format? If not, that
+			// would be a good thing to check for.
+			if(found_dot) ext_len++;
+			else base_len++;
+		}
+	}
+
+	if(!found_nul || base_len<1 || base_len>8 || ext_len>3) return 0;
+	return 1;
+}
+
+// Sets d->fmtver to:
+//  0 = Not a known format
+//  1 = EDI Pack "EDILZSS1"
+//  2 = EDI Pack "EDILZSS2"
+//  10 = EDI LZSSLib EDILZSSA.DLL
+//  Other formats might exist, but are unlikely to ever be supported:
+//  * EDI LZSSLib EDILZSSB.DLL
+//  * EDI LZSSLib EDILZSSC.DLL
+static void edi_detect_fmt(deark *c, de_arch_lctx *d)
+{
+	u8 ver;
+	i64 pos = 0;
+
+	if(dbuf_memcmp(c->infile, pos, g_edilzss_sig, 7)) {
+		d->need_errmsg = 1;
+		return;
+	}
+	pos += 7;
+
+	ver = de_getbyte_p(&pos);
+	if(ver=='1') {
+		// There's no easy way to distinguish some LZSS1 formats. This will not
+		// always work.
+		if(edi_is_filename_at(c, d, pos)) {
+			d->fmtver = 1;
+		}
+		else {
+			d->fmtver = 10;
+		}
+	}
+	else if(ver=='2') {
+		d->fmtver = 2;
+	}
+	else {
+		d->need_errmsg = 1;
+	}
+}
+
+static void de_run_edi_pack(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	struct de_arch_member_data *md = NULL;
+	i64 pos = 0;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_WINDOWS1252);
+
+	edi_detect_fmt(c, d);
+	if(d->fmtver==0) goto done;
+	else if(d->fmtver==10) {
+		de_declare_fmt(c, "EDI LZSSLib");
+	}
+	else {
+		de_declare_fmtf(c, "EDI Pack LZSS%d", d->fmtver);
+	}
+	pos = 8;
+
+	md = de_arch_create_md(c, d);
+	if(d->fmtver==1 || d->fmtver==2) {
+		dbuf_read_to_ucstring(c->infile, pos, 12, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+			d->input_encoding);
+		de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+		pos += 13;
+	}
+
+	if(d->fmtver==2) {
+		de_arch_read_field_orig_len_p(md, &pos);
+	}
+
+	if(pos > c->infile->len) {
+		d->need_errmsg = 1;
+		goto done;
+	}
+
+	md->cmpr_pos = pos;
+	md->cmpr_len = c->infile->len - md->cmpr_pos;
+	md->dfn = edi_pack_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	de_arch_destroy_md(c, md);
+	if(d->need_errmsg) {
+		de_err(c, "Bad or unsupported EDI Pack format");
+	}
+	de_arch_destroy_lctx(c, d);
+}
+
+static int de_identify_edi_pack(deark *c)
+{
+	if(!dbuf_memcmp(c->infile, 0, g_edilzss_sig, 7)) {
+		u8 v;
+
+		v = de_getbyte(7);
+		if(v=='1' || v=='2') return 100;
+		return 0;
+	}
+	return 0;
+}
+
+void de_module_edi_pack(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "edi_pack";
+	mi->desc = "EDI Install packed file";
+	mi->run_fn = de_run_edi_pack;
+	mi->identify_fn = de_identify_edi_pack;
+}
+
+// **************************************************************************
+// Quarterdeck QIP
+// **************************************************************************
+
+// Returns 0 if no member was found at md->member_hdr_pos.
+static int do_qip_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	int saved_indent_level;
+	i64 pos;
+	UI index;
+	int retval = 0;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	de_dbg(c, "member at %" I64_FMT, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+	pos = md->member_hdr_pos;
+	if(dbuf_memcmp(c->infile, pos, "QD", 2)) goto done;
+	pos += 2;
+	retval = 1;
+	pos += 2; // ?
+	de_arch_read_field_cmpr_len_p(md, &pos);
+	index = (UI)de_getu16le_p(&pos); // ?
+	de_dbg(c, "index: %u", index);
+
+	if(d->fmtver>=2) {
+		md->crc_reported = (u32)de_getu32le_p(&pos);
+		de_dbg(c, "crc (reported): 0x%08x", (UI)md->crc_reported);
+	}
+
+	de_arch_read_field_dos_attr_p(md, &pos); // ?
+
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_TD, &pos);
+	de_arch_read_field_orig_len_p(md, &pos);
+	dbuf_read_to_ucstring(c->infile, pos, 12, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+	pos += 12;
+	pos += 1; // Maybe to allow the name to always be NUL terminated?
+
+	md->cmpr_pos = pos;
+	de_dbg(c, "cmpr data at %" I64_FMT, md->cmpr_pos);
+	md->dfn = dclimplode_decompressor_fn;
+	if(d->fmtver>=2) {
+		md->validate_crc = 1;
+	}
+
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+	return retval;
+}
+
+static void qip_do_v1(deark *c, de_arch_lctx *d)
+{
+	i64 pos = 0;
+	struct de_arch_member_data *md = NULL;
+
+	// This version doesn't have an index, but we sort of pretend it does,
+	// so that v1 and v2 can be handled pretty much the same.
+
+	while(1) {
+		i64 cmpr_len;
+
+		if(pos+32 >= c->infile->len) goto done;
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+
+		md->member_hdr_pos = pos;
+		cmpr_len = de_getu32le(pos+4);
+		if(!do_qip_member(c, d, md)) {
+			goto done;
+		}
+		pos += 32 + cmpr_len;
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+}
+
+static void qip_do_v2(deark *c, de_arch_lctx *d)
+{
+	i64 pos;
+	i64 index_pos;
+	i64 index_len;
+	i64 index_endpos;
+	i64 i;
+	struct de_arch_member_data *md = NULL;
+
+	pos = 2;
+	d->num_members = de_getu16le_p(&pos);
+	de_dbg(c, "number of members: %" I64_FMT, d->num_members);
+	index_len = de_getu32le_p(&pos);
+	de_dbg(c, "index size: %" I64_FMT, index_len); // ??
+	d->crco = de_crcobj_create(c, DE_CRCOBJ_CRC32_IEEE);
+	index_pos = 16;
+
+	de_dbg(c, "index at %" I64_FMT, index_pos);
+	index_endpos = index_pos+index_len;
+	if(index_endpos > c->infile->len) goto done;
+	pos = index_pos;
+
+	for(i=0; i<d->num_members; i++) {
+		if(pos+16 > index_endpos) goto done;
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+
+		md->member_hdr_pos = de_getu32le_p(&pos);
+		(void)do_qip_member(c, d, md);
+		pos += 12;
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+}
+
+static void de_run_qip(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	u8 b;
+	int unsupp_flag = 0;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	b = de_getbyte(1);
+	if(b=='P') {
+		d->fmtver = 2;
+	}
+	else if(b=='D') {
+		d->fmtver = 1;
+	}
+	else {
+		unsupp_flag = 1;
+		goto done;
+	}
+
+	if(d->fmtver==2) {
+		if(de_getbyte(8)!=0x02) {
+			unsupp_flag = 1;
+			goto done;
+		}
+	}
+
+	if(d->fmtver==1) {
+		qip_do_v1(c, d);
+	}
+	else {
+		qip_do_v2(c, d);
+	}
+
+done:
+	if(unsupp_flag) {
+		de_err(c, "Not a supported QIP format");
+	}
+	de_arch_destroy_lctx(c, d);
+}
+
+static int de_identify_qip(deark *c)
+{
+	u8 b;
+	i64 n;
+
+	if(de_getbyte(0)!='Q') return 0;
+	b = de_getbyte(1);
+	if(b=='P') {
+		if(de_getbyte(8)!=0x02) return 0;
+		n = de_getu32le(16);
+		if(n>c->infile->len) return 0;
+		if(!dbuf_memcmp(c->infile, n, "QD", 2)) return 100;
+	}
+	else if(b=='D') {
+		if(de_getu16le(2)==0 &&
+			de_getu16le(8)==1)
+		{
+			return 70;
+		}
+	}
+	return 0;
+}
+
+void de_module_qip(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "qip";
+	mi->desc = "QIP (Quarterdeck)";
+	mi->run_fn = de_run_qip;
+	mi->identify_fn = de_identify_qip;
+}
+
+// **************************************************************************
+// PCX Library (by Genus Microprogramming)
+// **************************************************************************
+
+#define FMT_PCXLIB 0
+#define FMT_GXLIB  1
+
+static void noncompressed_decompressor_fn(struct de_arch_member_data *md)
+{
+	fmtutil_decompress_uncompressed(md->c, md->dcmpri, md->dcmpro, md->dres, 0);
+}
+
+static void read_pcxgxlib_filename(deark *c, de_arch_lctx *d, struct de_arch_member_data *md,
+	i64 pos)
+{
+	de_ucstring *tmps = NULL;
+
+	tmps = ucstring_create(c);
+	dbuf_read_to_ucstring(c->infile, pos, 8, tmps, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	ucstring_strip_trailing_spaces(tmps);
+	ucstring_append_ucstring(md->filename, tmps);
+	ucstring_empty(tmps);
+	dbuf_read_to_ucstring(c->infile, pos+8, 4, tmps, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	ucstring_strip_trailing_spaces(tmps);
+	if(tmps->len>1) {
+		// The extension part includes the dot. If len==1, there is no extension.
+		ucstring_append_ucstring(md->filename, tmps);
+	}
+	ucstring_destroy(tmps);
+}
+
+static void do_pcxgxlib_member(deark *c,  de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	int saved_indent_level;
+	i64 pos = md->member_hdr_pos;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	de_dbg(c, "member file at %" I64_FMT, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+
+	if(d->fmtcode==FMT_PCXLIB) {
+		pos++; // already read
+	}
+	if(d->fmtcode==FMT_GXLIB) {
+		md->cmpr_meth = de_getbyte_p(&pos);
+	}
+
+	read_pcxgxlib_filename(c, d, md, pos);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+	pos += 13;
+
+	if(d->fmtcode==FMT_GXLIB) {
+		md->cmpr_pos = de_getu32le_p(&pos);
+		de_dbg(c, "cmpr. data pos: %" I64_FMT, md->cmpr_pos);
+	}
+
+	de_arch_read_field_cmpr_len_p(md, &pos);
+
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_DT, &pos);
+
+	if(d->fmtcode==FMT_PCXLIB) {
+		md->cmpr_meth = (UI)de_getu16le_p(&pos);
+	}
+
+	de_dbg(c, "packing type: %u", (UI)md->cmpr_meth);
+	if(md->cmpr_meth==0) {
+		md->orig_len = md->cmpr_len;
+		md->orig_len_known = 1;
+	}
+	else {
+		de_err(c, "Unsupported compression: %u", (UI)md->cmpr_meth);
+		goto done;
+	}
+
+	if(d->fmtcode==FMT_PCXLIB) {
+		pos += 40; // note
+		pos += 20; // unused
+	}
+
+	if(d->fmtcode==FMT_PCXLIB) {
+		md->cmpr_pos = pos;
+	}
+
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		d->fatalerrflag = 1;
+		goto done;
+	}
+
+	if(d->fmtcode==FMT_GXLIB) {
+		md->member_total_size = pos - md->member_hdr_pos;
+	}
+	else {
+		md->member_total_size = md->cmpr_pos + md->cmpr_len - md->member_hdr_pos;
+	}
+
+	md->dfn = noncompressed_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static void do_pcxgxlib_main(deark *c, de_module_params *mparams, UI fmtcode)
+{
+	i64 pos = 0;
+	i64 member_count = 0;
+	struct de_arch_member_data *md = NULL;
+	de_arch_lctx *d = NULL;
+
+	d = de_arch_create_lctx(c);
+	d->fmtcode = fmtcode;
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	if(d->fmtcode==FMT_GXLIB) {
+		pos += 2;
+		pos += 50; // copyright message
+		d->fmtver = (int)de_getu16le_p(&pos);
+		de_dbg(c, "gxLib ver: %d", d->fmtver);
+		pos += 40; // label
+		d->num_members = de_getu16le_p(&pos);
+		de_dbg(c, "number of members: %" I64_FMT, d->num_members);
+		pos += 32; // unused
+	}
+	else {
+		pos += 10;
+		pos += 50;
+		d->fmtver = (int)de_getu16le_p(&pos);
+		de_dbg(c, "pcxLib ver: %d", d->fmtver);
+		pos += 40; // TODO: volume label
+		pos += 20; // unused
+	}
+
+	while(1) {
+		if(pos >= c->infile->len) goto done;
+
+		if(d->fmtcode==FMT_GXLIB) {
+			if(member_count >= d->num_members) goto done;
+		}
+
+		if(d->fmtcode==FMT_PCXLIB) {
+			u8 b;
+
+			b = de_getbyte(pos);
+			if(b != 0x01) goto done;
+		}
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		md->member_hdr_pos = pos;
+		do_pcxgxlib_member(c, d, md);
+		if(d->fatalerrflag) goto done;
+		if(md->member_total_size<1) goto done;
+		pos += md->member_total_size;
+		member_count++;
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+	de_arch_destroy_lctx(c, d);
+}
+
+static void de_run_pcxlib(deark *c, de_module_params *mparams)
+{
+	do_pcxgxlib_main(c, mparams, FMT_PCXLIB);
+}
+
+static int de_identify_pcxlib(deark *c)
+{
+	if(!dbuf_memcmp(c->infile, 0, "pcxLib\0", 7)) return 100;
+	return 0;
+}
+
+void de_module_pcxlib(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "pcxlib";
+	mi->desc = "PCX Library";
+	mi->run_fn = de_run_pcxlib;
+	mi->identify_fn = de_identify_pcxlib;
+}
+
+// **************************************************************************
+// GX Library / Genus Graphics Library
+// **************************************************************************
+
+static void de_run_gxlib(deark *c, de_module_params *mparams)
+{
+	do_pcxgxlib_main(c, mparams, FMT_GXLIB);
+}
+
+static int de_identify_gxlib(deark *c)
+{
+	UI n;
+	u8 has_copyr, has_ver;
+
+	n = (UI)de_getu16be(0);
+	if(n!=0x01ca) return 0;
+	has_copyr = !dbuf_memcmp(c->infile, 2, "Copyri", 6);
+	n = (UI)de_getu16le(52);
+	has_ver = (n==100);
+	if(has_copyr && has_ver) return 100;
+	if(has_copyr || has_ver) return 25;
+	return 0;
+}
+
+void de_module_gxlib(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "gxlib";
+	mi->desc = "GX Library";
+	mi->run_fn = de_run_gxlib;
+	mi->identify_fn = de_identify_gxlib;
+}
+
+// **************************************************************************
+// MDCD
+// **************************************************************************
+
+#define MDCD_MINHEADERLEN 54
+
+static int mdcd_sig_at(deark *c, i64 pos)
+{
+	return !dbuf_memcmp(c->infile, pos, (const void*)"MDmd", 4);
+}
+
+static void mdcd_decompressor_fn(struct de_arch_member_data *md)
+{
+	deark *c = md->c;
+
+	if(md->cmpr_meth==1) {
+		struct de_lzw_params delzwp;
+
+		de_zeromem(&delzwp, sizeof(struct de_lzw_params));
+		delzwp.fmt = DE_LZWFMT_ZOOLZD;
+		fmtutil_decompress_lzw(c, md->dcmpri, md->dcmpro, md->dres, &delzwp);
+	}
+	else if(md->cmpr_meth==0) {
+		fmtutil_decompress_uncompressed(c, md->dcmpri, md->dcmpro, md->dres, 0);
+	}
+	else {
+		de_dfilter_set_generic_error(c, md->dres, NULL);
+	}
+}
+
+// Returns 0 if no member was found at md->member_hdr_pos.
+static int do_mdcd_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	i64 pos;
+	i64 s_len;
+	i64 hdrlen;
+	UI attr;
+	int saved_indent_level;
+	int retval = 0;
+	int have_path = 0;
+	u8 hdrtype;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	// Note: For info about the MDCD header format, see MDCD.PAS, near the
+	// "FileHeader = Record" line.
+
+	pos = md->member_hdr_pos;
+	if(!mdcd_sig_at(c, pos)) {
+		if(md->member_hdr_pos==0) {
+			de_err(c, "Not an MDCD file");
+		}
+		else {
+			de_dbg(c, "[member not found at %" I64_FMT "]", pos);
+		}
+		goto done;
+	}
+	pos += 4;
+
+	de_dbg(c, "member at %" I64_FMT, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+	pos++; // software version?
+	hdrtype = de_getbyte_p(&pos);
+	de_dbg(c, "header type: %u", (UI)hdrtype);
+	if(hdrtype!=1) {
+		d->need_errmsg = 1;
+		goto done;
+	}
+	hdrlen = de_getu16le_p(&pos);
+	de_dbg(c, "header len: %" I64_FMT, hdrlen);
+	if(hdrlen<MDCD_MINHEADERLEN) {
+		d->need_errmsg = 1;
+		goto done;
+	}
+
+	pos += 16; // various
+	md->cmpr_meth = (UI)de_getbyte_p(&pos);
+	de_dbg(c, "cmpr. method: %u", md->cmpr_meth);
+	de_arch_read_field_orig_len_p(md, &pos);
+	de_arch_read_field_cmpr_len_p(md, &pos);
+
+	md->cmpr_pos = md->member_hdr_pos + hdrlen;
+	// TODO: If we can set the filename first, we should.
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		goto done;
+	}
+	md->member_total_size = hdrlen + md->cmpr_len;
+	retval = 1;
+
+	attr = (UI)de_getu16le_p(&pos);
+	de_arch_handle_field_dos_attr(md, attr);
+
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_TD, &pos);
+
+	md->crc_reported = (u32)de_getu16le_p(&pos);
+	de_dbg(c, "crc (reported): 0x%04x", (UI)md->crc_reported);
+
+	s_len = de_getbyte_p(&pos);
+	if(s_len>12) {
+		d->need_errmsg = 1;
+		goto done;
+	}
+	md->tmpfn_base = ucstring_create(c);
+	dbuf_read_to_ucstring(c->infile, pos, s_len, md->tmpfn_base, 0, d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->tmpfn_base));
+	pos += 12;
+
+	if(hdrlen>=55) {
+		s_len = de_getbyte_p(&pos);
+	}
+	else {
+		s_len = 0;
+	}
+	md->tmpfn_path = ucstring_create(c);
+	dbuf_read_to_ucstring(c->infile, pos, s_len, md->tmpfn_path, 0, d->input_encoding);
+	de_dbg(c, "path: \"%s\"", ucstring_getpsz_d(md->tmpfn_path));
+
+	// Ignore paths that look like absolute paths. Not sure what to do with them.
+	have_path = ucstring_isnonempty(md->tmpfn_path);
+
+	if(have_path && md->tmpfn_path->len >= 1 && (md->tmpfn_path->str[0]=='\\' ||
+		md->tmpfn_path->str[0]=='/'))
+	{
+		have_path = 0;
+	}
+	if(have_path && md->tmpfn_path->len >= 2 && md->tmpfn_path->str[1]==':') {
+		have_path = 0;
+	}
+
+	if(have_path) {
+		de_arch_fixup_path(md->tmpfn_path, 0x1);
+		ucstring_append_ucstring(md->filename, md->tmpfn_path);
+		md->set_name_flags |= DE_SNFLAG_FULLPATH;
+	}
+	ucstring_append_ucstring(md->filename, md->tmpfn_base);
+
+	de_dbg(c, "compressed data at %" I64_FMT ", len=%" I64_FMT, md->cmpr_pos, md->cmpr_len);
+
+	if(md->cmpr_meth>1) {
+		de_err(c, "Unsupported compression: %u", (UI)md->cmpr_meth);
+		goto done;
+	}
+
+	md->dfn = mdcd_decompressor_fn;
+
+	md->validate_crc = 1;
+	// When extracting, MDCD (1.0) does not validate the CRC of files that were
+	// stored uncompressed. Some files seem to exploit this, and set the CRC to
+	// 0, so we tolerate it with a warning.
+	if(md->crc_reported==0 && md->cmpr_meth==0) {
+		md->behavior_on_wrong_crc = 1;
+	}
+
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+	return retval;
+}
+
+static void de_run_mdcd(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	i64 pos = 0;
+	struct de_arch_member_data *md = NULL;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+	d->crco = de_crcobj_create(c, DE_CRCOBJ_CRC16_XMODEM);
+
+	while(1) {
+		if(pos+MDCD_MINHEADERLEN >= c->infile->len) goto done;
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		md->member_hdr_pos = pos;
+		if(!do_mdcd_member(c, d, md)) goto done;
+		if(md->member_total_size<=0) goto done;
+		pos += md->member_total_size;
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported MDCD file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+}
+
+static int de_identify_mdcd(deark *c)
+{
+	if(mdcd_sig_at(c, 0)) {
+		return 91;
+	}
+	return 0;
+}
+
+void de_module_mdcd(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "mdcd";
+	mi->desc = "MDCD archive";
+	mi->run_fn = de_run_mdcd;
+	mi->identify_fn = de_identify_mdcd;
+}
+
+// **************************************************************************
+// CAZIP
+// **************************************************************************
+
+static void de_run_cazip(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	struct de_arch_member_data *md = NULL;
+	i64 pos;
+	UI verfield, field10, field12, field18;
+	u8 mjver, mnver;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->crco = de_crcobj_create(c, DE_CRCOBJ_CRC32_IEEE);
+
+	md = de_arch_create_md(c, d);
+
+	pos = 8;
+	// Only known versions are "10" and "33".
+	verfield = (UI)de_getu16be_p(&pos);
+	mjver = verfield>>8;
+	mnver = verfield&0xff;
+	de_dbg(c, "version: %c.%c", (int)de_byte_to_printable_char(mjver),
+		(int)de_byte_to_printable_char(mnver));
+
+	if(mjver>=0x32) {
+		field10 = (UI)de_getu16le_p(&pos);
+		field12 = (UI)de_getu16le_p(&pos);
+		md->crc_reported = (u32)de_getu32le_p(&pos);
+		de_dbg(c, "crc (reported): 0x%08x", (UI)md->crc_reported);
+		field18 = (UI)de_getu16le_p(&pos);
+	}
+	else {
+		field10 = 1;
+		field12 = 1;
+		field18 = 0;
+	}
+
+	if((verfield!=0x3130 && verfield!=0x3333) || field10!=1 || field12!=1 || field18!=0) {
+		de_warn(c, "This version of CAZIP might not be handled correctly");
+	}
+
+	md->cmpr_pos = pos;
+	md->cmpr_len = c->infile->len - md->cmpr_pos;
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		goto done;
+	}
+
+	md->dfn = dclimplode_decompressor_fn;
+	if(mjver>=0x32) {
+		md->validate_crc = 1;
+	}
+	de_arch_extract_member_file(md);
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+		md = NULL;
+	}
+	if(d) {
+		de_arch_destroy_lctx(c, d);
+	}
+}
+
+static int de_identify_cazip(deark *c)
+{
+	if(dbuf_memcmp(c->infile, 0, (const void*)"\x0d\x0a\x1a" "CAZIP", 8)) {
+		return 0;
+	}
+
+	return 100;
+}
+
+void de_module_cazip(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "cazip";
+	mi->desc = "CAZIP compressed file";
+	mi->run_fn = de_run_cazip;
+	mi->identify_fn = de_identify_cazip;
+}
+
+// **************************************************************************
+// CMZ (Ami Pro installer archive)
+// **************************************************************************
+
+#define CMZ_MINHEADERLEN 21
+
+static int cmz_sig_at(deark *c, i64 pos)
+{
+	return !dbuf_memcmp(c->infile, pos, (const void*)"Clay", 4);
+}
+
+// Returns 0 if no member was found at md->member_hdr_pos.
+static int do_cmz_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	i64 pos;
+	i64 namelen;
+	int saved_indent_level;
+	int retval = 0;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	pos = md->member_hdr_pos;
+	if(!cmz_sig_at(c, pos)) {
+		if(md->member_hdr_pos==0) {
+			de_err(c, "Not a CMZ file");
+		}
+		else {
+			de_err(c, "Bad data found at %" I64_FMT, pos);
+		}
+		goto done;
+	}
+	pos += 4;
+
+	de_dbg(c, "member at %" I64_FMT, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+
+	de_arch_read_field_cmpr_len_p(md, &pos);
+	de_arch_read_field_orig_len_p(md, &pos);
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_DT, &pos);
+
+	namelen = de_getu16le_p(&pos);
+	if(namelen>255) {
+		d->need_errmsg = 1;
+		goto done;
+	}
+	pos += 2; // Unknown field (flags?)
+
+	dbuf_read_to_ucstring(c->infile, pos, namelen, md->filename, 0, d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+	pos += namelen;
+
+	md->cmpr_pos = pos;
+	de_dbg(c, "compressed data at %" I64_FMT ", len=%" I64_FMT, md->cmpr_pos, md->cmpr_len);
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		goto done;
+	}
+
+	md->member_total_size =  md->cmpr_pos + md->cmpr_len - md->member_hdr_pos;
+	retval = 1;
+
+	md->dfn = dclimplode_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+	return retval;
+}
+
+static void de_run_cmz(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	i64 pos = 0;
+	struct de_arch_member_data *md = NULL;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	while(1) {
+		if(pos+CMZ_MINHEADERLEN >= c->infile->len) goto done;
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		md->member_hdr_pos = pos;
+		if(!do_cmz_member(c, d, md)) goto done;
+		if(md->member_total_size<=0) goto done;
+		pos += md->member_total_size;
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+		md = NULL;
+	}
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported CMZ file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+}
+
+static int de_identify_cmz(deark *c)
+{
+	i64 name_len;
+	i64 cmpr_len;
+
+	if(!cmz_sig_at(c, 0)) {
+		return 0;
+	}
+
+	cmpr_len = de_getu32le(4);
+	name_len = de_getu16le(16);
+	if(cmpr_len==0 && name_len>0) {
+		return 60;
+	}
+	if(dclimplode_header_at(c, 20+name_len)) {
+		return 100;
+	}
+
+	return 0;
+}
+
+void de_module_cmz(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "cmz";
+	mi->desc = "CMZ installer archive";
+	mi->run_fn = de_run_cmz;
+	mi->identify_fn = de_identify_cmz;
+}
+
+// **************************************************************************
+// SHR - PC-Install "PC-Shrink" format
+// **************************************************************************
+
+#define PCSHRINK_MINHEADERLEN 48
+
+// Returns:
+//  0 - not SHR
+//  1 - old format
+//  2 - new format
+static int detect_pcshrink_internal(deark *c, u8 *pmultipart_flag)
+{
+	u8 b;
+	UI n;
+	i64 cmpr_len;
+
+	*pmultipart_flag = 0;
+	b = de_getbyte(13);
+	if(b==0x74) { // maybe old format
+		if(de_getbyte(0)!=0) return 0;
+		if(de_getbyte(16)!=0x74) return 0;
+		if(de_getbyte(56)==0) return 0; // 1st byte of filename
+		cmpr_len = de_getu32le(76);
+		if(cmpr_len!=0) {
+			if(!dclimplode_header_at(c, 104)) return 0;
+		}
+		return 1;
+	}
+	else if(b==0) { // maybe new format
+		if(de_getu16le(14)!=0x74) return 0;
+		n = (UI)de_getu16le(18);
+		if(n==0x75) {
+			*pmultipart_flag = 1;
+		}
+		else if(n!=0x74) {
+			return 0;
+		}
+		if(n==0x74) {
+			if(de_getbyte(58)==0) return 0; // 1st byte of filename
+			cmpr_len = de_getu32le(194);
+			if(cmpr_len!=0) {
+				if(!dclimplode_header_at(c, 226)) return 0;
+			}
+		}
+		if(de_getbyte(0)!=0) {
+			*pmultipart_flag = 1;
+		}
+		return 2;
+	}
+	return 0;
+}
+
+static int do_pcshrink_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	i64 pos;
+	int saved_indent_level;
+	int retval = 0;
+	i64 fnfieldlen;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	pos = md->member_hdr_pos;
+	de_dbg(c, "member at %" I64_FMT, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+
+	if(d->fmtver==2) {
+		fnfieldlen = 128;
+	}
+	else {
+		fnfieldlen = 14;
+	}
+	dbuf_read_to_ucstring(c->infile, pos, fnfieldlen, md->filename,
+		DE_CONVFLAG_STOP_AT_NUL, d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+
+	if(d->fmtver==2) {
+		de_arch_fixup_path(md->filename, 0);
+		md->set_name_flags |= DE_SNFLAG_FULLPATH;
+	}
+	pos += fnfieldlen;
+
+	pos++; // attributes?
+
+	if(d->fmtver==2) {
+		pos += 7;
+	}
+	else {
+		pos += 5;
+	}
+
+	de_arch_read_field_cmpr_len_p(md, &pos);
+
+	if(d->fmtver==2) {
+		de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+			DE_ARCH_TSTYPE_DOS_DXT, &pos);
+	}
+	else {
+		de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+			DE_ARCH_TSTYPE_DOS_DT, &pos);
+	}
+
+	if(d->fmtver==2) {
+		md->cmpr_pos = md->member_hdr_pos + 168;
+	}
+	else {
+		md->cmpr_pos = md->member_hdr_pos + 48;
+	}
+
+	de_dbg(c, "compressed data at %" I64_FMT ", len=%" I64_FMT, md->cmpr_pos, md->cmpr_len);
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		goto done;
+	}
+
+	md->member_total_size =  md->cmpr_pos + md->cmpr_len - md->member_hdr_pos;
+	retval = 1;
+
+	md->dfn = dclimplode_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+	return retval;
+}
+
+static void de_run_pcshrink(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	i64 pos = 0;
+	i64 idx;
+	u8 multipart_flag;
+	struct de_arch_member_data *md = NULL;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+
+	// Detect version
+	d->fmtver = detect_pcshrink_internal(c, &multipart_flag);
+	if(d->fmtver!=1 && d->fmtver!=2) {
+		de_err(c, "Not a PC-Shrink file");
+		goto done;
+	}
+	de_dbg(c, "format version: %d", d->fmtver);
+
+	// Read archive header
+	if(d->fmtver==2) {
+		d->num_members = de_getu16le(16);
+	}
+	else {
+		d->num_members = de_getu16le(14);
+	}
+	de_dbg(c, "number of members: %d", (int)d->num_members);
+
+	// TODO: Can we tell Windows files from DOS files?
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	if(d->fmtver==2) {
+		pos = 58;
+	}
+	else {
+		pos = 56;
+	}
+
+	if(multipart_flag) {
+		de_err(c, "Multi-part PC-Shrink files are not supported");
+		goto done;
+	}
+
+	for(idx=0; idx<d->num_members; idx++) {
+		if(pos+PCSHRINK_MINHEADERLEN >= c->infile->len) {
+			de_err(c, "Unexpected end of file");
+			goto done;
+		}
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		md->member_hdr_pos = pos;
+		if(!do_pcshrink_member(c, d, md)) goto done;
+		if(md->member_total_size<=0) goto done;
+		pos += md->member_total_size;
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+		md = NULL;
+	}
+	if(d) {
+		de_arch_destroy_lctx(c, d);
+	}
+}
+
+static int de_identify_pcshrink(deark *c)
+{
+	u8 multipart_flag;
+	int ver;
+
+	ver = detect_pcshrink_internal(c, &multipart_flag);
+	if(ver==1) {
+		return 60;
+	}
+	else if(ver==2) {
+		if(multipart_flag) return 40;
+		return 80;
+	}
+
+	return 0;
+}
+
+void de_module_pcshrink(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "pcshrink";
+	mi->desc = "PC-Install compressed archive";
+	mi->run_fn = de_run_pcshrink;
+	mi->identify_fn = de_identify_pcshrink;
+}
+
+// **************************************************************************
+// ARCV - Eschalon Setup / EDI Install
+// **************************************************************************
+
+// Warning: This ARCV code is not based on any specification. It may be wrong
+// or misleading.
+
+// This format was popular enough that I wanted to at least parse it, but I'm
+// not optimistic about figuring out how to decompress it.
+// Initial testing suggests LZ77 with a 4k window, possibly with adaptive
+// Huffman coding or arithmetic coding. But it's not LZHUF or LZARI.
+
+#define CODE_ARCV 0x41524356U
+#define CODE_BLCK 0x424c434bU
+#define CODE_CHNK 0x43484e4bU
+
+static void do_arcv_common_fields(deark *c, de_arch_lctx *d,
+	struct de_arch_member_data *md, i64 pos1, i64 *nbytes_consumed)
+{
+	i64 fnlen;
+	UI fver_maj1, fver_min1;
+	UI fver_maj2, fver_min2;
+	i64 pos = pos1;
+	UI attr;
+
+	fnlen = (i64)de_getbyte_p(&pos);
+	dbuf_read_to_ucstring(c->infile, pos, fnlen, md->filename, 0,
+		d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+	pos += fnlen;
+
+	de_arch_read_field_orig_len_p(md, &pos);
+	de_arch_read_field_cmpr_len_p(md, &pos);
+
+	attr = (UI)de_getu32le_p(&pos); // TODO: How big is this field
+	de_arch_handle_field_dos_attr(md, attr);
+
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_TD, &pos);
+
+	fver_min1 = (UI)de_getu16le_p(&pos);
+	fver_maj1 = (UI)de_getu16le_p(&pos);
+	de_dbg(c, "file ver (1): %u.%u", fver_maj1, fver_min1);
+	fver_min2 = (UI)de_getu16le_p(&pos);
+	fver_maj2 = (UI)de_getu16le_p(&pos);
+	de_dbg(c, "file ver (2): %u.%u", fver_maj2, fver_min2);
+
+	// Algorithm seems to be "CRC-32/JAMCRC".
+	// Same as the usual CRC-32, except it doesn't invert the bits as a final step.
+	md->crc_reported = (u32)de_getu32le_p(&pos);
+	de_dbg(c, "crc (reported): 0x%08x", (UI)md->crc_reported);
+
+	*nbytes_consumed = pos - pos1;
+}
+
+static void do_arcv_v1(deark *c, de_arch_lctx *d)
+{
+	struct de_arch_member_data *md = NULL;
+	i64 arcv_hdr_len;
+	i64 chnk_pos;
+	i64 chnk_hdr_len;
+	i64 chnk_dlen;
+	i64 pos;
+	i64 nbytes_consumed = 0;
+	u32 id;
+	int saved_indent_level;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	md = de_arch_create_md(c, d);
+
+	pos = 6;
+	arcv_hdr_len = de_getu16le_p(&pos);
+	de_dbg(c, "arcv hdr len: %" I64_FMT, arcv_hdr_len);
+	d->archive_flags = (UI)de_getu32le_p(&pos);
+	de_dbg(c, "flags: 0x%08x", (UI)d->archive_flags);
+
+	do_arcv_common_fields(c, d, md, pos, &nbytes_consumed);
+
+	pos = arcv_hdr_len; // Seek to the CHNK segment
+	chnk_pos = pos;
+	id = (u32)de_getu32be_p(&pos);
+	if(id != CODE_CHNK) {
+		d->need_errmsg = 1;
+		goto done;
+	}
+	pos += 2; // segment version number?
+	chnk_hdr_len = de_getu16le_p(&pos);
+	de_dbg(c, "chnk header len: %" I64_FMT, chnk_hdr_len);
+	pos += 4; // flags?
+	chnk_dlen = de_getu32le_p(&pos);
+	md->cmpr_pos = chnk_pos + chnk_hdr_len;
+	de_dbg(c, "file data at %" I64_FMT ", len=%" I64_FMT, md->cmpr_pos, chnk_dlen);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+	de_arch_destroy_md(c, md);
+}
+
+static void do_arcv_v2(deark *c, de_arch_lctx *d)
+{
+	i64 pos = 0;
+	i64 arcv_hdr_len;
+	i64 blck_hdr_len;
+	i64 blck_dlen;
+	u32 id;
+	struct de_arch_member_data *md = NULL;
+	int saved_indent_level;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	arcv_hdr_len = de_getu16le(6);
+	de_dbg(c, "arcv hdr len: %" I64_FMT, arcv_hdr_len);
+
+	pos = arcv_hdr_len;
+	while(1) {
+		i64 nbytes_consumed = 0;
+
+		if(pos >= c->infile->len) {
+			goto done;
+		}
+		de_dbg(c, "member at %" I64_FMT, pos);
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		md->member_hdr_pos = pos;
+
+		de_dbg_indent(c, 1);
+		id = (u32)de_getu32be_p(&pos);
+		if(id!=CODE_BLCK) {
+			de_dbg(c, "can't find item at %" I64_FMT, md->member_hdr_pos);
+			goto done;
+		}
+		pos += 2; // format version?
+		blck_hdr_len = de_getu16le_p(&pos);
+		de_dbg(c, "block hdr len: %" I64_FMT, blck_hdr_len);
+		pos += 4; // ?
+
+		blck_dlen = de_getu32le_p(&pos);
+		de_dbg(c, "block dlen: %" I64_FMT, blck_dlen);
+
+		pos = md->member_hdr_pos+16;
+
+		do_arcv_common_fields(c, d, md, pos, &nbytes_consumed);
+		pos += nbytes_consumed;
+
+		md->cmpr_pos = pos;
+		de_dbg(c, "file data at %" I64_FMT ", len=%" I64_FMT, md->cmpr_pos, md->cmpr_len);
+
+		pos = md->member_hdr_pos + blck_hdr_len + blck_dlen;
+		de_dbg_indent(c, -1);
+	}
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+}
+
+static void de_run_arcv(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	UI ver_maj;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_WINDOWS1252);
+
+	d->fmtver = (int)de_getu16le(4);
+	ver_maj = (UI)d->fmtver >> 8;
+	de_dbg(c, "format ver: 0x%04x", (UI)d->fmtver);
+	if(ver_maj==1) {
+		do_arcv_v1(c, d);
+	}
+	else if(ver_maj==2) {
+		do_arcv_v2(c, d);
+	}
+	else {
+		d->need_errmsg = 1;
+		goto done;
+	}
+
+done:
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported ARCV file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+}
+
+static int de_identify_arcv(deark *c)
+{
+	u8 ver;
+
+	if((UI)de_getu32be(0) != CODE_ARCV) return 0;
+	ver = de_getbyte(5);
+	if(ver==1 || ver==2) {
+		return 100;
+	}
+	return 0;
+}
+
+void de_module_arcv(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "arcv";
+	mi->desc = "ARCV installer archive";
+	mi->run_fn = de_run_arcv;
+	mi->identify_fn = de_identify_arcv;
+	mi->flags |= DE_MODFLAG_WARNPARSEONLY;
+}
+
+// **************************************************************************
+// AIN archive (Transas Marine Ltd)
+// **************************************************************************
+
+// This module doesn't do much. It parses the archive header, and computes
+// some checksums.
+
+static void ain_calc_hdr_checksum(deark *c, UI *pchksum)
+{
+	*pchksum = (UI)de_calccrc_oneshot(c->infile, 0, 22, DE_CRCOBJ_SUM_BYTES);
+	// No need to mod 2^16 here, since the max possible sum is much less than 2^16.
+	*pchksum ^= 0x5555;
+}
+
+static void do_ain_main(deark *c, de_arch_lctx *d)
+{
+	struct de_timestamp archive_timestamp;
+	UI hdr_checksum_reported;
+	UI hdr_checksum_calc;
+	i64 member_hdrs_pos;
+	i64 member_hdrs_len;
+	u8 b;
+	UI upd_speed;
+	UI cmpr_meth;
+	UI member_hdrs_checksum_reported;
+	UI member_hdrs_checksum_calc = 0;
+	UI volume;
+	i64 pos;
+
+	de_declare_fmt(c, "AIN archive");
+	if(c->module_disposition==DE_MODDISP_AUTODETECT) {
+		de_info(c, "Note: AIN support is limited to decoding the header");
+	}
+
+	pos = 1;
+	b = de_getbyte_p(&pos);
+	upd_speed = b >> 4;
+	de_dbg(c, "update speed: /u%u", upd_speed);
+	cmpr_meth = b & 0x0f;
+	de_dbg(c, "cmpr. method: /m%u", cmpr_meth);
+
+	pos += 1; // ?
+	b = de_getbyte_p(&pos);
+	de_dbg(c, "flags: 0x%02x", b);
+	pos += 2; // password-related
+	volume = (UI)de_getu16le_p(&pos);
+	de_dbg(c, "volume: %u", volume);
+
+	pos = 8;
+	d->num_members = de_getu16le_p(&pos);
+	de_dbg(c, "number of members: %" I64_FMT, d->num_members);
+
+	de_arch_read_field_dttm_p(d, &archive_timestamp, "archive",
+		DE_ARCH_TSTYPE_DOS_TD, &pos);
+
+	member_hdrs_pos = de_getu32le_p(&pos);
+	de_dbg(c, "member hdrs pos: %" I64_FMT, member_hdrs_pos);
+	member_hdrs_len = c->infile->len - member_hdrs_pos;
+
+	member_hdrs_checksum_reported = (UI)de_getu16le_p(&pos);
+	de_dbg(c, "member hdrs checksum (reported): 0x%04x", member_hdrs_checksum_reported);
+	member_hdrs_checksum_calc = (UI)de_calccrc_oneshot(c->infile, member_hdrs_pos,
+		member_hdrs_len, DE_CRCOBJ_SUM_BYTES);
+	member_hdrs_checksum_calc &= 0xffff;
+	de_dbg(c, "member hdrs checksum (calculated): 0x%04x", member_hdrs_checksum_calc);
+
+	pos += 2; // ?
+
+	hdr_checksum_reported = (UI)de_getu16le_p(&pos);
+	de_dbg(c, "archive hdr checksum (reported): 0x%04x", hdr_checksum_reported);
+
+	ain_calc_hdr_checksum(c, &hdr_checksum_calc);
+	de_dbg(c, "archive hdr checksum (calculated): 0x%04x", hdr_checksum_calc);
+
+	de_dbg(c, "file data at %" I64_FMT ", len=%" I64_FMT, pos, member_hdrs_pos-pos);
+	de_dbg(c, "member hdrs at %" I64_FMT ", len=%" I64_FMT, member_hdrs_pos, member_hdrs_len);
+}
+
+static void de_run_ain(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	do_ain_main(c, d);
+	de_arch_destroy_lctx(c, d);
+}
+
+static int de_identify_ain(deark *c)
+{
+	UI hdr_checksum_reported;
+	UI hdr_checksum_calc;
+	int has_ext;
+	i64 member_hdrs_pos;
+
+	if(de_getbyte(0)!=0x21) return 0;
+	if(de_getbyte(2)!=0x00) return 0;
+	member_hdrs_pos = de_getu32le(14);
+	if(member_hdrs_pos<24 || member_hdrs_pos>=c->infile->len) return 0;
+	hdr_checksum_reported = (UI)de_getu16le(22);
+	ain_calc_hdr_checksum(c, &hdr_checksum_calc);
+	if(hdr_checksum_calc != hdr_checksum_reported) return 0;
+	has_ext = de_input_file_has_ext(c, "ain");
+	return has_ext?100:50;
+}
+
+void de_module_ain(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "ain";
+	mi->desc = "AIN archive";
+	mi->run_fn = de_run_ain;
+	mi->flags |= DE_MODFLAG_HIDDEN;
+	mi->identify_fn = de_identify_ain;
+}
+
+// **************************************************************************
+// Hemera thumbnails file (.hta)
+// **************************************************************************
+
+static void de_run_hta(deark *c, de_module_params *mparams)
+{
+	struct de_arch_member_data *md = NULL;
+	i64 pos;
+	i64 num_members;
+	UI fmtver;
+	i64 idx;
+	de_arch_lctx *d = NULL;
+	int saved_indent_level;
+	i64 tracking_dpos = 0;
+	struct fmtutil_fmtid_ctx *idctx = NULL;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	idctx = de_malloc(c, sizeof(struct fmtutil_fmtid_ctx));
+
+	pos = 8;
+	fmtver = (UI)de_getu32le_p(&pos);
+	de_dbg(c, "format version: %u", fmtver);
+	if(fmtver!=100) { d->need_errmsg = 1; goto done; }
+	num_members = de_getu32le_p(&pos);
+	de_dbg(c, "number of members: %" I64_FMT, num_members);
+	if(pos+num_members*8 > c->infile->len) { d->need_errmsg = 1; goto done; }
+
+	for(idx=0; idx<num_members; idx++) {
+		i64 endpos;
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		de_dbg(c, "member[%" I64_FMT "]", idx);
+		de_dbg_indent(c, 1);
+
+		md->cmpr_pos = de_getu32le_p(&pos);
+		de_dbg(c, "data pos: %" I64_FMT, md->cmpr_pos);
+		de_arch_read_field_orig_len_p(md, &pos);
+		md->cmpr_len = md->orig_len;
+
+		if(md->cmpr_pos < tracking_dpos) { d->need_errmsg = 1; goto done; }
+		endpos = md->cmpr_pos + md->cmpr_len;
+		if(endpos > c->infile->len) { d->need_errmsg = 1; goto done; }
+		tracking_dpos = endpos;
+
+		de_zeromem(idctx, sizeof(struct fmtutil_fmtid_ctx));
+		idctx->inf = c->infile;
+		idctx->inf_pos = md->cmpr_pos;
+		idctx->inf_len = md->cmpr_len;
+		idctx->mode = FMTUTIL_FMTIDMODE_ALL_IMG;
+		fmtutil_fmtid(c, idctx);
+
+		de_finfo_set_name_from_sz(c, md->fi, idctx->ext_sz, 0, DE_ENCODING_LATIN1);
+		md->dfn = noncompressed_decompressor_fn;
+		de_arch_extract_member_file(md);
+
+		de_dbg_indent(c, -1);
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+		md = NULL;
+	}
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported HTA file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+	de_free(c, idctx);
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static int de_identify_hta(deark *c)
+{
+	if(!dbuf_memcmp(c->infile, 0, "\x89\x48\x54\x41\x0d\x0a\x1a\x0a", 8)) return 100;
+	return 0;
+}
+
+void de_module_hta(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "hta";
+	mi->desc = "Hemera thumbnails";
+	mi->run_fn = de_run_hta;
+	mi->identify_fn = de_identify_hta;
+}
+
+// **************************************************************************
+// HIT (Bogdan Ureche)
+// **************************************************************************
+
+#define HIT_MINHEADERLEN 20
+
+static UI hit_calc_hdr_checksum(struct de_arch_member_data *md)
+{
+	struct de_crcobj *crco = NULL;
+	UI x;
+
+	crco = de_crcobj_create(md->c, DE_CRCOBJ_SUM_BYTES);
+	de_crcobj_addslice(crco, md->d->inf, md->member_hdr_pos, 2);
+	de_crcobj_addslice(crco, md->d->inf, md->member_hdr_pos+3,
+		md->member_hdr_size-3);
+	x = de_crcobj_getval(crco);
+	x &= 0xff;
+	de_crcobj_destroy(crco);
+	return x;
+}
+
+static int do_BUhit_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	i64 pos = md->member_hdr_pos;
+	i64 fnlen;
+	UI hdr_checksum_reported;
+	UI hdr_checksum_calc;
+	UI flags_and_cmpr_meth;
+	int saved_indent_level;
+	int retval = 0;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	de_dbg(c, "member at %" I64_FMT, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+
+	md->member_hdr_size = de_getu16le_p(&pos);
+	de_dbg(c, "header len: %" I64_FMT, md->member_hdr_size);
+	if(md->member_hdr_size < HIT_MINHEADERLEN) goto done;
+
+	hdr_checksum_reported = (UI)de_getbyte_p(&pos);
+	de_dbg(c, "header checksum (reported): 0x%02x", hdr_checksum_reported);
+
+	hdr_checksum_calc = hit_calc_hdr_checksum(md);
+	de_dbg(c, "header checksum (calculated): 0x%02x", hdr_checksum_calc);
+
+	// bit 0x80 = garbled (reserved)
+	// bit 0x40 = Maybe a version flag? Affects the CRC field.
+	// bit 0x20 = unknown (reserved?)
+	// low 5 bits = compression method
+	flags_and_cmpr_meth = (UI)de_getbyte_p(&pos);
+	md->cmpr_meth = flags_and_cmpr_meth & 0x1f;
+	de_dbg(c, "cmpr. method: %u", md->cmpr_meth);
+
+	pos += 1; // ??
+
+	de_arch_read_field_cmpr_len_p(md, &pos);
+	de_arch_read_field_orig_len_p(md, &pos);
+
+	pos = md->member_hdr_pos+13;
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_TD, &pos);
+	de_arch_read_field_dos_attr_p(md, &pos);
+
+	pos += 2; // ??
+
+	md->crc_reported = (u32)de_getu32le_p(&pos);
+	de_dbg(c, "crc (reported): 0x%08x", (UI)md->crc_reported);
+
+	fnlen = (i64)de_getbyte_p(&pos);
+	dbuf_read_to_ucstring(c->infile, pos, fnlen, md->filename, 0,
+		d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+	pos += fnlen;
+
+	md->cmpr_pos = md->member_hdr_pos + md->member_hdr_size;
+	de_dbg(c, "cmpr data pos: %" I64_FMT, md->cmpr_pos);
+	md->member_total_size = md->member_hdr_size + md->cmpr_len;
+	retval = 1;
+	de_dbg_indent(c, -1);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+	return retval;
+}
+
+static void de_run_hit(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	struct de_arch_member_data *md = NULL;
+	i64 pos;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	pos = 2;
+
+	while(1) {
+		if(pos+HIT_MINHEADERLEN > c->infile->len) goto done;
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		md->member_hdr_pos = pos;
+
+		if(!do_BUhit_member(c, d, md)) goto done;
+		if(md->member_total_size<=0) goto done;
+		pos += md->member_total_size;
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+	de_arch_destroy_lctx(c, d);
+}
+
+static int de_identify_hit(deark *c)
+{
+	if(!de_input_file_has_ext(c, "hit")) return 0;
+	if((UI)de_getu16be(0) != 0x5542) return 0; // "UB"
+	return 45;
+}
+
+void de_module_hit(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "hit";
+	mi->desc = "HIT archive";
+	mi->run_fn = de_run_hit;
+	mi->flags |= DE_MODFLAG_WARNPARSEONLY;
+	mi->identify_fn = de_identify_hit;
+}
+
+// **************************************************************************
+// Binary II (Apple II format)
+// **************************************************************************
+
+// This struct is assumed to contain no pointers
+struct binary_ii_extra_md {
+	i64 filesize; // in 512-byte blocks
+	int num_members_remaining;
+};
+
+static void do_binary_ii_member(deark *c,
+	de_arch_lctx *d, struct de_arch_member_data *md, struct binary_ii_extra_md *b2_md)
+{
+	i64 pos1;
+	i64 pos;
+	UI filesize_hi;
+	i64 space_reqd_in_blocks;
+	i64 fnlen;
+	UI auxtype, auxtype_hi;
+	UI accesscode, accesscode_hi;
+	UI filetype, filetype_hi;
+	UI storagetype, storagetype_hi;
+	UI eof_hi;
+	UI crdate_raw;
+	UI crtime_raw;
+	UI moddate_raw;
+	UI modtime_raw;
+	UI ostype;
+	UI data_flags;
+	u8 fmt_ver;
+	int saved_indent_level;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	pos1 = md->member_hdr_pos;
+	de_dbg(c, "member at %" I64_FMT, pos1);
+	de_dbg_indent(c, 1);
+
+	// Skip ahead and read some "high bytes" fields first.
+	pos = pos1 + 109;
+	auxtype_hi = (UI)de_getu16le_p(&pos);
+	accesscode_hi = (UI)de_getbyte_p(&pos);
+	filetype_hi = (UI)de_getbyte_p(&pos);
+	storagetype_hi = (UI)de_getbyte_p(&pos);
+	filesize_hi = (UI)de_getu16le_p(&pos);
+	eof_hi = (UI)de_getbyte_p(&pos);
+
+	pos = pos1 + 3;
+	accesscode = (UI)de_getbyte_p(&pos);
+	accesscode = accesscode | (accesscode_hi<<8);
+	de_dbg(c, "access: 0x%04x", accesscode);
+
+	filetype = (UI)de_getbyte_p(&pos);
+	filetype = filetype | (filetype_hi<<8);
+	de_dbg(c, "file type: 0x%04x", filetype);
+
+	auxtype = (UI)de_getu16le_p(&pos);
+	auxtype = auxtype | (auxtype_hi<<16);
+	de_dbg(c, "aux type: 0x%08x",auxtype);
+
+	storagetype = (UI)de_getbyte_p(&pos);
+	storagetype = storagetype | (storagetype_hi<<8);
+	de_dbg(c, "storage type: 0x%04x", storagetype);
+
+	b2_md->filesize = de_getu16le_p(&pos);
+	b2_md->filesize |= ((i64)filesize_hi<<16);
+	de_dbg(c, "\"file size\": %" I64_FMT " (in 512-byte blocks)", b2_md->filesize);
+
+	moddate_raw = (UI)de_getu16le_p(&pos);
+	modtime_raw = (UI)de_getu16le_p(&pos);
+	de_prodos_datetime_to_timestamp(&md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY],
+		moddate_raw, modtime_raw);
+	dbg_timestamp(c, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod time");
+
+	crdate_raw = (UI)de_getu16le_p(&pos);
+	crtime_raw = (UI)de_getu16le_p(&pos);
+	de_prodos_datetime_to_timestamp(&md->fi->timestamp[DE_TIMESTAMPIDX_CREATE],
+		crdate_raw, crtime_raw);
+	dbg_timestamp(c, &md->fi->timestamp[DE_TIMESTAMPIDX_CREATE], "create time");
+
+	pos = pos1 + 20;
+	md->orig_len = (UI)dbuf_getint_ext(c->infile, pos, 3, 1, 0);
+	md->orig_len |= ((i64)eof_hi<<24);
+	de_dbg(md->c, "original size: %" I64_FMT, md->orig_len);
+	md->orig_len_known = 1;
+	md->cmpr_len = md->orig_len;
+	pos += 3;
+
+	fnlen = de_getbyte_p(&pos);
+	if(fnlen>64) {
+		d->need_errmsg = 1;
+		goto done;
+	}
+	dbuf_read_to_ucstring(c->infile, pos, fnlen, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+
+	pos = pos1 + 117;
+	space_reqd_in_blocks = de_getu32le_p(&pos);
+	de_dbg(c, "disk space req'd: %" I64_FMT " (in 512-byte blocks)", space_reqd_in_blocks);
+
+	ostype = (UI)de_getbyte_p(&pos);
+	de_dbg(c, "OS type: 0x%02x", ostype);
+
+	pos += 2; // [122] native file type
+	pos += 1; // [124] phantom file flag
+
+	data_flags = (UI)de_getbyte_p(&pos);
+	de_dbg(c, "data flags: 0x%02x", data_flags);
+
+	fmt_ver = de_getbyte_p(&pos);
+	de_dbg(c, "fmt ver: 0x%02x", (UI)fmt_ver);
+
+	b2_md->num_members_remaining = (int)de_getbyte_p(&pos);
+	de_dbg(c, "num members remaining: %d", b2_md->num_members_remaining);
+
+	md->cmpr_pos = pos;
+	md->dfn = noncompressed_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static int binary_ii_is_member_at(dbuf *f, i64 pos, u8 check_nr, int nr_expected)
+{
+	if(dbuf_memcmp(f, pos, (const void*)"\x0a\x47\x4c", 3)) return 0;
+	if(dbuf_getbyte(f, pos+18) != 0x02) return 0;
+	if(check_nr) {
+		int nr;
+
+		nr = (int)dbuf_getbyte(f, pos+127);
+		if(nr != nr_expected) return 0;
+	}
+	return 1;
+}
+
+static void de_run_binary_ii(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	struct de_arch_member_data *md = NULL;
+	struct binary_ii_extra_md *b2_md = NULL;
+	i64 pos = 0;
+
+	b2_md = de_malloc(c, sizeof(struct binary_ii_extra_md));
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_ASCII);
+
+	if(!binary_ii_is_member_at(c->infile, 0, 0, 0)) {
+		d->need_errmsg = 1;
+		goto done;
+	}
+
+	while(1) {
+		i64 npos1, npos2;
+		int ret;
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		de_zeromem(b2_md, sizeof(struct binary_ii_extra_md));
+
+		md->member_hdr_pos = pos;
+		do_binary_ii_member(c, d, md, b2_md);
+		if(d->fatalerrflag) goto done;
+		if(b2_md->num_members_remaining<1) goto done;
+
+		// I'm not sure how we're supposed to find the next archive member.
+		// We'll check two places.
+
+		// This is where "ibmnulib" seems to look for the next member:
+		npos1 = de_pad_to_n(md->cmpr_pos + md->cmpr_len, 128);
+		// This is where the Raymond Clay document says to look:
+		npos2 = md->cmpr_pos + 512*b2_md->filesize;
+
+		ret = binary_ii_is_member_at(c->infile, npos1, 1, b2_md->num_members_remaining-1);
+		if(ret) {
+			pos = npos1;
+		}
+		else if(npos2!=npos1) {
+			ret = binary_ii_is_member_at(c->infile, npos2, 1, b2_md->num_members_remaining-1);
+			if(ret) {
+				pos = npos2;
+			}
+		}
+
+		if(!ret) {
+			d->need_errmsg = 1;
+			goto done;
+		}
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported Binary II file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+	de_free(c, b2_md);
+}
+
+static int de_identify_binary_ii(deark *c)
+{
+	if(!binary_ii_is_member_at(c->infile, 0, 0, 0)) return 0;
+	return 90;
+}
+
+void de_module_binary_ii(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "binary_ii";
+	mi->desc = "Binary II";
+	mi->run_fn = de_run_binary_ii;
+	mi->identify_fn = de_identify_binary_ii;
+}
+
+// **************************************************************************
+// TRS-80 TC archive (.arc, .tc)
+// Made by The Compressor, by John Lauro.
+// [Written with help from UnTC, public domain software by Tim Koonce.]
+// **************************************************************************
+
+static void tc_decompress_rle(struct de_arch_member_data *md)
+{
+	u8 escchar;
+	i64 pos = md->dcmpri->pos;
+	i64 endpos = md->dcmpri->pos + md->dcmpri->len;
+	i64 nbytes_written = 0;
+	static const char *modname = "TC_RLE";
+
+	escchar = dbuf_getbyte_p(md->dcmpri->f, &pos);
+	while(1) {
+		u8 b0, b1, b2;
+		i64 ctmp;
+		i64 count = 0;
+		u8 val = 0;
+
+		if(pos >= endpos) goto done;
+
+		b0 = dbuf_getbyte_p(md->dcmpri->f, &pos);
+		if(b0 != escchar) {
+			dbuf_writebyte(md->dcmpro->f, b0);
+			nbytes_written++;
+			continue;
+		}
+
+		b1 = dbuf_getbyte_p(md->dcmpri->f, &pos);
+		if(b1==0) {
+			count = 1;
+			val = escchar;
+		}
+		else if(b1==1) { // run length 256 to 511
+			b2 = dbuf_getbyte_p(md->dcmpri->f, &pos);
+			count = 256 + (i64)b2;
+			val = dbuf_getbyte_p(md->dcmpri->f, &pos);
+		}
+		else if(b1==2) { // large  run length
+			ctmp = dbuf_getu16be_p(md->dcmpri->f, &pos);
+			count = 512 + ctmp;
+			val = dbuf_getbyte_p(md->dcmpri->f, &pos);
+		}
+		else if(b1>3) { // small  run length
+			count = (i64)b1;
+			val = dbuf_getbyte_p(md->dcmpri->f, &pos);
+		}
+		else {
+			de_dfilter_set_generic_error(md->c, md->dres, modname);
+			goto done;
+		}
+		dbuf_write_run(md->dcmpro->f, val, count);
+		nbytes_written += count;
+	}
+done:
+	if(md->dres->errcode==0) {
+		de_dbg(md->c, "decompressed %" I64_FMT " to %" I64_FMT " bytes",
+			pos-md->dcmpri->pos, nbytes_written);
+	}
+}
+
+static void tc_decompressor_fn(struct de_arch_member_data *md)
+{
+	deark *c = md->c;
+
+	if(md->cmpr_meth==0) {
+		fmtutil_decompress_uncompressed(c, md->dcmpri, md->dcmpro, md->dres, 0);
+	}
+	else if(md->cmpr_meth==1) {
+		tc_decompress_rle(md);
+	}
+	else {
+		de_dfilter_set_generic_error(c, md->dres, NULL);
+	}
+}
+static void do_tc_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	int saved_indent_level;
+	i64 seq_num;
+	i64 pos = md->member_hdr_pos;
+	de_ucstring *fn_ext = NULL;
+	u8 ver;
+	u8 ftype;
+	u8 aflag;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	de_dbg(c, "member at %" I64_FMT, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+
+	seq_num = (i64)de_getbyte_p(&pos);
+	de_dbg(c, "seq num: %d", (int)seq_num);
+	if(seq_num == 0) {
+		d->stop_flag = 1;
+		goto done;
+	}
+	if(seq_num != md->member_idx) {
+		d->fatalerrflag = 1;
+		d->need_errmsg = 1;
+		goto done;
+	}
+
+	// Presumably not a NUL-terminated string, but the flag won't hurt.
+	dbuf_read_to_ucstring(c->infile, pos, 8, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	pos += 8;
+	ucstring_strip_trailing_spaces(md->filename);
+
+	fn_ext = ucstring_create(c);
+	dbuf_read_to_ucstring(c->infile, pos, 3, fn_ext, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	pos += 3;
+	ucstring_strip_trailing_spaces(fn_ext);
+	if(ucstring_isnonempty(fn_ext)) {
+		ucstring_append_char(md->filename, '.');
+		ucstring_append_ucstring(md->filename, fn_ext);
+	}
+
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+
+	ftype = de_getbyte_p(&pos);
+	de_dbg(c, "file type: %u", (UI)ftype);
+	aflag = de_getbyte_p(&pos);
+	de_dbg(c, "ascii flag: %u", (UI)aflag);
+	ver = de_getbyte_p(&pos);
+	if(ver != 1) {
+		d->fatalerrflag = 1;
+		d->need_errmsg = 1;
+		goto done;
+	}
+
+	md->cmpr_len = dbuf_getint_ext(c->infile, pos, 3, 0, 0);
+	pos += 3;
+	de_dbg(md->c, "compressed size: %" I64_FMT, md->cmpr_len);
+
+	md->cmpr_meth = (UI)de_getbyte_p(&pos);
+	de_dbg(c, "cmpr. method: %u", md->cmpr_meth);
+
+	md->cmpr_pos = pos;
+	de_dbg(c, "file data pos: %" I64_FMT, md->cmpr_pos);
+	md->member_total_size = md->cmpr_pos + md->cmpr_len - md->member_hdr_pos;
+
+	if(md->cmpr_meth>1) {
+		de_err(c, "Unsupported compression: %u", (UI)md->cmpr_meth);
+		goto done;
+	}
+
+	md->dfn = tc_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	ucstring_destroy(fn_ext);
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static void de_run_tc_trs80(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	struct de_arch_member_data *md = NULL;
+	i64 pos = 0;
+	i64 seq_num = 0;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 0;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_ASCII);
+
+	while(1) {
+		if(pos >= c->infile->len) {
+			d->fatalerrflag = 1;
+			d->need_errmsg = 1;
+			goto done;
+		}
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+
+		seq_num++; // 1-based
+		md = de_arch_create_md(c, d);
+		md->member_hdr_pos = pos;
+		md->member_idx = seq_num;
+		do_tc_member(c, d, md);
+		if(d->stop_flag || d->fatalerrflag || md->member_total_size<1) {
+			goto done;
+		}
+		pos += md->member_total_size;
+	}
+
+done:
+
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported TC file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+}
+
+static int de_identify_tc_trs80(deark *c)
+{
+	int has_ext = 0;
+	u8 b;
+	i64 n;
+	i64 i;
+
+	if(de_getbyte(0)!=1) return 0; // seq num #1
+	if(de_getbyte(14)!=1) return 0; // format ver
+	if(de_getbyte(18) >= 2) return 0; // cmpr meth
+
+	for(i=0; i<11; i++) { // filename
+		b = de_getbyte(1+i);
+		if(b<32) return 0;
+		if(i==0 && b==32) return 0;
+	}
+
+	b = de_getbyte(13); // ascii flag
+	if(b!=0 && b!=255) return 0;
+
+	n = (de_getu32be(14) & 0xffffff) + 19; // offset of member #2
+	if(n >= c->infile->len) return 0;
+	b = de_getbyte(n); // seq num #2
+	if(b!=0 && b!=2) return 0;
+	if(b!=0) {
+		if(n+1+18+1 > c->infile->len) return 0;
+	}
+
+	if(de_input_file_has_ext(c, "arc")) has_ext = 1;
+	else if(de_input_file_has_ext(c, "tc")) has_ext = 1;
+	if(has_ext) return 75;
+	else return 15;
+}
+
+void de_module_tc_trs80(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "tc_trs80";
+	mi->desc = "The Compressor (TRS-80 archive)";
+	mi->run_fn = de_run_tc_trs80;
+	mi->identify_fn = de_identify_tc_trs80;
+}
+
+// **************************************************************************
+// .EA/.PEA installer-archive
+// **************************************************************************
+
+#define EA_MINHEADERLEN 30
+
+static int ea_sig_at(deark *c, i64 pos)
+{
+	return !dbuf_memcmp(c->infile, pos, (const void*)"\x1a" "EA", 3);
+}
+
+static void ea_decompressor_fn(struct de_arch_member_data *md)
+{
+	deark *c = md->c;
+
+	if(md->cmpr_meth==1) {
+		struct de_lzw_params delzwp;
+
+		de_zeromem(&delzwp, sizeof(struct de_lzw_params));
+		delzwp.fmt = DE_LZWFMT_TIFFOLD;
+		fmtutil_decompress_lzw(c, md->dcmpri, md->dcmpro, md->dres, &delzwp);
+	}
+	else if(md->cmpr_meth==0) {
+		fmtutil_decompress_uncompressed(c, md->dcmpri, md->dcmpro, md->dres, 0);
+	}
+	else {
+		de_dfilter_set_generic_error(c, md->dres, NULL);
+	}
+}
+
+static int do_ea_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	i64 pos;
+	int saved_indent_level;
+	int retval = 0;
+	u8 unk1;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	pos = md->member_hdr_pos;
+	if(!ea_sig_at(c, pos)) {
+		if(md->member_hdr_pos==0) {
+			de_err(c, "Not an EA file");
+		}
+		else {
+			d->need_errmsg = 1;
+		}
+		goto done;
+	}
+	pos += 3;
+
+	de_dbg(c, "member at %" I64_FMT, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+
+	dbuf_read_to_ucstring(c->infile, pos, 12, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+	pos += 13;
+
+	// at 16
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_DT, &pos);
+	md->cmpr_meth = (UI)de_getbyte_p(&pos);
+	de_dbg(c, "cmpr. method: %u", md->cmpr_meth);
+	de_arch_read_field_orig_len_p(md, &pos);
+	de_arch_read_field_cmpr_len_p(md, &pos);
+	// at 29
+	md->member_hdr_size = (i64)de_getbyte_p(&pos);
+	unk1 = de_getbyte_p(&pos);
+	if(md->member_hdr_size!=48 || unk1!=1) {
+		// We're strict about this, because this format has no checksum/CRC.
+		d->need_errmsg = 1;
+		goto done;
+	}
+
+	md->cmpr_pos = md->member_hdr_pos + md->member_hdr_size;
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		goto done;
+	}
+	md->member_total_size = md->member_hdr_size + md->cmpr_len;
+	retval = 1;
+
+	de_dbg(c, "compressed data at %" I64_FMT ", len=%" I64_FMT, md->cmpr_pos, md->cmpr_len);
+
+	if(md->cmpr_meth>1) {
+		de_err(c, "Unsupported compression: %u", (UI)md->cmpr_meth);
+		goto done;
+	}
+
+	md->dfn = ea_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+	return retval;
+}
+
+static void de_run_ea_arch(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	i64 pos = 0;
+	struct de_arch_member_data *md = NULL;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	while(1) {
+		if(pos+EA_MINHEADERLEN >= c->infile->len) goto done;
+
+		if(md) {
+			de_arch_destroy_md(c, md);
+			md = NULL;
+		}
+		md = de_arch_create_md(c, d);
+		md->member_hdr_pos = pos;
+		if(!do_ea_member(c, d, md)) goto done;
+		if(md->member_total_size<=0) goto done;
+		pos += md->member_total_size;
+	}
+
+done:
+	if(md) {
+		de_arch_destroy_md(c, md);
+	}
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported EA file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+}
+
+static int de_identify_ea_arch(deark *c)
+{
+	u8 b, hdrsize;
+
+	if(de_getbyte(0)!=0x1a) return 0;
+	if(!ea_sig_at(c, 0)) return 0;
+	b = de_getbyte(15); // last byte of filename field
+	if(b!=0) return 0;
+	b = de_getbyte(20); // cmpr meth
+	if(b>1) return 0;
+	hdrsize = de_getbyte(29);
+	if(hdrsize<EA_MINHEADERLEN) return 0;
+	if(hdrsize==48) return 100;
+	return 45;
+}
+
+void de_module_ea_arch(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "ea_arch";
+	mi->desc = "EA/PEA archive";
+	mi->run_fn = de_run_ea_arch;
+	mi->identify_fn = de_identify_ea_arch;
+}
+
+// **************************************************************************
+// ZSoft zpk2
+// **************************************************************************
+
+// Caller creates/destroys md, and sets a few fields.
+static void zpk2_do_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	i64 pos = md->member_hdr_pos;
+	UI crc_reported;
+
+	int saved_indent_level;
+	de_dbg_indent_save(c, &saved_indent_level);
+	md->cmpr_pos = d->cmpr_data_curpos;
+
+	de_dbg(c, "member #%u hdr at %" I64_FMT, (UI)md->member_idx, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+
+	dbuf_read_to_ucstring(c->infile, pos, 13, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	pos += 13;
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+
+	md->cmpr_pos = de_getu32le_p(&pos);
+	de_dbg(c, "cmpr. data pos: %" I64_FMT, md->cmpr_pos);
+
+	de_arch_read_field_cmpr_len_p(md, &pos);
+
+	de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY], "mod",
+		DE_ARCH_TSTYPE_DOS_DT, &pos);
+
+	crc_reported = (u32)de_getu32le_p(&pos);
+	de_dbg(c, "unk. field: 0x%08x", (UI)crc_reported);
+
+	de_arch_read_field_orig_len_p(md, &pos);
+
+	if(!de_arch_good_cmpr_data_pos(md)) {
+		d->fatalerrflag = 1;
+		goto done;
+	}
+
+	md->dfn = dclimplode_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static void de_run_zpk2(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	i64 pos;
+	i64 i;
+	int saved_indent_level;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	pos = 0;
+	de_dbg(c, "archive header at %" I64_FMT, pos);
+	de_dbg_indent(c, 1);
+	pos += 4;
+	d->num_members = de_getu16le_p(&pos);
+	de_dbg(c, "number of members: %" I64_FMT, d->num_members);
+	de_dbg_indent(c, -1);
+
+	for(i=0; i<d->num_members; i++) {
+		struct de_arch_member_data *md;
+
+		if(pos+33 > c->infile->len) goto done;
+		md = de_arch_create_md(c, d);
+		md->member_idx = i;
+		md->member_hdr_pos = pos;
+		pos += 33;
+
+		zpk2_do_member(c, d, md);
+		de_arch_destroy_md(c, md);
+		if(d->fatalerrflag) goto done;
+	}
+
+done:
+	de_arch_destroy_lctx(c, d);
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static int de_identify_zpk2(deark *c)
+{
+	i64 n;
+
+	if(dbuf_memcmp(c->infile, 0, (const void*)"zpk2", 4)) {
+		return 0;
+	}
+	// Mainly to screen out text files: The 4-byte int at offset 19 is
+	// the data offset of the 1st member.
+	n = de_getu32le(19);
+	if(n<(6 + 33) || n>(6 + 33*65535)) return 0;
+	return 100;
+}
+
+void de_module_zpk2(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "zpk2";
+	mi->desc = "zpk2 archive (ZSoft)";
+	mi->run_fn = de_run_zpk2;
+	mi->identify_fn = de_identify_zpk2;
+}
+
+// **************************************************************************
+// Icon Heaven
+// **************************************************************************
+
+static void iconheaven_decompressor_fn(struct de_arch_member_data *md)
+{
+	deark *c = md->c;
+	struct de_lzw_params delzwp;
+
+	de_zeromem(&delzwp, sizeof(struct de_lzw_params));
+	delzwp.fmt = DE_LZWFMT_ICONHEAVEN;
+	fmtutil_decompress_lzw(c, md->dcmpri, md->dcmpro, md->dres, &delzwp);
+}
+
+// Caller creates/destroys md, and sets a few fields.
+static void iconheaven_do_member(deark *c, de_arch_lctx *d, struct de_arch_member_data *md)
+{
+	i64 pos = md->member_hdr_pos;
+	i64 namelen;
+	UI sig;
+	UI unk1;
+	UI peek_1st_code;
+	u8 need_errmsg = 0;
+
+	int saved_indent_level;
+	de_dbg_indent_save(c, &saved_indent_level);
+
+	de_dbg(c, "member #%u hdr at %" I64_FMT, (UI)md->member_idx, md->member_hdr_pos);
+	de_dbg_indent(c, 1);
+
+	sig = (UI)de_getu16be_p(&pos);
+	if(sig != 0x6369) {
+		de_err(c, "Icon not found at %" I64_FMT, md->member_hdr_pos);
+		d->fatalerrflag = 1;
+		goto done;
+	}
+
+	md->cmpr_len = de_getu16le_p(&pos);
+	de_dbg(md->c, "cmpr size: %" I64_FMT, md->cmpr_len);
+
+	md->orig_len = de_getu16le_p(&pos);
+	md->orig_len_known = 1;
+	de_dbg(md->c, "orig size: %" I64_FMT, md->orig_len);
+
+	unk1 = (UI)de_getu16le_p(&pos);
+
+	namelen = de_getu16le_p(&pos);
+	if(namelen>260) {
+		d->fatalerrflag = 1;
+		d->need_errmsg = 1;
+		goto done;
+	}
+	dbuf_read_to_ucstring(c->infile, pos, namelen, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	de_dbg(c, "name: \"%s\"", ucstring_getpsz_d(md->filename));
+	ucstring_strip_trailing_spaces(md->filename);
+	ucstring_append_sz(md->filename, ".ico", DE_ENCODING_LATIN1);
+	pos += namelen;
+
+	md->cmpr_pos = pos;
+	de_dbg(md->c, "cmpr pos: %" I64_FMT, md->cmpr_pos);
+	md->member_total_size = md->cmpr_pos + md->cmpr_len - md->member_hdr_pos;
+
+	if(unk1!=1) {
+		need_errmsg = 1;
+		goto done;
+	}
+
+	peek_1st_code = (UI)de_getu16be(md->cmpr_pos) >> 7;
+	de_dbg(c, "1st code: %u", peek_1st_code);
+
+	md->dfn = iconheaven_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+done:
+	if(need_errmsg) {
+		de_err(c, "[icon #%d] Unsupported icon", (int)md->member_idx);
+	}
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static void de_run_iconheaven(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	i64 pos;
+	i64 i;
+	int saved_indent_level;
+
+	de_dbg_indent_save(c, &saved_indent_level);
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+
+	pos = 0;
+	de_dbg(c, "header at %" I64_FMT, pos);
+	de_dbg_indent(c, 1);
+	pos += 8;
+	d->num_members = de_getu16le_p(&pos);
+	de_dbg(c, "number of icons: %" I64_FMT, d->num_members);
+	de_dbg_indent(c, -1);
+
+	pos = 140;
+	for(i=0; i<d->num_members; i++) {
+		struct de_arch_member_data *md;
+
+		if(pos >= c->infile->len) goto done;
+		md = de_arch_create_md(c, d);
+		md->member_idx = i;
+		md->member_hdr_pos = pos;
+
+		iconheaven_do_member(c, d, md);
+		if(d->fatalerrflag) goto done;
+		pos += md->member_total_size;
+		de_arch_destroy_md(c, md);
+	}
+
+done:
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported FIM file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+	de_dbg_indent_restore(c, saved_indent_level);
+}
+
+static int de_identify_iconheaven(deark *c)
+{
+	if(dbuf_memcmp(c->infile, 0, "LI\0\x01\0\0\0\0 ", 8)) return 0;
+	return 100;
+}
+
+void de_module_iconheaven(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "iconheaven";
+	mi->desc = "Icon Heaven library (.fim)";
+	mi->run_fn = de_run_iconheaven;
+	mi->identify_fn = de_identify_iconheaven;
+}
+
+// **************************************************************************
+// CORK - Installer format by Omega Logic
+// **************************************************************************
+
+// This is the same as ARC method #8.
+static void cork_decompressor_fn(struct de_arch_member_data *md)
+{
+	struct de_dcmpr_two_layer_params tlp;
+	struct de_lzw_params delzwp;
+
+	de_zeromem(&delzwp, sizeof(struct de_lzw_params));
+	delzwp.fmt = DE_LZWFMT_UNIXCOMPRESS;
+	delzwp.flags |= DE_LZWFLAG_HAS1BYTEHEADER;
+	de_zeromem(&tlp, sizeof(struct de_dcmpr_two_layer_params));
+	tlp.codec1_pushable = dfilter_lzw_codec;
+	tlp.codec1_private_params = (void*)&delzwp;
+	tlp.codec2 = dfilter_rle90_codec;
+	tlp.dcmpri = md->dcmpri;
+	tlp.dcmpro = md->dcmpro;
+	tlp.dres = md->dres;
+	de_dfilter_decompress_two_layer(md->c, &tlp);
+}
+
+// Ugh. Some files seem to use DOS timestamp format, others Unix.
+// Returns 1=Unix, 2=DOS, 0=unknown.
+static u8 cork_guess_timestamp_format(deark *c, i64 pos)
+{
+	UI v;
+	i64 yr;
+	u8 could_be_dos;
+	u8 could_be_unix;
+	struct de_timestamp ts;
+
+	v = (UI)de_getu32le(pos);
+	de_dbg2(c, "raw timestamp: 0x%08x", v);
+
+	// Unix dates seen: 1991-1993
+	if(v>=631152000U && //  1 Jan 1990
+		v<852076800U) // 1 Jan 1997
+	{
+		could_be_unix = 1;
+	}
+	else {
+		could_be_unix = 0;
+	}
+
+	could_be_dos = 1;
+	// DOS dates seen: 1993-1995
+	yr = 1980+((v&0xfe00)>>9);
+	if(yr<1990 || yr>1999) {
+		could_be_dos = 0;
+	}
+	if(could_be_dos) {
+		de_dos_datetime_to_timestamp(&ts, (i64)(v&0xffff), (i64)(v>>16));
+		if(!ts.is_valid) {
+			could_be_dos = 0;
+		}
+	}
+
+	if(could_be_unix && !could_be_dos) return 1;
+	if(could_be_dos && !could_be_unix) return 2;
+	return 0;
+}
+
+static void de_run_cork(deark *c, de_module_params *mparams)
+{
+	de_arch_lctx *d = NULL;
+	struct de_arch_member_data *md = NULL;
+	i64 pos;
+	UI tsfmt;
+
+	d = de_arch_create_lctx(c);
+	d->is_le = 1;
+	d->input_encoding = de_get_input_encoding(c, NULL, DE_ENCODING_CP437);
+	d->crco = de_crcobj_create(c, DE_CRCOBJ_CRC16_ARC);
+	md = de_arch_create_md(c, d);
+	pos = 6;
+
+	dbuf_read_to_ucstring(c->infile, pos, 12, md->filename, DE_CONVFLAG_STOP_AT_NUL,
+		d->input_encoding);
+	de_dbg(c, "filename: \"%s\"", ucstring_getpsz_d(md->filename));
+	pos += 13;
+
+	md->crc_reported = (u32)de_getu16le_p(&pos);
+	de_dbg(c, "crc (reported): 0x%04x", (UI)md->crc_reported);
+	md->validate_crc = 1;
+
+	tsfmt = cork_guess_timestamp_format(c, pos);
+	if(tsfmt==1) {
+		de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY],
+			"mod", DE_ARCH_TSTYPE_UNIX, &pos);
+	}
+	else if(tsfmt==2) {
+		de_arch_read_field_dttm_p(d, &md->fi->timestamp[DE_TIMESTAMPIDX_MODIFY],
+			"mod", DE_ARCH_TSTYPE_DOS_DT, &pos);
+	}
+	else {
+		de_dbg(c, "[can't detect timestamp format]");
+		pos += 4;
+	}
+
+	de_arch_read_field_orig_len_p(md, &pos);
+	de_arch_read_field_cmpr_len_p(md, &pos);
+	md->cmpr_pos = pos;
+
+	md->dfn = cork_decompressor_fn;
+	de_arch_extract_member_file(md);
+
+	if(md) {
+		de_arch_destroy_md(c, md);
+		md = NULL;
+	}
+	if(d) {
+		if(d->need_errmsg) {
+			de_err(c, "Bad or unsupported CORK file");
+		}
+		de_arch_destroy_lctx(c, d);
+	}
+}
+
+static int de_identify_cork(deark *c)
+{
+	if(dbuf_memcmp(c->infile, 0, (const void*)"CORK\1\0", 6)) {
+		return 0;
+	}
+
+	return 100;
+}
+
+void de_module_cork(deark *c, struct deark_module_info *mi)
+{
+	mi->id = "cork";
+	mi->desc = "CORK compressed file";
+	mi->run_fn = de_run_cork;
+	mi->identify_fn = de_identify_cork;
+}
