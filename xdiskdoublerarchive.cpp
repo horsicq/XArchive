@@ -8,7 +8,9 @@
 #include <QHash>
 #include <QPointer>
 #include <QSet>
-#include <QTextCodec>
+#if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
+#include <QTextCodec>  // Qt5 Compat; removed from Qt6 core
+#endif
 
 #include <limits>
 
@@ -18,9 +20,16 @@ const quint32 DISKDOUBLER_FILE_MAGIC = 0xabcd0054U;
 
 QString diskDoublerName(const QByteArray &baName)
 {
+    // Qt6 dropped QTextCodec from QtCore, and this build does not link
+    // Core5Compat. Fall back to the same Latin-1 decoding the Qt5 path already
+    // uses when the "macintosh" codec is unavailable.
+#if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
     QTextCodec *pCodec = QTextCodec::codecForName("macintosh");
     QString sName = pCodec ? pCodec->toUnicode(baName)
                            : QString::fromLatin1(baName);
+#else
+    QString sName = QString::fromLatin1(baName);
+#endif
     sName.replace(QLatin1Char('/'), QLatin1Char('_'));
     sName.replace(QLatin1Char(':'), QLatin1Char('_'));
     sName = sName.normalized(QString::NormalizationForm_C).trimmed();

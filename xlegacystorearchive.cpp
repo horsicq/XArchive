@@ -12,7 +12,9 @@
 #include <QHash>
 #include <QPointer>
 #include <QSet>
-#include <QTextCodec>
+#if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
+#include <QTextCodec>  // Qt5 Compat; removed from Qt6 core
+#endif
 #include <QVector>
 
 #include <algorithm>
@@ -35,7 +37,9 @@ quint8 decodeIsSkinByte(quint8 value, qint64 absoluteOffset)
 
 bool looksLikeIsSkin(const QByteArray &header)
 {
-    const qint32 nameLimit = qMin(header.size(), 80);
+    // qint32(): QByteArray::size() is qsizetype on Qt6, so qMin() cannot deduce
+    // a single T from it and the int literal 80.
+    const qint32 nameLimit = qMin(qint32(header.size()), 80);
     qint32 pos = 0;
     while (pos < nameLimit) {
         const quint8 value = decodeIsSkinByte(quint8(header.at(pos)), pos);
@@ -147,11 +151,18 @@ bool isJascRecordHeader(const uchar *pData, qint64 nAvailable,
 QString macName(const uchar *p, qint32 n)
 {
     if (!p || n <= 0) return QString();
+    // Qt6 dropped QTextCodec from QtCore, and this build does not link
+    // Core5Compat. Fall back to the same Latin-1 decoding the Qt5 path already
+    // uses when the "macintosh" codec is unavailable.
+#if (QT_VERSION_MAJOR < 6) || defined(QT_CORE5COMPAT_LIB)
     QTextCodec *codec = QTextCodec::codecForName("macintosh");
     QString s = codec ? codec->toUnicode(
                             reinterpret_cast<const char *>(p), n)
                       : QString::fromLatin1(
                             reinterpret_cast<const char *>(p), n);
+#else
+    QString s = QString::fromLatin1(reinterpret_cast<const char *>(p), n);
+#endif
     s.replace(QLatin1Char('/'), QLatin1Char('_'));
     s.replace(QLatin1Char(':'), QLatin1Char('_'));
     return XBinary::fixFileName(

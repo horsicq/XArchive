@@ -451,7 +451,11 @@ bool decodeDiskDoublerADn(const QByteArray &packed, qint64 rawSize,
                     if (!reader.isOk() || offset <= 0 || offset > block.size() ||
                         length > offset)
                         return false;
-                    length = qMin(length, uncompressedSize - block.size());
+                    // qint32(): the subtraction is qsizetype on Qt6 (int on
+                    // Qt5), so qMin() cannot deduce one T from it and `length`.
+                    // The enclosing loop runs only while block.size() is below
+                    // uncompressedSize, so the difference is always positive.
+                    length = qMin(length, qint32(uncompressedSize - block.size()));
                     for (qint32 i = 0; i < length; ++i)
                         block.append(block.at(block.size() - offset));
                 }

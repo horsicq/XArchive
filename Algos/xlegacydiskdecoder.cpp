@@ -221,7 +221,9 @@ bool decodeImd(const QByteArray &input, qint64 limit,
             geometry.sectorBase = qMin(geometry.sectorBase,
                                        qint32(sector.idSector));
         for (const QList<Sector> &track : tracks)
-            geometry.sectors = qMax(geometry.sectors, track.size());
+            // qint32(): Geometry::sectors is qint32 but QList::size() is
+            // qsizetype on Qt6, and qMin/qMax deduce a single T from both.
+            geometry.sectors = qMax(geometry.sectors, qint32(track.size()));
     }
 
     qint64 outputSize = 0;

@@ -519,7 +519,10 @@ bool decodeDense(const QByteArray &packed, qint64 nOffset,
                     return false;
                 nState = commandClass(nControl);
                 if (nState < 0) return false;
-                if (nState) pushHistory(&commandHistory, output.size() - 1);
+                // qint32(): commandHistory is std::array<qint32, 16>, but
+                // QByteArray::size() is qsizetype on Qt6 (int on Qt5), so T
+                // deduces to two different types and the call is ambiguous.
+                if (nState) pushHistory(&commandHistory, qint32(output.size() - 1));
             } else if (nSymbol < 0x191) {
                 const qint32 nDistance = nSymbol - 0x17f;
                 const qint32 nSource = output.size() - nDistance;
