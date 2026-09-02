@@ -351,12 +351,7 @@ bool XCKPEDPBase::scanArchive(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                                         entry.nDataOffset + entry.nDataSize));
         }
     }
-    std::sort(listRanges.begin(), listRanges.end(),
-              [](const QPair<qint64, qint64> &a,
-                 const QPair<qint64, qint64> &b) {
-                  return (a.first < b.first) ||
-                         ((a.first == b.first) && (a.second < b.second));
-              });
+    std::sort(listRanges.begin(), listRanges.end());
     for (qint32 i = 1; i < listRanges.count(); ++i) {
         if (listRanges.at(i).first < listRanges.at(i - 1).second) {
             return false;

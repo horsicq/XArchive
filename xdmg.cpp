@@ -2463,7 +2463,10 @@ QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseBlkxPartitions(const QByteArray &baX
                 break;
             }
 
-            const QStringRef elementName = reader.name();
+            // Materialize the local name so this remains source-compatible
+            // with both Qt 5 (QStringRef) and Qt 6 (QStringView) without type
+            // deduction.
+            const QString elementName = reader.name().toString();
             if (bWaitingForRootDict) {
                 if (((nDepth - 1) != nPlistDepth) || (elementName != QLatin1String("dict"))) {
                     bMalformed = true;
@@ -2655,7 +2658,10 @@ QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseBlkxPartitions(const QByteArray &baX
         } else if (token == QXmlStreamReader::Characters) {
             if (!reader.isWhitespace()) bMalformed = true;
         } else if (token == QXmlStreamReader::EndElement) {
-            const QStringRef elementName = reader.name();
+            // Materialize the local name so this remains source-compatible
+            // with both Qt 5 (QStringRef) and Qt 6 (QStringView) without type
+            // deduction.
+            const QString elementName = reader.name().toString();
             if ((nPartitionDictDepth == nDepth) && (elementName == QLatin1String("dict"))) {
                 if (bPartitionKeyPending || !bDataSeen || baMishData.isEmpty() || (listResult.size() >= DMG_MAX_PARTITIONS)) {
                     bMalformed = true;

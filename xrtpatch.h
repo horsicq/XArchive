@@ -9,8 +9,10 @@
 
 // Pocket Soft RTPatch update packages.  Structurally validated source-free
 // whole-file streams across the supported descriptor generations and the
-// optional plain-text banner are decoded natively.  Binary delta streams still
-// require their original target files and fail closed at extraction.
+// optional plain-text banner are decoded natively.  In mixed packages,
+// source-dependent binary-delta operations are omitted from the extractable
+// archive view.  Packages containing only deltas keep those records visible as
+// unsupported so extraction cannot claim to have reconstructed target files.
 class XRTPatch final : public XGameStoreArchiveBase
 {
     Q_OBJECT

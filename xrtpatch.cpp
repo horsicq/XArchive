@@ -522,6 +522,14 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     QSet<QString> stUsedDirectories;
     QHash<QString, qint32> mapNextSuffixes;
     QHash<QString, QString> mapResolvedDirectories;
+    bool bHasSourceFreeRecord = false;
+
+    for (const RTPatchDescriptor &descriptor : listDescriptors) {
+        if (descriptor.handleMethod != HANDLE_METHOD_UNKNOWN) {
+            bHasSourceFreeRecord = true;
+            break;
+        }
+    }
 
     // Generation-1 packages may start with a directory table, a banner, or
     // both.  Both use the same counted-string encoding.  Directory strings
@@ -552,6 +560,7 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                             &mapResolvedDirectories, &sUniqueName)) {
             return false;
         }
+        bHasSourceFreeRecord = true;
         if (pEntries) {
             ENTRY entry = {};
             entry.nHeaderOffset = stringList.nOffset;
@@ -579,6 +588,18 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
             !rangeWithin(nTotalSize, descriptor.nDataOffset,
                          nDataSize)) {
             return false;
+        }
+
+        // A patch operation is not an archive member: its byte stream is an
+        // opcode program that needs a checksum-matched source file.  Mixed
+        // packages therefore expose only their independently decodable banner
+        // and whole-file records, matching archive-tool semantics without
+        // manufacturing patched targets.  A delta-only package deliberately
+        // retains its unsupported records so an extraction attempt fails
+        // closed instead of reporting an empty success.
+        if (bHasSourceFreeRecord &&
+            (descriptor.handleMethod == HANDLE_METHOD_UNKNOWN)) {
+            continue;
         }
 
         QString sUniqueName;
