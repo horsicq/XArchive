@@ -116,6 +116,7 @@ bool XLegacyEncoded::decodeBinHex(const QByteArray &baSource,
     baDecoded.reserve(baRLE.size());
     qint32 nPosition = 0;
     qint32 nPrevious = -1;
+    qint32 nTrailingLiteralZeros = 0;
     while (nPosition < baRLE.size())
     {
         const quint8 nByte = static_cast<quint8>(baRLE.at(nPosition++));
@@ -125,8 +126,10 @@ bool XLegacyEncoded::decodeBinHex(const QByteArray &baSource,
                                MAX_DECODED_SIZE))
                 return false;
             nPrevious = nByte;
+            nTrailingLiteralZeros = nByte == 0 ? qMin(nTrailingLiteralZeros + 1, 2) : 0;
             continue;
         }
+        nTrailingLiteralZeros = 0;
         // A dangling 0x90 marker at the very end of a truncated stream has no
         // count byte; the reference drops it. A complete stream keeps failing.
         if (nPosition >= baRLE.size()) {
@@ -169,7 +172,15 @@ bool XLegacyEncoded::decodeBinHex(const QByteArray &baSource,
     // match for a complete, undamaged stream.
     if ((static_cast<quint64>(nDataSize) + nResourceSize) > static_cast<quint64>(MAX_DECODED_SIZE))
         return false;
-    const bool bComplete = (!bTruncated) && (nRequired == static_cast<quint64>(baDecoded.size()));
+    const quint64 nDecodedSize = static_cast<quint64>(baDecoded.size());
+    // Some encoders (including StuffIt 7) zero-pad the final encoded quartet
+    // after RLE. Permit at most two literal padding bytes after the resource
+    // CRC, only with a complete six-bit quartet. Fork bytes and all CRCs keep
+    // their declared boundaries; repeated or nonzero suffix data is refused.
+    const bool bComplete = !bTruncated && nRequired <= nDecodedSize &&
+        (nDecodedSize == nRequired ||
+         ((baSixBit.size() % 4) == 0 && nDecodedSize - nRequired <= 2U &&
+          nDecodedSize - nRequired <= static_cast<quint64>(nTrailingLiteralZeros)));
 
     const QString sName = safeBaseName(QString::fromLatin1(
         reinterpret_cast<const char *>(pData + 1), nNameLength));

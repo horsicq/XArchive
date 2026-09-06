@@ -22,6 +22,8 @@
 #define XARCHIVECONSOLE_H
 
 #include <QCommandLineOption>
+#include <QDateTime>
+#include <QJsonObject>
 #include <QStringList>
 
 #include "xarchives.h"
@@ -44,27 +46,25 @@ class QCoreApplication;
 // describes; XScanEngineConsole now delegates to this class and applications
 // that are archive tools first (XFileUnpacker) compose it directly.
 //
-// It accepts three command grammars -- the project's own long options, 7-Zip's
-// verb form, and Info-ZIP unzip/zipinfo -- all of which parse into one neutral
-// COMMAND and run through one set of executors.  See DIALECT for how an
-// invocation is assigned to a grammar.
+// It accepts two command grammars -- the project's own long options and
+// 7-Zip's verb form -- both of which parse into one neutral COMMAND and run
+// through one set of executors.  See DIALECT for how an invocation is assigned
+// to a grammar.
 class XArchiveConsole : public QObject {
     Q_OBJECT
+    friend class XU3Console;
 
 public:
     // Which command grammar an invocation is written in.  Selection order:
-    //   1. argv[0] basename ("7z"/"7za"/"7zr", "unzip", "zipinfo") -- copying
-    //      or symlinking the executable under one of those names gives drop-in
-    //      compatibility with no extra typing;
-    //   2. an explicit "unzip"/"zipinfo" selector token;
-    //   3. a bare 7-Zip verb as the first argument, when no file of that name
+    //   1. argv[0] basename ("7z"/"7za"/"7zr") -- copying or symlinking the
+    //      executable under one of those names gives drop-in compatibility
+    //      with no extra typing;
+    //   2. a bare 7-Zip verb as the first argument, when no file of that name
     //      exists (a real file always wins, and "--" forces the file reading);
-    //   4. otherwise DIALECT_NATIVE, so every existing invocation is unchanged.
+    //   3. otherwise DIALECT_NATIVE, so every existing invocation is unchanged.
     enum DIALECT {
         DIALECT_NATIVE = 0,
-        DIALECT_SEVENZIP,
-        DIALECT_UNZIP,
-        DIALECT_ZIPINFO
+        DIALECT_SEVENZIP
     };
 
     enum VERB {
@@ -79,7 +79,14 @@ public:
         VERB_INFO,
         VERB_ENTROPY,
         VERB_STRUCT,
-        VERB_SHOWSTRUCTS
+        VERB_SHOWSTRUCTS,
+        VERB_CREATE  // pack: the only writing operation this console has
+    };
+
+    // Packing is deliberately narrow for now: ZIP only, stored or deflated.
+    enum PACKMETHOD {
+        PACKMETHOD_DEFLATE = 0,
+        PACKMETHOD_STORE
     };
 
     // Output shape for the viewers above (the archive listing has its own
@@ -103,10 +110,13 @@ public:
     enum LISTFORMAT {
         LISTFORMAT_NATIVE = 0,     // this project's aligned table
         LISTFORMAT_TECHNICAL,      // 7-Zip "l -slt" / our --verbose property dump
-        LISTFORMAT_UNZIP,          // unzip -l
-        LISTFORMAT_UNZIP_VERBOSE,  // unzip -v
-        LISTFORMAT_ZIPINFO,        // unzip -Z / zipinfo
-        LISTFORMAT_JSON            // our own: the full record property map
+        // Machine-readable listings. JSON and XML carry the full record
+        // property map; CSV/TSV use a fixed column set, because a variable
+        // schema is exactly what a delimited format cannot express.
+        LISTFORMAT_JSON,
+        LISTFORMAT_XML,
+        LISTFORMAT_CSV,
+        LISTFORMAT_TSV
     };
 
     // One invocation, independent of the grammar it was written in.
@@ -120,6 +130,8 @@ public:
         QStringList listIncludes;  // member wildcards to keep (empty = all)
         QStringList listExcludes;  // member wildcards to drop
         QString sOutputDirectory;
+        QString sManifest;  // --manifest: JSON record dump written beside an extraction
+        PACKMETHOD packMethod;
         QString sStruct;  // -S/--struct selector, e.g. "Hash" or "Hash#MD5"
         XBinary::FT fileType;
         bool bFlatten;     // 7-Zip "e", unzip -j: drop stored directory components
@@ -151,22 +163,16 @@ public:
     // Returns false if any option could not be registered (a duplicate name);
     // the caller must not run with a half-registered command line.
     bool addOptions(QCommandLineParser *pParser);
-    // A scan-engine front end owns its own command line and already defines
-    // -b/-F/-i/-e/-S/-w and the output-format switches.  Embedded mode
-    // therefore registers only the archive commands, and only their long
-    // spellings, so a POSIX letter chosen here can never take a letter the
-    // host already gave a different meaning.
-    void setEmbedded(bool bEmbedded);
-    bool isEmbedded() const;
-    // Embedded entry point: runs whichever archive command the host's parser
-    // saw.  Returns true when one of them consumed the invocation; *pnResult is
-    // written only for a non-successful command, so an earlier failure in the
-    // host is never masked.
-    bool processModes(const QCommandLineParser *pParser, const QStringList &listArgs, XBinary::FT fileType, bool bVerbose, qint32 *pnResult);
     // Reads the archive options into this object.  Returns false (and, when
     // pcrResult is given, the code the process should exit with) if one of
     // them is malformed; the diagnostic is already printed.
     bool applyOptions(const QCommandLineParser *pParser, XOptions::CR *pcrResult);
+    // One --format vocabulary shared by both consoles: text (the default),
+    // json, xml, csv and tsv.  Each selects both an archive-listing encoder and
+    // a viewer result format.  Returns false for an unknown value, with nothing
+    // changed.
+    bool setFormat(const QString &sFormat);
+    static QString getFormatValues();
     // Builds one COMMAND from the parsed native command line, resolving the
     // operation letter, the operands and every modifier.  Returns false on a
     // usage error (two operations, an unusable operand, a malformed value);
@@ -185,6 +191,9 @@ public:
     XOptions::CR testArchives(const COMMAND &command);
     XOptions::CR writeMembersToStdout(const COMMAND &command);
     XOptions::CR listSupportedFormats(const COMMAND &command);
+    // Create a ZIP from the operands.  The archive is the first operand (or
+    // -f), the rest are the files and directories to add.
+    XOptions::CR createArchive(const COMMAND &command);
     // XFormats-backed viewers, carried so an archive front end does not have to
     // borrow a scan-engine console for them.
     XOptions::CR showFileInfo(const QString &sFileName, const COMMAND &command);
@@ -216,13 +225,15 @@ public:
     // format actually populates are shown, so each archive type surfaces its
     // own metadata.
     static QString formatList(XBinary::FT fileType, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize, bool bVerbose);
-    // Info-ZIP renderings, so "unzip -l/-v" and "zipinfo" output is familiar to
-    // scripts and to people rather than merely equivalent.
-    static QString formatListUnzip(const QString &sArchiveName, const QList<XBinary::ARCHIVERECORD> &listRecords, bool bVerbose);
-    static QString formatListZipInfo(const QString &sArchiveName, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize);
     // Every property the parser filled, as JSON.  Neither 7-Zip nor Info-ZIP
     // offers a machine-readable listing, so this is strictly ours.
     static QString formatListJson(const QString &sArchiveName, XBinary::FT fileType, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize);
+    // The same object formatListJson() renders, so a manifest and a
+    // "--format json" listing describe a record identically.
+    static QJsonObject buildListJson(const QString &sArchiveName, XBinary::FT fileType, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize);
+    static QString formatListXml(const QString &sArchiveName, XBinary::FT fileType, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize);
+    // bTabSeparated picks TSV over CSV; both share the fixed column set.
+    static QString formatListDelimited(const QList<XBinary::ARCHIVERECORD> &listRecords, bool bTabSeparated);
 
     // Member selection shared by every verb and dialect.  An empty include
     // list means "everything"; excludes always win.  Patterns are matched
@@ -241,8 +252,8 @@ public:
     static QString getPropertyName(XBinary::FPART_PROP prop);
     static QString getPropertyValueString(const XBinary::ARCHIVERECORD &record, XBinary::FPART_PROP prop);
 
-    // Usage text for the foreign dialects (7-Zip "7z" with no arguments,
-    // "unzip -h").  Kept next to the parsers so the two cannot drift.
+    // Usage text for the 7-Zip dialect ("7z" with no arguments).  Kept next to
+    // the parser so the two cannot drift.
     static QString getDialectHelp(DIALECT dialect, const QString &sProgramName);
 
 private:
@@ -265,12 +276,34 @@ private:
     // any "--word[=value]" token to applyLongOption(), which is why every
     // project-specific option stays available inside a foreign dialect.
     bool parseSevenZip(const QStringList &listArguments, COMMAND *pCommand, XOptions::CR *pcrResult);
-    bool parseUnzip(const QStringList &listArguments, DIALECT dialect, COMMAND *pCommand, XOptions::CR *pcrResult);
     bool applyLongOption(const QString &sToken, COMMAND *pCommand, XOptions::CR *pcrResult);
     static bool addOptionChecked(QCommandLineParser *pParser, const QCommandLineOption &option);
-    // Same option with every single-character name removed.
-    static QCommandLineOption longOnly(const QCommandLineOption &option);
-    bool addEmbeddedOptions(QCommandLineParser *pParser);
+
+    // One file to pack: where it is now, and the name it takes in the archive.
+    struct PACKENTRY {
+        QString sSourcePath;   // empty for a directory entry, which has no payload
+        QString sArchiveName;
+        bool bIsFolder;
+        // Set when the entry came from a manifest, which pins the method and
+        // timestamp instead of taking them from --method and the file on disk.
+        bool bMethodFromManifest;
+        bool bStore;
+        QDateTime dtModified;
+        quint16 nFlags;
+        quint16 nVersionMadeBy;
+        quint16 nVersionNeeded;
+        quint32 nExternalAttributes;
+        quint16 nInternalAttributes;
+        QByteArray baExtraFieldLocal;
+        QByteArray baExtraFieldCentral;
+        QByteArray baFileComment;
+        PACKENTRY() : bIsFolder(false), bMethodFromManifest(false), bStore(false), nFlags(0), nVersionMadeBy(0), nVersionNeeded(0), nExternalAttributes(0), nInternalAttributes(0) {}
+    };
+
+    // Expand the operands, descending into directories.  Returns false and
+    // fills *psError when an operand cannot be read.
+    static bool collectPackEntries(const QStringList &listInputs, QList<PACKENTRY> *pListEntries, QString *psError);
+    static bool collectManifestEntries(const QString &sManifestPath, QList<PACKENTRY> *pListEntries, QString *psComment, QString *psError);
 
     // Resolve the type to hand to the archive backends, under the probe
     // budget.  bValidateArchiveType keeps the listing path from accepting a
@@ -280,6 +313,8 @@ private:
     // Unpack properties for one command: the parsed base plus the per-command
     // overwrite policy.
     QMap<XBinary::UNPACK_PROP, QVariant> buildUnpackProperties(const COMMAND &command) const;
+
+    bool applyOutputLimit(const QString &sName, const QString &sValue, XOptions::CR *pcrResult);
 
     // Option set follows the POSIX Utility Syntax Guidelines: single-character
     // options, groupable when they take no argument, option-arguments as
@@ -293,7 +328,7 @@ private:
     // working unchanged.
 
     // Operations. At most one per invocation; more is a usage error.
-    QCommandLineOption m_clList;           // -t -l --list --listarchive --showarchive
+    QCommandLineOption m_clList;           // -l --list --listarchive --showarchive
     QCommandLineOption m_clExtract;        // -x --extract
     QCommandLineOption m_clExtractTo;      // --extractarchive <directory> (legacy: -x plus -C)
     QCommandLineOption m_clVerify;         // -W --verify --test --testarchive
@@ -305,11 +340,13 @@ private:
     // Long-only on purpose: -L sits one shift key from -l/list for a command
     // that is typed once in a while, not in scripts.
     QCommandLineOption m_clFormats;        // --formats --listformats
+    QCommandLineOption m_clCreate;         // -c --create
+    QCommandLineOption m_clMethod;         // --method <store|deflate>
 
     // Modifiers.
-    QCommandLineOption m_clDirectory;      // -C --directory <directory>
+    QCommandLineOption m_clDirectory;      // -C -o --directory <directory>
+    QCommandLineOption m_clManifest;       // --manifest <file>
     QCommandLineOption m_clFile;           // -f --file <file>
-    QCommandLineOption m_clExclude;        // -X --exclude <pattern>
     QCommandLineOption m_clInclude;        // --include <pattern>
     QCommandLineOption m_clKeep;           // -k --keep-old-files
     QCommandLineOption m_clOverwrite;      // --overwrite <mode>
@@ -320,9 +357,15 @@ private:
     QCommandLineOption m_clPasswordHex;    // -H --password-hex <hex>
     QCommandLineOption m_clCodePage;       // --codepage <number>
     QCommandLineOption m_clProbeTimeout;   // --probe-timeout <milliseconds>
+    QCommandLineOption m_clMaxOutputSize;
+    QCommandLineOption m_clMaxTotalOutputSize;
+    QCommandLineOption m_clMaxEntryCount;
+    QCommandLineOption m_clMaxMemoryOutputSize;
+    QCommandLineOption m_clFilesystem;
+    QCommandLineOption m_clTransportOnly;
     QCommandLineOption m_clStopOnError;    // --stop-on-error --stoponerror
     QCommandLineOption m_clFileType;       // -F --filetype <type>
-    QCommandLineOption m_clFormat;         // -o --format <layout>
+    QCommandLineOption m_clFormat;         // --format <text|json|xml|csv|tsv>
     // -v belongs to QCommandLineParser::addVersionOption(); verbosity keeps the
     // -b this project's other consoles already use.
     QCommandLineOption m_clVerbose;        // -b --verbose
@@ -337,7 +380,10 @@ private:
     QCommandLineOption m_clAsPlainText;
 
     QMap<XBinary::UNPACK_PROP, QVariant> m_mapUnpackProperties;
-    bool m_bEmbedded;
+    LISTFORMAT m_listFormat;
+    RESULTFORMAT m_resultFormat;
+    bool m_bListFormatSet;
+    bool m_bResultFormatSet;
     qint64 m_nProbeTimeout;
     bool m_bProbeTimeoutOccurred;
 };

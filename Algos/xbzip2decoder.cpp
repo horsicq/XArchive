@@ -1888,14 +1888,17 @@ save_state_and_return:
 /* ===== End embedded bzip2 helper sources ===== */
 
 #include <new>
+#include <limits>
 
 XBZIP2Decoder::XBZIP2Decoder(QObject *parent) : QObject(parent)
 {
 }
 
-bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+static bool decompressBzip2Streams(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct, bool bAllowTrailingData)
 {
     bool bResult = false;
+    QPointer<QIODevice> guardedInput(pDecompressState ? pDecompressState->pDeviceInput : nullptr);
+    QPointer<QIODevice> guardedOutput(pDecompressState ? pDecompressState->pDeviceOutput : nullptr);
 
     if (pDecompressState && pDecompressState->pDeviceInput && pDecompressState->pDeviceOutput && (pDecompressState->nInputOffset >= 0) &&
         (pDecompressState->nInputLimit >= -1) && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -1912,26 +1915,29 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
         }
 
         Algo_utils::prepareState(pDecompressState);
-        if (pDecompressState->bReadError || pDecompressState->bWriteError) {
+        if (!guardedInput || !guardedOutput || pDecompressState->bReadError || pDecompressState->bWriteError) {
             delete[] bufferIn;
             delete[] bufferOut;
             return false;
         }
 
         bz_stream strm = {};
-        qint32 ret = BZ_MEM_ERROR;
+        qint32 ret = BZ_OK;
         bool bReadMore = true;
+        bool bAcceptedOverlay = false;
+        quint32 nMembers = 1;
 
         qint32 rc = X_BZ2_bzDecompressInit(&strm, 0, 0);
 
         if (rc == BZ_OK) {
-            do {
+            while (guardedInput && guardedOutput && XBinary::isPdStructNotCanceled(pPdStruct)) {
                 // Read more data only if we consumed all input
                 if (bReadMore && strm.avail_in == 0) {
                     qint32 nBufferSize = Algo_utils::getReadChunkSize(pDecompressState, _nBufferSize);
 
                     if (nBufferSize > 0) {
                         strm.avail_in = XBinary::_readDevice(bufferIn, nBufferSize, pDecompressState);
+                        if (!guardedInput || !guardedOutput) { ret = BZ_IO_ERROR; break; }
 
                         if (strm.avail_in > 0) {
                             strm.next_in = bufferIn;
@@ -1945,8 +1951,60 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
                     }
                 }
 
-                // Only decompress if we have input data available
-                if (strm.avail_in > 0) {
+                if (ret == BZ_STREAM_END) {
+                    // A BZip2 file may concatenate independently checksummed
+                    // streams. Reinitialize at a verified end, preserving the
+                    // unread bytes already held in bufferIn.
+                    const qint64 nStreamEnd = pDecompressState->nCountInput - strm.avail_in;
+                    if (bAllowTrailingData) {
+                        // Gather only enough lookahead to distinguish another
+                        // BZh header from a top-level container overlay.
+                        while ((strm.avail_in < 4) && bReadMore) {
+                            if (strm.avail_in && strm.next_in != bufferIn) memmove(bufferIn, strm.next_in, strm.avail_in);
+                            strm.next_in = bufferIn;
+                            const qint32 nRequest = Algo_utils::getReadChunkSize(pDecompressState, 4 - strm.avail_in);
+                            const qint32 nRead = nRequest > 0 ? XBinary::_readDevice(bufferIn + strm.avail_in, nRequest, pDecompressState) : 0;
+                            if (!guardedInput || !guardedOutput) { ret = BZ_IO_ERROR; break; }
+                            if (nRead <= 0) bReadMore = false;
+                            else strm.avail_in += nRead;
+                        }
+                        if (!guardedInput || !guardedOutput) break;
+                        if (strm.avail_in) {
+                            const unsigned nPrefix = qMin<unsigned>(strm.avail_in, 3);
+                            const bool bBzipPrefix = memcmp(strm.next_in, "BZh", nPrefix) == 0;
+                            if (!bBzipPrefix) {
+                                // Prefix mode is reserved for envelope parsers.
+                                // Restore the actual consumed extent; generic
+                                // archive-member decoding remains exact-input.
+                                QPointer<QIODevice> input(guardedInput);
+                                if (!input || nStreamEnd <= 0 || nStreamEnd > pDecompressState->nCountInput ||
+                                    pDecompressState->nInputOffset > (std::numeric_limits<qint64>::max)() - nStreamEnd ||
+                                    !input->seek(pDecompressState->nInputOffset + nStreamEnd) || !input) {
+                                    ret = BZ_DATA_ERROR; break;
+                                }
+                                pDecompressState->nCountInput = nStreamEnd;
+                                bAcceptedOverlay = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!strm.avail_in) break;
+                    if (++nMembers > 65536) { ret = BZ_DATA_ERROR; break; }
+                    char *pRemaining = strm.next_in;
+                    unsigned nRemaining = strm.avail_in;
+                    X_BZ2_bzDecompressEnd(&strm);
+                    strm = bz_stream();
+                    rc = X_BZ2_bzDecompressInit(&strm, 0, 0);
+                    if (rc != BZ_OK) { ret = rc; break; }
+                    strm.next_in = pRemaining;
+                    strm.avail_in = nRemaining;
+                    ret = BZ_OK;
+                }
+
+                // A decoded block may still have output after all compressed
+                // input was consumed. Drain that output before declaring EOF.
+                {
+                    const unsigned nInputBefore = strm.avail_in;
                     strm.total_in_hi32 = 0;
                     strm.total_in_lo32 = 0;
                     strm.total_out_hi32 = 0;
@@ -1962,31 +2020,27 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
                     qint32 nTemp = _nBufferSize - strm.avail_out;
 
                     if (nTemp > 0) {
-                        if (!XBinary::_writeDevice((char *)bufferOut, nTemp, pDecompressState)) {
+                        if (!XBinary::_writeDevice((char *)bufferOut, nTemp, pDecompressState) || !guardedInput || !guardedOutput) {
                             ret = BZ_MEM_ERROR;
                             break;
                         }
                     }
-                } else if (!bReadMore) {
-                    // No more data to read and buffer is empty - exit loop
-                    // The stream should have ended by now if data was valid
-                    break;
+                    if ((ret == BZ_OK) && !nTemp && (strm.avail_in == nInputBefore)) {
+                        ret = BZ_UNEXPECTED_EOF;
+                        break;
+                    }
                 }
-
-                if (XBinary::isPdStructStopped(pPdStruct)) {
-                    break;
-                }
-            } while (ret != BZ_STREAM_END);
+            }
 
             X_BZ2_bzDecompressEnd(&strm);
 
             const bool bConsumedInput =
-                (strm.avail_in == 0) && ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit));
+                bAcceptedOverlay || ((strm.avail_in == 0) && ((pDecompressState->nInputLimit == -1) || (pDecompressState->nCountInput == pDecompressState->nInputLimit)));
             const bool bExpectedOutput = !pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE) ||
                                          ((pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() >= 0) &&
                                           (pDecompressState->nCountOutput == pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong()));
             bResult = (ret == BZ_STREAM_END) && bConsumedInput && bExpectedOutput && !pDecompressState->bReadError && !pDecompressState->bWriteError &&
-                      XBinary::isPdStructNotCanceled(pPdStruct);
+                      guardedInput && guardedOutput && XBinary::isPdStructNotCanceled(pPdStruct);
         }
 
         delete[] bufferIn;
@@ -1994,4 +2048,14 @@ bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBi
     }
 
     return bResult;
+}
+
+bool XBZIP2Decoder::decompress(XBinary::DATAPROCESS_STATE *state, XBinary::PDSTRUCT *pd)
+{
+    return decompressBzip2Streams(state, pd, false);
+}
+
+bool XBZIP2Decoder::decompressPrefix(XBinary::DATAPROCESS_STATE *state, XBinary::PDSTRUCT *pd)
+{
+    return decompressBzip2Streams(state, pd, true);
 }

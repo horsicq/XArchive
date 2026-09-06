@@ -83,7 +83,7 @@ static QByteArray wimSha1(const QByteArray &baData, XBinary::PDSTRUCT *pPdStruct
     qint64 nOffset = 0;
     while ((nOffset < baData.size()) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         const qint32 nChunk = (qint32)qMin<qint64>(1 << 20, (qint64)baData.size() - nOffset);
-        hash.addData(baData.constData() + nOffset, nChunk);
+        hash.addData(QByteArray::fromRawData(baData.constData() + nOffset, nChunk));
         nOffset += nChunk;
     }
     if (!XBinary::isPdStructNotCanceled(pPdStruct)) return QByteArray();
@@ -1590,7 +1590,7 @@ bool XWIM::_stageResource(const WIM_RECORD &record, const WIM_UNPACK_CONTEXT &co
                 (read_array_process((qint64)nReadOffset, baBuffer.data(), nChunk, pPdStruct) != nChunk)) {
                 return false;
             }
-            hash.addData(baBuffer.constData(), nChunk);
+            hash.addData(QByteArray::fromRawData(baBuffer.constData(), nChunk));
             if (!wimWriteAll(pStageDevice, baBuffer.constData(), nChunk, pPdStruct)) return false;
             nDone += nChunk;
         }

@@ -22,6 +22,7 @@
 #include "algo_utils.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <vector>
 
@@ -34,7 +35,7 @@ const qint32 ARC_LZW_MIN_BITS = 9;
 const qint32 ARC_LZW_CRUNCH_MAX_BITS = 12;  // method 8
 const qint32 ARC_LZW_SQUASH_BITS = 13;      // method 9
 const quint32 ARC_LZW_CLEAR = 256;          // dynamic-width methods only
-const quint32 ARC_LZW_MAX_TABLE = 1u << ARC_LZW_SQUASH_BITS;
+const qint32 ARC_LZW_MAX_BITS = 16;  // ARC 0x7f Unix-compress flag limit.
 
 const qint32 ARC_SQUEEZE_NUMVALS = 257;  // 256 byte values + the end marker
 const qint32 ARC_SQUEEZE_EOF = 256;
@@ -53,17 +54,10 @@ bool arcParams(qint32 nMethod, ARC_PARAMS *pParams)
     switch (nMethod) {
         case 3: *pParams = {true, false, 0, false}; return true;
         case 4: *pParams = {true, false, 0, false}; return true;
-        // Methods 5, 6 and 7 are deliberately absent.  ARC's original "crunch"
-        // is a separate decompressor from the dynamic one used by 8 and 9: it
-        // reconstructs strings by probing a hash table rather than by indexing
-        // a prefix/suffix array, so it is not this decoder with different
-        // parameters.  Its codes are also nybble-packed and a literal's code is
-        // not its byte value, because init_tab hashes even the 256 atomic
-        // codes.  Methods 6 and 7 do NOT decode identically: init_ucr(1, f)
-        // selects a different hash function (newh) for 7 only, so the three
-        // need three distinct handles rather than two.  No archive using any of
-        // them has been found to test against, so they are refused rather than
-        // decoded by an untested approximation.
+        case 5: *pParams = {false, false, 0, false}; return true;
+        case 6:
+        case 7: *pParams = {true, false, 0, false}; return true;
+        case 0x7f: *pParams = {false, true, ARC_LZW_MAX_BITS, true}; return true;
         case 8: *pParams = {true, true, ARC_LZW_CRUNCH_MAX_BITS, true}; return true;
         case 9: *pParams = {false, true, ARC_LZW_SQUASH_BITS, false}; return true;
         default: return false;
@@ -117,7 +111,7 @@ private:
     quint32 m_nFreeEnt;
     quint32 m_nMaxCode;
     quint32 m_nMaxMaxCode;
-    quint8 m_group[ARC_LZW_SQUASH_BITS];
+    quint8 m_group[ARC_LZW_MAX_BITS];
 };
 
 // Output side: buffers, optionally expands the run-length stage, and refuses to
@@ -300,7 +294,7 @@ bool ArcCodeReader::read(quint32 *pCode)
             m_nMaxCode = maxCodeFor(m_nBits);
             m_bClearPending = false;
         }
-        if ((m_nBits < 1) || (m_nBits > ARC_LZW_SQUASH_BITS)) return false;
+        if ((m_nBits < 1) || (m_nBits > ARC_LZW_MAX_BITS)) return false;
 
         qint32 nGot = 0;
         while (nGot < m_nBits) {
@@ -397,9 +391,118 @@ bool arcDecodeSqueeze(ArcSource *pSource, ArcSink *pSink, XBinary::PDSTRUCT *pPd
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
-// Methods 5-9: LZW.  Code 256 resets the table; 257 is the first string code.
-// Methods 5/6/7 hold the code width at 12 while 8 and 9 widen from 9, but the
-// reader, the reset and the table are otherwise the same.
+
+// U3 004e8260..004e8790: original 12-bit hash-table crunch. Unlike the
+// later ARC LZW method, literal codes are themselves hashed and there is no
+// CLEAR code. Keep U3's dictionary and pending nibble local to this decode.
+struct ArcHashEntry {
+    quint16 next = 0;
+    qint16 prefix = -1;
+    quint8 suffix = 0;
+    bool occupied = false;
+};
+
+class ArcNibbleReader {
+public:
+    explicit ArcNibbleReader(ArcSource *source) : m_source(source), m_nibble(-1) {}
+    // -1 is the end of the bounded stream; -2 is a missing second byte.
+    qint32 read()
+    {
+        quint8 first = 0, second = 0;
+        if (!m_source->readByte(&first)) return -1;
+        if (m_nibble >= 0) {
+            const qint32 code = (m_nibble << 8) | first;
+            m_nibble = -1;
+            return code;
+        }
+        if (!m_source->readByte(&second)) return -2;
+        m_nibble = second & 15;
+        return (qint32(first) << 4) | (second >> 4);
+    }
+private:
+    ArcSource *m_source;
+    qint32 m_nibble;
+};
+
+qint32 arcHashInsert(std::array<ArcHashEntry, 4096> &table, qint32 method, qint16 prefix, quint8 suffix)
+{
+    const quint32 sum = quint32(qint32(prefix) + qint32(suffix));
+    const quint32 folded = (sum & 0xffffU) | 0x800U;
+    const quint32 hash = method == 7 ? sum * 0x3ae1U : (folded * folded) >> 6;
+    quint32 slot = hash & 0xfffU;
+    if (table[slot].occupied) {
+        // 004e82b0 returns the LAST collision node in AX, despite the
+        // decompiler's void prototype. 004e82f0 then probes tail+101.
+        quint32 tail = slot;
+        quint32 steps = 0;
+        while (table[tail].next != 0) {
+            tail = table[tail].next;
+            if (tail >= table.size() || ++steps >= table.size()) return -1;
+        }
+        slot = (tail + 101) & 0xfffU;
+        steps = 0;
+        while (table[slot].occupied) {
+            if (++steps >= table.size()) return -1;
+            slot = (slot + 1) & 0xfffU;
+        }
+        table[tail].next = quint16(slot);
+    }
+    table[slot].occupied = true;
+    table[slot].next = 0;
+    table[slot].prefix = prefix;
+    table[slot].suffix = suffix;
+    return qint32(slot);
+}
+
+bool arcDecodeHash(ArcSource *source, ArcSink *sink, qint32 method, XBinary::PDSTRUCT *pd)
+{
+    std::array<ArcHashEntry, 4096> table = {};
+    std::array<quint8, 4096> stack = {};
+    for (qint32 value = 0; value < 256; ++value) {
+        if (arcHashInsert(table, method, -1, quint8(value)) < 0) return false;
+    }
+    ArcNibbleReader reader(source);
+    qint32 previous = reader.read();
+    if (previous == -1) return XBinary::isPdStructNotCanceled(pd);
+    if (previous < 0 || !table[size_t(previous)].occupied || table[size_t(previous)].prefix != -1) return false;
+    quint8 first = table[size_t(previous)].suffix;
+    if (!sink->put(first)) return false;
+    qint32 remaining = 3840;
+    while (XBinary::isPdStructNotCanceled(pd)) {
+        const qint32 code = reader.read();
+        if (code == -1) return true;
+        if (code < 0) return false;
+        const bool undefined = !table[size_t(code)].occupied;
+        qint32 cursor = code;
+        size_t length = 0;
+        if (undefined) {
+            if (remaining == 0) return false;
+            stack[length++] = first;
+            cursor = previous;
+        }
+        while (table[size_t(cursor)].prefix != -1) {
+            if (!table[size_t(cursor)].occupied || length >= stack.size()) return false;
+            stack[length++] = table[size_t(cursor)].suffix;
+            cursor = table[size_t(cursor)].prefix;
+            if (cursor < 0 || cursor >= qint32(table.size())) return false;
+        }
+        if (!table[size_t(cursor)].occupied || length >= stack.size()) return false;
+        first = table[size_t(cursor)].suffix;
+        stack[length++] = first;
+        if (remaining != 0) {
+            const qint32 assigned = arcHashInsert(table, method, qint16(previous), first);
+            if (assigned < 0 || (undefined && assigned != code)) return false;
+            --remaining;
+        }
+        while (length != 0) {
+            if (!sink->put(stack[--length])) return false;
+        }
+        previous = code;
+    }
+    return false;
+}
+
+// ARC 8/9/0x7f use grouped, variable-width Unix-compress codes.
 bool arcDecodeLzw(ArcSource *pSource, ArcSink *pSink, const ARC_PARAMS &params, XBinary::PDSTRUCT *pPdStruct)
 {
     qint32 nMaxBits = params.nMaxBits;
@@ -407,18 +510,24 @@ bool arcDecodeLzw(ArcSource *pSource, ArcSink *pSink, const ARC_PARAMS &params, 
     if (params.bLeadingMaxBitsByte) {
         quint8 nDeclared = 0;
         if (!pSource->readByte(&nDeclared)) return false;
-        if ((nDeclared < ARC_LZW_MIN_BITS) || (nDeclared > ARC_LZW_CRUNCH_MAX_BITS)) return false;
-        nMaxBits = nDeclared;
+        if (params.nMaxBits == ARC_LZW_MAX_BITS) {
+            // ARC 0x7f uses the low five flag bits for the maximum width.
+            // ARC always reserves CLEAR, even when flag 0x80 is absent.
+            if ((nDeclared & 0x60) || ((nDeclared & 0x1f) < ARC_LZW_MIN_BITS) || ((nDeclared & 0x1f) > params.nMaxBits)) return false;
+        } else if ((nDeclared < ARC_LZW_MIN_BITS) || (nDeclared > ARC_LZW_CRUNCH_MAX_BITS)) {
+            return false;  // Preserve method 8's original plain 9..12 range.
+        }
+        nMaxBits = nDeclared & 0x1f;
     }
-    if ((nMaxBits < ARC_LZW_MIN_BITS) || (nMaxBits > ARC_LZW_SQUASH_BITS)) return false;
+    if ((nMaxBits < ARC_LZW_MIN_BITS) || (nMaxBits > ARC_LZW_MAX_BITS)) return false;
 
     const qint32 nInitBits = params.bDynamic ? ARC_LZW_MIN_BITS : nMaxBits;
     const quint32 nFirstFree = ARC_LZW_CLEAR + 1;
     const quint32 nTableSize = (1u << nMaxBits);
 
-    std::vector<quint16> listPrefix(ARC_LZW_MAX_TABLE, 0);
-    std::vector<quint8> listSuffix(ARC_LZW_MAX_TABLE, 0);
-    std::vector<quint8> listStack(ARC_LZW_MAX_TABLE, 0);
+    std::vector<quint16> listPrefix(nTableSize, 0);
+    std::vector<quint8> listSuffix(nTableSize, 0);
+    std::vector<quint8> listStack(nTableSize, 0);
     for (quint32 i = 0; i < 256; i++) listSuffix[i] = (quint8)i;
 
     ArcCodeReader reader(pSource, nInitBits, nMaxBits);
@@ -523,6 +632,8 @@ bool XArcDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint3
         bResult = arcDecodePack(&source, &sink, pPdStruct);
     } else if (nMethod == 4) {
         bResult = arcDecodeSqueeze(&source, &sink, pPdStruct);
+    } else if (nMethod >= 5 && nMethod <= 7) {
+        bResult = arcDecodeHash(&source, &sink, nMethod, pPdStruct);
     } else {
         bResult = arcDecodeLzw(&source, &sink, params, pPdStruct);
     }

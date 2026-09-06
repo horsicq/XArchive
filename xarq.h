@@ -66,12 +66,15 @@ private:
     struct CONTEXT {
         qint64 nInputSize;
         qint64 nArchiveSize;
+        qint64 nFirstMemberOffset;
         quint32 nDeclaredUncompressedSize;
+        bool bHasContainerHeader;
         QList<MEMBER> listMembers;
     };
 
     bool parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct);
     static QString methodToString(quint16 nMethod);
+    static HANDLE_METHOD methodToHandleMethod(quint16 nMethod);
     static bool canAppendPart(qint32 nLimit, qint32 nCurrentCount);
 };
 

@@ -25,6 +25,9 @@
 #include <QPointer>
 #include <memory>
 #include <new>
+#include <limits>
+#include <QDir>
+#include <QRegularExpression>
 
 namespace {
 const qint64 XRAR_MAX_RAR5_HEADER_SIZE = 4 * 1024 * 1024;
@@ -40,6 +43,41 @@ quint32 xrarReadLe32(const QByteArray &baData, qint32 nOffset)
 {
     return (quint32)(quint8)baData.at(nOffset) | ((quint32)(quint8)baData.at(nOffset + 1) << 8) | ((quint32)(quint8)baData.at(nOffset + 2) << 16) |
            ((quint32)(quint8)baData.at(nOffset + 3) << 24);
+}
+
+qint32 xrarOwnerDataSize4(const QByteArray &header)
+{
+    if (header.size() < 18 || quint8(header.at(2)) != 0x77 || !(xrarReadLe16(header, 3) & 0x8000) ||
+        xrarReadLe16(header, 5) != 18 || xrarReadLe16(header, 11) != 0x101) return -1;
+    const quint32 names = quint32(xrarReadLe16(header, 14)) + xrarReadLe16(header, 16);
+    return names == xrarReadLe32(header, 7) ? qint32(names) : -1;
+}
+
+// RAR 1.5/2.x embeds the comment in HEAD_SIZE, but its header CRC
+// covers only the fields preceding that comment (UnRAR ReadHeader15).
+qint32 xrarHeaderCRCSize4(const QByteArray &header)
+{
+    if (header.size() < 7) return -1;
+    const quint8 type = quint8(header.at(2));
+    const quint16 flags = xrarReadLe16(header, 3);
+    qint32 size = qint32(header.size());
+    if ((type == 0x73) && (flags & 0x0002)) {
+        size = 13;
+    } else if ((type == 0x74) && (flags & 0x0008)) {
+        // This branch describes the old comment layout, before RAR3's
+        // salt and extended-time fields. Other layouts remain unsupported.
+        if ((header.size() < 32) || (quint8(header.at(24)) >= 29) || (flags & 0x1400)) return -1;
+        size = 32 + ((flags & 0x0100) ? 8 : 0) + xrarReadLe16(header, 26);
+    } else if (type == 0x75) {
+        return header.size() >= 13 ? 13 : -1;
+    } else {
+        return size;
+    }
+    if ((size > header.size()) || ((header.size() - size) < 13)) return -1;
+    const QByteArray comment = header.mid(size);
+    if ((quint8(comment.at(2)) != 0x75) || (xrarReadLe16(comment, 5) != comment.size())) return -1;
+    const quint32 crc = XBinary::_getCRC32(comment.mid(2, 11), 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
+    return quint16(crc) == xrarReadLe16(comment, 0) ? size : -1;
 }
 
 bool xrarReadVInt(const QByteArray &baData, qint64 *pOffset, qint64 nEndOffset, qint32 nMaxBytes, quint64 *pValue)
@@ -69,6 +107,152 @@ bool xrarReadVInt(const QByteArray &baData, qint64 *pOffset, qint64 nEndOffset, 
     }
 
     return false;
+}
+
+// A split member is a byte stream of packed fragments, not a concatenation
+// of whole .rar files. Keep a distinct original offset in the virtual view so
+// the persistent solid decoder's existing cache keys remain member-specific.
+class XRarPieceDevice : public QIODevice {
+public:
+    struct Piece { QPointer<QIODevice> source; qint64 offset; qint64 size; bool packedCRC; quint32 crc; };
+    XRarPieceDevice(XRar *owner, XBinary::PDSTRUCT *progress, qint64 base)
+        : m_owner(owner), m_progress(progress), m_lifetime(progress ? XBinary::retainPdStructLifetime(progress) : XBinary::PDSTRUCTLIFETIME()),
+          m_base(base), m_size(base) {}
+    void configure(XBinary::PDSTRUCT *progress, qint64 base)
+    {
+        close();
+        m_progress = progress;
+        m_lifetime = progress ? XBinary::retainPdStructLifetime(progress) : XBinary::PDSTRUCTLIFETIME();
+        m_base = base; m_size = base; m_pieces.clear(); m_error = false;
+    }
+    bool active() const
+    {
+        return m_owner && (!m_progress || XBinary::isPdStructLifetimeAlive(m_lifetime)) && XBinary::isPdStructNotCanceled(m_progress);
+    }
+    bool append(const Piece &piece)
+    {
+        if (!active() || !piece.source || piece.offset < 0 || piece.size < 0 || m_size > std::numeric_limits<qint64>::max() - piece.size) return false;
+        m_pieces.append(piece); m_size += piece.size; return true;
+    }
+    qint64 size() const override { return m_size; }
+    bool isSequential() const override { return false; }
+    bool seek(qint64 offset) override { return active() && offset >= m_base && offset <= m_size && QIODevice::seek(offset); }
+    bool hasError() const { return m_error; }
+    bool checkPackedCRCs()
+    {
+        qint64 start = m_base;
+        char buffer[65536];
+        for (const Piece &piece : m_pieces) {
+            if (piece.packedCRC) {
+                if (!seek(start)) return false;
+                qint64 left = piece.size;
+                quint32 crc = 0xffffffff;
+                while (left > 0) {
+                    const qint64 count = read(buffer, qMin<qint64>(left, sizeof(buffer)));
+                    if (count <= 0 || !active()) return false;
+                    crc = XBinary::_getCRC32(buffer, qint32(count), crc, XBinary::_getCRC32Table_EDB88320());
+                    left -= count;
+                }
+                if ((crc ^ 0xffffffff) != piece.crc) return false;
+            }
+            start += piece.size;
+        }
+        return seek(m_base);
+    }
+protected:
+    qint64 readData(char *data, qint64 requested) override
+    {
+        if (!active() || requested < 0 || pos() < m_base || pos() > m_size) { m_error = true; return -1; }
+        qint64 relative = pos() - m_base;
+        qint64 written = 0;
+        for (const Piece &piece : m_pieces) {
+            if (relative >= piece.size) { relative -= piece.size; continue; }
+            const qint64 amount = qMin<qint64>(requested - written, piece.size - relative);
+            QPointer<QIODevice> source = piece.source;
+            if (!active() || !source) { m_error = true; return -1; }
+            const bool moved = source->seek(piece.offset + relative);
+            if (!active() || !source || !moved) { m_error = true; return -1; }
+            qint64 left = amount;
+            while (left > 0) {
+                const qint64 count = source->read(data + written, qMin<qint64>(left, 65536));
+                if (!active() || !source || count <= 0 || count > left) { m_error = true; return -1; }
+                written += count; left -= count;
+            }
+            relative = 0;
+            if (written == requested) break;
+        }
+        return written;
+    }
+    qint64 writeData(const char *, qint64) override { return -1; }
+private:
+    QPointer<XRar> m_owner;
+    XBinary::PDSTRUCT *m_progress;
+    XBinary::PDSTRUCTLIFETIME m_lifetime;
+    qint64 m_base, m_size;
+    QList<Piece> m_pieces;
+    bool m_error = false;
+};
+
+QString xrarNextVolumePath(const QString &path)
+{
+    const QFileInfo current(path);
+    const QString name = current.fileName();
+    const QRegularExpression numbered(QStringLiteral("^(.*\\.part)([0-9]{1,9})(\\.rar)$"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch match = numbered.match(name);
+    QString next;
+    if (match.hasMatch()) {
+        const quint64 number = match.captured(2).toULongLong();
+        next = match.captured(1) + QString::number(number + 1).rightJustified(match.captured(2).size(), QLatin1Char('0')) + match.captured(3);
+    } else if (name.endsWith(QStringLiteral(".rar"), Qt::CaseInsensitive)) {
+        next = name.left(name.size() - 3) + QStringLiteral("r00");
+    } else {
+        const QRegularExpression old(QStringLiteral("^(.*\\.)([r-zR-Z])([0-9]{2})$"));
+        const QRegularExpressionMatch oldMatch = old.match(name);
+        if (!oldMatch.hasMatch()) return QString();
+        ushort letter = oldMatch.captured(2).at(0).unicode();
+        int number = oldMatch.captured(3).toInt() + 1;
+        if (number == 100) { ++letter; number = 0; }
+        if (letter > ushort(QLatin1Char('z').unicode()) || letter == ushort(QLatin1Char('Z').unicode()) + 1) return QString();
+        next = oldMatch.captured(1) + QChar(letter) + QString::number(number).rightJustified(2, QLatin1Char('0'));
+    }
+    return current.dir().absoluteFilePath(next);
+}
+
+struct XRAR_REDIRECTION5 {
+    bool bPresent = false;
+    quint64 nType = 0;
+    quint64 nFlags = 0;
+    QString sTarget;
+};
+
+bool xrarReadRedirection5(const QByteArray &extra, XRAR_REDIRECTION5 *pResult)
+{
+    if (!pResult || (extra.size() > XRAR_MAX_RAR5_HEADER_SIZE)) return false;
+    XRAR_REDIRECTION5 result;
+    qint64 offset = 0;
+    qint32 records = 0;
+    while (offset < extra.size()) {
+        quint64 size = 0, type = 0;
+        if (++records > 65536 || !xrarReadVInt(extra, &offset, extra.size(), 10, &size) ||
+            (size == 0) || (size > quint64(extra.size() - offset))) return false;
+        const qint64 end = offset + qint64(size);
+        if (!xrarReadVInt(extra, &offset, end, 10, &type)) return false;
+        if (type == 5) {
+            quint64 nameSize = 0;
+            if (result.bPresent || !xrarReadVInt(extra, &offset, end, 10, &result.nType) ||
+                !xrarReadVInt(extra, &offset, end, 10, &result.nFlags) ||
+                !xrarReadVInt(extra, &offset, end, 10, &nameSize) || (nameSize == 0) ||
+                (nameSize != quint64(end - offset))) return false;
+            const QByteArray name = extra.mid(qint32(offset), qint32(nameSize));
+            if (name.contains('\0')) return false;
+            result.sTarget = QString::fromUtf8(name.constData(), name.size());
+            if (result.sTarget.toUtf8() != name) return false;
+            result.bPresent = true;
+        }
+        offset = end;
+    }
+    *pResult = result;
+    return true;
 }
 }  // namespace
 
@@ -1335,12 +1519,14 @@ bool XRar::isHeaderCRCValid4(qint64 nOffset, qint64 nHeaderSize, quint16 nExpect
     QPointer<QIODevice> guardedSource(getDevice());
     if (!guardedSource) return false;
 
-    const QByteArray baHeader = guardedArchive->read_array(nOffset + 2, nHeaderSize - 2);
-    if (!guardedArchive || !guardedSource || (guardedArchive->getDevice() != guardedSource.data()) || (baHeader.size() != (nHeaderSize - 2))) {
+    QByteArray baHeader = guardedArchive->readBlock4Snapshot(nOffset);
+    if (!guardedArchive || !guardedSource || (guardedArchive->getDevice() != guardedSource.data()) || (baHeader.size() < 7) || (xrarReadLe16(baHeader, 5) != nHeaderSize)) {
         return false;
     }
 
-    const quint32 nCRC = XBinary::_getCRC32(baHeader, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
+    const qint32 nCRCSize = xrarHeaderCRCSize4(baHeader);
+    if (nCRCSize < 7) return false;
+    const quint32 nCRC = XBinary::_getCRC32(baHeader.mid(2, nCRCSize - 2), 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
     return (quint16)nCRC == nExpectedCRC;
 }
 
@@ -1376,11 +1562,17 @@ QByteArray XRar::readBlock4Snapshot(qint64 nOffset)
     if (nHeaderSize < 7) return QByteArray();
     if (nHeaderSize == 7) return baFixed;
 
-    const QByteArray baHeader = guardedArchive->read_array(nOffset, nHeaderSize);
+    QByteArray baHeader = guardedArchive->read_array(nOffset, nHeaderSize);
     if (!guardedArchive || !guardedSource || (guardedArchive->getDevice() != guardedSource.data()) || (baHeader.size() != nHeaderSize)) {
         return QByteArray();
     }
 
+    const qint32 ownerData = xrarOwnerDataSize4(baHeader);
+    if (ownerData >= 0) {
+        const QByteArray names = guardedArchive->read_array(nOffset + nHeaderSize, ownerData);
+        if (!guardedArchive || !guardedSource || guardedArchive->getDevice() != guardedSource.data() || names.size() != ownerData) return QByteArray();
+        baHeader.append(names);
+    }
     return baHeader;
 }
 
@@ -1427,7 +1619,7 @@ QByteArray XRar::readHeader5Snapshot(qint64 nOffset)
 
 bool XRar::parseGenericBlock4Snapshot(const QByteArray &baHeader, GENERICBLOCK4 *pResult)
 {
-    if (!pResult || (baHeader.size() < 7) || (baHeader.size() > 0xFFFF)) {
+    if (!pResult || (baHeader.size() < 7) || (baHeader.size() > 18 + 2 * 0xFFFF)) {
         return false;
     }
 
@@ -1436,9 +1628,14 @@ bool XRar::parseGenericBlock4Snapshot(const QByteArray &baHeader, GENERICBLOCK4 
     parsed.nType = (quint8)baHeader.at(2);
     parsed.nFlags = xrarReadLe16(baHeader, 3);
     parsed.nHeaderSize = xrarReadLe16(baHeader, 5);
-    if (parsed.nHeaderSize != baHeader.size()) return false;
+    const qint32 ownerData = xrarOwnerDataSize4(baHeader);
+    if (ownerData >= 0) {
+        if (baHeader.size() != 18 + ownerData) return false;
+    } else if (parsed.nHeaderSize != baHeader.size()) return false;
 
-    const QByteArray baCrcData = baHeader.mid(2);
+    const qint32 nCRCSize = xrarHeaderCRCSize4(baHeader);
+    if (nCRCSize < 7) return false;
+    const QByteArray baCrcData = baHeader.mid(2, nCRCSize - 2);
     const quint32 nCRC = XBinary::_getCRC32(baCrcData, 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
     if ((quint16)nCRC != parsed.nCRC16) return false;
 
@@ -1615,6 +1812,9 @@ XRar::FILEHEADER5 XRar::readFileHeader5(qint64 nOffset)
             return result;
         }
     }
+
+    XRAR_REDIRECTION5 redirection;
+    if (!xrarReadRedirection5(parsed.baExtraArea, &redirection)) return result;
 
     return parsed;
 }
@@ -2011,6 +2211,9 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
         *pUnpackState = UNPACK_STATE();
         return false;
     }
+    pContext->bIsVolume = false;
+    pContext->bVolumeNumberKnown = false;
+    pContext->nVolumeNumber = 0;
     pContext->bArchiveIsSolid = false;
     pContext->bHeadersEncrypted = false;
     pContext->nArchiveEnd = 0;
@@ -2080,6 +2283,7 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
             return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
         }
 
+        pContext->bIsVolume = (archiveBlock.nFlags & 1) != 0;
         pContext->bArchiveIsSolid = (archiveBlock.nFlags & 0x0008) != 0;
         nCurrentOffset += archiveBlock.nHeaderSize;
 
@@ -2223,6 +2427,18 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
                     !guardedArchive) {
                     return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 }
+                const QByteArray mainHeader = guardedArchive->readHeader5Snapshot(nCurrentOffset);
+                if (!guardedArchive) { delete pContext; *pUnpackState = UNPACK_STATE(); return false; }
+                qint64 body = 0;
+                quint64 flags = 0;
+                GENERICHEADER5 parsed = {};
+                if (!parseGenericHeader5Snapshot(mainHeader, &parsed, &body) ||
+                    !xrarReadVInt(mainHeader, &body, mainHeader.size() - qint64(parsed.nExtraAreaSize), 10, &flags))
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
+                pContext->bIsVolume = (flags & 1) != 0;
+                pContext->bVolumeNumberKnown = pContext->bIsVolume;
+                if ((flags & 2) && !xrarReadVInt(mainHeader, &body, mainHeader.size() - qint64(parsed.nExtraAreaSize), 10, &pContext->nVolumeNumber))
+                    return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
                 bSawMainHeader = true;
             } else if (!bSawMainHeader && !((genericHeader.nType == HEADERTYPE5_ENCRYPTION) && (nHeaderCount == 0))) {
                 return _initUnpackFail(&guardedArchive, pUnpackState, pContext);
@@ -2463,24 +2679,9 @@ bool XRar::initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::U
     return true;
 }
 
-XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+XBinary::ARCHIVERECORD XRar::infoCurrentRaw(RAR_UNPACK_CONTEXT *pContext, qint32 nIndex)
 {
-    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
-    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
-
-    QPointer<XRar> guardedArchive(this);
-    QPointer<QIODevice> guardedSource(getDevice());
     ARCHIVERECORD record = {};
-
-    if (!pUnpackState || !pUnpackState->pContext || (pUnpackState->nCurrentIndex < 0) || (pUnpackState->nCurrentIndex >= pUnpackState->nNumberOfRecords) ||
-        !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return record;
-    }
-    if (!guardedArchive->isUnpackSourceCurrent(pUnpackState, pPdStruct) || !guardedArchive || !guardedSource) return record;
-
-    RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
-    qint32 nIndex = pUnpackState->nCurrentIndex;
-
     if (pContext->nVersion == 1) {
         const FILEBLOCK14 &fileBlock = pContext->listFileBlocks14.at(nIndex);
 
@@ -2528,8 +2729,7 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
         record.nStreamOffset = pContext->listFileOffsets.at(nIndex) + fileBlock.genericBlock4.nHeaderSize;
         record.nStreamSize = nPackSize;
 
-        record.mapProperties = guardedArchive->_readProperties(fileBlock);
-        if (!guardedArchive) return XBinary::ARCHIVERECORD();
+        record.mapProperties = _readProperties(fileBlock);
 
         // For solid archives, mark ALL files as solid so decompressArchiveRecord
         // routes them through the persistent decoder path
@@ -2547,8 +2747,7 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
         record.nStreamOffset = pContext->listFileOffsets.at(nIndex) + fileHeader.nHeaderSize;
         record.nStreamSize = fileHeader.nDataSize;
 
-        record.mapProperties = guardedArchive->_readProperties(fileHeader);
-        if (!guardedArchive) return XBinary::ARCHIVERECORD();
+        record.mapProperties = _readProperties(fileHeader);
 
         // For solid archives, mark ALL files as solid so decompressArchiveRecord
         // routes them through the persistent decoder path
@@ -2559,6 +2758,165 @@ XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PD
         if (nIndex < pContext->listSolidFolderIndex.count()) {
             record.mapProperties.insert(XBinary::FPART_PROP_SOLIDFOLDERINDEX, (qint64)pContext->listSolidFolderIndex.at(nIndex));
         }
+    }
+
+    return record;
+}
+
+quint8 XRar::splitFlags(const RAR_UNPACK_CONTEXT *context, qint32 index)
+{
+    if (context->nVersion == 4) return quint8(context->listFileBlocks4.at(index).genericBlock4.nFlags & 3);
+    if (context->nVersion == 5) return quint8((context->listFileHeaders5.at(index).nFlags >> 3) & 3);
+    return 0;
+}
+
+bool XRar::unpackSplitRecord(RAR_UNPACK_CONTEXT *context, qint32 index, ARCHIVERECORD record,
+                            UNPACK_STATE *state, QIODevice *stage, QIODevice *destination, PDSTRUCT *progress)
+{
+    QPointer<XRar> owner(this);
+    QPointer<QIODevice> source(getDevice());
+    QPointer<QIODevice> output(stage);
+    QPointer<QIODevice> callerOutput(destination);
+    const qint32 version = context->nVersion;
+    const quint8 firstFlags = splitFlags(context, index);
+    if (!source || !output || !callerOutput || (firstFlags & 1) || !(firstFlags & 2) || !context->bIsVolume ||
+        record.mapProperties.value(FPART_PROP_ENCRYPTED).toBool() || record.mapProperties.contains(FPART_PROP_HANDLEMETHOD2)) return false;
+    // Filename-based companion lookup is available only for a real open file.
+    // A synthetic device's FileName property is not authority to open files.
+    if (!dynamic_cast<QFile *>(source.data())) {
+        setPdStructErrorString(progress, tr("RAR split member requires adjacent volume files"));
+        return false;
+    }
+    QString currentPath = XBinary::getDeviceFileName(source.data());
+    if (!owner || !source || currentPath.isEmpty()) return false;
+    const QString directory = QFileInfo(currentPath).canonicalPath();
+    if (directory.isEmpty()) return false;
+
+    struct OpenVolume {
+        QFile file;
+        std::unique_ptr<XRar> archive;
+        UNPACK_STATE state = {};
+        ~OpenVolume() { if (archive) archive->finishUnpack(&state, nullptr); }
+    };
+    std::vector<std::unique_ptr<OpenVolume>> volumes;
+    // Keep the same input identity across ordinary and split members of a
+    // solid archive. The decoder dictionary belongs to this archive context.
+    QSharedPointer<QIODevice> retainedView = context->spInputView;
+    if (!retainedView) retainedView.reset(new XRarPieceDevice(this, progress, record.nStreamOffset));
+    XRarPieceDevice &pieces = *static_cast<XRarPieceDevice *>(retainedView.data());
+    pieces.configure(progress, record.nStreamOffset);
+    const FILEBLOCK4 first4 = version == 4 ? context->listFileBlocks4.at(index) : FILEBLOCK4();
+    const FILEHEADER5 first5 = version == 5 ? context->listFileHeaders5.at(index) : FILEHEADER5();
+    if (version == 4 && (first4.genericBlock4.nFlags & 4)) return false;
+    if (version == 5 && (first5.nFileFlags & 8)) return false; // Unknown logical size is not yet supported.
+    bool after = true;
+    bool numbered = context->bVolumeNumberKnown;
+    quint64 number = context->nVolumeNumber;
+    ARCHIVERECORD part = record;
+    QPointer<QIODevice> partSource(source);
+    while (after) {
+        if (!pieces.active() || !partSource || volumes.size() >= 4096) return false;
+        const bool packedCRC = part.mapProperties.value(FPART_PROP_CRC_TYPE).toInt() == CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF;
+        if (!pieces.append({partSource, part.nStreamOffset, part.nStreamSize, packedCRC,
+                            part.mapProperties.value(FPART_PROP_RESULTCRC).toUInt()})) return false;
+        const QString nextPath = xrarNextVolumePath(currentPath);
+        const QFileInfo nextInfo(nextPath);
+        if (nextPath.isEmpty() || !nextInfo.isFile() || nextInfo.isSymLink() || nextInfo.canonicalPath() != directory) {
+            setPdStructErrorString(progress, tr("Missing or unsupported adjacent RAR volume: %1").arg(nextPath));
+            return false;
+        }
+        std::unique_ptr<OpenVolume> next(new OpenVolume);
+        next->file.setFileName(nextPath);
+        if (!next->file.open(QIODevice::ReadOnly)) return false;
+        // The stage is internal; also protect the actual direct-API output
+        // from replacing any volume supplying this member's packed bytes.
+        const bool aliasesOutput = XBinary::devicesAlias(&next->file, callerOutput.data());
+        if (!owner || !source || !output || !callerOutput || !pieces.active()) return false;
+        if (aliasesOutput) {
+            setPdStructErrorString(progress, tr("RAR output device aliases an input volume"));
+            return false;
+        }
+        next->archive.reset(new XRar(&next->file));
+        if (!next->archive->initUnpack(&next->state, state->mapUnpackProperties, progress) || !pieces.active()) return false;
+        RAR_UNPACK_CONTEXT *nc = static_cast<RAR_UNPACK_CONTEXT *>(next->state.pContext);
+        if (!nc || nc->nVersion != version || !nc->bIsVolume || next->state.nNumberOfRecords == 0 || !(splitFlags(nc, 0) & 1) ||
+            (numbered && (!nc->bVolumeNumberKnown || number == std::numeric_limits<quint64>::max() || nc->nVolumeNumber != number + 1))) return false;
+        if (version == 4) {
+            const FILEBLOCK4 &f = nc->listFileBlocks4.at(0);
+            if (f.sFileName != first4.sFileName || f.unpSize != first4.unpSize || f.highUnpSize != first4.highUnpSize ||
+                f.unpVer != first4.unpVer || f.method != first4.method || f.hostOS != first4.hostOS ||
+                ((f.genericBlock4.nFlags ^ first4.genericBlock4.nFlags) & 0x01e4)) return false;
+        } else {
+            const FILEHEADER5 &f = nc->listFileHeaders5.at(0);
+            if (f.sFileName != first5.sFileName || f.nUnpackedSize != first5.nUnpackedSize || f.nHostOS != first5.nHostOS ||
+                ((f.nCompInfo ^ first5.nCompInfo) & ~quint64(0x40)) || ((f.nFileFlags ^ first5.nFileFlags) & 9)) return false;
+        }
+        part = next->archive->infoCurrentRaw(nc, 0);
+        if (part.mapProperties.value(FPART_PROP_ENCRYPTED).toBool() || part.mapProperties.contains(FPART_PROP_HANDLEMETHOD2) ||
+            part.mapProperties.contains(FPART_PROP_LINKNAME) || part.mapProperties.value(FPART_PROP_ISFOLDER).toBool()) return false;
+        partSource = &next->file;
+        after = (splitFlags(nc, 0) & 2) != 0;
+        numbered = nc->bVolumeNumberKnown;
+        number = nc->nVolumeNumber;
+        currentPath = nextPath;
+        volumes.push_back(std::move(next));
+        if (!after) {
+            if (!pieces.append({partSource, part.nStreamOffset, part.nStreamSize, false, 0})) return false;
+            // Non-final part CRCs describe compressed fragments. Only the final
+            // header carries the logical member checksum used after decoding.
+            record.mapProperties.remove(FPART_PROP_CRC_TYPE);
+            record.mapProperties.remove(FPART_PROP_RESULTCRC);
+            if (part.mapProperties.contains(FPART_PROP_CRC_TYPE)) {
+                record.mapProperties.insert(FPART_PROP_CRC_TYPE, part.mapProperties.value(FPART_PROP_CRC_TYPE));
+                record.mapProperties.insert(FPART_PROP_RESULTCRC, part.mapProperties.value(FPART_PROP_RESULTCRC));
+            }
+        }
+    }
+    if (!pieces.open(QIODevice::ReadOnly) || !pieces.checkPackedCRCs()) {
+        if (pieces.active()) setPdStructErrorString(progress, tr("RAR split fragment checksum or read failure"));
+        return false;
+    }
+    for (const std::unique_ptr<OpenVolume> &volume : volumes) {
+        if (!volume->archive->isUnpackSourceCurrent(&volume->state, progress) || !pieces.active()) return false;
+    }
+    record.nStreamSize = pieces.size() - record.nStreamOffset;
+    record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, record.nStreamSize);
+    const bool decoded = context->decompress.decompressArchiveRecord(record, &pieces, output.data(), state->mapUnpackProperties,
+                                                                      progress, state->spOutputBudget);
+    if (!decoded || !pieces.active() || !source || !output || pieces.hasError()) return false;
+    for (const std::unique_ptr<OpenVolume> &volume : volumes) {
+        if (!volume->archive->isUnpackSourceCurrent(&volume->state, progress) || !pieces.active()) return false;
+    }
+    return owner && source && output && callerOutput;
+}
+
+XBinary::ARCHIVERECORD XRar::infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct)
+{
+    UNPACK_OPERATION_GUARD operationGuard(&m_bUnpackOperationInProgress, &m_bNestedUnpackInfoAuthorized);
+    if (!operationGuard.isAllowed()) return XBinary::ARCHIVERECORD();
+
+    QPointer<XRar> guardedArchive(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    ARCHIVERECORD record = {};
+
+    if (!pUnpackState || !pUnpackState->pContext || (pUnpackState->nCurrentIndex < 0) || (pUnpackState->nCurrentIndex >= pUnpackState->nNumberOfRecords) ||
+        !guardedSource || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return record;
+    }
+    if (!guardedArchive->isUnpackSourceCurrent(pUnpackState, pPdStruct) || !guardedArchive || !guardedSource) return record;
+
+    RAR_UNPACK_CONTEXT *pContext = (RAR_UNPACK_CONTEXT *)pUnpackState->pContext;
+    qint32 nIndex = pUnpackState->nCurrentIndex;
+
+    record = guardedArchive->infoCurrentRaw(pContext, nIndex);
+    if (splitFlags(pContext, nIndex)) {
+        // A non-final header's CRC describes its packed fragment, not the
+        // logical file. unpackSplitRecord checks each fragment and the final
+        // logical checksum; generic publication must not check that fragment
+        // CRC again against the reconstructed output.
+        record.mapProperties.remove(FPART_PROP_CRC_TYPE);
+        record.mapProperties.remove(FPART_PROP_RESULTCRC);
+        if (!markArchiveStreamRecord(&record, nIndex)) return ARCHIVERECORD();
     }
 
     if (!guardedArchive->isUnpackSourceCurrent(pUnpackState, pPdStruct) || !guardedArchive || !guardedSource) {
@@ -2593,9 +2951,31 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
         return false;
     }
 
+    archiveRecord = guardedArchive->infoCurrentRaw(pContext, pUnpackState->nCurrentIndex);
+    const quint8 split = splitFlags(pContext, pUnpackState->nCurrentIndex);
+    if (split & 1) {
+        setPdStructErrorString(pPdStruct, tr("RAR member starts in a previous volume; open the volume containing its first part"));
+        return false;
+    }
+
+    if (pContext->nVersion == 5) {
+        XRAR_REDIRECTION5 redirection;
+        if (!xrarReadRedirection5(pContext->listFileHeaders5.at(pUnpackState->nCurrentIndex).baExtraArea, &redirection)) return false;
+        if (redirection.bPresent) {
+            // Redirections have no ordinary member stream. Retain their link
+            // metadata in infoCurrent; never publish an empty file for them.
+            // The common archive contract does not materialize link targets.
+            XBinary::setPdStructErrorString(pPdStruct, tr("RAR link extraction is unsupported; the link target is preserved in the member metadata"));
+            return false;
+        }
+    }
+
     const bool bIsFolder = archiveRecord.mapProperties.value(FPART_PROP_ISFOLDER).toBool();
     const qint64 nExpectedSize = bIsFolder ? 0 : archiveRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE, (qint64)-1).toLongLong();
     if ((nExpectedSize < 0) || !XBinary::isUnpackOutputSizeAllowed(pUnpackState->mapUnpackProperties, nExpectedSize)) return false;
+    OUTPUT_POLICY outputPolicy = {};
+    if (!resolveUnpackOutputPolicy(pUnpackState->mapUnpackProperties, &outputPolicy) ||
+        (dynamic_cast<QBuffer *>(guardedOutput.data()) && outputPolicy.nMaxMemoryOutputSize >= 0 && nExpectedSize > outputPolicy.nMaxMemoryOutputSize)) return false;
 
     // This override bypasses the base decode chain's per-entry gate; account
     // the member here. Produced bytes are charged by _writeDevice through the
@@ -2614,8 +2994,31 @@ bool XRar::unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutput
     if (!pStage || !guardedArchive || !guardedSource || !guardedOutput) return false;
     if (!guardedArchive->isUnpackSourceCurrent(pUnpackState, pPdStruct) || !guardedArchive || !guardedSource || !guardedOutput) return false;
 
-    bool bResult = bIsFolder || pContext->decompress.decompressArchiveRecord(archiveRecord, guardedSource.data(), pStage.get(), pUnpackState->mapUnpackProperties,
-                                                                             pPdStruct, pUnpackState->spOutputBudget);
+    QSharedPointer<QIODevice> retainedView;
+    QPointer<QIODevice> decodeInput = guardedSource;
+    if (!bIsFolder && pContext->bArchiveIsSolid) {
+        if (pContext->sSourceMD5.isEmpty()) {
+            const QString identity = XBinary::getHash(HASH_MD5, guardedSource.data(), pPdStruct);
+            if (!guardedArchive || !guardedSource || !guardedOutput || identity.isEmpty()) return false;
+            if (!guardedArchive->isUnpackSourceCurrent(pUnpackState, pPdStruct) || !guardedArchive || !guardedSource || !guardedOutput) return false;
+            pContext->sSourceMD5 = identity;
+        }
+        archiveRecord.mapProperties.insert(FPART_PROP_FILEMD5, pContext->sSourceMD5);
+        if (!pContext->spInputView) pContext->spInputView.reset(new XRarPieceDevice(this, pPdStruct, 0));
+        retainedView = pContext->spInputView;
+        XRarPieceDevice *view = static_cast<XRarPieceDevice *>(retainedView.data());
+        view->configure(pPdStruct, 0);
+        const qint64 sourceSize = guardedSource->size();
+        if (!guardedArchive || !guardedSource || !guardedOutput || !view->active() || sourceSize < 0 ||
+            !view->append({guardedSource, 0, sourceSize, false, 0}) || !view->open(QIODevice::ReadOnly)) return false;
+        decodeInput = view;
+    }
+    bool bResult = bIsFolder;
+    if (!bIsFolder) {
+        bResult = (split & 2) ? guardedArchive->unpackSplitRecord(pContext, pUnpackState->nCurrentIndex, archiveRecord, pUnpackState, pStage.get(), guardedOutput.data(), pPdStruct)
+                             : pContext->decompress.decompressArchiveRecord(archiveRecord, decodeInput.data(), pStage.get(), pUnpackState->mapUnpackProperties,
+                                                                           pPdStruct, pUnpackState->spOutputBudget);
+    }
 
     if (!guardedArchive || !guardedSource || !guardedOutput || !bResult) return false;
 
@@ -2768,6 +3171,14 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEBLOCK4 &file
         compressMethod = HANDLE_METHOD_RAR_29;
     }
 
+    // RAR 2.x/3.x store the required dictionary in file-header bits 7-5.
+    // Omitting it selected the decoder's 256 KiB fallback and corrupted valid
+    // matches farther back in larger dictionaries. Value 7 marks directories.
+    const quint8 nDictionaryBits = (fileBlock4.genericBlock4.nFlags >> 5) & 7;
+    if (((compressMethod == HANDLE_METHOD_RAR_20) || (compressMethod == HANDLE_METHOD_RAR_29)) && (nDictionaryBits < 7)) {
+        mapResult.insert(XBinary::FPART_PROP_WINDOWSIZE, quint32(0x10000) << nDictionaryBits);
+    }
+
     mapResult.insert(XBinary::FPART_PROP_HANDLEMETHOD, compressMethod);
 
     // Solid flag: RAR4 file header nFlags bit 0x0010
@@ -2775,7 +3186,9 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEBLOCK4 &file
     mapResult.insert(XBinary::FPART_PROP_ISSOLID, bIsSolid);
 
     // Directory flag: RAR4 uses dictionary size field (bits 7-5) == 7 or fileAttr & 0x10
-    bool bIsFolder = ((fileBlock4.genericBlock4.nFlags & 0x00E0) == 0x00E0) || (fileBlock4.fileAttr & 0x10);
+    const bool bUnixAttributes = (fileBlock4.hostOS == RAR_OS_UNIX) || (fileBlock4.hostOS == RAR_OS_BEOS);
+    bool bIsFolder = ((fileBlock4.genericBlock4.nFlags & 0x00E0) == 0x00E0) ||
+                     (bUnixAttributes ? ((fileBlock4.fileAttr & 0xf000) == 0x4000) : ((fileBlock4.fileAttr & 0x10) != 0));
     mapResult.insert(XBinary::FPART_PROP_ISFOLDER, bIsFolder);
 
     // Extract DOS date and time from 32-bit fileTime field (date in high word, time in low word)
@@ -2817,6 +3230,21 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
     mapResult.insert(XBinary::FPART_PROP_COMPRESSEDSIZE, fileHeader5.nDataSize);
     mapResult.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, fileHeader5.nUnpackedSize);
 
+    XRAR_REDIRECTION5 redirection;
+    if (!xrarReadRedirection5(fileHeader5.baExtraArea, &redirection)) return QMap<XBinary::FPART_PROP, QVariant>();
+    if (redirection.bPresent) {
+        QString sType;
+        switch (redirection.nType) {
+            case 1: case 2: sType = QStringLiteral("Symbolic link"); break;
+            case 3: sType = QStringLiteral("Windows junction"); break;
+            case 4: sType = QStringLiteral("Hard link"); break;
+            case 5: sType = QStringLiteral("File copy"); break;
+            default: sType = QStringLiteral("RAR redirection (%1)").arg(redirection.nType); break;
+        }
+        mapResult.insert(XBinary::FPART_PROP_TYPE, sType);
+        mapResult.insert(XBinary::FPART_PROP_LINKNAME, redirection.sTarget);
+    }
+
     // RAR5 stores nDataCRC32 only when the CRC-present flag is set. A zero
     // value is still a valid CRC and must not be used as a presence sentinel.
     if (fileHeader5.nFileFlags & 0x0004) {
@@ -2848,7 +3276,11 @@ QMap<XBinary::FPART_PROP, QVariant> XRar::_readProperties(const FILEHEADER5 &fil
     mapResult.insert(XBinary::FPART_PROP_ISFOLDER, bIsFolder);
 
     // Calculate window (dictionary) size from compression info
-    if (nVer == 0) {
+    if (compressMethod == HANDLE_METHOD_STORE) {
+        // Stored data does not allocate or use the compression dictionary.
+        // Publishing a nominal window would incorrectly reject a small
+        // stored member whose exact output limit is below 128 KiB.
+    } else if (nVer == 0) {
         // RAR 5.0: bits 10-14 encode dictionary size as 128KB << dictBits
         quint8 nDictBits = (fileHeader5.nCompInfo >> 10) & 0x1F;
         quint64 nWindowSize = (quint64)0x20000 << nDictBits;

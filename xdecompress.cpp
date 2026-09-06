@@ -38,10 +38,59 @@
 #include "Algos/xpakdecoder.h"
 #include "Algos/xssmdecoder.h"
 #include "Algos/xmaclegacydecoders.h"
+#include "xaldusdecoder.h"
+#include "Algos/xbthpakdecoder.h"
+#include "Algos/xarcv2decoder.h"
+#include "Algos/xampkdecoder.h"
+#include "Algos/xancientdecoder.h"  // already present in xdecompress.cpp (line 43) - no new include needed
+#include "Algos/xasymetrixdecoder.h"
+#include "Algos/xbsndecoder.h"
+#include "xborlandpackdecoder.h"
 #include "Algos/xpaxdecoder.h"
 #include "Algos/xvisedeflatedecoder.h"
 #include "Algos/xancientdecoder.h"
 #include "Algos/xrtpatchdecoder.h"
+#include "Algos/xbzip1decoder.h"
+#include "Algos/xkolibrikpackdecoder.h"
+#include "Algos/xmathcaddecoder.h"
+#include "Algos/xpcommos2decoder.h"
+#include "Algos/xinfogramespakdecoder.h"
+#include "Algos/xnetwarepackdecoder.h"
+#include "Algos/xearefpackdecoder.h"
+#include "Algos/xlzpis2decoder.h"
+#include "Algos/xnpackdecoder.h"
+#include "Algos/xcorelltecdecoder.h"
+#include "Algos/xirwinpacdecoder.h"
+#include "Algos/xgashuffdecoder.h"
+#include "Algos/xsilmarilsdecoder.h"
+#include "Algos/xrawlzw15vdecoder.h"
+#include "Algos/xriddecoder.h"
+#include "Algos/xrompaqdecoder.h"
+#include "Algos/xarcv4decoder.h"
+#include "Algos/xealzwdecoder.h"
+#include "Algos/xslsdecoder.h"
+#include "Algos/xpcsecuredecoder.h"
+#include "Algos/xqnxbasedecoder.h"
+#include "Algos/xhuffdecoder.h"
+#include "Algos/xlzhcxpdecoder.h"
+#include "Algos/xdsquantumdecoder.h"
+#include "Algos/xpktdecoder.h"
+#include "Algos/xhdcopydecoder.h"
+#include "Algos/xstylusdecoder.h"
+#include "Algos/xsettlersftdecoder.h"
+#include "Algos/xsqdecoder.h"
+#include "Algos/xis11decoder.h"
+#include "Algos/xpaperportdecoder.h"
+#include "Algos/xealibdecoder.h"
+#include "Algos/xniddecoder.h"
+#include "Algos/xhapdecoder.h"
+#include "Algos/xlzdietdecoder.h"
+#include "Algos/xlzv1decoder.h"
+#include "Algos/xsafdecoder.h"
+#include "Algos/xhfedecoder.h"
+#include "Algos/xrsvkdecoder.h"
+#include "Algos/xhzldecoder.h"
+#include "Algos/xlofidecoder.h"
 #include <QCoreApplication>
 #include <QPointer>
 #include <QVector>
@@ -2375,7 +2424,7 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
     qint32 nNumberOfMethods = 1;
 
     XBinary::HANDLE_METHOD topMethod = (XBinary::HANDLE_METHOD)pState->mapProperties.value(XBinary::FPART_PROP_HANDLEMETHOD, XBinary::HANDLE_METHOD_STORE).toUInt();
-    // BCJ2 handles its own 4 sub-streams internally in decompress() — never treat it as multi-method
+    // BCJ2 handles its own 4 sub-streams internally in decompress() â€” never treat it as multi-method
     if (topMethod != XBinary::HANDLE_METHOD_BCJ2) {
         if (pState->mapProperties.contains(XBinary::FPART_PROP_HANDLEMETHOD3)) {
             nNumberOfMethods = 3;
@@ -2431,7 +2480,15 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
                     bResult = decCheckCRCQuiet(crcType, varCRC, pFullDevice, pPdStruct, pState);
                 }
                 if (bResult) {
-                    bResult = decEmitDevice(pFullDevice, 0, nFullSize, pState, pPdStruct);
+                    // Full decoding already charged every produced byte to
+                    // the operation budget. Publishing its verified window
+                    // must not debit those same bytes a second time.
+                    XBinary::DATAPROCESS_STATE publishState = *pState;
+                    publishState.spOutputBudget.clear();
+                    bResult = decEmitDevice(pFullDevice, 0, nFullSize, &publishState, pPdStruct);
+                    pState->nCountOutput = publishState.nCountOutput;
+                    pState->bReadError = publishState.bReadError;
+                    pState->bWriteError = publishState.bWriteError;
                 }
                 XBinary::freeFileBuffer(&pFullDevice);
             }
@@ -2449,7 +2506,7 @@ bool XDecompress::multiDecompress(XBinary::DATAPROCESS_STATE *pState, XBinary::P
             }
         }
     } else if (bIsSolid) {
-        // Check if this is a RAR solid archive — RAR solid requires sequential decompression
+        // Check if this is a RAR solid archive â€” RAR solid requires sequential decompression
         // with persistent decoder state, unlike 7z solid which uses a single compressed block.
         bool bIsRarSolid = (topMethod == XBinary::HANDLE_METHOD_RAR_15) || (topMethod == XBinary::HANDLE_METHOD_RAR_20) || (topMethod == XBinary::HANDLE_METHOD_RAR_29) ||
                            (topMethod == XBinary::HANDLE_METHOD_RAR_50) || (topMethod == XBinary::HANDLE_METHOD_RAR_70);
@@ -2832,6 +2889,87 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XStoreDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP2) {
         bResult = XBZIP2Decoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_BZIP1) {
+        // bzip 0.21 ('BZ0'), the arithmetic-coded predecessor of bzip2.  It sits
+        // here and NOT in the whole-buffer family list below because that path
+        // requires bUncompressedSizeDefined, and a bzip 0.21 stream carries no
+        // uncompressed size anywhere - the only way to learn it is to decode.
+        bResult = XBZIP1Decoder::decompress(pState, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_MATHCAD) {
+        bResult = XMathCadDecoder::decompress(pState, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_KOLIBRI_KPACK) {
+        bResult = XKolibriKPackDecoder::decompress(pState, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_MWAVE_Z) {
+        // IBM Mwave packed file (.Z).  The container keeps the 1F 9D magic at
+        // offset 0 of the file and the ordinary Unix-compress flags byte at
+        // +0x17, immediately in front of the LSB-first LZW code stream, so the
+        // three bytes XCompressDecoder expects at its entry point are nowhere
+        // adjacent.  The part starts at the flags byte: re-attach the magic in
+        // memory and run the shared compress decoder over the reconstructed
+        // stream.  The container stores no unpacked length, which is why this
+        // method must NOT join the whole-buffer decoder group above.
+        qint64 nMwavePackedSize = 0;
+        bResult = decPrepareBoundedInput(pState->pDeviceInput, pState->nInputOffset, pState->nInputLimit, &nMwavePackedSize) && decIsValidBufferSize(nMwavePackedSize) &&
+                  (nMwavePackedSize >= 1) && (nMwavePackedSize <= (qint64)(std::numeric_limits<qint32>::max)() - 2);
+        if (!bResult) {
+            pState->bReadError = true;
+        }
+
+        XBinary::UNPACK_MEMORY_RESERVATION mwaveReservation;
+        bResult = bResult && mwaveReservation.acquire(pState->mapUnpackProperties, nMwavePackedSize + 2);
+
+        QByteArray baMwaveStream;
+        if (bResult) {
+            baMwaveStream = QByteArray(qint32(nMwavePackedSize) + 2, char(0));
+            baMwaveStream[0] = char(0x1f);
+            baMwaveStream[1] = char(0x9d);
+            qint64 nMwaveConsumed = 0;
+            bResult = decReadExactAt(pState->pDeviceInput, pState->nInputOffset, baMwaveStream.data() + 2, nMwavePackedSize, pState, pPdStruct, &nMwaveConsumed);
+            pState->nCountInput = nMwaveConsumed;
+        }
+
+        if (bResult) {
+            QBuffer mwaveBuffer(&baMwaveStream);
+            bResult = mwaveBuffer.open(QIODevice::ReadOnly);
+
+            if (bResult) {
+                XBinary::DATAPROCESS_STATE mwaveState = {};
+                mwaveState.mapProperties = pState->mapProperties;
+                mwaveState.mapUnpackProperties = pState->mapUnpackProperties;
+                mwaveState.spOutputBudget = pState->spOutputBudget;
+                mwaveState.pDeviceInput = &mwaveBuffer;
+                mwaveState.pDeviceOutput = pState->pDeviceOutput;
+                mwaveState.nInputOffset = 0;
+                mwaveState.nInputLimit = baMwaveStream.size();
+                mwaveState.nProcessedOffset = pState->nProcessedOffset;
+                mwaveState.nProcessedLimit = pState->nProcessedLimit;
+
+                bResult = XCompressDecoder::decompress(&mwaveState, pPdStruct);
+
+                pState->nCountOutput = mwaveState.nCountOutput;
+                if (mwaveState.bReadError) pState->bReadError = true;
+                if (mwaveState.bWriteError) pState->bWriteError = true;
+
+                mwaveBuffer.close();
+            }
+        }
+    } else if (compressMethod == XBinary::HANDLE_METHOD_NPACK) {
+        bResult = XNPackDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_IRWINPAC) {
+        bResult = XIrwinPacDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_GAS_HUFF) {
+        bResult = XGasHuffDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZPIS2) {
+        bResult = XLzpis2Decoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_STYLUS) {
+        // Stylus "DP"/SDC dictionary stream: 0xB5-XORed LZSS with a zero-filled
+    // 4 KiB ring and a +18 position bias.  It belongs here and NOT in the
+    // whole-buffer method list below: the container stores no uncompressed
+    // size, so bUncompressedSizeDefined is false and that path would reject
+    // it.  XStylus measures the stream itself when it has to publish a size.
+    bResult = XStylusDecoder::decompress(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LZV1) {
+        bResult = XLZV1Decoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_BROTLI) {
         bResult = XBrotliDecoder::decompress(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZMA) {
@@ -2847,7 +2985,7 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
             bResult = XLZMADecoder::decompressLZMA2(pState, pPdStruct);
         }
     } else if (compressMethod == XBinary::HANDLE_METHOD_BCJ) {
-        // x86 BCJ inverse filter — delegate to the single byte-exact reference port.
+        // x86 BCJ inverse filter â€” delegate to the single byte-exact reference port.
         if (pState->pDeviceInput && pState->pDeviceOutput) {
             qint64 nFilterSize = pState->nInputLimit;
             if (nFilterSize == -1) {
@@ -3139,7 +3277,22 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                   (pState->nCountOutput == nUncompressedSize) &&
                   XBinary::isPdStructNotCanceled(pPdStruct);
     } else if ((compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_RLE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ALDUS_LZW) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ALDUS_PKZP) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ALDUS_LZSH) ||
+               (compressMethod == XBinary::HANDLE_METHOD_BPE_GAGE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ARCV2_LZHUF_DELTA) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ARCV_XOR_DELTA) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ARCV2_LZHUF_DELTA_TRIAL) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ARCV_XOR_DELTA_TRIAL) ||
+               (compressMethod == XBinary::HANDLE_METHOD_AMPK_LZSS) ||
+               (compressMethod == XBinary::HANDLE_METHOD_AMPK_LZARI) ||
+               (compressMethod == XBinary::HANDLE_METHOD_UNIX_PACK) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ASYMETRIX_BLOCKS) ||
+               (compressMethod == XBinary::HANDLE_METHOD_BSN_LH6) ||
+               (compressMethod == XBinary::HANDLE_METHOD_COMPRESS_RAW) ||
                (compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_LZH) ||
+               (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_LZW) ||
                (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_ADN) ||
                (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_DDN) ||
                (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_COMPACT_PRO) ||
@@ -3158,6 +3311,47 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                (compressMethod == XBinary::HANDLE_METHOD_FPAK_COMPRESSED) ||
                (compressMethod == XBinary::HANDLE_METHOD_RTPATCH_TEXT) ||
                 (compressMethod == XBinary::HANDLE_METHOD_RNC) ||
+               (compressMethod == XBinary::HANDLE_METHOD_SOLARIS_BOOT) ||
+               (compressMethod == XBinary::HANDLE_METHOD_PCOMM_OS2) ||
+               (compressMethod == XBinary::HANDLE_METHOD_INFOGRAMES_PAK) ||
+               (compressMethod == XBinary::HANDLE_METHOD_NETWARE_PACK) ||
+               (compressMethod == XBinary::HANDLE_METHOD_EA_REFPACK) ||
+               (compressMethod == XBinary::HANDLE_METHOD_COREL_LTEC) ||
+               (compressMethod == XBinary::HANDLE_METHOD_SILMARILS) ||
+               (compressMethod == XBinary::HANDLE_METHOD_IS7_INX) ||
+               (compressMethod == XBinary::HANDLE_METHOD_RAW_LZW15V) ||
+               (compressMethod == XBinary::HANDLE_METHOD_GTU) ||
+               (compressMethod == XBinary::HANDLE_METHOD_NOTETAB) ||
+               (compressMethod == XBinary::HANDLE_METHOD_IZPACK) ||
+               (compressMethod == XBinary::HANDLE_METHOD_RID) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ROMPAQ) ||
+               (compressMethod == XBinary::HANDLE_METHOD_ARCV4_M2) ||
+               (compressMethod == XBinary::HANDLE_METHOD_EA) ||
+               (compressMethod == XBinary::HANDLE_METHOD_SLS) ||
+               (compressMethod == XBinary::HANDLE_METHOD_PC_SECURE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_QNX_BASE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_GAMOS) ||
+               (compressMethod == XBinary::HANDLE_METHOD_EXE_SBOOKBUILDER) ||
+               (compressMethod == XBinary::HANDLE_METHOD_HUFF) ||
+               (compressMethod == XBinary::HANDLE_METHOD_LZHCXP) ||
+               (compressMethod == XBinary::HANDLE_METHOD_QUANTUM) ||
+               (compressMethod == XBinary::HANDLE_METHOD_PKT) ||
+               (compressMethod == XBinary::HANDLE_METHOD_HDCOPY) ||
+               (compressMethod == XBinary::HANDLE_METHOD_IVT) ||
+               (compressMethod == XBinary::HANDLE_METHOD_SETTLERS_FT) ||
+               (compressMethod == XBinary::HANDLE_METHOD_OPC) ||
+               (compressMethod == XBinary::HANDLE_METHOD_SQ) ||
+               (compressMethod == XBinary::HANDLE_METHOD_IS11) ||
+               (compressMethod == XBinary::HANDLE_METHOD_PAPERPORT) ||
+               (compressMethod == XBinary::HANDLE_METHOD_EALIB) ||
+               (compressMethod == XBinary::HANDLE_METHOD_NID) ||
+               (compressMethod == XBinary::HANDLE_METHOD_HAP) ||
+               (compressMethod == XBinary::HANDLE_METHOD_LZDIET) ||
+               (compressMethod == XBinary::HANDLE_METHOD_SAF) ||
+               (compressMethod == XBinary::HANDLE_METHOD_HFE) ||
+               (compressMethod == XBinary::HANDLE_METHOD_RSVK) ||
+               (compressMethod == XBinary::HANDLE_METHOD_HZL) ||
+               (compressMethod == XBinary::HANDLE_METHOD_LOFI) ||
                 (compressMethod == XBinary::HANDLE_METHOD_RTPATCH)) {
         qint64 nPackedSize = 0;
         if (!bUncompressedSizeDefined || !decIsValidBufferSize(nUncompressedSize) ||
@@ -3278,6 +3472,63 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                     unpacked[i] = char(quint8(unpacked.at(i)) ^ 0xa9U);
                 bResult = true;
             }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_SOLARIS_BOOT) {
+            // The Solaris boot "TG" group is handed over whole: a 12-byte header,
+            // a table of {unpacked, packed, offset} triples whose offsets are
+            // relative to the group start, and back-to-back raw Deflate streams.
+            // Concatenating the blocks yields the single cpio member.
+            bResult = false;
+            const uchar *pGroup = reinterpret_cast<const uchar *>(packed.constData());
+            if ((packed.size() >= 24) && (pGroup[0] == 0x19U) && (pGroup[1] == 0x9eU) && (pGroup[2] == 'T') && (pGroup[3] == 'G')) {
+                const quint32 nBlockCount = qFromLittleEndian<quint32>(pGroup + 4);
+                const qint64 nTableEnd = 12 + (qint64)nBlockCount * 12;
+                if ((nBlockCount > 0) && (nBlockCount <= 0x10000) && (nTableEnd <= packed.size())) {
+                    bResult = true;
+                    for (quint32 i = 0; bResult && (i < nBlockCount); i++) {
+                        const uchar *pEntry = pGroup + 12 + (qint64)i * 12;
+                        const qint64 nBlockUnpacked = (qint64)qFromLittleEndian<quint32>(pEntry + 0);
+                        const qint64 nBlockPacked = (qint64)qFromLittleEndian<quint32>(pEntry + 4);
+                        const qint64 nBlockOffset = (qint64)qFromLittleEndian<quint32>(pEntry + 8);
+                        if ((nBlockUnpacked <= 0) || (nBlockPacked <= 0) || (nBlockOffset < nTableEnd) || (nBlockOffset > packed.size()) ||
+                            (nBlockPacked > (qint64)packed.size() - nBlockOffset) || (nBlockUnpacked > nUncompressedSize - (qint64)unpacked.size())) {
+                            bResult = false;
+                            break;
+                        }
+                        QByteArray baBlock = packed.mid((qint32)nBlockOffset, (qint32)nBlockPacked);
+                        QByteArray baBlockOutput;
+                        QBuffer blockInput(&baBlock);
+                        QBuffer blockOutput(&baBlockOutput);
+                        if (!blockInput.open(QIODevice::ReadOnly) || !blockOutput.open(QIODevice::WriteOnly)) {
+                            bResult = false;
+                            break;
+                        }
+                        XBinary::DATAPROCESS_STATE blockState = {};
+                        blockState.pDeviceInput = &blockInput;
+                        blockState.pDeviceOutput = &blockOutput;
+                        blockState.nInputOffset = 0;
+                        blockState.nInputLimit = baBlock.size();
+                        blockState.nProcessedOffset = 0;
+                        blockState.nProcessedLimit = nBlockUnpacked;
+                        blockState.mapUnpackProperties.insert(XBinary::UNPACK_PROP_MAX_OUTPUT_SIZE, nBlockUnpacked);
+                        blockState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nBlockUnpacked);
+                        // The stored packed length carries one byte of slack past the
+                        // final Deflate block, so full input consumption must NOT be
+                        // required here - only the exact output length.
+                        bResult = XDeflateDecoder::decompress(&blockState, pPdStruct) && !blockState.bReadError && !blockState.bWriteError &&
+                                  (blockState.nCountOutput == nBlockUnpacked) && ((qint64)baBlockOutput.size() == nBlockUnpacked) &&
+                                  XBinary::isPdStructNotCanceled(pPdStruct);
+                        blockInput.close();
+                        blockOutput.close();
+                        if (bResult) unpacked.append(baBlockOutput);
+                    }
+                    bResult = bResult && ((qint64)unpacked.size() == nUncompressedSize);
+                }
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_PCOMM_OS2) {
+            bResult = XPCommOS2Decoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_INFOGRAMES_PAK) {
+            bResult = XInfogramesPakDecoder::decode(
+                packed, nUncompressedSize, &unpacked, nullptr, pPdStruct);
         } else if (compressMethod == XBinary::HANDLE_METHOD_IS_SKIN_XOR) {
             if (nPackedSize != nUncompressedSize) {
                 bResult = false;
@@ -3295,18 +3546,495 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
                 }
                 bResult = true;
             }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_NETWARE_PACK) {
+            bResult = XNetWarePackDecoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_EA_REFPACK) {
+            bResult = XEARefPackDecoder::decode(packed, nUncompressedSize, &unpacked, nullptr, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_COREL_LTEC) {
+            bResult = XCorelLtecDecoder::decode(packed, nUncompressedSize, baProperty, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_SILMARILS) {
+            bResult = XSilmarilsDecoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_IS7_INX) {
+            // InstallShield 7 obfuscated compiled InstallScript.  The filter is
+            // length preserving and position dependent: byte i of the FILE (the
+            // counter starts at 0 at offset 0 and never resets) decodes as
+            // ror8(b ^ 0xF1, 2) - (i % 0x47).  The member is always the whole
+            // container, so the part offset is 0 and i is the buffer index.
+            if (nPackedSize != nUncompressedSize) {
+                bResult = false;
+            } else {
+                unpacked = packed;
+                for (qint32 i = 0; i < unpacked.size(); ++i) {
+                    const quint8 nByte = quint8(quint8(unpacked.at(i)) ^ 0xF1U);
+                    const quint8 nRotated = quint8((nByte >> 2) | (nByte << 6));
+                    unpacked[i] = char(quint8(nRotated - quint8(quint32(i) % 0x47U)));
+                }
+                bResult = true;
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_RAW_LZW15V) {
+            bResult = XRawLzw15vDecoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_GTU) {
+            // GTU members are a chain of frames, each [i32 rawSize][i32
+            // packedSize] followed by one complete Okumura LZARI stream - the
+            // same codec AMPK method 1 uses, so no new decoder is introduced.
+            // XGTU publishes the member starting at its first output-producing
+            // frame, so the walk begins at offset 0 of `packed`.
+            bResult = true;
+            unpacked.clear();
+            qint64 nGtuFrameOffset = 0;
+            qint64 nGtuLeft = nUncompressedSize;
+            while (bResult && (nGtuLeft > 0)) {
+                if (nGtuFrameOffset > packed.size() - 8) {
+                    bResult = false;
+                    break;
+                }
+                const uchar *pGtuFrame =
+                    reinterpret_cast<const uchar *>(packed.constData()) +
+                    nGtuFrameOffset;
+                const qint64 nGtuRawSize = static_cast<qint64>(
+                    static_cast<qint32>(qFromLittleEndian<quint32>(pGtuFrame)));
+                const qint64 nGtuPackedSize = static_cast<qint64>(
+                    static_cast<qint32>(qFromLittleEndian<quint32>(pGtuFrame + 4)));
+                nGtuFrameOffset += 8;
+                if ((nGtuRawSize <= 0) || (nGtuRawSize > nGtuLeft) ||
+                    (nGtuPackedSize <= 0) ||
+                    (nGtuPackedSize > packed.size() - nGtuFrameOffset)) {
+                    bResult = false;
+                    break;
+                }
+                QByteArray baGtuFrame;
+                bResult = XAMPKDecoder::decodeLZARI(
+                    packed.mid(qint32(nGtuFrameOffset), qint32(nGtuPackedSize)),
+                    nGtuRawSize, &baGtuFrame);
+                if (bResult && (baGtuFrame.size() != nGtuRawSize)) bResult = false;
+                if (!bResult) break;
+                unpacked.append(baGtuFrame);
+                nGtuFrameOffset += nGtuPackedSize;
+                nGtuLeft -= nGtuRawSize;
+            }
+            if (bResult && (nGtuLeft != 0)) bResult = false;
+        } else if (compressMethod == XBinary::HANDLE_METHOD_NOTETAB) {
+            // NoteTab clip: the container stores only the clip body. The
+            // extracted member is the clip heading, a blank line, then that
+            // body. Heading and body are NOT contiguous in the file (the
+            // closing quote and the heading line's own terminator sit between
+            // them), so XNoteTab hands the heading over as
+            // FPART_PROP_COMPRESSPROPERTIES and this arm concatenates. There is
+            // no codec and no bit reader.
+            bResult = ((static_cast<qint64>(baProperty.size()) + static_cast<qint64>(packed.size())) == nUncompressedSize);
+            if (bResult) {
+                unpacked.reserve(qint32(nUncompressedSize));
+                unpacked.append(baProperty);
+                unpacked.append(packed);
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_IZPACK) {
+            // IzPack members are STORED, but ObjectOutputStream frames them as a
+            // run of block-data records: TC_BLOCKDATA (0x77 + u8 length) or
+            // TC_BLOCKDATALONG (0x7A + u32be length).  Concatenating the chunk
+            // payloads yields the file.  The final chunk may declare 4, 8 or 12
+            // bytes more than the member has left, because the writer had already
+            // buffered the next primitive writes when it flushed; XIzPack keeps
+            // those inside the packed span and they are simply not copied.
+            bResult = false;
+            unpacked.reserve((qint32)nUncompressedSize);
+            const uchar *pStream = reinterpret_cast<const uchar *>(packed.constData());
+            qint64 nStreamPos = 0;
+            qint64 nLeft = nUncompressedSize;
+            bool bStreamOk = true;
+            while (bStreamOk && (nLeft > 0)) {
+                if (nStreamPos >= (qint64)packed.size()) {
+                    bStreamOk = false;
+                    break;
+                }
+                const quint8 nTag = pStream[nStreamPos++];
+                qint64 nChunkSize = 0;
+                if (nTag == 0x7aU) {
+                    if (((qint64)packed.size() - nStreamPos) < 4) {
+                        bStreamOk = false;
+                        break;
+                    }
+                    nChunkSize = (qint64)qFromBigEndian<quint32>(pStream + nStreamPos);
+                    nStreamPos += 4;
+                } else if (nTag == 0x77U) {
+                    if (nStreamPos >= (qint64)packed.size()) {
+                        bStreamOk = false;
+                        break;
+                    }
+                    nChunkSize = (qint64)pStream[nStreamPos++];
+                } else {
+                    bStreamOk = false;
+                    break;
+                }
+                if (nChunkSize <= 0) {
+                    bStreamOk = false;
+                    break;
+                }
+                if (nChunkSize > nLeft) nChunkSize = nLeft;
+                if (nChunkSize > ((qint64)packed.size() - nStreamPos)) {
+                    bStreamOk = false;
+                    break;
+                }
+                unpacked.append(packed.mid((qint32)nStreamPos, (qint32)nChunkSize));
+                nStreamPos += nChunkSize;
+                nLeft -= nChunkSize;
+            }
+            bResult = bStreamOk && ((qint64)unpacked.size() == nUncompressedSize);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_RID) {
+            bResult = XRidDecoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_ROMPAQ) {
+            bResult = XRomPaqDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_ARCV4_M2) {
+            bResult = XARCV4Decoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_EA) {
+            bResult = XEALzwDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_SLS) {
+            bResult = XSLSDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_PC_SECURE) {
+            bResult = XPCSecureDecoder::decode(packed, nUncompressedSize, baProperty, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_QNX_BASE) {
+            // QNX Neutrino boot image.  Every member's stream is the SAME block
+            // chain - the whole compressed image filesystem - so the member's own
+            // place inside the decompressed image travels in the compress
+            // properties as two little-endian u32s: the member's offset and the
+            // size of the whole image filesystem, which is the decoder's ceiling.
+            if (baProperty.size() != 8) {
+                bResult = false;
+            } else {
+                const uchar *pQnxProperty = reinterpret_cast<const uchar *>(baProperty.constData());
+                const qint64 nQnxMemberOffset = static_cast<qint64>(qFromLittleEndian<quint32>(pQnxProperty));
+                const qint64 nQnxImageSize = static_cast<qint64>(qFromLittleEndian<quint32>(pQnxProperty + 4));
+                bResult = XQNXBaseDecoder::decodeRange(packed, nQnxMemberOffset, nUncompressedSize, nQnxImageSize, &unpacked);
+                if (bResult && (static_cast<qint64>(unpacked.size()) != nUncompressedSize)) bResult = false;
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_GAMOS) {
+            // Gamos LZSS: a 4 KiB ring pre-filled with 0x20 and a write cursor that
+            // starts at 0 - not at N - F, which is what the LPAK/AMPK/SZDD paths
+            // do - one LSB-first flag byte per eight tokens, bit set = literal, and
+            // a match encoded as two bytes b1, b2 with
+            // position = ((b2 & 0x0f) << 8) | b1 and length = (b2 >> 4) + 3, i.e.
+            // the two nibbles of b2 the other way round from HANDLE_METHOD_LPAK_LZSS.
+            // The walk is driven by the COMPRESSED size: it ends when the input is
+            // exhausted, and the declared output length is only checked afterwards.
+            QByteArray baGamosWindow(4096, char(0x20));
+            uchar *pGamosWindow = reinterpret_cast<uchar *>(baGamosWindow.data());
+            const uchar *pGamosInput = reinterpret_cast<const uchar *>(packed.constData());
+            qint64 nGamosLeft = packed.size();
+            qint64 nGamosPosition = 0;
+            qint32 nGamosRing = 0;
+            quint32 nGamosFlags = 0;
+            unpacked.clear();
+            unpacked.reserve(qint32(nUncompressedSize));
+            bResult = true;
+            while (nGamosLeft > 0) {
+                quint32 nGamosByte = pGamosInput[nGamosPosition++];
+                --nGamosLeft;
+                nGamosFlags >>= 1;
+                if ((nGamosFlags & 0x100U) == 0) {
+                    nGamosFlags = nGamosByte | 0xff00U;
+                    if (nGamosLeft < 1) {
+                        bResult = false;
+                        break;
+                    }
+                    nGamosByte = pGamosInput[nGamosPosition++];
+                    --nGamosLeft;
+                }
+                if (nGamosFlags & 1U) {
+                    pGamosWindow[nGamosRing] = quint8(nGamosByte);
+                    if (qint64(unpacked.size()) >= nUncompressedSize) {
+                        bResult = false;
+                        break;
+                    }
+                    unpacked.append(char(quint8(nGamosByte)));
+                    nGamosRing = (nGamosRing + 1) & 0xfff;
+                } else {
+                    // Running out of input in front of a match is a clean end of
+                    // stream in the original, not an error.
+                    if (nGamosLeft < 1) break;
+                    const quint32 nGamosSecond = pGamosInput[nGamosPosition++];
+                    --nGamosLeft;
+                    qint32 nGamosSource = qint32(((nGamosSecond & 0x0fU) << 8) | nGamosByte);
+                    const qint32 nGamosLength = qint32(nGamosSecond >> 4) + 3;
+                    if (qint64(nGamosLength) > nUncompressedSize - qint64(unpacked.size())) {
+                        bResult = false;
+                        break;
+                    }
+                    for (qint32 i = 0; i < nGamosLength; ++i) {
+                        const quint8 nGamosCopied = pGamosWindow[nGamosSource & 0xfff];
+                        pGamosWindow[nGamosRing] = nGamosCopied;
+                        nGamosSource = (nGamosSource & 0xfff) + 1;
+                        unpacked.append(char(nGamosCopied));
+                        nGamosRing = (nGamosRing + 1) & 0xfff;
+                    }
+                }
+            }
+            bResult = bResult && (qint64(unpacked.size()) == nUncompressedSize);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_EXE_SBOOKBUILDER) {
+            // SbookBuilder self-running Sbook.  A member is a run of
+            // [u32 packedSize][packedSize bytes] where each chunk is its OWN
+            // complete zlib stream inflating to exactly 16384 bytes; the first
+            // chunk that produces less than that is the member's last one, which is
+            // the only thing that marks a member's end.
+            unpacked.clear();
+            bResult = true;
+            qint64 nSbookOffset = 0;
+            while (bResult && (qint64(unpacked.size()) < nUncompressedSize)) {
+                if (nSbookOffset > packed.size() - 4) {
+                    bResult = false;
+                    break;
+                }
+                const qint64 nSbookChunkSize =
+                    qint64(qint32(qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(packed.constData()) + nSbookOffset)));
+                nSbookOffset += 4;
+                if ((nSbookChunkSize < 6) || (nSbookChunkSize > packed.size() - nSbookOffset)) {
+                    bResult = false;
+                    break;
+                }
+                QByteArray baSbookChunk = packed.mid(qint32(nSbookOffset), qint32(nSbookChunkSize));
+                QByteArray baSbookRaw;
+                QBuffer sbookInput(&baSbookChunk);
+                QBuffer sbookOutput(&baSbookRaw);
+                // ReadWrite, not WriteOnly: decompress_zlib authenticates the RFC 1950
+                // Adler32 by re-reading the finished output device, and a write-only
+                // buffer answers -1 to every read, so every chunk reports broken zlib.
+                if (!sbookInput.open(QIODevice::ReadOnly) || !sbookOutput.open(QIODevice::ReadWrite)) {
+                    bResult = false;
+                    break;
+                }
+                XBinary::DATAPROCESS_STATE sbookState = {};
+                sbookState.pDeviceInput = &sbookInput;
+                sbookState.pDeviceOutput = &sbookOutput;
+                sbookState.nInputOffset = 0;
+                sbookState.nInputLimit = baSbookChunk.size();
+                sbookState.nProcessedOffset = 0;
+                sbookState.nProcessedLimit = 0x4000;
+                sbookState.mapUnpackProperties.insert(XBinary::UNPACK_PROP_MAX_OUTPUT_SIZE, (qint64)0x4000);
+                bResult = XDeflateDecoder::decompress_zlib(&sbookState, pPdStruct) && !sbookState.bReadError && !sbookState.bWriteError;
+                sbookInput.close();
+                sbookOutput.close();
+                if (!bResult) break;
+                if ((baSbookRaw.size() > 0x4000) || (qint64(baSbookRaw.size()) > nUncompressedSize - qint64(unpacked.size()))) {
+                    bResult = false;
+                    break;
+                }
+                unpacked.append(baSbookRaw);
+                nSbookOffset += nSbookChunkSize;
+                if (baSbookRaw.size() != 0x4000) break;
+            }
+            bResult = bResult && (qint64(unpacked.size()) == nUncompressedSize);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_HUFF) {
+            // One Huffman tree serves the whole archive and it lives in the
+            // archive header, not in the member stream, so XHUFF hands it over
+            // as FPART_PROP_COMPRESSPROPERTIES: u16 symbolCount, then the
+            // frequency-ordered symbol table, then the raw tree bit stream.
+            bResult = XHuffDecoder::decodeWithProperty(baProperty, packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_LZHCXP) {
+            // Block-framed LZW: the bit stream is [u8 blockLength][blockLength
+            // bytes]... , a zero length ends it, and bits are LSB-first.  Codes
+            // are 10..12 bits, 0x200 is CLEAR (the code right after it is
+            // emitted as a literal seed), 0x201 ends the stream, the first free
+            // entry is 0x202 and codes 0x100..0x1FF are illegal.
+            bResult = XLzhcxpDecoder::decode(packed, nUncompressedSize, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_QUANTUM) {
+            // David Stafford "DS" Quantum .PAK: the whole archive body is ONE
+            // solid arithmetic-coded stream - the models, the LZ window and the
+            // coder registers all run continuously across the members - so a
+            // member can only be produced by replaying the members in front of
+            // it.  XQuantum hands the window order, the variant flag and the
+            // full member size table over as FPART_PROP_COMPRESSPROPERTIES, and
+            // the decoder does that replay itself.
+            bResult = XDSQuantumDecoder::decode(packed, nUncompressedSize, baProperty, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_PKT) {
+            bResult = XPKTDecoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_HDCOPY) {
+            bResult = XHDCopyDecoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_IVT) {
+            // MediaView internal file: a 12-byte "mszp"/"nszp" header (magic,
+            // u32 uncompressed size, u32 reserved) followed by MSZIP blocks of
+            // [u16 blockUncompressed][u16 blockCompressed]["CK"][raw DEFLATE],
+            // where blockCompressed counts the "CK" and every block inherits the
+            // previous 32 KiB as its dictionary - the same scheme CAB uses, so this
+            // arm only walks the framing and reuses decInflateMSZIPBlock.
+            bResult = false;
+            if ((packed.size() >= 12) && (packed.startsWith("mszp") || packed.startsWith("nszp"))) {
+                const uchar *pStream = reinterpret_cast<const uchar *>(packed.constData());
+                const qint64 nDeclaredSize = (qint64)qFromLittleEndian<quint32>(pStream + 4);
+                if (nDeclaredSize == nUncompressedSize) {
+                    unpacked.reserve((qint32)nUncompressedSize);
+                    qint64 nPosition = 12;
+                    bool bStreamOk = true;
+                    while (bStreamOk && ((nPosition + 2) <= (qint64)packed.size())) {
+                        const qint32 nBlockUncompressed = (qint32)qFromLittleEndian<quint16>(pStream + nPosition);
+                        nPosition += 2;
+                        if (nBlockUncompressed == 0) break;
+                        if ((nPosition + 2) > (qint64)packed.size()) {
+                            bStreamOk = false;
+                            break;
+                        }
+                        const qint32 nBlockCompressed = (qint32)qFromLittleEndian<quint16>(pStream + nPosition);
+                        nPosition += 2;
+                        if ((nBlockCompressed < 2) || (nBlockUncompressed > 32768) || ((qint64)nBlockCompressed > ((qint64)packed.size() - nPosition))) {
+                            bStreamOk = false;
+                            break;
+                        }
+                        QByteArray baBlock;
+                        if (!decInflateMSZIPBlock(packed.mid((qint32)nPosition, nBlockCompressed), unpacked, nBlockUncompressed, &baBlock, pPdStruct)) {
+                            bStreamOk = false;
+                            break;
+                        }
+                        nPosition += nBlockCompressed;
+                        unpacked.append(baBlock);
+                    }
+                    bResult = bStreamOk && ((qint64)unpacked.size() == nUncompressedSize);
+                }
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_SETTLERS_FT) {
+            // Settlers/Serf City image member.  The archive's own 256-colour
+            // palette travels with the member as FPART_PROP_COMPRESSPROPERTIES,
+            // already in scope here as baProperty; only KIND_BITMAP and
+            // KIND_MASK carry this method, every other kind is STORE.
+            bResult = XSettlersFTDecoder::decode(packed, baProperty,
+                                                 nUncompressedSize, &unpacked,
+                                                 pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_OPC) {
+            // OS2Point shifts every byte of the embedded ZIP by +0x67, so the
+            // filter has to be undone before the member's own ZIP method is
+            // applied.  That method travels as the single property byte that
+            // XOPC publishes in FPART_PROP_COMPRESSPROPERTIES (0 stored,
+            // 8 deflate); no new codec maths is introduced here.
+            bResult = false;
+            if (baProperty.size() == 1) {
+                const quint8 nOpcMethod = quint8(baProperty.at(0));
+                QByteArray baOpcPlain(packed);
+                for (qint32 i = 0; i < baOpcPlain.size(); ++i) {
+                    baOpcPlain[i] = char(quint8(quint8(baOpcPlain.at(i)) - 0x67U));
+                }
+                if (nOpcMethod == 0) {
+                    if ((qint64)baOpcPlain.size() == nUncompressedSize) {
+                        unpacked = baOpcPlain;
+                        bResult = true;
+                    }
+                } else if (nOpcMethod == 8) {
+                    QByteArray baOpcInflated;
+                    QBuffer opcInput(&baOpcPlain);
+                    QBuffer opcOutput(&baOpcInflated);
+                    if (opcInput.open(QIODevice::ReadOnly) && opcOutput.open(QIODevice::WriteOnly)) {
+                        XBinary::DATAPROCESS_STATE opcState = {};
+                        opcState.pDeviceInput = &opcInput;
+                        opcState.pDeviceOutput = &opcOutput;
+                        opcState.nInputOffset = 0;
+                        opcState.nInputLimit = baOpcPlain.size();
+                        opcState.nProcessedOffset = 0;
+                        opcState.nProcessedLimit = nUncompressedSize;
+                        opcState.mapUnpackProperties.insert(XBinary::UNPACK_PROP_MAX_OUTPUT_SIZE, nUncompressedSize);
+                        opcState.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nUncompressedSize);
+                        bResult = XDeflateDecoder::decompress(&opcState, pPdStruct) && !opcState.bReadError && !opcState.bWriteError &&
+                                  (opcState.nCountOutput == nUncompressedSize) && ((qint64)baOpcInflated.size() == nUncompressedSize);
+                        opcInput.close();
+                        opcOutput.close();
+                        if (bResult) unpacked = baOpcInflated;
+                    }
+                }
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_SQ) {
+            bResult = XSQDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_IS11) {
+            bResult = XIS11Decoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_PAPERPORT) {
+            bResult = XPaperPortDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_EALIB) {
+            bResult = XEALIBDecoder::decodeLZSS(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_NID) {
+            bResult = XNIDDecoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_HAP) {
+            bResult = XHAPDecoder::decode(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_LZDIET) {
+            bResult = XLZDIETDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_SAF) {
+            // Stac SAF member.  baProperty carries the record's method byte:
+            // 3 means the packed extent is a single stream, anything else
+            // means a chain of [qint32 length][stream] chunks, each of which
+            // restarts the bit reader and the 2 KiB window.
+            const qint32 nSafMethod = baProperty.isEmpty() ? 3 : static_cast<qint32>(static_cast<quint8>(baProperty.at(0)));
+            bResult = XSAFDecoder::decode(packed, nUncompressedSize, nSafMethod, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_HFE) {
+            bResult = XHFEDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_RSVK) {
+            bResult = XRSVKDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_HZL) {
+            bResult = XHZLDecoder::decode(packed, qint32(nUncompressedSize), &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_LOFI) {
+            bResult = XLOFIDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
         } else if (compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_RLE) {
             bResult = XMacLegacyDecoders::decodeCompactPro(
                 packed, nUncompressedSize, false, 0x1fff0, &unpacked);
         } else if (compressMethod == XBinary::HANDLE_METHOD_COMPACT_PRO_LZH) {
             bResult = XMacLegacyDecoders::decodeCompactPro(
                 packed, nUncompressedSize, true, 0x1fff0, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_LZW) {
+            bResult = baProperty.size() == 4 && XMacLegacyDecoders::decodeDiskDoublerLZW(
+                packed, nUncompressedSize, quint8(baProperty.at(0)), quint8(baProperty.at(1)),
+                qFromBigEndian<quint16>(reinterpret_cast<const uchar *>(baProperty.constData() + 2)), &unpacked, pPdStruct);
         } else if (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_ADN) {
             bResult = XMacLegacyDecoders::decodeDiskDoublerADn(
                 packed, nUncompressedSize, &unpacked);
         } else if (compressMethod == XBinary::HANDLE_METHOD_DISKDOUBLER_DDN) {
             bResult = XMacLegacyDecoders::decodeDiskDoublerDDn(
                 packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_ALDUS_LZW) {
+            bResult = XAldusDecoder::decodeLZW(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_ALDUS_PKZP) {
+            bResult = XAldusDecoder::decodePKZP(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_ALDUS_LZSH) {
+            bResult = XAldusDecoder::decodeLZSH(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_BPE_GAGE) {
+            bResult = XBTHPAKDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if ((compressMethod == XBinary::HANDLE_METHOD_ARCV2_LZHUF_DELTA) ||
+                   (compressMethod == XBinary::HANDLE_METHOD_ARCV2_LZHUF_DELTA_TRIAL)) {
+            const quint8 nSeed =
+                (compressMethod == XBinary::HANDLE_METHOD_ARCV2_LZHUF_DELTA_TRIAL)
+                    ? XARCV2Decoder::SEED_TRIAL
+                    : XARCV2Decoder::SEED_RELEASE;
+            QByteArray baDescrambled;
+            bResult = XARCV2Decoder::descramble(packed, nSeed, &baDescrambled) &&
+                      decArcvLzhuf(baDescrambled, qint32(nUncompressedSize), false, &unpacked, pPdStruct);
+        } else if ((compressMethod == XBinary::HANDLE_METHOD_ARCV_XOR_DELTA) ||
+                   (compressMethod == XBinary::HANDLE_METHOD_ARCV_XOR_DELTA_TRIAL)) {
+            const quint8 nSeed =
+                (compressMethod == XBinary::HANDLE_METHOD_ARCV_XOR_DELTA_TRIAL)
+                    ? XARCV2Decoder::SEED_TRIAL
+                    : XARCV2Decoder::SEED_RELEASE;
+            bResult = XARCV2Decoder::decode(packed, nUncompressedSize, nSeed, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_AMPK_LZSS) {
+            bResult = XAMPKDecoder::decodeLZSS(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_AMPK_LZARI) {
+            bResult = XAMPKDecoder::decodeLZARI(packed, nUncompressedSize, &unpacked);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_UNIX_PACK) {
+            // The BFF payload is a headerless SysV `pack` stream: no 0x1F1E magic and
+            // no embedded raw size, so XAncientDecoder::identify() would reject it.
+            // Synthesise the six-byte prefix from the size the record header declares.
+            bResult = (nUncompressedSize >= 0) &&
+                      (nUncompressedSize <= qint64(0xffffffffu)) &&
+                      (packed.size() <= (std::numeric_limits<qint32>::max)() - 6);
+            if (bResult) {
+                QByteArray baWrapped;
+                baWrapped.reserve(packed.size() + 6);
+                baWrapped.append(char(0x1f));
+                baWrapped.append(char(0x1e));
+                const quint32 nRawSizeBE =
+                    qToBigEndian<quint32>(quint32(nUncompressedSize));
+                baWrapped.append(reinterpret_cast<const char *>(&nRawSizeBE), 4);
+                baWrapped.append(packed);
+                bResult = XAncientDecoder::decode(
+                              baWrapped, XAncientDecoder::TYPE_UNIX_PACK, &unpacked,
+                              nullptr, nullptr, true) &&
+                          (unpacked.size() == nUncompressedSize);
+            }
+        } else if (compressMethod == XBinary::HANDLE_METHOD_ASYMETRIX_BLOCKS) {
+            bResult = XAsymetrixDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_BSN_LH6) {
+            bResult = XBSNDecoder::decode(packed, nUncompressedSize, baProperty, &unpacked, pPdStruct);
+        } else if (compressMethod == XBinary::HANDLE_METHOD_COMPRESS_RAW) {
+            bResult = XBorlandPackDecoder::decode(packed, nUncompressedSize, &unpacked, pPdStruct);
         } else if (compressMethod == XBinary::HANDLE_METHOD_EPFS_LZW) {
             // East Point Software's LZW variant. The two control codes track
             // the current all-ones code width, and reset clears only the
@@ -3516,6 +4244,8 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XASCIIHexDecoder::decompress_pdf(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_RUNLENGTH) {
         bResult = XRunLengthDecoder::decompress_pdf(pState, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_LHA_LEGACY) {
+        bResult = XLZHDecoder::decompressLegacyLha(pState, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH1) {
         bResult = XLZHDecoder::decompress(pState, 1, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_LZH4) {
@@ -3538,6 +4268,14 @@ bool XDecompress::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRU
         bResult = XArcDecoder::decompress(pState, 3, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_SQUEEZE) {
         bResult = XArcDecoder::decompress(pState, 4, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_CRUNCH_OLD) {
+        bResult = XArcDecoder::decompress(pState, 5, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_CRUNCH) {
+        bResult = XArcDecoder::decompress(pState, 6, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_CRUNCH_HASHNEW) {
+        bResult = XArcDecoder::decompress(pState, 7, pPdStruct);
+    } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_COMPRESSED) {
+        bResult = XArcDecoder::decompress(pState, 0x7f, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_CRUNCH_DYN) {
         bResult = XArcDecoder::decompress(pState, 8, pPdStruct);
     } else if (compressMethod == XBinary::HANDLE_METHOD_ARC_SQUASH) {

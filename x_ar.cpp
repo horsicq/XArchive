@@ -19,6 +19,15 @@
  * SOFTWARE.
  */
 #include "x_ar.h"
+#include <memory>
+
+namespace {
+struct ArUnpackContext {
+    QList<qint64> offsets;
+    QByteArray names;
+};
+}
+
 
 #include <limits>
 #include <new>
@@ -982,7 +991,9 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     if (!pState) return false;
 
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !guardedArchive->ownsUnpackSource(pState)) return false;
+    ArUnpackContext *oldContext = static_cast<ArUnpackContext *>(pState->pContext);
     guardedArchive->releaseUnpackSource(pState);
+    delete oldContext;
     *pState = UNPACK_STATE();
     const bool bBound = guardedArchive->bindUnpackSource(pState, pPdStruct);
     if (!guardedArchive || !bBound) return false;
@@ -1007,6 +1018,9 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     pState->nCurrentIndex = 0;
     pState->pContext = nullptr;
 
+    std::unique_ptr<ArUnpackContext> context(new (std::nothrow) ArUnpackContext);
+    if (!context) { guardedArchive->releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false; }
+    bool namesSeen = false;
     qint64 nOffset = 8;
     while ((nOffset < pState->nTotalSize) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         if ((pState->nTotalSize - nOffset) < (qint64)sizeof(FRECORD)) {
@@ -1030,7 +1044,25 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             *pState = UNPACK_STATE();
             return false;
         }
-        pState->nNumberOfRecords++;
+        const QByteArray name = QByteArray(header.fileId, sizeof(header.fileId)).trimmed();
+        if (name == "//") {
+            // GNU/COFF filename tables are metadata, not archive members.
+            if (namesSeen || nFileSize > 16 * 1024 * 1024) {
+                guardedArchive->releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false;
+            }
+            namesSeen = true;
+            context->names = guardedArchive->read_array(nOffset + sizeof(FRECORD), nFileSize);
+            if (!guardedArchive || context->names.size() != nFileSize) {
+                if (guardedArchive) guardedArchive->releaseUnpackSource(pState);
+                *pState = UNPACK_STATE(); return false;
+            }
+        } else if ((name != "/") && (name != "/SYM64/")) {
+            if (context->offsets.size() >= 1000000) {
+                guardedArchive->releaseUnpackSource(pState); *pState = UNPACK_STATE(); return false;
+            }
+            context->offsets.append(nOffset);
+            pState->nNumberOfRecords++;
+        }
         nOffset += nRecordSize;
     }
 
@@ -1040,8 +1072,13 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
 
-    const bool bFinalized = guardedArchive->validateAndFinalizeUnpackSource(pState, pPdStruct);
+    pState->nCurrentOffset = context->offsets.isEmpty() ? pState->nTotalSize : context->offsets.first();
+    pState->pContext = context.get();
+    const bool bFinalized = guardedArchive->validateAndFinalizeUnpackSource(pState, context.get(), pPdStruct);
     if (!guardedArchive) {
+        // Finalization transfers cleanup to the bound-source owner when the
+        // archive disappears during validation.
+        context.release();
         *pState = UNPACK_STATE();
         return false;
     }
@@ -1051,6 +1088,7 @@ bool X_Ar::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
 
+    context.release();
     return true;
 }
 
@@ -1079,6 +1117,9 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
             return result;
         }
 
+        const ArUnpackContext *context = static_cast<const ArUnpackContext *>(pState->pContext);
+        if (!context || context->offsets.size() != pState->nNumberOfRecords || context->offsets.at(pState->nCurrentIndex) != pState->nCurrentOffset)
+            return ARCHIVERECORD();
         // Extract file name
         QByteArray baFileName(header.fileId, sizeof(header.fileId));
         while (baFileName.endsWith(' ')) baFileName.chop(1);
@@ -1095,6 +1136,20 @@ XBinary::ARCHIVERECORD X_Ar::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
         } else {
             // Remove trailing '/' if present
             if ((baFileName.size() > 1) && baFileName.endsWith('/')) baFileName.chop(1);
+            if (baFileName.startsWith('/')) {
+                qint64 nameOffset = -1;
+                const QByteArray reference = baFileName.mid(1);
+                if (!arParseDecimalField(reference.constData(), qint32(reference.size()), &nameOffset) ||
+                    nameOffset < 0 || nameOffset >= context->names.size() ||
+                    (nameOffset && context->names.at(qint32(nameOffset - 1)) != '\n' && context->names.at(qint32(nameOffset - 1)) != '\0')) return ARCHIVERECORD();
+                const qint32 newline = qint32(context->names.indexOf('\n', nameOffset));
+                const qint32 nul = qint32(context->names.indexOf('\0', nameOffset));
+                const qint32 end = newline < 0 ? nul : nul < 0 ? newline : qMin(newline, nul);
+                if (end <= nameOffset) return ARCHIVERECORD();
+                baFileName = context->names.mid(nameOffset, end - nameOffset);
+                if (baFileName.endsWith('/')) baFileName.chop(1);
+                if (baFileName.isEmpty()) return ARCHIVERECORD();
+            }
             sFileName = QString::fromUtf8(baFileName);
 
             result.nStreamOffset = pState->nCurrentOffset + sizeof(FRECORD);
@@ -1159,9 +1214,10 @@ bool X_Ar::moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
         return false;
     }
 
-    pState->nCurrentOffset += nRecordSize;
+    const ArUnpackContext *context = static_cast<const ArUnpackContext *>(pState->pContext);
+    if (!context || context->offsets.size() != pState->nNumberOfRecords || context->offsets.at(pState->nCurrentIndex) != pState->nCurrentOffset) return false;
     pState->nCurrentIndex++;
-
+    pState->nCurrentOffset = pState->nCurrentIndex < pState->nNumberOfRecords ? context->offsets.at(pState->nCurrentIndex) : pState->nTotalSize;
     return pState->nCurrentIndex < pState->nNumberOfRecords;
 }
 
@@ -1177,12 +1233,10 @@ bool X_Ar::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
     }
 
     if ((pState->pContext || !pState->baUnpackSourceToken.isEmpty()) && !ownsUnpackSource(pState)) return false;
-    // AR enumeration has no heap context, but it still owns all public cursor
-    // and property state.  XArchive::getRecords() treats cleanup failure as an
-    // incomplete enumeration, so the inherited false-returning stub used to
-    // discard every otherwise valid AR/DEB record list.
+    ArUnpackContext *context = static_cast<ArUnpackContext *>(pState->pContext);
     releaseUnpackSource(pState);
     *pState = UNPACK_STATE();
+    delete context;
     return true;
 }
 

@@ -488,7 +488,8 @@ QList<XBinary::XFHEADER> XCab::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
     QList<qint64> listFolderOffsets;
     if (bIncludeFolders) {
         listFolderOffsets = cabSelectOffsets(&xfStruct, pContext->listFolderOffsets, nStructID == STRUCTID_CFFOLDER);
-        for (qint64 nOffset : qAsConst(listFolderOffsets)) {
+        const QList<qint64> &listSelectedOffsets = listFolderOffsets;
+        for (qint64 nOffset : listSelectedOffsets) {
             const qint32 nIndex = pContext->listFolderOffsets.indexOf(nOffset);
             if (nIndex >= 0) listSelectedFolderIndexes.append(nIndex);
         }
@@ -499,7 +500,8 @@ QList<XBinary::XFHEADER> XCab::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         xfHeader.fileType = xfStruct.fileType;
         xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFFOLDER);
         xfHeader.xfType = XFTYPE_TABLE;
-        for (qint64 nOffset : qAsConst(listFolderOffsets)) {
+        const QList<qint64> &listSelectedOffsets = listFolderOffsets;
+        for (qint64 nOffset : listSelectedOffsets) {
             xfHeader.listRowLocations.append((XADDR)nOffset);
         }
         xfHeader.xLoc = offsetToLoc(xfHeader.listRowLocations.constFirst());
@@ -517,7 +519,7 @@ QList<XBinary::XFHEADER> XCab::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
         xfHeader.fileType = xfStruct.fileType;
         xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFFILE);
         xfHeader.xfType = XFTYPE_TABLE;
-        for (qint64 nOffset : qAsConst(listFileOffsets)) {
+        for (qint64 nOffset : listFileOffsets) {
             xfHeader.listRowLocations.append((XADDR)nOffset);
         }
         xfHeader.xLoc = offsetToLoc(xfHeader.listRowLocations.constFirst());
@@ -537,7 +539,8 @@ QList<XBinary::XFHEADER> XCab::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
                 listDataFolderIndexes.append(i);
             }
         }
-        for (qint32 nFolderIndex : qAsConst(listDataFolderIndexes)) {
+        const QList<qint32> &listIndexes = listDataFolderIndexes;
+        for (qint32 nFolderIndex : listIndexes) {
             listAllDataOffsets.append(pContext->mapFolderDataOffsets.value((quint16)nFolderIndex));
         }
         const QList<qint64> listDataOffsets = cabSelectOffsets(&xfStruct, listAllDataOffsets, nStructID == STRUCTID_CFDATA);
@@ -547,7 +550,7 @@ QList<XBinary::XFHEADER> XCab::getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *
             xfHeader.fileType = xfStruct.fileType;
             xfHeader.structID = static_cast<XBinary::STRUCTID>(STRUCTID_CFDATA);
             xfHeader.xfType = XFTYPE_TABLE;
-            for (qint64 nOffset : qAsConst(listDataOffsets)) {
+            for (qint64 nOffset : listDataOffsets) {
                 xfHeader.listRowLocations.append((XADDR)nOffset);
             }
             xfHeader.xLoc = offsetToLoc(listDataOffsets.constFirst());
@@ -1239,7 +1242,8 @@ bool XCab::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     // earliest non-empty folder stream.  This keeps directory-only parsing
     // from interpreting compressed bytes as additional metadata.
     qint64 nFileTableLimit = nCabinetSize;
-    for (const CFFOLDER &folder : qAsConst(pContext->listFolders)) {
+    const QList<CFFOLDER> &listFolders = pContext->listFolders;
+    for (const CFFOLDER &folder : listFolders) {
         if (folder.cCFData != 0) {
             if ((qint64)folder.coffCabStart > nCabinetSize) {
                 return cabFailUnpackInit(&guardedThis, pState, pContext);

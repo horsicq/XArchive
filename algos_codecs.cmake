@@ -20,7 +20,9 @@
 # Dropping PIC is invisible on MSVC but hard-fails the ELF shared-library builds
 # (die/nfd) with "relocation R_X86_64_PC32 against symbol 'z_errmsg' ...
 # recompile with -fPIC". The amalgamations are now .cpp, so the former
-# LINKER_LANGUAGE C / C_STANDARD 11 became LINKER_LANGUAGE CXX / CXX_STANDARD 14.
+# LINKER_LANGUAGE C / C_STANDARD 11 became LINKER_LANGUAGE CXX / CXX_STANDARD 11.
+# (11, not 14: all ten amalgamations compile clean under g++ -std=c++11, and the
+# rest of the tree targets 11 -- see build_tools/cmake/cpp_standart_setup.cmake.)
 #
 # Those sources were converted from C to C++ on 2026-08-17 and must stay C++.
 # Do not add them to a C target or rename any of them back to .c. Several of
@@ -35,7 +37,7 @@ set(XARCHIVE_ALGOS_DIR "${CMAKE_CURRENT_LIST_DIR}/Algos")
 if(NOT TARGET bzip2)
     add_library(bzip2 STATIC "${XARCHIVE_ALGOS_DIR}/bzip2declib.cpp")
     target_include_directories(bzip2 PUBLIC "${XARCHIVE_ALGOS_DIR}/include")
-    set_target_properties(bzip2 PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 14
+    set_target_properties(bzip2 PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 11
         POSITION_INDEPENDENT_CODE ON AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
     if(MSVC)
         target_compile_definitions(bzip2 PRIVATE _CRT_SECURE_NO_WARNINGS)
@@ -49,7 +51,7 @@ if(NOT TARGET zlib)
         "${XARCHIVE_ALGOS_DIR}/zlibenclib.cpp"
     )
     target_include_directories(zlib PUBLIC "${XARCHIVE_ALGOS_DIR}/include")
-    set_target_properties(zlib PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 14
+    set_target_properties(zlib PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 11
         POSITION_INDEPENDENT_CODE ON AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
     # The amalgamated inflate/deflate implementation is prohibitively slow at
     # -O0 (large installer streams can take minutes merely to enumerate). Keep
@@ -69,7 +71,7 @@ if(NOT TARGET lzma)
         "${XARCHIVE_ALGOS_DIR}/sevenzip_extcodec_lzma2dec.cpp"
     )
     target_include_directories(lzma PUBLIC "${XARCHIVE_ALGOS_DIR}" "${XARCHIVE_ALGOS_DIR}/include")
-    set_target_properties(lzma PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 14
+    set_target_properties(lzma PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 11
         POSITION_INDEPENDENT_CODE ON AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
     if(MSVC)
         target_compile_definitions(lzma PRIVATE _CRT_SECURE_NO_WARNINGS)
@@ -84,7 +86,7 @@ if(NOT TARGET ppmd)
         "${XARCHIVE_ALGOS_DIR}/sevenzip_extcodec_ppmd8dec.cpp"
     )
     target_include_directories(ppmd PUBLIC "${XARCHIVE_ALGOS_DIR}" "${XARCHIVE_ALGOS_DIR}/include")
-    set_target_properties(ppmd PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 14
+    set_target_properties(ppmd PROPERTIES LINKER_LANGUAGE CXX CXX_STANDARD 11
         POSITION_INDEPENDENT_CODE ON AUTOMOC OFF AUTOUIC OFF AUTORCC OFF)
     if(MSVC)
         target_compile_definitions(ppmd PRIVATE _CRT_SECURE_NO_WARNINGS)

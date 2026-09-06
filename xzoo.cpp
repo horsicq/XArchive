@@ -21,6 +21,7 @@
 #include "xzoo.h"
 
 #include <new>
+#include <QTimeZone>
 
 static XBinary::XCONVERT _TABLE_XZOO_STRUCTID[] = {{XZOO::STRUCTID_UNKNOWN, "Unknown", QObject::tr("Unknown")}, {XZOO::STRUCTID_HEADER, "HEADER", QString("HEADER")}};
 
@@ -167,7 +168,7 @@ bool XZOO::_parseEntries(QList<ZOO_RECORD> *pListRecords, PDSTRUCT *pPdStruct)
             QDate date(nYear, nMonth, nDay);
             QTime time(nHour, nMinute, nSecond);
             if (date.isValid() && time.isValid()) {
-                record.mtDateTime = QDateTime(date, time, Qt::UTC);
+                record.mtDateTime = QDateTime(date, time, X_UTC_TZ);
             }
 
             pListRecords->append(record);

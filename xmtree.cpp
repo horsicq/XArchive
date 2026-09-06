@@ -393,7 +393,7 @@ bool XMTree::_parseTime(const QByteArray &value, QDateTime *pResult)
     if ((nSeconds > ((std::numeric_limits<qint64>::max)() / 1000)) || (nSeconds < ((std::numeric_limits<qint64>::min)() / 1000))) {
         return false;
     }
-    const QDateTime result = QDateTime::fromMSecsSinceEpoch(nSeconds * 1000, Qt::UTC);
+    const QDateTime result = QDateTime::fromMSecsSinceEpoch(nSeconds * 1000, X_UTC_TZ);
 #endif
     if (!result.isValid()) return false;
     *pResult = result;

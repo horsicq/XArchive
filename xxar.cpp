@@ -148,7 +148,7 @@ QByteArray XXAR::_readTOC(PDSTRUCT *pPdStruct)
                 !guardedSource) {
                 return QByteArray();
             }
-            hash.addData(pBuffer.get(), nChunkSize);
+            hash.addData(QByteArray::fromRawData(pBuffer.get(), nChunkSize));
             nCurrentOffset += nChunkSize;
             nRemaining -= nChunkSize;
         }

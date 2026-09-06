@@ -27,7 +27,8 @@ class QBuffer;
 
 // A uuencode transport filter. Recognized archives are delegated to their
 // native handler; every other valid transport block is exposed as one decoded
-// file using the name declared by the transport header.
+// file using the name declared by the transport header. TRANSPORT_ONLY exposes
+// all transport blocks directly, matching U3's UUE member model.
 class XUU : public XArchive {
     Q_OBJECT
 

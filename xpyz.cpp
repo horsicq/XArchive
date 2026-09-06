@@ -229,7 +229,7 @@ bool XPYZ::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         return false;
     QVariant root;
     MarshalReader reader(tocData);
-    if (!reader.read(&root) || (root.type() != QVariant::List)) return false;
+    if (!reader.read(&root) || (root.userType() != QMetaType::QVariantList)) return false;
     const QVariantList toc = root.toList();
     if (toc.isEmpty() || (toc.count() > MAX_RECORDS)) return false;
 
@@ -241,11 +241,11 @@ bool XPYZ::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     for (const QVariant &itemValue : toc)
     {
         if (!XBinary::isPdStructNotCanceled(pPdStruct) ||
-            (itemValue.type() != QVariant::List))
+            (itemValue.userType() != QMetaType::QVariantList))
             return false;
         const QVariantList item = itemValue.toList();
-        if ((item.count() != 2) || (item.at(0).type() != QVariant::String) ||
-            (item.at(1).type() != QVariant::List))
+        if ((item.count() != 2) || (item.at(0).userType() != QMetaType::QString) ||
+            (item.at(1).userType() != QMetaType::QVariantList))
             return false;
         const QVariantList descriptor = item.at(1).toList();
         if (descriptor.count() != 3) return false;

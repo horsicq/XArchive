@@ -40,11 +40,11 @@
  *   8  crunched        LZW, dynamic width -> run-length
  *   9  squashed        LZW, dynamic width, no run-length stage
  *
- * Methods 5-7 are NOT this decoder with a fixed code width.  They are ARC's
+ * Methods 5-7 use a dedicated U3-derived hash-table decoder.  They are ARC's
  * original "crunch": strings are reconstructed by probing a hash table, codes
  * are nybble-packed, there is no CLEAR, and because init_tab hashes even the
- * 256 atomic codes a literal's code is not its byte value.  They are refused
- * here rather than approximated.
+ * 256 atomic codes a literal's code is not its byte value. See U3_ARC_PORT.md
+ * for the recovered source addresses and validation provenance.
  *
  * The two stages are composed inside one decoder rather than being chained
  * through the shared multi-method path, because only the final byte count may be
@@ -56,7 +56,7 @@ class XArcDecoder : public QObject {
 public:
     explicit XArcDecoder(QObject *parent = nullptr);
 
-    // nMethod is the SEA ARC method id, 3..9.
+    // nMethod is the SEA ARC method id, 3..9 or 0x7f (Unix compress).
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, qint32 nMethod, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 

@@ -41,7 +41,9 @@ const quint32 CRUSHED_EOF = 256;
 const quint32 CRUSHED_RING_SIZE = 500;
 const quint32 CRUSHED_STRING_THRESHOLD = 375;
 
-const quint32 DISTILLED_MAX_NODES = 628;
+// U3 004e8a90 accepts 2..629 serialized links. Links point to adjacent
+// pairs; neither the root nor another pair has to start at an even index.
+const quint32 DISTILLED_MAX_NODES = 629;
 const quint32 DISTILLED_WINDOW_SIZE = 8192;
 const quint32 DISTILLED_EOF = 256;
 
@@ -500,12 +502,10 @@ bool distilledSymbol(PakBitSource *pSource, const std::vector<quint32> &nodes, q
 
 bool validateDistilledTree(const std::vector<quint32> &nodes, quint32 nNodeCount)
 {
-    if ((nNodeCount < 2) || (nNodeCount > DISTILLED_MAX_NODES) || (nNodeCount & 1) || (nodes.size() != nNodeCount)) return false;
+    if ((nNodeCount < 2) || (nNodeCount > DISTILLED_MAX_NODES) || (nodes.size() != nNodeCount)) return false;
     for (quint32 nValue : nodes) {
         if (nValue < nNodeCount) {
             if (nValue > nNodeCount - 2) return false;
-        } else if ((nValue - nNodeCount) > 314) {
-            return false;
         }
     }
 
@@ -544,7 +544,7 @@ bool decodeDistilled(PakBitSource *pSource, PakSink *pSink, XBinary::PDSTRUCT *p
     quint32 nNodeCount = 0;
     quint32 nCodeLength = 0;
     if (!pSource->readBits(16, &nNodeCount) || !pSource->readBits(8, &nCodeLength) || (nNodeCount < 2) ||
-        (nNodeCount > DISTILLED_MAX_NODES) || (nNodeCount & 1) || (nCodeLength < 1) || (nCodeLength > 12)) {
+        (nNodeCount > DISTILLED_MAX_NODES) || (nCodeLength < 1) || (nCodeLength > 12)) {
         return false;
     }
 
@@ -572,7 +572,10 @@ bool decodeDistilled(PakBitSource *pSource, PakSink *pSink, XBinary::PDSTRUCT *p
             break;
         } else {
             const quint32 nLength = nSymbol - 254;
-            if ((nLength < 3) || (nLength > 60)) return false;
+            // U3 004e8a90 forms length = leaf - 254, with no 60-byte cap.
+            // The serialized width (at most 12 bits, retained for compatibility)
+            // bounds a leaf; keep a separate window-sized work bound as well.
+            if ((nLength < 3) || (nLength > DISTILLED_WINDOW_SIZE)) return false;
             quint32 nOffsetSymbol = 0;
             if (!distilledOffsetSymbol(pSource, &nOffsetSymbol)) return false;
             const qint32 nExtraBits = distilledExtraBits(pSink->produced());

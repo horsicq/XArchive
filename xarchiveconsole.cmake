@@ -23,5 +23,7 @@ endif()
 set(XARCHIVECONSOLE_SOURCES
     ${XARCHIVECONSOLE_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/xarchiveconsole.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xu3console.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xarchiveconsole.h
+    ${CMAKE_CURRENT_LIST_DIR}/xu3console.h
 )

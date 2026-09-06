@@ -77,12 +77,18 @@ bool XUU::parseHeader(const QByteArray &line, bool *pbBase64, QString *pName)
         return false;
     }
 
-    if ((body.size() < (nPrefix + 5)) || (body.at(nPrefix) < '0') || (body.at(nPrefix) > '7') || (body.at(nPrefix + 1) < '0') || (body.at(nPrefix + 1) > '7') ||
-        (body.at(nPrefix + 2) < '0') || (body.at(nPrefix + 2) > '7') || (body.at(nPrefix + 3) != ' ')) {
+    // Both 644 and 0644 are ordinary permission spellings. Limit the field
+    // to three or four octal digits, then require its separating space.
+    qint32 nModeEnd = nPrefix;
+    while (nModeEnd < body.size() && nModeEnd < nPrefix + 4 &&
+           body.at(nModeEnd) >= '0' && body.at(nModeEnd) <= '7') {
+        ++nModeEnd;
+    }
+    if (nModeEnd - nPrefix < 3 || nModeEnd >= body.size() || body.at(nModeEnd) != ' ') {
         return false;
     }
 
-    const QByteArray name = body.mid(nPrefix + 4);
+    const QByteArray name = body.mid(nModeEnd + 1);
     if (name.isEmpty() || name.contains('\0')) return false;
     for (char c : name) {
         const quint8 value = static_cast<quint8>(c);
@@ -407,7 +413,7 @@ bool XUU::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
     // its decoded bytes are themselves an archive, expose that archive's
     // records. Multiple blocks are a file bundle and their declared names are
     // the member model, so do not collapse the first one into a nested view.
-    if (bResult && (pContext->listBlocks.count() == 1)) {
+    if (bResult && (pContext->listBlocks.count() == 1) && !mapProperties.value(UNPACK_PROP_TRANSPORT_ONLY, false).toBool()) {
         innerType = XFormats::getPrefFileType(pContext->pDecodedDevice, FT_FLAG_ARCHIVES, pPdStruct);
     }
     if (!guardedThis || !guardedSource) bResult = false;
@@ -417,7 +423,10 @@ bool XUU::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &ma
         if (!pContext->pInnerArchive) delete pBinary;
         if (pContext->pInnerArchive) {
             bResult = pContext->pInnerArchive->initUnpack(&pContext->innerState, mapProperties, pPdStruct);
-            if (!bResult) {
+            // Keep the named transport payload when the nested archive has
+            // no records. Recognizing an empty archive must not remove the
+            // outer file that this UU input previously exposed.
+            if (!bResult || (pContext->innerState.nNumberOfRecords == 0)) {
                 pContext->pInnerArchive->finishUnpack(&pContext->innerState, nullptr);
                 delete pContext->pInnerArchive;
                 pContext->pInnerArchive = nullptr;

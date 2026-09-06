@@ -3863,7 +3863,7 @@ _ucl_config_check(void)
     if (r == 1) {
         static int x[3];
         static unsigned xn = 3;
-        register unsigned j;
+        unsigned j;
 
         for (j = 0; j < xn; j++) x[j] = (int)j - 3;
         r &= __ucl_assert(!strength_reduce_bug(x));

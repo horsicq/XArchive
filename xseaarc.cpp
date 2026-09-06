@@ -845,13 +845,14 @@ QString XSEAARC::cmethodToString(CMETHOD cmethod)
         case CMETHOD_STORE: sResult = "Stored"; break;
         case CMETHOD_PACKED: sResult = "Packed (RLE)"; break;
         case CMETHOD_SQUEEZED: sResult = "Squeezed (Huffman)"; break;
-        case CMETHOD_CRUNCHED1: sResult = "Crunched (LZW 9-bit)"; break;
-        case CMETHOD_CRUNCHED2: sResult = "Crunched (LZW 9-12 bit)"; break;
-        case CMETHOD_CRUNCHED3: sResult = "Crunched with pack"; break;
+        case CMETHOD_CRUNCHED1: sResult = "Crunched (12-bit old-hash LZW)"; break;
+        case CMETHOD_CRUNCHED2: sResult = "Crunched (12-bit old-hash LZW + RLE90)"; break;
+        case CMETHOD_CRUNCHED3: sResult = "Crunched (12-bit new-hash LZW + RLE90)"; break;
         case CMETHOD_CRUNCHED4: sResult = "Crunched (LZW dynamic)"; break;
         case CMETHOD_SQUASHED: sResult = "Squashed (LZW 13-bit)"; break;
         case CMETHOD_CRUSHED: sResult = "Crushed"; break;
         case CMETHOD_DISTILLED: sResult = "Distilled"; break;
+        case CMETHOD_COMPRESSED: sResult = "Compressed (Unix compress)"; break;
     }
 
     return sResult;
@@ -860,8 +861,7 @@ QString XSEAARC::cmethodToString(CMETHOD cmethod)
 // Anything without a decoder must map to HANDLE_METHOD_UNKNOWN rather than be
 // left unset: an unset property makes the shared decompressor fall back to
 // STORE, which would copy the still-compressed bytes out as if they were the
-// file. The original hash-table Crunch methods 5-7 remain explicit unknowns;
-// PAK's later Crushed and Distilled methods have dedicated decoders.
+// file. Hash-table Crunch methods 5-7 and PAK methods have dedicated decoders.
 XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
 {
     switch (nMethod) {
@@ -869,18 +869,14 @@ XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
         case CMETHOD_STORE: return HANDLE_METHOD_STORE;
         case CMETHOD_PACKED: return HANDLE_METHOD_ARC_PACK;
         case CMETHOD_SQUEEZED: return HANDLE_METHOD_ARC_SQUEEZE;
-        // Methods 5-7 use ARC's original hash-table crunch, which is a
-        // different decompressor from the dynamic LZW of methods 8/9 rather
-        // than the same one with a fixed code width. No sample using them has
-        // been found, so they stay unsupported instead of being decoded by an
-        // untested approximation.
-        case CMETHOD_CRUNCHED1:
-        case CMETHOD_CRUNCHED2:
-        case CMETHOD_CRUNCHED3: return HANDLE_METHOD_UNKNOWN;
+        case CMETHOD_CRUNCHED1: return HANDLE_METHOD_ARC_CRUNCH_OLD;
+        case CMETHOD_CRUNCHED2: return HANDLE_METHOD_ARC_CRUNCH;
+        case CMETHOD_CRUNCHED3: return HANDLE_METHOD_ARC_CRUNCH_HASHNEW;
         case CMETHOD_CRUNCHED4: return HANDLE_METHOD_ARC_CRUNCH_DYN;
         case CMETHOD_SQUASHED: return HANDLE_METHOD_ARC_SQUASH;
         case CMETHOD_CRUSHED: return HANDLE_METHOD_PAK_CRUSHED;
         case CMETHOD_DISTILLED: return HANDLE_METHOD_PAK_DISTILLED;
+        case CMETHOD_COMPRESSED: return HANDLE_METHOD_ARC_COMPRESSED;
         default: return HANDLE_METHOD_UNKNOWN;
     }
 }
@@ -888,7 +884,7 @@ XBinary::HANDLE_METHOD XSEAARC::_methodToHandle(quint8 nMethod)
 qint32 XSEAARC::_getHeaderSize(quint8 nMethod)
 {
     // Method 1 (old store): no original size field = 25 bytes header
-    // Methods 2-11: has original size field = 29 bytes header
+    // Methods 2-11 and 0x7f: original size field = 29 bytes header
     if (nMethod == CMETHOD_STORE_OLD) {
         return 25;
     }
@@ -898,7 +894,7 @@ qint32 XSEAARC::_getHeaderSize(quint8 nMethod)
 
 bool XSEAARC::_isValidMethod(quint8 nMethod)
 {
-    return (nMethod >= CMETHOD_STORE_OLD) && (nMethod <= CMETHOD_DISTILLED);
+    return ((nMethod >= CMETHOD_STORE_OLD) && (nMethod <= CMETHOD_DISTILLED)) || (nMethod == CMETHOD_COMPRESSED);
 }
 
 QList<QString> XSEAARC::getSearchSignatures()

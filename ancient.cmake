@@ -1,6 +1,6 @@
 # Project-owned private implementations of the six legacy codecs exposed by
 # XAncientDecoder. The former Ancient class tree is not part of this target.
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(XARCHIVE_ANCIENT_SOURCES

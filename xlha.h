@@ -74,6 +74,19 @@ protected:
     // Shared with XSAR, whose container is this format with a different method
     // tag spelling; see xsar.h. The tag test is virtual because that spelling
     // is the only thing that differs in the member walk.
+    struct LHA_MEMBER {
+        qint64 nHeaderSize = 0;
+        qint64 nCompressedSize = 0;
+        qint64 nUncompressedSize = 0;
+        qint64 nRecordSize = 0;
+        quint16 nCRC16 = 0;
+        quint8 nLevel = 0;
+        bool bDirectory = false;
+        bool bSymbolicLink = false;
+        QString sMethod;
+        QString sFileName;
+    };
+    bool _readMember(qint64 nOffset, LHA_MEMBER *pMember, PDSTRUCT *pPdStruct = nullptr);
     virtual bool _isMemberTag(const QByteArray &baHeader);
     static HANDLE_METHOD _methodToHandle(const QString &sMethod);
     // For Level 1 archives: bytes 7-10 = skip_sz = ext_headers + compressed_data.

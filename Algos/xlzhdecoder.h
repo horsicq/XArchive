@@ -233,6 +233,7 @@ public:
     // extent needed by containers that do not store compressed member sizes.
     static qint64 lh1MeasureStream(const quint8 *pData, qint64 nMaxSize, qint64 nUncompressedSize,
                                    XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool decompressLegacyLha(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 

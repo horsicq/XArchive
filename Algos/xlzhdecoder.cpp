@@ -19,6 +19,8 @@
  * SOFTWARE.
  */
 #include "xlzhdecoder.h"
+#include "xlha_legacy_p.h"
+#include <cstdlib>
 #include "algo_utils.h"
 #include "xbinary.h"
 
@@ -1454,4 +1456,76 @@ bool XLZHDecoder::decompressLh1(XBinary::DATAPROCESS_STATE *pDecompressState, XB
 
     return (XBinary::_writeDevice(baOut.data(), baOut.size(), pDecompressState) == baOut.size()) && XBinary::isPdStructNotCanceled(pPdStruct) &&
            !pDecompressState->bWriteError;
+}
+
+namespace {
+struct LegacyLhaInput {
+    XBinary::DATAPROCESS_STATE *pState;
+    XBinary::PDSTRUCT *pPdStruct;
+};
+
+size_t legacyLhaRead(void *pBuffer, size_t nLength, void *pContext)
+{
+    LegacyLhaInput *pInput = static_cast<LegacyLhaInput *>(pContext);
+    if (!XBinary::isPdStructNotCanceled(pInput->pPdStruct) || pInput->pState->bReadError) return 0;
+    const qint32 nChunk = Algo_utils::getReadChunkSize(pInput->pState, static_cast<qint32>(qMin<size_t>(nLength, 65536)));
+    if (nChunk <= 0) return 0;
+    const qint32 nRead = XBinary::_readDevice(static_cast<char *>(pBuffer), nChunk, pInput->pState);
+    return (nRead > 0) ? static_cast<size_t>(nRead) : 0;
+}
+}  // namespace
+
+bool XLZHDecoder::decompressLegacyLha(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pDeviceInput || !pState->pDeviceOutput ||
+        !pState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE)) return false;
+    bool bExpectedValid = false;
+    const qint64 nExpected = pState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bExpectedValid);
+    const qint64 nLimit = 128 * 1024 * 1024;
+    if (!bExpectedValid || (nExpected < 0) || (nExpected > nLimit) || (pState->nInputOffset < 0) ||
+        (pState->nInputLimit < 0) || (pState->nInputLimit > nLimit)) return false;
+    const QByteArray baMethod = pState->mapProperties.value(XBinary::FPART_PROP_COMPRESSPROPERTIES).toByteArray();
+    const XLhaLegacyDecoderType *pType = nullptr;
+    if (baMethod == "-lzs-") pType = &xlha_legacy_lzs_decoder;
+    else if (baMethod == "-lz5-") pType = &xlha_legacy_lz5_decoder;
+    else if (baMethod == "-lhx-") pType = &xlha_legacy_lhx_decoder;
+    else if (baMethod == "-lk7-") pType = &xlha_legacy_lk7_decoder;
+    else if (baMethod == "-pm1-") pType = &xlha_legacy_pm1_decoder;
+    else if (baMethod == "-pm2-") pType = &xlha_legacy_pm2_decoder;
+    if (!pType) return false;
+
+    // The codecs stream into a bounded scratch buffer. Account for their
+    // dictionary and buffer before allocation; writes use the shared output
+    // budget and the caller's staged output, including final CRC validation.
+    XBinary::UNPACK_MEMORY_RESERVATION memoryReservation;
+    if (!memoryReservation.acquire(pState->mapUnpackProperties, static_cast<qint64>(pType->extra_size + pType->max_read))) return false;
+    std::unique_ptr<void, decltype(&std::free)> context(std::calloc(1, pType->extra_size), &std::free);
+    std::unique_ptr<quint8[]> output(new (std::nothrow) quint8[pType->max_read]);
+    if (!context || !output) return false;
+    Algo_utils::prepareState(pState);
+    if (pState->bReadError || pState->bWriteError || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    LegacyLhaInput input = {pState, pPdStruct};
+    if (!pType->init(context.get(), legacyLhaRead, &input)) return false;
+    bool bResult = true;
+    while (pState->nCountOutput < nExpected) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct) || pState->bReadError || pState->bWriteError) {
+            bResult = false;
+            break;
+        }
+        const size_t nDecoded = pType->read(context.get(), output.get());
+        if (!nDecoded || (nDecoded > pType->max_read)) {
+            bResult = false;
+            break;
+        }
+        // Lhasa's API clips a final command/batch to the member's declared
+        // output length (notably PMarc and flag-byte LArc streams).
+        const qint32 nWrite = static_cast<qint32>(qMin<qint64>(static_cast<qint64>(nDecoded), nExpected - pState->nCountOutput));
+        if (XBinary::_writeDevice(reinterpret_cast<const char *>(output.get()), nWrite, pState) != nWrite) {
+            bResult = false;
+            break;
+        }
+    }
+    if (pType->free) pType->free(context.get());
+    return bResult && !pState->bReadError && !pState->bWriteError &&
+           (pState->nCountOutput == nExpected) && XBinary::isPdStructNotCanceled(pPdStruct);
 }

@@ -12144,6 +12144,12 @@ int LZ5_decompress_fast_withPrefix64k(const char* source, char* dest, int origin
     return LZ5_decompress_generic(source, dest, 0, originalSize, endOnOutputSize, full, 0, withPrefix64k, (BYTE*)dest - LZ5_DICT_SIZE, NULL, LZ5_DICT_SIZE);
 }
 
+/* XArchive amalgamation boundary: the frame API uses its own allocator and size macros. */
+#undef ALLOCATOR
+#undef KB
+#undef MB
+#undef GB
+
 /* ================ unit: lz5/lz5frame.cpp ================ */
 /*
 LZ5 auto-framing library
@@ -14079,6 +14085,18 @@ size_t LZ5F_decompress(LZ5F_decompressionContext_t decompressionContext,
 }
 
 }  // namespace xarchive_lz5
+
+/* XArchive amalgamation boundary: C++ namespaces do not scope LZ5 preprocessor helpers. */
+#undef ALLOCATOR
+#undef KB
+#undef MB
+#undef GB
+#undef MINMATCH
+#undef WILDCOPYLENGTH
+#undef LASTLITERALS
+#undef MFLIMIT
+#undef ML_RUN_BITS
+#undef SET_PRICE
 
 namespace xarchive_zstd {
 
@@ -16536,6 +16554,13 @@ size_t HIST_count(unsigned* count, unsigned* maxSymbolValuePtr,
 #endif
 
 }  // namespace xarchive_zstd
+
+/* XArchive amalgamation boundary: Lizard supplies a separate FSE error-code family. */
+#undef PREFIX
+#undef ERROR
+#undef ZSTD_ERROR
+#undef CHECK_V_F
+#undef CHECK_F
 
 namespace xarchive_lizard {
 using namespace xarchive_zstd;
@@ -29001,3 +29026,19 @@ size_t LizardF_decompress(LizardF_decompressionContext_t decompressionContext,
 }
 
 }  // namespace xarchive_lizard
+
+/* XArchive amalgamation boundary: do not export Lizard-private macro state. */
+#undef ALLOCATOR
+#undef KB
+#undef MB
+#undef GB
+#undef MINMATCH
+#undef WILDCOPYLENGTH
+#undef LASTLITERALS
+#undef MFLIMIT
+#undef ML_RUN_BITS
+#undef SET_PRICE
+#undef PREFIX
+#undef ERROR
+#undef CHECK_V_F
+#undef CHECK_F

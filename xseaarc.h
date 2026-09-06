@@ -47,13 +47,14 @@ public:
         CMETHOD_STORE = 2,      // Stored
         CMETHOD_PACKED = 3,     // Packed (RLE)
         CMETHOD_SQUEEZED = 4,   // Squeezed (Huffman)
-        CMETHOD_CRUNCHED1 = 5,  // Crunched (LZW 9-bit)
-        CMETHOD_CRUNCHED2 = 6,  // Crunched (LZW 9-12 bit)
-        CMETHOD_CRUNCHED3 = 7,  // Crunched with pack
+        CMETHOD_CRUNCHED1 = 5,  // Crunched (12-bit old-hash LZW)
+        CMETHOD_CRUNCHED2 = 6,  // Crunched (12-bit old-hash LZW + RLE90)
+        CMETHOD_CRUNCHED3 = 7,  // Crunched (12-bit new-hash LZW + RLE90)
         CMETHOD_CRUNCHED4 = 8,  // Crunched (LZW dynamic)
         CMETHOD_SQUASHED = 9,   // Squashed (LZW 13-bit)
         CMETHOD_CRUSHED = 10,   // PAK: Crushed
-        CMETHOD_DISTILLED = 11  // PAK: Distilled
+        CMETHOD_DISTILLED = 11,  // PAK: Distilled
+        CMETHOD_COMPRESSED = 0x7f  // Unix compress extension
     };
 
     explicit XSEAARC(QIODevice *pDevice = nullptr);

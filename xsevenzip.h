@@ -140,6 +140,7 @@ public:
     virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
     virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
     virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
@@ -282,6 +283,9 @@ private:
     quint32 _handleUINT32(QList<SZRECORD> *pListRecords, SZSTATE *pState, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
     QByteArray _handleArray(QList<SZRECORD> *pListRecords, SZSTATE *pState, qint64 nSize, PDSTRUCT *pPdStruct, const QString &sCaption, IMPTYPE impType);
 
+    bool _prepareSplitInput(PDSTRUCT *pPdStruct);
+    bool _resolveBCJ2Streams(const SZSTATE &state, qint32 nFolderIndex, qint32 nPackBase, qint32 nSizeBase,
+                             QMap<FPART_PROP, QVariant> *pProperties, qint64 *pMainOffset, qint64 *pMainSize, qint64 *pOutputSize, PDSTRUCT *pPdStruct);
     bool _loadValidatedNextHeader(QByteArray *pData, qint64 *pNextHeaderOffset, PDSTRUCT *pPdStruct);
     bool _validateEncodedHeader(SZSTATE *pState, qint64 nPackDataLimit);
     bool _validateParsedHeader(SZSTATE *pState, qint64 nPackDataLimit, PDSTRUCT *pPdStruct);

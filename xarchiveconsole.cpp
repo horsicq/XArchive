@@ -19,22 +19,32 @@
  * SOFTWARE.
  */
 #include "xarchiveconsole.h"
+#include "xu3console.h"
 
+#include <QBuffer>
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QDirIterator>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMetaType>
 #include <QSet>
+#include <QScopedPointer>
 #include <QVector>
+#include <QXmlStreamWriter>
 
 #include <algorithm>
 #include <cstdio>
+
+#ifdef Q_OS_WIN
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 XArchiveConsole::COMMAND::COMMAND()
     : verb(VERB_NONE),
@@ -42,6 +52,7 @@ XArchiveConsole::COMMAND::COMMAND()
       listFormat(LISTFORMAT_NATIVE),
       resultFormat(RESULTFORMAT_TEXT),
       overwrite(OVERWRITE_ALWAYS),
+      packMethod(PACKMETHOD_DEFLATE),
       fileType(XBinary::FT_UNKNOWN),
       bFlatten(false),
       bVerbose(false),
@@ -53,7 +64,7 @@ XArchiveConsole::COMMAND::COMMAND()
 XArchiveConsole::XArchiveConsole(QObject *pParent)
     : QObject(pParent),
       // ---- operations (POSIX tar letters where they exist) ----
-      m_clList(QStringList() << "t" << "l" << "list" << "listarchive" << "showarchive", "List archive contents."),
+      m_clList(QStringList() << "l" << "list" << "listarchive" << "showarchive", "List archive contents."),
       m_clExtract(QStringList() << "x" << "extract", "Extract archive members."),
       m_clExtractTo(QStringList() << "extractarchive", "Extract all archive entries to <directory>.", "directory"),
       m_clVerify(QStringList() << "W" << "verify" << "test" << "testarchive", "Verify every archive member without writing files."),
@@ -63,10 +74,13 @@ XArchiveConsole::XArchiveConsole(QObject *pParent)
       m_clStruct(QStringList() << "s" << "struct", "Show one named structure, e.g. 'Hash' or 'Hash#MD5'.", "name"),
       m_clStructs(QStringList() << "S" << "structs" << "showstructs", "Show every available structure."),
       m_clFormats(QStringList() << "formats" << "listformats", "List the container formats this build can open."),
+      m_clCreate(QStringList() << "c" << "create", "Create an archive from the files that follow (ZIP only)."),
+      m_clMethod(QStringList() << "method", "Compression for -c: deflate (default) or store.", "method", "deflate"),
       // ---- modifiers ----
-      m_clDirectory(QStringList() << "C" << "directory", "Extract into <directory>.", "directory"),
+      m_clDirectory(QStringList() << "C" << "o" << "directory", "Extract into <directory>.", "directory"),
+      m_clManifest(QStringList() << "manifest",
+                   "Write a JSON manifest of every extracted record, with all of its properties, to <file>.", "file"),
       m_clFile(QStringList() << "f" << "file", "Archive to operate on; repeatable, and operands work too.", "file"),
-      m_clExclude(QStringList() << "X" << "exclude", "Skip members matching <pattern>; repeatable.", "pattern"),
       m_clInclude(QStringList() << "include", "Keep only members matching <pattern>; repeatable. Operands do the same.", "pattern"),
       m_clKeep(QStringList() << "k" << "keep-old-files", "Keep existing destination files instead of replacing them."),
       m_clOverwrite(QStringList() << "overwrite", "Existing destination files: always (default), skip, or rename.", "mode", "always"),
@@ -77,10 +91,15 @@ XArchiveConsole::XArchiveConsole(QObject *pParent)
       m_clPasswordHex(QStringList() << "H" << "password-hex", "Exact legacy archive password bytes as hexadecimal.", "hex"),
       m_clCodePage(QStringList() << "codepage", "Windows code page for legacy archive filenames and password bytes.", "number"),
       m_clProbeTimeout(QStringList() << "probe-timeout", "Maximum automatic archive-probe time per target in milliseconds (0 disables).", "milliseconds", "20000"),
+      m_clMaxOutputSize(QStringList() << "max-output-size", "Maximum uncompressed bytes per member.", "bytes"),
+      m_clMaxTotalOutputSize(QStringList() << "max-total-output-size", "Maximum aggregate uncompressed bytes per operation.", "bytes"),
+      m_clMaxEntryCount(QStringList() << "max-entry-count", "Maximum archive member count.", "count"),
+      m_clMaxMemoryOutputSize(QStringList() << "max-memory-output-size", "Maximum bytes for in-memory decoded output.", "bytes"),
+      m_clFilesystem(QStringList() << "filesystem", "Read supported guest filesystem files inside virtual disk images."),
+      m_clTransportOnly(QStringList() << "transport-only", "Decode UU/base64 payloads without opening the nested archive."),
       m_clStopOnError(QStringList() << "stop-on-error" << "stoponerror", "Abort extraction and roll the destination back when a member fails."),
       m_clFileType(QStringList() << "F" << "filetype", "Force the container type (e.g. PE, ELF, ZIP).", "type"),
-      m_clFormat(QStringList() << "o" << "format",
-                 "Output layout: native, technical, unzip, unzip-verbose, zipinfo, json, xml, csv, tsv, or text.", "layout"),
+      m_clFormat(QStringList() << "format", "Output format: text (default), json, xml, csv, or tsv.", "layout"),
       m_clVerbose(QStringList() << "b" << "verbose", "Show verbose output with detailed information."),
       m_clQuiet(QStringList() << "q" << "quiet", "Suppress progress and summary lines."),
       m_clNoColor(QStringList() << "N" << "no-color" << "nocolor", "Disable colour output."),
@@ -90,7 +109,10 @@ XArchiveConsole::XArchiveConsole(QObject *pParent)
       m_clAsCsv(QStringList() << "csv", "Output results in CSV format."),
       m_clAsTsv(QStringList() << "tsv", "Output results in TSV format."),
       m_clAsPlainText(QStringList() << "plaintext", "Output results as plain text."),
-      m_bEmbedded(false),
+      m_listFormat(LISTFORMAT_NATIVE),
+      m_resultFormat(RESULTFORMAT_TEXT),
+      m_bListFormatSet(false),
+      m_bResultFormatSet(false),
       m_nProbeTimeout(20000),
       m_bProbeTimeoutOccurred(false)
 {
@@ -103,10 +125,6 @@ XArchiveConsole::XArchiveConsole(QObject *pParent)
 
 bool XArchiveConsole::addOptions(QCommandLineParser *pParser)
 {
-    if (m_bEmbedded) {
-        return addEmbeddedOptions(pParser);
-    }
-
     bool bAllRegistered = true;
 
     bAllRegistered = addOptionChecked(pParser, m_clList) && bAllRegistered;
@@ -119,10 +137,12 @@ bool XArchiveConsole::addOptions(QCommandLineParser *pParser)
     bAllRegistered = addOptionChecked(pParser, m_clStruct) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clStructs) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clFormats) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clCreate) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clMethod) && bAllRegistered;
 
     bAllRegistered = addOptionChecked(pParser, m_clDirectory) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clManifest) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clFile) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, m_clExclude) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clInclude) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clKeep) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clOverwrite) && bAllRegistered;
@@ -133,6 +153,12 @@ bool XArchiveConsole::addOptions(QCommandLineParser *pParser)
     bAllRegistered = addOptionChecked(pParser, m_clPasswordHex) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clCodePage) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clProbeTimeout) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clMaxOutputSize) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clMaxTotalOutputSize) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clMaxEntryCount) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clMaxMemoryOutputSize) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clFilesystem) && bAllRegistered;
+    bAllRegistered = addOptionChecked(pParser, m_clTransportOnly) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clStopOnError) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clFileType) && bAllRegistered;
     bAllRegistered = addOptionChecked(pParser, m_clFormat) && bAllRegistered;
@@ -164,137 +190,30 @@ bool XArchiveConsole::addOptionChecked(QCommandLineParser *pParser, const QComma
     return false;
 }
 
-void XArchiveConsole::setEmbedded(bool bEmbedded)
+bool XArchiveConsole::applyOutputLimit(const QString &sName, const QString &sValue, XOptions::CR *pcrResult)
 {
-    m_bEmbedded = bEmbedded;
-}
-
-bool XArchiveConsole::isEmbedded() const
-{
-    return m_bEmbedded;
-}
-
-QCommandLineOption XArchiveConsole::longOnly(const QCommandLineOption &option)
-{
-    QStringList listNames;
-    const QStringList listOriginal = option.names();
-
-    for (const QString &sName : listOriginal) {
-        if (sName.length() > 1) {
-            listNames.append(sName);
-        }
+    bool bValid = !sValue.isEmpty();
+    for (const QChar c : sValue) {
+        if ((c < QLatin1Char('0')) || (c > QLatin1Char('9'))) bValid = false;
     }
-
-    return QCommandLineOption(listNames, option.description(), option.valueName(), option.defaultValues().value(0));
-}
-
-// Only the archive commands, long spellings only.  The host owns every letter
-// and every viewer/output switch; registering ours would either lose the
-// option (QCommandLineParser drops an option whose name is taken) or steal a
-// letter that already means something else there.
-bool XArchiveConsole::addEmbeddedOptions(QCommandLineParser *pParser)
-{
-    bool bAllRegistered = true;
-
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clList)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clExtract)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clExtractTo)) && bAllRegistered;
-
-    // "--test" is diec's signature-test directory switch, so the verify
-    // command keeps only the spellings that cannot collide.
-    bAllRegistered =
-        addOptionChecked(pParser, QCommandLineOption(QStringList() << "verify" << "testarchive", m_clVerify.description())) && bAllRegistered;
-
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clToStdout)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clFormats)) && bAllRegistered;
-
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clDirectory)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clExclude)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clInclude)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clKeep)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clOverwrite)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clFlatten)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clIgnoreCase)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clPassword)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clPasswordStdin)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clPasswordHex)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clCodePage)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clProbeTimeout)) && bAllRegistered;
-    bAllRegistered = addOptionChecked(pParser, longOnly(m_clStopOnError)) && bAllRegistered;
-
-    return bAllRegistered;
-}
-
-bool XArchiveConsole::processModes(const QCommandLineParser *pParser, const QStringList &listArgs, XBinary::FT fileType, bool bVerbose, qint32 *pnResult)
-{
-    COMMAND command;
-    command.dialect = DIALECT_NATIVE;
-    command.listTargets = listArgs;
-    command.fileType = fileType;
-    command.bVerbose = bVerbose;
-    command.listFormat = bVerbose ? LISTFORMAT_TECHNICAL : LISTFORMAT_NATIVE;
-    command.bFlatten = pParser->isSet(longOnly(m_clFlatten));
-    command.bIgnoreCase = pParser->isSet(longOnly(m_clIgnoreCase));
-    command.listIncludes = pParser->values(longOnly(m_clInclude));
-    command.listExcludes = pParser->values(longOnly(m_clExclude));
-
-    if (pParser->isSet(longOnly(m_clDirectory))) {
-        command.sOutputDirectory = pParser->value(longOnly(m_clDirectory));
+    bool bConverted = false;
+    const qint64 nLimit = sValue.toLongLong(&bConverted);
+    if (!bValid || !bConverted || nLimit < 0) {
+        printf("Error: --%s requires a non-negative integer\n", sName.toUtf8().constData());
+        if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
+        return false;
     }
-
-    if (pParser->isSet(longOnly(m_clExtractTo))) {
-        command.sOutputDirectory = pParser->value(longOnly(m_clExtractTo));
+    XBinary::UNPACK_PROP key = XBinary::UNPACK_PROP_UNKNOWN;
+    if (sName == QLatin1String("max-output-size")) key = XBinary::UNPACK_PROP_MAX_OUTPUT_SIZE;
+    else if (sName == QLatin1String("max-total-output-size")) key = XBinary::UNPACK_PROP_MAX_TOTAL_OUTPUT_SIZE;
+    else if (sName == QLatin1String("max-entry-count")) key = XBinary::UNPACK_PROP_MAX_ENTRY_COUNT;
+    else if (sName == QLatin1String("max-memory-output-size")) key = XBinary::UNPACK_PROP_MAX_MEMORY_OUTPUT_SIZE;
+    if (key == XBinary::UNPACK_PROP_UNKNOWN) {
+        if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
+        return false;
     }
-
-    const QString sOverwrite = pParser->value(longOnly(m_clOverwrite));
-
-    if (sOverwrite == QLatin1String("skip")) command.overwrite = OVERWRITE_SKIP;
-    else if (sOverwrite == QLatin1String("rename")) command.overwrite = OVERWRITE_RENAME;
-
-    if (pParser->isSet(longOnly(m_clKeep))) {
-        command.overwrite = OVERWRITE_SKIP;
-    }
-
-    const QCommandLineOption clVerify(QStringList() << "verify" << "testarchive", m_clVerify.description());
-
-    bool bProcessed = false;
-
-    if (pParser->isSet(longOnly(m_clFormats))) {
-        command.verb = VERB_FORMATS;
-        const XOptions::CR cr = execute(command);
-        if ((cr != XOptions::CR_SUCCESS) && pnResult) *pnResult = cr;
-        bProcessed = true;
-    }
-
-    if (pParser->isSet(longOnly(m_clList))) {
-        command.verb = VERB_LIST;
-        const XOptions::CR cr = execute(command);
-        if ((cr != XOptions::CR_SUCCESS) && pnResult) *pnResult = cr;
-        bProcessed = true;
-    }
-
-    if (pParser->isSet(clVerify)) {
-        command.verb = VERB_TEST;
-        const XOptions::CR cr = execute(command);
-        if ((cr != XOptions::CR_SUCCESS) && pnResult) *pnResult = cr;
-        bProcessed = true;
-    }
-
-    if (pParser->isSet(longOnly(m_clToStdout))) {
-        command.verb = VERB_STDOUT;
-        const XOptions::CR cr = execute(command);
-        if ((cr != XOptions::CR_SUCCESS) && pnResult) *pnResult = cr;
-        bProcessed = true;
-    }
-
-    if (pParser->isSet(longOnly(m_clExtract)) || pParser->isSet(longOnly(m_clExtractTo))) {
-        command.verb = VERB_EXTRACT;
-        const XOptions::CR cr = execute(command);
-        if ((cr != XOptions::CR_SUCCESS) && pnResult) *pnResult = cr;
-        bProcessed = true;
-    }
-
-    return bProcessed;
+    m_mapUnpackProperties.insert(key, nLimit);
+    return true;
 }
 
 bool XArchiveConsole::applyOptions(const QCommandLineParser *pParser, XOptions::CR *pcrResult)
@@ -311,6 +230,13 @@ bool XArchiveConsole::applyOptions(const QCommandLineParser *pParser, XOptions::
     m_nProbeTimeout = nProbeTimeoutMs;
 
     m_mapUnpackProperties.clear();
+    if (pParser->isSet(m_clFilesystem)) m_mapUnpackProperties.insert(XBinary::UNPACK_PROP_DISK_FILESYSTEM, true);
+    if (pParser->isSet(m_clTransportOnly)) m_mapUnpackProperties.insert(XBinary::UNPACK_PROP_TRANSPORT_ONLY, true);
+
+    if (pParser->isSet(m_clMaxOutputSize) && !applyOutputLimit(QStringLiteral("max-output-size"), pParser->value(m_clMaxOutputSize), pcrResult)) return false;
+    if (pParser->isSet(m_clMaxTotalOutputSize) && !applyOutputLimit(QStringLiteral("max-total-output-size"), pParser->value(m_clMaxTotalOutputSize), pcrResult)) return false;
+    if (pParser->isSet(m_clMaxEntryCount) && !applyOutputLimit(QStringLiteral("max-entry-count"), pParser->value(m_clMaxEntryCount), pcrResult)) return false;
+    if (pParser->isSet(m_clMaxMemoryOutputSize) && !applyOutputLimit(QStringLiteral("max-memory-output-size"), pParser->value(m_clMaxMemoryOutputSize), pcrResult)) return false;
 
     if (!pParser->isSet(m_clStopOnError)) {
         m_mapUnpackProperties.insert(XBinary::UNPACK_PROP_CONTINUEONERROR, true);
@@ -390,6 +316,40 @@ bool XArchiveConsole::applyOptions(const QCommandLineParser *pParser, XOptions::
     return true;
 }
 
+QString XArchiveConsole::getFormatValues()
+{
+    return QStringLiteral("text (default), json, xml, csv, or tsv");
+}
+
+bool XArchiveConsole::setFormat(const QString &sFormat)
+{
+    // Five encodings, nothing else. The technical rendering is a layout rather
+    // than an encoding, so --verbose selects it instead of a --format value.
+    if (sFormat == QLatin1String("text")) {
+        m_resultFormat = RESULTFORMAT_TEXT;
+        m_listFormat = LISTFORMAT_NATIVE;
+    } else if (sFormat == QLatin1String("json")) {
+        m_resultFormat = RESULTFORMAT_JSON;
+        m_listFormat = LISTFORMAT_JSON;
+    } else if (sFormat == QLatin1String("xml")) {
+        m_resultFormat = RESULTFORMAT_XML;
+        m_listFormat = LISTFORMAT_XML;
+    } else if (sFormat == QLatin1String("csv")) {
+        m_resultFormat = RESULTFORMAT_CSV;
+        m_listFormat = LISTFORMAT_CSV;
+    } else if (sFormat == QLatin1String("tsv")) {
+        m_resultFormat = RESULTFORMAT_TSV;
+        m_listFormat = LISTFORMAT_TSV;
+    } else {
+        return false;
+    }
+
+    m_bListFormatSet = true;
+    m_bResultFormatSet = true;
+
+    return true;
+}
+
 bool XArchiveConsole::buildCommand(const QCommandLineParser *pParser, COMMAND *pCommand, XOptions::CR *pcrResult)
 {
     pCommand->dialect = DIALECT_NATIVE;
@@ -424,7 +384,6 @@ bool XArchiveConsole::buildCommand(const QCommandLineParser *pParser, COMMAND *p
     }
 
     pCommand->listIncludes += pParser->values(m_clInclude);
-    pCommand->listExcludes = pParser->values(m_clExclude);
 
     if (pParser->isSet(m_clDirectory)) {
         pCommand->sOutputDirectory = pParser->value(m_clDirectory);
@@ -432,6 +391,18 @@ bool XArchiveConsole::buildCommand(const QCommandLineParser *pParser, COMMAND *p
 
     if (pParser->isSet(m_clExtractTo)) {
         pCommand->sOutputDirectory = pParser->value(m_clExtractTo);
+    }
+
+    pCommand->sManifest = pParser->value(m_clManifest);
+
+    const QString sMethod = pParser->value(m_clMethod);
+
+    if (sMethod == QLatin1String("store")) pCommand->packMethod = PACKMETHOD_STORE;
+    else if (sMethod == QLatin1String("deflate")) pCommand->packMethod = PACKMETHOD_DEFLATE;
+    else {
+        printf("Error: --method requires deflate or store\n");
+        if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
+        return false;
     }
 
     // Overwrite policy: -k is the shorthand, --overwrite the explicit form.
@@ -452,38 +423,31 @@ bool XArchiveConsole::buildCommand(const QCommandLineParser *pParser, COMMAND *p
         pCommand->overwrite = OVERWRITE_SKIP;
     }
 
-    // One -o/--format for both the archive listing and the viewers, plus the
-    // pre-POSIX one-switch-per-format spellings.
-    QString sFormat = pParser->value(m_clFormat);
-
-    if (!pParser->isSet(m_clFormat)) {
-        if (pParser->isSet(m_clAsXml)) sFormat = QStringLiteral("xml");
-        else if (pParser->isSet(m_clAsJson)) sFormat = QStringLiteral("json");
-        else if (pParser->isSet(m_clAsCsv)) sFormat = QStringLiteral("csv");
-        else if (pParser->isSet(m_clAsTsv)) sFormat = QStringLiteral("tsv");
-        else if (pParser->isSet(m_clAsPlainText)) sFormat = QStringLiteral("text");
-        else sFormat.clear();
+    // --format carries the five output encodings; the one-switch-per-format
+    // spellings below are aliases for the same setter.
+    if (pParser->isSet(m_clFormat) && !setFormat(pParser->value(m_clFormat))) {
+        printf("Error: --format requires %s\n", getFormatValues().toUtf8().data());
+        if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
+        return false;
     }
 
-    if (!sFormat.isEmpty()) {
-        if (sFormat == QLatin1String("native")) pCommand->listFormat = LISTFORMAT_NATIVE;
-        else if (sFormat == QLatin1String("technical")) pCommand->listFormat = LISTFORMAT_TECHNICAL;
-        else if (sFormat == QLatin1String("unzip")) pCommand->listFormat = LISTFORMAT_UNZIP;
-        else if (sFormat == QLatin1String("unzip-verbose")) pCommand->listFormat = LISTFORMAT_UNZIP_VERBOSE;
-        else if (sFormat == QLatin1String("zipinfo")) pCommand->listFormat = LISTFORMAT_ZIPINFO;
-        else if (sFormat == QLatin1String("json")) {
-            pCommand->listFormat = LISTFORMAT_JSON;
-            pCommand->resultFormat = RESULTFORMAT_JSON;
-        } else if (sFormat == QLatin1String("xml")) pCommand->resultFormat = RESULTFORMAT_XML;
-        else if (sFormat == QLatin1String("csv")) pCommand->resultFormat = RESULTFORMAT_CSV;
-        else if (sFormat == QLatin1String("tsv")) pCommand->resultFormat = RESULTFORMAT_TSV;
-        else if (sFormat == QLatin1String("text")) pCommand->resultFormat = RESULTFORMAT_TEXT;
-        else {
-            printf("Error: -o/--format requires native, technical, unzip, unzip-verbose, zipinfo, json, xml, csv, tsv, or text\n");
-            if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
-            return false;
-        }
-    } else if (pCommand->bVerbose) {
+    // The pre-POSIX one-switch-per-format spellings feed the same setter.
+    QString sAliasFormat;
+
+    if (pParser->isSet(m_clAsXml)) sAliasFormat = QStringLiteral("xml");
+    else if (pParser->isSet(m_clAsJson)) sAliasFormat = QStringLiteral("json");
+    else if (pParser->isSet(m_clAsCsv)) sAliasFormat = QStringLiteral("csv");
+    else if (pParser->isSet(m_clAsTsv)) sAliasFormat = QStringLiteral("tsv");
+    else if (pParser->isSet(m_clAsPlainText)) sAliasFormat = QStringLiteral("text");
+
+    if (!pParser->isSet(m_clFormat) && !sAliasFormat.isEmpty()) {
+        setFormat(sAliasFormat);
+    }
+
+    if (m_bListFormatSet) pCommand->listFormat = m_listFormat;
+    if (m_bResultFormatSet) pCommand->resultFormat = m_resultFormat;
+
+    if (!m_bListFormatSet && pCommand->bVerbose) {
         pCommand->listFormat = LISTFORMAT_TECHNICAL;
     }
 
@@ -497,7 +461,7 @@ bool XArchiveConsole::buildCommand(const QCommandLineParser *pParser, COMMAND *p
     };
 
     const OPERATION operations[] = {
-        {&m_clList, VERB_LIST, "-t/-l/--list"},
+        {&m_clList, VERB_LIST, "-l/--list"},
         {&m_clExtract, VERB_EXTRACT, "-x/--extract"},
         {&m_clExtractTo, VERB_EXTRACT, "--extractarchive"},
         {&m_clVerify, VERB_TEST, "-W/--verify"},
@@ -507,6 +471,7 @@ bool XArchiveConsole::buildCommand(const QCommandLineParser *pParser, COMMAND *p
         {&m_clStruct, VERB_STRUCT, "-s/--struct"},
         {&m_clStructs, VERB_SHOWSTRUCTS, "-S/--structs"},
         {&m_clFormats, VERB_FORMATS, "--formats"},
+        {&m_clCreate, VERB_CREATE, "-c/--create"},
     };
 
     const qint32 nNumberOfOperations = qint32(sizeof(operations) / sizeof(operations[0]));
@@ -556,24 +521,8 @@ XArchiveConsole::DIALECT XArchiveConsole::detectDialect(const QString &sProgramN
         return DIALECT_SEVENZIP;
     }
 
-    if (sName == QLatin1String("unzip")) {
-        return DIALECT_UNZIP;
-    }
-
-    if (sName == QLatin1String("zipinfo")) {
-        return DIALECT_ZIPINFO;
-    }
-
     if (!listArguments.isEmpty()) {
         const QString sFirst = listArguments.at(0);
-
-        if (sFirst == QLatin1String("unzip")) {
-            return DIALECT_UNZIP;
-        }
-
-        if (sFirst == QLatin1String("zipinfo")) {
-            return DIALECT_ZIPINFO;
-        }
 
         // A real file always wins over a verb.  "l" and "x" are legal file
         // names, and opening one must not turn into a command because of where
@@ -600,22 +549,13 @@ bool XArchiveConsole::processForeignDialect(const QStringList &listArguments, qi
         return false;
     }
 
-    // Drop an explicit selector token ("xfileunpackerc unzip -l foo.zip").
-    if (!listTokens.isEmpty() && ((listTokens.at(0) == QLatin1String("unzip")) || (listTokens.at(0) == QLatin1String("zipinfo")))) {
-        listTokens.removeFirst();
-    }
-
     COMMAND command;
     command.dialect = dialect;
 
     XOptions::CR crResult = XOptions::CR_SUCCESS;
     bool bParsed = false;
 
-    if (dialect == DIALECT_SEVENZIP) {
-        bParsed = parseSevenZip(listTokens, &command, &crResult);
-    } else {
-        bParsed = parseUnzip(listTokens, dialect, &command, &crResult);
-    }
+    bParsed = parseSevenZip(listTokens, &command, &crResult);
 
     if (!bParsed) {
         if (pnResult) *pnResult = crResult;
@@ -667,7 +607,14 @@ bool XArchiveConsole::applyLongOption(const QString &sToken, COMMAND *pCommand, 
         pCommand->bFlatten = true;
     } else if (sName == QLatin1String("ignore-case")) {
         pCommand->bIgnoreCase = true;
-    } else if (sName == QLatin1String("stoponerror")) {
+    } else if (sName == QLatin1String("filesystem")) {
+        if (nEqual >= 0) {
+            printf("Error: --filesystem does not take a value\n");
+            if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
+            return false;
+        }
+        m_mapUnpackProperties.insert(XBinary::UNPACK_PROP_DISK_FILESYSTEM, true);
+    } else if ((sName == QLatin1String("stoponerror")) || (sName == QLatin1String("stop-on-error"))) {
         m_mapUnpackProperties.remove(XBinary::UNPACK_PROP_CONTINUEONERROR);
     } else if (sName == QLatin1String("json")) {
         pCommand->listFormat = LISTFORMAT_JSON;
@@ -677,6 +624,8 @@ bool XArchiveConsole::applyLongOption(const QString &sToken, COMMAND *pCommand, 
         if (!sValue.isEmpty()) pCommand->listExcludes.append(sValue);
     } else if (sName == QLatin1String("outdir")) {
         pCommand->sOutputDirectory = sValue;
+    } else if (sName == QLatin1String("manifest")) {
+        pCommand->sManifest = sValue;
     } else if (sName == QLatin1String("password")) {
         m_mapUnpackProperties.insert(XBinary::UNPACK_PROP_PASSWORD, sValue);
     } else if (sName == QLatin1String("codepage")) {
@@ -712,6 +661,11 @@ bool XArchiveConsole::applyLongOption(const QString &sToken, COMMAND *pCommand, 
             return false;
         }
         m_nProbeTimeout = nTimeout;
+    } else if (sName == QLatin1String("max-output-size") ||
+               sName == QLatin1String("max-total-output-size") ||
+               sName == QLatin1String("max-entry-count") ||
+               sName == QLatin1String("max-memory-output-size")) {
+        return applyOutputLimit(sName, sValue, pcrResult);
     } else if (sName == QLatin1String("filetype")) {
         pCommand->fileType = XBinary::ftStringToFileTypeId(sValue);
     } else if (sName == QLatin1String("overwrite")) {
@@ -724,17 +678,13 @@ bool XArchiveConsole::applyLongOption(const QString &sToken, COMMAND *pCommand, 
             return false;
         }
     } else if (sName == QLatin1String("format")) {
-        if (sValue == QLatin1String("native")) pCommand->listFormat = LISTFORMAT_NATIVE;
-        else if (sValue == QLatin1String("technical")) pCommand->listFormat = LISTFORMAT_TECHNICAL;
-        else if (sValue == QLatin1String("unzip")) pCommand->listFormat = LISTFORMAT_UNZIP;
-        else if (sValue == QLatin1String("unzip-verbose")) pCommand->listFormat = LISTFORMAT_UNZIP_VERBOSE;
-        else if (sValue == QLatin1String("zipinfo")) pCommand->listFormat = LISTFORMAT_ZIPINFO;
-        else if (sValue == QLatin1String("json")) pCommand->listFormat = LISTFORMAT_JSON;
-        else {
-            printf("Error: --format requires native, technical, unzip, unzip-verbose, zipinfo, or json\n");
+        if (!setFormat(sValue)) {
+            printf("Error: --format requires %s\n", getFormatValues().toUtf8().data());
             if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
             return false;
         }
+        pCommand->listFormat = m_listFormat;
+        pCommand->resultFormat = m_resultFormat;
     } else if (sName == QLatin1String("help")) {
         pCommand->verb = VERB_NONE;
     } else {
@@ -851,137 +801,6 @@ bool XArchiveConsole::parseSevenZip(const QStringList &listArguments, COMMAND *p
     return true;
 }
 
-bool XArchiveConsole::parseUnzip(const QStringList &listArguments, DIALECT dialect, COMMAND *pCommand, XOptions::CR *pcrResult)
-{
-    bool bStopSwitches = false;
-    bool bExcludeMode = false;
-    bool bVerbSelected = false;
-
-    if (dialect == DIALECT_ZIPINFO) {
-        pCommand->verb = VERB_LIST;
-        pCommand->listFormat = LISTFORMAT_ZIPINFO;
-        bVerbSelected = true;
-    }
-
-    for (qint32 i = 0; i < listArguments.count(); i++) {
-        const QString sToken = listArguments.at(i);
-
-        if (!bStopSwitches && (sToken == QLatin1String("--"))) {
-            bStopSwitches = true;
-            continue;
-        }
-
-        if (!bStopSwitches && sToken.startsWith(QLatin1String("--"))) {
-            if (!applyLongOption(sToken, pCommand, pcrResult)) {
-                return false;
-            }
-            continue;
-        }
-
-        if (!bStopSwitches && sToken.startsWith(QChar('-')) && (sToken.length() > 1)) {
-            // Info-ZIP clusters its switches: "-qo" is "-q -o", and a switch
-            // that takes a value consumes the rest of the cluster or, when the
-            // cluster ends, the next argument.
-            const QString sCluster = sToken.mid(1);
-
-            for (qint32 c = 0; c < sCluster.length(); c++) {
-                const QChar cSwitch = sCluster.at(c);
-                const QString sRest = sCluster.mid(c + 1);
-
-                if (cSwitch == QChar('d')) {
-                    if (!sRest.isEmpty()) {
-                        pCommand->sOutputDirectory = sRest;
-                        c = sCluster.length();
-                    } else if ((i + 1) < listArguments.count()) {
-                        pCommand->sOutputDirectory = listArguments.at(++i);
-                    } else {
-                        printf("Error: -d requires a directory\n");
-                        if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
-                        return false;
-                    }
-                } else if (cSwitch == QChar('P')) {
-                    if (!sRest.isEmpty()) {
-                        m_mapUnpackProperties.insert(XBinary::UNPACK_PROP_PASSWORD, sRest);
-                        c = sCluster.length();
-                    } else if ((i + 1) < listArguments.count()) {
-                        m_mapUnpackProperties.insert(XBinary::UNPACK_PROP_PASSWORD, listArguments.at(++i));
-                    } else {
-                        printf("Error: -P requires a password\n");
-                        if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
-                        return false;
-                    }
-                } else if (cSwitch == QChar('Z')) {
-                    pCommand->verb = VERB_LIST;
-                    pCommand->listFormat = LISTFORMAT_ZIPINFO;
-                    bVerbSelected = true;
-                } else if (cSwitch == QChar('l')) {
-                    if (pCommand->listFormat != LISTFORMAT_ZIPINFO) {
-                        pCommand->verb = VERB_LIST;
-                        pCommand->listFormat = LISTFORMAT_UNZIP;
-                        bVerbSelected = true;
-                    }
-                } else if (cSwitch == QChar('v')) {
-                    pCommand->verb = VERB_LIST;
-                    if (pCommand->listFormat != LISTFORMAT_ZIPINFO) pCommand->listFormat = LISTFORMAT_UNZIP_VERBOSE;
-                    pCommand->bVerbose = true;
-                    bVerbSelected = true;
-                } else if (cSwitch == QChar('t')) {
-                    if (pCommand->listFormat != LISTFORMAT_ZIPINFO) {
-                        pCommand->verb = VERB_TEST;
-                        bVerbSelected = true;
-                    }
-                } else if ((cSwitch == QChar('p')) || (cSwitch == QChar('c'))) {
-                    pCommand->verb = VERB_STDOUT;
-                    bVerbSelected = true;
-                } else if (cSwitch == QChar('j')) {
-                    pCommand->bFlatten = true;
-                } else if (cSwitch == QChar('o')) {
-                    pCommand->overwrite = OVERWRITE_ALWAYS;
-                } else if (cSwitch == QChar('n')) {
-                    pCommand->overwrite = OVERWRITE_SKIP;
-                } else if (cSwitch == QChar('q')) {
-                    pCommand->bQuiet = true;
-                } else if (cSwitch == QChar('C')) {
-                    pCommand->bIgnoreCase = true;
-                } else if (cSwitch == QChar('x')) {
-                    bExcludeMode = true;
-                } else if ((cSwitch == QChar('h')) || (cSwitch == QChar('?'))) {
-                    pCommand->verb = VERB_NONE;
-                    return true;
-                } else if ((cSwitch == QChar('a')) || (cSwitch == QChar('b')) || (cSwitch == QChar('L')) || (cSwitch == QChar('X')) || (cSwitch == QChar('K')) ||
-                           (cSwitch == QChar('M')) || (cSwitch == QChar('U')) || (cSwitch == QChar('T')) || (cSwitch == QChar('D')) || (cSwitch == QChar('s')) ||
-                           (cSwitch == QChar('S')) || (cSwitch == QChar('V')) || (cSwitch == QChar('N')) || (cSwitch == QChar('B')) || (cSwitch == QChar('1')) ||
-                           (cSwitch == QChar('m')) || (cSwitch == QChar('z')) || (cSwitch == QChar('f')) || (cSwitch == QChar('u'))) {
-                    // Accepted and ignored: text conversion, permission and
-                    // pager switches, and the zipinfo layout variants, none of
-                    // which change which bytes come out of the archive.
-                } else {
-                    printf("Error: unsupported unzip switch -%s\n", QString(cSwitch).toUtf8().data());
-                    if (pcrResult) *pcrResult = XOptions::CR_INVALIDPARAMETER;
-                    return false;
-                }
-            }
-
-            continue;
-        }
-
-        if (pCommand->listTargets.isEmpty() && !bExcludeMode) {
-            pCommand->listTargets.append(sToken);
-        } else if (bExcludeMode) {
-            pCommand->listExcludes.append(sToken);
-        } else {
-            pCommand->listIncludes.append(sToken);
-        }
-    }
-
-    // unzip's default action is extraction.
-    if (!bVerbSelected && (pCommand->verb == VERB_NONE) && !pCommand->listTargets.isEmpty()) {
-        pCommand->verb = VERB_EXTRACT;
-    }
-
-    return true;
-}
-
 QString XArchiveConsole::getDialectHelp(DIALECT dialect, const QString &sProgramName)
 {
     const QString sName = QFileInfo(sProgramName).completeBaseName();
@@ -1006,18 +825,6 @@ QString XArchiveConsole::getDialectHelp(DIALECT dialect, const QString &sProgram
         sResult += "  -slt           : show technical information for l (List)\n";
         sResult += "  -t{Type}       : set type of archive\n";
         sResult += "  --             : stop switches parsing\n";
-    } else if (dialect == DIALECT_ZIPINFO) {
-        sResult += QString("Usage: %1 [options] archive[.zip] [member...] [-x xmember...]\n\n").arg(sName);
-        sResult += "  Lists archive contents in zipinfo format.\n";
-    } else {
-        sResult += QString("Usage: %1 [-opts] file[.zip] [list] [-x xlist] [-d exdir]\n\n").arg(sName);
-        sResult += "  -l  list files (short format)     -t  test compressed archive data\n";
-        sResult += "  -v  list verbosely                -Z  ZipInfo-style listing\n";
-        sResult += "  -p  extract files to pipe         -c  extract files to stdout\n";
-        sResult += "  -d  extract files into exdir      -x  exclude the files that follow\n";
-        sResult += "  -j  junk paths                    -C  match names case-insensitively\n";
-        sResult += "  -o  overwrite without prompting   -n  never overwrite existing files\n";
-        sResult += "  -q  quiet                         -P  use the given password\n";
     }
 
     sResult += "\nThis build also accepts its own long options in this dialect, for example\n";
@@ -1081,6 +888,10 @@ QMap<XBinary::UNPACK_PROP, QVariant> XArchiveConsole::buildUnpackProperties(cons
         mapResult.insert(XBinary::UNPACK_PROP_SKIPEXISTINGFILES, true);
     } else if (command.overwrite == OVERWRITE_ALWAYS) {
         mapResult.insert(XBinary::UNPACK_PROP_OVERWRITEFILES, true);
+    } else if (command.overwrite == OVERWRITE_RENAME) {
+        mapResult.insert(XBinary::UNPACK_PROP_OVERWRITEFILES, false);
+        mapResult.insert(XBinary::UNPACK_PROP_FIXFILENAMES, true);
+        mapResult.insert(XBinary::UNPACK_PROP_SKIPEXISTINGFILES, false);
     }
 
     return mapResult;
@@ -1204,6 +1015,7 @@ XOptions::CR XArchiveConsole::execute(const COMMAND &command)
     if (command.verb == VERB_TEST) return testArchives(command);
     if (command.verb == VERB_STDOUT) return writeMembersToStdout(command);
     if (command.verb == VERB_FORMATS) return listSupportedFormats(command);
+    if (command.verb == VERB_CREATE) return createArchive(command);
     if (command.verb == VERB_SHOWSTRUCTS) return showStructsOverview(command);
 
     // The remaining verbs are per-file viewers.
@@ -1244,39 +1056,20 @@ XOptions::CR XArchiveConsole::execute(const COMMAND &command)
 
 XBinary::FT XArchiveConsole::detectFileType(QIODevice *pDevice, XBinary::FT fileType, bool bValidateArchiveType, XBinary::PDSTRUCT *pPdStruct)
 {
-    XBinary::FT result = fileType;
-
-    if (!XFormats::isStaticUnpacker(result)) {
-        if (m_nProbeTimeout == 0) {
-            XBinary::disablePdStructDeadline(pPdStruct);
-        } else {
-            XBinary::setPdStructDeadline(pPdStruct, m_nProbeTimeout);
-        }
-
-        // A preliminary scan commonly reports a generic PE type. Probe the executable
-        // for a specific packer/installer before sending it to the archive backends.
-        const XBinary::FT ftStatic = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_EXECUTABLES | XBinary::FT_FLAG_STATICUNPACKERS, pPdStruct);
-
-        if (XFormats::isStaticUnpacker(ftStatic)) {
-            result = ftStatic;
-        } else if (result == XBinary::FT_UNKNOWN) {
-            // Only re-probe for an archive type when the user did not force one
-            // with -F.  Without this guard an explicit --filetype (e.g. UDF on a
-            // bridge disc that, by definition, also carries an ISO 9660
-            // descriptor) is silently overwritten by auto-detection.
-            if (bValidateArchiveType) {
-                const XBinary::FT ftArchive = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES | XBinary::FT_FLAG_STATICUNPACKERS, pPdStruct);
-
-                if (XFormats::isStaticUnpacker(ftArchive) || XArchives::getArchiveOpenValidFileTypes().contains(ftArchive)) {
-                    result = ftArchive;
-                }
-            } else {
-                result = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES, pPdStruct);
-            }
-        }
+    // An explicit backend must be used for both enumeration and extraction.
+    if (fileType != XBinary::FT_UNKNOWN) return fileType;
+    if (m_nProbeTimeout == 0) {
+        XBinary::disablePdStructDeadline(pPdStruct);
+    } else {
+        XBinary::setPdStructDeadline(pPdStruct, m_nProbeTimeout);
     }
+    const XBinary::FT ftStatic = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_EXECUTABLES | XBinary::FT_FLAG_STATICUNPACKERS, pPdStruct);
+    if (XFormats::isStaticUnpacker(ftStatic)) return ftStatic;
 
-    return result;
+    // Compound-file installers such as MSI become available in this pass.
+    const XBinary::FT ftArchive = XFormats::getPrefFileType(pDevice, XBinary::FT_FLAG_ARCHIVES | XBinary::FT_FLAG_STATICUNPACKERS, pPdStruct);
+    if (!bValidateArchiveType || XFormats::isStaticUnpacker(ftArchive) || XArchives::getArchiveOpenValidFileTypes().contains(ftArchive)) return ftArchive;
+    return XBinary::FT_UNKNOWN;
 }
 
 XOptions::CR XArchiveConsole::listArchives(const QStringList &listFileNames, XBinary::FT fileType, bool bVerbose)
@@ -1286,7 +1079,9 @@ XOptions::CR XArchiveConsole::listArchives(const QStringList &listFileNames, XBi
     command.listTargets = listFileNames;
     command.fileType = fileType;
     command.bVerbose = bVerbose;
-    command.listFormat = bVerbose ? LISTFORMAT_TECHNICAL : LISTFORMAT_NATIVE;
+    // The host owns --format; setFormat() has already recorded whatever it saw.
+    command.listFormat = m_bListFormatSet ? m_listFormat : (bVerbose ? LISTFORMAT_TECHNICAL : LISTFORMAT_NATIVE);
+    if (m_bResultFormatSet) command.resultFormat = m_resultFormat;
 
     return listArchives(command);
 }
@@ -1309,8 +1104,7 @@ XOptions::CR XArchiveConsole::listArchives(const COMMAND &command)
             continue;
         }
 
-        if (bShowFileName && (command.listFormat != LISTFORMAT_UNZIP) && (command.listFormat != LISTFORMAT_UNZIP_VERBOSE) &&
-            (command.listFormat != LISTFORMAT_ZIPINFO)) {
+        if (bShowFileName) {
             printf("%s:\n", QDir().toNativeSeparators(sFileName).toUtf8().data());
         }
 
@@ -1358,14 +1152,14 @@ XOptions::CR XArchiveConsole::listArchives(const COMMAND &command)
             const QList<XBinary::ARCHIVERECORD> listSelected = filterRecords(listRecords, command);
             QString sListing;
 
-            if (command.listFormat == LISTFORMAT_UNZIP) {
-                sListing = formatListUnzip(sFileName, listSelected, false);
-            } else if (command.listFormat == LISTFORMAT_UNZIP_VERBOSE) {
-                sListing = formatListUnzip(sFileName, listSelected, true);
-            } else if (command.listFormat == LISTFORMAT_ZIPINFO) {
-                sListing = formatListZipInfo(sFileName, listSelected, nPhysicalSize);
-            } else if (command.listFormat == LISTFORMAT_JSON) {
+            if (command.listFormat == LISTFORMAT_JSON) {
                 sListing = formatListJson(sFileName, currentFileType, listSelected, nPhysicalSize);
+            } else if (command.listFormat == LISTFORMAT_XML) {
+                sListing = formatListXml(sFileName, currentFileType, listSelected, nPhysicalSize);
+            } else if (command.listFormat == LISTFORMAT_CSV) {
+                sListing = formatListDelimited(listSelected, false);
+            } else if (command.listFormat == LISTFORMAT_TSV) {
+                sListing = formatListDelimited(listSelected, true);
             } else {
                 sListing = formatList(currentFileType, listSelected, nPhysicalSize, command.listFormat == LISTFORMAT_TECHNICAL);
             }
@@ -1428,17 +1222,6 @@ XOptions::CR XArchiveConsole::extractArchives(const COMMAND &command)
         return XOptions::CR_INVALIDPARAMETER;
     }
 
-    if (command.overwrite == OVERWRITE_RENAME) {
-        // Auto-rename needs UNPACK_PROP_OVERWRITEFILES cleared, and that path
-        // currently aborts the whole extraction with a sharing violation when
-        // it publishes the first member -- even into an empty directory. That
-        // is a defect in the extraction core, not something this front end can
-        // work around, so refuse rather than abort mid-archive.
-        printf("Error: --overwrite=rename (7-Zip -aou) is not available:\n");
-        printf("       the extraction core fails to publish files with overwriting disabled\n");
-        return XOptions::CR_INVALIDPARAMETER;
-    }
-
     const bool bMemberSelection = !command.listIncludes.isEmpty() || !command.listExcludes.isEmpty() || command.bFlatten;
 
     if (bMemberSelection) {
@@ -1454,6 +1237,10 @@ XOptions::CR XArchiveConsole::extractArchives(const COMMAND &command)
     }
 
     const QMap<XBinary::UNPACK_PROP, QVariant> mapProperties = buildUnpackProperties(command);
+
+    // One manifest describes the whole run, so several archives extracted in
+    // one command produce one file with an entry each.
+    QJsonArray jsonManifest;
 
     for (const QString &sFileName : command.listTargets) {
         if (!QFileInfo::exists(sFileName)) {
@@ -1498,6 +1285,17 @@ XOptions::CR XArchiveConsole::extractArchives(const COMMAND &command)
             }
         }
 
+        // Read the end-of-central-directory comment now: the archive object is
+        // deleted below, and the manifest is written after that.
+        QString sArchiveComment;
+        {
+            XArchive *pArchiveForComment = qobject_cast<XArchive *>(pArchive);
+
+            if (pArchiveForComment && pArchiveForComment->isCommentPresent()) {
+                sArchiveComment = pArchiveForComment->getComment();
+            }
+        }
+
         for (qint32 i = 0; i < listRecords.count(); i++) {
             if (!isRecordFolder(listRecords.at(i))) {
                 nNumberOfFiles++;
@@ -1517,9 +1315,47 @@ XOptions::CR XArchiveConsole::extractArchives(const COMMAND &command)
         delete pArchive;
 
         XBinary::setPdStructErrorString(&archivePdStruct, QString());
+        const qint64 nPhysicalSize = file.size();
         qint32 nSkippedEntries = 0;
-        const bool bExtracted = file.seek(0) && XArchives::decompressToFolder(&file, sResultDirectory, mapProperties, &archivePdStruct, &nSkippedEntries);
+        const bool bExtracted = file.seek(0) && XArchives::decompressToFolder(&file, sResultDirectory, mapProperties, &archivePdStruct, &nSkippedEntries, currentFileType);
         file.close();
+
+        if (!command.sManifest.isEmpty()) {
+            // Same record shape as a "--format json" listing, plus what this
+            // particular extraction did with them.
+            QJsonObject jsonArchive = buildListJson(sFileName, currentFileType, listRecords, nPhysicalSize);
+
+            // Point every member at the file it was written to, so the manifest
+            // alone is enough to pack the archive again.
+            QJsonArray jsonRecords = jsonArchive.value("records").toArray();
+
+            for (qint32 r = 0; r < jsonRecords.count(); r++) {
+                QJsonObject jsonRecord = jsonRecords.at(r).toObject();
+                const QString sMemberName = jsonRecord.value("Name").toString();
+
+                if (!sMemberName.isEmpty() && !jsonRecord.value("Folder").toBool()) {
+                    const QString sPath = QDir(sResultDirectory).filePath(sMemberName);
+
+                    if (QFileInfo::exists(sPath)) {
+                        jsonRecord.insert("sourcePath", QDir().toNativeSeparators(sPath));
+                    }
+                }
+
+                jsonRecords.replace(r, jsonRecord);
+            }
+
+            jsonArchive.insert("records", jsonRecords);
+            jsonArchive.insert("outputDirectory", QDir().toNativeSeparators(sResultDirectory));
+
+            // The end-of-central-directory comment belongs to the archive, not
+            // to any member, so it is carried at the top level.
+            if (!sArchiveComment.isEmpty()) {
+                jsonArchive.insert("comment", sArchiveComment);
+            }
+            jsonArchive.insert("extracted", bExtracted);
+            jsonArchive.insert("skipped", nSkippedEntries);
+            jsonManifest.append(jsonArchive);
+        }
 
         if (bExtracted) {
             const QString sTotalSize = bTotalSizeComplete ? XBinary::bytesCountToString(nTotalSize, 1024) : QString("unknown");
@@ -1554,6 +1390,31 @@ XOptions::CR XArchiveConsole::extractArchives(const COMMAND &command)
         }
     }
 
+    if (!command.sManifest.isEmpty()) {
+        // One archive -- the documented case -- is written as the archive
+        // object itself, with no wrapper. Several archives in one command
+        // become an array of exactly those objects, since a JSON file has room
+        // for only one root.
+        const QJsonDocument jsonDocument = (jsonManifest.count() == 1) ? QJsonDocument(jsonManifest.at(0).toObject()) : QJsonDocument(jsonManifest);
+
+        QFile manifestFile;
+        manifestFile.setFileName(command.sManifest);
+
+        if (manifestFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            manifestFile.write(jsonDocument.toJson(QJsonDocument::Indented));
+            manifestFile.close();
+
+            if (!command.bQuiet) {
+                printf("Manifest -> %s\n", QDir().toNativeSeparators(command.sManifest).toUtf8().data());
+            }
+        } else {
+            // The archive is already on disk; say the manifest failed rather
+            // than reporting the whole extraction as a failure.
+            printf("Cannot write manifest: %s\n", command.sManifest.toUtf8().data());
+            result = XOptions::CR_PARTIALRESULT;
+        }
+    }
+
     return result;
 }
 
@@ -1576,7 +1437,7 @@ XOptions::CR XArchiveConsole::testArchives(const COMMAND &command)
         XBinary::PDSTRUCT archivePdStruct = XBinary::createPdStruct();
         XBinary::disablePdStructDeadline(&archivePdStruct);
 
-        const bool bTested = XArchives::testArchive(sFileName, m_mapUnpackProperties, &archivePdStruct);
+        const bool bTested = XArchives::testArchive(sFileName, m_mapUnpackProperties, &archivePdStruct, command.fileType);
         const QString sError = XBinary::getPdStructErrorString(&archivePdStruct);
 
         if (bTested) {
@@ -1610,23 +1471,77 @@ XOptions::CR XArchiveConsole::writeMembersToStdout(const COMMAND &command)
         return XOptions::CR_INVALIDPARAMETER;
     }
 
-    QFile output;
+    XBinary::OUTPUT_POLICY policy = {};
+    if (!XBinary::resolveUnpackOutputPolicy(m_mapUnpackProperties, &policy)) {
+        fprintf(stderr, "Invalid unpacked-output limit\n");
+        return XOptions::CR_INVALIDPARAMETER;
+    }
+    QSharedPointer<XBinary::OUTPUT_BUDGET> operationBudget = QSharedPointer<XBinary::OUTPUT_BUDGET>::create();
+    operationBudget->configureForProperties(policy, m_mapUnpackProperties);
 
+    // The checked single-record API publishes into a seekable device after
+    // verification. Bound this temporary byte array before it reaches stdout.
+    class BoundedBuffer final : public QBuffer {
+    public:
+        BoundedBuffer(QByteArray *pData, qint64 nLimit) : QBuffer(pData), m_nLimit(nLimit) {}
+        bool seek(qint64 nPosition) override
+        {
+            return (nPosition >= 0) && ((m_nLimit < 0) || (nPosition <= m_nLimit)) && QBuffer::seek(nPosition);
+        }
+    protected:
+        qint64 writeData(const char *pData, qint64 nSize) override
+        {
+            if ((nSize < 0) || !XBinary::OUTPUT_BUDGET::withinLimit(pos(), m_nLimit, nSize)) return -1;
+            return QBuffer::writeData(pData, nSize);
+        }
+    private:
+        qint64 m_nLimit;
+    };
+
+#ifdef Q_OS_WIN
+    // QFile wraps the CRT stdout handle. Its underlying descriptor must be
+    // binary too, otherwise Windows expands LF and changes both bytes and size.
+    class StdoutModeGuard {
+    public:
+        StdoutModeGuard() : m_nPreviousMode(-1) {}
+        bool setBinary()
+        {
+            if (std::fflush(stdout) != 0) return false;
+            m_nPreviousMode = _setmode(_fileno(stdout), _O_BINARY);
+            return m_nPreviousMode != -1;
+        }
+        ~StdoutModeGuard()
+        {
+            if (m_nPreviousMode != -1) {
+                std::fflush(stdout);
+                _setmode(_fileno(stdout), m_nPreviousMode);
+            }
+        }
+    private:
+        int m_nPreviousMode;
+    } stdoutModeGuard;
+    if (!stdoutModeGuard.setBinary()) {
+        fprintf(stderr, "Error: cannot set standard output to binary mode\n");
+        return XOptions::CR_CANNOTOPENFILE;
+    }
+#endif
+
+    QFile output;
     if (!output.open(stdout, QIODevice::WriteOnly | QIODevice::Unbuffered, QFileDevice::DontCloseHandle)) {
-        printf("Error: cannot write to standard output\n");
+        fprintf(stderr, "Error: cannot write to standard output\n");
         return XOptions::CR_CANNOTOPENFILE;
     }
 
+    bool bBudgetExhausted = false;
     for (const QString &sFileName : command.listTargets) {
+        if (bBudgetExhausted) break;
         if (!QFileInfo::exists(sFileName)) {
             fprintf(stderr, "Cannot find: %s\n", sFileName.toUtf8().data());
             result = XOptions::CR_CANNOTFINDFILE;
             continue;
         }
 
-        QFile file;
-        file.setFileName(sFileName);
-
+        QFile file(sFileName);
         if (!file.open(QIODevice::ReadOnly)) {
             fprintf(stderr, "Cannot open: %s\n", sFileName.toUtf8().data());
             result = XOptions::CR_CANNOTOPENFILE;
@@ -1635,84 +1550,96 @@ XOptions::CR XArchiveConsole::writeMembersToStdout(const COMMAND &command)
 
         XBinary::PDSTRUCT archivePdStruct = XBinary::createPdStruct();
         const XBinary::FT currentFileType = detectFileType(&file, command.fileType, true, &archivePdStruct);
-
         if (XBinary::isPdStructDeadlineExpired(&archivePdStruct)) {
             fprintf(stderr, "Detection budget exceeded: %s\n", sFileName.toUtf8().data());
             m_bProbeTimeoutOccurred = true;
             result = XOptions::CR_PROBETIMEOUT;
-            file.close();
             continue;
         }
-
         XBinary::disablePdStructDeadline(&archivePdStruct);
 
-        QList<XBinary::ARCHIVERECORD> listRecords;
-        XBinary *pArchive = nullptr;
-
+        // Keep the chosen handler and original record indices. Re-detecting
+        // through the legacy name API loses forced types and archive streams.
+        QScopedPointer<XBinary> archive;
         if (XFormats::isStaticUnpacker(currentFileType) || XFormats::isArchive(currentFileType)) {
-            pArchive = XFormats::createClass(currentFileType, &file);
-
-            if (pArchive) {
-                listRecords = getRecords(pArchive, m_mapUnpackProperties, &archivePdStruct);
-            }
+            archive.reset(XFormats::createClass(currentFileType, &file));
         }
-
-        delete pArchive;
-        pArchive = nullptr;
-
+        const QList<XBinary::ARCHIVERECORD> listRecords = getRecords(archive.data(), m_mapUnpackProperties, &archivePdStruct);
         if (listRecords.isEmpty()) {
             fprintf(stderr, "Cannot open archive: %s\n", sFileName.toUtf8().data());
             result = XOptions::CR_CANNOTOPENFILE;
-            file.close();
             continue;
         }
 
-        const QList<XBinary::ARCHIVERECORD> listSelected = filterRecords(listRecords, command);
-        qint32 nWritten = 0;
+        qint32 nMatched = 0;
+        for (qint32 i = 0; i < listRecords.count(); ++i) {
+            const XBinary::ARCHIVERECORD &record = listRecords.at(i);
+            const QString sMemberName = getRecordName(record);
+            if (isRecordFolder(record) || !isMemberSelected(sMemberName, command.listIncludes, command.listExcludes, command.bIgnoreCase)) continue;
+            ++nMatched;
 
-        for (qint32 i = 0; i < listSelected.count(); i++) {
-            if (isRecordFolder(listSelected.at(i))) {
-                continue;
-            }
-
-            const QString sMemberName = getRecordName(listSelected.at(i));
-
-            if (!file.seek(0)) {
+            if (!operationBudget->beginEntry(i, sMemberName) && operationBudget->isEnforcing()) {
+                fprintf(stderr, "Archive member count exceeds the configured limit\n");
+                result = XOptions::CR_PARTIALRESULT;
+                bBudgetExhausted = true;
                 break;
             }
+
+            QMap<XBinary::UNPACK_PROP, QVariant> memberProperties = m_mapUnpackProperties;
+            qint64 nBufferLimit = policy.nMaxMemoryOutputSize;
+            if (policy.nMaxEntryOutputSize >= 0) nBufferLimit = (nBufferLimit < 0) ? policy.nMaxEntryOutputSize : qMin(nBufferLimit, policy.nMaxEntryOutputSize);
+            if (m_mapUnpackProperties.contains(XBinary::UNPACK_PROP_MAX_TOTAL_OUTPUT_SIZE) && (policy.nMaxTotalOutputSize >= 0)) {
+                const qint64 nRemaining = qMax(qint64(0), policy.nMaxTotalOutputSize - operationBudget->totalWritten());
+                memberProperties.insert(XBinary::UNPACK_PROP_MAX_TOTAL_OUTPUT_SIZE, nRemaining);
+                nBufferLimit = (nBufferLimit < 0) ? nRemaining : qMin(nBufferLimit, nRemaining);
+            }
+            // This call processes one selected member. Its local count must not
+            // replace the operation-wide count charged above.
+            if (memberProperties.contains(XBinary::UNPACK_PROP_MAX_ENTRY_COUNT)) memberProperties.insert(XBinary::UNPACK_PROP_MAX_ENTRY_COUNT, qint64(1));
 
             XBinary::PDSTRUCT memberPdStruct = XBinary::createPdStruct();
             XBinary::disablePdStructDeadline(&memberPdStruct);
-
-            const QByteArray baData = XArchives::decompress(&file, sMemberName, &memberPdStruct, m_mapUnpackProperties);
-            const QString sMemberError = XBinary::getPdStructErrorString(&memberPdStruct);
-
-            if (baData.isEmpty() && !sMemberError.isEmpty()) {
+            QByteArray baData;
+            BoundedBuffer buffer(&baData, nBufferLimit);
+            const bool bWithinKnownSize = !isRecordSizePresent(record) || (nBufferLimit < 0) || (getRecordSize(record) <= nBufferLimit);
+            const bool bUnpacked = bWithinKnownSize && file.seek(0) && buffer.open(QIODevice::ReadWrite) &&
+                                   archive->unpackRecordByIndex(i, &record, &buffer, memberProperties, &memberPdStruct);
+            buffer.close();
+            if (!bUnpacked || !XBinary::isPdStructNotCanceled(&memberPdStruct)) {
                 fprintf(stderr, "Cannot extract member: %s\n", sMemberName.toUtf8().data());
-                fprintf(stderr, "  %s\n", sMemberError.toUtf8().data());
+                const QString sError = XBinary::getPdStructErrorString(&memberPdStruct);
+                if (!bWithinKnownSize) fprintf(stderr, "  Unpacked output exceeds the configured limit\n");
+                else if (!sError.isEmpty()) fprintf(stderr, "  %s\n", sError.toUtf8().data());
                 result = XOptions::CR_PARTIALRESULT;
+                if (!m_mapUnpackProperties.value(XBinary::UNPACK_PROP_CONTINUEONERROR, false).toBool()) break;
                 continue;
             }
 
-            if (!baData.isEmpty() && (output.write(baData) != baData.size())) {
-                fprintf(stderr, "Cannot write member to standard output: %s\n", sMemberName.toUtf8().data());
-                result = XOptions::CR_CANNOTOPENFILE;
+            if (!operationBudget->debit(baData.size()) && operationBudget->isEnforcing()) {
+                fprintf(stderr, "Unpacked output exceeds the configured operation limit\n");
+                result = XOptions::CR_PARTIALRESULT;
+                bBudgetExhausted = true;
                 break;
             }
-
-            nWritten++;
+            qint64 nWritten = 0;
+            while (nWritten < baData.size()) {
+                const qint64 nChunk = output.write(baData.constData() + nWritten, baData.size() - nWritten);
+                if (nChunk <= 0) break;
+                nWritten += nChunk;
+            }
+            if (nWritten != baData.size()) {
+                fprintf(stderr, "Cannot write member to standard output: %s\n", sMemberName.toUtf8().data());
+                result = XOptions::CR_CANNOTOPENFILE;
+                bBudgetExhausted = true;
+                break;
+            }
         }
-
-        if (nWritten == 0) {
+        if (nMatched == 0) {
             fprintf(stderr, "No matching member in: %s\n", sFileName.toUtf8().data());
             result = XOptions::CR_CANNOTFINDFILE;
         }
-
-        file.close();
     }
-
-    output.flush();
-
+    if (!output.flush()) result = XOptions::CR_CANNOTOPENFILE;
     return result;
 }
 
@@ -1744,7 +1671,7 @@ XOptions::CR XArchiveConsole::listSupportedFormats(const COMMAND &command)
 
         printf("%s\n", QJsonDocument(jsonRoot).toJson(QJsonDocument::Indented).constData());
     } else {
-        printf("Supported archive formats (%d):\n", listNames.count());
+        printf("Supported archive formats (%lld):\n", static_cast<long long>(listNames.count()));
 
         for (const QString &sName : listNames) {
             printf("  %s\n", sName.toUtf8().data());
@@ -1754,171 +1681,8 @@ XOptions::CR XArchiveConsole::listSupportedFormats(const COMMAND &command)
     return XOptions::CR_SUCCESS;
 }
 
-// ---------------------------------------------------------------------------
-// Info-ZIP renderings
-//
-// These reproduce the shape of "unzip -l", "unzip -v" and "zipinfo" so a
-// script that already parses those keeps working.  Fields this project's
-// record model does not carry (Info-ZIP's version-made-by, for instance) are
-// printed as "-" rather than invented, because a plausible-looking wrong value
-// is worse for a parser than an obviously absent one.
-// ---------------------------------------------------------------------------
-
-QString XArchiveConsole::formatListUnzip(const QString &sArchiveName, const QList<XBinary::ARCHIVERECORD> &listRecords, bool bVerbose)
-{
-    QString sResult;
-
-    sResult += QString("Archive:  %1\n").arg(QDir().toNativeSeparators(sArchiveName));
-
-    qint64 nTotalSize = 0;
-    qint64 nTotalPacked = 0;
-    qint32 nNumberOfEntries = 0;
-
-    if (bVerbose) {
-        sResult += " Length   Method    Size  Cmpr    Date    Time   CRC-32   Name\n";
-        sResult += "--------  ------  ------- ---- ---------- ----- --------  ----\n";
-    } else {
-        sResult += "  Length      Date    Time    Name\n";
-        sResult += "---------  ---------- -----   ----\n";
-    }
-
-    for (qint32 i = 0; i < listRecords.count(); i++) {
-        const XBinary::ARCHIVERECORD &record = listRecords.at(i);
-        const qint64 nSize = isRecordSizePresent(record) ? getRecordSize(record) : 0;
-        const QString sModified = getRecordModified(record);
-        const QString sDateTime = sModified.isEmpty() ? QString("                ") : sModified.left(16);
-
-        nTotalSize += nSize;
-        nNumberOfEntries++;
-
-        if (bVerbose) {
-            qint64 nPacked = 0;
-            const bool bPackedKnown = (getRecordPacked(record, &nPacked) == PACKEDSTATE_VALUE);
-            if (bPackedKnown) nTotalPacked += nPacked;
-
-            QString sMethod = XBinary::getHandleMethods(record.mapProperties);
-            if (sMethod.isEmpty()) sMethod = QString("-");
-            if (sMethod.length() > 6) sMethod = sMethod.left(6);
-
-            QString sRatio = QString("-");
-            if (bPackedKnown && (nSize > 0)) {
-                sRatio = QString("%1%").arg(((nSize - nPacked) * 100) / nSize);
-            }
-
-            QString sCRC = getRecordCRC(record).toLower();
-            if (sCRC.isEmpty()) sCRC = QString("--------");
-
-            sResult += QString("%1  %2  %3 %4 %5 %6  %7\n")
-                           .arg(QString::number(nSize).rightJustified(8))
-                           .arg(sMethod.leftJustified(6))
-                           .arg(bPackedKnown ? QString::number(nPacked).rightJustified(7) : QString("      -"))
-                           .arg(sRatio.rightJustified(4))
-                           .arg(sDateTime)
-                           .arg(sCRC.rightJustified(8))
-                           .arg(getRecordName(record));
-        } else {
-            sResult += QString("%1  %2   %3\n").arg(QString::number(nSize).rightJustified(9)).arg(sDateTime).arg(getRecordName(record));
-        }
-    }
-
-    if (bVerbose) {
-        sResult += "--------          -------  ---                            -------\n";
-        QString sTotalRatio = QString("-");
-        if ((nTotalSize > 0) && (nTotalPacked > 0)) {
-            sTotalRatio = QString("%1%").arg(((nTotalSize - nTotalPacked) * 100) / nTotalSize);
-        }
-        sResult += QString("%1          %2 %3                            %4 file%5\n")
-                       .arg(QString::number(nTotalSize).rightJustified(8))
-                       .arg(QString::number(nTotalPacked).rightJustified(7))
-                       .arg(sTotalRatio.rightJustified(4))
-                       .arg(nNumberOfEntries)
-                       .arg(nNumberOfEntries == 1 ? QString() : QString("s"));
-    } else {
-        sResult += "---------                     -------\n";
-        sResult += QString("%1                     %2 file%3\n")
-                       .arg(QString::number(nTotalSize).rightJustified(9))
-                       .arg(nNumberOfEntries)
-                       .arg(nNumberOfEntries == 1 ? QString() : QString("s"));
-    }
-
-    return sResult;
-}
-
-QString XArchiveConsole::formatListZipInfo(const QString &sArchiveName, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize)
-{
-    QString sResult;
-
-    sResult += QString("Archive:  %1\n").arg(QDir().toNativeSeparators(sArchiveName));
-    sResult += QString("Zip file size: %1 bytes, number of entries: %2\n").arg(nPhysicalSize).arg(listRecords.count());
-
-    qint64 nTotalSize = 0;
-    qint64 nTotalPacked = 0;
-    qint32 nNumberOfEntries = 0;
-
-    for (qint32 i = 0; i < listRecords.count(); i++) {
-        const XBinary::ARCHIVERECORD &record = listRecords.at(i);
-        const bool bIsFolder = isRecordFolder(record);
-        const qint64 nSize = isRecordSizePresent(record) ? getRecordSize(record) : 0;
-
-        qint64 nPacked = 0;
-        if (getRecordPacked(record, &nPacked) == PACKEDSTATE_VALUE) nTotalPacked += nPacked;
-
-        nTotalSize += nSize;
-        nNumberOfEntries++;
-
-        QString sPermissions;
-        if (record.mapProperties.contains(XBinary::FPART_PROP_FILEMODE)) {
-            sPermissions = getModeString(record.mapProperties.value(XBinary::FPART_PROP_FILEMODE).toUInt(), bIsFolder).left(10);
-        } else {
-            sPermissions = bIsFolder ? QString("drwxr-xr-x") : QString("-rw-r--r--");
-        }
-
-        // Info-ZIP prints "<version> <host-os>" here.  Neither is part of this
-        // project's record model for most containers, so print what the record
-        // actually has and a dash for the rest.
-        QString sHostOs = record.mapProperties.value(XBinary::FPART_PROP_HOSTOS).toString();
-        if (sHostOs.isEmpty()) sHostOs = QString("unk");
-        if (sHostOs.length() > 3) sHostOs = sHostOs.left(3).toLower();
-
-        QString sMethod = XBinary::getHandleMethods(record.mapProperties);
-        if (sMethod.isEmpty()) sMethod = QString("----");
-        if (sMethod.length() > 4) sMethod = sMethod.left(4);
-
-        QString sDateTime = getRecordModified(record);
-        if (sDateTime.length() >= 16) {
-            const QDateTime dateTime = QDateTime::fromString(sDateTime, "yyyy-MM-dd hh:mm:ss");
-            sDateTime = dateTime.isValid() ? dateTime.toString("yy-MMM-dd HH:mm") : sDateTime.left(15);
-        } else {
-            sDateTime = QString("              ");
-        }
-
-        sResult += QString("%1  %2 %3 %4 %5 %6 %7 %8\n")
-                       .arg(sPermissions.leftJustified(10))
-                       .arg(QString("-.-"))
-                       .arg(sHostOs.leftJustified(3))
-                       .arg(QString::number(nSize).rightJustified(8))
-                       .arg(record.mapProperties.value(XBinary::FPART_PROP_ENCRYPTED).toBool() ? QString("B+") : QString("b-"))
-                       .arg(sMethod.leftJustified(4))
-                       .arg(sDateTime)
-                       .arg(getRecordName(record));
-    }
-
-    QString sRatio = QString("0.0%");
-    if ((nTotalSize > 0) && (nTotalPacked > 0)) {
-        sRatio = QString("%1%").arg(QString::number(double(nTotalSize - nTotalPacked) * 100.0 / double(nTotalSize), 'f', 1));
-    }
-
-    sResult += QString("%1 file%2, %3 bytes uncompressed, %4 bytes compressed:  %5\n")
-                   .arg(nNumberOfEntries)
-                   .arg(nNumberOfEntries == 1 ? QString() : QString("s"))
-                   .arg(nTotalSize)
-                   .arg(nTotalPacked)
-                   .arg(sRatio);
-
-    return sResult;
-}
-
-QString XArchiveConsole::formatListJson(const QString &sArchiveName, XBinary::FT fileType, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize)
+QJsonObject XArchiveConsole::buildListJson(const QString &sArchiveName, XBinary::FT fileType, const QList<XBinary::ARCHIVERECORD> &listRecords,
+                                           qint64 nPhysicalSize)
 {
     QJsonObject jsonRoot;
 
@@ -1975,7 +1739,9 @@ QString XArchiveConsole::formatListJson(const QString &sArchiveName, XBinary::FT
                 (prop == XBinary::FPART_PROP_UNCOMPRESSEDSIZE) || (prop == XBinary::FPART_PROP_COMPRESSEDSIZE) || (prop == XBinary::FPART_PROP_STREAMOFFSET) ||
                 (prop == XBinary::FPART_PROP_STREAMSIZE) || (prop == XBinary::FPART_PROP_STREAMUNPACKEDSIZE) || (prop == XBinary::FPART_PROP_SUBSTREAMOFFSET) ||
                 (prop == XBinary::FPART_PROP_UID) || (prop == XBinary::FPART_PROP_GID) || (prop == XBinary::FPART_PROP_WINDOWSIZE) ||
-                (prop == XBinary::FPART_PROP_SOLIDFOLDERINDEX) || (prop == XBinary::FPART_PROP_ARCHIVE_RECORD_INDEX);
+                (prop == XBinary::FPART_PROP_SOLIDFOLDERINDEX) || (prop == XBinary::FPART_PROP_ARCHIVE_RECORD_INDEX) ||
+                (prop == XBinary::FPART_PROP_FLAGS) || (prop == XBinary::FPART_PROP_VERSIONMADEBY) || (prop == XBinary::FPART_PROP_VERSIONNEEDED) ||
+                (prop == XBinary::FPART_PROP_INTERNALATTRIBUTES) || (prop == XBinary::FPART_PROP_EXTERNALATTRIBUTES);
 
             if (varValue.userType() == QMetaType::Bool) {
                 jsonRecord.insert(sKey, varValue.toBool());
@@ -1995,7 +1761,153 @@ QString XArchiveConsole::formatListJson(const QString &sArchiveName, XBinary::FT
     jsonRoot.insert("totalSize", nTotalSize);
     jsonRoot.insert("totalPacked", nTotalPacked);
 
-    return QString::fromUtf8(QJsonDocument(jsonRoot).toJson(QJsonDocument::Indented));
+    return jsonRoot;
+}
+
+QString XArchiveConsole::formatListJson(const QString &sArchiveName, XBinary::FT fileType, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize)
+{
+    return QString::fromUtf8(QJsonDocument(buildListJson(sArchiveName, fileType, listRecords, nPhysicalSize)).toJson(QJsonDocument::Indented));
+}
+
+QString XArchiveConsole::formatListXml(const QString &sArchiveName, XBinary::FT fileType, const QList<XBinary::ARCHIVERECORD> &listRecords, qint64 nPhysicalSize)
+{
+    QString sResult;
+    QXmlStreamWriter writer(&sResult);
+
+    writer.setAutoFormatting(true);
+    writer.writeStartDocument();
+    writer.writeStartElement("archive");
+    writer.writeAttribute("name", QDir().toNativeSeparators(sArchiveName));
+    writer.writeAttribute("fileType", XBinary::fileTypeIdToString(fileType));
+    writer.writeAttribute("physicalSize", QString::number(nPhysicalSize));
+
+    qint64 nTotalSize = 0;
+    qint64 nTotalPacked = 0;
+    qint32 nNumberOfFiles = 0;
+    qint32 nNumberOfFolders = 0;
+
+    writer.writeStartElement("records");
+
+    for (qint32 i = 0; i < listRecords.count(); i++) {
+        const XBinary::ARCHIVERECORD &record = listRecords.at(i);
+
+        if (isRecordFolder(record)) nNumberOfFolders++;
+        else nNumberOfFiles++;
+
+        if (isRecordSizePresent(record)) nTotalSize += getRecordSize(record);
+
+        qint64 nPacked = 0;
+        if (getRecordPacked(record, &nPacked) == PACKEDSTATE_VALUE) nTotalPacked += nPacked;
+
+        writer.writeStartElement("record");
+
+        // The full property map, like the JSON encoder: XML has no trouble with
+        // a schema that varies by container.
+        QList<XBinary::FPART_PROP> listKeys = record.mapProperties.keys();
+        std::sort(listKeys.begin(), listKeys.end());
+
+        for (qint32 k = 0; k < listKeys.count(); k++) {
+            const XBinary::FPART_PROP prop = listKeys.at(k);
+
+            if (prop == XBinary::FPART_PROP_ARCHIVE_RECORD_TOKEN) {
+                continue;  // session bookkeeping, not archive metadata
+            }
+
+            // Property names are display text ("Compressed size", "#57"), which
+            // is not a legal XML element name; carry it as an attribute and keep
+            // the element generic.
+            writer.writeStartElement("property");
+            writer.writeAttribute("name", getPropertyName(prop));
+            writer.writeCharacters(getPropertyValueString(record, prop));
+            writer.writeEndElement();
+        }
+
+        writer.writeEndElement();
+    }
+
+    writer.writeEndElement();
+
+    writer.writeStartElement("summary");
+    writer.writeAttribute("numberOfFiles", QString::number(nNumberOfFiles));
+    writer.writeAttribute("numberOfFolders", QString::number(nNumberOfFolders));
+    writer.writeAttribute("totalSize", QString::number(nTotalSize));
+    writer.writeAttribute("totalPacked", QString::number(nTotalPacked));
+    writer.writeEndElement();
+
+    writer.writeEndElement();
+    writer.writeEndDocument();
+
+    return sResult;
+}
+
+// One field, escaped for the delimited formats. CSV follows RFC 4180: a field
+// containing the delimiter, a quote or a newline is quoted and its quotes
+// doubled. TSV has no such standard, so the characters that would break a row
+// are replaced rather than quoted.
+static QString _xacDelimitedField(const QString &sValue, bool bTabSeparated)
+{
+    if (bTabSeparated) {
+        QString sResult = sValue;
+        sResult.replace(QChar('\t'), QChar(' '));
+        sResult.replace(QChar('\r'), QChar(' '));
+        sResult.replace(QChar('\n'), QChar(' '));
+        return sResult;
+    }
+
+    if (sValue.contains(QChar(',')) || sValue.contains(QChar('"')) || sValue.contains(QChar('\n')) || sValue.contains(QChar('\r'))) {
+        QString sQuoted = sValue;
+        sQuoted.replace(QChar('"'), QStringLiteral("\"\""));
+        return QChar('"') + sQuoted + QChar('"');
+    }
+
+    return sValue;
+}
+
+QString XArchiveConsole::formatListDelimited(const QList<XBinary::ARCHIVERECORD> &listRecords, bool bTabSeparated)
+{
+    // A fixed column set on purpose. The native table hides columns a container
+    // does not populate, which is right for a human but would make every
+    // archive produce a different CSV schema.
+    const QChar cDelimiter = bTabSeparated ? QChar('\t') : QChar(',');
+    QStringList listHeaders;
+    listHeaders << "Name"
+                << "Size"
+                << "Packed"
+                << "Ratio"
+                << "Method"
+                << "Checksum"
+                << "Modified"
+                << "Attributes"
+                << "IsFolder"
+                << "IsEncrypted";
+
+    QString sResult = listHeaders.join(cDelimiter) + QLatin1String("\n");
+
+    for (qint32 i = 0; i < listRecords.count(); i++) {
+        const XBinary::ARCHIVERECORD &record = listRecords.at(i);
+        QStringList listFields;
+
+        listFields << getRecordName(record);
+        listFields << (isRecordSizePresent(record) ? QString::number(getRecordSize(record)) : QString());
+        listFields << getRecordPackedString(record);
+        listFields << getRecordRatio(record);
+        listFields << XBinary::getHandleMethods(record.mapProperties);
+        listFields << getRecordCRC(record);
+        listFields << getRecordModified(record);
+        listFields << getRecordAttr(record);
+        listFields << (isRecordFolder(record) ? QStringLiteral("1") : QStringLiteral("0"));
+        listFields << (record.mapProperties.value(XBinary::FPART_PROP_ENCRYPTED).toBool() ? QStringLiteral("1") : QStringLiteral("0"));
+
+        QStringList listEscaped;
+
+        for (const QString &sField : listFields) {
+            listEscaped << _xacDelimitedField(sField, bTabSeparated);
+        }
+
+        sResult += listEscaped.join(cDelimiter) + QLatin1String("\n");
+    }
+
+    return sResult;
 }
 bool XArchiveConsole::hasAuthoritativeExternalStreamingReader(XBinary::FT fileType)
 {
@@ -2300,7 +2212,7 @@ QString XArchiveConsole::getPropertyName(XBinary::FPART_PROP prop)
     else if (prop == XBinary::FPART_PROP_HANDLEMETHOD) sResult = "Method";
     else if (prop == XBinary::FPART_PROP_HANDLEMETHOD2) sResult = "Method 2";
     else if (prop == XBinary::FPART_PROP_DATETIME) sResult = "Modified";
-    else if (prop == XBinary::FPART_PROP_MTIME) sResult = "Modified";
+    else if (prop == XBinary::FPART_PROP_MTIME) sResult = "MTime";
     else if (prop == XBinary::FPART_PROP_CTIME) sResult = "Created";
     else if (prop == XBinary::FPART_PROP_ATIME) sResult = "Accessed";
     else if (prop == XBinary::FPART_PROP_RESULTCRC) sResult = "CRC";
@@ -2337,6 +2249,24 @@ QString XArchiveConsole::getPropertyName(XBinary::FPART_PROP prop)
     else if (prop == XBinary::FPART_PROP_HOSTOS) sResult = "Host OS";
     else if (prop == XBinary::FPART_PROP_CHECKSUM) sResult = "Checksum";
     else if (prop == XBinary::FPART_PROP_CHECKSUMTYPE) sResult = "Checksum type";
+    else if (prop == XBinary::FPART_PROP_EXTRAFIELDOFFSET) sResult = "Extra field offset";
+    else if (prop == XBinary::FPART_PROP_EXTRAFIELDLENGTH) sResult = "Extra field length";
+    else if (prop == XBinary::FPART_PROP_FILECOMMENTOFFSET) sResult = "File comment offset";
+    else if (prop == XBinary::FPART_PROP_FILECOMMENTLENGTH) sResult = "File comment length";
+    else if (prop == XBinary::FPART_PROP_VERSIONMADEBY) sResult = "Version made by";
+    else if (prop == XBinary::FPART_PROP_VERSIONNEEDED) sResult = "Version needed";
+    else if (prop == XBinary::FPART_PROP_INTERNALATTRIBUTES) sResult = "Internal attributes";
+    else if (prop == XBinary::FPART_PROP_EXTERNALATTRIBUTES) sResult = "External attributes";
+    else if (prop == XBinary::FPART_PROP_ISUTF8NAME) sResult = "UTF-8 name";
+    else if (prop == XBinary::FPART_PROP_HASDATADESCRIPTOR) sResult = "Data descriptor";
+    else if (prop == XBinary::FPART_PROP_ISSTRONGENCRYPTED) sResult = "Strong encryption";
+    else if (prop == XBinary::FPART_PROP_VERSION) sResult = "Version";
+    else if (prop == XBinary::FPART_PROP_VERSIONCREATED) sResult = "Version created";
+    else if (prop == XBinary::FPART_PROP_HOSTSYSTEM) sResult = "Host system";
+    else if (prop == XBinary::FPART_PROP_EXTRAFIELD) sResult = "Extra field";
+    else if (prop == XBinary::FPART_PROP_EXTRAFIELDLOCAL) sResult = "Extra field local";
+    else if (prop == XBinary::FPART_PROP_FILECOMMENT) sResult = "File comment";
+    else if (prop == XBinary::FPART_PROP_ENCODER) sResult = "Encoder";
     else sResult = QString("#%1").arg(static_cast<qint32>(prop));
 
     return sResult;
@@ -2772,6 +2702,305 @@ QString XArchiveConsole::formatList(XBinary::FT fileType, const QList<XBinary::A
 }
 
 // ---------------------------------------------------------------------------
+// Packing
+//
+// ZIP only, stored or deflated. Everything else this console does is read-only,
+// so the writer is kept deliberately small and explicit: it emits local file
+// headers, the central directory and the end-of-central-directory record, and
+// refuses anything it cannot represent rather than producing an archive that
+// only half-works.
+// ---------------------------------------------------------------------------
+
+// A stored name uses '/' and carries no drive letter or leading separator, so
+// it can never escape the destination when it is extracted again.
+static QString _xacArchiveName(const QDir &dirBase, const QString &sFilePath)
+{
+    QString sName = dirBase.relativeFilePath(sFilePath);
+    sName.replace(QChar('\\'), QChar('/'));
+
+    while (sName.startsWith(QLatin1String("./"))) {
+        sName = sName.mid(2);
+    }
+
+    return sName;
+}
+
+// Read the entries back out of a manifest written by an extraction. The
+// manifest fixes the member order, the stored name and the method, so packing
+// from it reproduces the archive rather than merely re-creating one.
+bool XArchiveConsole::collectManifestEntries(const QString &sManifestPath, QList<PACKENTRY> *pListEntries, QString *psComment, QString *psError)
+{
+    QFile manifestFile;
+    manifestFile.setFileName(sManifestPath);
+
+    if (!manifestFile.open(QIODevice::ReadOnly)) {
+        if (psError) *psError = QString("Cannot open manifest: %1").arg(sManifestPath);
+        return false;
+    }
+
+    QJsonParseError parseError = {};
+    const QJsonDocument jsonDocument = QJsonDocument::fromJson(manifestFile.readAll(), &parseError);
+    manifestFile.close();
+
+    if (parseError.error != QJsonParseError::NoError) {
+        if (psError) *psError = QString("Invalid manifest: %1").arg(parseError.errorString());
+        return false;
+    }
+
+    // An extraction of several archives writes an array; one archive writes the
+    // object itself.
+    const QJsonObject jsonArchive = jsonDocument.isArray() ? jsonDocument.array().first().toObject() : jsonDocument.object();
+    if (psComment) *psComment = jsonArchive.value("comment").toString();
+    const QJsonArray jsonRecords = jsonArchive.value("records").toArray();
+
+    if (jsonRecords.isEmpty()) {
+        if (psError) *psError = QString("Manifest has no records: %1").arg(sManifestPath);
+        return false;
+    }
+
+    for (qint32 i = 0; i < jsonRecords.count(); i++) {
+        const QJsonObject jsonRecord = jsonRecords.at(i).toObject();
+
+        const bool bIsFolder = jsonRecord.value("Folder").toBool();
+        const QString sName = jsonRecord.value("Name").toString();
+        const QString sSourcePath = jsonRecord.value("sourcePath").toString();
+
+        if (sName.isEmpty()) {
+            if (psError) *psError = QString("Manifest record %1 has no name").arg(i);
+            return false;
+        }
+
+        // A directory entry has no file behind it, so it needs no sourcePath.
+        if (!bIsFolder) {
+            if (sSourcePath.isEmpty()) {
+                if (psError) *psError = QString("Manifest record '%1' has no sourcePath").arg(sName);
+                return false;
+            }
+
+            if (!QFileInfo::exists(sSourcePath)) {
+                if (psError) *psError = QString("Cannot find: %1").arg(sSourcePath);
+                return false;
+            }
+        }
+
+        PACKENTRY entry;
+        entry.bIsFolder = bIsFolder;
+        entry.sSourcePath = sSourcePath;
+        entry.sArchiveName = sName;
+        entry.bMethodFromManifest = true;
+        entry.bStore = (jsonRecord.value("Method").toString() == QLatin1String("Store"));
+        entry.dtModified = QDateTime::fromString(jsonRecord.value("Modified").toString(), "yyyy-MM-dd hh:mm:ss");
+        // Container header fields, so the repack reproduces the original rather
+        // than substituting this build's defaults.
+        entry.nFlags = (quint16)jsonRecord.value("Flags").toInt();
+        entry.nVersionMadeBy = (quint16)jsonRecord.value("Version made by").toInt();
+        entry.nVersionNeeded = (quint16)jsonRecord.value("Version needed").toInt();
+        entry.nExternalAttributes = (quint32)jsonRecord.value("External attributes").toDouble();
+        entry.nInternalAttributes = (quint16)jsonRecord.value("Internal attributes").toInt();
+        // The byte-valued fields come back as hex, the way the listing renders
+        // a QByteArray.
+        entry.baExtraFieldCentral = QByteArray::fromHex(jsonRecord.value("Extra field").toString().toLatin1());
+        entry.baExtraFieldLocal = QByteArray::fromHex(jsonRecord.value("Extra field local").toString().toLatin1());
+        entry.baFileComment = QByteArray::fromHex(jsonRecord.value("File comment").toString().toLatin1());
+        pListEntries->append(entry);
+    }
+
+    return true;
+}
+
+bool XArchiveConsole::collectPackEntries(const QStringList &listInputs, QList<PACKENTRY> *pListEntries, QString *psError)
+{
+    for (const QString &sInput : listInputs) {
+        const QFileInfo fileInfo(sInput);
+
+        if (!fileInfo.exists()) {
+            if (psError) *psError = QString("Cannot find: %1").arg(sInput);
+            return false;
+        }
+
+        if (fileInfo.isDir()) {
+            // A directory contributes its files under its own name, so
+            // "pack dir" produces "dir/..." rather than a flattened list.
+            const QDir dirBase(fileInfo.absoluteFilePath() + QLatin1String("/.."));
+
+            // An empty directory carries no file, so without an explicit entry
+            // it would simply vanish from the archive.
+            QDirIterator itDirs(fileInfo.absoluteFilePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+
+            while (itDirs.hasNext()) {
+                const QString sDirPath = itDirs.next();
+
+                if (!QDir(sDirPath).isEmpty()) {
+                    continue;  // its files already imply the directory
+                }
+
+                PACKENTRY entry;
+                entry.bIsFolder = true;
+                entry.sArchiveName = _xacArchiveName(dirBase, sDirPath) + QLatin1String("/");
+                pListEntries->append(entry);
+            }
+
+            QDirIterator it(fileInfo.absoluteFilePath(), QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+
+            while (it.hasNext()) {
+                const QString sFilePath = it.next();
+                PACKENTRY entry;
+                entry.sSourcePath = sFilePath;
+                entry.sArchiveName = _xacArchiveName(dirBase, sFilePath);
+                pListEntries->append(entry);
+            }
+        } else {
+            PACKENTRY entry;
+            entry.sSourcePath = fileInfo.absoluteFilePath();
+            entry.sArchiveName = fileInfo.fileName();
+            pListEntries->append(entry);
+        }
+    }
+
+    return true;
+}
+
+XOptions::CR XArchiveConsole::createArchive(const COMMAND &command)
+{
+    if (command.listTargets.isEmpty()) {
+        printf("Error: -c/--create requires the archive to create\n");
+        return XOptions::CR_INVALIDPARAMETER;
+    }
+
+    if (command.listTargets.count() > 1) {
+        printf("Error: -c/--create writes one archive; name it once\n");
+        return XOptions::CR_INVALIDPARAMETER;
+    }
+
+    // The files come either from the operands or from a manifest, never both.
+    if (command.listIncludes.isEmpty() && command.sManifest.isEmpty()) {
+        printf("Error: -c/--create requires the files to add, or --manifest\n");
+        return XOptions::CR_INVALIDPARAMETER;
+    }
+
+    if (!command.listIncludes.isEmpty() && !command.sManifest.isEmpty()) {
+        printf("Error: -c/--create takes files or --manifest, not both\n");
+        return XOptions::CR_INVALIDPARAMETER;
+    }
+
+    const QString sArchivePath = command.listTargets.at(0);
+
+    QList<PACKENTRY> listEntries;
+    QString sError;
+    QString sArchiveComment;
+
+    const bool bCollected = command.sManifest.isEmpty() ? collectPackEntries(command.listIncludes, &listEntries, &sError)
+                                                        : collectManifestEntries(command.sManifest, &listEntries, &sArchiveComment, &sError);
+
+    if (!bCollected) {
+        printf("%s\n", sError.toUtf8().data());
+        return XOptions::CR_CANNOTFINDFILE;
+    }
+
+    if (listEntries.isEmpty()) {
+        printf("Error: nothing to add\n");
+        return XOptions::CR_INVALIDPARAMETER;
+    }
+
+    XBinary::PDSTRUCT pdStruct = XBinary::createPdStruct();
+    XBinary::disablePdStructDeadline(&pdStruct);
+
+    QFile archiveFile;
+    archiveFile.setFileName(sArchivePath);
+
+    if (!archiveFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        printf("Cannot create: %s\n", sArchivePath.toUtf8().data());
+        return XOptions::CR_CANNOTOPENFILE;
+    }
+
+    // The container is written by XZip, which owns the ZIP layout: it stages
+    // the source, computes the CRC, deflates through XArchive::_compress and
+    // range-checks every offset against the 4 GB the format can express.
+    QList<XZip::ZIPFILE_RECORD> listZipRecords;
+    bool bFailed = false;
+
+    for (qint32 i = 0; (i < listEntries.count()) && !bFailed; i++) {
+        const PACKENTRY &entry = listEntries.at(i);
+
+        QFile sourceFile;
+        QBuffer emptyPayload;
+        QIODevice *pSource = nullptr;
+
+        if (entry.bIsFolder) {
+            // A stored directory is a real member with a zero-length payload,
+            // not a missing one.
+            emptyPayload.open(QIODevice::ReadOnly);
+            pSource = &emptyPayload;
+        } else {
+            sourceFile.setFileName(entry.sSourcePath);
+
+            if (!sourceFile.open(QIODevice::ReadOnly)) {
+                printf("Cannot open: %s\n", entry.sSourcePath.toUtf8().data());
+                bFailed = true;
+                break;
+            }
+
+            pSource = &sourceFile;
+        }
+
+        XZip::ZIPFILE_RECORD zipRecord = {};
+        zipRecord.sFileName = entry.sArchiveName;
+        const bool bStore = entry.bMethodFromManifest ? entry.bStore : (command.packMethod == PACKMETHOD_STORE);
+        zipRecord.method = bStore ? XZip::CMETHOD_STORE : XZip::CMETHOD_DEFLATE;
+        // A manifest pins the stored timestamp; without one it comes from the
+        // file, which is what a fresh archive should record.
+        zipRecord.dtTime = (entry.bMethodFromManifest && entry.dtModified.isValid()) ? entry.dtModified : QFileInfo(entry.sSourcePath).lastModified();
+
+        if (entry.bMethodFromManifest) {
+            zipRecord.nFlags = entry.nFlags;
+            zipRecord.nVersion = (quint8)(entry.nVersionMadeBy & 0xFF);
+            zipRecord.nOS = (quint8)((entry.nVersionMadeBy >> 8) & 0xFF);
+            zipRecord.nMinVersion = (quint8)(entry.nVersionNeeded & 0xFF);
+            zipRecord.nMinOS = (quint8)((entry.nVersionNeeded >> 8) & 0xFF);
+            zipRecord.nExternalFileAttributes = entry.nExternalAttributes;
+            zipRecord.nInternalFileAttributes = entry.nInternalAttributes;
+            zipRecord.baExtraFieldLocal = entry.baExtraFieldLocal;
+            zipRecord.baExtraFieldCentral = entry.baExtraFieldCentral;
+            zipRecord.baFileComment = entry.baFileComment;
+        }
+
+        const bool bAdded = XZip::addLocalFileRecord(pSource, &archiveFile, &zipRecord, &pdStruct);
+        sourceFile.close();
+        emptyPayload.close();
+
+        if (!bAdded) {
+            printf("Cannot add: %s\n", entry.sArchiveName.toUtf8().data());
+            bFailed = true;
+            break;
+        }
+
+        listZipRecords.append(zipRecord);
+
+        if (!command.bQuiet) {
+            printf("  %s (%s)\n", entry.sArchiveName.toUtf8().data(), (zipRecord.method == XZip::CMETHOD_DEFLATE) ? "Deflate" : "Store");
+        }
+    }
+
+    if (!bFailed && !XZip::addCentralDirectory(&archiveFile, &listZipRecords, sArchiveComment, &pdStruct)) {
+        printf("Cannot write the central directory: %s\n", sArchivePath.toUtf8().data());
+        bFailed = true;
+    }
+
+    archiveFile.close();
+
+    if (bFailed) {
+        QFile::remove(sArchivePath);  // never leave a half-written archive behind
+        return XOptions::CR_CANNOTOPENFILE;
+    }
+
+    if (!command.bQuiet) {
+        printf("Created %s with %lld file(s)\n", QDir().toNativeSeparators(sArchivePath).toUtf8().data(), static_cast<long long>(listZipRecords.count()));
+    }
+
+    return XOptions::CR_SUCCESS;
+}
+
+// ---------------------------------------------------------------------------
 // XFormats-backed viewers
 //
 // None of these needs a signature database or a scan engine, so an archive
@@ -2961,6 +3190,8 @@ int XArchiveConsole::process(QCoreApplication &app, const QString &sDescription)
     // attached-value switch forms are not expressible as Qt options, and
     // QCommandLineParser::process() would reject them outright.
     qint32 nDialectResult = XOptions::CR_SUCCESS;
+
+    if (XU3Console::process(*this, app.arguments(), &nDialectResult)) return nDialectResult;
 
     if (processForeignDialect(app.arguments(), &nDialectResult)) {
         return nDialectResult;

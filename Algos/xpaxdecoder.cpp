@@ -51,6 +51,15 @@ struct PaxPair
 {
     quint32 frequency = 0;
     qint32 node = -1;
+
+    // Default member initialisers keep this out of the aggregate category in
+    // C++11, so the brace-initialised appends below need real constructors.
+    PaxPair()
+    {
+    }
+    PaxPair(quint32 nFrequency, qint32 nNode) : frequency(nFrequency), node(nNode)
+    {
+    }
 };
 
 bool paxPairLess(const PaxPair &a, const PaxPair &b)

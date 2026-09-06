@@ -358,8 +358,10 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
 
 bool XACE::_isRawAce1Main(const BLOCK_INFO &info) const
 {
+    // ACE 2.0 can retain the ACE 1.x block layout. Its STORE members do not
+    // require the 2.0 compression engine (U3 00500510 / 00500d00).
     return (info.nOffset == 0) && (info.nHeadType == HEADTYPE_ARCHIVE) && !(info.nHeadFlags & ARCHFLAG_V20FORMAT) && (info.nVersionExtract >= 10) &&
-           (info.nVersionExtract < 20);
+           (info.nVersionExtract <= 20);
 }
 
 bool XACE::_collectBlocks(QList<BLOCK_INFO> *pListBlocks, PDSTRUCT *pPdStruct)
@@ -696,7 +698,8 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
     // dictionary, so it is genuinely solid.
     const bool bSolidArchive = (pContext->nArchiveFlags & ARCHFLAG_SOLID) || (info.nHeadFlags & FILEFLAG_SOLID);
     const bool bFirstInSolidChain = (pState->nCurrentIndex == 0) && (pContext->nVolumeNumber == 0);
-    const bool bSolid = bSolidArchive && (!bFirstInSolidChain);
+    // STORE has no dictionary dependency even after another solid member.
+    const bool bSolid = bSolidArchive && (!bFirstInSolidChain) && (info.nTechType != CTYPE_STORED);
 
     if (bSolid) {
         result.mapProperties.insert(FPART_PROP_ISSOLID, true);
@@ -736,7 +739,8 @@ XBinary::ARCHIVERECORD XACE::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
     HANDLE_METHOD compressMethod = HANDLE_METHOD_UNKNOWN;
     const bool bUnsupportedFlags =
-        bSolid || (info.nHeadFlags & FILEFLAG_PASSWORD) || (info.nHeadFlags & FILEFLAG_SPLIT_BEFORE) || (info.nHeadFlags & FILEFLAG_SPLIT_AFTER);
+        (bSolid && (info.nTechType != CTYPE_STORED)) || (info.nHeadFlags & FILEFLAG_PASSWORD) || (info.nHeadFlags & FILEFLAG_SPLIT_BEFORE) ||
+        (info.nHeadFlags & FILEFLAG_SPLIT_AFTER);
 
     if (!bUnsupportedFlags) {
         if (info.nTechType == CTYPE_STORED) {
@@ -1052,7 +1056,8 @@ QList<XBinary::FPART> XACE::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
 
             HANDLE_METHOD method = HANDLE_METHOD_UNKNOWN;
             const bool bFirstInSolidChain = (nFileBlockIndex == 0) && (nMainVolumeNumber == 0);
-            const bool bUnsupported = (((nArchiveFlags & ARCHFLAG_SOLID) || (info.nHeadFlags & FILEFLAG_SOLID)) && (!bFirstInSolidChain)) ||
+            const bool bUnsupported = (((nArchiveFlags & ARCHFLAG_SOLID) || (info.nHeadFlags & FILEFLAG_SOLID)) && (!bFirstInSolidChain) &&
+                                       (info.nTechType != CTYPE_STORED)) ||
                                       (info.nHeadFlags & (FILEFLAG_PASSWORD | FILEFLAG_SPLIT_BEFORE | FILEFLAG_SPLIT_AFTER));
 
             if (!bUnsupported) {

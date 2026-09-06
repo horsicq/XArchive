@@ -19,6 +19,23 @@
  * SOFTWARE.
  */
 #include "xtar_bzip2.h"
+#include "xbzip2decoder.h"
+
+#include <QBuffer>
+
+namespace {
+class BzipTarBuffer : public QBuffer {
+public:
+    BzipTarBuffer(QByteArray *data, qint64 limit) : QBuffer(data), m_limit(limit) {}
+protected:
+    qint64 writeData(const char *data, qint64 size) override {
+        if (size < 0 || pos() < 0 || pos() > m_limit || size > m_limit - pos()) return -1;
+        return QBuffer::writeData(data, size);
+    }
+private:
+    qint64 m_limit;
+};
+}
 
 XTAR_BZIP2::XTAR_BZIP2(QIODevice *pDevice) : XTARCOMPRESSED(pDevice)
 {
@@ -63,7 +80,43 @@ QString XTAR_BZIP2::getMIMEString()
 
 QIODevice *XTAR_BZIP2::decompressData(PDSTRUCT *pPdStruct)
 {
-    return decompressByMethod(HANDLE_METHOD_BZIP2, 0, -1, pPdStruct);
+    QPointer<XTAR_BZIP2> self(this);
+    QPointer<QIODevice> source(getDevice());
+    m_nTrailingOffset = m_nTrailingSize = 0;
+    if (!source || !isPdStructNotCanceled(pPdStruct)) return nullptr;
+    qint64 size = source->size();
+    if (!self || !source || size <= 0 || m_nMaterializedOutputLimit < 0) return nullptr;
+    const qint64 limit = m_nMaterializedOutputLimit;
+    QByteArray data;
+    BzipTarBuffer output(&data, limit);
+    if (!output.open(QIODevice::ReadWrite)) return nullptr;
+    DATAPROCESS_STATE state = {};
+    state.pDeviceInput = source.data();
+    state.pDeviceOutput = &output;
+    state.nInputOffset = 0;
+    state.nInputLimit = size;
+    state.nProcessedLimit = -1;
+    state.mapUnpackProperties.insert(UNPACK_PROP_MAX_OUTPUT_SIZE, limit);
+    const bool decoded = XBZIP2Decoder::decompressPrefix(&state, pPdStruct);
+    if (!self || !source || !decoded || state.bReadError || state.bWriteError || !isPdStructNotCanceled(pPdStruct) ||
+        state.nCountInput <= 0 || state.nCountInput > size || state.nCountOutput <= 0 || state.nCountOutput > limit || state.nCountOutput != data.size()) return nullptr;
+    // Only a complete, checksummed sequence reaches this point. The exact
+    // trailing extent is descriptive metadata, never a decoder input range.
+    m_nTrailingOffset = state.nCountInput;
+    m_nTrailingSize = size - state.nCountInput;
+    return createMemoryBuffer(data);
+}
+
+XBinary::ARCHIVERECORD XTAR_BZIP2::infoCurrent(UNPACK_STATE *state, PDSTRUCT *pd)
+{
+    QPointer<XTAR_BZIP2> self(this);
+    ARCHIVERECORD result = XTARCOMPRESSED::infoCurrent(state, pd);
+    if (!self || result.mapProperties.isEmpty()) return ARCHIVERECORD();
+    if (m_nTrailingSize > 0) {
+        result.mapProperties.insert(FPART_PROP_INFO, tr("BZip2 transport; %1 trailing bytes outside the stream, at offset %2")
+                                                        .arg(m_nTrailingSize).arg(m_nTrailingOffset));
+    }
+    return result;
 }
 
 QList<QString> XTAR_BZIP2::getSearchSignatures()

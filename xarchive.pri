@@ -19,11 +19,26 @@ include($$PWD/legacydisk.pri)
 
 HEADERS += \
     $$PWD/x_ar.h \
+    $$PWD/xsqlitearchive.h \
+    $$PWD/xcpmcompressedarchive.h \
+    $$PWD/Algos/xu3cpmdecoder.h \
+    $$PWD/xgitobjectarchive.h \
+    $$PWD/xalzarchive.h \
+    $$PWD/xfreearcnative.h \
+    $$PWD/Algos/xfreearcdecoder.h \
+    $$PWD/xrziparchive.h \
+    $$PWD/xchmarchive.h \
+    $$PWD/xntfsarchive.h \
+    $$PWD/games/xhog2.h \
+    $$PWD/games/xpboarchive.h \
+    $$PWD/Algos/xu3rzipdecoder.h \
+    $$PWD/xvirtualdiskarchive.h \
     $$PWD/xancient.h \
     $$PWD/xlegacyencoded.h \
     $$PWD/xdearkarchive.h \
     $$PWD/xdskexp.h \
     $$PWD/xlibdskarchive.h \
+    $$PWD/xadfarchive.h \
     $$PWD/xcompactproarchive.h \
     $$PWD/xdiskdoublerarchive.h \
     $$PWD/xfls.h \
@@ -45,6 +60,137 @@ HEADERS += \
     $$PWD/xrtpatch.h \
     $$PWD/xrncarchive.h \
     $$PWD/xarq.h \
+    $$PWD/xnetwarepackedfile.h \
+    $$PWD/xpovlablzh.h \
+    $$PWD/xearefpack.h \
+    $$PWD/xprintshopdeluxe.h \
+    $$PWD/xfrontpagetheme.h \
+    $$PWD/xsecondnature.h \
+    $$PWD/xlzpis2.h \
+    $$PWD/xfinereaderpack.h \
+    $$PWD/xecmpacked.h \
+    $$PWD/xgstpack.h \
+    $$PWD/xnpack.h \
+    $$PWD/xcorelltec.h \
+    $$PWD/xirwinpac.h \
+    $$PWD/xdtpacked.h \
+    $$PWD/xgashuff.h \
+    $$PWD/xpowerboardbbs.h \
+    $$PWD/xsilmarils.h \
+    $$PWD/xis7inx.h \
+    $$PWD/xrawlzw15v.h \
+    $$PWD/xlbrcobol.h \
+    $$PWD/xlsz.h \
+    $$PWD/xgob.h \
+    $$PWD/xgtu.h \
+    $$PWD/xnotetab.h \
+    $$PWD/xizpack.h \
+    $$PWD/xsolarispackage.h \
+    $$PWD/xhlb.h \
+    $$PWD/xrid.h \
+    $$PWD/xrompaq.h \
+    $$PWD/xfiz.h \
+    $$PWD/xmiz.h \
+    $$PWD/xibmspack.h \
+    $$PWD/xea.h \
+    $$PWD/xsls.h \
+    $$PWD/xpcsecure.h \
+    $$PWD/xpmdiskcopy.h \
+    $$PWD/xmegatechvol.h \
+    $$PWD/xigf1.h \
+    $$PWD/xjetbbs.h \
+    $$PWD/xmakeself.h \
+    $$PWD/xfld.h \
+    $$PWD/xglu.h \
+    $$PWD/xjam.h \
+    $$PWD/xfmc1.h \
+    $$PWD/xsoftpaq2.h \
+    $$PWD/xmarc.h \
+    $$PWD/xstork.h \
+    $$PWD/xseadata.h \
+    $$PWD/xqnxbase.h \
+    $$PWD/xgamos.h \
+    $$PWD/xsos.h \
+    $$PWD/xexesbookbuilder.h \
+    $$PWD/xhuff.h \
+    $$PWD/xlzhcxp.h \
+    $$PWD/xkrml.h \
+    $$PWD/xqip1.h \
+    $$PWD/xquantum.h \
+    $$PWD/xirixsa.h \
+    $$PWD/xjm93.h \
+    $$PWD/xnextstepdiskimage.h \
+    $$PWD/xmva.h \
+    $$PWD/xpkt.h \
+    $$PWD/xhdcopy.h \
+    $$PWD/xivt.h \
+    $$PWD/xswag.h \
+    $$PWD/xstylus.h \
+    $$PWD/xsettlersft.h \
+    $$PWD/xriversoft.h \
+    $$PWD/xgksetup.h \
+    $$PWD/xopc.h \
+    $$PWD/xgob2.h \
+    $$PWD/xsq.h \
+    $$PWD/xis11.h \
+    $$PWD/xrecognita.h \
+    $$PWD/xinteduft.h \
+    $$PWD/xpaperport.h \
+    $$PWD/xealib.h \
+    $$PWD/xnid.h \
+    $$PWD/xhap.h \
+    $$PWD/xexeebookcreator.h \
+    $$PWD/xlzdiet.h \
+    $$PWD/xqualitas.h \
+    $$PWD/xlzv1.h \
+    $$PWD/xsw.h \
+    $$PWD/xsaf.h \
+    $$PWD/xigf2.h \
+    $$PWD/xrcf.h \
+    $$PWD/xhfe.h \
+    $$PWD/xrsvk.h \
+    $$PWD/xhzl.h \
+    $$PWD/xjbf.h \
+    $$PWD/xjgpak.h \
+    $$PWD/xpackit.h \
+    $$PWD/xlofi.h \
+    $$PWD/xsci.h \
+    $$PWD/xagis.h \
+    $$PWD/xmwavez.h \
+    $$PWD/xmscompresssz.h \
+    $$PWD/xkolibrikpack.h \
+    $$PWD/xmathcadpacked.h \
+    $$PWD/xpcommos2.h \
+    $$PWD/xsolarisbootarchive.h \
+    $$PWD/xinfogramespak.h \
+    $$PWD/xibmzpak.h \
+    $$PWD/xquarterdeckqp.h \
+    $$PWD/xmaxisinstall.h \
+    $$PWD/xswagpacket.h \
+    $$PWD/xpalmdatabase.h \
+    $$PWD/xnetwareinstallfile.h \
+    $$PWD/xaixbff.h \
+    $$PWD/xaldus.h \
+    $$PWD/xampk.h \
+    $$PWD/xaodos.h \
+    $$PWD/xarcv2.h \
+    $$PWD/xarcv4.h \
+    $$PWD/xarpdp11.h \
+    $$PWD/xartipack.h \
+    $$PWD/xascend.h \
+    $$PWD/xascendbackup.h \
+    $$PWD/xasymetrix.h \
+    $$PWD/xbinaryii.h \
+    $$PWD/xbinshsfx.h \
+    $$PWD/xbluebytelib.h \
+    $$PWD/xboo.h \
+    $$PWD/xborlandpack.h \
+    $$PWD/xbsn.h \
+    $$PWD/xbthpak.h \
+    $$PWD/xbvrppac.h \
+    $$PWD/xbzip1.h \
+    $$PWD/xinstallanywhere.h \
+    $$PWD/xpcinstall.h \
     $$PWD/xsqz.h \
     $$PWD/xseaarc.h \
     $$PWD/xexternalarchive.h \
@@ -62,6 +208,9 @@ HEADERS += \
     $$PWD/games/xpak.h \
     $$PWD/games/xwad.h \
     $$PWD/games/xgrp.h \
+    $$PWD/games/xgodotpck.h \
+    $$PWD/games/xwbfsarchive.h \
+    $$PWD/games/xrvzarchive.h \
     $$PWD/games/xhog.h \
     $$PWD/games/xwolfvswap.h \
     $$PWD/games/xwintermutedcp.h \
@@ -117,11 +266,26 @@ HEADERS += \
 
 SOURCES += \
     $$PWD/x_ar.cpp \
+    $$PWD/xsqlitearchive.cpp \
+    $$PWD/xcpmcompressedarchive.cpp \
+    $$PWD/Algos/xu3cpmdecoder.cpp \
+    $$PWD/xgitobjectarchive.cpp \
+    $$PWD/xalzarchive.cpp \
+    $$PWD/xfreearcnative.cpp \
+    $$PWD/Algos/xfreearcdecoder.cpp \
+    $$PWD/xrziparchive.cpp \
+    $$PWD/xchmarchive.cpp \
+    $$PWD/xntfsarchive.cpp \
+    $$PWD/games/xhog2.cpp \
+    $$PWD/games/xpboarchive.cpp \
+    $$PWD/Algos/xu3rzipdecoder.cpp \
+    $$PWD/xvirtualdiskarchive.cpp \
     $$PWD/xancient.cpp \
     $$PWD/xlegacyencoded.cpp \
     $$PWD/xdearkarchive.cpp \
     $$PWD/xdskexp.cpp \
     $$PWD/xlibdskarchive.cpp \
+    $$PWD/xadfarchive.cpp \
     $$PWD/xcompactproarchive.cpp \
     $$PWD/xdiskdoublerarchive.cpp \
     $$PWD/xfls.cpp \
@@ -143,6 +307,137 @@ SOURCES += \
     $$PWD/xrtpatch.cpp \
     $$PWD/xrncarchive.cpp \
     $$PWD/xarq.cpp \
+    $$PWD/xnetwarepackedfile.cpp \
+    $$PWD/xpovlablzh.cpp \
+    $$PWD/xearefpack.cpp \
+    $$PWD/xprintshopdeluxe.cpp \
+    $$PWD/xfrontpagetheme.cpp \
+    $$PWD/xsecondnature.cpp \
+    $$PWD/xlzpis2.cpp \
+    $$PWD/xfinereaderpack.cpp \
+    $$PWD/xecmpacked.cpp \
+    $$PWD/xgstpack.cpp \
+    $$PWD/xnpack.cpp \
+    $$PWD/xcorelltec.cpp \
+    $$PWD/xirwinpac.cpp \
+    $$PWD/xdtpacked.cpp \
+    $$PWD/xgashuff.cpp \
+    $$PWD/xpowerboardbbs.cpp \
+    $$PWD/xsilmarils.cpp \
+    $$PWD/xis7inx.cpp \
+    $$PWD/xrawlzw15v.cpp \
+    $$PWD/xlbrcobol.cpp \
+    $$PWD/xlsz.cpp \
+    $$PWD/xgob.cpp \
+    $$PWD/xgtu.cpp \
+    $$PWD/xnotetab.cpp \
+    $$PWD/xizpack.cpp \
+    $$PWD/xsolarispackage.cpp \
+    $$PWD/xhlb.cpp \
+    $$PWD/xrid.cpp \
+    $$PWD/xrompaq.cpp \
+    $$PWD/xfiz.cpp \
+    $$PWD/xmiz.cpp \
+    $$PWD/xibmspack.cpp \
+    $$PWD/xea.cpp \
+    $$PWD/xsls.cpp \
+    $$PWD/xpcsecure.cpp \
+    $$PWD/xpmdiskcopy.cpp \
+    $$PWD/xmegatechvol.cpp \
+    $$PWD/xigf1.cpp \
+    $$PWD/xjetbbs.cpp \
+    $$PWD/xmakeself.cpp \
+    $$PWD/xfld.cpp \
+    $$PWD/xglu.cpp \
+    $$PWD/xjam.cpp \
+    $$PWD/xfmc1.cpp \
+    $$PWD/xsoftpaq2.cpp \
+    $$PWD/xmarc.cpp \
+    $$PWD/xstork.cpp \
+    $$PWD/xseadata.cpp \
+    $$PWD/xqnxbase.cpp \
+    $$PWD/xgamos.cpp \
+    $$PWD/xsos.cpp \
+    $$PWD/xexesbookbuilder.cpp \
+    $$PWD/xhuff.cpp \
+    $$PWD/xlzhcxp.cpp \
+    $$PWD/xkrml.cpp \
+    $$PWD/xqip1.cpp \
+    $$PWD/xquantum.cpp \
+    $$PWD/xirixsa.cpp \
+    $$PWD/xjm93.cpp \
+    $$PWD/xnextstepdiskimage.cpp \
+    $$PWD/xmva.cpp \
+    $$PWD/xpkt.cpp \
+    $$PWD/xhdcopy.cpp \
+    $$PWD/xivt.cpp \
+    $$PWD/xswag.cpp \
+    $$PWD/xstylus.cpp \
+    $$PWD/xsettlersft.cpp \
+    $$PWD/xriversoft.cpp \
+    $$PWD/xgksetup.cpp \
+    $$PWD/xopc.cpp \
+    $$PWD/xgob2.cpp \
+    $$PWD/xsq.cpp \
+    $$PWD/xis11.cpp \
+    $$PWD/xrecognita.cpp \
+    $$PWD/xinteduft.cpp \
+    $$PWD/xpaperport.cpp \
+    $$PWD/xealib.cpp \
+    $$PWD/xnid.cpp \
+    $$PWD/xhap.cpp \
+    $$PWD/xexeebookcreator.cpp \
+    $$PWD/xlzdiet.cpp \
+    $$PWD/xqualitas.cpp \
+    $$PWD/xlzv1.cpp \
+    $$PWD/xsw.cpp \
+    $$PWD/xsaf.cpp \
+    $$PWD/xigf2.cpp \
+    $$PWD/xrcf.cpp \
+    $$PWD/xhfe.cpp \
+    $$PWD/xrsvk.cpp \
+    $$PWD/xhzl.cpp \
+    $$PWD/xjbf.cpp \
+    $$PWD/xjgpak.cpp \
+    $$PWD/xpackit.cpp \
+    $$PWD/xlofi.cpp \
+    $$PWD/xsci.cpp \
+    $$PWD/xagis.cpp \
+    $$PWD/xmwavez.cpp \
+    $$PWD/xmscompresssz.cpp \
+    $$PWD/xkolibrikpack.cpp \
+    $$PWD/xmathcadpacked.cpp \
+    $$PWD/xpcommos2.cpp \
+    $$PWD/xsolarisbootarchive.cpp \
+    $$PWD/xinfogramespak.cpp \
+    $$PWD/xibmzpak.cpp \
+    $$PWD/xquarterdeckqp.cpp \
+    $$PWD/xmaxisinstall.cpp \
+    $$PWD/xswagpacket.cpp \
+    $$PWD/xpalmdatabase.cpp \
+    $$PWD/xnetwareinstallfile.cpp \
+    $$PWD/xaixbff.cpp \
+    $$PWD/xaldus.cpp \
+    $$PWD/xampk.cpp \
+    $$PWD/xaodos.cpp \
+    $$PWD/xarcv2.cpp \
+    $$PWD/xarcv4.cpp \
+    $$PWD/xarpdp11.cpp \
+    $$PWD/xartipack.cpp \
+    $$PWD/xascend.cpp \
+    $$PWD/xascendbackup.cpp \
+    $$PWD/xasymetrix.cpp \
+    $$PWD/xbinaryii.cpp \
+    $$PWD/xbinshsfx.cpp \
+    $$PWD/xbluebytelib.cpp \
+    $$PWD/xboo.cpp \
+    $$PWD/xborlandpack.cpp \
+    $$PWD/xbsn.cpp \
+    $$PWD/xbthpak.cpp \
+    $$PWD/xbvrppac.cpp \
+    $$PWD/xbzip1.cpp \
+    $$PWD/xinstallanywhere.cpp \
+    $$PWD/xpcinstall.cpp \
     $$PWD/xsqz.cpp \
     $$PWD/xseaarc.cpp \
     $$PWD/xexternalarchive.cpp \
@@ -160,6 +455,9 @@ SOURCES += \
     $$PWD/games/xpak.cpp \
     $$PWD/games/xwad.cpp \
     $$PWD/games/xgrp.cpp \
+    $$PWD/games/xgodotpck.cpp \
+    $$PWD/games/xwbfsarchive.cpp \
+    $$PWD/games/xrvzarchive.cpp \
     $$PWD/games/xhog.cpp \
     $$PWD/games/xwolfvswap.cpp \
     $$PWD/games/xwintermutedcp.cpp \

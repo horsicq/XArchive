@@ -34,7 +34,7 @@ void buildOldHuffmanDecoder(const std::array<uint16_t,1024> &tree,uint32_t count
 	} else {
 		if (!length)
 			throw CodecDecoder::DecompressionError();
-		decoder.insert(HuffmanCode{length,bits,uint8_t(tree[node+1])});
+		decoder.insert(HuffmanCode<uint8_t>{length,bits,uint8_t(tree[node+1])});
 	}
 }
 
@@ -164,14 +164,14 @@ void UnixPackDecoder::decompressImpl(ByteBuffer &rawData,bool verify)
 			for (uint32_t i=0;i<maxLevel;i++)
 				levelCounts[i]=inputStream.readByte();
 			levelCounts[maxLevel-1U]+=2U;
-			uint32_t code{0x100'0000U};
+			uint32_t code{0x1000000U};
 			for (uint32_t i=0;i<maxLevel;i++)
 			{
 				code-=levelCounts[i]<<(23U-i);
 				for (uint32_t j=0;j<levelCounts[i];j++)
 				{
 					uint16_t symbol{(i==maxLevel-1&&j==levelCounts[i]-1U)?uint16_t(256U):uint16_t(inputStream.readByte())};
-					decoder.insert(HuffmanCode{i+1U,code>>(23U-i),symbol});
+					decoder.insert(HuffmanCode<uint16_t>{i+1U,code>>(23U-i),symbol});
 					code+=1U<<(23U-i);
 				}
 				code-=levelCounts[i]<<(23U-i);

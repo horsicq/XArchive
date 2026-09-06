@@ -60,7 +60,7 @@ bool measureBzip2Stream(QIODevice *pDevice, qint64 nFileSize, qint64 *pnCompress
     state.nInputLimit = nFileSize;
     state.nProcessedLimit = -1;
 
-    const bool bResult = XBZIP2Decoder::decompress(&state, pPdStruct) && (state.nCountInput >= 0) && (state.nCountInput <= nFileSize) && (state.nCountOutput >= 0) &&
+    const bool bResult = XBZIP2Decoder::decompressPrefix(&state, pPdStruct) && (state.nCountInput > 0) && (state.nCountInput <= nFileSize) && (state.nCountOutput >= 0) &&
                          XBinary::isPdStructNotCanceled(pPdStruct);
     if (bResult) {
         if (pnCompressedSize) *pnCompressedSize = state.nCountInput;
@@ -469,6 +469,11 @@ XBinary::ARCHIVERECORD XBZIP2::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdSt
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, pContext->nCompressedSize);
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, pContext->nUncompressedSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_BZIP2);
+
+    if (pContext->nCompressedSize < pState->nTotalSize) {
+        result.mapProperties.insert(FPART_PROP_INFO, tr("%1 trailing bytes outside the BZip2 stream, at offset %2")
+                                                        .arg(pState->nTotalSize - pContext->nCompressedSize).arg(pContext->nCompressedSize));
+    }
 
     return result;
 }

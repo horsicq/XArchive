@@ -58,11 +58,12 @@ public:
     // pnSkippedEntries (optional): members skipped by
     // UNPACK_PROP_CONTINUEONERROR on a successful best-effort run.
     static bool decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties,
-                                   XBinary::PDSTRUCT *pPdStruct = nullptr, qint32 *pnSkippedEntries = nullptr);
+                                   XBinary::PDSTRUCT *pPdStruct = nullptr, qint32 *pnSkippedEntries = nullptr, XBinary::FT forcedFileType = XBinary::FT_UNKNOWN);
     static bool decompressToFolder(const QString &sFileName, const QString &sResultFileFolder, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool decompressToFolder(const QString &sFileName, const QString &sResultFileFolder, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties,
                                    XBinary::PDSTRUCT *pPdStruct = nullptr);
-    static bool testArchive(const QString &sFileName, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    static bool testArchive(const QString &sFileName, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct = nullptr,
+                            XBinary::FT forcedFileType = XBinary::FT_UNKNOWN);
     static bool isArchiveRecordPresent(QIODevice *pDevice, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveRecordPresent(const QString &sFileName, const QString &sRecordFileName, XBinary::PDSTRUCT *pPdStruct = nullptr);
     static bool isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &stAvailable);

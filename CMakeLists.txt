@@ -12,6 +12,12 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/games/xwad.h
     ${CMAKE_CURRENT_LIST_DIR}/games/xgrp.cpp
     ${CMAKE_CURRENT_LIST_DIR}/games/xgrp.h
+    ${CMAKE_CURRENT_LIST_DIR}/games/xgodotpck.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/games/xgodotpck.h
+    ${CMAKE_CURRENT_LIST_DIR}/games/xwbfsarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/games/xwbfsarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/games/xrvzarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/games/xrvzarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/games/xgamestorearchive_p.cpp
     ${CMAKE_CURRENT_LIST_DIR}/games/xgamestorearchive_p.h
     ${CMAKE_CURRENT_LIST_DIR}/games/xckp.cpp
@@ -57,6 +63,8 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xlibdskarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/xadfarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/xadfarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xcompactproarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xcompactproarchive.h
     ${CMAKE_CURRENT_LIST_DIR}/xdiskdoublerarchive.cpp

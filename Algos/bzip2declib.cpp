@@ -1,7 +1,7 @@
-/* XArchive amalgamation of bzip2 1.0.8.
+/* XArchive amalgamation of bzip2 1.0.6 with C++ integration patches.
  *
- * The seven library translation units folded into one, verbatim; only the file
- * boundaries are gone. Emitted as C originally, and converted to C++ on
+ * The seven library translation units folded into one. Emitted as C
+ * originally, and converted to C++ on
  * 2026-08-17 (see the guard below). The 43 link sites across the tree that
  * expect the C ABI are unaffected: bzlib.h wraps the public API in extern "C",
  * and bzlib_private.h was given the same guard, so every exported name is
@@ -16,7 +16,8 @@
  *
  * bzip2 is BSD-style licensed, Copyright (C) 1996-2019 Julian R Seward.
  *
- * This file is generated -- do not edit by hand.
+ * This file is generated -- do not edit by hand. Reproducible local patches
+ * are maintained in _mylibs/warning_fixes/2026-09-nfd.
  */
 
 /* Converted from C to C++ on 2026-08-17 and must stay C++. Several of the
@@ -2542,7 +2543,8 @@ void generateMTFValues ( EState* s )
                *ryy_j = rtmp2;
             };
             yy[0] = rtmp;
-            j = ryy_j - &(yy[0]);
+            /* yy is the 256-symbol MTF permutation; this index is 0..255. */
+            j = static_cast<Int32>(ryy_j - &(yy[0]));
             mtfv[wr] = j+1; wr++; s->mtfFreq[j+1]++;
          }
 
@@ -4629,7 +4631,8 @@ void BZ_API(BZ2_bzWrite)
                void*   buf, 
                int     len )
 {
-   Int32 n, n2, ret;
+   size_t n, n2;
+   Int32 ret;
    bzFile* bzf = (bzFile*)b;
 
    BZ_SETERR(BZ_OK);
@@ -4689,7 +4692,8 @@ void BZ_API(BZ2_bzWriteClose64)
                     unsigned int* nbytes_out_lo32,
                     unsigned int* nbytes_out_hi32 )
 {
-   Int32   n, n2, ret;
+   size_t  n, n2;
+   Int32   ret;
    bzFile* bzf = (bzFile*)b;
 
    if (bzf == NULL)
@@ -4826,7 +4830,8 @@ int BZ_API(BZ2_bzRead)
              void*   buf, 
              int     len )
 {
-   Int32   n, ret;
+   size_t  n;
+   Int32   ret;
    bzFile* bzf = (bzFile*)b;
 
    BZ_SETERR(BZ_OK);
@@ -4853,7 +4858,8 @@ int BZ_API(BZ2_bzRead)
                      BZ_MAX_UNUSED, bzf->handle );
          if (ferror(bzf->handle))
             { BZ_SETERR(BZ_IO_ERROR); return 0; };
-         bzf->bufN = n;
+         /* fread requested at most BZ_MAX_UNUSED (5000) bytes. */
+         bzf->bufN = static_cast<Int32>(n);
          bzf->strm.avail_in = bzf->bufN;
          bzf->strm.next_in = bzf->buf;
       }
@@ -5037,7 +5043,11 @@ const char * BZ_API(BZ2_bzlibVersion)(void)
 #if defined(_WIN32) || defined(OS2) || defined(MSDOS)
 #   include <fcntl.h>
 #   include <io.h>
-#   define SET_BINARY_MODE(file) setmode(fileno(file),O_BINARY)
+#   if defined(_MSC_VER)
+#      define SET_BINARY_MODE(file) _setmode(_fileno(file),_O_BINARY)
+#   else
+#      define SET_BINARY_MODE(file) setmode(fileno(file),O_BINARY)
+#   endif
 #else
 #   define SET_BINARY_MODE(file)
 #endif
@@ -5090,7 +5100,11 @@ BZFILE * bzopen_or_bzdopen
 #ifdef BZ_STRICT_ANSI
       fp = NULL;
 #else
+#if defined(_MSC_VER)
+      fp = _fdopen(fd,mode2);
+#else
       fp = fdopen(fd,mode2);
+#endif
 #endif
    }
    if (fp == NULL) return NULL;

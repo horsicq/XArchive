@@ -229,7 +229,7 @@ public:
         } else if (m_nCheckType == 4) {
             m_nCRC64 = xzCRC64Update(m_nCRC64, pData, nSize);
         } else if (m_nCheckType == 10) {
-            m_sha256.addData(pData, nSize);
+            m_sha256.addData(QByteArray::fromRawData(pData, nSize));
         }
     }
 

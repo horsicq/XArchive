@@ -214,26 +214,29 @@ void RncDecoder::RNCDecompressOld(ByteBuffer &rawData,bool verify,bool rnc2)
 
 	BackwardOutputStream outputStream{rawData,0,_rawSize};
 
+	// The codes are hexadecimal; the bit pattern each one stood for as a binary
+	// literal is spelled out in the trailing comment. The first field is the
+	// number of significant bits.
 	HuffmanDecoder<uint8_t> lengthDecoder
 	{
-		HuffmanCode{1,0b0000,uint8_t{0}},
-		HuffmanCode{2,0b0010,uint8_t{1}},
-		HuffmanCode{3,0b0110,uint8_t{2}},
-		HuffmanCode{4,0b1110,uint8_t{3}},
-		HuffmanCode{4,0b1111,uint8_t{4}}
+		HuffmanCode<uint8_t>{1,0x0,uint8_t{0}},		// 0000
+		HuffmanCode<uint8_t>{2,0x2,uint8_t{1}},		// 0010
+		HuffmanCode<uint8_t>{3,0x6,uint8_t{2}},		// 0110
+		HuffmanCode<uint8_t>{4,0xe,uint8_t{3}},		// 1110
+		HuffmanCode<uint8_t>{4,0xf,uint8_t{4}}		// 1111
 	};
 
 	HuffmanDecoder<uint8_t> distanceDecoder
 	{
-		HuffmanCode{1,0b00,uint8_t{1}},
-		HuffmanCode{2,0b10,uint8_t{0}},
-		HuffmanCode{2,0b11,uint8_t{2}}
+		HuffmanCode<uint8_t>{1,0x0,uint8_t{1}},		// 00
+		HuffmanCode<uint8_t>{2,0x2,uint8_t{0}},		// 10
+		HuffmanCode<uint8_t>{2,0x3,uint8_t{2}}		// 11
 	};
 
-	VariableLengthCodeDecoder litVlcDecoder1{1,1,2,2,3,10};
-	VariableLengthCodeDecoder litVlcDecoder2{1,1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
-	VariableLengthCodeDecoder lengthVlcDecoder{0,0,1,2,lastLengthBits};
-	VariableLengthCodeDecoder distanceVlcDecoder{5,8,lastDistanceBits};
+	VariableLengthCodeDecoder<6> litVlcDecoder1{1,1,2,2,3,10};
+	VariableLengthCodeDecoder<18> litVlcDecoder2{1,1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+	VariableLengthCodeDecoder<5> lengthVlcDecoder{0,0,1,2,lastLengthBits};
+	VariableLengthCodeDecoder<3> distanceVlcDecoder{5,8,lastDistanceBits};
 
 	for (;;)
 	{
@@ -541,44 +544,45 @@ void RncDecoder::RNC2DecompressNew(ByteBuffer &rawData,bool verify)
 		
 	};
 
+	// As above: hexadecimal codes, original bit patterns in the comments.
 	HuffmanDecoder<Cmd> cmdDecoder
 	{
-		HuffmanCode{1,0b0000,Cmd::LIT},
-		HuffmanCode{2,0b0010,Cmd::MOV},
-		HuffmanCode{3,0b0110,Cmd::MV2},
-		HuffmanCode{4,0b1110,Cmd::MV3},
-		HuffmanCode{4,0b1111,Cmd::CND}
+		HuffmanCode<Cmd>{1,0x0,Cmd::LIT},		// 0000
+		HuffmanCode<Cmd>{2,0x2,Cmd::MOV},		// 0010
+		HuffmanCode<Cmd>{3,0x6,Cmd::MV2},		// 0110
+		HuffmanCode<Cmd>{4,0xe,Cmd::MV3},		// 1110
+		HuffmanCode<Cmd>{4,0xf,Cmd::CND}		// 1111
 	};
 
 	/* length of 9 is a marker for literals */
 	HuffmanDecoder<uint8_t> lengthDecoder
 	{
-		HuffmanCode{2,0b000,uint8_t{4}},
-		HuffmanCode{2,0b010,uint8_t{5}},
-		HuffmanCode{3,0b010,uint8_t{6}},
-		HuffmanCode{3,0b011,uint8_t{7}},
-		HuffmanCode{3,0b110,uint8_t{8}},
-		HuffmanCode{3,0b111,uint8_t{9}}
+		HuffmanCode<uint8_t>{2,0x0,uint8_t{4}},		// 000
+		HuffmanCode<uint8_t>{2,0x2,uint8_t{5}},		// 010
+		HuffmanCode<uint8_t>{3,0x2,uint8_t{6}},		// 010
+		HuffmanCode<uint8_t>{3,0x3,uint8_t{7}},		// 011
+		HuffmanCode<uint8_t>{3,0x6,uint8_t{8}},		// 110
+		HuffmanCode<uint8_t>{3,0x7,uint8_t{9}}		// 111
 	};
-	
+
 	HuffmanDecoder<uint8_t> distanceDecoder
 	{
-		HuffmanCode{1,0b000000,uint8_t{0}},
-		HuffmanCode{3,0b000110,uint8_t{1}},
-		HuffmanCode{4,0b001000,uint8_t{2}},
-		HuffmanCode{4,0b001001,uint8_t{3}},
-		HuffmanCode{5,0b010101,uint8_t{4}},
-		HuffmanCode{5,0b010111,uint8_t{5}},
-		HuffmanCode{5,0b011101,uint8_t{6}},
-		HuffmanCode{5,0b011111,uint8_t{7}},
-		HuffmanCode{6,0b101000,uint8_t{8}},
-		HuffmanCode{6,0b101001,uint8_t{9}},
-		HuffmanCode{6,0b101100,uint8_t{10}},
-		HuffmanCode{6,0b101101,uint8_t{11}},
-		HuffmanCode{6,0b111000,uint8_t{12}},
-		HuffmanCode{6,0b111001,uint8_t{13}},
-		HuffmanCode{6,0b111100,uint8_t{14}},
-		HuffmanCode{6,0b111101,uint8_t{15}}
+		HuffmanCode<uint8_t>{1,0x00,uint8_t{0}},	// 000000
+		HuffmanCode<uint8_t>{3,0x06,uint8_t{1}},	// 000110
+		HuffmanCode<uint8_t>{4,0x08,uint8_t{2}},	// 001000
+		HuffmanCode<uint8_t>{4,0x09,uint8_t{3}},	// 001001
+		HuffmanCode<uint8_t>{5,0x15,uint8_t{4}},	// 010101
+		HuffmanCode<uint8_t>{5,0x17,uint8_t{5}},	// 010111
+		HuffmanCode<uint8_t>{5,0x1d,uint8_t{6}},	// 011101
+		HuffmanCode<uint8_t>{5,0x1f,uint8_t{7}},	// 011111
+		HuffmanCode<uint8_t>{6,0x28,uint8_t{8}},	// 101000
+		HuffmanCode<uint8_t>{6,0x29,uint8_t{9}},	// 101001
+		HuffmanCode<uint8_t>{6,0x2c,uint8_t{10}},	// 101100
+		HuffmanCode<uint8_t>{6,0x2d,uint8_t{11}},	// 101101
+		HuffmanCode<uint8_t>{6,0x38,uint8_t{12}},	// 111000
+		HuffmanCode<uint8_t>{6,0x39,uint8_t{13}},	// 111001
+		HuffmanCode<uint8_t>{6,0x3c,uint8_t{14}},	// 111100
+		HuffmanCode<uint8_t>{6,0x3d,uint8_t{15}}	// 111101
 	};
 
 	// helpers

@@ -33,6 +33,7 @@ HEADERS += \
     $$PWD/Algos/xarjdecoder.h \
     $$PWD/Algos/xacedecoder.h \
     $$PWD/Algos/xlzhdecoder.h \
+    $$PWD/Algos/xlha_legacy_p.h \
     $$PWD/Algos/xkwajlzssdecoder.h \
     $$PWD/Algos/xkwajlzhdecoder.h \
     $$PWD/Algos/xrardecoder.h \
@@ -95,6 +96,55 @@ HEADERS += \
     $$PWD/../Formats/xarchive.h \
     $$PWD/xcompress.h \
     $$PWD/xdecompress.h \
+    $$PWD/Algos/xaldusdecoder.h \
+    $$PWD/Algos/xampkdecoder.h \
+    $$PWD/Algos/xarcv2decoder.h \
+    $$PWD/Algos/xasymetrixdecoder.h \
+    $$PWD/Algos/xborlandpackdecoder.h \
+    $$PWD/Algos/xbzip1decoder.h \
+    $$PWD/Algos/xbsndecoder.h \
+    $$PWD/Algos/xbthpakdecoder.h \
+    $$PWD/Algos/xdcldecoder.h \
+    $$PWD/Algos/xkolibrikpackdecoder.h \
+    $$PWD/Algos/xmathcaddecoder.h \
+    $$PWD/Algos/xpcommos2decoder.h \
+    $$PWD/Algos/xnetwarepackdecoder.h \
+    $$PWD/Algos/xearefpackdecoder.h \
+    $$PWD/Algos/xlzpis2decoder.h \
+    $$PWD/Algos/xnpackdecoder.h \
+    $$PWD/Algos/xcorelltecdecoder.h \
+    $$PWD/Algos/xirwinpacdecoder.h \
+    $$PWD/Algos/xgashuffdecoder.h \
+    $$PWD/Algos/xsilmarilsdecoder.h \
+    $$PWD/Algos/xrawlzw15vdecoder.h \
+    $$PWD/Algos/xriddecoder.h \
+    $$PWD/Algos/xrompaqdecoder.h \
+    $$PWD/Algos/xarcv4decoder.h \
+    $$PWD/Algos/xealzwdecoder.h \
+    $$PWD/Algos/xslsdecoder.h \
+    $$PWD/Algos/xpcsecuredecoder.h \
+    $$PWD/Algos/xqnxbasedecoder.h \
+    $$PWD/Algos/xhuffdecoder.h \
+    $$PWD/Algos/xlzhcxpdecoder.h \
+    $$PWD/Algos/xdsquantumdecoder.h \
+    $$PWD/Algos/xpktdecoder.h \
+    $$PWD/Algos/xhdcopydecoder.h \
+    $$PWD/Algos/xstylusdecoder.h \
+    $$PWD/Algos/xsettlersftdecoder.h \
+    $$PWD/Algos/xsqdecoder.h \
+    $$PWD/Algos/xis11decoder.h \
+    $$PWD/Algos/xpaperportdecoder.h \
+    $$PWD/Algos/xealibdecoder.h \
+    $$PWD/Algos/xniddecoder.h \
+    $$PWD/Algos/xhapdecoder.h \
+    $$PWD/Algos/xlzdietdecoder.h \
+    $$PWD/Algos/xlzv1decoder.h \
+    $$PWD/Algos/xsafdecoder.h \
+    $$PWD/Algos/xhfedecoder.h \
+    $$PWD/Algos/xrsvkdecoder.h \
+    $$PWD/Algos/xhzldecoder.h \
+    $$PWD/Algos/xlofidecoder.h \
+    $$PWD/Algos/xinfogramespakdecoder.h \
     $$PWD/xcompresseddevice.h \
     $$PWD/../Formats/archives/xtar.h \
     $$PWD/../Formats/archives/xtarcompressed.h \
@@ -116,6 +166,12 @@ SOURCES += \
     $$PWD/Algos/xarcdecoder.cpp \
     $$PWD/Algos/xarjdecoder.cpp \
     $$PWD/Algos/xacedecoder.cpp \
+    $$PWD/Algos/xlha_legacy_lzs_p.cpp \
+    $$PWD/Algos/xlha_legacy_lz5_p.cpp \
+    $$PWD/Algos/xlha_legacy_lhx_p.cpp \
+    $$PWD/Algos/xlha_legacy_lk7_p.cpp \
+    $$PWD/Algos/xlha_legacy_pm1_p.cpp \
+    $$PWD/Algos/xlha_legacy_pm2_p.cpp \
     $$PWD/Algos/xlzhdecoder.cpp \
     $$PWD/Algos/xkwajlzssdecoder.cpp \
     $$PWD/Algos/xkwajlzhdecoder.cpp \
@@ -177,6 +233,15 @@ SOURCES += \
     $$PWD/../Formats/xarchive.cpp \
     $$PWD/xcompress.cpp \
     $$PWD/xdecompress.cpp \
+    $$PWD/Algos/xaldusdecoder.cpp \
+    $$PWD/Algos/xampkdecoder.cpp \
+    $$PWD/Algos/xarcv2decoder.cpp \
+    $$PWD/Algos/xasymetrixdecoder.cpp \
+    $$PWD/Algos/xborlandpackdecoder.cpp \
+    $$PWD/Algos/xbzip1decoder.cpp \
+    $$PWD/Algos/xbsndecoder.cpp \
+    $$PWD/Algos/xbthpakdecoder.cpp \
+    $$PWD/Algos/xdcldecoder.cpp \
     $$PWD/xcompresseddevice.cpp \
     $$PWD/../Formats/archives/xtar.cpp \
     $$PWD/../Formats/archives/xtarcompressed.cpp \
@@ -191,7 +256,47 @@ SOURCES += \
     $$PWD/../Formats/archives/xtar_compress.cpp \
     $$PWD/../Formats/archives/xnpm.cpp \
     $$PWD/../Formats/exec/xmachofat.cpp \
-    $$PWD/../Formats/exec/xdos16.cpp
+    $$PWD/../Formats/exec/xdos16.cpp \
+    $$PWD/Algos/xkolibrikpackdecoder.cpp \
+    $$PWD/Algos/xmathcaddecoder.cpp \
+    $$PWD/Algos/xpcommos2decoder.cpp \
+    $$PWD/Algos/xnetwarepackdecoder.cpp \
+    $$PWD/Algos/xearefpackdecoder.cpp \
+    $$PWD/Algos/xlzpis2decoder.cpp \
+    $$PWD/Algos/xnpackdecoder.cpp \
+    $$PWD/Algos/xcorelltecdecoder.cpp \
+    $$PWD/Algos/xirwinpacdecoder.cpp \
+    $$PWD/Algos/xgashuffdecoder.cpp \
+    $$PWD/Algos/xsilmarilsdecoder.cpp \
+    $$PWD/Algos/xrawlzw15vdecoder.cpp \
+    $$PWD/Algos/xriddecoder.cpp \
+    $$PWD/Algos/xrompaqdecoder.cpp \
+    $$PWD/Algos/xarcv4decoder.cpp \
+    $$PWD/Algos/xealzwdecoder.cpp \
+    $$PWD/Algos/xslsdecoder.cpp \
+    $$PWD/Algos/xpcsecuredecoder.cpp \
+    $$PWD/Algos/xqnxbasedecoder.cpp \
+    $$PWD/Algos/xhuffdecoder.cpp \
+    $$PWD/Algos/xlzhcxpdecoder.cpp \
+    $$PWD/Algos/xdsquantumdecoder.cpp \
+    $$PWD/Algos/xpktdecoder.cpp \
+    $$PWD/Algos/xhdcopydecoder.cpp \
+    $$PWD/Algos/xstylusdecoder.cpp \
+    $$PWD/Algos/xsettlersftdecoder.cpp \
+    $$PWD/Algos/xsqdecoder.cpp \
+    $$PWD/Algos/xis11decoder.cpp \
+    $$PWD/Algos/xpaperportdecoder.cpp \
+    $$PWD/Algos/xealibdecoder.cpp \
+    $$PWD/Algos/xniddecoder.cpp \
+    $$PWD/Algos/xhapdecoder.cpp \
+    $$PWD/Algos/xlzdietdecoder.cpp \
+    $$PWD/Algos/xlzv1decoder.cpp \
+    $$PWD/Algos/xsafdecoder.cpp \
+    $$PWD/Algos/xhfedecoder.cpp \
+    $$PWD/Algos/xrsvkdecoder.cpp \
+    $$PWD/Algos/xhzldecoder.cpp \
+    $$PWD/Algos/xlofidecoder.cpp \
+    $$PWD/Algos/xinfogramespakdecoder.cpp
 
 !contains(XCONFIG, xbinary) {
     XCONFIG += xbinary

@@ -48,6 +48,31 @@ XBinary::FT preferredUnpackerFileType(QIODevice *pDevice, XBinary::PDSTRUCT *pPd
 bool hasAuthoritativeStreamingReader(XBinary::FT fileType)
 {
     switch (fileType) {
+        case XBinary::FT_TAR_GZ:
+        case XBinary::FT_TAR_BZIP2:
+        case XBinary::FT_TAR_XZ:
+        case XBinary::FT_TAR_LZMA:
+        case XBinary::FT_TAR_LZOP:
+        case XBinary::FT_TAR_Z:
+        case XBinary::FT_TAR_LZIP:
+        case XBinary::FT_TAR_LZ4:
+        case XBinary::FT_TAR_ZSTD:
+        case XBinary::FT_VHD:
+        case XBinary::FT_VDI:
+        case XBinary::FT_QCOW2:
+        case XBinary::FT_VHDX:
+        case XBinary::FT_SQLITE:
+        case XBinary::FT_CPM_CRUNCH:
+        case XBinary::FT_CPM_LZH:
+        case XBinary::FT_UNIX_COMPACT:
+        case XBinary::FT_GIT_OBJECT:
+        case XBinary::FT_ALZ:
+        case XBinary::FT_RZIP:
+        case XBinary::FT_CHM:
+        case XBinary::FT_NTFS:
+        case XBinary::FT_BOHEMIA_PBO:
+        case XBinary::FT_DESCENT_HOG2:
+        case XBinary::FT_DISK_DOUBLER_DDAR:
         case XBinary::FT_ZPAQ:
         case XBinary::FT_BCM:
         case XBinary::FT_LPAQ8:
@@ -423,7 +448,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
 }
 
 bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFileFolder, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties,
-                                   XBinary::PDSTRUCT *pPdStruct, qint32 *pnSkippedEntries)
+                                   XBinary::PDSTRUCT *pPdStruct, qint32 *pnSkippedEntries, XBinary::FT forcedFileType)
 {
     if (pnSkippedEntries) *pnSkippedEntries = 0;
     if (!pDevice) return false;
@@ -444,7 +469,7 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
         return false;
     }
 
-    const XBinary::FT fileType = preferredUnpackerFileType(pDevice, pPdStruct);
+    const XBinary::FT fileType = (forcedFileType == XBinary::FT_UNKNOWN) ? preferredUnpackerFileType(pDevice, pPdStruct) : forcedFileType;
     XBinary *pBinary = XFormats::createClass(fileType, pDevice);
 
     if (pBinary && XFormats::isStaticUnpacker(fileType)) {
@@ -484,7 +509,17 @@ bool XArchives::decompressToFolder(QIODevice *pDevice, const QString &sResultFil
             pArchive->finishUnpack(&probeState, nullptr);
         }
 
-        if (!bStreamingImplemented && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const bool bExplicitLimits = mapProperties.contains(XBinary::UNPACK_PROP_MAX_OUTPUT_SIZE) ||
+                                     mapProperties.contains(XBinary::UNPACK_PROP_MAX_TOTAL_OUTPUT_SIZE) ||
+                                     mapProperties.contains(XBinary::UNPACK_PROP_MAX_ENTRY_COUNT) ||
+                                     mapProperties.contains(XBinary::UNPACK_PROP_MAX_MEMORY_OUTPUT_SIZE);
+        if (!bStreamingImplemented && bExplicitLimits) {
+            if (XBinary::getPdStructErrorString(pPdStruct).isEmpty())
+                XBinary::setPdStructErrorString(pPdStruct, tr("The archive reader could not honor the configured output limits"));
+        }
+        // The legacy API cannot carry these ceilings. A failed bounded read
+        // must not be retried through an unbounded publication route.
+        if (!bStreamingImplemented && !bExplicitLimits && XBinary::isPdStructNotCanceled(pPdStruct)) {
             QList<XArchive::RECORD> listRecords = pArchive->getRecords(-1, pPdStruct);
             bResult =
                 !listRecords.isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct) && pArchive->decompressToPath(&listRecords, QString(), sResultFileFolder, pPdStruct);
@@ -528,7 +563,7 @@ bool XArchives::decompressToFolder(const QString &sFileName, const QString &sRes
     return bResult;
 }
 
-bool XArchives::testArchive(const QString &sFileName, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct)
+bool XArchives::testArchive(const QString &sFileName, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, XBinary::PDSTRUCT *pPdStruct, XBinary::FT forcedFileType)
 {
     QTemporaryDir temporaryDir;
     if (!temporaryDir.isValid()) {
@@ -539,7 +574,7 @@ bool XArchives::testArchive(const QString &sFileName, const QMap<XBinary::UNPACK
     QFile file(sFileName);
     if (!file.open(QIODevice::ReadOnly)) return false;
 
-    const bool bResult = decompressToFolder(&file, temporaryDir.path(), mapProperties, pPdStruct);
+    const bool bResult = decompressToFolder(&file, temporaryDir.path(), mapProperties, pPdStruct, nullptr, forcedFileType);
     file.close();
 
     return bResult;
@@ -662,6 +697,22 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ISO9660);
     result.insert(XBinary::FT_UDF);
     result.insert(XBinary::FT_DMG);
+    result.insert(XBinary::FT_VHD);
+    result.insert(XBinary::FT_VDI);
+    result.insert(XBinary::FT_QCOW2);
+    result.insert(XBinary::FT_VHDX);
+    result.insert(XBinary::FT_SQLITE);
+    result.insert(XBinary::FT_CPM_CRUNCH);
+    result.insert(XBinary::FT_CPM_LZH);
+    result.insert(XBinary::FT_UNIX_COMPACT);
+    result.insert(XBinary::FT_GIT_OBJECT);
+    result.insert(XBinary::FT_ALZ);
+    result.insert(XBinary::FT_RZIP);
+    result.insert(XBinary::FT_CHM);
+    result.insert(XBinary::FT_NTFS);
+    result.insert(XBinary::FT_BOHEMIA_PBO);
+    result.insert(XBinary::FT_DESCENT_HOG2);
+    result.insert(XBinary::FT_DISK_DOUBLER_DDAR);
     result.insert(XBinary::FT_MINIDUMP);
     result.insert(XBinary::FT_RPM);
     result.insert(XBinary::FT_KWAJ);
@@ -676,6 +727,10 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_QUAKE_PAK);
     result.insert(XBinary::FT_DOOM_WAD);
     result.insert(XBinary::FT_BUILD_GRP);
+    result.insert(XBinary::FT_AMIGA_ADF);
+    result.insert(XBinary::FT_GODOT_PCK);
+    result.insert(XBinary::FT_WBFS);
+    result.insert(XBinary::FT_RVZ);
     result.insert(XBinary::FT_DESCENT_HOG);
     result.insert(XBinary::FT_WOLF_VSWAP);
     result.insert(XBinary::FT_WINTERMUTE_DCP);
@@ -710,6 +765,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_SPISSFX);
     result.insert(XBinary::FT_ARQSFX);
     result.insert(XBinary::FT_SQZSFX);
+    result.insert(XBinary::FT_BZIP2SFX);
     result.insert(XBinary::FT_RTPATCHSFX);
     result.insert(XBinary::FT_INSTALLSHIELD_LAUNCHER);
     result.insert(XBinary::FT_EPFS_ARCHIVE);
@@ -746,6 +802,137 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_CPM_LBR);
     result.insert(XBinary::FT_RTPATCH);
     result.insert(XBinary::FT_ARQ);
+    result.insert(XBinary::FT_ALDUS);
+    result.insert(XBinary::FT_BLUEBYTE_LIB);
+    result.insert(XBinary::FT_BTH_PAK);
+    result.insert(XBinary::FT_ARCV2);
+    result.insert(XBinary::FT_AMPK);
+    result.insert(XBinary::FT_AIX_BFF);
+    result.insert(XBinary::FT_AR_PDP11);
+    result.insert(XBinary::FT_ASYMETRIX);
+    result.insert(XBinary::FT_BINARY2);
+    result.insert(XBinary::FT_ASCEND);
+    result.insert(XBinary::FT_ARCV4);
+    result.insert(XBinary::FT_BVRP_PAC);
+    result.insert(XBinary::FT_PCINSTALL);
+    result.insert(XBinary::FT_BOO);
+    result.insert(XBinary::FT_ARTIPACK);
+    result.insert(XBinary::FT_BINSH_SFX);
+    result.insert(XBinary::FT_NETWARE_PACK);
+    result.insert(XBinary::FT_POVLAB_LZH);
+    result.insert(XBinary::FT_EA_REFPACK);
+    result.insert(XBinary::FT_PRINTSHOP_DELUXE);
+    result.insert(XBinary::FT_FRONTPAGE_THEME);
+    result.insert(XBinary::FT_SECOND_NATURE);
+    result.insert(XBinary::FT_LZPIS2);
+    result.insert(XBinary::FT_FINEREADER_PACK);
+    result.insert(XBinary::FT_ECM_PACK);
+    result.insert(XBinary::FT_GST_PACK);
+    result.insert(XBinary::FT_NPACK);
+    result.insert(XBinary::FT_COREL_LTEC);
+    result.insert(XBinary::FT_IRWINPAC);
+    result.insert(XBinary::FT_DT_PACK);
+    result.insert(XBinary::FT_GAS_HUFF);
+    result.insert(XBinary::FT_POWERBOARD_BBS);
+    result.insert(XBinary::FT_SILMARILS);
+    result.insert(XBinary::FT_IS7_INX);
+    result.insert(XBinary::FT_RAW_LZW15V);
+    result.insert(XBinary::FT_LBR_COBOL);
+    result.insert(XBinary::FT_LSZ);
+    result.insert(XBinary::FT_GOB);
+    result.insert(XBinary::FT_GTU);
+    result.insert(XBinary::FT_NOTETAB);
+    result.insert(XBinary::FT_IZPACK);
+    result.insert(XBinary::FT_SOLARIS_PKG);
+    result.insert(XBinary::FT_HLB);
+    result.insert(XBinary::FT_RID);
+    result.insert(XBinary::FT_ROMPAQ);
+    result.insert(XBinary::FT_FIZ);
+    result.insert(XBinary::FT_MIZ);
+    result.insert(XBinary::FT_IBM_SPACK);
+    result.insert(XBinary::FT_EA);
+    result.insert(XBinary::FT_SLS);
+    result.insert(XBinary::FT_PC_SECURE);
+    result.insert(XBinary::FT_PM_DISKCOPY);
+    result.insert(XBinary::FT_MEGATECH_VOL);
+    result.insert(XBinary::FT_IGF1);
+    result.insert(XBinary::FT_JETBBS);
+    result.insert(XBinary::FT_MAKESELF);
+    result.insert(XBinary::FT_FLD);
+    result.insert(XBinary::FT_GLU);
+    result.insert(XBinary::FT_JAM);
+    result.insert(XBinary::FT_FMC1);
+    result.insert(XBinary::FT_SOFTPAQ_2);
+    result.insert(XBinary::FT_MARC);
+    result.insert(XBinary::FT_STORK);
+    result.insert(XBinary::FT_SEA_DATA);
+    result.insert(XBinary::FT_QNX_BASE);
+    result.insert(XBinary::FT_GAMOS);
+    result.insert(XBinary::FT_SOS);
+    result.insert(XBinary::FT_EXE_SBOOKBUILDER);
+    result.insert(XBinary::FT_HUFF);
+    result.insert(XBinary::FT_LZHCXP);
+    result.insert(XBinary::FT_KRML);
+    result.insert(XBinary::FT_QIP1);
+    result.insert(XBinary::FT_QUANTUM);
+    result.insert(XBinary::FT_IRIX_SA);
+    result.insert(XBinary::FT_JM93);
+    result.insert(XBinary::FT_NEXTSTEP_DISKIMAGE);
+    result.insert(XBinary::FT_MVA);
+    result.insert(XBinary::FT_PKT);
+    result.insert(XBinary::FT_HDCOPY);
+    result.insert(XBinary::FT_IVT);
+    result.insert(XBinary::FT_SWAG);
+    result.insert(XBinary::FT_STYLUS);
+    result.insert(XBinary::FT_SETTLERS_FT);
+    result.insert(XBinary::FT_RIVERSOFT);
+    result.insert(XBinary::FT_GKSETUP);
+    result.insert(XBinary::FT_OPC);
+    result.insert(XBinary::FT_GOB2);
+    result.insert(XBinary::FT_SQ);
+    result.insert(XBinary::FT_IS11);
+    result.insert(XBinary::FT_RECOGNITA);
+    result.insert(XBinary::FT_INTEDU_FT);
+    result.insert(XBinary::FT_PAPERPORT);
+    result.insert(XBinary::FT_EALIB);
+    result.insert(XBinary::FT_NID);
+    result.insert(XBinary::FT_HAP);
+    result.insert(XBinary::FT_EXE_EBOOKCREATOR);
+    result.insert(XBinary::FT_LZDIET);
+    result.insert(XBinary::FT_QUALITAS);
+    result.insert(XBinary::FT_LZV1);
+    result.insert(XBinary::FT_SW);
+    result.insert(XBinary::FT_SAF);
+    result.insert(XBinary::FT_IGF2);
+    result.insert(XBinary::FT_RCF);
+    result.insert(XBinary::FT_HFE);
+    result.insert(XBinary::FT_RSVK);
+    result.insert(XBinary::FT_HZL);
+    result.insert(XBinary::FT_JBF);
+    result.insert(XBinary::FT_JGPAK);
+    result.insert(XBinary::FT_PACKIT);
+    result.insert(XBinary::FT_LOFI);
+    result.insert(XBinary::FT_SCI);
+    result.insert(XBinary::FT_AGIS);
+    result.insert(XBinary::FT_MWAVE_Z);
+    result.insert(XBinary::FT_MSCOMPRESS_SZ);
+    result.insert(XBinary::FT_KOLIBRI_KPACK);
+    result.insert(XBinary::FT_MATHCAD_PACK);
+    result.insert(XBinary::FT_PCOMM_OS2);
+    result.insert(XBinary::FT_SOLARIS_BOOT);
+    result.insert(XBinary::FT_INFOGRAMES_PAK);
+    result.insert(XBinary::FT_IBM_ZPAK);
+    result.insert(XBinary::FT_QDECK_QIP);
+    result.insert(XBinary::FT_MAXIS_MXS);
+    result.insert(XBinary::FT_SWAG_PACKET);
+    result.insert(XBinary::FT_PALM_PDB);
+    result.insert(XBinary::FT_NETWARE_PACK2);
+    result.insert(XBinary::FT_BSN);
+    result.insert(XBinary::FT_AODOS);
+    result.insert(XBinary::FT_BZIP1);
+    result.insert(XBinary::FT_INSTALLANYWHERE_SFX);
+    result.insert(XBinary::FT_ASCEND_BACKUP);
+    result.insert(XBinary::FT_BORLAND_PACK);
     result.insert(XBinary::FT_SQZ);
     result.insert(XBinary::FT_DMS);
     result.insert(XBinary::FT_PP20);

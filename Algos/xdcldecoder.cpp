@@ -541,7 +541,13 @@ bool decodeBuffer(const uchar *packed, qint64 packedSize, QByteArray *raw,
     if (raw) raw->clear();
     unsigned left = unsigned(packedSize);
     unsigned char *next = const_cast<unsigned char *>(packed);
-    DecodeOutput output = {raw, 0, maxOutputSize, false};
+    // Set member by member: a struct with default member initialisers is not an
+    // aggregate in C++11, so it cannot be brace-initialised here.
+    DecodeOutput output;
+    output.raw = raw;
+    output.size = 0;
+    output.limit = maxOutputSize;
+    output.overflow = false;
     const int result = blast(noMoreInput, nullptr, collectOutput, &output,
                              &left, &next);
     const qint64 used = packedSize - qint64(left);

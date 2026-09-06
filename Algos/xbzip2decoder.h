@@ -313,6 +313,10 @@ public:
     explicit XBZIP2Decoder(QObject *parent = nullptr);
 
     static bool decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
+    // Envelope-only measurement/decoding: stop before non-BZip2 trailing
+    // bytes after a fully checksummed stream and report the exact prefix.
+    // A following BZh stream must still decode and validate completely.
+    static bool decompressPrefix(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct = nullptr);
 };
 
 #endif  // XBZIP2DECODER_H

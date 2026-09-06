@@ -274,7 +274,7 @@ static bool asarHashExternalFile(const QString &sFileName, const QString &sCanon
         const qint64 nRequest = qMin<qint64>(baBuffer.size(), nExpectedSize - nReadTotal);
         const qint64 nRead = file.read(baBuffer.data(), nRequest);
         if ((nRead <= 0) || (nRead > nRequest)) return false;
-        hash.addData(baBuffer.constData(), nRead);
+        hash.addData(QByteArray::fromRawData(baBuffer.constData(), nRead));
         nReadTotal += nRead;
     }
 
@@ -1203,7 +1203,7 @@ bool XASAR::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
             bResult = false;
             break;
         }
-        hash.addData(baBuffer.constData(), nRead);
+        hash.addData(QByteArray::fromRawData(baBuffer.constData(), nRead));
         const qint64 nWritten = guardedThis->safeWriteData(pWorkDevice, nReadTotal, baBuffer.constData(), nRead, pPdStruct);
         if (!guardedThis || !guardedOutput || !guardedSource || (nWritten != nRead)) {
             bResult = false;

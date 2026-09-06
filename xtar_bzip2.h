@@ -44,12 +44,15 @@ public:
     QString getFileFormatExt() override;
     QString getFileFormatExtsString() override;
     QString getMIMEString() override;
+    ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     QIODevice *decompressData(PDSTRUCT *pPdStruct) override;
 
 private:
     INTERNAL_INFO m_internalInfo;
+    qint64 m_nTrailingOffset = 0;
+    qint64 m_nTrailingSize = 0;
 };
 
 #endif  // XTAR_BZIP2_H

@@ -448,7 +448,7 @@ void DmsDecoder::decompressImpl(ByteBuffer &rawData,bool verify,uint32_t &restar
 	UnpackQuick unpackQuick{initContext,limitedDecompress,readBits,contextBuffer,contextLocation};
 
 
-	VariableLengthCodeDecoder lengthDecoder{7,7,8,8,8,9,9,9,9,10,10,10,11,11,11,12};
+	VariableLengthCodeDecoder<16> lengthDecoder{7,7,8,8,8,9,9,9,9,10,10,10,11,11,11,12};
 
 	struct UnpackMedium : public BlockUnpacker
 	{
@@ -539,7 +539,7 @@ void DmsDecoder::decompressImpl(ByteBuffer &rawData,bool verify,uint32_t &restar
 		void operator()(ForwardOutputStream &output) final
 		{
 			initContext();
-			if (!deepDecoder) deepDecoder=std::make_unique<DynamicHuffmanDecoder<314>>();
+			if (!deepDecoder) deepDecoder.reset(new DynamicHuffmanDecoder<314>());
 
 			while (!output.eof())
 			{
@@ -578,7 +578,7 @@ void DmsDecoder::decompressImpl(ByteBuffer &rawData,bool verify,uint32_t &restar
 
 		void operator()(std::unique_ptr<OptionalHuffmanDecoder<uint32_t>> &decoder,uint32_t countBits,uint32_t valueBits) const
 		{
-			decoder=std::make_unique<OptionalHuffmanDecoder<uint32_t>>();
+			decoder.reset(new OptionalHuffmanDecoder<uint32_t>());
 			uint32_t count{readBits(countBits)};
 			if (count)
 			{
@@ -881,7 +881,7 @@ void DmsDecoder::decompressImpl(ByteBuffer &rawData,bool verify,uint32_t &restar
 						inputStream.setCode(restartPosition);
 						limitedDecompress=8;
 						processBlock(doRLE,func);
-						if ((rawData.readBE32(0)&0xffff'ff00U)!=FourCC("DOS\0")) continue;
+						if ((rawData.readBE32(0)&0xffffff00U)!=FourCC("DOS\0")) continue;
 
 						// now see if the candidate is any good
 						doInitContext=true;
@@ -949,7 +949,7 @@ void DmsDecoder::decompressImpl(ByteBuffer &rawData,bool verify,uint32_t &restar
 			// 4: do RLE
 			// heavy1 uses 4k dictionary (mode 5), whereas heavy2 uses 8k dictionary
 			case 5:
-			[[fallthrough]];
+			// fallthrough
 			case 6:
 			unpackHeavy.configure(flags&2,mode==6);
 			processBlockCode(flags&4,unpackHeavy);

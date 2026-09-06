@@ -21,6 +21,16 @@ struct Geometry {
     qint32 sectors = 0;
     qint32 sectorSize = 0;
     qint32 sectorBase = 1;
+
+    // Default member initialisers keep this out of the aggregate category in
+    // C++11, so the brace-initialised table below needs real constructors.
+    Geometry()
+    {
+    }
+    Geometry(qint32 nCylinders, qint32 nHeads, qint32 nSectors, qint32 nSectorSize, qint32 nSectorBase)
+        : cylinders(nCylinders), heads(nHeads), sectors(nSectors), sectorSize(nSectorSize), sectorBase(nSectorBase)
+    {
+    }
 };
 
 struct Sector {

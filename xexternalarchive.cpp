@@ -19,6 +19,7 @@
  * SOFTWARE.
  */
 #include "xexternalarchive.h"
+#include "xfreearcnative.h"
 
 #include <QBuffer>
 #include <QCoreApplication>
@@ -50,6 +51,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <utility>
 #include <new>
 #include <utility>
 
@@ -401,7 +403,8 @@ bool setLowIntegrityDirectoryTree(const QString &sCanonicalRoot, QString *pError
                       .arg(GetLastError());
     }
 
-    for (const QString &sDirectory : qAsConst(listDirectories)) {
+    const QStringList &listTargetDirectories = listDirectories;
+    for (const QString &sDirectory : listTargetDirectories) {
         if (!bResult) break;
         QString sNativeDirectory = QDir::toNativeSeparators(sDirectory);
         const DWORD nStatus =
@@ -1636,7 +1639,8 @@ bool reconcileListedStage(const QList<ExternalRecord> &listManifest, QList<Exter
     if (!externalCanContinue(pPdStruct, pDeadline, pbTimedOut)) return false;
 
     QSet<QString> setStrictAncestorFolders;
-    for (const ExternalRecord &expected : qAsConst(listExpected)) {
+    const QList<ExternalRecord> &listExpectedRecords = listExpected;
+    for (const ExternalRecord &expected : listExpectedRecords) {
         if (!externalCanContinue(pPdStruct, pDeadline, pbTimedOut)) return false;
         qint32 nSeparator = expected.sName.indexOf(QLatin1Char('/'));
         while (nSeparator > 0) {
@@ -1648,7 +1652,8 @@ bool reconcileListedStage(const QList<ExternalRecord> &listManifest, QList<Exter
     QList<ExternalRecord> listReconciled;
     listReconciled.reserve(listExpected.size());
     qint32 nExpectedIndex = 0;
-    for (ExternalRecord actual : qAsConst(*pStageRecords)) {
+    const QList<ExternalRecord> &listStageRecords = *pStageRecords;
+    for (ExternalRecord actual : listStageRecords) {
         if (!externalCanContinue(pPdStruct, pDeadline, pbTimedOut)) return false;
         if ((nExpectedIndex < listExpected.size()) && (actual.sName == listExpected.at(nExpectedIndex).sName)) {
             const ExternalRecord &expected = listExpected.at(nExpectedIndex++);
@@ -1738,6 +1743,8 @@ struct XExternalArchive::EXTERNAL_UNPACK_CONTEXT {
     QString sHelperPath;
     QString sPassword;
     QList<ExternalRecord> listRecords;
+    std::unique_ptr<XFreeArcNative> pNativeFreeArc;
+    bool bNativeFreeArc = false;
     XBinary::OUTPUT_POLICY outputPolicy = {};
     bool bZpaqEnvironmentPassword = false;
 };
@@ -1819,6 +1826,61 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
     if (!XBinary::resolveUnpackOutputPolicy(mapProperties, &outputPolicy)) {
         m_lastExternalFailure = EXTERNAL_FAILURE_RESOURCE_LIMIT;
         return setExternalError(pPdStruct, tr("Invalid unpacked-output policy"));
+    }
+
+    if (m_backend == BACKEND_FREEARC) {
+        const bool bBound = bindUnpackSource(pState, pPdStruct);
+        if (!guardedThis || !bBound) return false;
+        std::unique_ptr<XFreeArcNative> native(new (std::nothrow) XFreeArcNative);
+        const XFreeArcNative::RESULT nativeResult = native ? native->open(getDevice(), outputPolicy, pPdStruct) : XFreeArcNative::RESOURCE_LIMIT;
+        if (!guardedThis) return false;
+        if (nativeResult == XFreeArcNative::READY) {
+            std::unique_ptr<EXTERNAL_UNPACK_CONTEXT> context(new (std::nothrow) EXTERNAL_UNPACK_CONTEXT);
+            if (!context) { releaseUnpackSource(pState); return false; }
+            context->outputPolicy = outputPolicy;
+            context->bNativeFreeArc = true;
+            context->pNativeFreeArc = std::move(native);
+            context->pTemporaryDir.reset(new (std::nothrow) QTemporaryDir(QDir(QDir::tempPath()).filePath(QStringLiteral("xfileunpacker-freearc-XXXXXX"))));
+            if (!context->pTemporaryDir || !context->pTemporaryDir->isValid()) { releaseUnpackSource(pState); return false; }
+            bool hasFiles = false;
+            for (const XFreeArcNative::ENTRY &entry : context->pNativeFreeArc->entries()) {
+                ExternalRecord record;
+                record.sName = entry.name;
+                record.nUncompressedSize = entry.size;
+                record.bIsFolder = entry.folder;
+                record.sProvider = QStringLiteral("FreeArc native");
+                record.dateTime = QDateTime::fromSecsSinceEpoch(entry.time);
+                context->listRecords.append(record);
+                hasFiles |= !entry.folder;
+            }
+            pState->mapUnpackProperties = mapProperties;
+            pState->mapUnpackProperties.remove(UNPACK_PROP_PASSWORD);
+            pState->mapUnpackProperties.remove(UNPACK_PROP_PASSWORD_BYTES);
+            pState->nTotalSize = getSize();
+            if (!guardedThis) return false;
+            pState->nNumberOfRecords = context->listRecords.size();
+            pState->pContext = context.get();
+            const bool finalized = validateAndFinalizeUnpackSource(pState, context.get(), pPdStruct);
+            if (!guardedThis) { context.release(); *pState = UNPACK_STATE(); return false; }
+            const bool materialized = finalized && (hasFiles || _materializeDeferredArchive(context.get(), pState, pPdStruct));
+            if (!guardedThis) { context.release(); *pState = UNPACK_STATE(); return false; }
+            if (!materialized) {
+                releaseUnpackSource(pState);
+                *pState = UNPACK_STATE();
+                return false;
+            }
+            context.release();
+            m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
+            return true;
+        }
+        releaseUnpackSource(pState);
+        *pState = UNPACK_STATE();
+        if (nativeResult != XFreeArcNative::UNSUPPORTED) {
+            m_lastExternalFailure = nativeResult == XFreeArcNative::CANCELED ? EXTERNAL_FAILURE_CANCELED :
+                                    nativeResult == XFreeArcNative::RESOURCE_LIMIT ? EXTERNAL_FAILURE_RESOURCE_LIMIT : EXTERNAL_FAILURE_ARCHIVE_REJECTED;
+            return setExternalError(pPdStruct, nativeResult == XFreeArcNative::RESOURCE_LIMIT ? tr("FreeArc archive exceeds native reader limits") :
+                                                                                              tr("Cannot read FreeArc control blocks"));
+        }
     }
 
     const QString sHelperPath = resolveHelper(m_backend);
@@ -2101,7 +2163,8 @@ bool XExternalArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, 
 
     if (bInitialized && ((m_backend == BACKEND_ZPAQ) || (m_backend == BACKEND_FREEARC))) {
         bool bHasFileRecord = false;
-        for (const ExternalRecord &record : qAsConst(pContext->listRecords)) {
+        const QList<ExternalRecord> &listRecords = pContext->listRecords;
+        for (const ExternalRecord &record : listRecords) {
             if (!record.bIsFolder) {
                 bHasFileRecord = true;
                 break;
@@ -2168,7 +2231,7 @@ XBinary::ARCHIVERECORD XExternalArchive::infoCurrent(UNPACK_STATE *pState, PDSTR
     if (record.nUncompressedSize >= 0) result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, record.nUncompressedSize);
     if (record.bIsFolder) result.mapProperties.insert(FPART_PROP_ISFOLDER, true);
     if (record.dateTime.isValid()) result.mapProperties.insert(FPART_PROP_MTIME, record.dateTime);
-    result.mapProperties.insert(FPART_PROP_REPORTEDMETHOD,
+    result.mapProperties.insert(FPART_PROP_REPORTEDMETHOD, pContext->bNativeFreeArc ? QStringLiteral("FreeArc native") :
                                 QStringLiteral("%1 (PeaZip external helper)").arg(record.sProvider.isEmpty() ? backendName(m_backend) : record.sProvider));
     if (!XBinary::markArchiveStreamRecord(&result, pState->nCurrentIndex)) return ARCHIVERECORD();
     return result;
@@ -2196,6 +2259,20 @@ bool XExternalArchive::_materializeDeferredArchive(EXTERNAL_UNPACK_CONTEXT *pCon
     }
 
     const QString sArchiveStageRoot = pArchiveStage->path();
+    if (pContext->pNativeFreeArc) {
+        if (!pContext->pNativeFreeArc->materialize(sArchiveStageRoot, pPdStruct) || !guardedThis || !guardedSource ||
+            !isUnpackSourceCurrent(pState, pPdStruct)) {
+            if (guardedThis) m_lastExternalFailure = XBinary::isPdStructNotCanceled(pPdStruct) ? EXTERNAL_FAILURE_ARCHIVE_REJECTED : EXTERNAL_FAILURE_CANCELED;
+            return setExternalError(pPdStruct, tr("FreeArc data failed decompression or CRC verification"));
+        }
+        const QList<XFreeArcNative::ENTRY> &entries = pContext->pNativeFreeArc->entries();
+        if (entries.size() != pContext->listRecords.size()) return false;
+        for (qint32 i = 0; i < entries.size(); ++i) pContext->listRecords[i].sStagedPath = entries.at(i).stagedPath;
+        pContext->pArchiveStageDir = std::move(pArchiveStage);
+        pContext->pNativeFreeArc.reset();
+        m_lastExternalFailure = EXTERNAL_FAILURE_NONE;
+        return true;
+    }
     const QString sWorkDir = pContext->pTemporaryDir->path();
     QStringList listArguments;
     QByteArray baHelperOutput;

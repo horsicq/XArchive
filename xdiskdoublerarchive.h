@@ -20,6 +20,8 @@ public:
                         PDSTRUCT *pPdStruct = nullptr);
     XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false,
                             XADDR nModuleAddress = -1) override;
+    ARCHIVERECORD infoCurrent(UNPACK_STATE *pState,
+                              PDSTRUCT *pPdStruct = nullptr) override;
 
 private:
     struct PARSE_CONTEXT;

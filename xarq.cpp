@@ -9,12 +9,21 @@
 #include <QtEndian>
 
 #include <new>
+#include <QTimeZone>
 
 namespace {
 const quint32 ARQ_CONTAINER_MAGIC = 0x02045767U;
 const quint32 ARQ_MEMBER_MAGIC = 0x01045767U;
-const quint16 ARQ_MEMBER_SIGNATURE = 0x1231U;
-const quint16 ARQ_CRUSHER_METHOD = 0x1002U;
+// Crusher! writes the member header in two shapes.  Only the low byte of the
+// signature word is a constant ('0' or '1'); its high byte is a writer tag
+// (0x12 or 0x31).  The method word likewise splits: the high byte selects the
+// Crusher generation (0x00, 0x0a, 0x10 all observed) and only the low byte
+// names the codec.  Whole-word comparisons rejected every archive that was not
+// produced by the one generation the class was first written against.
+const quint8 ARQ_MEMBER_SIGNATURE_LOW_A = 0x30U;
+const quint8 ARQ_MEMBER_SIGNATURE_LOW_B = 0x31U;
+const quint8 ARQ_METHOD_STORED = 0x01U;
+const quint8 ARQ_METHOD_CRUSHED = 0x02U;
 const qint64 ARQ_CONTAINER_HEADER_SIZE = 12;
 const qint64 ARQ_MEMBER_PREFIX_SIZE = 8;
 const qint64 ARQ_MEMBER_TRAILER_SIZE = 33;
@@ -37,6 +46,18 @@ bool arqIsValidName(const QByteArray &baName)
         if (nCharacter < 0x20 || nCharacter > 0x7e) return false;
     }
     return true;
+}
+
+bool arqIsValidSignature(quint16 nSignature)
+{
+    const quint8 nLow = static_cast<quint8>(nSignature & 0xffU);
+    return (nLow == ARQ_MEMBER_SIGNATURE_LOW_A) ||
+           (nLow == ARQ_MEMBER_SIGNATURE_LOW_B);
+}
+
+quint8 arqMethodCode(quint16 nMethod)
+{
+    return static_cast<quint8>(nMethod & 0xffU);
 }
 }  // namespace
 
@@ -71,14 +92,26 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
     }
     const uchar *pContainer =
         reinterpret_cast<const uchar *>(baContainer.constData());
-    if (qFromLittleEndian<quint32>(pContainer) != ARQ_CONTAINER_MAGIC ||
-        qFromLittleEndian<quint32>(pContainer + 8) != 0) {
+    const quint32 nLeadingMagic = qFromLittleEndian<quint32>(pContainer);
+
+    // Crusher! emits the 12-byte container prelude only when it wraps the
+    // chain (the SFX payload does).  A bare .ARQ/.SKU/.IRD file starts
+    // directly at the first member record and has no total-size field, so the
+    // sum-of-members cross-check only applies to the wrapped shape.
+    if (nLeadingMagic == ARQ_CONTAINER_MAGIC) {
+        if (qFromLittleEndian<quint32>(pContainer + 8) != 0) return false;
+        context.bHasContainerHeader = true;
+        context.nDeclaredUncompressedSize =
+            qFromLittleEndian<quint32>(pContainer + 4);
+    } else if (nLeadingMagic == ARQ_MEMBER_MAGIC) {
+        context.bHasContainerHeader = false;
+        context.nDeclaredUncompressedSize = 0;
+    } else {
         return false;
     }
-    context.nDeclaredUncompressedSize =
-        qFromLittleEndian<quint32>(pContainer + 4);
 
-    qint64 nOffset = ARQ_CONTAINER_HEADER_SIZE;
+    qint64 nOffset =
+        context.bHasContainerHeader ? ARQ_CONTAINER_HEADER_SIZE : 0;
     quint64 nTotalUncompressedSize = 0;
     while (context.listMembers.size() < ARQ_MAX_MEMBERS &&
            isPdStructNotCanceled(pPdStruct)) {
@@ -97,8 +130,7 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         const quint32 nMagic = qFromLittleEndian<quint32>(pPrefix);
         const quint16 nSignature = qFromLittleEndian<quint16>(pPrefix + 4);
         const quint16 nNameSize = qFromLittleEndian<quint16>(pPrefix + 6);
-        if (nMagic != ARQ_MEMBER_MAGIC ||
-            nSignature != ARQ_MEMBER_SIGNATURE) {
+        if (nMagic != ARQ_MEMBER_MAGIC || !arqIsValidSignature(nSignature)) {
             return false;
         }
 
@@ -109,11 +141,14 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
             if (context.listMembers.isEmpty() ||
                 !arqRangeWithin(context.nInputSize, nOffset,
                                 ARQ_TERMINATOR_SIZE) ||
-                nTotalUncompressedSize !=
-                    context.nDeclaredUncompressedSize) {
+                (context.bHasContainerHeader &&
+                 (nTotalUncompressedSize !=
+                  context.nDeclaredUncompressedSize))) {
                 return false;
             }
             context.nArchiveSize = nOffset + ARQ_TERMINATOR_SIZE;
+            context.nFirstMemberOffset =
+                context.listMembers.first().nHeaderOffset;
             *pContext = context;
             return guardedThis && guardedSource &&
                    isPdStructNotCanceled(pPdStruct);
@@ -157,10 +192,23 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
                                .replace(QLatin1Char('\\'),
                                         QLatin1Char('/'));
 
-        if (nReserved != 0 || member.nMethod != ARQ_CRUSHER_METHOD ||
-            baHeader.mid(nTrailerOffset + 24, 9) != QByteArray(9, '\0') ||
+        const quint8 nMethodCode = arqMethodCode(member.nMethod);
+        if (nMethodCode != ARQ_METHOD_STORED &&
+            nMethodCode != ARQ_METHOD_CRUSHED) {
+            return false;
+        }
+        // Byte +24 is a per-member flag (0/1/2 observed); only the eight
+        // bytes after it are structurally required to be zero.
+        if (nReserved != 0 ||
+            baHeader.mid(nTrailerOffset + 25, 8) != QByteArray(8, '\0') ||
             !arqRangeWithin(context.nInputSize, member.nDataOffset,
                             member.nCompressedSize)) {
+            return false;
+        }
+        // A stored member is the anchor that keeps the relaxed method gate
+        // honest: its two size fields must agree exactly.
+        if ((nMethodCode == ARQ_METHOD_STORED) &&
+            (member.nCompressedSize != member.nUncompressedSize)) {
             return false;
         }
 
@@ -178,8 +226,9 @@ bool XARQ::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
 
         nTotalUncompressedSize +=
             static_cast<quint64>(member.nUncompressedSize);
-        if (nTotalUncompressedSize >
-            context.nDeclaredUncompressedSize) {
+        if (context.bHasContainerHeader &&
+            (nTotalUncompressedSize >
+             context.nDeclaredUncompressedSize)) {
             return false;
         }
         context.listMembers.append(member);
@@ -218,7 +267,9 @@ XBinary *XARQ::createInstance(QIODevice *pDevice, bool bIsImage,
 
 QList<QString> XARQ::getSearchSignatures()
 {
-    return {QStringLiteral("67570402")};
+    // 67570402 is the wrapped container prelude; 67570401 is the bare member
+    // chain, which is how standalone Crusher! archives begin.
+    return {QStringLiteral("67570402"), QStringLiteral("67570401")};
 }
 
 XBinary::FT XARQ::getFileType()
@@ -289,8 +340,23 @@ XBinary::_MEMORY_MAP XARQ::getMemoryMap(MAPMODE mapMode,
 
 QString XARQ::methodToString(quint16 nMethod)
 {
-    return QStringLiteral("Crusher 0x%1 (LH5-compatible)")
-        .arg(nMethod, 4, 16, QLatin1Char('0'));
+    const quint8 nMethodCode = arqMethodCode(nMethod);
+    const QString sName = (nMethodCode == ARQ_METHOD_STORED)
+                              ? QStringLiteral("Stored")
+                              : ((nMethodCode == ARQ_METHOD_CRUSHED)
+                                     ? QStringLiteral("Crushed (LH5-compatible)")
+                                     : QStringLiteral("Unknown"));
+    return QStringLiteral("Crusher 0x%1 %2")
+        .arg(nMethod, 4, 16, QLatin1Char('0'))
+        .arg(sName);
+}
+
+XBinary::HANDLE_METHOD XARQ::methodToHandleMethod(quint16 nMethod)
+{
+    const quint8 nMethodCode = arqMethodCode(nMethod);
+    if (nMethodCode == ARQ_METHOD_STORED) return HANDLE_METHOD_STORE;
+    if (nMethodCode == ARQ_METHOD_CRUSHED) return HANDLE_METHOD_LZH5;
+    return HANDLE_METHOD_UNKNOWN;
 }
 
 bool XARQ::canAppendPart(qint32 nLimit, qint32 nCurrentCount)
@@ -306,7 +372,7 @@ QList<XBinary::FPART> XARQ::getFileParts(quint32 nFileParts,
     CONTEXT context = {};
     if (!parseContext(&context, pPdStruct)) return result;
 
-    if ((nFileParts & FILEPART_HEADER) &&
+    if (context.bHasContainerHeader && (nFileParts & FILEPART_HEADER) &&
         canAppendPart(nLimit, result.size())) {
         FPART part = {};
         part.filePart = FILEPART_HEADER;
@@ -344,7 +410,7 @@ QList<XBinary::FPART> XARQ::getFileParts(quint32 nFileParts,
             part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE,
                                       member.nUncompressedSize);
             part.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
-                                      HANDLE_METHOD_LZH5);
+                                      methodToHandleMethod(member.nMethod));
             part.mapProperties.insert(FPART_PROP_REPORTEDMETHOD,
                                       methodToString(member.nMethod));
             part.mapProperties.insert(FPART_PROP_TYPE,
@@ -435,7 +501,7 @@ bool XARQ::initUnpack(
     pState->mapArchiveProperties.insert(
         FPART_PROP_INFO,
         tr("Crusher ARQ; packed member CRCs verified"));
-    pState->nCurrentOffset = ARQ_CONTAINER_HEADER_SIZE;
+    pState->nCurrentOffset = pContext->nFirstMemberOffset;
     pState->nTotalSize = pContext->nArchiveSize;
     pState->nCurrentIndex = 0;
     pState->nNumberOfRecords = pContext->listMembers.size();
@@ -490,7 +556,7 @@ XBinary::ARCHIVERECORD XARQ::infoCurrent(UNPACK_STATE *pState,
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE,
                                 member.nUncompressedSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
-                                HANDLE_METHOD_LZH5);
+                                methodToHandleMethod(member.nMethod));
     result.mapProperties.insert(FPART_PROP_REPORTEDMETHOD,
                                 methodToString(member.nMethod));
     result.mapProperties.insert(FPART_PROP_TYPE,
@@ -499,7 +565,7 @@ XBinary::ARCHIVERECORD XARQ::infoCurrent(UNPACK_STATE *pState,
     result.mapProperties.insert(FPART_PROP_ISREADONLY,
                                 (member.nAttributes & 0222U) == 0);
     const QDateTime dtModified = QDateTime::fromSecsSinceEpoch(
-        member.nMTime, Qt::UTC);
+        member.nMTime, X_UTC_TZ);
     if (dtModified.isValid()) {
         result.mapProperties.insert(FPART_PROP_MTIME, dtModified);
     }

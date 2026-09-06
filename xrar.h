@@ -129,6 +129,9 @@ class XRar : public XArchive {
 
     struct RAR_UNPACK_CONTEXT {
         qint32 nVersion;                      // RAR version (1, 4, or 5)
+        bool bIsVolume;
+        bool bVolumeNumberKnown;
+        quint64 nVolumeNumber;
         bool bArchiveIsSolid;                 // Archive-level solid flag
         bool bHeadersEncrypted;               // True if archive has encrypted headers (RAR5)
         qint64 nArchiveEnd;                   // Exact logical end when it can be determined
@@ -137,6 +140,8 @@ class XRar : public XArchive {
         QList<FILEBLOCK4> listFileBlocks4;    // Cache of RAR 4.x file blocks
         QList<FILEHEADER5> listFileHeaders5;  // Cache of RAR 5.x file headers
         QList<qint32> listSolidFolderIndex;   // Solid block index per file (incremented on non-solid boundary)
+        QSharedPointer<QIODevice> spInputView;  // Stable identity for a solid stream spanning volumes
+        QString sSourceMD5;
         XDecompress decompress;
     };
 
@@ -226,6 +231,10 @@ public:
     virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
 
 private:
+    static quint8 splitFlags(const RAR_UNPACK_CONTEXT *context, qint32 index);
+    ARCHIVERECORD infoCurrentRaw(RAR_UNPACK_CONTEXT *context, qint32 index);
+    bool unpackSplitRecord(RAR_UNPACK_CONTEXT *context, qint32 index, ARCHIVERECORD record,
+                           UNPACK_STATE *state, QIODevice *stage, QIODevice *destination, PDSTRUCT *progress);
     qint32 getInternVersion(PDSTRUCT *pPdStruct);
     bool readVIntBounded(qint64 *pOffset, qint64 nEndOffset, qint32 nMaxBytes, quint64 *pValue);
     bool isRangeValid(qint64 nOffset, quint64 nSize);

@@ -26,6 +26,7 @@
 #include <QDir>
 #include <QSet>
 #include <QUrl>
+#include <QTimeZone>
 
 namespace {
 const qint32 WARC_MAX_HEADER_SIZE = 1024 * 1024;
@@ -282,7 +283,7 @@ bool XWARC::_parseDate(const QByteArray &value, QDateTime *pResult)
     const QTime qTime(nHour, nMinute, nSecond, nMillisecond);
     if (!qDate.isValid() || !qTime.isValid()) return false;
 
-    QDateTime result(qDate, qTime, Qt::UTC);
+    QDateTime result(qDate, qTime, X_UTC_TZ);
     if (!result.isValid()) return false;
 
     *pResult = result;

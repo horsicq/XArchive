@@ -4,6 +4,7 @@
  * GNU LGPL 2.1 or later; see xadmaster/COPYING.
  */
 #include "xmaclegacydecoders.h"
+#include "xborlandpackdecoder.h"
 
 #include <QVector>
 
@@ -391,6 +392,36 @@ bool readDdnCode(const QByteArray &packed, qint64 start, PrefixCode *code,
 }  // namespace
 
 namespace XMacLegacyDecoders {
+
+bool decodeDiskDoublerLZW(const QByteArray &packed, qint64 rawSize,
+                         quint8 info1, quint8 info2, quint16 checksum,
+                         QByteArray *output, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!output || rawSize < 0 || rawSize > (std::numeric_limits<qint32>::max)() ||
+        packed.size() < 3 || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    const quint8 xorByte = (info1 >= 0x2a && !(info2 & 0x80)) ? 0x5a : 0;
+    const quint8 magic1 = quint8(packed.at(0)) ^ xorByte;
+    const quint8 magic2 = quint8(packed.at(1)) ^ xorByte;
+    const quint8 flags = quint8(packed.at(2)) ^ xorByte;
+    if (magic1 != 0x1f || magic2 != 0x9d) return false;
+
+    // Only the three-byte header is XORed before decompression. The code
+    // stream itself is ordinary LZW; XOR is applied to its decoded bytes.
+    QByteArray lzw = packed.mid(2);
+    lzw[0] = char(flags);
+    QByteArray decoded;
+    if (!XBorlandPackDecoder::decode(lzw, rawSize, &decoded, pPdStruct)) return false;
+    quint32 sum = quint32(magic1) + magic2 + flags;
+    for (qint32 i = 0; i < decoded.size(); ++i) {
+        if (!(i & 0xffff) && !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        const quint8 value = quint8(decoded.at(i)) ^ xorByte;
+        decoded[i] = char(value);
+        sum = (sum + value) & 0xffffU;
+    }
+    if (sum != checksum || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    *output = decoded;
+    return true;
+}
 
 bool decodeCompactPro(const QByteArray &packed, qint64 rawSize, bool lzh,
                       qint32 blockSize, QByteArray *output)

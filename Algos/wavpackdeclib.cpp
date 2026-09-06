@@ -19,15 +19,17 @@
  * internal helpers declared by wavpack_local.h take C++ linkage, which is
  * invisible outside this translation unit because nothing links to them.
  *
- * Upstream code is verbatim apart from three explicit casts that C accepts
+ * Upstream code is adapted with three explicit casts that C accepts
  * implicitly and C++ does not: void pointers assigned to `unsigned char` and
  * `uint16_t` pointers in read_channel_identities() and bs_open_read(). Each is
- * marked XARCHIVE-C++ at the site.
+ * marked XARCHIVE-C++ at the site. Bit-mask tables use unsigned 32-bit
+ * constants to preserve their value under the C++ narrowing rules.
  *
  * WavPack is BSD-3-Clause, Copyright (c) 1998-2025 David Bryant; the text is
  * reproduced in Algos/licenses/wavpack/LICENSE.
  *
- * This file is generated -- do not edit by hand.
+ * This file is generated -- do not edit by hand. Reproducible local patches
+ * are maintained in _mylibs/warning_fixes/2026-09-nfd.
  */
 
 /* Upstream's own trim for the APEv2 tag reader. tags.c and tag_utils.c define
@@ -686,7 +688,11 @@ uint32_t bs_close_read (Bitstream *bs);
 #define INC_MED2() (c->median [2] += ((c->median [2] + DIV2) / DIV2) * 5)
 #define DEC_MED2() (c->median [2] -= ((c->median [2] + (DIV2-2)) / DIV2) * 2)
 
-#ifdef HAVE___BUILTIN_CLZ
+// __GNUC__ added to the upstream condition: the amalgamation never defines
+// HAVE___BUILTIN_CLZ, so gcc/clang used to fall through to the _WIN64 branch
+// below, which is MSVC-only (_BitScanReverse with <intrin.h>) and does not
+// compile with MinGW.
+#if defined(HAVE___BUILTIN_CLZ) || defined(__GNUC__)
 #define count_bits(av) ((av) ? 32 - __builtin_clz (av) : 0)
 #elif defined (__WATCOMC__) && defined(__386__)
 extern __inline int _bsr_watcom(uint32_t);
@@ -696,10 +702,8 @@ extern __inline int _bsr_watcom(uint32_t);
   value [eax] \
   modify exact [eax] nomemory;
 #define count_bits(av) ((av) ? _bsr_watcom((av)) + 1 : 0)
-#elif defined (_WIN64)
- #ifdef _MSC_VER
+#elif defined (_WIN64) && defined (_MSC_VER)
  #include <intrin.h>
- #endif
 static __inline int count_bits (uint32_t av) { unsigned long res; return _BitScanReverse (&res, av) ? (int)(res + 1) : 0; }
 #else
 #define count_bits(av) ( \
@@ -5194,25 +5198,25 @@ static uint32_t __inline read_code (Bitstream *bs, uint32_t maxcode)
 ///////////////////////////// local table storage ////////////////////////////
 
 const uint32_t bitset [] = {
-    1L << 0, 1L << 1, 1L << 2, 1L << 3,
-    1L << 4, 1L << 5, 1L << 6, 1L << 7,
-    1L << 8, 1L << 9, 1L << 10, 1L << 11,
-    1L << 12, 1L << 13, 1L << 14, 1L << 15,
-    1L << 16, 1L << 17, 1L << 18, 1L << 19,
-    1L << 20, 1L << 21, 1L << 22, 1L << 23,
-    1L << 24, 1L << 25, 1L << 26, 1L << 27,
-    1L << 28, 1L << 29, 1L << 30, 1L << 31
+    UINT32_C(1) << 0, UINT32_C(1) << 1, UINT32_C(1) << 2, UINT32_C(1) << 3,
+    UINT32_C(1) << 4, UINT32_C(1) << 5, UINT32_C(1) << 6, UINT32_C(1) << 7,
+    UINT32_C(1) << 8, UINT32_C(1) << 9, UINT32_C(1) << 10, UINT32_C(1) << 11,
+    UINT32_C(1) << 12, UINT32_C(1) << 13, UINT32_C(1) << 14, UINT32_C(1) << 15,
+    UINT32_C(1) << 16, UINT32_C(1) << 17, UINT32_C(1) << 18, UINT32_C(1) << 19,
+    UINT32_C(1) << 20, UINT32_C(1) << 21, UINT32_C(1) << 22, UINT32_C(1) << 23,
+    UINT32_C(1) << 24, UINT32_C(1) << 25, UINT32_C(1) << 26, UINT32_C(1) << 27,
+    UINT32_C(1) << 28, UINT32_C(1) << 29, UINT32_C(1) << 30, UINT32_C(1) << 31
 };
 
 const uint32_t bitmask [] = {
-    (1L << 0) - 1, (1L << 1) - 1, (1L << 2) - 1, (1L << 3) - 1,
-    (1L << 4) - 1, (1L << 5) - 1, (1L << 6) - 1, (1L << 7) - 1,
-    (1L << 8) - 1, (1L << 9) - 1, (1L << 10) - 1, (1L << 11) - 1,
-    (1L << 12) - 1, (1L << 13) - 1, (1L << 14) - 1, (1L << 15) - 1,
-    (1L << 16) - 1, (1L << 17) - 1, (1L << 18) - 1, (1L << 19) - 1,
-    (1L << 20) - 1, (1L << 21) - 1, (1L << 22) - 1, (1L << 23) - 1,
-    (1L << 24) - 1, (1L << 25) - 1, (1L << 26) - 1, (1L << 27) - 1,
-    (1L << 28) - 1, (1L << 29) - 1, (1L << 30) - 1, 0x7fffffff
+    (UINT32_C(1) << 0) - 1, (UINT32_C(1) << 1) - 1, (UINT32_C(1) << 2) - 1, (UINT32_C(1) << 3) - 1,
+    (UINT32_C(1) << 4) - 1, (UINT32_C(1) << 5) - 1, (UINT32_C(1) << 6) - 1, (UINT32_C(1) << 7) - 1,
+    (UINT32_C(1) << 8) - 1, (UINT32_C(1) << 9) - 1, (UINT32_C(1) << 10) - 1, (UINT32_C(1) << 11) - 1,
+    (UINT32_C(1) << 12) - 1, (UINT32_C(1) << 13) - 1, (UINT32_C(1) << 14) - 1, (UINT32_C(1) << 15) - 1,
+    (UINT32_C(1) << 16) - 1, (UINT32_C(1) << 17) - 1, (UINT32_C(1) << 18) - 1, (UINT32_C(1) << 19) - 1,
+    (UINT32_C(1) << 20) - 1, (UINT32_C(1) << 21) - 1, (UINT32_C(1) << 22) - 1, (UINT32_C(1) << 23) - 1,
+    (UINT32_C(1) << 24) - 1, (UINT32_C(1) << 25) - 1, (UINT32_C(1) << 26) - 1, (UINT32_C(1) << 27) - 1,
+    (UINT32_C(1) << 28) - 1, (UINT32_C(1) << 29) - 1, (UINT32_C(1) << 30) - 1, 0x7fffffff
 };
 
 const char nbits_table [] = {
@@ -6979,5 +6983,4 @@ static int64_t find_sample (WavpackContext *wpc, void *infile, int64_t header_po
 }
 
 #endif
-
 

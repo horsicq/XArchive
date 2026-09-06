@@ -3165,6 +3165,13 @@ extern "C" uLong ZEXPORT adler32_combine64(uLong adler1, uLong adler2, z_off64_t
     return adler32_combine_(adler1, adler2, len2);
 }
 
+/* XArchive amalgamation boundary: Adler helpers belong to adler32.c. */
+#undef DO1
+#undef DO2
+#undef DO4
+#undef DO8
+#undef DO16
+
 /* ================ unit: crc32.c ================ */
 /* crc32.c -- compute the CRC-32 of a data stream
  * Copyright (C) 1995-2006, 2010, 2011, 2012, 2016 Mark Adler
@@ -3581,6 +3588,10 @@ extern "C" uLong ZEXPORT crc32_combine64(uLong crc1, uLong crc2, z_off64_t len2)
 {
     return crc32_combine_(crc1, crc2, len2);
 }
+
+/* XArchive amalgamation boundary: CRC helpers belong to crc32.c. */
+#undef DO1
+#undef DO8
 
 /* ================ unit: zutil.c ================ */
 /* zutil.c -- target dependent utility functions for the compression library

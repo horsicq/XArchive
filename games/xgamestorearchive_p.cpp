@@ -236,8 +236,9 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
     QPointer<XGameStoreArchiveBase> guardedThis(this);
     const FT fileType = getFileType();
     if (((fileType != FT_ZIP) &&
-         (fileType != FT_QUAKE_PAK) && (fileType != FT_DOOM_WAD) &&
-         (fileType != FT_BUILD_GRP) && (fileType != FT_DESCENT_HOG) &&
+          (fileType != FT_QUAKE_PAK) && (fileType != FT_DOOM_WAD) &&
+          (fileType != FT_BUILD_GRP) && (fileType != FT_DESCENT_HOG) && (fileType != FT_DESCENT_HOG2) &&
+          (fileType != FT_GOB) && (fileType != FT_GODOT_PCK) &&
          (fileType != FT_C64_T64) && (fileType != FT_APPLESINGLE) &&
          (fileType != FT_APPLE_2IMG) &&
          (fileType != FT_WINTERMUTE_DCP) &&
@@ -247,6 +248,7 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
          (fileType != FT_COMPACT_PRO) &&
          (fileType != FT_DISK_DOUBLER) &&
          (fileType != FT_DISK_DOUBLER_DDA2) &&
+         (fileType != FT_DISK_DOUBLER_DDAR) &&
          (fileType != FT_PYINSTALLER_SFX) &&
          (fileType != FT_LEGACY_CAT) &&
          (fileType != FT_KA_ARCHIVE) &&
@@ -342,6 +344,7 @@ XBinary::ENDIAN XGameStoreArchiveBase::getEndian()
         (fileType == FT_RESOURCE_FORK) || (fileType == FT_COMPACT_PRO) ||
         (fileType == FT_DISK_DOUBLER) ||
         (fileType == FT_DISK_DOUBLER_DDA2) ||
+        (fileType == FT_DISK_DOUBLER_DDAR) ||
         (fileType == FT_SHRINKWRAP_IMAGE) ||
         (fileType == FT_LPAK) || (fileType == FT_PAX) ||
         (fileType == FT_RNC) || (fileType == FT_MI10)) return ENDIAN_BIG;
@@ -359,6 +362,7 @@ QString XGameStoreArchiveBase::getFileFormatExt()
     if (fileType == FT_QUAKE_PAK) return QStringLiteral("pak");
     if (fileType == FT_DOOM_WAD) return QStringLiteral("wad");
     if (fileType == FT_BUILD_GRP) return QStringLiteral("grp");
+    if (fileType == FT_GODOT_PCK) return QStringLiteral("pck");
     if (fileType == FT_DESCENT_HOG) return QStringLiteral("hog");
     if (fileType == FT_C64_T64) return QStringLiteral("t64");
     if (fileType == FT_APPLESINGLE) return QStringLiteral("as");
@@ -370,6 +374,7 @@ QString XGameStoreArchiveBase::getFileFormatExt()
     if (fileType == FT_COMPACT_PRO) return QStringLiteral("cpt");
     if (fileType == FT_DISK_DOUBLER) return QStringLiteral("dd");
     if (fileType == FT_DISK_DOUBLER_DDA2) return QStringLiteral("dda2");
+    if (fileType == FT_DISK_DOUBLER_DDAR) return QStringLiteral("dd");
     if (fileType == FT_PYINSTALLER_SFX) return QStringLiteral("exe");
     if (fileType == FT_LEGACY_CAT) return QStringLiteral("cat");
     if (fileType == FT_KA_ARCHIVE) return QStringLiteral("arc");
@@ -433,6 +438,8 @@ QString XGameStoreArchiveBase::getFileFormatExtsString()
         return QStringLiteral("Doom WAD (*.wad)");
     if (fileType == FT_BUILD_GRP)
         return QStringLiteral("Build GRP (*.grp)");
+    if (fileType == FT_GODOT_PCK)
+        return QStringLiteral("Godot PCK package (*.pck)");
     if (fileType == FT_DESCENT_HOG)
         return QStringLiteral("Descent HOG (*.hog)");
     if (fileType == FT_C64_T64)
@@ -455,6 +462,8 @@ QString XGameStoreArchiveBase::getFileFormatExtsString()
         return QStringLiteral("DiskDoubler compressed file (*.dd)");
     if (fileType == FT_DISK_DOUBLER_DDA2)
         return QStringLiteral("DiskDoubler DDA2 archive (*.dda2;*.sea)");
+    if (fileType == FT_DISK_DOUBLER_DDAR)
+        return QStringLiteral("DiskDoubler DDAR archive (*.dd)");
     if (fileType == FT_PYINSTALLER_SFX)
         return QStringLiteral("PyInstaller executable archive (*.exe)");
     if (fileType == FT_LEGACY_CAT)
@@ -569,6 +578,8 @@ QString XGameStoreArchiveBase::getMIMEString()
         return QStringLiteral("application/x-doom-wad");
     if (fileType == FT_BUILD_GRP)
         return QStringLiteral("application/x-build-grp");
+    if (fileType == FT_GODOT_PCK)
+        return QStringLiteral("application/x-godot-pck");
     if (fileType == FT_DESCENT_HOG)
         return QStringLiteral("application/x-descent-hog");
     if (fileType == FT_C64_T64)
@@ -588,7 +599,8 @@ QString XGameStoreArchiveBase::getMIMEString()
     if (fileType == FT_COMPACT_PRO)
         return QStringLiteral("application/x-compact-pro");
     if ((fileType == FT_DISK_DOUBLER) ||
-        (fileType == FT_DISK_DOUBLER_DDA2))
+        (fileType == FT_DISK_DOUBLER_DDA2) ||
+        (fileType == FT_DISK_DOUBLER_DDAR))
         return QStringLiteral("application/x-diskdoubler");
     if (fileType == FT_PYINSTALLER_SFX)
         return QStringLiteral("application/x-pyinstaller");
@@ -733,6 +745,8 @@ QList<QString> XGameStoreArchiveBase::getSearchSignatures()
         listResult.append(QStringLiteral("'PWAD'"));
     } else if (fileType == FT_BUILD_GRP) {
         listResult.append(QStringLiteral("'KenSilverman'"));
+    } else if (fileType == FT_GODOT_PCK) {
+        listResult.append(QStringLiteral("'GDPC'"));
     } else if (fileType == FT_DESCENT_HOG) {
         listResult.append(QStringLiteral("'DHF'"));
     } else if (fileType == FT_C64_T64) {
@@ -747,6 +761,8 @@ QList<QString> XGameStoreArchiveBase::getSearchSignatures()
         listResult.append(QStringLiteral("ABCD0054"));
     } else if (fileType == FT_DISK_DOUBLER_DDA2) {
         listResult.append(QStringLiteral("'DDA2'"));
+    } else if (fileType == FT_DISK_DOUBLER_DDAR) {
+        listResult.append(QStringLiteral("'DDAR'"));
     } else if (fileType == FT_WINTERMUTE_DCP) {
         listResult.append(QStringLiteral("DEADC0DE'JUNK'"));
     } else if (fileType == FT_PYINSTALLER_PYZ) {

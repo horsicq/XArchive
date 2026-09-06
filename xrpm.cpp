@@ -621,7 +621,10 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         return false;
     }
 
-    // For gzip, strip the gzip header so the DEFLATE stream starts cleanly.
+    // RPM keeps its existing single-member gzip policy. GZIP's public unpack
+    // record is composite and deliberately carries no raw stream coordinates.
+    // Validate it with the caller's limits, then recover the verified physical
+    // member parts for RPM's raw-DEFLATE record and its footer CRC.
     if (pContext->compressMethod == HANDLE_METHOD_DEFLATE) {
         QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
         if (!guardedArchive || !guardedSource) {
@@ -633,7 +636,7 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         bool bGzipValid = payloadDevice.open(QIODevice::ReadOnly);
         XGzip gzip(&payloadDevice);
         if (bGzipValid) {
-            bGzipValid = gzip.initUnpack(&gzipState, gzip.getDefaultUnpackProperties(), pPdStruct);
+            bGzipValid = gzip.initUnpack(&gzipState, mapProperties, pPdStruct);
         }
         if (!guardedArchive || !guardedSource) {
             gzip.finishUnpack(&gzipState, nullptr);
@@ -641,22 +644,56 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             return false;
         }
 
-        XBinary::ARCHIVERECORD gzipRecord = {};
+        qint64 nStreamOffset = -1;
+        qint64 nStreamSize = -1;
+        qint64 nUncompressedSize = -1;
+        quint32 nCRC32 = 0;
         if (bGzipValid) {
-            gzipRecord = gzip.infoCurrent(&gzipState, pPdStruct);
+            const XBinary::ARCHIVERECORD gzipRecord = gzip.infoCurrent(&gzipState, pPdStruct);
             if (!guardedArchive || !guardedSource) {
                 gzip.finishUnpack(&gzipState, nullptr);
                 delete pContext;
                 return false;
             }
-            const qint64 nStreamOffset = gzipRecord.nStreamOffset;
-            const qint64 nStreamSize = gzipRecord.nStreamSize;
-            bGzipValid = (nStreamOffset >= 10) && (nStreamSize > 0) && (nStreamOffset <= pContext->nPayloadSize) &&
-                         (nStreamSize <= (pContext->nPayloadSize - nStreamOffset)) && ((nStreamOffset + nStreamSize) <= (pContext->nPayloadSize - 8));
-            // An RPM gzip payload owns one complete member.  Reject trailing
-            // bytes instead of silently treating a second member or junk as
-            // unauthenticated package data.
-            bGzipValid = bGzipValid && ((nStreamOffset + nStreamSize + 8) == pContext->nPayloadSize);
+            bool bSizeConverted = false;
+            nUncompressedSize = gzipRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE).toLongLong(&bSizeConverted);
+            bGzipValid = bSizeConverted && (nUncompressedSize >= 0) && XBinary::isUnpackOutputSizeAllowed(mapProperties, nUncompressedSize);
+            if (bGzipValid) {
+                // getFileParts describes the first fully checked member. Its
+                // footer must end at the payload boundary: a second member is
+                // not representable by RPM's single raw-DEFLATE record.
+                const QList<FPART> parts = gzip.getFileParts(FILEPART_REGION | FILEPART_FOOTER, 2, pPdStruct);
+                if (!guardedArchive || !guardedSource) {
+                    gzip.finishUnpack(&gzipState, nullptr);
+                    delete pContext;
+                    return false;
+                }
+                bGzipValid = (parts.size() == 2) && (parts.at(0).filePart == FILEPART_REGION) && (parts.at(1).filePart == FILEPART_FOOTER);
+                if (bGzipValid) {
+                    nStreamOffset = parts.at(0).nFileOffset;
+                    nStreamSize = parts.at(0).nFileSize;
+                    const qint64 nFooterOffset = parts.at(1).nFileOffset;
+                    bGzipValid = (nStreamOffset >= 10) && (nStreamSize > 0) && (nStreamOffset <= pContext->nPayloadSize) &&
+                                 (nStreamSize <= (pContext->nPayloadSize - nStreamOffset)) && (parts.at(1).nFileSize == 8) &&
+                                 (nFooterOffset == (nStreamOffset + nStreamSize)) && (nFooterOffset == (pContext->nPayloadSize - 8));
+                    if (bGzipValid) {
+                        const QByteArray footer = gzip.read_array_process(nFooterOffset, 8, pPdStruct);
+                        if (!guardedArchive || !guardedSource) {
+                            gzip.finishUnpack(&gzipState, nullptr);
+                            delete pContext;
+                            return false;
+                        }
+                        bGzipValid = (footer.size() == 8);
+                        if (bGzipValid) {
+                            nCRC32 = (quint32)(quint8)footer.at(0) | ((quint32)(quint8)footer.at(1) << 8) |
+                                     ((quint32)(quint8)footer.at(2) << 16) | ((quint32)(quint8)footer.at(3) << 24);
+                            const quint32 nISize = (quint32)(quint8)footer.at(4) | ((quint32)(quint8)footer.at(5) << 8) |
+                                                  ((quint32)(quint8)footer.at(6) << 16) | ((quint32)(quint8)footer.at(7) << 24);
+                            bGzipValid = ((quint32)(quint64)nUncompressedSize == nISize);
+                        }
+                    }
+                }
+            }
         }
 
         gzip.finishUnpack(&gzipState, nullptr);
@@ -669,13 +706,11 @@ bool XRPM::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
             return false;
         }
 
-        pContext->nPayloadOffset = nPayloadOffset + gzipRecord.nStreamOffset;
-        pContext->nPayloadSize = gzipRecord.nStreamSize;
-        pContext->nUncompressedSize = gzipRecord.mapProperties.value(FPART_PROP_UNCOMPRESSEDSIZE, -1).toLongLong();
-        if (gzipRecord.mapProperties.contains(FPART_PROP_RESULTCRC)) {
-            pContext->nCRC32 = gzipRecord.mapProperties.value(FPART_PROP_RESULTCRC).toUInt();
-            pContext->bHasCRC32 = true;
-        }
+        pContext->nPayloadOffset = nPayloadOffset + nStreamOffset;
+        pContext->nPayloadSize = nStreamSize;
+        pContext->nUncompressedSize = nUncompressedSize;
+        pContext->nCRC32 = nCRC32;
+        pContext->bHasCRC32 = true;
     } else if (pContext->compressMethod == HANDLE_METHOD_STORE) {
         QPointer<QIODevice> guardedSource(guardedArchive->getDevice());
         if (!guardedArchive || !guardedSource) {

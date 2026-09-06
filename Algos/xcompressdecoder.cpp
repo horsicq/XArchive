@@ -128,7 +128,7 @@ static bool compressAppendOutput(XBinary::DATAPROCESS_STATE *pState, quint8 *pOu
     return (*pnOutPos < nOutBufSize) || compressFlushOutput(pState, pOutBuf, pnOutPos);
 }
 
-bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct)
+static bool compressDecompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBinary::PDSTRUCT *pPdStruct, bool bLegacyNineBitWidth)
 {
     if (!pDecompressState || !pDecompressState->pDeviceInput || !pDecompressState->pDeviceOutput) {
         return false;
@@ -351,7 +351,7 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
             nNextCode++;
 
             // Increase code size when needed
-            if (nNextCode >= nMaxVal && nCodeBits < nMaxBits) {
+            if (nNextCode >= nMaxVal && (nCodeBits < nMaxBits || (bLegacyNineBitWidth && nMaxBits == 9 && nCodeBits == 9))) {
                 if (!compressAlignCodeGroup(&br, nCodeBits, &nGroupStartBits)) {
                     bResult = false;
                     break;
@@ -377,4 +377,90 @@ bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, 
     delete[] pStack;
 
     return bResult;
+}
+
+namespace {
+class CompressProbeOutput : public QIODevice {
+public:
+    explicit CompressProbeOutput(qint64 nLimit) : m_nLimit(nLimit) {}
+    bool bLimitReached = false;
+    bool seek(qint64 nPosition) override
+    {
+        // XBinary::_writeDevice reasserts the cursor before and after each
+        // write. A discard sink supports that current-position seek as well
+        // as the rewind used to start a fresh validation pass.
+        if ((nPosition != 0) && (nPosition != m_nWritten)) return false;
+        if (nPosition == 0) {
+            m_nWritten = 0;
+            bLimitReached = false;
+        }
+        return QIODevice::seek(nPosition);
+    }
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+    qint64 writeData(const char *, qint64 nSize) override
+    {
+        if ((nSize < 0) || (nSize > m_nLimit - m_nWritten)) {
+            bLimitReached = true;
+            return -1;
+        }
+        m_nWritten += nSize;
+        return nSize;
+    }
+private:
+    qint64 m_nLimit;
+    qint64 m_nWritten = 0;
+};
+}  // namespace
+
+bool XCompressDecoder::decompress(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pState || !pState->pDeviceInput || !pState->pDeviceOutput || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    QPointer<QIODevice> input(pState->pDeviceInput);
+    QPointer<QIODevice> destination(pState->pDeviceOutput);
+    bool bLegacyNineBitWidth = false;
+    // Historical compress -b9 writers can switch to ten-bit codes while their
+    // dictionary remains limited to 512 entries. Modern writers also produce
+    // valid fixed-nine-bit streams, so retain that interpretation whenever it
+    // validates. See Ancient's pinned CompressDecompressor.cpp, lines 85-110.
+    // A bounded discard pass chooses the compatibility path before any bytes
+    // or output-budget charges reach the caller's actual destination.
+    const bool bSequentialInput = input->isSequential();
+    if (input && destination && !bSequentialInput && (pState->nInputOffset >= 0) && (pState->nInputLimit >= -1)) {
+        const qint64 nSize = input->size();
+        if (input && (nSize >= pState->nInputOffset)) {
+            const qint64 nExtent = (pState->nInputLimit >= 0) ? pState->nInputLimit : nSize - pState->nInputOffset;
+            if ((nExtent >= 3) && (nExtent <= 4 * 1024 * 1024) && (nExtent <= nSize - pState->nInputOffset) && input->seek(pState->nInputOffset) && input) {
+                const QByteArray header = input->read(3);
+                if (input && (header.size() == 3) && (static_cast<quint8>(header.at(0)) == COMPRESS_MAGIC_0) &&
+                    (static_cast<quint8>(header.at(1)) == COMPRESS_MAGIC_1) &&
+                    ((static_cast<quint8>(header.at(2)) & 0x7f) == COMPRESS_MINBITS)) {
+                    CompressProbeOutput output(128 * 1024 * 1024);
+                    if (!output.open(QIODevice::WriteOnly)) return false;
+                    XBinary::DATAPROCESS_STATE probe = *pState;
+                    probe.pDeviceOutput = &output;
+                    probe.nInputLimit = nExtent;
+                    probe.nProcessedOffset = 0;
+                    probe.nProcessedLimit = -1;
+                    probe.spOutputBudget.clear();
+                    const bool bCanonical = compressDecompress(&probe, pPdStruct, false);
+                    if (!input || !destination || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+                    // If the bounded probe cannot cover this output, preserve
+                    // the existing streaming path and its configured limits.
+                    if (!bCanonical && !output.bLimitReached) {
+                        probe = *pState;
+                        probe.pDeviceOutput = &output;
+                        probe.nInputLimit = nExtent;
+                        probe.nProcessedOffset = 0;
+                        probe.nProcessedLimit = -1;
+                        probe.spOutputBudget.clear();
+                        if (!compressDecompress(&probe, pPdStruct, true)) return false;
+                        if (!input || !destination || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+                        bLegacyNineBitWidth = true;
+                    }
+                }
+            }
+        }
+    }
+    return input && destination && compressDecompress(pState, pPdStruct, bLegacyNineBitWidth);
 }

@@ -126,28 +126,37 @@ private:
 class PowerPackerReadWord
 {
 public:
-	PowerPackerReadWord(BackwardInputStream &inputStream,uint32_t key) noexcept :
+	PowerPackerReadWord(BackwardInputStream &inputStream,uint32_t key,bool allowPartial) noexcept :
 		_inputStream{inputStream},
-		_key{key}
+		_key{key},
+		_allowPartial{allowPartial}
 	{
 	}
 
 	std::pair<uint32_t,uint32_t> operator()()
 	{
-		return std::make_pair(_inputStream.readBE32()^_key,32U);
+        if (_allowPartial && _inputStream.available()<4U) {
+            const uint32_t bytes=static_cast<uint32_t>(_inputStream.available());
+            if (!bytes) throw CodecDecoder::DecompressionError();
+            uint32_t value=0;
+            for (uint32_t i=0;i<bytes;++i) value|=uint32_t(_inputStream.readByte())<<(i*8U);
+            return std::make_pair(value,bytes*8U);
+        }
+        return std::make_pair(_inputStream.readBE32()^_key,32U);
 	}
 
 private:
 	BackwardInputStream &_inputStream;
 	uint32_t _key;
+	bool _allowPartial;
 };
 
 class PowerPackerBitReader
 {
 public:
-	PowerPackerBitReader(BackwardInputStream &inputStream,LSBBitReader<BackwardInputStream> &bitReader,uint32_t key) noexcept :
+	PowerPackerBitReader(BackwardInputStream &inputStream,LSBBitReader<BackwardInputStream> &bitReader,uint32_t key,bool allowPartial) noexcept :
 		_bitReader{bitReader},
-		_readWord{inputStream,key}
+		_readWord{inputStream,key,allowPartial}
 	{
 	}
 
@@ -202,7 +211,7 @@ std::shared_ptr<XpkDecoder> PowerPackerDecoder::create(uint32_t hdr,uint32_t rec
 PowerPackerDecoder::PowerPackerDecoder(const ByteBuffer &packedData,bool exactSizeKnown,bool verify) :
 	_packedData{packedData}
 {
-	if (!exactSizeKnown || packedData.size()<16U)
+	if (!exactSizeKnown || packedData.size()<13U)
 		throw InvalidFormatError();		// no scanning support
 	_dataStart=_packedData.size()-4;
 
@@ -458,7 +467,7 @@ void PowerPackerDecoder::findKeyRound(BackwardInputStream &inputStream,LSBBitRea
 	}
 	if (failed) return;
 	// If not all bits are resolved, that is bad
-	if (keyMask==0xffff'ffffU)
+	if (keyMask==0xffffffffU)
 		throw DoneException(keyBits);
 }
 
@@ -510,12 +519,12 @@ void PowerPackerDecoder::decompressImpl(ByteBuffer &rawData,bool verify)
 
 	BackwardInputStream inputStream{_packedData,_isXPK?0:(_isObsfuscated?10U:8U),_dataStart};
 	LSBBitReader<BackwardInputStream> bitReader{inputStream};
-	PowerPackerBitReader dataReader{inputStream,bitReader,key};
+	PowerPackerBitReader dataReader{inputStream,bitReader,key,!_isObsfuscated};
 
 	dataReader.readBits(_startShift);
 	BackwardOutputStream outputStream{rawData,0,_rawSize};
 
-	for (;;)
+	while (!outputStream.eof())
 	{
 		if (!dataReader.readBit())
 		{

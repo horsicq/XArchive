@@ -2,10 +2,12 @@ INCLUDEPATH += $$PWD
 DEPENDPATH += $$PWD
 
 HEADERS += \
-    $$PWD/xarchiveconsole.h
+    $$PWD/xarchiveconsole.h \
+    $$PWD/xu3console.h
 
 SOURCES += \
-    $$PWD/xarchiveconsole.cpp
+    $$PWD/xarchiveconsole.cpp \
+    $$PWD/xu3console.cpp
 
 !contains(XCONFIG, xarchives) {
     XCONFIG += xarchives
