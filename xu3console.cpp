@@ -37,7 +37,7 @@ bool linked(const QString &path)
 }
 QString safeTypeDirectory(QString value)
 {
-    for (qsizetype i = 0; i < value.size(); ++i) {
+    for (qint32 i = 0; i < value.size(); ++i) {
         if (value.at(i).unicode() < 32 || QStringLiteral("\"*/:<>?\\|").contains(value.at(i))) value[i] = QLatin1Char('_');
     }
     while (value.endsWith(' ') || value.endsWith('.')) value.chop(1);
