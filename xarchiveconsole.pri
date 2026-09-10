@@ -1,13 +1,25 @@
 INCLUDEPATH += $$PWD
+INCLUDEPATH += $$PWD/archives
+INCLUDEPATH += $$PWD/compressors
+INCLUDEPATH += $$PWD/core
+INCLUDEPATH += $$PWD/diskimages
+INCLUDEPATH += $$PWD/documents
+INCLUDEPATH += $$PWD/filesystems
+INCLUDEPATH += $$PWD/games
+INCLUDEPATH += $$PWD/installers
+INCLUDEPATH += $$PWD/packages
+INCLUDEPATH += $$PWD/sfx
+INCLUDEPATH += $$PWD/tar
+INCLUDEPATH += $$PWD/transport
 DEPENDPATH += $$PWD
 
 HEADERS += \
-    $$PWD/xarchiveconsole.h \
-    $$PWD/xu3console.h
+    $$PWD/core/xarchiveconsole.h \
+    $$PWD/core/xlegacyconsole.h
 
 SOURCES += \
-    $$PWD/xarchiveconsole.cpp \
-    $$PWD/xu3console.cpp
+    $$PWD/core/xarchiveconsole.cpp \
+    $$PWD/core/xlegacyconsole.cpp
 
 !contains(XCONFIG, xarchives) {
     XCONFIG += xarchives

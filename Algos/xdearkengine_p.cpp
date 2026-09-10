@@ -160,6 +160,17 @@ bool XDearkEngine::extractToZip(const QString &inputPath,
             de_set_max_output_file_size(context, limits.maxFileSize);
             de_set_max_total_output_size(context, limits.maxTotalSize);
             de_set_ext_option(context, "loaddskf:toraw", "1");
+            // ISSUE-22. The intermediate ZIP needs a modification time in every
+            // member header, and for a source format that stores none the engine
+            // would otherwise stamp the CURRENT TIME - so listing the same
+            // archive twice produced different output and no listing could be
+            // hashed. This is the engine's own reproducible-output option
+            // ("archive:repro" with an explicit value), so a member that DOES
+            // carry a real timestamp still keeps it; only the synthesized case
+            // changes. 315532800 is 1980-01-01 00:00:00 UTC - the DOS epoch that
+            // ZIP counts from, which is also the floor the engine clamps to, and
+            // conventionally means "no timestamp recorded".
+            de_set_ext_option(context, "archive:timestamp", "315532800");
             de_set_disable_mods(context, SUPPORTED_MODULES, 1);
             de_set_input_filename(context, inputName.constData(), 0);
 

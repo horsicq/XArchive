@@ -49,8 +49,8 @@
 // The stream opens with a bare 9-bit code that is emitted as a literal byte and
 // becomes the initial previous-code; every CLEAR restarts that same opening.
 //
-// Reference: U3.unp.exe handler A141 ("Raw LZW15V", class xna, VMT 0x0053e8a8),
-// whose worker 0x0053e9b0 calls the codec at 0x00519f60.  U3 itself detects the
+// Reference: the reference implementation handler A141 ("Raw LZW15V", class xna, VMT 0x0053e8a8),
+// whose worker calls the codec. The reference implementation itself detects the
 // format with an 11-entry whitelist of literal 16-byte file prefixes, which is
 // pure overfitting to its own corpus; XRawLzw15v instead gates on a strict full
 // trial decode - see probe() below.

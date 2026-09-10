@@ -63,6 +63,10 @@ private:
 	const ByteBuffer		&_packedData;
 
 	size_t			_dataStart{0};
+	// 8 for PP11/PP20 and the game variants, 10 for the obfuscated PX20,
+	// 12 for PPLS - which is PP20 with one extra 32-bit field before the
+	// mode word
+	uint32_t		_headerSize{8};
 	size_t			_rawSize{0};
 	uint8_t			_startShift{0};
 	std::array<uint8_t,4>	_modeTable;

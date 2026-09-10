@@ -12,9 +12,9 @@
 namespace {
 
 const qint64 RSVK_BLOCK_HEADER_SIZE = 20;
-// U3's own ceilings (FUN_00691770 / FUN_00691d40).  The MTF symbol buffer is
+// The reference implementation's own ceilings. The MTF symbol buffer is
 // capped at 0xc87d2 bytes and the inverse-BWT index vector at 0x643e8 entries;
-// keeping both makes this decoder accept exactly the blocks U3 accepts.
+// keeping both makes this decoder accept exactly the blocks the reference implementation accepts.
 const qint32 RSVK_MAX_MTF = 0xc87d2;
 const qint32 RSVK_MAX_ROWS = 0x643e8;
 const qint32 RSVK_SYMBOL_EOB = 0x101;
@@ -53,7 +53,7 @@ quint32 rsvkCrc32(const uchar *pData, qint64 nSize)
 }
 
 // MSB-first bit reader; reading past the end yields zero bits, which is what
-// U3's FUN_00486b90 does when the bounded sub-stream is exhausted.
+// The reference implementation does when the bounded sub-stream is exhausted.
 class RSVKBits {
 public:
     RSVKBits(const uchar *pData, qint64 nSize) : m_pData(pData), m_nSize(nSize)

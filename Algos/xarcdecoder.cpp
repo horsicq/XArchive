@@ -392,9 +392,9 @@ bool arcDecodeSqueeze(ArcSource *pSource, ArcSink *pSink, XBinary::PDSTRUCT *pPd
 }
 
 
-// U3 004e8260..004e8790: original 12-bit hash-table crunch. Unlike the
+// original 12-bit hash-table crunch. Unlike the
 // later ARC LZW method, literal codes are themselves hashed and there is no
-// CLEAR code. Keep U3's dictionary and pending nibble local to this decode.
+// CLEAR code. Keep the reference implementation's dictionary and pending nibble local to this decode.
 struct ArcHashEntry {
     quint16 next = 0;
     qint16 prefix = -1;

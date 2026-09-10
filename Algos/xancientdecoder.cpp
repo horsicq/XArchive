@@ -75,7 +75,7 @@ XAncientDecoder::TYPE XAncientDecoder::identify(const QByteArray &data)
         return TYPE_RNC;
     if (fourCC(data, "TPWM")) return TYPE_TPWM;
     static const char *const powerPackerIds[] = {
-        "PP11", "PP20", "PX20", "CHFC", "DEN!", "DXS9", "H.D.", "RVV!"};
+        "PP11", "PP20", "PX20", "PPLS", "CHFC", "DEN!", "DXS9", "H.D.", "RVV!"};
     for (const char *id : powerPackerIds)
         if (fourCC(data, id)) return TYPE_POWERPACKER;
     if (data.size() >= 2) {

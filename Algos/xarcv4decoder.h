@@ -45,7 +45,7 @@
 //     whenever the uncle is lighter.
 //   * When the root weight reaches exactly 2000 every weight is halved.
 //
-// Reference: U3 handler "ARCV4" (class dta), decompressor at VA 0x00577010
+// Reference: handler "ARCV4" (class dta), decompressor at VA 0x00577010
 // with the model at 0x005769b0 / 0x00576c20 / 0x00576ae0 / 0x00576e70 /
 // 0x00576f40 / 0x00576fc0.
 class XARCV4Decoder {

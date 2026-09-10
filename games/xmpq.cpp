@@ -20,7 +20,7 @@
  */
 #include "xmpq.h"
 
-#include "../xdecompress.h"
+#include "xdecompress.h"
 
 #include <QBuffer>
 #include <QHash>

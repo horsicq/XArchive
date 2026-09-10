@@ -1,4 +1,4 @@
-// Functional translation of U3 0065d610 and 0065cf90.
+// Functional translation of the reference implementation.
 #include "xpboarchive.h"
 #include <QTemporaryFile>
 #include <QCryptographicHash>
@@ -62,7 +62,7 @@ bool decodePbo(const QByteArray &input, qint64 offset, qint64 packed, qint64 siz
             if (buffered == 4096 && !flushPbo(output, &buffered, writer, progress)) return false;
         }
     }
-    // U3 ends at the declared output length. The native path additionally
+    // The reference implementation ends at the declared output length. The native path additionally
     // verifies the four-byte additive checksum and exact packet extent.
     return pos == end && checksum == u32(input, end) && (!buffered || flushPbo(output, &buffered, writer, progress)) && XBinary::isPdStructNotCanceled(progress);
 }

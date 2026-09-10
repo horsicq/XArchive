@@ -27,7 +27,7 @@
 //     every reference that points before the start of the member land on
 //     never-written ring bytes, and the whole ring is primed with 0x20.
 //
-// Reference: U3 handler "JGPAK" (class adb, entry A487), worker at VA
+// Reference: handler "JGPAK" (class adb, entry A487), worker at VA
 // 0x0061eb80, decompressor entry at 0x0061ea80 calling the shared LZHUF engine
 // at 0x004edae0 with (windowMode=1, lengthProfile=1, threshold=0, endMarker=0)
 // -- i.e. 12-bit positions, F=60, THRESHOLD=2, no end marker.

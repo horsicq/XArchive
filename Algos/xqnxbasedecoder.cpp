@@ -25,7 +25,7 @@
 namespace {
 
 // Largest match offset the original accepts before it declares the stream
-// corrupt (U3 0x00612830: "if (0x1000002 < m_off) fail").
+// corrupt fail").
 const quint32 QNXB_MAX_M_OFF = 0x1000002U;
 // A block length word is a u16, so no single stream can be longer than this.
 const qint32 QNXB_MAX_BLOCK = 0xffff;

@@ -1,4 +1,4 @@
-// Functional translation of U3 recognizer 00601de0 and extractor 00601e20.
+// Reconstruction of the format recognizer and extractor.
 #include "xhog2.h"
 #include <cstring>
 
@@ -21,7 +21,7 @@ bool XHOG2::scanFormat(QList<ENTRY> *entries, qint64 *archiveEnd, PDSTRUCT *prog
     if (!owner || header.size() != 68 || std::memcmp(header.constData(), "HOG2", 4)) return false;
     const uchar *h = reinterpret_cast<const uchar *>(header.constData());
     const quint32 count = readLE32(h + 4), firstData = readLE32(h + 8);
-    // U3's catalogue recognizer requires at least one entry and exact adjacency
+    // The reference implementation's catalogue recognizer requires at least one entry and exact adjacency
     // of header, complete 48-byte table, and the first stored payload.
     if (!count || count > MAX_RECORDS || qint64(firstData) != 68 + qint64(count) * 48 || !rangeWithin(total, 68, qint64(count) * 48)) return false;
     QSet<QString> usedFiles, usedDirectories;

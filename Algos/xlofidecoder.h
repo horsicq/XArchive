@@ -34,7 +34,7 @@
 // exists in the reference corpus, so XLOFI refuses it outright rather than
 // guessing at its segment framing.
 //
-// Reference: U3 handler "LOFI" (class yfa, entry A431), detector at VA
+// Reference: handler "LOFI" (class yfa, entry A431), detector at VA
 // 0x004432a0 with the name/geometry checks at 0x00443240.
 class XLOFIDecoder {
 public:

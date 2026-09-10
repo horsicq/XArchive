@@ -255,7 +255,7 @@ bool XHZLDecoder::decode(const QByteArray &baPacked, qint32 nUncompressedSize,
         if ((nPosition < 0) || reader.isOverrun()) return false;
         qint32 nLength = nCharacter + HZL_THRESHOLD - 0xff;
         if ((nLength < 3) || (nLength > HZL_F + HZL_THRESHOLD)) return false;
-        // U3 clamps a final overlong match to the remaining plaintext instead
+        // The reference implementation clamps a final overlong match to the remaining plaintext instead
         // of rejecting the member; the stream has no stop code, so the last
         // match legitimately overshoots.
         if (nLength > (nUncompressedSize - nProduced)) {

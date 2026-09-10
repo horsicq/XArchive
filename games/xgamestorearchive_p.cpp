@@ -285,6 +285,7 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
          (fileType != FT_FLS) &&
          (fileType != FT_RTPATCH) &&
          (fileType != FT_RNC) &&
+         (fileType != FT_LARC_PFX) &&
          (fileType != FT_MI10) &&
          (fileType != FT_DN_ARCHIVE) &&
          (fileType != FT_FPAK) &&
@@ -297,7 +298,8 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
          (fileType != FT_IS_SKIN) &&
          (fileType != FT_MACBINARY) && (fileType != FT_RESOURCE_FORK) &&
          (fileType != FT_CPM_LBR) &&
-         (fileType != FT_PARSEC_ARCHIVE) && (fileType != FT_PMM)) ||
+         (fileType != FT_PARSEC_ARCHIVE) && (fileType != FT_PMM) &&
+         (fileType != FT_HE_TLKB)) ||
         !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -347,7 +349,8 @@ XBinary::ENDIAN XGameStoreArchiveBase::getEndian()
         (fileType == FT_DISK_DOUBLER_DDAR) ||
         (fileType == FT_SHRINKWRAP_IMAGE) ||
         (fileType == FT_LPAK) || (fileType == FT_PAX) ||
-        (fileType == FT_RNC) || (fileType == FT_MI10)) return ENDIAN_BIG;
+        (fileType == FT_RNC) || (fileType == FT_MI10) ||
+        (fileType == FT_LARC_PFX)) return ENDIAN_BIG;
     return ENDIAN_LITTLE;
 }
 
@@ -397,6 +400,7 @@ QString XGameStoreArchiveBase::getFileFormatExt()
     if (fileType == FT_STUNTS_DSI) return QStringLiteral("pes");
     if (fileType == FT_FINSTALL_ARCHIVE) return QStringLiteral("disk");
     if (fileType == FT_IS_STORED) return QStringLiteral("bin");
+    if (fileType == FT_HE_TLKB) return QStringLiteral("tlk");
     if (fileType == FT_INSTALLSHIELD3_ARCHIVE) return QStringLiteral("z");
     if (fileType == FT_EMT_IMAGE) return QStringLiteral("emt");
     if (fileType == FT_GPFPACK) return QStringLiteral("gpf");
@@ -411,6 +415,7 @@ QString XGameStoreArchiveBase::getFileFormatExt()
     if (fileType == FT_FLS) return QStringLiteral("fls");
     if (fileType == FT_RTPATCH) return QStringLiteral("rtp");
     if (fileType == FT_RNC) return QStringLiteral("rnc");
+    if (fileType == FT_LARC_PFX) return QStringLiteral("prg");
     if (fileType == FT_MI10) return QStringLiteral("mi");
     if (fileType == FT_DN_ARCHIVE) return QStringLiteral("138");
     if (fileType == FT_FPAK) return QStringLiteral("pak");
@@ -508,6 +513,8 @@ QString XGameStoreArchiveBase::getFileFormatExtsString()
         return QStringLiteral("F Install 2 archive (DISK*)");
     if (fileType == FT_IS_STORED)
         return QStringLiteral("IS stored/XOR data");
+    if (fileType == FT_HE_TLKB)
+        return QStringLiteral("Humongous Entertainment TLKB speech pack (*.tlk;*.he2)");
     if (fileType == FT_INSTALLSHIELD3_ARCHIVE)
         return QStringLiteral("InstallShield 3 archive (*.z;*.lib;*.1;*.2;*.3;*.4;*.5;*.6)");
     if (fileType == FT_EMT_IMAGE)
@@ -536,6 +543,8 @@ QString XGameStoreArchiveBase::getFileFormatExtsString()
         return QStringLiteral("Pocket Soft RTPatch package (*.rtp;*.stp)");
     if (fileType == FT_RNC)
         return QStringLiteral("Rob Northen multi-file archive (*.rnc)");
+    if (fileType == FT_LARC_PFX)
+        return QStringLiteral("LArc PFX self-extracting Atari program (*.prg;*.tos;*.ttp;*.acc)");
     if (fileType == FT_MI10)
         return QStringLiteral("Amiga MI10 crunched block chain (*.mi)");
     if (fileType == FT_DN_ARCHIVE)
@@ -646,6 +655,8 @@ QString XGameStoreArchiveBase::getMIMEString()
         return QStringLiteral("application/x-finstall-archive");
     if (fileType == FT_IS_STORED)
         return QStringLiteral("application/x-is-stored");
+    if (fileType == FT_HE_TLKB)
+        return QStringLiteral("application/x-he-tlkb");
     if (fileType == FT_INSTALLSHIELD3_ARCHIVE)
         return QStringLiteral("application/x-installshield3-archive");
     if (fileType == FT_EMT_IMAGE)
@@ -674,6 +685,8 @@ QString XGameStoreArchiveBase::getMIMEString()
         return QStringLiteral("application/x-rtpatch");
     if (fileType == FT_RNC)
         return QStringLiteral("application/x-rnc");
+    if (fileType == FT_LARC_PFX)
+        return QStringLiteral("application/x-larc-pfx");
     if (fileType == FT_MI10)
         return QStringLiteral("application/x-amiga-mi10");
     if (fileType == FT_DN_ARCHIVE)
@@ -825,6 +838,8 @@ QList<QString> XGameStoreArchiveBase::getSearchSignatures()
         listResult.append(QStringLiteral("'MI10'"));
     } else if (fileType == FT_DN_ARCHIVE) {
         listResult.append(QStringLiteral("848D0102"));
+    } else if (fileType == FT_HE_TLKB) {
+        listResult.append(QStringLiteral("3D25222B"));
     } else if (fileType == FT_FPAK) {
         listResult.append(QStringLiteral("'FPAK'|'FPAC'"));
     } else if (fileType == FT_SOFTPAQ1_SFX) {
@@ -969,6 +984,10 @@ XBinary::ARCHIVERECORD XGameStoreArchiveBase::infoCurrent(
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, entry.nDataSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD,
                                 entry.handleMethod);
+    if (!entry.baCompressProperties.isEmpty()) {
+        result.mapProperties.insert(FPART_PROP_COMPRESSPROPERTIES,
+                                    entry.baCompressProperties);
+    }
     if (entry.bIsSolid) {
         if ((entry.nSubstreamOffset < 0) ||
             (entry.nStreamUnpackedSize < 0) ||
@@ -1082,6 +1101,7 @@ XGameStoreArchiveBase::getAvailableFPARTProperties()
     listResult.append(FPART_PROP_HEADER_SIZE);
     listResult.append(FPART_PROP_FILEMODE);
     listResult.append(FPART_PROP_HANDLEMETHOD);
+    listResult.append(FPART_PROP_COMPRESSPROPERTIES);
     listResult.append(FPART_PROP_ISSOLID);
     listResult.append(FPART_PROP_SUBSTREAMOFFSET);
     listResult.append(FPART_PROP_STREAMUNPACKEDSIZE);

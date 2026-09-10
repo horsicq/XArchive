@@ -1,4 +1,4 @@
-// U3 archive[563] PBO; see xpboarchive.PROVENANCE.md.
+// The reference implementation PBO.
 #ifndef XPBOARCHIVE_H
 #define XPBOARCHIVE_H
 #include "xarchive.h"

@@ -53,7 +53,7 @@
 // until the declared uncompressed size is produced.  There is no LZ stage and
 // no post-filter.
 //
-// Verified byte-exact against U3 on all 82 corpus members.
+// Verified byte-exact against the reference implementation on all 82 corpus members.
 class XGasHuffDecoder : public QObject {
     Q_OBJECT
 

@@ -74,6 +74,13 @@ protected:
         qint64 nDataSize = 0;
         qint64 nUncompressedSize = -1;
         HANDLE_METHOD handleMethod = HANDLE_METHOD_STORE;
+        // Per-member codec parameters for the handful of methods whose profile
+        // cannot be expressed by the handle alone (FPAK carries a PKZIP method
+        // and general-purpose flag word).  Empty means "this codec needs none":
+        // it must stay empty rather than carry a plausible default, because the
+        // decoder side falls back to a REAL profile when the property is
+        // absent, so a reader that forgets one decodes into silent garbage.
+        QByteArray baCompressProperties;
         qint64 nSubstreamOffset = -1;
         qint64 nStreamUnpackedSize = -1;
         qint64 nSolidFolderIndex = -1;

@@ -24,12 +24,12 @@
 //     ring prefilled with 0x20, ring cursor starts at 0 (not N - F)
 //     position code   = classic 6-low-bit table (d_code << 6 | i & 0x3f),
 //                       i.e. distances stay below 4096 even though the ring
-//                       is 8 KiB, which is what U3's FUN_004edae0 does
+// is 8 KiB, which is what the reference implementation does
 //
 // Decoding therefore always runs to the caller-supplied plaintext length; the
-// stream carries no terminator.  Ported from U3.unp.exe FUN_004edae0 /
-// FUN_004ed030 / FUN_004ed820 / FUN_004ed8e0, and validated byte-exact against
-// U3's own extraction over the whole HZL (5/5) and JBF (39/39) corpora.
+// stream carries no terminator. Ported from the reference implementation /
+// The reference implementation, and validated byte-exact against
+// The reference implementation's own extraction over the whole HZL (5/5) and JBF (39/39) corpora.
 class XHZLDecoder {
 public:
     static bool decode(const QByteArray &baPacked, qint32 nUncompressedSize,

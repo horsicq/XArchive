@@ -6,13 +6,28 @@
 #define XLEGACYDISKDECODER_H
 
 #include <QByteArray>
+#include <QList>
 #include <QString>
 
 class XLegacyDiskDecoder
 {
 public:
-    struct RESULT {
+    // A container can hold more than one image: QRST version 5 carries a fixed
+    // pair of image descriptors, so a decode result is a LIST, never a single
+    // buffer.  A single-image driver (IMD, QRST version 1) returns one entry
+    // with an empty name, which tells the reader to name the member after the
+    // archive itself.
+    struct IMAGE {
         QByteArray rawImage;
+        QString name;
+
+        IMAGE()
+        {
+        }
+    };
+
+    struct RESULT {
+        QList<IMAGE> images;
         QString driver;
         qint32 cylinders = 0;
         qint32 heads = 0;

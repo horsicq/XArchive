@@ -29,8 +29,8 @@
 // not interchangeable blobs: two of the five member kinds are images in a
 // game-specific encoding that is meaningless without the archive's own 256
 // colour palette (itself one of the members).  classify() reproduces exactly
-// the test U3 applies - a bounded trial decode of the row-RLE - and decode()
-// turns the two image kinds into the Windows bitmaps U3 writes.  The three
+// the test the reference implementation applies - a bounded trial decode of the row-RLE - and decode
+// turns the two image kinds into the Windows bitmaps the reference implementation writes. The three
 // remaining kinds are byte-for-byte copies and are published as
 // HANDLE_METHOD_STORE instead of reaching this decoder at all.
 class XSettlersFTDecoder : public QObject {

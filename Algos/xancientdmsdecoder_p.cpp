@@ -107,7 +107,10 @@ DmsDecoder::DmsDecoder(const ByteBuffer &packedData,bool verify) :
 	}
 	uint32_t trackSize{(_isHD)?22528U:11264U};
 	_rawOffset=minTrack*trackSize;
-	if (minTrack>=numTracks)
+	// numTracks is the highest track INDEX, not a count, so a single-track
+	// image legitimately has minTrack == numTracks; only minTrack > numTracks
+	// means no track was recorded at all
+	if (minTrack>numTracks)
 		throw InvalidFormatError();
 	_minTrack=minTrack;
 	_rawSize=(numTracks-minTrack)*trackSize+lastTrackSize;

@@ -40,10 +40,10 @@
  *   8  crunched        LZW, dynamic width -> run-length
  *   9  squashed        LZW, dynamic width, no run-length stage
  *
- * Methods 5-7 use a dedicated U3-derived hash-table decoder.  They are ARC's
+ * Methods 5-7 use a dedicated dedicated hash-table decoder. They are ARC's
  * original "crunch": strings are reconstructed by probing a hash table, codes
  * are nybble-packed, there is no CLEAR, and because init_tab hashes even the
- * 256 atomic codes a literal's code is not its byte value. See U3_ARC_PORT.md
+ * 256 atomic codes a literal's code is not its byte value..
  * for the recovered source addresses and validation provenance.
  *
  * The two stages are composed inside one decoder rather than being chained

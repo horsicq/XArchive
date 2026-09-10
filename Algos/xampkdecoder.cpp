@@ -286,7 +286,8 @@ struct AmpkLzari {
 
 bool XAMPKDecoder::decodeLZSS(const QByteArray &baPacked,
                               qint64 nUncompressedSize,
-                              QByteArray *pbaUnpacked)
+                              QByteArray *pbaUnpacked,
+                              bool bAllowTruncated)
 {
     if (!pbaUnpacked || (nUncompressedSize < 0) ||
         (nUncompressedSize > AMPK_MAX_UNPACKED_SIZE)) {
@@ -320,9 +321,16 @@ bool XAMPKDecoder::decodeLZSS(const QByteArray &baPacked,
     quint32 nFlags = 0;
     qint32 nFlagBits = 0;
 
+    // Three input-exhaustion points.  With bAllowTruncated they end the stream
+    // at whatever has been produced so far; without it they are a hard failure.
+    bool bTruncated = false;
     while (nOutPosition < nUncompressedSize) {
         if (nFlagBits == 0) {
-            if (nInPosition >= nInSize) return false;
+            if (nInPosition >= nInSize) {
+                if (!bAllowTruncated) return false;
+                bTruncated = true;
+                break;
+            }
             nFlags = pIn[nInPosition++];
             nFlagBits = 8;
         }
@@ -331,13 +339,21 @@ bool XAMPKDecoder::decodeLZSS(const QByteArray &baPacked,
         --nFlagBits;
 
         if (bLiteral) {
-            if (nInPosition >= nInSize) return false;
+            if (nInPosition >= nInSize) {
+                if (!bAllowTruncated) return false;
+                bTruncated = true;
+                break;
+            }
             const quint8 nByte = pIn[nInPosition++];
             pOut[nOutPosition++] = static_cast<char>(nByte);
             pRing[nRing] = nByte;
             nRing = (nRing + 1) & AMPK_RING_MASK;
         } else {
-            if (nInPosition + 1 >= nInSize) return false;
+            if (nInPosition + 1 >= nInSize) {
+                if (!bAllowTruncated) return false;
+                bTruncated = true;
+                break;
+            }
             const quint32 nFirst = pIn[nInPosition];
             const quint32 nSecond = pIn[nInPosition + 1];
             nInPosition += 2;
@@ -352,6 +368,13 @@ bool XAMPKDecoder::decodeLZSS(const QByteArray &baPacked,
                 nRing = (nRing + 1) & AMPK_RING_MASK;
             }
         }
+    }
+
+    if (bTruncated) {
+        // Publish exactly what the stream carried, never the zero padding the
+        // declared size reserved.
+        baOut.resize(static_cast<qint32>(nOutPosition));
+        if (baOut.size() != nOutPosition) return false;
     }
 
     *pbaUnpacked = baOut;

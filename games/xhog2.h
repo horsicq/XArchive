@@ -1,4 +1,4 @@
-// U3 archive[413] HOG2; see xhog2.PROVENANCE.md.
+// The reference implementation HOG2.
 #ifndef XHOG2_H
 #define XHOG2_H
 #include "xgamestorearchive_p.h"

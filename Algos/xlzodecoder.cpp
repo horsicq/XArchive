@@ -389,6 +389,18 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
         return false;
     }
 
+    // A .lzo file may hold SEVERAL streams written end to end, each with its own
+    // header and its own flags, and their outputs concatenate.  The running
+    // total therefore lives outside this loop while everything the header
+    // configures is re-read per stream.
+    // These describe the WHOLE output, not one stream, so they are read once.
+    const bool bHasExpectedOutput = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
+    const qint64 nExpectedOutput = bHasExpectedOutput ? pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() : -1;
+    if (bHasExpectedOutput && (nExpectedOutput < 0)) return false;
+
+    qint64 nTotalOutput = 0;
+    for (;;) {
+
     // Read header fields (big-endian)
     LZOP_CHECKSUMS headerChecksums;
     quint16 nVersion = 0;
@@ -455,11 +467,6 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
     const bool bHasCrc32Uncompressed = (nFlags & LZOP_F_CRC32_D) != 0;
     const bool bHasAdler32Compressed = (nFlags & LZOP_F_ADLER32_C) != 0;
     const bool bHasCrc32Compressed = (nFlags & LZOP_F_CRC32_C) != 0;
-    const bool bHasExpectedOutput = pDecompressState->mapProperties.contains(XBinary::FPART_PROP_UNCOMPRESSEDSIZE);
-    const qint64 nExpectedOutput = bHasExpectedOutput ? pDecompressState->mapProperties.value(XBinary::FPART_PROP_UNCOMPRESSEDSIZE).toLongLong() : -1;
-    if (bHasExpectedOutput && (nExpectedOutput < 0)) return false;
-
-    qint64 nTotalOutput = 0;
 
     // Process blocks
     for (;;) {
@@ -523,6 +530,15 @@ bool XLZODecoder::decompress(XBinary::DATAPROCESS_STATE *pDecompressState, XBina
             return false;
 
         nTotalOutput += nUncompressedBlockSize;
+    }
+
+    if ((pDecompressState->nInputLimit != -1) && (pDecompressState->nCountInput >= pDecompressState->nInputLimit)) break;
+    // Anything still there has to be another stream, magic and all - trailing
+    // bytes that are not one remain a hard error.
+    if (!lzoReadExact(pDecompressState, (char *)aMagic, sizeof(aMagic), pPdStruct) || (memcmp(aMagic, nExpectedMagic, sizeof(aMagic)) != 0)) {
+        return false;
+    }
+
     }
 
     return lzoIsExactInputEnd(pDecompressState) && !pDecompressState->bReadError && !pDecompressState->bWriteError && XBinary::isPdStructNotCanceled(pPdStruct) &&

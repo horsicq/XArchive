@@ -8,6 +8,18 @@
 # USE_ARCHIVE keeps gating those remaining formats.
 
 INCLUDEPATH += $$PWD
+INCLUDEPATH += $$PWD/archives
+INCLUDEPATH += $$PWD/compressors
+INCLUDEPATH += $$PWD/core
+INCLUDEPATH += $$PWD/diskimages
+INCLUDEPATH += $$PWD/documents
+INCLUDEPATH += $$PWD/filesystems
+INCLUDEPATH += $$PWD/games
+INCLUDEPATH += $$PWD/installers
+INCLUDEPATH += $$PWD/packages
+INCLUDEPATH += $$PWD/sfx
+INCLUDEPATH += $$PWD/tar
+INCLUDEPATH += $$PWD/transport
 DEPENDPATH += $$PWD
 INCLUDEPATH += $$PWD/Algos
 DEPENDPATH += $$PWD/Algos
@@ -94,10 +106,53 @@ HEADERS += \
     $$PWD/Algos/xlzodecoder.h \
     $$PWD/Algos/xcompressdecoder.h \
     $$PWD/../Formats/xarchive.h \
-    $$PWD/xcompress.h \
-    $$PWD/xdecompress.h \
+    $$PWD/compressors/xcompress.h \
+    $$PWD/core/xdecompress.h \
     $$PWD/Algos/xaldusdecoder.h \
     $$PWD/Algos/xampkdecoder.h \
+    $$PWD/Algos/xclaydecoder.h \
+    $$PWD/Algos/xcopyqmdecoder.h \
+    $$PWD/Algos/xdiskimagedecoder.h \
+    $$PWD/Algos/xchieflzdecoder.h \
+    $$PWD/Algos/xhadecoder.h \
+    $$PWD/Algos/xlimdecoder.h \
+    $$PWD/Algos/xaindecoder.h \
+    $$PWD/Algos/xobfuscationdecoder.h \
+    $$PWD/Algos/xuleaddecoder.h \
+    $$PWD/Algos/xtopspeeddecoder.h \
+    $$PWD/Algos/xpakleodecoder.h \
+    $$PWD/Algos/xtpsdecoder.h \
+    $$PWD/Algos/xzxzipdecoder.h \
+    $$PWD/Algos/ximpdecoder.h \
+    $$PWD/Algos/xsfpackdecoder.h \
+    $$PWD/diskimages/xvmdkarchive.h \
+    $$PWD/Algos/xsqxdecoder.h \
+    $$PWD/Algos/xvmarcdecoder.h \
+    $$PWD/Algos/xtersedecoder.h \
+    $$PWD/Algos/xsquashfsdecoder.h \
+    $$PWD/Algos/xvmssavesetdecoder.h \
+    $$PWD/Algos/xtarx2decoder.h \
+    $$PWD/Algos/xpanoramadecoder.h \
+    $$PWD/Algos/xziedecoder.h \
+    $$PWD/Algos/xteledeskdecoder.h \
+    $$PWD/Algos/xqdadecoder.h \
+    $$PWD/Algos/xc64wraptordecoder.h \
+    $$PWD/Algos/xvmsdatabasedecoder.h \
+    $$PWD/Algos/xtarx1decoder.h \
+    $$PWD/Algos/xvmspcsidecoder.h \
+    $$PWD/Algos/xzcmpdecoder.h \
+    $$PWD/Algos/xzpakdecoder.h \
+    $$PWD/Algos/xztcdecoder.h \
+    $$PWD/Algos/xwintersoftdecoder.h \
+    $$PWD/Algos/xtivolidecoder.h \
+    $$PWD/Algos/xzoomdecoder.h \
+    $$PWD/Algos/xwpkdecoder.h \
+    $$PWD/Algos/xlzhufdecoder.h \
+    $$PWD/Algos/xti99arcdecoder.h \
+    $$PWD/Algos/xxeditpackdecoder.h \
+    $$PWD/Algos/xkboomdecoder.h \
+    $$PWD/Algos/xcmpdecoder.h \
+    $$PWD/Algos/xsharedlzwdecoder.h \
     $$PWD/Algos/xarcv2decoder.h \
     $$PWD/Algos/xasymetrixdecoder.h \
     $$PWD/Algos/xborlandpackdecoder.h \
@@ -127,6 +182,7 @@ HEADERS += \
     $$PWD/Algos/xhuffdecoder.h \
     $$PWD/Algos/xlzhcxpdecoder.h \
     $$PWD/Algos/xdsquantumdecoder.h \
+    $$PWD/Algos/xgenteedecoder.h \
     $$PWD/Algos/xpktdecoder.h \
     $$PWD/Algos/xhdcopydecoder.h \
     $$PWD/Algos/xstylusdecoder.h \
@@ -145,7 +201,7 @@ HEADERS += \
     $$PWD/Algos/xhzldecoder.h \
     $$PWD/Algos/xlofidecoder.h \
     $$PWD/Algos/xinfogramespakdecoder.h \
-    $$PWD/xcompresseddevice.h \
+    $$PWD/core/xcompresseddevice.h \
     $$PWD/../Formats/archives/xtar.h \
     $$PWD/../Formats/archives/xtarcompressed.h \
     $$PWD/../Formats/archives/xzip.h \
@@ -231,10 +287,53 @@ SOURCES += \
     $$PWD/Algos/wavpackdeclib.cpp \
     $$PWD/Algos/lz5lizarddeclib.cpp \
     $$PWD/../Formats/xarchive.cpp \
-    $$PWD/xcompress.cpp \
-    $$PWD/xdecompress.cpp \
+    $$PWD/compressors/xcompress.cpp \
+    $$PWD/core/xdecompress.cpp \
     $$PWD/Algos/xaldusdecoder.cpp \
     $$PWD/Algos/xampkdecoder.cpp \
+    $$PWD/Algos/xclaydecoder.cpp \
+    $$PWD/Algos/xcopyqmdecoder.cpp \
+    $$PWD/Algos/xdiskimagedecoder.cpp \
+    $$PWD/Algos/xchieflzdecoder.cpp \
+    $$PWD/Algos/xhadecoder.cpp \
+    $$PWD/Algos/xlimdecoder.cpp \
+    $$PWD/Algos/xaindecoder.cpp \
+    $$PWD/Algos/xobfuscationdecoder.cpp \
+    $$PWD/Algos/xuleaddecoder.cpp \
+    $$PWD/Algos/xtopspeeddecoder.cpp \
+    $$PWD/Algos/xpakleodecoder.cpp \
+    $$PWD/Algos/xtpsdecoder.cpp \
+    $$PWD/Algos/xzxzipdecoder.cpp \
+    $$PWD/Algos/ximpdecoder.cpp \
+    $$PWD/Algos/xsfpackdecoder.cpp \
+    $$PWD/diskimages/xvmdkarchive.cpp \
+    $$PWD/Algos/xsqxdecoder.cpp \
+    $$PWD/Algos/xvmarcdecoder.cpp \
+    $$PWD/Algos/xtersedecoder.cpp \
+    $$PWD/Algos/xsquashfsdecoder.cpp \
+    $$PWD/Algos/xvmssavesetdecoder.cpp \
+    $$PWD/Algos/xtarx2decoder.cpp \
+    $$PWD/Algos/xpanoramadecoder.cpp \
+    $$PWD/Algos/xziedecoder.cpp \
+    $$PWD/Algos/xteledeskdecoder.cpp \
+    $$PWD/Algos/xqdadecoder.cpp \
+    $$PWD/Algos/xc64wraptordecoder.cpp \
+    $$PWD/Algos/xvmsdatabasedecoder.cpp \
+    $$PWD/Algos/xtarx1decoder.cpp \
+    $$PWD/Algos/xvmspcsidecoder.cpp \
+    $$PWD/Algos/xzcmpdecoder.cpp \
+    $$PWD/Algos/xzpakdecoder.cpp \
+    $$PWD/Algos/xztcdecoder.cpp \
+    $$PWD/Algos/xwintersoftdecoder.cpp \
+    $$PWD/Algos/xtivolidecoder.cpp \
+    $$PWD/Algos/xzoomdecoder.cpp \
+    $$PWD/Algos/xwpkdecoder.cpp \
+    $$PWD/Algos/xlzhufdecoder.cpp \
+    $$PWD/Algos/xti99arcdecoder.cpp \
+    $$PWD/Algos/xxeditpackdecoder.cpp \
+    $$PWD/Algos/xkboomdecoder.cpp \
+    $$PWD/Algos/xcmpdecoder.cpp \
+    $$PWD/Algos/xsharedlzwdecoder.cpp \
     $$PWD/Algos/xarcv2decoder.cpp \
     $$PWD/Algos/xasymetrixdecoder.cpp \
     $$PWD/Algos/xborlandpackdecoder.cpp \
@@ -242,7 +341,7 @@ SOURCES += \
     $$PWD/Algos/xbsndecoder.cpp \
     $$PWD/Algos/xbthpakdecoder.cpp \
     $$PWD/Algos/xdcldecoder.cpp \
-    $$PWD/xcompresseddevice.cpp \
+    $$PWD/core/xcompresseddevice.cpp \
     $$PWD/../Formats/archives/xtar.cpp \
     $$PWD/../Formats/archives/xtarcompressed.cpp \
     $$PWD/../Formats/archives/xzip.cpp \
@@ -279,6 +378,7 @@ SOURCES += \
     $$PWD/Algos/xhuffdecoder.cpp \
     $$PWD/Algos/xlzhcxpdecoder.cpp \
     $$PWD/Algos/xdsquantumdecoder.cpp \
+    $$PWD/Algos/xgenteedecoder.cpp \
     $$PWD/Algos/xpktdecoder.cpp \
     $$PWD/Algos/xhdcopydecoder.cpp \
     $$PWD/Algos/xstylusdecoder.cpp \

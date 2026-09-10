@@ -17,7 +17,7 @@ const qint32 SLS_R = SLS_T - 1;                         // 686
 const quint32 SLS_MAX_FREQ = 0x8000U;
 const qint64 SLS_MAX_OUTPUT = 0x10000000;  // 256 MiB sanity cap
 
-// Stock Okumura position tables; byte-identical to U3's copies.
+// Stock Okumura position tables; byte-identical to the reference implementation's copies.
 const quint8 SLS_D_CODE[256] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

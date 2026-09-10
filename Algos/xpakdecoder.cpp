@@ -41,7 +41,7 @@ const quint32 CRUSHED_EOF = 256;
 const quint32 CRUSHED_RING_SIZE = 500;
 const quint32 CRUSHED_STRING_THRESHOLD = 375;
 
-// U3 004e8a90 accepts 2..629 serialized links. Links point to adjacent
+// The reference implementation accepts 2..629 serialized links. Links point to adjacent
 // pairs; neither the root nor another pair has to start at an even index.
 const quint32 DISTILLED_MAX_NODES = 629;
 const quint32 DISTILLED_WINDOW_SIZE = 8192;
@@ -572,7 +572,7 @@ bool decodeDistilled(PakBitSource *pSource, PakSink *pSink, XBinary::PDSTRUCT *p
             break;
         } else {
             const quint32 nLength = nSymbol - 254;
-            // U3 004e8a90 forms length = leaf - 254, with no 60-byte cap.
+            // The reference implementation forms length = leaf - 254, with no 60-byte cap.
             // The serialized width (at most 12 bits, retained for compatibility)
             // bounds a leaf; keep a separate window-sized work bound as well.
             if ((nLength < 3) || (nLength > DISTILLED_WINDOW_SIZE)) return false;

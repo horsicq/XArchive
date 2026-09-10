@@ -18,6 +18,18 @@
 # XDEX_SOURCES are defined) and are not added again here.
 
 include_directories(${CMAKE_CURRENT_LIST_DIR})
+include_directories(${CMAKE_CURRENT_LIST_DIR}/archives/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/compressors/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/core/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/diskimages/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/documents/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/filesystems/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/games/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/installers/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/packages/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/sfx/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/tar/)
+include_directories(${CMAKE_CURRENT_LIST_DIR}/transport/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/Algos/include/)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/../Formats)
@@ -76,10 +88,10 @@ set(XZIP_SOURCES
     ${XARCHIVE_ANCIENT_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/../Formats/xarchive.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../Formats/xarchive.h
-    ${CMAKE_CURRENT_LIST_DIR}/xcompress.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xcompress.h
-    ${CMAKE_CURRENT_LIST_DIR}/xdecompress.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xdecompress.h
+    ${CMAKE_CURRENT_LIST_DIR}/compressors/xcompress.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/compressors/xcompress.h
+    ${CMAKE_CURRENT_LIST_DIR}/core/xdecompress.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/core/xdecompress.h
     # Decoders dispatched from xdecompress.cpp: they must live in the shared core
     # (this file), not in xarchive.cmake, or a USE_ARCHIVE-less consumer such as
     # xbinaryviewerc fails to link (LNK2019 XAldusDecoder/XAMPKDecoder/...).
@@ -87,6 +99,92 @@ set(XZIP_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xaldusdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xampkdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xampkdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xclaydecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xcopyqmdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xdiskimagedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xchieflzdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xhadecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlimdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xaindecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xobfuscationdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xuleaddecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtopspeeddecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpakleodecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtpsdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzxzipdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/ximpdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsfpackdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/diskimages/xvmdkarchive.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsqxdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvmarcdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtersedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsquashfsdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvmssavesetdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtarx2decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpanoramadecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xziedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xteledeskdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xqdadecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xc64wraptordecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvmsdatabasedecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtarx1decoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvmspcsidecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzcmpdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzpakdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xztcdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xwintersoftdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtivolidecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzoomdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xwpkdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhufdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xti99arcdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xxeditpackdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xhadecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlimdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xaindecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xobfuscationdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xuleaddecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtopspeeddecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpakleodecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtpsdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzxzipdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/ximpdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsfpackdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/diskimages/xvmdkarchive.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsqxdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvmarcdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtersedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsquashfsdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvmssavesetdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtarx2decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xpanoramadecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xziedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xteledeskdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xqdadecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xc64wraptordecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvmsdatabasedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtarx1decoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xvmspcsidecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzcmpdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzpakdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xztcdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xwintersoftdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xtivolidecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xzoomdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xwpkdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhufdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xti99arcdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xxeditpackdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xchieflzdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xdiskimagedecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xcopyqmdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xkboomdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xkboomdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xclaydecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xcmpdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xcmpdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsharedlzwdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xsharedlzwdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarcv2decoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xarcv2decoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xasymetrixdecoder.cpp
@@ -101,8 +199,8 @@ set(XZIP_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xbthpakdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xdcldecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xdcldecoder.h
-    ${CMAKE_CURRENT_LIST_DIR}/xcompresseddevice.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/xcompresseddevice.h
+    ${CMAKE_CURRENT_LIST_DIR}/core/xcompresseddevice.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/core/xcompresseddevice.h
     ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtar.cpp
     ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtar.h
     ${CMAKE_CURRENT_LIST_DIR}/../Formats/archives/xtarcompressed.cpp
@@ -294,6 +392,7 @@ set(XZIP_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xhuffdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhcxpdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xdsquantumdecoder.h
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xgenteedecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xpktdecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xhdcopydecoder.h
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xstylusdecoder.h
@@ -337,6 +436,7 @@ set(XZIP_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xhuffdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xlzhcxpdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xdsquantumdecoder.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Algos/xgenteedecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xpktdecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xhdcopydecoder.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Algos/xstylusdecoder.cpp

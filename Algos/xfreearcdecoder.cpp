@@ -1,5 +1,5 @@
 /* Copyright (c) 2026 hors<horsicq@gmail.com>
- * Native FreeArc decoding only. See xfreearcdecoder.PROVENANCE.md.
+ * Native FreeArc decoding only..
  * The x86 converter follows Igor Pavlov's public-domain Bra86.c.
  * DELTA binary tables algorithm: (c) Bulat.Ziganshin@gmail.com, 2013-09-18.
  * All rights reserved. You can for free use decompression part of the algorithm
@@ -177,7 +177,7 @@ bool lzma(const QByteArray &input, const Method &method, qint64 expected, qint64
            (expected < 0 || out->size() == expected) && XBinary::isPdStructNotCanceled(pd);
 }
 
-// U3 00587200: window size, framed table/literal blocks and a zero block EOF.
+// window size, framed table/literal blocks and a zero block EOF.
 bool rep(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDSTRUCT *pd)
 {
     if (input.size() < 8) return false;
@@ -219,7 +219,7 @@ bool rep(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDSTRU
     return false;
 }
 
-// U3 00586dd0/00586c00/00586cc0/00586c40: unshuffle then undiff tables.
+// unshuffle then undiff tables.
 bool delta(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDSTRUCT *pd)
 {
     qint64 cursor = 0;
@@ -278,7 +278,7 @@ bool delta(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDST
 
 bool msByte(quint32 byte) { return byte == 0 || byte == 255; }
 
-// Public-domain Bra86 state machine also recovered at U3 00438670.
+// Public-domain Bra86 state machine also recovered at the reference implementation.
 int exeBlock(char *buffer, int size, quint32 ip, quint32 *state, XBinary::PDSTRUCT *pd)
 {
     static const quint8 allowed[8] = {1, 1, 1, 0, 1, 0, 0, 0};
@@ -333,7 +333,7 @@ bool exe(const QByteArray &input, qint64 limit, QByteArray *out, XBinary::PDSTRU
     *out = QByteArray(input.constData(), input.size());
     qint64 offset = 0;
     quint32 state = 0;
-    // U3 00438a20 reads 64 KiB, retaining the unfinished converter suffix.
+    // The reference implementation reads 64 KiB, retaining the unfinished converter suffix.
     while (offset < out->size() && XBinary::isPdStructNotCanceled(pd)) {
         const int available = static_cast<int>(qMin<qint64>(65536, out->size() - offset));
         if (available <= 5) break;

@@ -113,7 +113,7 @@ bool XEALzwDecoder::decode(const QByteArray &baPacked, qint64 nUncompressedSize,
         }
 
         // A code stream that does not open with CLEAR has no defined previous
-        // code; U3 reads a stale register there, so refuse instead.
+        // code; the reference implementation reads a stale register there, so refuse instead.
         if (!bStarted) break;
 
         qint32 nStackSize = 0;

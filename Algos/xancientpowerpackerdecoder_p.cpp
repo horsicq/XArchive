@@ -186,6 +186,7 @@ PowerPackerDecoder::PPState::PPState(uint32_t mode) noexcept :
 bool PowerPackerDecoder::detectHeader(uint32_t hdr,uint32_t footer) noexcept
 {
 	return hdr==FourCC("PP11") || hdr==FourCC("PP20") || hdr==FourCC("PX20")
+		|| hdr==FourCC("PPLS")		// PowerPacker library/device crunch
 		|| hdr==FourCC("CHFC")		// Sky High Stuntman
 		|| hdr==FourCC("DEN!")		// Jewels - Crossroads
 		|| hdr==FourCC("DXS9")		// Hopp oder Top, Punkt Punkt Punkt
@@ -223,8 +224,17 @@ PowerPackerDecoder::PowerPackerDecoder(const ByteBuffer &packedData,bool exactSi
 		if (packedData.size()<18U)
 			throw InvalidFormatError();
 		_isObsfuscated=true;
+		_headerSize=10U;
 	}
-	uint32_t mode{packedData.readBE32(_isObsfuscated?6U:4U)};
+	// PPLS carries an extra 32-bit field before the mode word, so everything
+	// after the magic shifts by four
+	if (hdr==FourCC("PPLS"))
+	{
+		if (packedData.size()<17U)
+			throw InvalidFormatError();
+		_headerSize=12U;
+	}
+	uint32_t mode{packedData.readBE32(_isObsfuscated?6U:(_headerSize-4U))};
 	if (mode!=0x9090909 && mode!=0x90a0a0a && mode!=0x90a0b0b && mode!=0x90a0c0c && mode!=0x90a0c0d)
 		throw InvalidFormatError();
 	for (uint32_t i=0;i<4;i++)
@@ -473,7 +483,7 @@ void PowerPackerDecoder::findKeyRound(BackwardInputStream &inputStream,LSBBitRea
 
 void PowerPackerDecoder::findKey(uint32_t keyBits,uint32_t keyMask)
 {
-	BackwardInputStream inputStream{_packedData,10,_dataStart};
+	BackwardInputStream inputStream{_packedData,_headerSize,_dataStart};
 	LSBBitReader<BackwardInputStream> bitReader{inputStream};
 
 	bitReader.readBitsBE32(_startShift);
@@ -517,7 +527,7 @@ void PowerPackerDecoder::decompressImpl(ByteBuffer &rawData,bool verify)
 		}
 	}
 
-	BackwardInputStream inputStream{_packedData,_isXPK?0:(_isObsfuscated?10U:8U),_dataStart};
+	BackwardInputStream inputStream{_packedData,_isXPK?0:_headerSize,_dataStart};
 	LSBBitReader<BackwardInputStream> bitReader{inputStream};
 	PowerPackerBitReader dataReader{inputStream,bitReader,key,!_isObsfuscated};
 

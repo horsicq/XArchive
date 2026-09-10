@@ -11,9 +11,8 @@
 //
 // The member payload is DES-ECB encrypted and then, optionally, LZW-compressed
 // UNDER the encryption - so the order on the way out is decrypt first, inflate
-// second.  Both stages come straight from U3.unp.exe: FUN_006ef350 (the block
-// cipher), FUN_006ef4f0 (the key schedule) and FUN_004c55f0 (the LZW engine
-// EA's ".PEA" members share, run with a different configuration).
+// second. The three pieces are a block cipher, its key schedule, and the same
+// LZW engine EA's ".PEA" members share, run with a different configuration.
 //
 // DES, with two deviations from the textbook that both matter:
 //
@@ -23,7 +22,7 @@
 //     both 16 and 2.  Only the first `rounds` subkeys are used, in reverse
 //     order, exactly as a shortened decrypt would.
 //   * when the round count is BELOW 3 the initial and final permutations are
-//     SKIPPED entirely (U3's FUN_006ef350 replaces them with a plain 32-bit
+// SKIPPED entirely (the reference implementation replaces them with a plain 32-bit
 //     endian swap, which is the identity once the halves are treated as
 //     big-endian words).  Running standard IP/FP at 2 rounds decodes three of
 //     the four extractable corpus files into garbage, so this is not cosmetic.
@@ -38,9 +37,9 @@
 // The stream opens with a bare code that is emitted as a literal and becomes
 // the initial previous code, and every CLEAR restarts that same opening.
 //
-// Validated byte-exact against U3's own extraction over the whole PC Secure
+// Validated byte-exact against the reference implementation's own extraction over the whole PC Secure
 // corpus: 4 of the 6 files (the other two are user-password protected, carry
-// none of U3's four built-in keys, and U3 reports them as errors too).
+// none of the reference implementation's four built-in keys, and the reference implementation reports them as errors too).
 class XPCSecureDecoder {
 public:
     enum {
@@ -50,15 +49,15 @@ public:
         PC_SECURE_PROPERTY_SIZE = 14
     };
 
-    // U3's four built-in keys, in the order it tries them.  They are the
+    // The reference implementation's four built-in keys, in the order it tries them. They are the
     // product keys PCSECURE uses when no user password was set; the bytes are
-    // the little-endian image of the quad words U3 passes.
+    // the little-endian image of the quad words the reference implementation passes.
     static const quint64 *builtinKeys();
     static qint32 builtinKeyCount();
 
     // Runs the 68-byte header through the cipher with nRounds rounds and
     // reports whether the "SeaHawks" verifier came out.  On success the
-    // decrypted header (with U3's byte-order fixups already applied) is
+    // decrypted header (with the reference implementation's byte-order fixups already applied) is
     // written to *pbaHeader.
     static bool tryHeader(const QByteArray &baHeader, quint64 nKey,
                           qint32 nRounds, QByteArray *pbaHeader);

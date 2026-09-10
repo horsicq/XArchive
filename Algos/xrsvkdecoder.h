@@ -32,8 +32,7 @@
 // (the coded symbol stream ends on the 0x101 end-of-block symbol).  Blocks are
 // 200 KiB of plaintext except the last one of a member.
 //
-// Model parameters, all recovered from U3.unp.exe (FUN_00691770 / FUN_00691180
-// / FUN_00691280 / FUN_006913f0 / FUN_00691300) and then pinned against the
+// Model parameters, all recovered from the reference implementation and then pinned against the
 // per-block CRC-32s of the whole sample corpus:
 //
 //   selector model  symbols 0..8, increment 0x20, Max_frequency 0x1000

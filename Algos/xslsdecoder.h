@@ -23,20 +23,20 @@
 //                      d_len[b >> 4] - 1 extra bits shifted into b
 //
 // That 13-bit position field is the part that separates it from every other
-// LZHUF dialect here: XHZLDecoder (the same U3 codec function) uses F = 60 and
+// LZHUF dialect here: XHZLDecoder (the same the reference implementation codec function) uses F = 60 and
 // the classic 6-low-bit position code, so it decodes this family into garbage.
 // d_code/d_len are the stock Okumura tables, verified byte-for-byte against
-// U3's own copies at 0x007d14c0 / 0x007d15c0.
+// The reference implementation's own copies at 0x007d14c0 / 0x007d15c0.
 //
 // The stream carries no terminator: decoding runs until the caller-supplied
 // plaintext length has been produced, and a match that would overrun it is
-// clipped, exactly as U3's FUN_004edae0 does when its "has stop code" flag is
+// clipped, exactly as the reference implementation does when its "has stop code" flag is
 // clear.
 //
-// Ported from U3.unp.exe FUN_004edae0 / FUN_004ed030 / FUN_004ed5a0 /
-// FUN_004ed820 / FUN_004ed8e0 / FUN_004ecd90 / FUN_004ecef0 with the
-// configuration SLS's worker passes at FUN_0054f580, and validated byte-exact
-// against U3's own extraction over the whole SLS corpus (16/16 files).
+// Ported from the reference implementation /
+// The reference implementation with the
+// configuration SLS's worker passes at the reference implementation, and validated byte-exact
+// against the reference implementation's own extraction over the whole SLS corpus (16/16 files).
 class XSLSDecoder {
 public:
     static bool decode(const QByteArray &baPacked, qint64 nUncompressedSize,

@@ -80,7 +80,7 @@ const quint8 PCS_SBOX[8][64] = {
      7,  11, 4,  1,  9,  12, 14, 2,  0,  6,  10, 13, 15, 3,  5,  8,
      2,  1,  14, 7,  4,  10, 8,  13, 15, 12, 9,  0,  3,  5,  6,  11}};
 
-// The four built-in product keys.  U3 holds them as little-endian quad words
+// The four built-in product keys. The reference implementation holds them as little-endian quad words
 // (0x0489cf09a84cb420, 0xf03606ff259275dd, 0xa9e9721989bca97c,
 // 0x4f279ef1fad9666e); DES numbers key bit 1 as the most significant bit of the
 // FIRST key BYTE, so the schedule has to see those quad words in memory order,
@@ -143,8 +143,8 @@ quint32 pcsFeistel(quint32 nRight, quint64 nSubkey)
     return static_cast<quint32>(pcsPermute(nMerged, 32, PCS_P, 32));
 }
 
-// One decrypting block pass.  nRounds < 3 skips IP/FP, which is what U3's
-// FUN_006ef350 does; the halves are still swapped before the result is stored.
+// One decrypting block pass. nRounds < 3 skips IP/FP, which is what the reference implementation's
+// The reference implementation does; the halves are still swapped before the result is stored.
 void pcsDecryptBlock(const quint8 *pIn, quint8 *pOut, const quint64 *pSubkeys,
                      qint32 nRounds)
 {
@@ -361,7 +361,7 @@ bool XPCSecureDecoder::tryHeader(const QByteArray &baHeader, quint64 nKey,
     if ((nHigh != 0x48616553U) || (nLow != 0x736b7761U)) return false;
 
     const quint16 nPayloadRounds = qFromLittleEndian<quint16>(pData + 0x0c);
-    // U3 requires the payload round count to be 0..16 before it will accept
+    // The reference implementation requires the payload round count to be 0..16 before it will accept
     // the header, which is what stops a lucky verifier collision.
     const quint16 nSwapped =
         static_cast<quint16>(((nPayloadRounds & 0x00ffU) << 8) |
@@ -402,7 +402,7 @@ bool XPCSecureDecoder::decode(const QByteArray &baPacked,
     pcsSubkeys(nKey, subkeys);
 
     // The cipher is ECB over whole 8-byte blocks; a short tail is carried
-    // through untouched, exactly as U3's block stream does.
+    // through untouched, exactly as the reference implementation's block stream does.
     QByteArray baPlain = baPacked;
     const qint64 nBlocks = baPacked.size() / PC_SECURE_BLOCK_SIZE;
     const quint8 *pSource =

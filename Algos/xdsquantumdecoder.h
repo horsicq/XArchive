@@ -50,9 +50,8 @@
 //     a uniform one, symbols come out reversed (real = entries - sym - 1), and
 //     there is no in-stream checksum (the member CRC lives in the directory).
 //
-// Ported from the recovered U3 handler (FUN_00514990 / FUN_004caa50 for the new
-// variant, FUN_00513ec0 / FUN_00513110 for the old one) and validated
-// byte-exact against U3 over all 19 files of the reference corpus, both
+// Ported from the recovered handler and validated
+// byte-exact against the reference implementation over all 19 files of the reference corpus, both
 // variants, window orders 10..18.
 class XDSQuantumDecoder {
 public:

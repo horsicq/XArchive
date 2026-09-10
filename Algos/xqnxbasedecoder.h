@@ -56,7 +56,7 @@
 //   * m_len += (m_off > 0xd00)
 //   * copy m_len bytes from output[-m_off]
 //
-// Reference: U3.unp.exe handler A458 ("QNX Base", class dcb, VMT 0x006132d0),
+// Reference: the reference implementation handler A458 ("QNX Base", class dcb, VMT 0x006132d0),
 // worker 0x00613190 -> block walk 0x00612cd0 -> 0x00612ae0 -> codec 0x00612830
 // with its variant selector held at 0 (NRV2B) and a 64 KiB output window.
 class XQNXBaseDecoder {

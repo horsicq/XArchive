@@ -9,6 +9,10 @@
 
 namespace {
 const qint64 MAX_FPAK_OUTPUT = Q_INT64_C(512) * 1024 * 1024;
+// The literal tree is the widest of the three; the length and distance trees
+// are always 64 symbols.
+const qint32 MAX_FPAK_TREE_SYMBOLS = 256;
+const qint32 FPAK_CODE_TREE_SYMBOLS = 64;
 
 class FpakBits
 {
@@ -57,19 +61,24 @@ struct FpakTree
     std::array<quint32, 17> count = {};
     std::array<quint32, 17> firstCode = {};
     std::array<qint32, 17> firstSymbol = {};
-    std::array<quint8, 64> symbols = {};
+    std::array<quint8, MAX_FPAK_TREE_SYMBOLS> symbols = {};
+    qint32 symbolCount = 0;
 };
 
-bool readTree(const QByteArray &packed, qint32 *position, FpakTree *tree)
+// symbolTotal is 64 for the length and distance trees and 256 for the literal
+// tree; the run-length encoding of the code lengths is identical for all three.
+bool readTree(const QByteArray &packed, qint32 *position, qint32 symbolTotal,
+              FpakTree *tree)
 {
     if (!position || !tree || (*position < 0) ||
-        (*position >= packed.size()))
+        (*position >= packed.size()) || (symbolTotal < 1) ||
+        (symbolTotal > MAX_FPAK_TREE_SYMBOLS))
         return false;
 
-    std::array<quint8, 64> lengths = {};
+    std::array<quint8, MAX_FPAK_TREE_SYMBOLS> lengths = {};
     const quint32 pairCount = quint8(packed.at((*position)++)) + 1U;
-    // Every pair describes at least one of the fixed 64 symbols.
-    if (pairCount > 64U) return false;
+    // Every pair describes at least one of the tree's symbols.
+    if (pairCount > quint32(symbolTotal)) return false;
 
     qint32 symbolCount = 0;
     for (quint32 i = 0; i < pairCount; ++i) {
@@ -77,17 +86,18 @@ bool readTree(const QByteArray &packed, qint32 *position, FpakTree *tree)
         const quint8 descriptor = quint8(packed.at((*position)++));
         const qint32 repeat = (descriptor >> 4) + 1;
         const quint8 length = (descriptor & 0x0fU) + 1U;
-        if ((symbolCount > 64 - repeat) || (length > 16U)) return false;
+        if ((symbolCount > symbolTotal - repeat) || (length > 16U)) return false;
         for (qint32 j = 0; j < repeat; ++j)
             lengths[symbolCount++] = length;
     }
-    if (symbolCount != 64) return false;
+    if (symbolCount != symbolTotal) return false;
 
     *tree = FpakTree();
+    tree->symbolCount = symbolTotal;
     quint32 kraftUnits = 0;
-    for (quint8 length : lengths) {
-        ++tree->count[length];
-        kraftUnits += 1U << (16U - length);
+    for (qint32 i = 0; i < symbolTotal; ++i) {
+        ++tree->count[lengths[i]];
+        kraftUnits += 1U << (16U - lengths[i]);
     }
     // Implode stores complete Shannon-Fano trees.  Reject over-subscribed and
     // incomplete descriptions alike; accepting either makes random data look
@@ -100,12 +110,12 @@ bool readTree(const QByteArray &packed, qint32 *position, FpakTree *tree)
         code = (code + tree->count[length - 1]) << 1;
         tree->firstCode[length] = code;
         tree->firstSymbol[length] = outputIndex;
-        for (qint32 symbol = 0; symbol < 64; ++symbol) {
+        for (qint32 symbol = 0; symbol < symbolTotal; ++symbol) {
             if (lengths[symbol] == length)
                 tree->symbols[outputIndex++] = quint8(symbol);
         }
     }
-    return (outputIndex == 64) &&
+    return (outputIndex == symbolTotal) &&
            (code + tree->count[16] == (1U << 16));
 }
 
@@ -127,7 +137,7 @@ bool decodeSymbol(FpakBits *bits, const FpakTree &tree, quint32 *symbol)
         if (count && (code >= first) && ((code - first) < count)) {
             const qint32 index =
                 tree.firstSymbol[length] + qint32(code - first);
-            if ((index < 0) || (index >= 64)) return false;
+            if ((index < 0) || (index >= tree.symbolCount)) return false;
             *symbol = tree.symbols[index];
             return true;
         }
@@ -136,7 +146,8 @@ bool decodeSymbol(FpakBits *bits, const FpakTree &tree, quint32 *symbol)
 }
 }  // namespace
 
-bool XFpakDecoder::decode(const QByteArray &packed, qint64 expectedSize,
+bool XFpakDecoder::decode(const QByteArray &packed, quint16 method,
+                          quint16 flags, qint64 expectedSize,
                           QByteArray *output, qint64 *consumedSize,
                           XBinary::PDSTRUCT *pPdStruct)
 {
@@ -148,11 +159,31 @@ bool XFpakDecoder::decode(const QByteArray &packed, qint64 expectedSize,
         !XBinary::isPdStructNotCanceled(pPdStruct))
         return false;
 
+    if (method == METHOD_STORED) {
+        // A stored member is its own payload; the segment chain has already
+        // been concatenated by the caller, so the two sizes must agree.
+        if (qint64(packed.size()) != expectedSize) return false;
+        *output = packed;
+        if (consumedSize) *consumedSize = packed.size();
+        return true;
+    }
+    if (method != METHOD_IMPLODED) return false;
+
+    // 0x08 is the data-descriptor bit and has no effect on the bit stream.
+    const bool bLiteralTree = (flags & FLAG_LITERAL_TREE) != 0;
+    const quint32 nDistanceBits = (flags & FLAG_DICTIONARY_8K) ? 7U : 6U;
+    const quint32 nMinimumMatch = bLiteralTree ? 3U : 2U;
+    const quint32 nDictionarySize = 1U << (nDistanceBits + 6U);
+
     qint32 position = 0;
+    FpakTree literalTree;
     FpakTree lengthTree;
     FpakTree distanceTree;
-    if (!readTree(packed, &position, &lengthTree) ||
-        !readTree(packed, &position, &distanceTree) ||
+    if (bLiteralTree &&
+        !readTree(packed, &position, MAX_FPAK_TREE_SYMBOLS, &literalTree))
+        return false;
+    if (!readTree(packed, &position, FPAK_CODE_TREE_SYMBOLS, &lengthTree) ||
+        !readTree(packed, &position, FPAK_CODE_TREE_SYMBOLS, &distanceTree) ||
         (position >= packed.size()))
         return false;
 
@@ -175,7 +206,11 @@ bool XFpakDecoder::decode(const QByteArray &packed, qint64 expectedSize,
         if (!bits.readBit(&literalFlag)) return false;
         if (literalFlag) {
             quint32 literal = 0;
-            if (!bits.readBits(8, &literal)) return false;
+            if (bLiteralTree) {
+                if (!decodeSymbol(&bits, literalTree, &literal)) return false;
+            } else if (!bits.readBits(8, &literal)) {
+                return false;
+            }
             result.append(char(literal));
             continue;
         }
@@ -183,20 +218,20 @@ bool XFpakDecoder::decode(const QByteArray &packed, qint64 expectedSize,
         quint32 lowDistance = 0;
         quint32 distanceSymbol = 0;
         quint32 lengthSymbol = 0;
-        if (!bits.readBits(6, &lowDistance) ||
+        if (!bits.readBits(nDistanceBits, &lowDistance) ||
             !decodeSymbol(&bits, distanceTree, &distanceSymbol) ||
             !decodeSymbol(&bits, lengthTree, &lengthSymbol))
             return false;
 
-        quint32 length = lengthSymbol + 2U;
+        quint32 length = lengthSymbol + nMinimumMatch;
         if (lengthSymbol == 63U) {
             quint32 extraLength = 0;
             if (!bits.readBits(8, &extraLength)) return false;
             length += extraLength;
         }
         const quint32 distance =
-            distanceSymbol * 64U + lowDistance + 1U;
-        if (!distance || (distance > 4096U) ||
+            (distanceSymbol << nDistanceBits) + lowDistance + 1U;
+        if (!distance || (distance > nDictionarySize) ||
             (length > quint64(expectedSize - result.size())))
             return false;
 

@@ -24,17 +24,17 @@
 //   no block align  the bit stream is NOT padded to a byte after a CLEAR
 //
 // Every EA stream in the corpus opens with a CLEAR, which is what supplies the
-// initial previous-code; U3's own decoder relies on exactly that and would
+// initial previous-code; the reference implementation's own decoder relies on exactly that and would
 // otherwise seed the dictionary from an uninitialised register.  A stream that
 // does not open with CLEAR is therefore rejected here.
 //
 // On a malformed stream the decoder stops and keeps what it has already
-// produced, which is what U3 does (its worker reports the member as an error
+// produced, which is what the reference implementation does (its worker reports the member as an error
 // but the partially written file survives); the caller decides whether a short
-// result is acceptable.  Ported from U3.unp.exe FUN_004c55f0 / FUN_004c5490 /
-// FUN_004c52e0 with the configuration EA's worker passes at FUN_00557cb0
+// result is acceptable. Ported from the reference implementation /
+// The reference implementation with the configuration EA's worker passes at the reference implementation
 // (maxbits 12, EOF code on, CLEAR on, no block align, LSB-first, no early
-// change), and validated byte-exact against U3 over the whole EA corpus
+// change), and validated byte-exact against the reference implementation over the whole EA corpus
 // (212/212 members, 27 archives).
 class XEALzwDecoder {
 public:
@@ -48,7 +48,7 @@ public:
 
     // Decodes the whole stream.  Succeeds only when exactly nUncompressedSize
     // bytes were produced; a short or over-long result is a failure, but
-    // *pOutput still holds what was decoded so callers that want U3's
+    // *pOutput still holds what was decoded so callers that want the reference implementation's
     // "partial file plus error" behaviour can use it.
     static bool decode(const QByteArray &baPacked, qint64 nUncompressedSize,
                        QByteArray *pOutput,

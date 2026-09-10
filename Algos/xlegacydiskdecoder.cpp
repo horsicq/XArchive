@@ -15,6 +15,17 @@
 #include <cstring>
 
 namespace {
+// QRST version 5 layout.  The 796-byte fixed header is followed by a 25-byte
+// extension - one unused byte then exactly two 12-byte image descriptors - and
+// the image data starts at 821.
+const qint64 QRST5_EXTENSION_OFFSET = 796;
+const qint64 QRST5_DATA_OFFSET = 821;
+// The version is the float32 at +4: 0x3f800000 (1.0f) is the original format
+// and 0x40a00000 (5.0f) is version 5.  BYTE 795 IS NOT THE VERSION.  The
+// reference never reads it; its being 2 in the corpus's version 5 files is a
+// coincidence, and branching on it misroutes any other version 5 image.
+const quint32 QRST_VERSION_5 = 0x40a00000U;  // 5.0f
+
 struct Geometry {
     qint32 cylinders = 0;
     qint32 heads = 0;
@@ -108,6 +119,55 @@ bool standardQrstGeometry(quint8 format, Geometry *geometry)
     if (format < 1 || format > 7) return false;
     *geometry = formats[format];
     return true;
+}
+
+bool isQrstVersion5(const QByteArray &data)
+{
+    if (data.size() < 8) return false;
+    return qFromLittleEndian<quint32>(
+               reinterpret_cast<const uchar *>(data.constData()) + 4) ==
+           QRST_VERSION_5;
+}
+
+// The byte count a complete image of the header's standard format occupies.
+// QRST version 5 uses exactly this number to decide whether an image is stored
+// or compressed, so it must come from the FORMAT BYTE and never from a boot
+// sector.
+bool standardGeometrySize(quint8 format, qint64 limit, qint64 *size)
+{
+    Geometry geometry;
+    if (!standardQrstGeometry(format, &geometry)) return false;
+    return geometrySize(geometry, limit, size);
+}
+
+quint32 crc32Edb88320(const QByteArray &data)
+{
+    static quint32 table[256];
+    static bool ready = false;
+    if (!ready) {
+        for (quint32 index = 0; index < 256; ++index) {
+            quint32 value = index;
+            for (qint32 bit = 0; bit < 8; ++bit)
+                value = (value & 1U) ? ((value >> 1) ^ 0xedb88320U) : (value >> 1);
+            table[index] = value;
+        }
+        ready = true;
+    }
+    quint32 crc = 0xffffffffU;
+    const uchar *p = reinterpret_cast<const uchar *>(data.constData());
+    for (qint64 index = 0; index < data.size(); ++index)
+        crc = table[(crc ^ p[index]) & 0xffU] ^ (crc >> 8);
+    return crc ^ 0xffffffffU;
+}
+
+// QRST version 5 stores one CRC-32 per image, computed over the COMPRESSED
+// extent.  Which of the two conventional end states the writer stored - the
+// final-xored CRC or its complement - is not recoverable from the two corpus
+// files alone, so both are accepted; every other bit pattern is a mismatch.
+bool qrstCrcMatches(const QByteArray &data, quint32 expected)
+{
+    const quint32 crc = crc32Edb88320(data);
+    return (crc == expected) || ((crc ^ 0xffffffffU) == expected);
 }
 
 bool decodeImd(const QByteArray &input, qint64 limit,
@@ -274,7 +334,9 @@ bool decodeImd(const QByteArray &input, qint64 limit,
             }
         }
     }
-    result->rawImage = raw;
+    XLegacyDiskDecoder::IMAGE image;
+    image.rawImage = raw;
+    result->images.append(image);
     result->driver = QStringLiteral("imd");
     result->cylinders = geometry.cylinders;
     result->heads = geometry.heads;
@@ -320,25 +382,65 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
     Geometry geometry;
     if (!standardQrstGeometry(p[12], &geometry)) return false;
 
-    if (p[795] == 2) {
-        if (input.size() < 801) return false;
-        const quint32 packedOffset = qFromLittleEndian<quint32>(p + 797);
-        if (!rangeWithin(input.size(), packedOffset, 3)) return false;
-        QByteArray decoded;
-        qint64 consumed = 0;
-        if (!XDclDecoder::decode(input.mid(packedOffset), &decoded, limit,
-                                 &consumed)) {
-            setError(error, QStringLiteral("Invalid QRST v5 DCL stream"));
-            return false;
+    if (isQrstVersion5(input)) {
+        // Version 5: the 796-byte fixed header is followed by a 25-byte
+        // extension holding exactly TWO 12-byte image descriptors - there is no
+        // loop and no count - and the data area starts at 821.
+        //   +796 u8  unused
+        //   +797 u32 image 1 offset   +801 u32 size   +805 u32 CRC-32
+        //   +809 u32 image 2 offset   +813 u32 size   +817 u32 CRC-32
+        // An image 2 offset of zero means the second image is absent.
+        if (input.size() < QRST5_DATA_OFFSET) return false;
+        qint64 storedSize = 0;
+        const bool haveStoredSize = standardGeometrySize(p[12], limit, &storedSize);
+
+        for (qint32 index = 0; index < 2; ++index) {
+            const qint64 descriptor = QRST5_EXTENSION_OFFSET + 1 +
+                                      qint64(index) * 12;
+            const qint64 offset = qFromLittleEndian<quint32>(p + descriptor);
+            const qint64 size = qFromLittleEndian<quint32>(p + descriptor + 4);
+            const quint32 crc = qFromLittleEndian<quint32>(p + descriptor + 8);
+            if (index > 0 && offset == 0) break;
+            if (offset < QRST5_EXTENSION_OFFSET || size < 1 ||
+                !rangeWithin(input.size(), offset, size))
+                return false;
+
+            const QByteArray packed = input.mid(int(offset), int(size));
+            if (!qrstCrcMatches(packed, crc)) {
+                setError(error, QStringLiteral(
+                                    "QRST v5 image %1 fails its CRC-32")
+                                    .arg(index + 1));
+                return false;
+            }
+
+            QByteArray decoded;
+            if (haveStoredSize && size == storedSize) {
+                // A whole standard-geometry image is stored, not compressed.
+                decoded = packed;
+            } else {
+                qint64 consumed = 0;
+                if (!XDclDecoder::decode(packed, &decoded, limit, &consumed)) {
+                    setError(error,
+                             QStringLiteral("Invalid QRST v5 DCL stream"));
+                    return false;
+                }
+            }
+            if (decoded.isEmpty()) return false;
+
+            // These are PARTIAL images: the decoded length is taken exactly as
+            // it comes out, neither required to reach the standard geometry
+            // size nor truncated down to it.
+            XLegacyDiskDecoder::IMAGE image;
+            image.rawImage = decoded;
+            image.name = QStringLiteral("Image%1.img").arg(index + 1);
+            result->images.append(image);
         }
+        if (result->images.isEmpty()) return false;
+
+        // Geometry is reported, never enforced.
         Geometry bootGeometry;
-        if (dosGeometry(decoded.left(512), &bootGeometry))
+        if (dosGeometry(result->images.at(0).rawImage.left(512), &bootGeometry))
             geometry = bootGeometry;
-        qint64 outputSize = 0;
-        if (!geometrySize(geometry, limit, &outputSize) ||
-            decoded.size() < outputSize)
-            return false;
-        result->rawImage = decoded.left(int(outputSize));
         result->driver = QStringLiteral("qrst5");
     } else {
         const Geometry storageGeometry = geometry;
@@ -388,7 +490,9 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
             input.mid(position, 4) == QByteArrayLiteral("QRST") &&
             input.size() >= 40 * 8 * 512) {
             geometry = {40, 1, 8, 512, 1};
-            result->rawImage = input.left(40 * 8 * 512);
+            XLegacyDiskDecoder::IMAGE image;
+            image.rawImage = input.left(40 * 8 * 512);
+            result->images.append(image);
             result->driver = QStringLiteral("qrst");
             result->cylinders = geometry.cylinders;
             result->heads = geometry.heads;
@@ -426,7 +530,9 @@ bool decodeQrst(const QByteArray &input, qint64 limit,
                 }
             }
         }
-        result->rawImage = raw;
+        XLegacyDiskDecoder::IMAGE image;
+        image.rawImage = raw;
+        result->images.append(image);
         result->driver = QStringLiteral("qrst");
         result->recoveredSectors = recovered;
     }
@@ -443,10 +549,12 @@ QString XLegacyDiskDecoder::identify(const QByteArray &data)
     if (data.startsWith("IMD ") && data.indexOf(char(0x1a), 4) >= 4)
         return QStringLiteral("imd");
     if (data.size() >= 796 && data.startsWith("QRST") &&
-        quint8(data.at(12)) >= 1 && quint8(data.at(12)) <= 7)
-        return data.size() >= 801 && quint8(data.at(795)) == 2
-                   ? QStringLiteral("qrst5")
-                   : QStringLiteral("qrst");
+        quint8(data.at(12)) >= 1 && quint8(data.at(12)) <= 7) {
+        // The version is the float32 at +4, not byte 795.
+        if (isQrstVersion5(data) && data.size() >= QRST5_DATA_OFFSET)
+            return QStringLiteral("qrst5");
+        return QStringLiteral("qrst");
+    }
     return QString();
 }
 
