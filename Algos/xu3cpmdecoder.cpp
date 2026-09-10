@@ -5,6 +5,7 @@
 #include <array>
 #include <new>
 #include "xancientdynamichuffman_p.h"
+constexpr std::size_t XU3CpmDecoder::MaxOutput;
 
 namespace {
 class Bits {
@@ -233,6 +234,8 @@ private:
     std::array<int, 5003> m_hash;
     int m_last = -1;
 };
+
+constexpr int Crunch::Empty;
 
 // U3 004ed030/004ed220/004ed5a0/004ed820: adaptive 315-symbol Huffman.
 // U3 004f4a70 passes stop=1 and RLE=0 to the shared 004edae0 engine.
