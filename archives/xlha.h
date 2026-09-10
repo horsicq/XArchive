@@ -1,0 +1,104 @@
+/* Copyright (c) 2023-2026 hors<horsicq@gmail.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+#ifndef XLHA_H
+#define XLHA_H
+
+#include "xarchive.h"
+
+class XLHA : public XArchive {
+    Q_OBJECT
+public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_HEADER,
+        STRUCTID_RECORD,
+    };
+
+    explicit XLHA(QIODevice *pDevice = nullptr);
+
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
+    virtual QList<MAPMODE> getMapModesList() override;
+    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual FT getFileType() override;
+    virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString() override;
+    virtual QString getMIMEString() override;
+    virtual QString getVersion() override;
+    virtual QString getArch() override;
+    virtual MODE getMode() override;
+    virtual ENDIAN getEndian() override;
+
+    // Streaming unpacking API
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
+    virtual bool initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual ARCHIVERECORD infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool moveToNext(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual bool finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QString structIDToString(quint32 nID) override;
+    virtual QString structIDToFtString(quint32 nID) override;
+    virtual quint32 ftStringToStructID(const QString &sFtString) override;
+    virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
+    virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
+    // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+
+protected:
+    // Shared with XSAR, whose container is this format with a different method
+    // tag spelling; see xsar.h. The tag test is virtual because that spelling
+    // is the only thing that differs in the member walk.
+    struct LHA_MEMBER {
+        qint64 nHeaderSize = 0;
+        qint64 nCompressedSize = 0;
+        qint64 nUncompressedSize = 0;
+        qint64 nRecordSize = 0;
+        quint16 nCRC16 = 0;
+        quint8 nLevel = 0;
+        bool bDirectory = false;
+        bool bSymbolicLink = false;
+        QString sMethod;
+        QString sFileName;
+    };
+    bool _readMember(qint64 nOffset, LHA_MEMBER *pMember, PDSTRUCT *pPdStruct = nullptr);
+    virtual bool _isMemberTag(const QByteArray &baHeader);
+    static HANDLE_METHOD _methodToHandle(const QString &sMethod);
+    // For Level 1 archives: bytes 7-10 = skip_sz = ext_headers + compressed_data.
+    // Returns the total size of extended headers that follow the base header.
+    qint64 _getLevel1ExtHeadersSize(qint64 nOffset, qint64 nBaseHeaderSize);
+    // A level 0/1 header is preceded by its own size and a checksum over the
+    // bytes it covers. Verifying it is what makes a signature-free container
+    // safe to claim.
+    static bool _isHeaderChecksumValid(const QByteArray &baHeader);
+
+private:
+    INTERNAL_INFO m_internalInfo;
+};
+
+#endif  // XLHA_H

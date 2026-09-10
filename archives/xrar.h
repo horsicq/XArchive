@@ -1,0 +1,273 @@
+/* Copyright (c) 2017-2026 hors<horsicq@gmail.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+#ifndef XRAR_H
+#define XRAR_H
+
+#include "xarchive.h"
+
+class XRar : public XArchive {
+    Q_OBJECT
+
+    const quint16 RAR4_FILE_LARGE = 0x0100;
+    const quint16 RAR4_FILE_UNICODE_FILENAME = 0x0200;
+    const quint16 RAR4_FILE_SALT = 0x0400;
+    const quint16 RAR4_FILE_EXT_TIME = 0x1000;
+    const quint16 RAR4_FILE_COMMENT = 0x0008;
+    const quint16 RAR4_FILE_PASSWORD = 0x0004;
+    const quint16 RAR4_ARCHIVE_PASSWORD = 0x0080;
+    const quint16 RAR4_LONG_BLOCK = 0x8000;
+
+    const quint8 RAR_OS_MSDOS = 0;  // MS-DOS
+    const quint8 RAR_OS_OS2 = 1;    // OS/2
+    const quint8 RAR_OS_WIN32 = 2;  // Windows
+    const quint8 RAR_OS_UNIX = 3;   // Unix/Linux
+    const quint8 RAR_OS_MACOS = 4;  // Mac OS
+    const quint8 RAR_OS_BEOS = 5;   // BeOS
+
+    // RAR 5.0 hostOS values
+    const quint8 RAR5_OS_WINDOWS = 0;  // Windows
+    const quint8 RAR5_OS_UNIX = 1;     // Unix/Linux
+
+    const quint8 RAR_METHOD_STORE = 0x30;    // Storing without compression
+    const quint8 RAR_METHOD_FASTEST = 0x31;  // Fastest compression
+    const quint8 RAR_METHOD_FAST = 0x32;     // Fast compression
+    const quint8 RAR_METHOD_NORMAL = 0x33;   // Normal compression (default)
+    const quint8 RAR_METHOD_GOOD = 0x34;     // Good compression
+    const quint8 RAR_METHOD_BEST = 0x35;     // Best compression
+
+    const quint8 RAR5_METHOD_STORE = 0x00;    // RAR 5.0 storing without compression
+    const quint8 RAR5_METHOD_FASTEST = 0x01;  // RAR 5.0 fastest compression
+    const quint8 RAR5_METHOD_FAST = 0x02;     // RAR 5.0 fast compression
+    const quint8 RAR5_METHOD_NORMAL = 0x03;   // RAR 5.0 normal compression
+    const quint8 RAR5_METHOD_GOOD = 0x04;     // RAR 5.0 good compression
+    const quint8 RAR5_METHOD_BEST = 0x05;     // RAR 5.0 best compression
+
+    struct GENERICBLOCK4 {
+        quint16 nCRC16;
+        quint8 nType;
+        quint16 nFlags;
+        quint16 nHeaderSize;
+    };
+
+    struct FILEBLOCK4 {
+        GENERICBLOCK4 genericBlock4;
+        quint32 packSize;      // Packed file size
+        quint32 unpSize;       // Unpacked file size
+        quint8 hostOS;         // Operating system used for archiving
+        quint32 fileCRC;       // File CRC
+        quint32 fileTime;      // Date and time in standard MS-DOS format
+        quint8 unpVer;         // RAR version needed to extract file
+        quint8 method;         // Packing method
+        quint16 nameSize;      // Size of filename field
+        quint32 fileAttr;      // File attributes
+        quint32 highPackSize;  // High 4 bytes of 64-bit value of packed file size
+        quint32 highUnpSize;   // High 4 bytes of 64-bit value of unpacked file size
+        QString sFileName;
+    };
+
+    struct GENERICHEADER5 {
+        quint32 nCRC32;
+        quint64 _nHeaderSize;
+        quint64 nHeaderSize;
+        quint64 nType;
+        quint64 nFlags;
+        quint64 nExtraAreaSize;
+        quint64 nDataSize;
+    };
+
+    struct FILEHEADER5 {
+        quint32 nCRC32;          // Header CRC32
+        quint64 _nHeaderSize;    // Internal variable for header size
+        quint64 nHeaderSize;     // Size of the header
+        quint64 nType;           // Header type (2 for file header, 3 for service header)
+        quint64 nFlags;          // Common header flags
+        quint64 nExtraAreaSize;  // Size of extra area (if 0x0001 flag set)
+        quint64 nDataSize;       // Size of data area (if 0x0002 flag set)
+        quint64 nFileFlags;      // Flags specific for file/service headers
+        quint64 nUnpackedSize;   // Unpacked file or service data size
+        quint64 nAttributes;     // OS-specific file attributes
+        quint32 nMTime;          // File modification time (Unix format, if 0x0002 file flag set)
+        quint32 nDataCRC32;      // CRC32 of unpacked data (if 0x0004 file flag set)
+        quint64 nCompInfo;       // Compression algorithm information
+        quint64 nHostOS;         // Type of OS used to create the archive
+        quint64 nNameLength;     // Length of name field
+        QString sFileName;       // File or service name
+        QByteArray baExtraArea;  // Optional extra area (if 0x0001 header flag set)
+        QByteArray baDataArea;   // Optional data area (if 0x0002 header flag set)
+    };
+
+    struct FILEBLOCK14 {
+        quint8 nFlags;       // Archive flags (bit 0x08 = solid)
+        quint32 nPackSize;   // Packed file size (LE)
+        quint32 nUnpSize;    // Unpacked file size (LE)
+        quint16 nFileCRC16;  // RAR 1.4 rotate/add checksum of unpacked file data
+        quint32 nFileTime;   // DOS date/time
+        quint16 nFileAttr;   // File attributes
+        quint8 nNameLen;     // Filename length
+        quint8 nMethod;      // Packing method (0=store, 1-5=compress)
+        QString sFileName;   // Filename
+        qint64 nHeaderSize;  // Total header size (24 + nNameLen)
+    };
+
+    struct RAR_UNPACK_CONTEXT {
+        qint32 nVersion;                      // RAR version (1, 4, or 5)
+        bool bIsVolume;
+        bool bVolumeNumberKnown;
+        quint64 nVolumeNumber;
+        bool bArchiveIsSolid;                 // Archive-level solid flag
+        bool bHeadersEncrypted;               // True if archive has encrypted headers (RAR5)
+        qint64 nArchiveEnd;                   // Exact logical end when it can be determined
+        QList<qint64> listFileOffsets;        // Offsets of file headers
+        QList<FILEBLOCK14> listFileBlocks14;  // Cache of RAR 1.4 file blocks
+        QList<FILEBLOCK4> listFileBlocks4;    // Cache of RAR 4.x file blocks
+        QList<FILEHEADER5> listFileHeaders5;  // Cache of RAR 5.x file headers
+        QList<qint32> listSolidFolderIndex;   // Solid block index per file (incremented on non-solid boundary)
+        QSharedPointer<QIODevice> spInputView;  // Stable identity for a solid stream spanning volumes
+        QString sSourceMD5;
+        XDecompress decompress;
+    };
+
+    enum BLOCKTYPE4 {
+        BLOCKTYPE4_MARKER = 0x72,        // Marker block
+        BLOCKTYPE4_ARCHIVE = 0x73,       // Archive header
+        BLOCKTYPE4_FILE = 0x74,          // File header
+        BLOCKTYPE4_COMMENT = 0x75,       // Comment header
+        BLOCKTYPE4_EXTRA = 0x76,         // Extra information
+        BLOCKTYPE4_SUBBLOCK = 0x77,      // Subblock
+        BLOCKTYPE4_RECOVERY = 0x78,      // Recovery record
+        BLOCKTYPE4_AUTH = 0x79,          // Archive authentication
+        BLOCKTYPE4_SUBBLOCK_NEW = 0x7A,  // Subblock for new-format file data
+        BLOCKTYPE4_END = 0x7B            // End of archive
+    };
+
+    enum HEADERTYPE5 {
+        HEADERTYPE5_MAIN = 1,        // Main archive header
+        HEADERTYPE5_FILE = 2,        // File header
+        HEADERTYPE5_SERVICE = 3,     // Service header
+        HEADERTYPE5_ENCRYPTION = 4,  // Archive encryption header
+        HEADERTYPE5_ENDARC = 5,      // End of archive header
+    };
+
+public:
+    struct INTERNAL_INFO : XArchive::INTERNAL_INFO {};
+
+    bool handleInternalInfo(PDSTRUCT *pPdStruct) override;
+    void *getInternalInfo(PDSTRUCT *pPdStruct) override;
+    void setInternalInfo(void *pInternalInfo) override;
+
+    virtual QList<QString> getSearchSignatures() override;
+    virtual XBinary *createInstance(QIODevice *pDevice, bool bIsImage = false, XADDR nModuleAddress = -1) override;
+    enum STRUCTID {
+        STRUCTID_UNKNOWN = 0,
+        STRUCTID_RAR14_SIGNATURE,
+        STRUCTID_RAR40_SIGNATURE,
+        STRUCTID_RAR50_SIGNATURE,
+        STRUCTID_RAR14_HEADER,
+        STRUCTID_RAR40_HEADER,
+        STRUCTID_RAR50_HEADER,
+    };
+
+    explicit XRar(QIODevice *pDevice = nullptr);
+
+    virtual bool isValid(PDSTRUCT *pPdStruct = nullptr) override;
+    static bool isValid(QIODevice *pDevice, PDSTRUCT *pPdStruct = nullptr);
+    virtual QString getVersion() override;
+    virtual bool isEncrypted() override;
+    virtual bool isCommentPresent() override;
+    virtual QString getComment() override;
+
+    virtual QString getFileFormatExt() override;
+    virtual QString getFileFormatExtsString() override;
+    virtual qint64 getFileFormatSize(PDSTRUCT *pPdStruct) override;
+
+    virtual QList<MAPMODE> getMapModesList() override;
+    virtual _MEMORY_MAP getMemoryMap(MAPMODE mapMode = MAPMODE_UNKNOWN, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual FT getFileType() override;
+
+    QString blockType4ToString(BLOCKTYPE4 type);
+    QString headerType5ToString(HEADERTYPE5 type);
+
+    virtual FILEFORMATINFO getFileFormatInfo(PDSTRUCT *pPdStruct) override;
+
+    virtual QString getMIMEString() override;
+
+    virtual QString structIDToString(quint32 nID) override;
+    virtual QString structIDToFtString(quint32 nID) override;
+    virtual quint32 ftStringToStructID(const QString &sFtString) override;
+    virtual QList<XFHEADER> getXFHeaders(const XFSTRUCT &xfStruct, PDSTRUCT *pPdStruct) override;
+    virtual QList<XFRECORD> getXFRecords(FT fileType, quint32 nStructID, const XLOC &xLoc) override;
+    // virtual QList<DATA_HEADER> getDataHeaders(const DATA_HEADERS_OPTIONS &dataHeadersOptions, PDSTRUCT *pPdStruct) override;
+    // virtual qint32 readTableRow(qint32 nRow, LT locType, XADDR nLocation, const DATA_RECORDS_OPTIONS &dataRecordsOptions, QList<DATA_RECORD_ROW> *pListDataRecords,
+    //                             void *pUserData, PDSTRUCT *pPdStruct) override;
+
+    virtual QList<FPART> getFileParts(quint32 nFileParts, qint32 nLimit = -1, PDSTRUCT *pPdStruct = nullptr) override;
+
+    // Streaming Unpacking API
+    virtual QList<PM_INFO> unpackImplemented() override;
+    virtual QMap<UNPACK_PROP, QVariant> getDefaultUnpackProperties() override;
+    virtual bool initUnpack(XBinary::UNPACK_STATE *pUnpackState, const QMap<XBinary::UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual XBinary::ARCHIVERECORD infoCurrent(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
+    virtual bool unpackCurrent(XBinary::UNPACK_STATE *pUnpackState, QIODevice *pOutputDevice, PDSTRUCT *pPdStruct) override;
+    virtual bool moveToNext(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct) override;
+    virtual bool finishUnpack(XBinary::UNPACK_STATE *pUnpackState, PDSTRUCT *pPdStruct = nullptr) override;
+    virtual QList<FPART_PROP> getAvailableFPARTProperties() override;
+
+private:
+    static quint8 splitFlags(const RAR_UNPACK_CONTEXT *context, qint32 index);
+    ARCHIVERECORD infoCurrentRaw(RAR_UNPACK_CONTEXT *context, qint32 index);
+    bool unpackSplitRecord(RAR_UNPACK_CONTEXT *context, qint32 index, ARCHIVERECORD record,
+                           UNPACK_STATE *state, QIODevice *stage, QIODevice *destination, PDSTRUCT *progress);
+    qint32 getInternVersion(PDSTRUCT *pPdStruct);
+    bool readVIntBounded(qint64 *pOffset, qint64 nEndOffset, qint32 nMaxBytes, quint64 *pValue);
+    bool isRangeValid(qint64 nOffset, quint64 nSize);
+    bool isHeaderCRCValid4(qint64 nOffset, qint64 nHeaderSize, quint16 nExpectedCRC);
+    bool isHeaderCRCValid5(qint64 nOffset, qint64 nHeaderSize, quint32 nExpectedCRC);
+    QByteArray readBlock4Snapshot(qint64 nOffset);
+    QByteArray readHeader5Snapshot(qint64 nOffset);
+    static bool parseGenericBlock4Snapshot(const QByteArray &baHeader, GENERICBLOCK4 *pResult);
+    static bool parseGenericHeader5Snapshot(const QByteArray &baHeader, GENERICHEADER5 *pResult, qint64 *pBodyOffset = nullptr);
+    bool isMainOrEndHeader5Valid(qint64 nOffset, const GENERICHEADER5 &genericHeader);
+    GENERICHEADER5 readGenericHeader5(qint64 nOffset);
+    GENERICBLOCK4 readGenericBlock4(qint64 nOffset);
+    FILEBLOCK14 readFileBlock14(qint64 nOffset);
+    FILEBLOCK4 readFileBlock4(qint64 nOffset);
+    FILEHEADER5 readFileHeader5(qint64 nOffset);
+    static bool decodeRar4UnicodeName(const QByteArray &nameData, QString *pResult);
+    static bool decodeRar5Name(const QByteArray &nameData, QString *pResult);
+    static bool _initUnpackFail(QPointer<XRar> *pGuardedArchive, XBinary::UNPACK_STATE *pUnpackState, RAR_UNPACK_CONTEXT *pContext);
+
+    // Decrypt a single RAR5 encrypted header block (IV + AES-CBC data)
+    // Returns decrypted header bytes; sets *pConsumedSize to total bytes consumed from file
+    QByteArray decryptRar5HeaderBlock(qint64 nOffset, const QByteArray &baAesKey, qint64 *pConsumedSize);
+
+    // Helper functions for property extraction
+    QMap<XBinary::FPART_PROP, QVariant> _readProperties(const FILEBLOCK4 &fileBlock4);
+    QMap<XBinary::FPART_PROP, QVariant> _readProperties(const FILEHEADER5 &fileHeader5);
+
+    // Helper functions for packing
+    QByteArray createFileBlock4(const QString &sFileName, qint64 nFileSize, quint32 nFileCRC, quint32 nFileTime, quint32 nAttributes);
+    quint16 calculateCRC16(const QByteArray &data);
+
+private:
+    INTERNAL_INFO m_internalInfo;
+};
+
+#endif  // XRAR_H
