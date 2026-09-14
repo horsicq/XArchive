@@ -7,6 +7,7 @@
 
 #include "xdcldecoder.h"
 
+#include <limits>  // Qt5 qfloat16.h needs it
 #include <QtEndian>
 
 namespace {

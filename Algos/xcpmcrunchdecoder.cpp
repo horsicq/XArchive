@@ -233,6 +233,7 @@ private:
     std::array<int, 5003> m_hash;
     int m_last = -1;
 };
+constexpr int Crunch::Empty;  // odr-used by std::array::fill (C++11)
 
 // adaptive 315-symbol Huffman.
 // The reference implementation passes stop=1 and RLE=0 to the shared engine.
@@ -415,6 +416,8 @@ bool compact(Bits *bits, Output *output)
     return false;
 }
 }  // namespace
+
+constexpr std::size_t XCpmCrunchDecoder::MaxOutput;  // odr-used by std::min (C++11)
 
 bool XCpmCrunchDecoder::parseHeader(const std::uint8_t *data, std::size_t size, Header *header)
 {
