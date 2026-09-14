@@ -5,7 +5,7 @@
 
 #include "xlhasfx.h"
 
-XLhaSFX::XLhaSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_LHA)
+XLhaSFX::XLhaSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_LHA)
 {
 }
 

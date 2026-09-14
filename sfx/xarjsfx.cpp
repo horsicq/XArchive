@@ -53,7 +53,7 @@ XArjSFX::ARJSFX_UNPACK_DEFERRED_CLEANUP::~ARJSFX_UNPACK_DEFERRED_CLEANUP()
     }
 }
 
-XArjSFX::XArjSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_ARJ)
+XArjSFX::XArjSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_ARJ)
 {
     m_pArjUnpackDeferredCleanup = QSharedPointer<ARJSFX_UNPACK_DEFERRED_CLEANUP>::create();
     const QSharedPointer<ARJSFX_UNPACK_DEFERRED_CLEANUP> pDeferredCleanup = m_pArjUnpackDeferredCleanup;
@@ -97,7 +97,7 @@ bool XArjSFX::_scanArchives(QList<ARJSFX_ENTRY> *pList, const QMap<UNPACK_PROP, 
     if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
 
     const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(guardedThis->XSFX::getInternalInfo(pPdStruct));
-    if (!guardedThis || !guardedSource || !pInfo || !pInfo->bIsValid || (pInfo->arcType != ARC_ARJ) || pInfo->bUseOuterDevice ||
+    if (!guardedThis || !guardedSource || !pInfo || !pInfo->bIsValid || (pInfo->arcType != FT_ARJ) || pInfo->bUseOuterDevice ||
         (pInfo->nArchiveOffset < 0) || (pInfo->nArchiveSize <= 0))
         return false;
 

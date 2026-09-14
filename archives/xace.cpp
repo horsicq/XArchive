@@ -322,9 +322,17 @@ bool XACE::_readBlock(qint64 nOffset, BLOCK_INFO *pInfo, PDSTRUCT *pPdStruct)
             return false;
         }
 
+        // The recovery block is CLUSTER 16-bit per-cluster checksums followed
+        // by the CL_SIZE-byte recovery cluster, and REC_CRC covers only that
+        // trailing cluster - not the whole block.  Checking the whole block
+        // rejected every archive that actually carries a recovery record: the
+        // two in the reference corpus both match on the cluster alone, and on
+        // the larger of them 197 of the 198 stored per-cluster checksums
+        // independently reproduce over the archive's own 2048-byte clusters,
+        // which is what fixes the layout.
         quint32 nRecoveryCRC = 0xFFFFFFFFU;
-        qint64 nCRCOffset = info.nDataOffset;
-        qint64 nCRCRemaining = info.nAddSize;
+        qint64 nCRCOffset = info.nDataOffset + static_cast<qint64>(info.nRecoveryBlockCount) * 2;
+        qint64 nCRCRemaining = static_cast<qint64>(info.nRecoveryClusterSize);
         QByteArray baCRCBuffer;
         if (nCRCRemaining > 0) {
             baCRCBuffer.resize(static_cast<qint32>(qMin(nCRCRemaining, (qint64)ACE1_CRC_BUFFER_SIZE)));

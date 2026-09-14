@@ -69,6 +69,13 @@ public:
     static bool isArchiveOpenValid(QIODevice *pDevice, const QSet<XBinary::FT> &stAvailable);
     static bool isArchiveOpenValid(const QString &sFileName, const QSet<XBinary::FT> &stAvailable);
     static QSet<XBinary::FT> getArchiveOpenValidFileTypes();
+    // Authenticates an archive of fileType embedded at nOffset and reports its
+    // exact size in *pnArchiveSize.  A signature match and a self-declared size
+    // are not enough for an embedded payload: the declared size is verified
+    // against a second, exactly sized window that must also parse end to end.
+    // Returns false and leaves *pnArchiveSize untouched on any failure.
+    static bool getValidatedArchiveSize(QIODevice *pDevice, XBinary::FT fileType, qint64 nOffset, qint64 nAvailableSize, qint64 *pnArchiveSize,
+                                        XBinary::PDSTRUCT *pPdStruct = nullptr);
 
 private:
     static void _findFiles(const QString &sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit,

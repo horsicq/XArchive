@@ -74,7 +74,12 @@ bool arcv4IsValidName(const QByteArray &baName)
     if (baName.isEmpty()) return false;
     for (char c : baName) {
         const quint8 nCharacter = static_cast<quint8>(c);
-        if (nCharacter < 0x20 || nCharacter > 0x7e) return false;
+        // The name is a byte string in the builder machine's ANSI code page,
+        // not ASCII.  "Catalunya_R\xe0dio_(Spanish)" is a real member name in
+        // the reference corpus, and rejecting that 0xe0 threw away the entire
+        // 48-member archive it lives in.  Control bytes and DEL still cannot
+        // occur in a Windows path, so those stay fatal.
+        if ((nCharacter < 0x20) || (nCharacter == 0x7f)) return false;
     }
     return true;
 }
@@ -217,13 +222,19 @@ bool XARCV4::parseContext(CONTEXT *pContext, PDSTRUCT *pPdStruct)
         MEMBER member = {};
         member.nHeaderOffset = nOffset;
         member.nUncompressedSize = qFromLittleEndian<quint32>(pTail);
-        const quint32 nReserved = qFromLittleEndian<quint32>(pTail + 4);
+        const quint32 nMemberFlags = qFromLittleEndian<quint32>(pTail + 4);
         member.nMTime = qFromLittleEndian<quint64>(pTail + 8);
         member.nFileVersionLS = qFromLittleEndian<quint32>(pTail + 16);
         member.nFileVersionMS = qFromLittleEndian<quint32>(pTail + 20);
         const quint32 nPackedSize = qFromLittleEndian<quint32>(pTail + 24);
         member.nMethod = qFromLittleEndian<quint32>(pTail + 28);
-        if (nReserved != 0) return false;
+        // NOT reserved: a small per-member install-flag word.  It is 0 on
+        // 864 of the 867 members in the reference corpus and 1 or 3 on the
+        // other three, all inside one Eschalon Setup EPSF payload, and
+        // demanding zero rejected that whole archive.  Bounding it to a byte
+        // keeps the field contributing to the gate without asserting a meaning
+        // for bits no sample exercises.
+        if (nMemberFlags > 0xffU) return false;
         if ((member.nMethod != ARCV4_METHOD_STORED) &&
             (member.nMethod != ARCV4_METHOD_COMPRESSED)) {
             return false;

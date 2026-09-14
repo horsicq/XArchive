@@ -9,6 +9,7 @@
 
 #include "xpe.h"
 #include "subdevice.h"
+#include "xarchives.h"
 #include "xsevenzip.h"
 
 namespace {
@@ -27,48 +28,6 @@ public:
 private:
     QSharedPointer<XSevenZipSFX::UNPACK_DEFERRED_CLEANUP> m_pCleanup;
 };
-
-bool getValidatedSevenZipSize(QIODevice *pDevice, qint64 nOffset, qint64 nAvailableSize, qint64 *pArchiveSize, XBinary::PDSTRUCT *pPdStruct)
-{
-    if (!pDevice || !pArchiveSize || (nOffset < 0) || (nAvailableSize < 32) || (nOffset > pDevice->size()) || (nAvailableSize > pDevice->size() - nOffset) ||
-        !XBinary::isPdStructNotCanceled(pPdStruct)) {
-        return false;
-    }
-
-    qint64 nLogicalSize = 0;
-    {
-        SubDevice candidateDevice(pDevice, nOffset, nAvailableSize);
-        if (!candidateDevice.open(QIODevice::ReadOnly)) return false;
-
-        XSevenZip candidate(&candidateDevice);
-        if (candidate.isValid(pPdStruct)) nLogicalSize = candidate.getFileFormatSize(pPdStruct);
-        candidateDevice.close();
-    }
-
-    if ((nLogicalSize < 32) || (nLogicalSize > nAvailableSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-
-    // isValid() authenticates the framing CRCs. Also parse the complete header
-    // so a CRC-consistent but semantically malformed header is not accepted.
-    // An encrypted encoded header cannot be initialized without its password;
-    // isEncrypted() still parses and validates its stream description.
-    SubDevice archiveDevice(pDevice, nOffset, nLogicalSize);
-    if (!archiveDevice.open(QIODevice::ReadOnly)) return false;
-
-    XSevenZip archive(&archiveDevice);
-    XBinary::UNPACK_STATE state = {};
-    QMap<XBinary::UNPACK_PROP, QVariant> properties;
-    bool bValid = archive.initUnpack(&state, properties, pPdStruct);
-    if (bValid) {
-        bValid = archive.finishUnpack(&state, pPdStruct);
-    } else if (XBinary::isPdStructNotCanceled(pPdStruct)) {
-        bValid = archive.isEncrypted();
-    }
-    archiveDevice.close();
-
-    if (!bValid || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
-    *pArchiveSize = nLogicalSize;
-    return true;
-}
 
 }  // namespace
 
@@ -249,7 +208,7 @@ XSevenZipSFX::INTERNAL_INFO XSevenZipSFX::_detect(PDSTRUCT *pPdStruct)
 
             qint64 nArchiveSize = 0;
             if ((nArchiveOffset <= nTotalSize - 6) && (read_array_process(nArchiveOffset, 6, pPdStruct) == k7z) &&
-                getValidatedSevenZipSize(getDevice(), nArchiveOffset, nTotalSize - nArchiveOffset, &nArchiveSize, pPdStruct)) {
+                XArchives::getValidatedArchiveSize(getDevice(), XBinary::FT_7Z, nArchiveOffset, nTotalSize - nArchiveOffset, &nArchiveSize, pPdStruct)) {
                 result.bIsValid = true;
                 result.nArchiveOffset = nArchiveOffset;
                 result.nArchiveSize = nArchiveSize;
@@ -262,12 +221,14 @@ XSevenZipSFX::INTERNAL_INFO XSevenZipSFX::_detect(PDSTRUCT *pPdStruct)
         QString sProduct = pe.getResourcesVersionValue("ProductName").trimmed();
         bool bHarden = (sInternal.startsWith("7z") && sInternal.endsWith(".sfx")) || (sProduct == "7-Zip");
         if (bHarden) {
-            qint64 nArchiveSize = 0;
-            if (getValidatedSevenZipSize(getDevice(), nOverlayOffset, nTotalSize - nOverlayOffset, &nArchiveSize, pPdStruct)) {
-                result.bIsValid = true;
-                result.nArchiveOffset = nOverlayOffset;
-                result.nArchiveSize = nArchiveSize;
-            }
+            result.bCustom = true;
+        }
+
+        qint64 nArchiveSize = 0;
+        if (XArchives::getValidatedArchiveSize(getDevice(), XBinary::FT_7Z, nOverlayOffset, nTotalSize - nOverlayOffset, &nArchiveSize, pPdStruct)) {
+            result.bIsValid = true;
+            result.nArchiveOffset = nOverlayOffset;
+            result.nArchiveSize = nArchiveSize;
         }
     }
 
@@ -288,34 +249,34 @@ QMap<XBinary::UNPACK_PROP, QVariant> XSevenZipSFX::getDefaultUnpackProperties()
 {
     QMap<XBinary::UNPACK_PROP, QVariant> result = XBinary::getDefaultUnpackProperties();
 
-    QIODevice *pDevice = getDevice();
+    // QIODevice *pDevice = getDevice();
 
-    if (pDevice) {
-        INTERNAL_INFO info = _detect(nullptr);
+    // if (pDevice) {
+    //     INTERNAL_INFO info = _detect(nullptr);
 
-        if (info.bIsValid && (info.nArchiveOffset >= 0) && (info.nArchiveSize > 0)) {
-            SubDevice subDevice(pDevice, info.nArchiveOffset, info.nArchiveSize);
+    //     if (info.bIsValid && (info.nArchiveOffset >= 0) && (info.nArchiveSize > 0)) {
+    //         SubDevice subDevice(pDevice, info.nArchiveOffset, info.nArchiveSize);
 
-            if (subDevice.open(QIODevice::ReadOnly)) {
-                {
-                    XSevenZip archive(&subDevice);
-                    QMap<UNPACK_PROP, QVariant> mapInnerProperties = archive.getDefaultUnpackProperties();
+    //         if (subDevice.open(QIODevice::ReadOnly)) {
+    //             {
+    //                 XSevenZip archive(&subDevice);
+    //                 QMap<UNPACK_PROP, QVariant> mapInnerProperties = archive.getDefaultUnpackProperties();
 
-                    if (mapInnerProperties.contains(UNPACK_PROP_PASSWORD)) {
-                        result.insert(UNPACK_PROP_PASSWORD, mapInnerProperties.value(UNPACK_PROP_PASSWORD));
-                    }
+    //                 if (mapInnerProperties.contains(UNPACK_PROP_PASSWORD)) {
+    //                     result.insert(UNPACK_PROP_PASSWORD, mapInnerProperties.value(UNPACK_PROP_PASSWORD));
+    //                 }
 
-                    for (QMap<UNPACK_PROP, QVariant>::const_iterator it = mapInnerProperties.constBegin(); it != mapInnerProperties.constEnd(); ++it) {
-                        if (XBinary::isUnpackCRCProperty(it.key())) {
-                            result.insert(it.key(), it.value());
-                        }
-                    }
-                }
+    //                 for (QMap<UNPACK_PROP, QVariant>::const_iterator it = mapInnerProperties.constBegin(); it != mapInnerProperties.constEnd(); ++it) {
+    //                     if (XBinary::isUnpackCRCProperty(it.key())) {
+    //                         result.insert(it.key(), it.value());
+    //                     }
+    //                 }
+    //             }
 
-                subDevice.close();
-            }
-        }
-    }
+    //             subDevice.close();
+    //         }
+    //     }
+    // }
 
     return result;
 }

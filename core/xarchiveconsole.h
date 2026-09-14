@@ -192,10 +192,19 @@ public:
     XOptions::CR writeMembersToStdout(const COMMAND &command);
     XOptions::CR listSupportedFormats(const COMMAND &command);
     // What `-i` with no target answers: every format this build can open, one
-    // table per category. A bare `-i` is a question about the tool rather than
-    // about a file, and the flat `--formats` list is the wrong shape for it.
+    // table per carrier/target class. A bare `-i` is a question about the tool
+    // rather than about a file, and the flat `--formats` list is the wrong
+    // shape for it.
     XOptions::CR showFormatTables(const COMMAND &command);
+    // Every type this build can open: the archive readers' set plus, when
+    // XStaticUnpacker is compiled in, the packer/installer/SFX identities it
+    // adds. Shared by the tables and by the machine-readable listings so the
+    // two can never disagree about what the tool supports.
+    static QList<XBinary::FT> collectFormatTypes();
     void printFormatTable(const QString &sTitle, const QList<XBinary::FT> &listTypes);
+    // The XBinary::FTCLASS_* bits of one type as stable lowercase tokens, for
+    // the machine-readable listings.
+    static QStringList formatClassNames(quint32 nClassMask);
     // Create a ZIP from the operands.  The archive is the first operand (or
     // -f), the rest are the files and directories to add.
     XOptions::CR createArchive(const COMMAND &command);

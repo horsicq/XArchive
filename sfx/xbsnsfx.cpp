@@ -4,7 +4,7 @@
  */
 #include "xbsnsfx.h"
 
-XBsnSFX::XBsnSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_BSN)
+XBsnSFX::XBsnSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_BSN)
 {
 }
 

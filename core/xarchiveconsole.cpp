@@ -1713,156 +1713,571 @@ XOptions::CR XArchiveConsole::writeMembersToStdout(const COMMAND &command)
     return result;
 }
 
+// Defined further down, next to the record-listing encoders it was written
+// for; the format listing needs the same quoting rules.
+static QString _xacDelimitedField(const QString &sValue, bool bTabSeparated);
+
+QList<XBinary::FT> XArchiveConsole::collectFormatTypes()
+{
+    QSet<XBinary::FT> stFileTypes = XArchives::getArchiveOpenValidFileTypes();
+
+#ifdef USE_STATICUNPACKER
+    // The packer / installer / SFX identities are dispatched from the
+    // USE_STATICUNPACKER arms of XFormats::createClass (xformats.cpp:727 and
+    // :1053), and XArchives::getArchiveOpenValidFileTypes() is the archive
+    // reader set, which does not list them.  Without this, a build that
+    // unpacks UPX, NSIS and Inno Setup answered `-i` with an archive-only list
+    // and never mentioned them.  The format registry knows which types those
+    // are, so there is no second hand-maintained list to drift.
+    const QList<XBinary::FT> listCarried = XBinary::getFileTypesByClass(XBinary::FTCLASS_MASK_EXECUTABLECARRIED);
+
+    for (qint32 i = 0; i < listCarried.count(); i++) {
+        stFileTypes.insert(listCarried.at(i));
+    }
+
+#ifndef USE_XEMULATOR
+    // XInstallSimple is the one reader in that group that also needs the
+    // emulator: its createClass arm sits inside `#ifdef USE_XEMULATOR`
+    // (xformats.cpp:1086-1089).  Without WITH_XEMULATOR the identity is still
+    // detected but has no reader, so listing it would be a claim this build
+    // cannot honour.
+    stFileTypes.remove(XBinary::FT_PE32_INSTALLSIMPLE);
+    stFileTypes.remove(XBinary::FT_PE64_INSTALLSIMPLE);
+#endif
+#endif
+
+    QList<XBinary::FT> listResult;
+    QSet<XBinary::FT> stTaken;
+
+    // The historical order first, so an existing reader of this output finds
+    // the same names in the same places.
+    const QList<XBinary::FT> listOrdered = XBinary::_getFileTypeListFromSet(stFileTypes, XBinary::FT_FLAG_FORMATS);
+
+    for (qint32 i = 0; i < listOrdered.count(); i++) {
+        const XBinary::FT fileType = listOrdered.at(i);
+
+        // _getFileTypeListFromSet prepends the generic pseudo-types to any
+        // FT_FLAG_FORMATS request; they are not container formats.
+        if ((fileType == XBinary::FT_REGION) || (fileType == XBinary::FT_DATA) || (fileType == XBinary::FT_BINARY)) continue;
+        if (stTaken.contains(fileType)) continue;
+        if (XBinary::fileTypeIdToString(fileType).isEmpty()) continue;
+
+        listResult.append(fileType);
+        stTaken.insert(fileType);
+    }
+
+    // Then whatever that ordered walk did not claim, in registry order, so the
+    // packer and installer identities are grouped the way the registry lists
+    // them rather than by raw enum value.
+    const QList<XBinary::FT> listRegistry = XBinary::getFileTypesByClass(0xFFFFFFFFU);
+
+    for (qint32 i = 0; i < listRegistry.count(); i++) {
+        const XBinary::FT fileType = listRegistry.at(i);
+
+        if (!stFileTypes.contains(fileType)) continue;
+        if (stTaken.contains(fileType)) continue;
+        if (XBinary::fileTypeIdToString(fileType).isEmpty()) continue;
+
+        listResult.append(fileType);
+        stTaken.insert(fileType);
+    }
+
+    // And finally anything still left, so a type can never be silently dropped
+    // from a "what can this open" answer.
+    for (QSet<XBinary::FT>::const_iterator it = stFileTypes.constBegin(); it != stFileTypes.constEnd(); ++it) {
+        const XBinary::FT fileType = *it;
+
+        if ((fileType == XBinary::FT_REGION) || (fileType == XBinary::FT_DATA) || (fileType == XBinary::FT_BINARY)) continue;
+        if (stTaken.contains(fileType)) continue;
+        if (XBinary::fileTypeIdToString(fileType).isEmpty()) continue;
+
+        listResult.append(fileType);
+        stTaken.insert(fileType);
+    }
+
+    return listResult;
+}
+
 XOptions::CR XArchiveConsole::showFormatTables(const COMMAND &command)
 {
-    const QSet<XBinary::FT> stFileTypes = XArchives::getArchiveOpenValidFileTypes();
-
-    // The machine-readable shapes already answer this question with the same
-    // set of names, so delegate rather than invent a second grouped schema
-    // nothing asked for. Only the two human-readable shapes get tables.
+    // The machine-readable shapes answer the same question with the same
+    // fields, so delegate rather than invent a second grouped schema nothing
+    // asked for. Only the two human-readable shapes get tables.
     if ((command.listFormat != LISTFORMAT_NATIVE) && (command.listFormat != LISTFORMAT_TECHNICAL)) {
         return listSupportedFormats(command);
     }
 
-    struct CATEGORY {
-        quint32 nFlag;
+    const QList<XBinary::FT> listAll = collectFormatTypes();
+    QSet<XBinary::FT> stAll;
+
+    for (qint32 i = 0; i < listAll.count(); i++) {
+        stAll.insert(listAll.at(i));
+    }
+
+    // Coarse FT_FLAG category per type, computed once.  It is the fallback for
+    // the several hundred legacy containers the format registry has no row for
+    // yet: they keep appearing under the category they always did instead of
+    // being dumped into "Other" by a registry that has not caught up.
+    const quint32 arrFallbackFlags[] = {XBinary::FT_FLAG_ARCHIVES, XBinary::FT_FLAG_EXECUTABLES, XBinary::FT_FLAG_DOCUMENTS,
+                                        XBinary::FT_FLAG_IMAGES,   XBinary::FT_FLAG_AUDIO,       XBinary::FT_FLAG_VIDEO,
+                                        XBinary::FT_FLAG_TEXT};
+    const qint32 nNumberOfFallbackFlags = qint32(sizeof(arrFallbackFlags) / sizeof(arrFallbackFlags[0]));
+    QMap<XBinary::FT, quint32> mapFallbackFlags;
+
+    for (qint32 i = 0; i < nNumberOfFallbackFlags; i++) {
+        const QList<XBinary::FT> listCategory = XBinary::_getFileTypeListFromSet(stAll, arrFallbackFlags[i]);
+
+        for (qint32 j = 0; j < listCategory.count(); j++) {
+            const XBinary::FT fileType = listCategory.at(j);
+
+            // The helper prepends the pseudo-types to every category request.
+            if ((fileType == XBinary::FT_REGION) || (fileType == XBinary::FT_DATA) || (fileType == XBinary::FT_BINARY)) continue;
+
+            mapFallbackFlags.insert(fileType, mapFallbackFlags.value(fileType, 0) | arrFallbackFlags[i]);
+        }
+    }
+
+    // One table per carrier/target class.
+    //
+    // nClassMask selects from the format registry (XBinary::FORMATINFO).
+    // nFallbackFlag additionally sweeps in every type the registry has no row
+    // for at all.
+    //
+    // A type may match more than one table on purpose: UPX is a COM, MS-DOS,
+    // PE32, PE64 and ELF/Mach-O packer, and printing it once would mean four
+    // of those five tables lied.  The total line below therefore counts
+    // distinct types, not the sum of the table sizes.
+    struct TABLESPEC {
+        quint32 nClassMask;
+        quint32 nFallbackFlag;
         const char *pszTitle;
     };
 
-    // Widest interest first. Empty categories are skipped rather than printed
-    // as empty tables.
-    const CATEGORY categories[] = {
-        {XBinary::FT_FLAG_ARCHIVES, "Archives and containers"},
-        {XBinary::FT_FLAG_STATICUNPACKERS, "Packed executables"},
-        {XBinary::FT_FLAG_EXECUTABLES, "Executables"},
-        {XBinary::FT_FLAG_DOCUMENTS, "Documents"},
-        {XBinary::FT_FLAG_IMAGES, "Images"},
-        {XBinary::FT_FLAG_AUDIO, "Audio"},
-        {XBinary::FT_FLAG_VIDEO, "Video"},
-        {XBinary::FT_FLAG_TEXT, "Text"},
+    const TABLESPEC tables[] = {
+        {XBinary::FTCLASS_ARCHIVE, XBinary::FT_FLAG_ARCHIVES, "Archives and containers"},
+        {XBinary::FTCLASS_STREAM, 0, "Single-stream compressors"},
+        {XBinary::FTCLASS_PACKAGE, 0, "Software packages"},
+        {XBinary::FTCLASS_FILESYSTEM, 0, "File systems"},
+        {XBinary::FTCLASS_DISKIMAGE, 0, "Disk and disc images"},
+        {XBinary::FTCLASS_DOCUMENT, XBinary::FT_FLAG_DOCUMENTS, "Documents and compound files"},
+        {XBinary::FTCLASS_GAME, 0, "Game and engine containers"},
+        {XBinary::FTCLASS_SFX_ANY, 0, "Self-extracting archives (stub architecture not fixed)"},
+        {XBinary::FTCLASS_SFX_MSDOS, 0, "MS-DOS SFX"},
+        {XBinary::FTCLASS_SFX_PE32, 0, "PE32 SFX"},
+        {XBinary::FTCLASS_SFX_PE64, 0, "PE64 SFX"},
+        {XBinary::FTCLASS_SFX_ELF, 0, "ELF SFX"},
+        {XBinary::FTCLASS_INSTALLER_MSDOS, 0, "MS-DOS installers"},
+        {XBinary::FTCLASS_INSTALLER_PE32, 0, "PE32 installers"},
+        {XBinary::FTCLASS_INSTALLER_PE64, 0, "PE64 installers"},
+        {XBinary::FTCLASS_PACKER_COM, 0, "COM packers"},
+        {XBinary::FTCLASS_PACKER_MSDOS, 0, "MS-DOS packers"},
+        {XBinary::FTCLASS_PACKER_PE32, 0, "PE32 packers"},
+        {XBinary::FTCLASS_PACKER_PE64, 0, "PE64 packers"},
+        {XBinary::FTCLASS_PACKER_OTHER, 0, "Packers on other carriers (ELF, Mach-O)"},
+        {XBinary::FTCLASS_EXECUTABLE, XBinary::FT_FLAG_EXECUTABLES, "Executables"},
+        {0, XBinary::FT_FLAG_IMAGES, "Images"},
+        {0, XBinary::FT_FLAG_AUDIO, "Audio"},
+        {0, XBinary::FT_FLAG_VIDEO, "Video"},
+        {0, XBinary::FT_FLAG_TEXT, "Text"}
     };
 
-    const qint32 nNumberOfCategories = qint32(sizeof(categories) / sizeof(categories[0]));
+    const qint32 nNumberOfTables = qint32(sizeof(tables) / sizeof(tables[0]));
     QSet<XBinary::FT> stShown;
-    qint32 nTotal = 0;
     qint32 nTables = 0;
 
     // Say what the ID column is for. It is the token -F/--filetype accepts, so
     // the table is something to act on rather than just read; without this the
-    // two columns look like the same thing printed twice (they coincide for
-    // ZIP, and differ for ZLIB/"zlib" or 7ZIP/"7-Zip").
+    // first two columns look like the same thing printed twice (they coincide
+    // for ZIP, and differ for ZLIB/"zlib" or 7ZIP/"7-Zip").
     printf("Container formats this build can open.\n");
     printf("The ID is what -F/--filetype accepts.\n");
+    printf("Codecs is what the reader decodes; \"Not supported\" is what the format defines and\n");
+    printf("this build refuses - by not claiming the file, or by failing the member.\n");
+    printf("An empty cell means that type has not been audited yet, not that the answer is\n");
+    printf("\"none\". A type appears in every table its carrier fits. A type whose carrier has\n");
+    printf("not been recorded appears under its legacy category instead, which for most\n");
+    printf("legacy containers is \"Archives and containers\" - so a carrier table holds the\n");
+    printf("types audited onto that carrier, not every format of that kind this build opens.\n");
 
-    for (qint32 nCategory = 0; nCategory < nNumberOfCategories; nCategory++) {
-        const QList<XBinary::FT> listAll = XBinary::_getFileTypeListFromSet(stFileTypes, categories[nCategory].nFlag);
+    for (qint32 nTable = 0; nTable < nNumberOfTables; nTable++) {
         QList<XBinary::FT> listTypes;
 
         for (qint32 i = 0; i < listAll.count(); i++) {
             const XBinary::FT fileType = listAll.at(i);
+            const quint32 nClassMask = XBinary::getFormatClassMask(fileType);
+            bool bTake = false;
 
-            // _getFileTypeListFromSet prepends the generic pseudo-types to any
-            // FT_FLAG_FORMATS request, and every category above is part of that
-            // mask - so without this they would head all eight tables.
-            if ((fileType == XBinary::FT_REGION) || (fileType == XBinary::FT_DATA) || (fileType == XBinary::FT_BINARY)) continue;
-            if (stShown.contains(fileType)) continue;
+            if (tables[nTable].nClassMask && (nClassMask & tables[nTable].nClassMask)) {
+                bTake = true;
+            } else if (tables[nTable].nFallbackFlag && (nClassMask == XBinary::FTCLASS_NONE)) {
+                bTake = ((mapFallbackFlags.value(fileType, 0) & tables[nTable].nFallbackFlag) != 0) && (!stShown.contains(fileType));
+            }
 
-            listTypes.append(fileType);
-            stShown.insert(fileType);
+            if (bTake) listTypes.append(fileType);
         }
 
         if (listTypes.isEmpty()) continue;
 
-        printFormatTable(QString(categories[nCategory].pszTitle), listTypes);
-        nTotal += listTypes.count();
+        printFormatTable(QString(tables[nTable].pszTitle), listTypes);
+
+        for (qint32 i = 0; i < listTypes.count(); i++) {
+            stShown.insert(listTypes.at(i));
+        }
+
         nTables++;
     }
 
-    // Anything no category claimed. Printed rather than dropped: this is a
-    // "what can it open" answer, so a silently omitted format would be a wrong
+    // Anything no table claimed. Printed rather than dropped: this is a "what
+    // can it open" answer, so a silently omitted format would be a wrong
     // answer, and an entry appearing here is the signal that a new type was
     // added without a category.
     QList<XBinary::FT> listRest;
 
-    for (QSet<XBinary::FT>::const_iterator it = stFileTypes.constBegin(); it != stFileTypes.constEnd(); ++it) {
-        if (stShown.contains(*it)) continue;
-        if ((*it == XBinary::FT_REGION) || (*it == XBinary::FT_DATA) || (*it == XBinary::FT_BINARY)) continue;
-        if (XBinary::fileTypeIdToString(*it).isEmpty()) continue;
+    for (qint32 i = 0; i < listAll.count(); i++) {
+        if (stShown.contains(listAll.at(i))) continue;
 
-        listRest.append(*it);
+        listRest.append(listAll.at(i));
     }
 
     if (!listRest.isEmpty()) {
         printFormatTable(QStringLiteral("Other"), listRest);
-        nTotal += listRest.count();
         nTables++;
     }
 
-    printf("\n%lld format(s) in %lld table(s). Name a file to describe that file instead.\n", static_cast<long long>(nTotal),
+    printf("\n%lld format(s) in %lld table(s). Name a file to describe that file instead.\n", static_cast<long long>(listAll.count()),
            static_cast<long long>(nTables));
 
     return XOptions::CR_SUCCESS;
 }
 
+// Greedy word wrap for one table cell. Splits on spaces only, so a codec
+// list wraps between codecs and never inside "AES-128/192/256"; a single
+// token wider than the column is left to overhang rather than truncated,
+// because a truncated codec name is a wrong answer, not a narrow one.
+static QStringList _xacWrapCell(const QString &sText, qint32 nWidth)
+{
+    QStringList listResult;
+
+    if (sText.isEmpty() || (nWidth <= 0)) {
+        listResult.append(QString());
+        return listResult;
+    }
+
+    // split(QChar) without a SplitBehavior argument is the one spelling that is
+    // not deprecated in either Qt 5 or Qt 6; empty pieces are dropped here.
+    const QStringList listWords = sText.split(QChar(' '));
+    QString sLine;
+
+    for (qint32 i = 0; i < listWords.count(); i++) {
+        const QString sWord = listWords.at(i);
+
+        if (sWord.isEmpty()) {
+            continue;
+        } else if (sLine.isEmpty()) {
+            sLine = sWord;
+        } else if ((sLine.length() + 1 + sWord.length()) <= nWidth) {
+            sLine += QChar(' ') + sWord;
+        } else {
+            listResult.append(sLine);
+            sLine = sWord;
+        }
+    }
+
+    listResult.append(sLine);
+
+    return listResult;
+}
+
 void XArchiveConsole::printFormatTable(const QString &sTitle, const QList<XBinary::FT> &listTypes)
 {
+    // Per-column caps. A cell longer than its cap wraps onto continuation
+    // lines instead of stretching the row, which is what keeps a table with
+    // one 130-character codec list readable next to three hundred rows that
+    // have none. The ID column is deliberately uncapped: it is the token the
+    // user has to type back into -F/--filetype, so it must never wrap.
+    const qint32 nNameCap = 34;
+    const qint32 nVersionsCap = 22;
+    const qint32 nCodecsCap = 36;
+    const qint32 nNotSupportedCap = 28;
+
     QStringList listIds;
     QStringList listNames;
-    qint32 nIdWidth = 2;  // the "ID" header itself
+    QStringList listVersions;
+    QStringList listCodecs;
+    QStringList listNotSupported;
+
+    // Every column is width-computed from its own content, as the ID column
+    // always was, so a table of short names stays narrow instead of being
+    // padded out to the width of the widest table on the page.
+    qint32 nIdWidth = 2;        // the "ID" header itself
+    qint32 nNameWidth = 6;      // "Format"
+    qint32 nVersionsWidth = 8;  // "Versions"
+    qint32 nCodecsWidth = 6;    // "Codecs"
+    // A column nothing in this table populates is not printed at all, which is
+    // what keeps the large legacy table as narrow as it was before the extra
+    // columns existed.
+    bool bAnyVersions = false;
+    bool bAnyCodecs = false;
+    bool bAnyNotSupported = false;
 
     for (qint32 i = 0; i < listTypes.count(); i++) {
-        QString sId = XBinary::fileTypeIdToFtString(listTypes.at(i));
-        QString sName = XBinary::fileTypeIdToString(listTypes.at(i));
+        const XBinary::FT fileType = listTypes.at(i);
+        QString sId = XBinary::fileTypeIdToFtString(fileType);
+        QString sName = XBinary::fileTypeIdToString(fileType);
+        const QString sVersions = XBinary::getFormatVersions(fileType);
+        const QString sCodecs = XBinary::getFormatCodecs(fileType);
+        const QString sNotSupported = XBinary::getFormatNotSupported(fileType);
 
         if (sName.isEmpty()) sName = sId;
 
         listIds.append(sId);
         listNames.append(sName);
+        listVersions.append(sVersions);
+        listCodecs.append(sCodecs);
+        listNotSupported.append(sNotSupported);
 
         if (sId.length() > nIdWidth) nIdWidth = sId.length();
+        if (qMin(sName.length(), nNameCap) > nNameWidth) nNameWidth = qMin(sName.length(), nNameCap);
+        if (qMin(sVersions.length(), nVersionsCap) > nVersionsWidth) nVersionsWidth = qMin(sVersions.length(), nVersionsCap);
+        if (qMin(sCodecs.length(), nCodecsCap) > nCodecsWidth) nCodecsWidth = qMin(sCodecs.length(), nCodecsCap);
+
+        if (!sVersions.isEmpty()) bAnyVersions = true;
+        if (!sCodecs.isEmpty()) bAnyCodecs = true;
+        if (!sNotSupported.isEmpty()) bAnyNotSupported = true;
+    }
+
+    // Which column ends the line decides which ones get padded: the last one
+    // never is, so no row carries trailing blanks and a narrow terminal wraps
+    // on real content.
+    const bool bPadName = (bAnyVersions || bAnyCodecs || bAnyNotSupported);
+    const bool bPadVersions = (bAnyCodecs || bAnyNotSupported);
+    const bool bPadCodecs = bAnyNotSupported;
+
+    QString sHeader = QString("ID").leftJustified(nIdWidth, QChar(' '));
+    QString sRule = QString(nIdWidth, QChar('-'));
+
+    sHeader += QString("  ") + (bPadName ? QString("Format").leftJustified(nNameWidth, QChar(' ')) : QString("Format"));
+    sRule += QString("  ") + QString(bPadName ? nNameWidth : 6, QChar('-'));
+
+    if (bAnyVersions) {
+        sHeader += QString("  ") + (bPadVersions ? QString("Versions").leftJustified(nVersionsWidth, QChar(' ')) : QString("Versions"));
+        sRule += QString("  ") + QString(bPadVersions ? nVersionsWidth : 8, QChar('-'));
+    }
+
+    if (bAnyCodecs) {
+        sHeader += QString("  ") + (bPadCodecs ? QString("Codecs").leftJustified(nCodecsWidth, QChar(' ')) : QString("Codecs"));
+        sRule += QString("  ") + QString(bPadCodecs ? nCodecsWidth : 6, QChar('-'));
+    }
+
+    if (bAnyNotSupported) {
+        sHeader += QString("  ") + QString("Not supported");
+        sRule += QString("  ") + QString(13, QChar('-'));
     }
 
     printf("\n%s (%lld)\n", sTitle.toUtf8().data(), static_cast<long long>(listTypes.count()));
-    printf("%s  %s\n", QString("ID").leftJustified(nIdWidth, QChar(' ')).toUtf8().data(), "Format");
-    printf("%s  %s\n", QString(nIdWidth, QChar('-')).toUtf8().data(), QString(6, QChar('-')).toUtf8().data());
+    printf("%s\n", sHeader.toUtf8().data());
+    printf("%s\n", sRule.toUtf8().data());
 
     for (qint32 i = 0; i < listIds.count(); i++) {
-        printf("%s  %s\n", listIds.at(i).leftJustified(nIdWidth, QChar(' ')).toUtf8().data(), listNames.at(i).toUtf8().data());
+        const QStringList listNameLines = _xacWrapCell(listNames.at(i), nNameWidth);
+        const QStringList listVersionLines = _xacWrapCell(listVersions.at(i), nVersionsWidth);
+        const QStringList listCodecLines = _xacWrapCell(listCodecs.at(i), nCodecsWidth);
+        const QStringList listNotSupportedLines = _xacWrapCell(listNotSupported.at(i), nNotSupportedCap);
+
+        qint32 nRowLines = listNameLines.count();
+
+        if (bAnyVersions && (listVersionLines.count() > nRowLines)) nRowLines = listVersionLines.count();
+        if (bAnyCodecs && (listCodecLines.count() > nRowLines)) nRowLines = listCodecLines.count();
+        if (bAnyNotSupported && (listNotSupportedLines.count() > nRowLines)) nRowLines = listNotSupportedLines.count();
+
+        for (qint32 nLine = 0; nLine < nRowLines; nLine++) {
+            const QString sIdCell = (nLine == 0) ? listIds.at(i) : QString();
+            const QString sNameCell = (nLine < listNameLines.count()) ? listNameLines.at(nLine) : QString();
+            const QString sVersionCell = (nLine < listVersionLines.count()) ? listVersionLines.at(nLine) : QString();
+            const QString sCodecCell = (nLine < listCodecLines.count()) ? listCodecLines.at(nLine) : QString();
+            const QString sNotSupportedCell = (nLine < listNotSupportedLines.count()) ? listNotSupportedLines.at(nLine) : QString();
+
+            QString sLine = sIdCell.leftJustified(nIdWidth, QChar(' '));
+
+            sLine += QString("  ") + (bPadName ? sNameCell.leftJustified(nNameWidth, QChar(' ')) : sNameCell);
+
+            if (bAnyVersions) {
+                sLine += QString("  ") + (bPadVersions ? sVersionCell.leftJustified(nVersionsWidth, QChar(' ')) : sVersionCell);
+            }
+
+            if (bAnyCodecs) {
+                sLine += QString("  ") + (bPadCodecs ? sCodecCell.leftJustified(nCodecsWidth, QChar(' ')) : sCodecCell);
+            }
+
+            if (bAnyNotSupported) {
+                sLine += QString("  ") + sNotSupportedCell;
+            }
+
+            // An empty trailing cell is the one case where the padding would
+            // leave the line ending in blanks.
+            while (sLine.endsWith(QChar(' '))) sLine.chop(1);
+
+            printf("%s\n", sLine.toUtf8().data());
+        }
     }
+}
+
+QStringList XArchiveConsole::formatClassNames(quint32 nClassMask)
+{
+    // Stable machine-readable tokens for the same grouping the tables use, so
+    // a consumer of --json/--xml/--csv/--tsv can rebuild those tables itself.
+    struct CLASSNAME {
+        quint32 nFlag;
+        const char *pszName;
+    };
+
+    const CLASSNAME names[] = {
+        {XBinary::FTCLASS_ARCHIVE, "archive"},
+        {XBinary::FTCLASS_STREAM, "stream"},
+        {XBinary::FTCLASS_DISKIMAGE, "diskimage"},
+        {XBinary::FTCLASS_FILESYSTEM, "filesystem"},
+        {XBinary::FTCLASS_PACKAGE, "package"},
+        {XBinary::FTCLASS_GAME, "game"},
+        {XBinary::FTCLASS_DOCUMENT, "document"},
+        {XBinary::FTCLASS_SFX_ANY, "sfx"},
+        {XBinary::FTCLASS_SFX_MSDOS, "sfx-msdos"},
+        {XBinary::FTCLASS_SFX_PE32, "sfx-pe32"},
+        {XBinary::FTCLASS_SFX_PE64, "sfx-pe64"},
+        {XBinary::FTCLASS_SFX_ELF, "sfx-elf"},
+        {XBinary::FTCLASS_INSTALLER_MSDOS, "installer-msdos"},
+        {XBinary::FTCLASS_INSTALLER_PE32, "installer-pe32"},
+        {XBinary::FTCLASS_INSTALLER_PE64, "installer-pe64"},
+        {XBinary::FTCLASS_PACKER_COM, "packer-com"},
+        {XBinary::FTCLASS_PACKER_MSDOS, "packer-msdos"},
+        {XBinary::FTCLASS_PACKER_PE32, "packer-pe32"},
+        {XBinary::FTCLASS_PACKER_PE64, "packer-pe64"},
+        {XBinary::FTCLASS_PACKER_OTHER, "packer-other"},
+        {XBinary::FTCLASS_EXECUTABLE, "executable"}
+    };
+
+    const qint32 nNumberOfNames = qint32(sizeof(names) / sizeof(names[0]));
+    QStringList listResult;
+
+    for (qint32 i = 0; i < nNumberOfNames; i++) {
+        if (nClassMask & names[i].nFlag) {
+            listResult.append(QString(names[i].pszName));
+        }
+    }
+
+    return listResult;
 }
 
 XOptions::CR XArchiveConsole::listSupportedFormats(const COMMAND &command)
 {
-    QStringList listNames;
-    const QSet<XBinary::FT> stFileTypes = XArchives::getArchiveOpenValidFileTypes();
+    const QList<XBinary::FT> listTypes = collectFormatTypes();
 
-    for (QSet<XBinary::FT>::const_iterator it = stFileTypes.constBegin(); it != stFileTypes.constEnd(); ++it) {
-        const QString sName = XBinary::fileTypeIdToString(*it);
+    // Sorted by display name, as this listing always was; the grouped `-i`
+    // tables are where order carries meaning.
+    QMultiMap<QString, XBinary::FT> mapByName;
+
+    for (qint32 i = 0; i < listTypes.count(); i++) {
+        const QString sName = XBinary::fileTypeIdToString(listTypes.at(i));
 
         if (!sName.isEmpty()) {
-            listNames.append(sName);
+            mapByName.insert(sName.toLower(), listTypes.at(i));
         }
     }
 
-    listNames.sort(Qt::CaseInsensitive);
+    const QList<XBinary::FT> listSorted = mapByName.values();
 
     if (command.listFormat == LISTFORMAT_JSON) {
         QJsonObject jsonRoot;
         QJsonArray jsonFormats;
 
-        for (const QString &sName : listNames) {
-            jsonFormats.append(sName);
+        for (qint32 i = 0; i < listSorted.count(); i++) {
+            const XBinary::FT fileType = listSorted.at(i);
+            QJsonObject jsonFormat;
+
+            jsonFormat.insert("id", XBinary::fileTypeIdToFtString(fileType));
+            jsonFormat.insert("name", XBinary::fileTypeIdToString(fileType));
+            jsonFormat.insert("versions", XBinary::getFormatVersions(fileType));
+            jsonFormat.insert("codecs", XBinary::getFormatCodecs(fileType));
+            jsonFormat.insert("notSupported", XBinary::getFormatNotSupported(fileType));
+
+            QJsonArray jsonClasses;
+            const QStringList listClasses = formatClassNames(XBinary::getFormatClassMask(fileType));
+
+            for (qint32 j = 0; j < listClasses.count(); j++) {
+                jsonClasses.append(listClasses.at(j));
+            }
+
+            jsonFormat.insert("classes", jsonClasses);
+            jsonFormats.append(jsonFormat);
         }
 
         jsonRoot.insert("formats", jsonFormats);
-        jsonRoot.insert("count", listNames.count());
+        jsonRoot.insert("count", listSorted.count());
 
         printf("%s\n", QJsonDocument(jsonRoot).toJson(QJsonDocument::Indented).constData());
-    } else {
-        printf("Supported archive formats (%lld):\n", static_cast<long long>(listNames.count()));
+    } else if (command.listFormat == LISTFORMAT_XML) {
+        QString sResult;
+        QXmlStreamWriter writer(&sResult);
 
-        for (const QString &sName : listNames) {
-            printf("  %s\n", sName.toUtf8().data());
+        writer.setAutoFormatting(true);
+        writer.writeStartDocument();
+        writer.writeStartElement("formats");
+        writer.writeAttribute("count", QString::number(listSorted.count()));
+
+        for (qint32 i = 0; i < listSorted.count(); i++) {
+            const XBinary::FT fileType = listSorted.at(i);
+
+            writer.writeStartElement("format");
+            writer.writeAttribute("id", XBinary::fileTypeIdToFtString(fileType));
+            writer.writeAttribute("name", XBinary::fileTypeIdToString(fileType));
+            writer.writeAttribute("versions", XBinary::getFormatVersions(fileType));
+            writer.writeAttribute("codecs", XBinary::getFormatCodecs(fileType));
+            writer.writeAttribute("notSupported", XBinary::getFormatNotSupported(fileType));
+            writer.writeAttribute("classes", formatClassNames(XBinary::getFormatClassMask(fileType)).join(QChar('|')));
+            writer.writeEndElement();
+        }
+
+        writer.writeEndElement();
+        writer.writeEndDocument();
+
+        printf("%s\n", sResult.toUtf8().data());
+    } else if ((command.listFormat == LISTFORMAT_CSV) || (command.listFormat == LISTFORMAT_TSV)) {
+        const bool bTabSeparated = (command.listFormat == LISTFORMAT_TSV);
+        const QChar cDelimiter = bTabSeparated ? QChar('\t') : QChar(',');
+        QStringList listHeaders;
+
+        listHeaders << "ID"
+                    << "Format"
+                    << "Versions"
+                    << "Codecs"
+                    << "NotSupported"
+                    << "Classes";
+
+        printf("%s\n", listHeaders.join(cDelimiter).toUtf8().data());
+
+        for (qint32 i = 0; i < listSorted.count(); i++) {
+            const XBinary::FT fileType = listSorted.at(i);
+            QStringList listFields;
+
+            listFields << XBinary::fileTypeIdToFtString(fileType);
+            listFields << XBinary::fileTypeIdToString(fileType);
+            listFields << XBinary::getFormatVersions(fileType);
+            listFields << XBinary::getFormatCodecs(fileType);
+            listFields << XBinary::getFormatNotSupported(fileType);
+            listFields << formatClassNames(XBinary::getFormatClassMask(fileType)).join(QChar('|'));
+
+            QStringList listEscaped;
+
+            for (qint32 j = 0; j < listFields.count(); j++) {
+                listEscaped << _xacDelimitedField(listFields.at(j), bTabSeparated);
+            }
+
+            printf("%s\n", listEscaped.join(cDelimiter).toUtf8().data());
+        }
+    } else {
+        printf("Supported formats (%lld):\n", static_cast<long long>(listSorted.count()));
+
+        for (qint32 i = 0; i < listSorted.count(); i++) {
+            printf("  %s\n", XBinary::fileTypeIdToString(listSorted.at(i)).toUtf8().data());
         }
     }
 

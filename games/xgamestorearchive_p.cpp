@@ -296,6 +296,8 @@ bool XGameStoreArchiveBase::scanArchive(QList<ENTRY> *pEntries,
          (fileType != FT_SSM_MODULE) &&
          (fileType != FT_SSBOB) &&
          (fileType != FT_IS_SKIN) &&
+         (fileType != FT_SMSIPAK) &&
+         (fileType != FT_PSN_COMPRESS) &&
          (fileType != FT_MACBINARY) && (fileType != FT_RESOURCE_FORK) &&
          (fileType != FT_CPM_LBR) &&
          (fileType != FT_PARSEC_ARCHIVE) && (fileType != FT_PMM) &&
@@ -426,6 +428,8 @@ QString XGameStoreArchiveBase::getFileFormatExt()
     if (fileType == FT_SSM_MODULE) return QStringLiteral("ssm");
     if (fileType == FT_SSBOB) return QStringLiteral("fss");
     if (fileType == FT_IS_SKIN) return QStringLiteral("skin");
+    if (fileType == FT_SMSIPAK) return QStringLiteral("pak");
+    if (fileType == FT_PSN_COMPRESS) return QStringLiteral("_");
     if (fileType == FT_MACBINARY) return QStringLiteral("bin");
     if (fileType == FT_RESOURCE_FORK) return QStringLiteral("rsrc");
     if (fileType == FT_CPM_LBR) return QStringLiteral("lbr");
@@ -565,6 +569,10 @@ QString XGameStoreArchiveBase::getFileFormatExtsString()
         return QStringLiteral("SSBOB slideshow package (*.fss)");
     if (fileType == FT_IS_SKIN)
         return QStringLiteral("InstallShield setup skin (skin, isn)");
+    if (fileType == FT_SMSIPAK)
+        return QStringLiteral("SMS Installer PAK volume (*.pak)");
+    if (fileType == FT_PSN_COMPRESS)
+        return QStringLiteral("PSNcompress packed file (*._)");
     if (fileType == FT_MACBINARY)
         return QStringLiteral("MacBinary (*.bin;*.macbin;*.mac)");
     if (fileType == FT_RESOURCE_FORK)
@@ -707,6 +715,10 @@ QString XGameStoreArchiveBase::getMIMEString()
         return QStringLiteral("application/x-ssbob-slideshow");
     if (fileType == FT_IS_SKIN)
         return QStringLiteral("application/x-installshield-skin");
+    if (fileType == FT_SMSIPAK)
+        return QStringLiteral("application/x-sms-installer-pak");
+    if (fileType == FT_PSN_COMPRESS)
+        return QStringLiteral("application/x-psncompress");
     if (fileType == FT_MACBINARY)
         return QStringLiteral("application/x-macbinary");
     if (fileType == FT_RESOURCE_FORK)
@@ -854,6 +866,10 @@ QList<QString> XGameStoreArchiveBase::getSearchSignatures()
         listResult.append(QStringLiteral("'SSM'00"));
     } else if (fileType == FT_SSBOB) {
         listResult.append(QStringLiteral("'SSBOB'"));
+    } else if (fileType == FT_SMSIPAK) {
+        listResult.append(QStringLiteral("'SMSIPAK '071A"));
+    } else if (fileType == FT_PSN_COMPRESS) {
+        listResult.append(QStringLiteral("'PSNcompress-Copyright'"));
     } else if (fileType == FT_CPM_LBR) {
         listResult.append(QStringLiteral("00'           '0000"));
     } else if (fileType == FT_PMM) {

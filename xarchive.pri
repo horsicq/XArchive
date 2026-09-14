@@ -67,6 +67,8 @@ HEADERS += \
     $$PWD/installers/xwisesfxarchive.h \
     $$PWD/installers/xis3sfxarchive.h \
     $$PWD/installers/xis14sfxarchive.h \
+    $$PWD/installers/xsmsipakarchive.h \
+    $$PWD/installers/xissetupstream.h \
     $$PWD/core/xlegacystorearchive.h \
     $$PWD/archives/xconcatziparchive.h \
     $$PWD/archives/xwinimageziparchive.h \
@@ -80,9 +82,11 @@ HEADERS += \
     $$PWD/transport/xresourcefork.h \
     $$PWD/archives/xlbr.h \
     $$PWD/archives/xrtpatch.h \
+    $$PWD/archives/xrta.h \
     $$PWD/compressors/xrncarchive.h \
     $$PWD/archives/xlarcpfx.h \
     $$PWD/archives/xarq.h \
+    $$PWD/archives/xchz.h \
     $$PWD/archives/xnetwarepackedfile.h \
     $$PWD/archives/xpovlablzh.h \
     $$PWD/archives/xearefpack.h \
@@ -106,6 +110,9 @@ HEADERS += \
     $$PWD/archives/xpowerarc.h \
     $$PWD/diskimages/xapricotimage.h \
     $$PWD/diskimages/xcisoimage.h \
+    $$PWD/diskimages/xandroidbootimage.h \
+    $$PWD/diskimages/xnerodiscimage.h \
+    $$PWD/diskimages/xecmimage.h \
     $$PWD/diskimages/xcloopimage.h \
     $$PWD/archives/xbigafarchive.h \
     $$PWD/filesystems/xromfsarchive.h \
@@ -114,6 +121,7 @@ HEADERS += \
     $$PWD/archives/xclparchive.h \
     $$PWD/archives/xlimarchive.h \
     $$PWD/archives/xainarchive.h \
+    $$PWD/archives/xesparchive.h \
     $$PWD/archives/xobfuscatedarchive.h \
     $$PWD/archives/xuleadarchive.h \
     $$PWD/archives/xtopspeedarchive.h \
@@ -140,11 +148,14 @@ HEADERS += \
     $$PWD/games/xteacyarchive.h \
     $$PWD/diskimages/xx64archive.h \
     $$PWD/archives/xchieflzmultiarchive.h \
+    $$PWD/archives/xedcpackedarchive.h \
     $$PWD/archives/xcflarchive.h \
     $$PWD/transport/xtnefarchive.h \
     $$PWD/archives/xqdaarchive.h \
     $$PWD/archives/xdpkarchive.h \
     $$PWD/archives/xdsl2archive.h \
+    $$PWD/archives/xbwfarchive.h \
+    $$PWD/archives/xbwcfarchive.h \
     $$PWD/archives/xzlwbarchive.h \
     $$PWD/archives/xc64wraptorarchive.h \
     $$PWD/packages/xvmsdatabasearchive.h \
@@ -168,6 +179,7 @@ HEADERS += \
     $$PWD/archives/xtrcarchive.h \
     $$PWD/diskimages/xcopyqmarchive.h \
     $$PWD/archives/xkboomarchive.h \
+    $$PWD/archives/xlzwdarchive.h \
     $$PWD/archives/xbigfarchive.h \
     $$PWD/archives/xarcfs.h \
     $$PWD/archives/xcmparchive.h \
@@ -225,10 +237,12 @@ HEADERS += \
     $$PWD/games/xsettlersft.h \
     $$PWD/archives/xriversoft.h \
     $$PWD/installers/xgksetup.h \
+    $$PWD/installers/xwarpin.h \
     $$PWD/packages/xopc.h \
     $$PWD/games/xgob2.h \
     $$PWD/compressors/xsq.h \
     $$PWD/compressors/xoraclesqueeze.h \
+    $$PWD/compressors/xsoftronics.h \
     $$PWD/installers/xis11.h \
     $$PWD/documents/xrecognita.h \
     $$PWD/archives/xinteduft.h \
@@ -310,8 +324,14 @@ HEADERS += \
     $$PWD/games/xwad.h \
     $$PWD/games/xgrp.h \
     $$PWD/games/xgodotpck.h \
+    $$PWD/games/xnscripter.h \
+    $$PWD/games/xrgssad.h \
+    $$PWD/games/xrpgmvresource.h \
+    $$PWD/games/xrenpyrpa.h \
     $$PWD/games/xwbfsarchive.h \
     $$PWD/games/xrvzarchive.h \
+    $$PWD/games/xwiiu8archive.h \
+    $$PWD/games/xwiiwad.h \
     $$PWD/games/xhog.h \
     $$PWD/games/xwolfvswap.h \
     $$PWD/games/xwintermutedcp.h \
@@ -327,6 +347,10 @@ HEADERS += \
     $$PWD/tar/xmtree.h \
     $$PWD/transport/xshar.h \
     $$PWD/transport/xuu.h \
+    $$PWD/transport/xyenc.h \
+    $$PWD/transport/xmimemail.h \
+    $$PWD/documents/xqtqm.h \
+    $$PWD/documents/xgettextmo.h \
     $$PWD/packages/xdeb.h \
     $$PWD/filesystems/xudf.h \
     $$PWD/packages/xwim.h \
@@ -350,6 +374,12 @@ HEADERS += \
     $$PWD/tar/xtar_zstd.h \
     $$PWD/tar/xtar_lz4.h \
     $$PWD/compressors/xszdd.h \
+    $$PWD/compressors/xlogitechcompress.h \
+    $$PWD/compressors/xdmapacked.h \
+    $$PWD/archives/xgeniuslibrary.h \
+    $$PWD/compressors/xwiilz77.h \
+    $$PWD/compressors/xash0.h \
+    $$PWD/archives/xap4archive.h \
     $$PWD/compressors/xbzip2.h \
     $$PWD/compressors/xbrotli.h \
     $$PWD/compressors/xlzip.h \
@@ -384,11 +414,19 @@ HEADERS += \
     $$PWD/installers/xmsi.h \
     $$PWD/installers/xnsis.h \
     $$PWD/installers/xpftw.h \
+    $$PWD/installers/xqsetup.h \
+    $$PWD/installers/xinstall4jsfx.h \
+    $$PWD/installers/xsbx.h \
+    $$PWD/installers/xarnisfx.h \
+    $$PWD/installers/xcreateinstallsfx.h \
     $$PWD/installers/xsetupfactory.h \
     $$PWD/installers/xsmartinstall.h \
     $$PWD/installers/xtarma.h \
     $$PWD/installers/xwix.h \
+    $$PWD/sfx/xacesfx.h \
+    $$PWD/sfx/xasymetrixsfx.h \
     $$PWD/sfx/xarcsfx.h \
+    $$PWD/sfx/xarcv2sfx.h \
     $$PWD/sfx/xarjsfx.h \
     $$PWD/sfx/xarqsfx.h \
     $$PWD/sfx/xbsnsfx.h \
@@ -400,12 +438,17 @@ HEADERS += \
     $$PWD/sfx/xlhasfx.h \
     $$PWD/sfx/xrarsfx.h \
     $$PWD/sfx/xrtpatchsfx.h \
+    $$PWD/sfx/xrtasfx.h \
+    $$PWD/sfx/xepsfsfx.h \
+    $$PWD/sfx/xardi1sfx.h \
+    $$PWD/sfx/xardi2sfx.h \
     $$PWD/sfx/xsevenzipsfx.h \
     $$PWD/sfx/xsfx.h \
     $$PWD/sfx/xspissfx.h \
     $$PWD/sfx/xsqzsfx.h \
     $$PWD/sfx/xsydexsfxarchive.h \
     $$PWD/sfx/xszddsfx.h \
+    $$PWD/sfx/xtgcfsfx.h \
     $$PWD/sfx/xzipsfx.h \
     $$PWD/sfx/xzpaqsfx.h
 
@@ -439,6 +482,8 @@ SOURCES += \
     $$PWD/installers/xwisesfxarchive.cpp \
     $$PWD/installers/xis3sfxarchive.cpp \
     $$PWD/installers/xis14sfxarchive.cpp \
+    $$PWD/installers/xsmsipakarchive.cpp \
+    $$PWD/installers/xissetupstream.cpp \
     $$PWD/core/xlegacystorearchive.cpp \
     $$PWD/archives/xconcatziparchive.cpp \
     $$PWD/archives/xwinimageziparchive.cpp \
@@ -452,9 +497,11 @@ SOURCES += \
     $$PWD/transport/xresourcefork.cpp \
     $$PWD/archives/xlbr.cpp \
     $$PWD/archives/xrtpatch.cpp \
+    $$PWD/archives/xrta.cpp \
     $$PWD/compressors/xrncarchive.cpp \
     $$PWD/archives/xlarcpfx.cpp \
     $$PWD/archives/xarq.cpp \
+    $$PWD/archives/xchz.cpp \
     $$PWD/archives/xnetwarepackedfile.cpp \
     $$PWD/archives/xpovlablzh.cpp \
     $$PWD/archives/xearefpack.cpp \
@@ -478,6 +525,9 @@ SOURCES += \
     $$PWD/archives/xpowerarc.cpp \
     $$PWD/diskimages/xapricotimage.cpp \
     $$PWD/diskimages/xcisoimage.cpp \
+    $$PWD/diskimages/xandroidbootimage.cpp \
+    $$PWD/diskimages/xnerodiscimage.cpp \
+    $$PWD/diskimages/xecmimage.cpp \
     $$PWD/diskimages/xcloopimage.cpp \
     $$PWD/archives/xbigafarchive.cpp \
     $$PWD/filesystems/xromfsarchive.cpp \
@@ -486,6 +536,7 @@ SOURCES += \
     $$PWD/archives/xclparchive.cpp \
     $$PWD/archives/xlimarchive.cpp \
     $$PWD/archives/xainarchive.cpp \
+    $$PWD/archives/xesparchive.cpp \
     $$PWD/archives/xobfuscatedarchive.cpp \
     $$PWD/archives/xuleadarchive.cpp \
     $$PWD/archives/xtopspeedarchive.cpp \
@@ -512,11 +563,14 @@ SOURCES += \
     $$PWD/games/xteacyarchive.cpp \
     $$PWD/diskimages/xx64archive.cpp \
     $$PWD/archives/xchieflzmultiarchive.cpp \
+    $$PWD/archives/xedcpackedarchive.cpp \
     $$PWD/archives/xcflarchive.cpp \
     $$PWD/transport/xtnefarchive.cpp \
     $$PWD/archives/xqdaarchive.cpp \
     $$PWD/archives/xdpkarchive.cpp \
     $$PWD/archives/xdsl2archive.cpp \
+    $$PWD/archives/xbwfarchive.cpp \
+    $$PWD/archives/xbwcfarchive.cpp \
     $$PWD/archives/xzlwbarchive.cpp \
     $$PWD/archives/xc64wraptorarchive.cpp \
     $$PWD/packages/xvmsdatabasearchive.cpp \
@@ -540,6 +594,7 @@ SOURCES += \
     $$PWD/archives/xtrcarchive.cpp \
     $$PWD/diskimages/xcopyqmarchive.cpp \
     $$PWD/archives/xkboomarchive.cpp \
+    $$PWD/archives/xlzwdarchive.cpp \
     $$PWD/archives/xbigfarchive.cpp \
     $$PWD/archives/xarcfs.cpp \
     $$PWD/archives/xcmparchive.cpp \
@@ -597,10 +652,12 @@ SOURCES += \
     $$PWD/games/xsettlersft.cpp \
     $$PWD/archives/xriversoft.cpp \
     $$PWD/installers/xgksetup.cpp \
+    $$PWD/installers/xwarpin.cpp \
     $$PWD/packages/xopc.cpp \
     $$PWD/games/xgob2.cpp \
     $$PWD/compressors/xsq.cpp \
     $$PWD/compressors/xoraclesqueeze.cpp \
+    $$PWD/compressors/xsoftronics.cpp \
     $$PWD/installers/xis11.cpp \
     $$PWD/documents/xrecognita.cpp \
     $$PWD/archives/xinteduft.cpp \
@@ -682,8 +739,14 @@ SOURCES += \
     $$PWD/games/xwad.cpp \
     $$PWD/games/xgrp.cpp \
     $$PWD/games/xgodotpck.cpp \
+    $$PWD/games/xnscripter.cpp \
+    $$PWD/games/xrgssad.cpp \
+    $$PWD/games/xrpgmvresource.cpp \
+    $$PWD/games/xrenpyrpa.cpp \
     $$PWD/games/xwbfsarchive.cpp \
     $$PWD/games/xrvzarchive.cpp \
+    $$PWD/games/xwiiu8archive.cpp \
+    $$PWD/games/xwiiwad.cpp \
     $$PWD/games/xhog.cpp \
     $$PWD/games/xwolfvswap.cpp \
     $$PWD/games/xwintermutedcp.cpp \
@@ -699,6 +762,10 @@ SOURCES += \
     $$PWD/tar/xmtree.cpp \
     $$PWD/transport/xshar.cpp \
     $$PWD/transport/xuu.cpp \
+    $$PWD/transport/xyenc.cpp \
+    $$PWD/transport/xmimemail.cpp \
+    $$PWD/documents/xqtqm.cpp \
+    $$PWD/documents/xgettextmo.cpp \
     $$PWD/packages/xdeb.cpp \
     $$PWD/filesystems/xudf.cpp \
     $$PWD/packages/xwim.cpp \
@@ -722,6 +789,12 @@ SOURCES += \
     $$PWD/tar/xtar_zstd.cpp \
     $$PWD/tar/xtar_lz4.cpp \
     $$PWD/compressors/xszdd.cpp \
+    $$PWD/compressors/xlogitechcompress.cpp \
+    $$PWD/compressors/xdmapacked.cpp \
+    $$PWD/archives/xgeniuslibrary.cpp \
+    $$PWD/compressors/xwiilz77.cpp \
+    $$PWD/compressors/xash0.cpp \
+    $$PWD/archives/xap4archive.cpp \
     $$PWD/compressors/xbzip2.cpp \
     $$PWD/compressors/xbrotli.cpp \
     $$PWD/compressors/xlzip.cpp \
@@ -755,11 +828,19 @@ SOURCES += \
     $$PWD/installers/xmsi.cpp \
     $$PWD/installers/xnsis.cpp \
     $$PWD/installers/xpftw.cpp \
+    $$PWD/installers/xqsetup.cpp \
+    $$PWD/installers/xinstall4jsfx.cpp \
+    $$PWD/installers/xsbx.cpp \
+    $$PWD/installers/xarnisfx.cpp \
+    $$PWD/installers/xcreateinstallsfx.cpp \
     $$PWD/installers/xsetupfactory.cpp \
     $$PWD/installers/xsmartinstall.cpp \
     $$PWD/installers/xtarma.cpp \
     $$PWD/installers/xwix.cpp \
+    $$PWD/sfx/xacesfx.cpp \
+    $$PWD/sfx/xasymetrixsfx.cpp \
     $$PWD/sfx/xarcsfx.cpp \
+    $$PWD/sfx/xarcv2sfx.cpp \
     $$PWD/sfx/xarjsfx.cpp \
     $$PWD/sfx/xarqsfx.cpp \
     $$PWD/sfx/xbsnsfx.cpp \
@@ -771,12 +852,17 @@ SOURCES += \
     $$PWD/sfx/xlhasfx.cpp \
     $$PWD/sfx/xrarsfx.cpp \
     $$PWD/sfx/xrtpatchsfx.cpp \
+    $$PWD/sfx/xrtasfx.cpp \
+    $$PWD/sfx/xepsfsfx.cpp \
+    $$PWD/sfx/xardi1sfx.cpp \
+    $$PWD/sfx/xardi2sfx.cpp \
     $$PWD/sfx/xsevenzipsfx.cpp \
     $$PWD/sfx/xsfx.cpp \
     $$PWD/sfx/xspissfx.cpp \
     $$PWD/sfx/xsqzsfx.cpp \
     $$PWD/sfx/xsydexsfxarchive.cpp \
     $$PWD/sfx/xszddsfx.cpp \
+    $$PWD/sfx/xtgcfsfx.cpp \
     $$PWD/sfx/xzipsfx.cpp \
     $$PWD/sfx/xzpaqsfx.cpp
 

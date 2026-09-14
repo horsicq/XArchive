@@ -8,7 +8,7 @@
 #include "xpe.h"
 
 XRarSFX::XRarSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress, bool bRequireWinRarAttribution)
-    : XSFX(pDevice, bIsImage, nModuleAddress, ARC_RAR), m_bRequireWinRarAttribution(bRequireWinRarAttribution)
+    : XSFX(pDevice, bIsImage, nModuleAddress, FT_RAR), m_bRequireWinRarAttribution(bRequireWinRarAttribution)
 {
 }
 
@@ -81,7 +81,7 @@ bool XRarSFX::_isWinRarAttributed(PDSTRUCT *pPdStruct)
 {
     QPointer<XRarSFX> guardedThis(this);
     const INTERNAL_INFO *pInfo = static_cast<const INTERNAL_INFO *>(guardedThis->getInternalInfo(pPdStruct));
-    if (!guardedThis || !pInfo || !pInfo->bIsValid || (pInfo->arcType != ARC_RAR)) {
+    if (!guardedThis || !pInfo || !pInfo->bIsValid || (pInfo->arcType != FT_RAR)) {
         return false;
     }
 

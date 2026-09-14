@@ -110,12 +110,12 @@ qint32 XUU::base64Value(quint8 value)
     return -1;
 }
 
-bool XUU::decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *pDeclaredName, qint64 nOutputLimit, qint64 *pnNextSearchOffset,
+bool XUU::decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *pDeclaredName, QString *pMethod, qint64 nOutputLimit, qint64 *pnNextSearchOffset,
                             bool *pbHeaderFound, PDSTRUCT *pPdStruct)
 {
     QPointer<XUU> guardedThis(this);
     QPointer<QIODevice> guardedDevice(getDevice());
-    if (!pOutput || !pDeclaredName || !pnNextSearchOffset || !pbHeaderFound || (nSearchOffset < 0) || (nOutputLimit < 0) || !guardedDevice ||
+    if (!pOutput || !pDeclaredName || !pMethod || !pnNextSearchOffset || !pbHeaderFound || (nSearchOffset < 0) || (nOutputLimit < 0) || !guardedDevice ||
         guardedDevice->isSequential() || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         return false;
     }
@@ -125,6 +125,7 @@ bool XUU::decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *
 
     pOutput->clear();
     pDeclaredName->clear();
+    pMethod->clear();
     *pnNextSearchOffset = nSearchOffset;
     *pbHeaderFound = false;
     bool bHeaderFound = false;
@@ -152,6 +153,7 @@ bool XUU::decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *
 
     bool bComplete = false;
     if (bHeaderFound && bBase64) {
+        *pMethod = QStringLiteral("base64");
         QByteArray carry;
         bool bPaddingSeen = false;
         while (!guardedDevice->atEnd() && XBinary::isPdStructNotCanceled(pPdStruct)) {
@@ -206,48 +208,20 @@ bool XUU::decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *
             }
         }
     } else if (bHeaderFound) {
-        bool bSawZeroLine = false;
-        while (!guardedDevice->atEnd() && XBinary::isPdStructNotCanceled(pPdStruct)) {
-            QByteArray line = guardedDevice->readLine(UU_MAX_LINE + 2);
-            if (!guardedThis || !guardedDevice || line.isEmpty() || ((line.size() > UU_MAX_LINE) && !line.endsWith('\n'))) {
-                break;
-            }
-            line = stripLineEnding(line);
-            if (bSawZeroLine) {
-                bComplete = (line == "end");
-                break;
-            }
-            if (line.isEmpty()) break;
-            const quint8 first = static_cast<quint8>(line.at(0));
-            if ((first < 0x20) || (first > 0x60)) break;
-            const qint32 nDecoded = (first - 0x20) & 0x3f;
-            if (nDecoded > 45) break;
-            if (nDecoded == 0) {
-                bSawZeroLine = true;
-                continue;
-            }
-            const qint32 nEncoded = ((nDecoded + 2) / 3) * 4;
-            if (line.size() < (1 + nEncoded)) break;
-            qint32 nWritten = 0;
-            for (qint32 i = 0; (i < nEncoded) && (nWritten < nDecoded); i += 4) {
-                quint8 values[4] = {};
-                bool bValid = true;
-                for (qint32 j = 0; j < 4; j++) {
-                    const quint8 c = static_cast<quint8>(line.at(1 + i + j));
-                    if ((c < 0x20) || (c > 0x60)) {
-                        bValid = false;
-                        break;
-                    }
-                    values[j] = (c - 0x20) & 0x3f;
-                }
-                if (!bValid) goto decode_finished;
-                const char decoded[3] = {static_cast<char>((values[0] << 2) | (values[1] >> 4)), static_cast<char>((values[1] << 4) | (values[2] >> 2)),
-                                         static_cast<char>((values[2] << 6) | values[3])};
-                for (qint32 j = 0; (j < 3) && (nWritten < nDecoded); j++, nWritten++) {
-                    if (!appendBounded(pOutput, decoded[j], nOutputLimit)) goto decode_finished;
-                }
-            }
+        // uuencode and XXencode share the `begin <mode> <name>` / `end`
+        // envelope and the line structure; only the 64-character alphabet
+        // differs. The decision is made once per block: the classic alphabet
+        // is tried first, and a block that is complete only under the
+        // XXencode alphabet (`+-0-9A-Za-z`) is decoded as XXencode.
+        const qint64 nDataOffset = guardedDevice->pos();
+        bComplete = decodeUUBlock(guardedDevice.data(), false, pOutput, nOutputLimit, pPdStruct);
+        bool bXX = false;
+        if (guardedThis && guardedDevice && !bComplete && (nDataOffset >= 0) && guardedDevice->seek(nDataOffset)) {
+            pOutput->clear();
+            bComplete = decodeUUBlock(guardedDevice.data(), true, pOutput, nOutputLimit, pPdStruct);
+            bXX = true;
         }
+        if (bComplete) *pMethod = bXX ? QStringLiteral("xxencode") : QStringLiteral("uuencode");
     }
 
 decode_finished:
@@ -256,9 +230,75 @@ decode_finished:
     if (!guardedThis || !guardedDevice || !bComplete || !XBinary::isPdStructNotCanceled(pPdStruct)) {
         pOutput->clear();
         pDeclaredName->clear();
+        pMethod->clear();
         return false;
     }
     return true;
+}
+
+qint32 XUU::alphabetValue(bool bXX, quint8 value)
+{
+    if (bXX) {
+        if (value == '+') return 0;
+        if (value == '-') return 1;
+        if ((value >= '0') && (value <= '9')) return value - '0' + 2;
+        if ((value >= 'A') && (value <= 'Z')) return value - 'A' + 12;
+        if ((value >= 'a') && (value <= 'z')) return value - 'a' + 38;
+        return -1;
+    }
+    if ((value < 0x20) || (value > 0x60)) return -1;
+    return (value - 0x20) & 0x3f;
+}
+
+bool XUU::decodeUUBlock(QIODevice *pDevice, bool bXX, QByteArray *pOutput, qint64 nOutputLimit, PDSTRUCT *pPdStruct)
+{
+    QPointer<QIODevice> guardedDevice(pDevice);
+    if (!guardedDevice || !pOutput) return false;
+    bool bComplete = false;
+    bool bSawZeroLine = false;
+    while (guardedDevice && !guardedDevice->atEnd() && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        QByteArray line = guardedDevice->readLine(UU_MAX_LINE + 2);
+        if (!guardedDevice || line.isEmpty() || ((line.size() > UU_MAX_LINE) && !line.endsWith('\n'))) {
+            break;
+        }
+        line = stripLineEnding(line);
+        if (bSawZeroLine) {
+            bComplete = (line == "end");
+            break;
+        }
+        if (line.isEmpty()) break;
+        const qint32 nDecoded = alphabetValue(bXX, static_cast<quint8>(line.at(0)));
+        if ((nDecoded < 0) || (nDecoded > 45)) break;
+        if (nDecoded == 0) {
+            bSawZeroLine = true;
+            continue;
+        }
+        const qint32 nEncoded = ((nDecoded + 2) / 3) * 4;
+        if (line.size() < (1 + nEncoded)) break;
+        qint32 nWritten = 0;
+        bool bLineValid = true;
+        for (qint32 i = 0; (i < nEncoded) && (nWritten < nDecoded) && bLineValid; i += 4) {
+            qint32 values[4] = {0, 0, 0, 0};
+            for (qint32 j = 0; j < 4; j++) {
+                values[j] = alphabetValue(bXX, static_cast<quint8>(line.at(1 + i + j)));
+                if (values[j] < 0) {
+                    bLineValid = false;
+                    break;
+                }
+            }
+            if (!bLineValid) break;
+            const char decoded[3] = {static_cast<char>((values[0] << 2) | (values[1] >> 4)), static_cast<char>((values[1] << 4) | (values[2] >> 2)),
+                                     static_cast<char>((values[2] << 6) | values[3])};
+            for (qint32 j = 0; (j < 3) && (nWritten < nDecoded); j++, nWritten++) {
+                if (!appendBounded(pOutput, decoded[j], nOutputLimit)) {
+                    bLineValid = false;
+                    break;
+                }
+            }
+        }
+        if (!bLineValid) break;
+    }
+    return bComplete;
 }
 
 bool XUU::decodeTransports(QList<UU_BLOCK> *pBlocks, qint64 nEntryLimit, qint64 nAggregateLimit, qint32 nBlockLimit, PDSTRUCT *pPdStruct)
@@ -283,7 +323,8 @@ bool XUU::decodeTransports(QList<UU_BLOCK> *pBlocks, qint64 nEntryLimit, qint64 
         // decode allowance refuses the first byte of any extra non-empty block
         // without allocating it; an extra empty block is rejected below.
         const qint64 nBlockOutputLimit = (pBlocks->count() >= nBlockLimit) ? 0 : qMin(nEntryLimit, nRemainingLimit);
-        const bool bDecoded = decodeTransportAt(nSearchOffset, &block.baDecoded, &block.sDeclaredName, nBlockOutputLimit, &nNextSearchOffset, &bHeaderFound, pPdStruct);
+        const bool bDecoded =
+            decodeTransportAt(nSearchOffset, &block.baDecoded, &block.sDeclaredName, &block.sMethod, nBlockOutputLimit, &nNextSearchOffset, &bHeaderFound, pPdStruct);
         if (!guardedThis || !guardedDevice || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
         if (!bDecoded) {
             // No later valid header is normal termination. Once a header has
@@ -495,6 +536,7 @@ XBinary::ARCHIVERECORD XUU::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStruc
         record.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nDecodedSize);
         record.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE, nDecodedSize);
         record.mapProperties.insert(FPART_PROP_HANDLEMETHOD, HANDLE_METHOD_STORE);
+        if (!block.sMethod.isEmpty()) record.mapProperties.insert(FPART_PROP_REPORTEDMETHOD, block.sMethod);
         if (!XBinary::markArchiveStreamRecord(&record, pState->nCurrentIndex)) {
             return ARCHIVERECORD();
         }

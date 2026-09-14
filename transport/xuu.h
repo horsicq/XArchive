@@ -57,6 +57,7 @@ private:
     struct UU_BLOCK {
         QByteArray baDecoded;
         QString sDeclaredName;
+        QString sMethod;  // "uuencode", "xxencode" or "base64"
     };
 
     struct UU_UNPACK_CONTEXT {
@@ -70,11 +71,18 @@ private:
         ~UU_UNPACK_CONTEXT();
     };
 
-    bool decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *pDeclaredName, qint64 nOutputLimit, qint64 *pnNextSearchOffset,
+    bool decodeTransportAt(qint64 nSearchOffset, QByteArray *pOutput, QString *pDeclaredName, QString *pMethod, qint64 nOutputLimit, qint64 *pnNextSearchOffset,
                            bool *pbHeaderFound, PDSTRUCT *pPdStruct);
     bool decodeTransports(QList<UU_BLOCK> *pBlocks, qint64 nEntryLimit, qint64 nAggregateLimit, qint32 nBlockLimit, PDSTRUCT *pPdStruct);
     static bool parseHeader(const QByteArray &line, bool *pbBase64, QString *pName);
     static qint32 base64Value(quint8 value);
+    // Six-bit value of one encoded character under the classic uuencode
+    // alphabet (bXX false: 0x20..0x60, backtick and space both zero) or the
+    // XXencode alphabet (bXX true: `+-0-9A-Za-z`); -1 when not in the alphabet.
+    static qint32 alphabetValue(bool bXX, quint8 value);
+    // Decodes the data lines of one begin/end block from the device's current
+    // position; returns true only when the zero-length line and `end` were seen.
+    static bool decodeUUBlock(QIODevice *pDevice, bool bXX, QByteArray *pOutput, qint64 nOutputLimit, PDSTRUCT *pPdStruct);
 };
 
 #endif  // XUU_H

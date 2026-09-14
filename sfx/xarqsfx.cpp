@@ -7,7 +7,7 @@
 
 XArqSFX::XArqSFX(QIODevice *pDevice, bool bIsImage,
                  XADDR nModuleAddress)
-    : XSFX(pDevice, bIsImage, nModuleAddress, ARC_ARQ)
+    : XSFX(pDevice, bIsImage, nModuleAddress, FT_ARQ)
 {
 }
 

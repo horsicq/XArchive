@@ -70,6 +70,18 @@ qint32 xrarHeaderCRCSize4(const QByteArray &header)
         size = 32 + ((flags & 0x0100) ? 8 : 0) + xrarReadLe16(header, 26);
     } else if (type == 0x75) {
         return header.size() >= 13 ? 13 : -1;
+    } else if (type == 0x76) {
+        // RAR 1.5/2.x old-style authenticity verification. UnRAR's
+        // ReadHeader15 reads only the fixed 14-byte AV header, so the
+        // stored HEAD_CRC covers those bytes and NOT the signature blob
+        // that HEAD_SIZE still accounts for. Accept the narrow form only
+        // when it verifies, so an archive whose whole-header checksum
+        // matches today keeps working.
+        if (header.size() >= 14) {
+            const quint32 nFixedCRC = XBinary::_getCRC32(header.mid(2, 12), 0xFFFFFFFF, XBinary::_getCRC32Table_EDB88320()) ^ 0xFFFFFFFF;
+            if (quint16(nFixedCRC) == xrarReadLe16(header, 0)) return 14;
+        }
+        return size;
     } else {
         return size;
     }

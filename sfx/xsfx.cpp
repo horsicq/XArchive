@@ -40,8 +40,12 @@
 #include "xarq.h"
 #include "xsqz.h"
 #include "xrtpatch.h"
+#include "xrta.h"
 #include "xbzip2.h"
 #include "xbsn.h"
+#include "xtgcfarchive.h"
+#include "xace.h"
+#include "xasymetrix.h"
 
 // A modeled ZPAQ segment can legitimately be much larger than the overlay
 // signature window, so validation must be allowed to stream to EOF.  Keep the
@@ -223,6 +227,165 @@ const qint64 SFX_FREEARC_MEMORY_LIMIT = 192LL * 1024 * 1024;
 const quint64 SFX_FREEARC_CONTROL_BLOCK_LIMIT = 4096;
 const QByteArray SFX_ZPAQFRANZ_START_TAG("rVVboBqlhbQksmjLfITQlKVxMB8oUiezUpip3End", 40);
 const QByteArray SFX_ZPAQFRANZ_END_TAG("oOEik4pAXOyDLNTQ7zG2Jtc4eX5N0ESHsP6ApUzx", 40);
+
+// Knowledge Dynamics Corp ".RED" (the container behind their INSTALL /
+// wINSTALL "WinSFX" stubs). A member is one 41-byte header immediately
+// followed by its stored bytes, and the headers are chained by that length
+// alone: there is no directory and no end marker. Byte 2 is the record
+// version, byte 3 the base header size, and the final two bytes a big-endian
+// CRC-16/CCITT over the 37 bytes between them, so a CRC residue of zero over
+// bytes 2..40 authenticates the whole header at once.
+const qint64 SFX_RED_HEADER_SIZE = 41;
+// A chain with no directory can only be validated by walking it, and a hostile
+// or corrupt carrier can present an arbitrarily long run of CRC-clean headers,
+// so both the length of one walk and the total number of headers the locator
+// may read across all of its candidates are bounded. The longest real chain
+// anywhere in the corpora is 151 members, the longest inside an executable
+// carrier is 2, and the most headers a real carrier makes the locator read is
+// 34, so neither cap can reject a genuine archive.
+const qint32 SFX_RED_MEMBER_LIMIT = 4096;
+const qint32 SFX_RED_SCAN_HEADER_BUDGET = 4096;
+
+quint16 getRedHeaderCrc(const quint8 *pData, qint32 nSize)
+{
+    quint16 nCrc = 0xffff;
+
+    for (qint32 i = 0; i < nSize; i++) {
+        nCrc = (quint16)(nCrc ^ ((quint16)pData[i] << 8));
+        for (qint32 j = 0; j < 8; j++) {
+            if (nCrc & 0x8000) {
+                nCrc = (quint16)((quint16)(nCrc << 1) ^ 0x1021);
+            } else {
+                nCrc = (quint16)(nCrc << 1);
+            }
+        }
+    }
+
+    return nCrc;
+}
+
+// True when an authentic ".RED" member chain begins at nStart and covers
+// [nStart, nEnd) exactly. Only the version-1 record is accepted: it is the one
+// the bounded legacy decoder behind FT_DEARK_LEGACY_ARCHIVE implements, and the only
+// one present in the reference carriers.
+//
+// pnHeaderBudget, when supplied, is a caller-owned allowance shared by every
+// walk that caller performs. Each header read spends one unit and the walk
+// fails as soon as the allowance is gone, so a caller that tries many
+// candidates cannot multiply the per-walk cap by the candidate cap.
+bool hasRedMemberChain(XBinary *pOuter, qint64 nStart, qint64 nEnd, XBinary::PDSTRUCT *pPdStruct, qint32 *pnHeaderBudget)
+{
+    if (!pOuter || (nStart < 0) || (nEnd <= nStart)) return false;
+
+    qint64 nCurrent = nStart;
+    qint32 nMemberCount = 0;
+
+    while ((nCurrent < nEnd) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        if (((nEnd - nCurrent) < SFX_RED_HEADER_SIZE) || (nMemberCount >= SFX_RED_MEMBER_LIMIT)) return false;
+
+        if (pnHeaderBudget) {
+            if (*pnHeaderBudget <= 0) return false;
+            (*pnHeaderBudget)--;
+        }
+
+        const QByteArray baHeader = pOuter->read_array_process(nCurrent, SFX_RED_HEADER_SIZE, pPdStruct);
+        if (baHeader.size() != SFX_RED_HEADER_SIZE) return false;
+
+        const quint8 *pHeader = (const quint8 *)baHeader.constData();
+        if ((pHeader[0] != 0x52) || (pHeader[1] != 0x52) || (pHeader[2] != 0x01) || (pHeader[3] != 0x29)) return false;
+        if (getRedHeaderCrc(pHeader + 2, (qint32)(SFX_RED_HEADER_SIZE - 2)) != 0) return false;
+
+        // Multi-volume members carry a non-zero fragment index or a cleared
+        // last-fragment flag; neither the reference implementation nor the
+        // decoder this locator hands the payload to reassembles them.
+        const quint16 nFragmentIndex = XBinary::_read_uint16(baHeader.constData() + 20);
+        const quint16 nLastFragment = XBinary::_read_uint16(baHeader.constData() + 22);
+        if ((nFragmentIndex != 0) || (nLastFragment != 1)) return false;
+
+        const quint16 nMethod = XBinary::_read_uint16(baHeader.constData() + 24);
+        if ((nMethod != 1) && (nMethod != 9) && (nMethod != 11)) return false;
+
+        const qint32 nPackedSize = (qint32)XBinary::_read_uint32(baHeader.constData() + 8);
+        const qint32 nOriginalSize = (qint32)XBinary::_read_uint32(baHeader.constData() + 12);
+        if ((nPackedSize < 0) || (nOriginalSize < 0)) return false;
+        if ((qint64)nPackedSize > (nEnd - nCurrent - SFX_RED_HEADER_SIZE)) return false;
+
+        nCurrent += SFX_RED_HEADER_SIZE + (qint64)nPackedSize;
+        nMemberCount++;
+    }
+
+    return XBinary::isPdStructNotCanceled(pPdStruct) && (nMemberCount > 0) && (nCurrent == nEnd);
+}
+
+// True when the header at nOffset is an authentic ".RED" record that belongs to
+// a multi-volume set. Such a record can never begin a locatable archive, and
+// neither can the records that follow it in the same volume, so the scan has to
+// stop rather than advance to the next member and lock onto the tail of a split
+// archive - which would publish only its final members and silently drop the
+// leading ones.
+bool isRedFragmentHeader(XBinary *pOuter, qint64 nOffset, XBinary::PDSTRUCT *pPdStruct, qint32 *pnHeaderBudget)
+{
+    if (!pOuter) return false;
+
+    if (pnHeaderBudget) {
+        if (*pnHeaderBudget <= 0) return false;
+        (*pnHeaderBudget)--;
+    }
+
+    const QByteArray baHeader = pOuter->read_array_process(nOffset, SFX_RED_HEADER_SIZE, pPdStruct);
+    if (baHeader.size() != SFX_RED_HEADER_SIZE) return false;
+
+    const quint8 *pHeader = (const quint8 *)baHeader.constData();
+    if ((pHeader[0] != 0x52) || (pHeader[1] != 0x52) || (pHeader[2] != 0x01) || (pHeader[3] != 0x29)) return false;
+    if (getRedHeaderCrc(pHeader + 2, (qint32)(SFX_RED_HEADER_SIZE - 2)) != 0) return false;
+
+    const quint16 nFragmentIndex = XBinary::_read_uint16(baHeader.constData() + 20);
+    const quint16 nLastFragment = XBinary::_read_uint16(baHeader.constData() + 22);
+
+    return (nFragmentIndex != 0) || (nLastFragment != 1);
+}
+
+// The ".RED" payload of a Knowledge Dynamics self-extractor has no locator
+// field, and the 16-bit builders store a SECOND, loader-owned RED blob (the
+// installation engine, "I.EXE") ahead of it whose chain deliberately stops
+// short of end of file. The payload is therefore the earliest candidate whose
+// complete member chain ends exactly at end of file; the engine blob can never
+// satisfy that and is never selected.
+//
+// Every axis of the search is bounded. The signature sweep covers at most
+// nScanLimit bytes from nScanStart, where the caller passes the retry loop's
+// minimum archive offset so that a carrier re-probed for a second payload does
+// not rescan a region whose offsets it would reject anyway. The candidate count
+// stops at SFX_SIGNATURE_CANDIDATE_LIMIT, and every header read by every walk
+// draws on one shared SFX_RED_SCAN_HEADER_BUDGET: without that last bound a
+// carrier made of nothing but CRC-clean headers costs candidates x members
+// device reads, which is minutes rather than milliseconds.
+qint64 getRedSfxCandidate(XBinary *pOuter, qint64 nScanStart, qint64 nScanLimit, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pOuter || !pOuter->getDevice() || !XBinary::isPdStructNotCanceled(pPdStruct)) return -1;
+
+    const qint64 nFileSize = pOuter->getSize();
+    if ((nFileSize < SFX_RED_HEADER_SIZE) || (nScanLimit <= 0)) return -1;
+
+    qint64 nCurrent = qMax((qint64)0, nScanStart);
+    if (nCurrent > (nFileSize - SFX_RED_HEADER_SIZE)) return -1;
+
+    const qint64 nScanEnd = qMin(nFileSize, nCurrent + nScanLimit);
+    qint32 nCandidateCount = 0;
+    qint32 nHeaderBudget = SFX_RED_SCAN_HEADER_BUDGET;
+
+    while ((nCurrent < nScanEnd) && (nCandidateCount < SFX_SIGNATURE_CANDIDATE_LIMIT) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint64 nFound = pOuter->find_signature(nCurrent, nScanEnd - nCurrent, "52520129", nullptr, pPdStruct);
+        if ((nFound < nCurrent) || (nFound > (nFileSize - SFX_RED_HEADER_SIZE))) break;
+        nCandidateCount++;
+        if (isRedFragmentHeader(pOuter, nFound, pPdStruct, &nHeaderBudget)) return -1;
+        if (hasRedMemberChain(pOuter, nFound, nFileSize, pPdStruct, &nHeaderBudget)) return nFound;
+        if (nHeaderBudget <= 0) return -1;
+        nCurrent = nFound + 1;
+    }
+
+    return -1;
+}
 
 // ZIP carries an authoritative footer within the final 64 KiB. Derive the
 // first local record from it instead of linearly searching as much as 16 MiB
@@ -1330,12 +1493,12 @@ bool hasZpaqBlockLayout(XZPAQ *pArchive, XBinary *pOuter, qint64 nCandidateOffse
     return false;
 }
 
-bool isExternalSfxType(XSFX::ARCTYPE arcType)
+bool isExternalSfxType(XBinary::FT arcType)
 {
-    return (arcType == XSFX::ARC_FREEARC) || (arcType == XSFX::ARC_ZPAQ);
+    return (arcType == XBinary::FT_FREEARC) || (arcType == XBinary::FT_ZPAQ);
 }
 
-XExternalArchive *externalArchiveFor(XArchive *pArchive, XSFX::ARCTYPE arcType)
+XExternalArchive *externalArchiveFor(XArchive *pArchive, XBinary::FT arcType)
 {
     if (!pArchive || !isExternalSfxType(arcType)) return nullptr;
     return static_cast<XExternalArchive *>(pArchive);
@@ -1415,11 +1578,11 @@ XSFX::UNPACK_DEFERRED_CLEANUP::~UNPACK_DEFERRED_CLEANUP()
     }
 }
 
-XSFX::XSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_UNKNOWN)
+XSFX::XSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_UNKNOWN)
 {
 }
 
-XSFX::XSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress, ARCTYPE requiredArcType)
+XSFX::XSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress, FT requiredArcType)
     : XBinary(pDevice, bIsImage, nModuleAddress), m_requiredArcType(requiredArcType)
 {
     m_pUnpackDeferredCleanup = QSharedPointer<UNPACK_DEFERRED_CLEANUP>::create();
@@ -1521,7 +1684,7 @@ void XSFX::setInternalInfo(void *pInternalInfo)
 {
     if (pInternalInfo) {
         const INTERNAL_INFO info = *static_cast<INTERNAL_INFO *>(pInternalInfo);
-        if ((m_requiredArcType != ARC_UNKNOWN) && info.bIsValid && (info.arcType != m_requiredArcType)) {
+        if ((m_requiredArcType != FT_UNKNOWN) && info.bIsValid && (info.arcType != m_requiredArcType)) {
             m_internalInfo = INTERNAL_INFO();
             setIsInternalInfoHandled(false);
             XBinary::setInternalInfo(nullptr);
@@ -1539,8 +1702,8 @@ void XSFX::setInternalInfo(void *pInternalInfo)
 
 XBinary::FT XSFX::getFileType()
 {
-    ARCTYPE arcType = m_requiredArcType;
-    if ((arcType == ARC_UNKNOWN) && m_internalInfo.bIsValid) {
+    FT arcType = m_requiredArcType;
+    if ((arcType == FT_UNKNOWN) && m_internalInfo.bIsValid) {
         arcType = m_internalInfo.arcType;
     }
 
@@ -1549,23 +1712,27 @@ XBinary::FT XSFX::getFileType()
     if (pe.isValid()) {
         const bool b64 = pe.is64();
         switch (arcType) {
-            case ARC_ZIP: return b64 ? FT_PE64_ZIPSFX : FT_PE32_ZIPSFX;
-            case ARC_RAR: return b64 ? FT_PE64_RARSFX : FT_PE32_RARSFX;
-            case ARC_CAB: return b64 ? FT_PE64_CABSFX : FT_PE32_CABSFX;
-            case ARC_FREEARC: return b64 ? FT_PE64_FREEARCSFX : FT_PE32_FREEARCSFX;
-            case ARC_ZPAQ: return b64 ? FT_PE64_ZPAQSFX : FT_PE32_ZPAQSFX;
-            case ARC_ARC: return FT_ARCSFX;
-            case ARC_ARJ: return FT_ARJSFX;
-            case ARC_LHA: return FT_LHASFX;
-            case ARC_GZIP: return FT_GZIPSFX;
-            case ARC_BZIP2: return FT_BZIP2SFX;
-            case ARC_KWAJ: return FT_KWAJSFX;
-            case ARC_SZDD: return FT_SZDDSFX;
-            case ARC_PYINSTALLER: return FT_PYINSTALLER_SFX;
-            case ARC_ARQ: return FT_ARQSFX;
-            case ARC_SQZ: return FT_SQZSFX;
-            case ARC_RTPATCH: return FT_RTPATCHSFX;
-            case ARC_BSN: return FT_BSNSFX;
+            case FT_ZIP: return b64 ? FT_PE64_ZIPSFX : FT_PE32_ZIPSFX;
+            case FT_RAR: return b64 ? FT_PE64_RARSFX : FT_PE32_RARSFX;
+            case FT_CAB: return b64 ? FT_PE64_CABSFX : FT_PE32_CABSFX;
+            case FT_FREEARC: return b64 ? FT_PE64_FREEARCSFX : FT_PE32_FREEARCSFX;
+            case FT_ZPAQ: return b64 ? FT_PE64_ZPAQSFX : FT_PE32_ZPAQSFX;
+            case FT_ARC: return FT_ARCSFX;
+            case FT_ARJ: return FT_ARJSFX;
+            case FT_LHA: return FT_LHASFX;
+            case FT_GZIP: return FT_GZIPSFX;
+            case FT_BZIP2: return FT_BZIP2SFX;
+            case FT_KWAJ: return FT_KWAJSFX;
+            case FT_SZDD: return FT_SZDDSFX;
+            case FT_PYINSTALLER_SFX: return FT_PYINSTALLER_SFX;
+            case FT_ARQ: return FT_ARQSFX;
+            case FT_SQZ: return FT_SQZSFX;
+            case FT_RTPATCH: return FT_RTPATCHSFX;
+            case FT_BSN: return FT_BSNSFX;
+            case FT_TGCF: return FT_TGCFSFX;
+            case FT_RTA: return FT_RTASFX;
+            case FT_ACE: return FT_ACESFX;
+            case FT_ASYMETRIX: return FT_ASYMETRIXSFX;
             default: return b64 ? FT_PE64_SFX : FT_PE32_SFX;
         }
     }
@@ -1574,45 +1741,53 @@ XBinary::FT XSFX::getFileType()
     if (elf.isValid()) {
         const bool b64 = elf.is64();
         switch (arcType) {
-            case ARC_ZIP: return b64 ? FT_ELF64_ZIPSFX : FT_ELF32_ZIPSFX;
-            case ARC_RAR: return b64 ? FT_ELF64_RARSFX : FT_ELF32_RARSFX;
-            case ARC_CAB: return b64 ? FT_ELF64_CABSFX : FT_ELF32_CABSFX;
-            case ARC_FREEARC: return b64 ? FT_ELF64_FREEARCSFX : FT_ELF32_FREEARCSFX;
-            case ARC_ZPAQ: return b64 ? FT_ELF64_ZPAQSFX : FT_ELF32_ZPAQSFX;
-            case ARC_ARC: return FT_ARCSFX;
-            case ARC_ARJ: return FT_ARJSFX;
-            case ARC_LHA: return FT_LHASFX;
-            case ARC_GZIP: return FT_GZIPSFX;
-            case ARC_BZIP2: return FT_BZIP2SFX;
-            case ARC_KWAJ: return FT_KWAJSFX;
-            case ARC_SZDD: return FT_SZDDSFX;
-            case ARC_PYINSTALLER: return FT_PYINSTALLER_SFX;
-            case ARC_ARQ: return FT_ARQSFX;
-            case ARC_SQZ: return FT_SQZSFX;
-            case ARC_RTPATCH: return FT_RTPATCHSFX;
-            case ARC_BSN: return FT_BSNSFX;
+            case FT_ZIP: return b64 ? FT_ELF64_ZIPSFX : FT_ELF32_ZIPSFX;
+            case FT_RAR: return b64 ? FT_ELF64_RARSFX : FT_ELF32_RARSFX;
+            case FT_CAB: return b64 ? FT_ELF64_CABSFX : FT_ELF32_CABSFX;
+            case FT_FREEARC: return b64 ? FT_ELF64_FREEARCSFX : FT_ELF32_FREEARCSFX;
+            case FT_ZPAQ: return b64 ? FT_ELF64_ZPAQSFX : FT_ELF32_ZPAQSFX;
+            case FT_ARC: return FT_ARCSFX;
+            case FT_ARJ: return FT_ARJSFX;
+            case FT_LHA: return FT_LHASFX;
+            case FT_GZIP: return FT_GZIPSFX;
+            case FT_BZIP2: return FT_BZIP2SFX;
+            case FT_KWAJ: return FT_KWAJSFX;
+            case FT_SZDD: return FT_SZDDSFX;
+            case FT_PYINSTALLER_SFX: return FT_PYINSTALLER_SFX;
+            case FT_ARQ: return FT_ARQSFX;
+            case FT_SQZ: return FT_SQZSFX;
+            case FT_RTPATCH: return FT_RTPATCHSFX;
+            case FT_BSN: return FT_BSNSFX;
+            case FT_TGCF: return FT_TGCFSFX;
+            case FT_RTA: return FT_RTASFX;
+            case FT_ACE: return FT_ACESFX;
+            case FT_ASYMETRIX: return FT_ASYMETRIXSFX;
             default: return b64 ? FT_ELF64_SFX : FT_ELF32_SFX;
         }
     }
 
     switch (arcType) {
-        case ARC_ZIP: return FT_ZIPSFX;
-        case ARC_RAR: return FT_RARSFX;
-        case ARC_CAB: return FT_CABSFX;
-        case ARC_FREEARC: return FT_FREEARCSFX;
-        case ARC_ZPAQ: return FT_ZPAQSFX;
-        case ARC_ARC: return FT_ARCSFX;
-        case ARC_ARJ: return FT_ARJSFX;
-        case ARC_LHA: return FT_LHASFX;
-        case ARC_GZIP: return FT_GZIPSFX;
-        case ARC_BZIP2: return FT_BZIP2SFX;
-        case ARC_KWAJ: return FT_KWAJSFX;
-        case ARC_SZDD: return FT_SZDDSFX;
-        case ARC_PYINSTALLER: return FT_PYINSTALLER_SFX;
-        case ARC_ARQ: return FT_ARQSFX;
-        case ARC_SQZ: return FT_SQZSFX;
-        case ARC_RTPATCH: return FT_RTPATCHSFX;
-        case ARC_BSN: return FT_BSNSFX;
+        case FT_ZIP: return FT_ZIPSFX;
+        case FT_RAR: return FT_RARSFX;
+        case FT_CAB: return FT_CABSFX;
+        case FT_FREEARC: return FT_FREEARCSFX;
+        case FT_ZPAQ: return FT_ZPAQSFX;
+        case FT_ARC: return FT_ARCSFX;
+        case FT_ARJ: return FT_ARJSFX;
+        case FT_LHA: return FT_LHASFX;
+        case FT_GZIP: return FT_GZIPSFX;
+        case FT_BZIP2: return FT_BZIP2SFX;
+        case FT_KWAJ: return FT_KWAJSFX;
+        case FT_SZDD: return FT_SZDDSFX;
+        case FT_PYINSTALLER_SFX: return FT_PYINSTALLER_SFX;
+        case FT_ARQ: return FT_ARQSFX;
+        case FT_SQZ: return FT_SQZSFX;
+        case FT_RTPATCH: return FT_RTPATCHSFX;
+        case FT_BSN: return FT_BSNSFX;
+        case FT_TGCF: return FT_TGCFSFX;
+        case FT_RTA: return FT_RTASFX;
+        case FT_ACE: return FT_ACESFX;
+        case FT_ASYMETRIX: return FT_ASYMETRIXSFX;
         default: break;
     }
 
@@ -1646,7 +1821,7 @@ QString XSFX::getMIMEString()
     return "application/x-sfx";
 }
 
-bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 *pArchiveSize, PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE *pZpaqScanCache,
+bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, FT *pType, qint64 *pArchiveSize, PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE *pZpaqScanCache,
                            XSFX_FREEARC_SCAN_CACHE *pFreeArcScanCache, bool *pbProvisional, bool *pbResourceIndeterminate, bool *pbUseOuterDevice)
 {
     if (pbProvisional) *pbProvisional = false;
@@ -1664,75 +1839,86 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
     }
     const quint8 *p = (const quint8 *)baMagic.constData();
 
-    ARCTYPE candidate = ARC_UNKNOWN;
+    FT candidate = FT_UNKNOWN;
 
-    if ((p[0] == 0x37) && (p[1] == 0x7A) && (p[2] == 0xBC) && (p[3] == 0xAF) && (p[4] == 0x27) && (p[5] == 0x1C)) {
-        candidate = ARC_7Z;  // '7z' BC AF 27 1C
+    if ((baMagic.size() >= 14) && (p[4] == 0x00) && (p[7] == 0x2A) && (p[8] == 0x2A) && (p[9] == 0x41) && (p[10] == 0x43) && (p[11] == 0x45) && (p[12] == 0x2A) &&
+        (p[13] == 0x2A)) {
+        // ACE archive header: HEAD_TYPE 0 (archive header) at +4 and the
+        // seven-byte ACESIGN "**ACE**" at +7.  XACE below walks the complete
+        // block chain and verifies every header CRC, so this cheap eight-byte
+        // test only decides which reader gets to answer.  It is tested first
+        // because an ACE header begins with its own HEAD_CRC, whose two
+        // arbitrary bytes can otherwise spell one of the short generic
+        // prefixes below and lose the candidate to a family that then fails.
+        candidate = FT_ACE;
+    } else if ((p[0] == 0x37) && (p[1] == 0x7A) && (p[2] == 0xBC) && (p[3] == 0xAF) && (p[4] == 0x27) && (p[5] == 0x1C)) {
+        candidate = FT_7Z;  // '7z' BC AF 27 1C
     } else if ((p[0] == 0x50) && (p[1] == 0x4B) && (((p[2] == 0x03) && (p[3] == 0x04)) || ((p[2] == 0x05) && (p[3] == 0x06)))) {
-        candidate = ARC_ZIP;  // local header or empty archive EOCD
+        candidate = FT_ZIP;  // local header or empty archive EOCD
     } else if ((p[0] == 0x52) && (p[1] == 0x61) && (p[2] == 0x72) && (p[3] == 0x21) && (p[4] == 0x1A) && (p[5] == 0x07)) {
-        candidate = ARC_RAR;  // 'Rar!' 1A 07 (RAR4/RAR5)
+        candidate = FT_RAR;  // 'Rar!' 1A 07 (RAR4/RAR5)
     } else if ((p[0] == 0x52) && (p[1] == 0x45) && (p[2] == 0x7E) && (p[3] == 0x5E)) {
-        candidate = ARC_RAR;  // 'RE~^' (RAR1.4)
+        candidate = FT_RAR;  // 'RE~^' (RAR1.4)
     } else if ((p[0] == 0x4D) && (p[1] == 0x53) && (p[2] == 0x43) && (p[3] == 0x46)) {
-        candidate = ARC_CAB;  // 'MSCF'
+        candidate = FT_CAB;  // 'MSCF'
     } else if ((baMagic.size() >= 13) && (p[0] == 0x41) && (p[1] == 0x72) && (p[2] == 0x43) && (p[3] == 0x01) && (p[8] == 0x41) && (p[9] == 0x72) && (p[10] == 0x43) &&
                (p[11] == 0x01) && (p[12] == 0x02)) {
         // Header followed by the first data block. A single ArC\x01 is common
         // inside the executable stubs and is deliberately not enough.
-        candidate = ARC_FREEARC;
+        candidate = FT_FREEARC;
     } else if ((baMagic.size() >= 16) && (p[0] == 0x37) && (p[1] == 0x6B) && (p[2] == 0x53) && (p[3] == 0x74) && (p[4] == 0xA0) && (p[5] == 0x31) && (p[6] == 0x83) &&
                (p[7] == 0xD3) && (p[8] == 0x8C) && (p[9] == 0xB2) && (p[10] == 0x28) && (p[11] == 0xB0) && (p[12] == 0xD3) && (p[13] == 0x7A) && (p[14] == 0x50) &&
                (p[15] == 0x51)) {
-        candidate = ARC_ZPAQ;  // 13-byte locator tag followed by 'zPQ'
+        candidate = FT_ZPAQ;  // 13-byte locator tag followed by 'zPQ'
     } else if ((p[0] == 0x7A) && (p[1] == 0x50) && (p[2] == 0x51)) {
         // Untagged zPQ is accepted only when the caller checks the exact
         // executable boundary. It is never one of the fallback scan patterns.
-        candidate = ARC_ZPAQ;
+        candidate = FT_ZPAQ;
     } else if ((p[0] == 0x1A) && (p[1] >= 0x01) && (p[1] <= 0x0B)) {
-        candidate = ARC_ARC;
+        candidate = FT_ARC;
     } else if ((p[0] == 0x60) && (p[1] == 0xEA)) {
-        candidate = ARC_ARJ;
+        candidate = FT_ARJ;
     } else if ((baMagic.size() >= 7) && (p[2] == 0x2D) && (p[6] == 0x2D) &&
                (((p[3] == 0x6C) && ((p[4] == 0x68) || (p[4] == 0x7A))) || ((p[3] == 0x70) && (p[4] == 0x6D)))) {
-        candidate = ARC_LHA;
+        candidate = FT_LHA;
     } else if ((baMagic.size() >= 10) && (p[0] == 0x1F) && (p[1] == 0x8B) && (p[2] == 0x08)) {
-        candidate = ARC_GZIP;
+        candidate = FT_GZIP;
     } else if ((baMagic.size() >= 10) && (p[0] == 'B') && (p[1] == 'Z') && (p[2] == 'h') && (p[3] >= '1') && (p[3] <= '9') &&
                ((memcmp(p + 4, "1AY&SY", 6) == 0) || (memcmp(p + 4, "\x17\x72\x45\x38\x50\x90", 6) == 0))) {
         // The reference implementation SFX109 / archive17 share probe004330b0: BZh1..9 plus
         // the data-block or empty-stream marker. The payload is never run.
-        candidate = ARC_BZIP2;
+        candidate = FT_BZIP2;
     } else if ((baMagic.size() >= 8) && (p[0] == 0x4B) && (p[1] == 0x57) && (p[2] == 0x41) && (p[3] == 0x4A) && (p[4] == 0x88) &&
                (p[5] == 0xF0) && (p[6] == 0x27) && (p[7] == 0xD1)) {
-        candidate = ARC_KWAJ;
+        candidate = FT_KWAJ;
     } else if ((baMagic.size() >= 8) &&
                (((p[0] == 0x53) && (p[1] == 0x5A) && (p[2] == 0x44) && (p[3] == 0x44) && (p[4] == 0x88) && (p[5] == 0xF0) &&
                  (p[6] == 0x27) && ((p[7] == 0x33) || (p[7] == 0x3A))) ||
                 ((p[0] == 0x5A) && (p[1] == 0x44) && (p[2] == 0x44) && (p[3] == 0x88) && (p[4] == 0xF0) && (p[5] == 0x27) &&
                  ((p[6] == 0x33) || (p[6] == 0x3A)) && (p[7] == 0x41)))) {
-        candidate = ARC_SZDD;
+        candidate = FT_SZDD;
     } else if ((baMagic.size() >= 11) &&
                (p[0] == 0x01) && (p[1] == 0xCA) &&
                (memcmp(p + 2, "Copyright", 9) == 0)) {
         // NeoBook/NeoShow launchers append a complete NeoSoft GX Library.
         // The long copyright preamble is the format's native signature.
-        candidate = ARC_DEARK_LEGACY;
+        candidate = FT_DEARK_LEGACY_ARCHIVE;
     } else if ((p[0] == 0x67) && (p[1] == 0x57) &&
                (p[2] == 0x04) && (p[3] == 0x02)) {
-        candidate = ARC_ARQ;
+        candidate = FT_ARQ;
     } else if ((p[0] == 0x48) && (p[1] == 0x4c) &&
                (p[2] == 0x53) && (p[3] == 0x51) &&
                (p[4] == 0x5a)) {
-        candidate = ARC_SQZ;
+        candidate = FT_SQZ;
     } else if ((p[0] == 0x4b) && (p[1] == 0x2a)) {
         const quint16 nVersion = quint16(p[2]) | (quint16(p[3]) << 8);
         if ((nVersion != 110) && (nVersion != 200) &&
-            (nVersion != 211) && (nVersion != 410) &&
+            (nVersion != 211) && (nVersion != 320) &&
+            (nVersion != 400) && (nVersion != 410) &&
             (nVersion != 500) && (nVersion != 650)) {
             return false;
         }
-        candidate = ARC_RTPATCH;
+        candidate = FT_RTPATCH;
     } else if ((p[0] == 0xff) && (p[1] == 0x42) && (p[2] == 0x53) && (p[3] == 0x47)) {
         // 0xFF 'BSG' plus the big-endian container version. XBSN below walks the
         // complete member chain and verifies every member header's stored CRC32,
@@ -1741,15 +1927,54 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
         if (nVersion > 0x000f) {
             return false;
         }
-        candidate = ARC_BSN;
+        candidate = FT_BSN;
+    } else if ((baMagic.size() >= 8) && (p[0] == 0x54) && (p[1] == 0x47) && (p[2] == 0x43) && (p[3] == 0x46) && (p[4] == 0x00) && (p[5] == 0x24)) {
+        // "Setup Specialist": 'TGCF' plus the big-endian 0x0024 header-record
+        // size and one of the three reader versions XTGCFArchive parses.  The
+        // container walk below still has to accept every member record and
+        // keep each payload extent inside the candidate, so this cheap prefix
+        // only decides which reader gets to answer.
+        const quint16 nTgcfVersion = ((quint16)p[6] << 8) | (quint16)p[7];
+        if ((nTgcfVersion != 0x0130) && (nTgcfVersion != 0x0140) && (nTgcfVersion != 0x0160)) {
+            return false;
+        }
+        candidate = FT_TGCF;
+    } else if ((p[0] == 0x4B) && (p[1] == 0x4A) && (p[2] == 0x64) && (p[3] == 0x00) && (p[4] != 0x00)) {
+        // "KJd\0" plus a non-empty first record name, which is what separates a
+        // real RTA container from a file that merely opens with the magic: a
+        // zero there is the archive's own end marker.  XRTA below walks the
+        // complete record chain to that marker and requires every member stream
+        // to open with the RTPatch codec's invariant prefix, so this cheap magic
+        // only decides which reader gets to answer.
+        candidate = FT_RTA;
+    } else if ((baMagic.size() >= 8) && (p[0] == 0x60) && (p[1] == 0x22) && (p[2] == 0x13) && (p[3] == 0x63) && (p[4] == 0x6C) && (p[5] == 0x00) &&
+               (p[6] == 0x00) && (p[7] == 0x00)) {
+        // Asymetrix disk-set volume header: the 32-bit magic plus the 0x6C
+        // directory-record stride, which is a hard constant of the writer - the
+        // same eight bytes XAsymetrix itself gates on.  XAsymetrix below parses
+        // the complete directory and walks every member's block chain, so this
+        // cheap test only decides which reader gets to answer.
+        candidate = FT_ASYMETRIX;
+    } else if ((p[0] == 0x52) && (p[1] == 0x52) && (p[2] == 0x01) && (p[3] == 0x29)) {
+        // Knowledge Dynamics Corp ".RED": 'RR', the version-1 record tag and
+        // the 41-byte base header size.  Four bytes are far too weak on their
+        // own, so require the complete member chain - every header's CRC-16 and
+        // its multi-volume fields included - to cover this candidate exactly
+        // before the bounded legacy decoder is even constructed.  This is one
+        // walk for one offset the caller already chose, capped by
+        // SFX_RED_MEMBER_LIMIT, so it needs no cross-candidate budget.
+        if (!hasRedMemberChain(this, nOffset, nOffset + nSize, pPdStruct, nullptr)) {
+            return false;
+        }
+        candidate = FT_DEARK_LEGACY_ARCHIVE;
     } else {
         return false;
     }
 
-    if ((m_requiredArcType != ARC_UNKNOWN) && (candidate != m_requiredArcType)) {
+    if ((m_requiredArcType != FT_UNKNOWN) && (candidate != m_requiredArcType)) {
         return false;
     }
-    if (candidate == ARC_FREEARC) {
+    if (candidate == FT_FREEARC) {
         const qint64 nMethodSize = qMin(nSize - 13, (qint64)256);
         if ((nMethodSize <= 0) || !hasFreeArcMethod(read_array_process(nOffset + 13, nMethodSize, pPdStruct))) {
             return false;
@@ -1761,7 +1986,7 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
     // which makes a view beginning at the first local header appear invalid.
     // Prefer the bounded concatenated adapter when the full sequence validates;
     // otherwise bound an ordinary candidate at the earliest authentic EOCD.
-    if ((candidate == ARC_ZIP) && (p[2] == 0x03) && (p[3] == 0x04)) {
+    if ((candidate == FT_ZIP) && (p[2] == 0x03) && (p[3] == 0x04)) {
         bool bConcatenated = false;
         SubDevice concatDevice(getDevice(), nOffset, nSize);
         if (concatDevice.open(QIODevice::ReadOnly)) {
@@ -1822,7 +2047,7 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
     // running the Deark adapter (which materializes a temporary ZIP) merely
     // to decide whether a candidate is an archive; the Deark reader remains
     // the extraction backend and the fallback for legacy dialects.
-    if (candidate == ARC_LHA) {
+    if (candidate == FT_LHA) {
         XLHA lha(&sub);
         if (lha.isValid(pPdStruct)) {
             const qint64 nLhaSize = lha.getFileFormatSize(pPdStruct);
@@ -1843,7 +2068,7 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
     }
     XArchive *pArc = bValid ? nullptr : _createArchive(candidate, &sub);
     if (pArc) {
-        if (candidate == ARC_FREEARC) {
+        if (candidate == FT_FREEARC) {
             // Format probing must remain structural: archive initialization now
             // publishes only helper metadata, while the first member extraction
             // authenticates and stages the payload through the external adapter.
@@ -1856,7 +2081,7 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
             *pbProvisional = (layoutStatus == FREEARC_LAYOUT_PROVISIONAL);
             *pbResourceIndeterminate = (layoutStatus == FREEARC_LAYOUT_RESOURCE_LIMIT);
             nLogicalSize = bValid ? nSize : 0;
-        } else if (candidate == ARC_ZPAQ) {
+        } else if (candidate == FT_ZPAQ) {
             XZPAQ *pZpaq = static_cast<XZPAQ *>(pArc);
             bValid = pZpaq->isValid(pPdStruct) && hasZpaqBlockLayout(pZpaq, this, nOffset, pZpaqScanCache, pPdStruct);
             // Local parsing proves the first block's framing but deliberately
@@ -1871,7 +2096,7 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
             bValid = pArc->initUnpack(&state, properties, pPdStruct);
             if (bValid) {
                 bValid = pArc->finishUnpack(&state, pPdStruct);
-            } else if ((candidate == ARC_7Z) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+            } else if ((candidate == FT_7Z) && XBinary::isPdStructNotCanceled(pPdStruct)) {
                 // Preserve detection of password-protected encoded headers while
                 // still requiring a structurally parsed encrypted stream map.
                 XSevenZip *pSevenZip = static_cast<XSevenZip *>(pArc);
@@ -1889,7 +2114,7 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
     // then require the first authenticated local record (or an empty EOCD) to
     // begin at this exact overlay candidate before delegating extraction to the
     // same whole-device XZip view.
-    if (!bValid && (candidate == ARC_ZIP) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!bValid && (candidate == FT_ZIP) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         XZip outerZip(getDevice());
         const qint64 nECDOffset = outerZip.findECDOffset(pPdStruct);
         bool bStartsAtCandidate = false;
@@ -1950,7 +2175,7 @@ bool XSFX::_matchArchiveAt(qint64 nOffset, qint64 nSize, ARCTYPE *pType, qint64 
     // footer arithmetic and then requires every absolute link to name the next
     // real, non-overlapping local header, so nothing about the delta is
     // guessed. Extraction uses the same whole-device view.
-    if (!bValid && (candidate == ARC_ZIP) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+    if (!bValid && (candidate == FT_ZIP) && XBinary::isPdStructNotCanceled(pPdStruct)) {
         XWinImageZipArchive winImageZip(getDevice());
         UNPACK_STATE winImageState = {};
         QMap<UNPACK_PROP, QVariant> winImageProperties;
@@ -1999,7 +2224,7 @@ XSFX::INTERNAL_INFO XSFX::_detect(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE *pZp
         if ((listCached.size() == 9) && (listCached.at(0).toLongLong() == nCacheDeviceSize)) {
             INTERNAL_INFO cached = {};
             cached.bIsValid = listCached.at(1).toBool();
-            cached.arcType = static_cast<ARCTYPE>(listCached.at(2).toInt());
+            cached.arcType = static_cast<FT>(listCached.at(2).toInt());
             cached.nArchiveOffset = listCached.at(3).toLongLong();
             cached.nArchiveSize = listCached.at(4).toLongLong();
             cached.bProvisional = listCached.at(5).toBool();
@@ -2122,7 +2347,7 @@ struct XSFX::SCAN_CANDIDATE_EVALUATOR {
                 break;
             }
 
-            ARCTYPE type = ARC_UNKNOWN;
+            FT type = FT_UNKNOWN;
             qint64 nArchiveSize = 0;
             bool bProvisional = false;
             bool bResourceIndeterminate = false;
@@ -2134,8 +2359,8 @@ struct XSFX::SCAN_CANDIDATE_EVALUATOR {
                 // independently aligned streams, so cap the current view at
                 // the next same-family header instead of treating the rest of
                 // the executable as data.
-                if ((m_pOwner->m_requiredArcType == ARC_KWAJ) ||
-                    (m_pOwner->m_requiredArcType == ARC_SZDD)) {
+                if ((m_pOwner->m_requiredArcType == FT_KWAJ) ||
+                    (m_pOwner->m_requiredArcType == FT_SZDD)) {
                     qint64 nNextFamilyOffset = -1;
                     // Standard SZDD also contains the legacy magic beginning
                     // one byte later ("SZDD..." vs "ZDD..."). Skip the
@@ -2144,9 +2369,9 @@ struct XSFX::SCAN_CANDIDATE_EVALUATOR {
                     const qint64 nNextSearchOffset = nPos + 8;
                     if (nNextSearchOffset < m_nScanEnd) {
                         const qint32 nFirstIndex =
-                            (m_pOwner->m_requiredArcType == ARC_KWAJ) ? 24 : 25;
+                            (m_pOwner->m_requiredArcType == FT_KWAJ) ? 24 : 25;
                         const qint32 nLastIndex =
-                            (m_pOwner->m_requiredArcType == ARC_KWAJ) ? 24 : 28;
+                            (m_pOwner->m_requiredArcType == FT_KWAJ) ? 24 : 28;
                         for (qint32 nSignatureIndex = nFirstIndex;
                              nSignatureIndex <= nLastIndex;
                              ++nSignatureIndex) {
@@ -2167,7 +2392,7 @@ struct XSFX::SCAN_CANDIDATE_EVALUATOR {
                         // size. Keep the physical extent precise without
                         // applying this heuristic to KWAJ streams, whose valid
                         // compressed data may itself end in zero bytes.
-                        if (m_pOwner->m_requiredArcType == ARC_SZDD) {
+                        if (m_pOwner->m_requiredArcType == FT_SZDD) {
                             const qint64 nTrimWindow = qMin<qint64>(
                                 qMax<qint64>(0, nCandidateSize - 8), 4096);
                             if (nTrimWindow > 0) {
@@ -2179,7 +2404,7 @@ struct XSFX::SCAN_CANDIDATE_EVALUATOR {
                                         m_pPdStruct) ||
                                     (baTail.size() != nTrimWindow)) {
                                     *m_pResult = INTERNAL_INFO();
-                                    m_pResult->arcType = ARC_UNKNOWN;
+                                    m_pResult->arcType = FT_UNKNOWN;
                                     return true;
                                 }
                                 qint64 nTrailingZeroes = 0;
@@ -2290,6 +2515,35 @@ private:
 // here cannot steal a file from another format.
 static const qint64 SFX_LHA_STUB_WINDOW = 1300;
 
+// The WinACE 32-bit self-extractor is the one ACE carrier that keeps its
+// archive in the PE resource directory instead of behind the executable
+// image: resource type "ARCDATA", resource name "DATA".  Its data entry gives
+// both the exact offset and the exact size of the container, so the locator
+// needs no scanning at all and cannot be confused by an ACE header that is
+// merely a stored member of some other container.  The carrier has no overlay,
+// which is exactly the shape the overlay probe and the overlay signature sweep
+// below structurally cannot reach.
+static const qint32 SFX_ACE_RESOURCE_LIMIT = 10000;
+
+static bool getWinAceSfxResource(XPE *pPe, qint64 *pnOffset, qint64 *pnSize, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pPe || !pnOffset || !pnSize) return false;
+
+    *pnOffset = -1;
+    *pnSize = 0;
+
+    QList<XPE::RESOURCE_RECORD> listRecords = pPe->getResources(SFX_ACE_RESOURCE_LIMIT, pPdStruct);
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    const XPE::RESOURCE_RECORD record = XPE::getResourceRecord(QStringLiteral("ARCDATA"), QStringLiteral("DATA"), &listRecords);
+    if ((record.nOffset < 0) || (record.nSize <= 0)) return false;
+
+    *pnOffset = record.nOffset;
+    *pnSize = record.nSize;
+
+    return true;
+}
+
 static qint64 getLhaSfxStubBase(const QByteArray &baPrefix)
 {
     if (baPrefix.size() < 10) return -1;
@@ -2342,6 +2596,59 @@ static qint64 getLhaSfxStubPayload(const QByteArray &baImage, qint64 nBase)
     return isLhaSfxMethodTagAt(baImage, nPayload + 2) ? nPayload : -1;
 }
 
+// RTPatch self-extractor payload locator.
+//
+// RTPatch 4.00 and later append the package at the carrier's overlay boundary,
+// where the ordinary overlay probe already finds it.  3.20 instead links the
+// package into the carrier itself, and neither shape of that carrier is
+// reachable from the overlay scan: the two PE stubs claim the whole file as
+// mapped image, so nOverlayOffset lands at EOF and the scan window is empty,
+// and the six NE stubs keep the package inside the mapped image, which the
+// overlay scan deliberately never searches.
+//
+// The generic signature table is deliberately left alone - an RTPatch magic is
+// only two bytes, and adding it would make every unrelated SFX probe test every
+// "K*" in its overlay.  This locator therefore runs ONLY for the explicit
+// FT_RTPATCHSFX probe, and the offset it returns is still handed to
+// _matchArchiveAt, so XRTPatch's complete container walk decides, exactly as it
+// does for a scanned candidate.
+//
+// The predicate is the package header: "K*", a version word the reader actually
+// parses, and for 3.20/4.00 the two invariants that separate a real header from
+// compressed data that happens to spell the magic - the reserved uint32 at 0x14
+// reads zero and the word at 0x18 reads the builder's fixed 4.  The invariants
+// are applied to 3.20 and 4.00 only, so over the 73,823 files of the reference
+// corpora - each read to this locator's own 16 MiB bound - the predicate
+// selects 99 positions in 90 files: 69 genuine RTPatch packages, and 30
+// positions in 21 unrelated files where an older version word happens to
+// appear.  XRTPatch's container walk rejects all 21 of those, and every one of
+// them keeps its existing identity.
+static const qint32 SFX_RTPATCH_HEADER_SIZE = 0x1a;
+
+static bool isRTPatchPackageHeaderAt(const QByteArray &baImage, qint64 nOffset)
+{
+    if ((nOffset < 0) || (nOffset > (baImage.size() - SFX_RTPATCH_HEADER_SIZE))) return false;
+    const quint8 *pHeader = (const quint8 *)baImage.constData() + nOffset;
+    if ((pHeader[0] != 0x4B) || (pHeader[1] != 0x2A)) return false;
+
+    const quint16 nVersion = (quint16)pHeader[2] | ((quint16)pHeader[3] << 8);
+    if ((nVersion != 110) && (nVersion != 200) &&
+        (nVersion != 211) && (nVersion != 320) &&
+        (nVersion != 400) && (nVersion != 410) &&
+        (nVersion != 500) && (nVersion != 650)) {
+        return false;
+    }
+
+    if ((nVersion == 320) || (nVersion == 400)) {
+        for (qint32 i = 0x14; i < 0x18; ++i) {
+            if (pHeader[i] != 0) return false;
+        }
+        if ((pHeader[0x18] != 4) || (pHeader[0x19] != 0)) return false;
+    }
+
+    return true;
+}
+
 bool XSFX::isLhaSfxStubCarrier(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 {
     QPointer<QIODevice> guarded(pDevice);
@@ -2366,7 +2673,7 @@ bool XSFX::isLhaSfxStubCarrier(QIODevice *pDevice, PDSTRUCT *pPdStruct)
 XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE *pZpaqScanCache, XSFX_FREEARC_SCAN_CACHE *pFreeArcScanCache, qint64 nMinimumArchiveOffset)
 {
     INTERNAL_INFO result = {};
-    result.arcType = ARC_UNKNOWN;
+    result.arcType = FT_UNKNOWN;
 
     const qint64 nTotalSize = getSize();
     if (nTotalSize < 0x40) {
@@ -2396,8 +2703,8 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
     // that carrier only for LHA probing; the embedded archive still has to
     // pass XLHA's complete structural validation below.
     const QByteArray baCarrierPrefix = read_array_process(0, 4, pPdStruct);
-    const bool bExecLha = ((m_requiredArcType == ARC_UNKNOWN) ||
-                           (m_requiredArcType == ARC_LHA)) &&
+    const bool bExecLha = ((m_requiredArcType == FT_UNKNOWN) ||
+                           (m_requiredArcType == FT_LHA)) &&
                           (baCarrierPrefix == QByteArrayLiteral("EXEC"));
 
     // The LHarc / LArc stub locator runs BEFORE the carrier gate and before the
@@ -2405,7 +2712,7 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
     // can reach (see getLhaSfxStubPayload above).  The offset it returns is
     // still handed to _matchArchiveAt, so XLHA's complete structural validation
     // decides, exactly as it does for a scanned candidate.
-    if ((m_requiredArcType == ARC_UNKNOWN) || (m_requiredArcType == ARC_LHA)) {
+    if ((m_requiredArcType == FT_UNKNOWN) || (m_requiredArcType == FT_LHA)) {
         const QByteArray baStubPrefix = read_array_process(0, qMin<qint64>(nTotalSize, 16), pPdStruct);
         if (!isPdStructNotCanceled(pPdStruct)) return result;
         const qint64 nStubBase = getLhaSfxStubBase(baStubPrefix);
@@ -2415,14 +2722,14 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
             if (!isPdStructNotCanceled(pPdStruct)) return result;
             const qint64 nStubPayload = getLhaSfxStubPayload(baStubImage, nStubBase);
             if ((nStubPayload > 0) && (nStubPayload < nTotalSize) && ((nMinimumArchiveOffset < 0) || (nStubPayload >= nMinimumArchiveOffset))) {
-                ARCTYPE stubType = ARC_UNKNOWN;
+                FT stubType = FT_UNKNOWN;
                 qint64 nStubArchiveSize = 0;
                 bool bStubProvisional = false;
                 bool bStubResourceIndeterminate = false;
                 bool bStubUseOuterDevice = false;
                 if (_matchArchiveAt(nStubPayload, nTotalSize - nStubPayload, &stubType, &nStubArchiveSize, pPdStruct, pZpaqScanCache, pFreeArcScanCache,
                                     &bStubProvisional, &bStubResourceIndeterminate, &bStubUseOuterDevice) &&
-                    (stubType == ARC_LHA)) {
+                    (stubType == FT_LHA)) {
                     result.bIsValid = true;
                     result.bProvisional = bStubProvisional;
                     result.arcType = stubType;
@@ -2435,18 +2742,57 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
         }
     }
 
+    // The RTPatch locator runs BEFORE the carrier gate and before the overlay
+    // scan, for the same reason the LHarc one does: the 3.20 carriers are
+    // precisely the ones neither can reach (see isRTPatchPackageHeaderAt).
+    // One buffered pass over the bounded image keeps a large carrier off the
+    // repeated whole-window rescans a per-candidate signature search would cost.
+    if (m_requiredArcType == FT_RTPATCH) {
+        const QByteArray baPatchImage = read_array_process(0, qMin(nTotalSize, SFX_OVERLAY_SCAN_LIMIT), pPdStruct);
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return result;
+        const qint32 nPatchLimit = baPatchImage.size() - SFX_RTPATCH_HEADER_SIZE;
+        qint32 nPatchSearch = (nMinimumArchiveOffset > 0) ? (qint32)qMin<qint64>(nMinimumArchiveOffset, baPatchImage.size()) : 0;
+        for (qint32 nAttempt = 0; (nAttempt < SFX_SIGNATURE_CANDIDATE_LIMIT) &&
+                                  (nPatchSearch >= 0) && (nPatchSearch <= nPatchLimit) &&
+                                  XBinary::isPdStructNotCanceled(pPdStruct);
+             ++nAttempt) {
+            const qint32 nPatchOffset = baPatchImage.indexOf(QByteArrayLiteral("K*"), nPatchSearch);
+            if ((nPatchOffset < nPatchSearch) || (nPatchOffset > nPatchLimit)) break;
+            nPatchSearch = nPatchOffset + 1;
+
+            if (!isRTPatchPackageHeaderAt(baPatchImage, nPatchOffset)) continue;
+
+            FT patchType = FT_UNKNOWN;
+            qint64 nPatchArchiveSize = 0;
+            bool bPatchProvisional = false;
+            bool bPatchResourceIndeterminate = false;
+            bool bPatchUseOuterDevice = false;
+            if (_matchArchiveAt(nPatchOffset, nTotalSize - nPatchOffset, &patchType, &nPatchArchiveSize, pPdStruct, pZpaqScanCache, pFreeArcScanCache,
+                                &bPatchProvisional, &bPatchResourceIndeterminate, &bPatchUseOuterDevice) &&
+                (patchType == FT_RTPATCH)) {
+                result.bIsValid = true;
+                result.bProvisional = bPatchProvisional;
+                result.arcType = patchType;
+                result.bUseOuterDevice = bPatchUseOuterDevice;
+                result.nArchiveOffset = nPatchOffset;
+                result.nArchiveSize = nPatchArchiveSize;
+                return result;
+            }
+        }
+    }
+
     if (!bMSDOS && !bELF && !bAtariST && !bCOM && !bExecLha) {
         return result;
     }
 
     // PyInstaller CArchive is footer-indexed and spans the executable image,
     // so it cannot be represented by the ordinary overlay signature scan.
-    if ((m_requiredArcType == ARC_UNKNOWN ||
-         m_requiredArcType == ARC_PYINSTALLER) &&
+    if ((m_requiredArcType == FT_UNKNOWN ||
+         m_requiredArcType == FT_PYINSTALLER_SFX) &&
         XPyInstallerCArchive::isValid(getDevice(), pPdStruct)) {
         result.bIsValid = true;
         result.bUseOuterDevice = true;
-        result.arcType = ARC_PYINSTALLER;
+        result.arcType = FT_PYINSTALLER_SFX;
         result.nArchiveOffset = 0;
         result.nArchiveSize = nTotalSize;
         return result;
@@ -2476,17 +2822,17 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
     // begin with raw zPQ and otherwise risk being carved from a later block.
     qint64 nFramedZpaqOffset = -1;
     qint64 nFramedZpaqSize = 0;
-    if (((m_requiredArcType == ARC_UNKNOWN) || (m_requiredArcType == ARC_ZPAQ)) &&
+    if (((m_requiredArcType == FT_UNKNOWN) || (m_requiredArcType == FT_ZPAQ)) &&
         getZpaqFranzSfxPayload(this, nOverlayOffset, &nFramedZpaqOffset, &nFramedZpaqSize, pPdStruct) &&
         ((nMinimumArchiveOffset < 0) || (nFramedZpaqOffset >= nMinimumArchiveOffset))) {
-        ARCTYPE type = ARC_UNKNOWN;
+        FT type = FT_UNKNOWN;
         qint64 nArchiveSize = 0;
         bool bProvisional = false;
         bool bResourceIndeterminate = false;
         bool bUseOuterDevice = false;
         if (_matchArchiveAt(nFramedZpaqOffset, nFramedZpaqSize, &type, &nArchiveSize, pPdStruct, pZpaqScanCache, pFreeArcScanCache, &bProvisional,
                             &bResourceIndeterminate, &bUseOuterDevice)) {
-            if (type != ARC_ZPAQ) return result;
+            if (type != FT_ZPAQ) return result;
             result.bIsValid = true;
             result.bProvisional = bProvisional;
             result.arcType = type;
@@ -2510,7 +2856,7 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
         result.bIsValid = true;
         result.bProvisional = true;
         result.bAllowOpaqueZpaq = true;
-        result.arcType = ARC_ZPAQ;
+        result.arcType = FT_ZPAQ;
         result.bUseOuterDevice = false;
         result.nArchiveOffset = nFramedZpaqOffset;
         result.nArchiveSize = nFramedZpaqSize;
@@ -2533,7 +2879,7 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
                 continue;
             }
             setTestedOverlayOffsets.insert(nCandidateOffset);
-            ARCTYPE type = ARC_UNKNOWN;
+            FT type = FT_UNKNOWN;
             qint64 nArchiveSize = 0;
             bool bProvisional = false;
             bool bResourceIndeterminate = false;
@@ -2555,17 +2901,49 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
         }
     }
 
+    // The WinACE 32-bit stub publishes its container as the "ARCDATA"/"DATA"
+    // PE resource. The directory entry is authoritative for both ends of the
+    // archive, so no scan window is widened and no other family's candidate
+    // can be displaced: the offset is only ever handed to _matchArchiveAt,
+    // which lets XACE validate the complete block chain exactly as it does
+    // for an overlay candidate.
+    if (((m_requiredArcType == FT_UNKNOWN) || (m_requiredArcType == FT_ACE)) && pe.isValid(pPdStruct) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        qint64 nAceResourceOffset = -1;
+        qint64 nAceResourceSize = 0;
+        if (getWinAceSfxResource(&pe, &nAceResourceOffset, &nAceResourceSize, pPdStruct) && (nAceResourceOffset > 0) && (nAceResourceOffset < nTotalSize) &&
+            (nAceResourceSize <= (nTotalSize - nAceResourceOffset)) && ((nMinimumArchiveOffset < 0) || (nAceResourceOffset >= nMinimumArchiveOffset)) &&
+            !setTestedOverlayOffsets.contains(nAceResourceOffset)) {
+            setTestedOverlayOffsets.insert(nAceResourceOffset);
+            FT type = FT_UNKNOWN;
+            qint64 nArchiveSize = 0;
+            bool bProvisional = false;
+            bool bResourceIndeterminate = false;
+            bool bUseOuterDevice = false;
+            if (_matchArchiveAt(nAceResourceOffset, nAceResourceSize, &type, &nArchiveSize, pPdStruct, pZpaqScanCache, pFreeArcScanCache, &bProvisional,
+                                &bResourceIndeterminate, &bUseOuterDevice) &&
+                (type == FT_ACE)) {
+                result.bIsValid = true;
+                result.bProvisional = bProvisional;
+                result.arcType = type;
+                result.bUseOuterDevice = bUseOuterDevice;
+                result.nArchiveOffset = nAceResourceOffset;
+                result.nArchiveSize = nArchiveSize;
+                return result;
+            }
+        }
+    }
+
     // A ZIP footer is both cheaper and more authoritative than a forward
     // signature sweep. Try its derived first-local-record offset even when it
     // lies beyond SFX_OVERLAY_SCAN_LIMIT (large PKSFX images commonly do).
-    if (((m_requiredArcType == ARC_UNKNOWN) || (m_requiredArcType == ARC_ZIP)) &&
+    if (((m_requiredArcType == FT_UNKNOWN) || (m_requiredArcType == FT_ZIP)) &&
         XBinary::isPdStructNotCanceled(pPdStruct)) {
         const qint64 nZipOffset = getZipSfxCandidate(this, pPdStruct);
         if ((nZipOffset > 0) && (nZipOffset < nTotalSize) &&
             ((nMinimumArchiveOffset < 0) || (nZipOffset >= nMinimumArchiveOffset)) &&
             !setTestedOverlayOffsets.contains(nZipOffset)) {
             setTestedOverlayOffsets.insert(nZipOffset);
-            ARCTYPE type = ARC_UNKNOWN;
+            FT type = FT_UNKNOWN;
             qint64 nArchiveSize = 0;
             bool bProvisional = false;
             bool bResourceIndeterminate = false;
@@ -2573,7 +2951,7 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
             if (_matchArchiveAt(nZipOffset, nTotalSize - nZipOffset, &type, &nArchiveSize, pPdStruct,
                                 pZpaqScanCache, pFreeArcScanCache, &bProvisional,
                                 &bResourceIndeterminate, &bUseOuterDevice) &&
-                (type == ARC_ZIP)) {
+                (type == FT_ZIP)) {
                 result.bIsValid = true;
                 result.bProvisional = bProvisional;
                 result.arcType = type;
@@ -2589,6 +2967,52 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
         }
     }
 
+    // Knowledge Dynamics Corp's INSTALL / wINSTALL "WinSFX" stubs append a
+    // complete ".RED" archive after the loader.  XFU already READS that
+    // container - it is one of the bounded legacy decoder's modules, and a
+    // carved payload lists and extracts today - so only its position inside
+    // the carrier was missing.  The locator is authoritative: it accepts the
+    // one offset whose CRC-authenticated member chain ends exactly at end of
+    // file, which is also what separates the payload from the loader-owned
+    // engine blob the 16-bit builders store ahead of it.  It runs before the
+    // generic sweep because a 16-bit carrier that reports no overlay returns
+    // just below, and no scan pattern can reach these bytes anyway.
+    //
+    // Cost, stated plainly because this probe runs on every SFX-probed
+    // executable: one buffered signature sweep of at most
+    // SFX_OVERLAY_SCAN_LIMIT bytes, plus - only for a carrier that really
+    // contains the four-byte tag - at most SFX_RED_SCAN_HEADER_BUDGET 41-byte
+    // header reads.  That sweep is not free: it is one linear pass
+    // proportional to the window, measured at about 40 ms for a full 16 MiB.
+    // It is bounded, and it can no longer be multiplied by the candidate cap.
+    // It starts at nMinimumArchiveOffset for the same reason the fallback
+    // sweep below does: offsets below that bound are rejected anyway, so a
+    // carrier re-probed for a further payload must not rescan them.
+    if ((m_requiredArcType == FT_UNKNOWN) || (m_requiredArcType == FT_DEARK_LEGACY_ARCHIVE)) {
+        const qint64 nRedScanStart = (nMinimumArchiveOffset > 0) ? nMinimumArchiveOffset : 0;
+        const qint64 nRedOffset = getRedSfxCandidate(this, nRedScanStart, SFX_OVERLAY_SCAN_LIMIT, pPdStruct);
+        if ((nRedOffset > 0) && (nRedOffset < nTotalSize) && ((nMinimumArchiveOffset < 0) || (nRedOffset >= nMinimumArchiveOffset)) &&
+            !setTestedOverlayOffsets.contains(nRedOffset)) {
+            setTestedOverlayOffsets.insert(nRedOffset);
+            FT type = FT_UNKNOWN;
+            qint64 nArchiveSize = 0;
+            bool bProvisional = false;
+            bool bResourceIndeterminate = false;
+            bool bUseOuterDevice = false;
+            if (_matchArchiveAt(nRedOffset, nTotalSize - nRedOffset, &type, &nArchiveSize, pPdStruct, pZpaqScanCache, pFreeArcScanCache, &bProvisional,
+                                &bResourceIndeterminate, &bUseOuterDevice) &&
+                (type == FT_DEARK_LEGACY_ARCHIVE)) {
+                result.bIsValid = true;
+                result.bProvisional = bProvisional;
+                result.arcType = type;
+                result.bUseOuterDevice = bUseOuterDevice;
+                result.nArchiveOffset = nRedOffset;
+                result.nArchiveSize = nArchiveSize;
+                return result;
+            }
+        }
+    }
+
     // 2) Fallback: scan only the executable overlay. Searching mapped PE/NE
     // sections classified ordinary programs containing CAB resources as SFXs.
     // Dedicated GZIP/KWAJ/SZDD wrappers are the exception: historical setup
@@ -2599,7 +3023,7 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
     // image has no file-backed size metadata, so its complete (at most
     // 65280-byte) body is the only meaningful search range. Candidates still
     // have to initialize as complete archives before they are accepted.
-    const bool bScanEmbeddedImage = (m_requiredArcType == ARC_GZIP) || (m_requiredArcType == ARC_KWAJ) || (m_requiredArcType == ARC_SZDD);
+    const bool bScanEmbeddedImage = (m_requiredArcType == FT_GZIP) || (m_requiredArcType == FT_KWAJ) || (m_requiredArcType == FT_SZDD);
     if (!bScanEmbeddedImage && !bCOM && !bAtariST && !bExecLha &&
         ((nOverlayOffset <= 0) || (nOverlayOffset >= nTotalSize))) return result;
 
@@ -2636,7 +3060,9 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
                                     "67570402",                          // Crusher ARQ
                                     "484C53515A",                        // HLSQZ
                                     "425A68",                            // BZIP2; full gate above
-                                    "FF425347"};                         // PTS BSA (.BSN) container header
+                                    "FF425347",                          // PTS BSA (.BSN) container header
+                                    "544743460024",                      // "Setup Specialist" TGCF container header
+                                    "602213636C000000"};                 // Asymetrix disk-set volume header + 0x6C record stride
     const qint32 anCandidateAdjustments[] = {0, 0, 0, 0, 0, 0, 0, 0,  // 7z through ZPAQ
                                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // ARC methods 1 through 11
                                              0,                                // ARJ
@@ -2645,11 +3071,12 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
                                              0,                                // KWAJ
                                              0, 0, 0, 0,                       // SZDD signatures
                                              0,                                // GX Library
-                                             0, 0, 0, 0};                      // ARQ, SQZ, BZIP2, BSN
-    const ARCTYPE anSignatureTypes[] = {ARC_7Z, ARC_ZIP, ARC_ZIP, ARC_RAR, ARC_RAR, ARC_CAB, ARC_FREEARC, ARC_ZPAQ,
-                                        ARC_ARC, ARC_ARC, ARC_ARC, ARC_ARC, ARC_ARC, ARC_ARC, ARC_ARC, ARC_ARC, ARC_ARC, ARC_ARC, ARC_ARC,
-                                        ARC_ARJ, ARC_LHA, ARC_LHA, ARC_LHA, ARC_GZIP, ARC_KWAJ, ARC_SZDD, ARC_SZDD, ARC_SZDD, ARC_SZDD,
-                                        ARC_DEARK_LEGACY, ARC_ARQ, ARC_SQZ, ARC_BZIP2, ARC_BSN};
+                                             0, 0, 0, 0, 0,                    // ARQ, SQZ, BZIP2, BSN, TGCF
+                                             0};                               // Asymetrix
+    const FT anSignatureTypes[] = {FT_7Z, FT_ZIP, FT_ZIP, FT_RAR, FT_RAR, FT_CAB, FT_FREEARC, FT_ZPAQ,
+                                        FT_ARC, FT_ARC, FT_ARC, FT_ARC, FT_ARC, FT_ARC, FT_ARC, FT_ARC, FT_ARC, FT_ARC, FT_ARC,
+                                        FT_ARJ, FT_LHA, FT_LHA, FT_LHA, FT_GZIP, FT_KWAJ, FT_SZDD, FT_SZDD, FT_SZDD, FT_SZDD,
+                                        FT_DEARK_LEGACY_ARCHIVE, FT_ARQ, FT_SQZ, FT_BZIP2, FT_BSN, FT_TGCF, FT_ASYMETRIX};
     static_assert((sizeof(apszSignatures) / sizeof(apszSignatures[0])) == (sizeof(anCandidateAdjustments) / sizeof(anCandidateAdjustments[0])),
                    "SFX signature and adjustment tables must stay aligned");
     static_assert((sizeof(apszSignatures) / sizeof(apszSignatures[0])) == (sizeof(anSignatureTypes) / sizeof(anSignatureTypes[0])),
@@ -2685,7 +3112,7 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
     qint32 nMinimumCandidateAdjustment = 0;
     QList<qint32> aBuckets[256];
     for (int i = 0; i < nSignatureCount; i++) {
-        if ((m_requiredArcType != ARC_UNKNOWN) && (anSignatureTypes[i] != m_requiredArcType)) continue;
+        if ((m_requiredArcType != FT_UNKNOWN) && (anSignatureTypes[i] != m_requiredArcType)) continue;
         const QByteArray baSignature(apszSignatures[i]);
         for (qint32 j = 0; (j + 1) < baSignature.size(); j += 2) {
             const char c1 = baSignature.at(j);
@@ -2721,7 +3148,7 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
     // is near the start, while retaining large buffered reads versus the old
     // byte-at-a-time device scan.
     const qint64 nChunkSize = 64LL * 1024;
-    const bool bNeedsCompleteCandidateMap = (m_requiredArcType == ARC_KWAJ) || (m_requiredArcType == ARC_SZDD);
+    const bool bNeedsCompleteCandidateMap = (m_requiredArcType == FT_KWAJ) || (m_requiredArcType == FT_SZDD);
     QByteArray baChunk;
     for (qint64 nChunkStart = nScanStart; (nChunkStart < nScanEnd) && isPdStructNotCanceled(pPdStruct); nChunkStart += nChunkSize) {
         const qint64 nReadSize = qMin(nChunkSize + nMaxPatternSize - 1, nScanEnd - nChunkStart);
@@ -2767,17 +3194,17 @@ XSFX::INTERNAL_INFO XSFX::_detectScan(PDSTRUCT *pPdStruct, XSFX_ZPAQ_SCAN_CACHE 
 
     if (!isPdStructNotCanceled(pPdStruct)) {
         INTERNAL_INFO canceledResult = {};
-        canceledResult.arcType = ARC_UNKNOWN;
+        canceledResult.arcType = FT_UNKNOWN;
         return canceledResult;
     }
     return result;
 }
 
-XArchive *XSFX::_createArchive(ARCTYPE arcType, QIODevice *pDevice, bool bAllowOpaqueZpaq)
+XArchive *XSFX::_createArchive(FT arcType, QIODevice *pDevice, bool bAllowOpaqueZpaq)
 {
     switch (arcType) {
-        case ARC_7Z: return new XSevenZip(pDevice);
-        case ARC_ZIP: {
+        case FT_7Z: return new XSevenZip(pDevice);
+        case FT_ZIP: {
             XConcatZipArchive *pConcat = new XConcatZipArchive(pDevice);
             if (pConcat->XGameStoreArchiveBase::isValid(nullptr)) return pConcat;
             delete pConcat;
@@ -2789,15 +3216,15 @@ XArchive *XSFX::_createArchive(ARCTYPE arcType, QIODevice *pDevice, bool bAllowO
             delete pWinImage;
             return new XZip(pDevice);
         }
-        case ARC_RAR: return new XRar(pDevice);
-        case ARC_CAB: return new XCab(pDevice);
-        case ARC_ARC: return new XSEAARC(pDevice);
-        case ARC_ARJ: return new XARJ(pDevice);
+        case FT_RAR: return new XRar(pDevice);
+        case FT_CAB: return new XCab(pDevice);
+        case FT_ARC: return new XSEAARC(pDevice);
+        case FT_ARJ: return new XARJ(pDevice);
         // Deark's LHA reader accepts the historical LArc/LZ5 headers used by
         // EXEC-format Atari self-extractors as well as ordinary LHA members.
         // The native XLHA reader remains the bare-archive implementation, but
         // the bounded SFX view benefits from Deark's wider header dialects.
-        case ARC_LHA: {
+        case FT_LHA: {
             // PMA uses the native PMarc decoders, including the reference implementation's
             // exact pms envelope. Other LHA SFX dialects retain Deark above.
             QPointer<XSFX> guardedThis(this);
@@ -2818,18 +3245,22 @@ XArchive *XSFX::_createArchive(ARCTYPE arcType, QIODevice *pDevice, bool bAllowO
             }
             return new XDearkArchive(guardedDevice.data());
         }
-        case ARC_GZIP: return new XGzip(pDevice);
-        case ARC_BZIP2: return new XBZIP2(pDevice);
-        case ARC_KWAJ: return new XKWAJ(pDevice);
-        case ARC_SZDD: return new XSZDD(pDevice);
-        case ARC_PYINSTALLER: return new XPyInstallerCArchive(pDevice);
-        case ARC_DEARK_LEGACY: return new XDearkArchive(pDevice);
-        case ARC_ARQ: return new XARQ(pDevice);
-        case ARC_SQZ: return new XSQZ(pDevice);
-        case ARC_RTPATCH: return new XRTPatch(pDevice);
-        case ARC_BSN: return new XBSN(pDevice);
-        case ARC_FREEARC: return new XFREEARC(pDevice);
-        case ARC_ZPAQ: {
+        case FT_GZIP: return new XGzip(pDevice);
+        case FT_BZIP2: return new XBZIP2(pDevice);
+        case FT_KWAJ: return new XKWAJ(pDevice);
+        case FT_SZDD: return new XSZDD(pDevice);
+        case FT_PYINSTALLER_SFX: return new XPyInstallerCArchive(pDevice);
+        case FT_DEARK_LEGACY_ARCHIVE: return new XDearkArchive(pDevice);
+        case FT_ARQ: return new XARQ(pDevice);
+        case FT_SQZ: return new XSQZ(pDevice);
+        case FT_RTPATCH: return new XRTPatch(pDevice);
+        case FT_BSN: return new XBSN(pDevice);
+        case FT_TGCF: return new XTGCFArchive(pDevice);
+        case FT_RTA: return new XRTA(pDevice);
+        case FT_ACE: return new XACE(pDevice);
+        case FT_ASYMETRIX: return new XAsymetrix(pDevice);
+        case FT_FREEARC: return new XFREEARC(pDevice);
+        case FT_ZPAQ: {
             XZPAQ *pZpaq = new XZPAQ(pDevice);
             pZpaq->setAllowOpaqueEncrypted(bAllowOpaqueZpaq);
             return pZpaq;
@@ -2931,7 +3362,7 @@ bool XSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
     const QString sInitialError = XBinary::getPdStructErrorString(pPdStruct);
     QString sLastCandidateError;
     qint64 nMinimumArchiveOffset = -1;
-    ARCTYPE retryType = ARC_UNKNOWN;
+    FT retryType = FT_UNKNOWN;
     UNPACK_CONTEXT *pContext = nullptr;
     XSFX_ZPAQ_SCAN_CACHE zpaqScanCache;
     XSFX_FREEARC_SCAN_CACHE freeArcScanCache;
@@ -2941,7 +3372,7 @@ bool XSFX::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &m
         const INTERNAL_INFO info = detector._detect(pPdStruct, &zpaqScanCache, &freeArcScanCache, nMinimumArchiveOffset);
         if (!guardedThis || !guardedSource || !info.bIsValid) break;
 
-        if ((retryType != ARC_UNKNOWN) && (info.arcType != retryType)) {
+        if ((retryType != FT_UNKNOWN) && (info.arcType != retryType)) {
             if (info.nArchiveOffset >= (std::numeric_limits<qint64>::max)()) break;
             nMinimumArchiveOffset = info.nArchiveOffset + 1;
             continue;
@@ -3052,7 +3483,7 @@ XBinary::ARCHIVERECORD XSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPdStru
 
     result = pContext->pArchive->infoCurrent(&pContext->innerState, pPdStruct);
     if (!guardedThis || !m_setUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return ARCHIVERECORD();
-    if (pContext->info.arcType == ARC_BZIP2 && result.mapProperties.contains(FPART_PROP_ORIGINALNAME)) {
+    if (pContext->info.arcType == FT_BZIP2 && result.mapProperties.contains(FPART_PROP_ORIGINALNAME)) {
         // The reference implementation removes only the last extension of the outer basename;
         // the inner SubDevice deliberately carries no filename properties.
         QString name = QFileInfo(XBinary::getDeviceFileName(pContext->pOuterSourceDevice.data())).fileName();
@@ -3106,7 +3537,7 @@ bool XSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     // into the private stage, so publishStage must not debit the copy).
     pContext->innerState.spOutputBudget = pState->spOutputBudget;
 
-    const bool bDeferredCandidate = pContext->info.bProvisional && ((pContext->info.arcType == ARC_ZPAQ) || (pContext->info.arcType == ARC_FREEARC));
+    const bool bDeferredCandidate = pContext->info.bProvisional && ((pContext->info.arcType == FT_ZPAQ) || (pContext->info.arcType == FT_FREEARC));
     if (!bDeferredCandidate) {
         const bool bResult = pContext->pArchive->unpackCurrent(&pContext->innerState, guardedOutput.data(), pPdStruct);
         if (!guardedThis || !guardedOutput || !m_setUnpackContexts.contains(pContext) || (pState->pContext != pContext)) return false;
@@ -3124,7 +3555,7 @@ bool XSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     const QString sInitialError = XBinary::getPdStructErrorString(pPdStruct);
     class SFX_DEFERRED_CANDIDATE_HELPER {
     public:
-        typedef XArchive *(XSFX::*CREATE_ARCHIVE_METHOD)(XSFX::ARCTYPE, QIODevice *, bool);
+        typedef XArchive *(XSFX::*CREATE_ARCHIVE_METHOD)(XBinary::FT, QIODevice *, bool);
 
         SFX_DEFERRED_CANDIDATE_HELPER(const QPointer<XSFX> &guardedThis, const QPointer<QIODevice> &guardedOutput,
                                       const QPointer<QIODevice> &guardedSource, QSet<XSFX::UNPACK_CONTEXT *> *pContexts,
@@ -3339,7 +3770,7 @@ bool XSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
             return m_ppContext ? *m_ppContext : nullptr;
         }
 
-        XArchive *createArchive(XSFX::ARCTYPE arcType, QIODevice *pDevice, bool bAllowOpaqueZpaq) const
+        XArchive *createArchive(XBinary::FT arcType, QIODevice *pDevice, bool bAllowOpaqueZpaq) const
         {
             return m_guardedThis ? (m_guardedThis.data()->*m_pCreateArchiveMethod)(arcType, pDevice, bAllowOpaqueZpaq) : nullptr;
         }
@@ -3421,7 +3852,7 @@ bool XSFX::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pPd
     XSFX_ZPAQ_SCAN_CACHE zpaqScanCache;
     XSFX_FREEARC_SCAN_CACHE freeArcScanCache;
     qint64 nMinimumArchiveOffset = pContext->info.nArchiveOffset + 1;
-    const ARCTYPE fallbackType = pContext->info.arcType;
+    const FT fallbackType = pContext->info.arcType;
     QString sLastDecodeError = sDecodeError;
 
     for (qint32 nAttempt = 0; (nAttempt < SFX_SIGNATURE_CANDIDATE_LIMIT) && helper.contextIsCurrent() && XBinary::isPdStructNotCanceled(pPdStruct); ++nAttempt) {

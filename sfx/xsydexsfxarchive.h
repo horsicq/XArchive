@@ -24,7 +24,7 @@
 #include <QPointer>
 #include <QSet>
 
-#include "xbinary.h"
+#include "xarchive.h"
 
 // Sydex's self-extracting DISK IMAGE (the 1995 "SFX Sydex" generation, an
 // MZ + NE carrier).  It is a sibling of - and NOT the same thing as - XCopyQM,
@@ -70,7 +70,13 @@
 //
 // The whole image is one member, named after the carrier with a ".img" suffix,
 // which is what the reference extractor emits as well.
-class XSydexSFXArchive : public XBinary {
+//
+// The base is XArchive, NOT XBinary.  XArchives::decompressToFolder() -
+// which is what --extractarchive and --testarchive both go through -
+// reaches an archive reader by dynamic_cast<XArchive *> and refuses
+// anything that is not one, so an XBinary-derived reader that is
+// registered as an archive lists perfectly and extracts nothing.
+class XSydexSFXArchive : public XArchive {
     Q_OBJECT
 
 public:
@@ -92,7 +98,7 @@ public:
         qint64 nCurrentOffset = 0;
     };
 
-    explicit XSydexSFXArchive(QIODevice *pDevice = nullptr, bool bIsImage = false, XADDR nModuleAddress = -1);
+    explicit XSydexSFXArchive(QIODevice *pDevice = nullptr);
     ~XSydexSFXArchive() override;
 
     bool isValid(PDSTRUCT *pPdStruct = nullptr) override;

@@ -125,7 +125,7 @@ XSzddSFX::SZDDSFX_UNPACK_DEFERRED_CLEANUP::~SZDDSFX_UNPACK_DEFERRED_CLEANUP()
     }
 }
 
-XSzddSFX::XSzddSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_SZDD)
+XSzddSFX::XSzddSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_SZDD)
 {
     m_pSzddUnpackDeferredCleanup = QSharedPointer<SZDDSFX_UNPACK_DEFERRED_CLEANUP>::create();
     const QSharedPointer<SZDDSFX_UNPACK_DEFERRED_CLEANUP> pDeferredCleanup = m_pSzddUnpackDeferredCleanup;

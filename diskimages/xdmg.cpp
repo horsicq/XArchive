@@ -32,6 +32,7 @@
 #include <QXmlStreamReader>
 #include <zlib.h>
 
+#include "Algos/xadcdecoder.h"
 #include "Algos/xbzip2decoder.h"
 #include "subdevice.h"
 
@@ -565,6 +566,10 @@ bool dmgGetPartitionStorageInfo(const QList<XDMG::BLOCK_DATA> &listStripes, qint
                 break;
 
             case XDMG::DMG_STRIPE_ADC:
+                currentMethod = XBinary::HANDLE_METHOD_ADC;
+                bHasPhysicalData = true;
+                break;
+
             case XDMG::DMG_STRIPE_LZFSE:
             case XDMG::DMG_STRIPE_XZ:
                 bHasPhysicalData = true;
@@ -1697,8 +1702,8 @@ QList<XBinary::FPART> XDMG::getFileParts(quint32 nFileParts, qint32 nLimit, PDST
                     case DMG_STRIPE_STORED: handleMethod = HANDLE_METHOD_STORE; break;
                     case DMG_STRIPE_DEFLATE: handleMethod = HANDLE_METHOD_ZLIB; break;
                     case DMG_STRIPE_BZ: handleMethod = HANDLE_METHOD_BZIP2; break;
+                    case DMG_STRIPE_ADC: handleMethod = HANDLE_METHOD_ADC; break;
 
-                    case DMG_STRIPE_ADC:
                     case DMG_STRIPE_LZFSE:
                     case DMG_STRIPE_XZ: break;
 
@@ -1813,7 +1818,7 @@ QList<XArchive::RECORD> XDMG::getRecords(qint32 nLimit, PDSTRUCT *pPdStruct)
 QList<XBinary::PM_INFO> XDMG::unpackImplemented()
 {
     QList<PM_INFO> listResult;
-    for (HANDLE_METHOD method : {HANDLE_METHOD_STORE, HANDLE_METHOD_ZLIB, HANDLE_METHOD_BZIP2}) {
+    for (HANDLE_METHOD method : {HANDLE_METHOD_STORE, HANDLE_METHOD_ZLIB, HANDLE_METHOD_BZIP2, HANDLE_METHOD_ADC}) {
         PM_INFO info = {};
         info.hm[0] = method;
         listResult.append(info);
@@ -2247,13 +2252,22 @@ bool XDMG::_parsePartition(const DMG_PARTITION_INFO &partitionInfo, const KOLY_B
 
         const bool bControl = (stripe.nType == DMG_STRIPE_SKIP) || (stripe.nType == DMG_STRIPE_END);
         if (bControl) {
-            if ((stripe.nSectorCount != 0) || (stripe.nDataOffset != 0) || (stripe.nDataLength != 0) || bEndSeen) return false;
+            // hdiutil writes the running data-fork cursor into the comment and
+            // terminator entries (their nDataOffset is the compressed size
+            // reached so far; the last terminator equals the whole fork), so
+            // only the sector and length fields must be zero.  The cursor is
+            // still bounded by the fork it points into.
+            const quint64 nRemainingFork = kolyBlock.nDataForkLength - mishBlock.nDataOffset;
+            if ((stripe.nSectorCount != 0) || (stripe.nDataLength != 0) || (stripe.nDataOffset > nRemainingFork) || bEndSeen) return false;
             if (stripe.nType == DMG_STRIPE_END) {
                 if (i != (mishBlock.nBlockDataCount - 1)) return false;
                 bEndSeen = true;
             }
         } else {
-            if ((stripe.nSectorCount == 0) || (stripe.nSectorCount > ((quint64)(std::numeric_limits<qint64>::max)() / DMG_SECTOR_SIZE)) ||
+            // hdiutil (UDRO images) may close a partition with a zero-length
+            // ZEROES run; only stripes that carry data must cover a sector.
+            const bool bZeroFill = (stripe.nType == DMG_STRIPE_EMPTY) || (stripe.nType == DMG_STRIPE_ZEROES);
+            if (((stripe.nSectorCount == 0) && !bZeroFill) || (stripe.nSectorCount > ((quint64)(std::numeric_limits<qint64>::max)() / DMG_SECTOR_SIZE)) ||
                 (nCoveredSectors > mishBlock.nSectorCount) || (stripe.nSectorCount > (mishBlock.nSectorCount - nCoveredSectors))) {
                 return false;
             }
@@ -2317,8 +2331,14 @@ bool XDMG::_parseAllPartitions(const QList<DMG_PARTITION_INFO> &listPartitions, 
     for (qint32 i = 0; (i < listPartitions.size()) && XBinary::isPdStructNotCanceled(pPdStruct); i++) {
         MISH_BLOCK mishBlock = {};
         QList<BLOCK_DATA> listCurrentStripes;
+        // A blkx table carries the absolute first sector of its partition and
+        // the tables must tile the image; some generators leave the field at
+        // zero in every table, so zero is accepted as "relative" while any
+        // other value must equal the running total.  The tiling itself is
+        // still enforced by the final sector-count comparison below.
         if (!_parsePartition(listPartitions.at(i), kolyBlock, &mishBlock, pStripes ? &listCurrentStripes : nullptr, pPdStruct) ||
-            (mishBlock.nStartSector != nExpectedStartSector) || (mishBlock.nSectorCount > kolyBlock.nSectorCount - nExpectedStartSector)) {
+            ((mishBlock.nStartSector != nExpectedStartSector) && (mishBlock.nStartSector != 0)) ||
+            (mishBlock.nSectorCount > kolyBlock.nSectorCount - nExpectedStartSector)) {
             pMishBlocks->clear();
             if (pStripes) pStripes->clear();
             return false;
@@ -2819,6 +2839,56 @@ QList<XDMG::DMG_PARTITION_INFO> XDMG::_parseResourceForkPartitions(const QByteAr
     return listResult;
 }
 
+namespace {
+typedef bool (*DMG_STRIPE_DECODER)(XBinary::DATAPROCESS_STATE *pState, XBinary::PDSTRUCT *pPdStruct);
+
+// Decodes one compressed stripe through a shared Algos decoder.  The shared
+// decoders define logical output offset zero and seek there during state
+// preparation, so each stripe is decoded into a private stage that cannot
+// overwrite bytes already appended by earlier stripes.  The decoder must
+// consume exactly the stripe's input and produce exactly the stripe's
+// output; only then is the stage appended to the partition.
+bool dmgDecodeStagedStripe(DMG_STRIPE_DECODER pfnDecoder, const QPointer<XDMG> &guardedThis, const QPointer<QIODevice> &guardedSource,
+                           const QPointer<QIODevice> &guardedOutput, qint64 nInputOffset, qint64 nInputSize, qint64 nExpectedSize,
+                           const QMap<XBinary::UNPACK_PROP, QVariant> &mapUnpackProperties, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pfnDecoder || (nInputSize <= 0) || (nExpectedSize < 0) || !dmgAllDevicesAreCurrent(guardedThis, guardedSource, guardedOutput)) return false;
+
+    QTemporaryFile stripeStaging;
+    if (!stripeStaging.open()) return false;
+    XBinary::DATAPROCESS_STATE state = {};
+    state.mapUnpackProperties = mapUnpackProperties;
+    state.pDeviceInput = guardedSource.data();
+    state.pDeviceOutput = &stripeStaging;
+    state.nInputOffset = nInputOffset;
+    state.nInputLimit = nInputSize;
+    state.nProcessedOffset = 0;
+    state.nProcessedLimit = nExpectedSize;
+    state.mapProperties.insert(XBinary::FPART_PROP_UNCOMPRESSEDSIZE, nExpectedSize);
+    const bool bDecoded = pfnDecoder(&state, pPdStruct);
+    if (!dmgAllDevicesAreCurrent(guardedThis, guardedSource, guardedOutput) || !bDecoded || (state.nCountInput != nInputSize) ||
+        (state.nCountOutput != nExpectedSize) || state.bReadError || state.bWriteError || (stripeStaging.size() != nExpectedSize) ||
+        !XBinary::isPdStructNotCanceled(pPdStruct) || !stripeStaging.seek(0)) {
+        return false;
+    }
+
+    QByteArray baBuffer(0x10000, 0);
+    qint64 nRemaining = nExpectedSize;
+    while ((nRemaining > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
+        const qint32 nChunk = (qint32)qMin<qint64>(baBuffer.size(), nRemaining);
+        if (stripeStaging.read(baBuffer.data(), nChunk) != nChunk) {
+            return false;
+        }
+        const bool bWritten = dmgWriteAll(guardedOutput.data(), baBuffer.constData(), nChunk, pPdStruct);
+        if (!dmgAllDevicesAreCurrent(guardedThis, guardedSource, guardedOutput) || !bWritten) {
+            return false;
+        }
+        nRemaining -= nChunk;
+    }
+    return dmgAllDevicesAreCurrent(guardedThis, guardedSource, guardedOutput) && (nRemaining == 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+}
+}  // namespace
+
 bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, qint64 nDataForkLength, qint64 nMishDataOffset, QIODevice *pDevice,
                              const QMap<UNPACK_PROP, QVariant> &mapUnpackProperties, PDSTRUCT *pPdStruct)
 {
@@ -2940,7 +3010,8 @@ bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, q
                    bExactInput;
         }
 
-        case DMG_STRIPE_BZ: {
+        case DMG_STRIPE_BZ:
+        case DMG_STRIPE_ADC: {
             qint64 nInputOffset = 0;
             qint64 nInputSize = 0;
             if (!dmgGetStripeDataRange(stripe, nDataForkOffset, nDataForkLength, nMishDataOffset, nFileSize, &nInputOffset, &nInputSize) ||
@@ -2948,48 +3019,18 @@ bool XDMG::_decompressStripe(const BLOCK_DATA &stripe, qint64 nDataForkOffset, q
                 return false;
             }
 
-            // The shared BZIP2 decoder defines logical output offset zero and
-            // seeks there during state preparation.  Isolate each stripe so
-            // it cannot overwrite bytes already appended by earlier stripes.
-            QTemporaryFile stripeStaging;
-            if (!stripeStaging.open()) return false;
-            DATAPROCESS_STATE state = {};
-            state.mapUnpackProperties = mapUnpackProperties;
-            state.pDeviceInput = guardedSource.data();
-            state.pDeviceOutput = &stripeStaging;
-            state.nInputOffset = nInputOffset;
-            state.nInputLimit = nInputSize;
-            state.nProcessedOffset = 0;
-            state.nProcessedLimit = nExpectedSize;
-            state.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, nExpectedSize);
-            const bool bDecoded = XBZIP2Decoder::decompress(&state, pPdStruct);
-            if (!dmgAllDevicesAreCurrent(guardedThis, guardedSource, guardedOutput) || !bDecoded || (state.nCountInput != nInputSize) ||
-                (state.nCountOutput != nExpectedSize) || state.bReadError ||
-                state.bWriteError || (stripeStaging.size() != nExpectedSize) || !XBinary::isPdStructNotCanceled(pPdStruct) || !stripeStaging.seek(0)) {
-                return false;
-            }
-
-            QByteArray baBuffer(0x10000, 0);
-            qint64 nRemaining = nExpectedSize;
-            while ((nRemaining > 0) && XBinary::isPdStructNotCanceled(pPdStruct)) {
-                const qint32 nChunk = (qint32)qMin<qint64>(baBuffer.size(), nRemaining);
-                if (stripeStaging.read(baBuffer.data(), nChunk) != nChunk) {
-                    return false;
-                }
-                const bool bWritten = dmgWriteAll(guardedOutput.data(), baBuffer.constData(), nChunk, pPdStruct);
-                if (!dmgAllDevicesAreCurrent(guardedThis, guardedSource, guardedOutput) || !bWritten) {
-                    return false;
-                }
-                nRemaining -= nChunk;
-            }
-            return dmgAllDevicesAreCurrent(guardedThis, guardedSource, guardedOutput) && (nRemaining == 0) && XBinary::isPdStructNotCanceled(pPdStruct);
+            const DMG_STRIPE_DECODER pfnDecoder = (stripe.nType == DMG_STRIPE_BZ) ? &XBZIP2Decoder::decompress : &XADCDecoder::decompress;
+            return dmgDecodeStagedStripe(pfnDecoder, guardedThis, guardedSource, guardedOutput, nInputOffset, nInputSize, nExpectedSize, mapUnpackProperties,
+                                         pPdStruct);
         }
 
-        case DMG_STRIPE_ADC:
         case DMG_STRIPE_LZFSE:
         case DMG_STRIPE_XZ:
             // Unsupported stripes must never be reported as successfully
-            // extracted with fabricated zero-filled data.
+            // extracted with fabricated zero-filled data.  Name the codec so
+            // the refusal is diagnosable.
+            XBinary::setPdStructErrorString(pPdStruct, tr("Unsupported DMG stripe compression: %1")
+                                                           .arg((stripe.nType == DMG_STRIPE_LZFSE) ? QString("LZFSE (0x80000007)") : QString("XZ (0x80000008)")));
             return false;
 
         case DMG_STRIPE_SKIP:

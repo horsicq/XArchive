@@ -16,6 +16,16 @@ const qint32 RTPATCH_HEADER_SIZE = 0x1a;
 const qint32 RTPATCH_DESCRIPTOR_SIZE = 34;
 const qint32 RTPATCH_AUGMENTED_PREFIX_SIZE = 42;
 const qint32 RTPATCH_MAX_LIST_ITEMS = 4096;
+// 3.20 and every later generation open the record area eight bytes behind the
+// header: a uint16 record count and six reserved bytes come first, and the
+// counted-string directory table and banner follow them.  1.10-2.11 have no
+// such block and open the area at the header itself.
+const qint32 RTPATCH_RECORD_AREA_OFFSET = 8;
+// How far in front of a record header its counted destination path may start.
+// The fields between the two are variable length; the widest in the corpus is
+// 47 bytes (4.10) and a path is at most 256, so this is the bound with margin,
+// not a tuned value.
+const qint32 RTPATCH_RECORD_PATH_WINDOW = 320;
 // Bytes a self-contained delta program spends before its payload: the mode
 // byte, a one-byte destination index and the fill opcode.  A fourth byte, the
 // end opcode, follows the payload.
@@ -44,6 +54,11 @@ struct RTPatchDescriptor {
     // member.
     bool bIsDelta = false;
     qint64 nProgramSize = 0;
+    // Start of the record header's size pair - the uncompressed size and the
+    // compressed extent - once a classifier has proved where it is.  The
+    // destination count byte sits one byte earlier, at -9, and every field of
+    // the record, including its destination path, precedes that.
+    qint64 nHeaderOffset = -1;
 };
 
 struct RTPatchStringList {
@@ -55,9 +70,19 @@ struct RTPatchStringList {
 bool isSupportedVersion(quint16 nVersion)
 {
     return (nVersion == 110) || (nVersion == 200) ||
-           (nVersion == 211) || (nVersion == 410) ||
+           (nVersion == 211) || (nVersion == 320) ||
+           (nVersion == 400) || (nVersion == 410) ||
            (nVersion == 500) ||
            (nVersion == 650);
+}
+
+// True for the generations that place the fixed 14-byte 8.3 descriptor at a
+// known distance in front of the member stream.  3.20 still uses that layout;
+// 4.00 already carries the augmented block with a counted long name, exactly
+// as 4.10 does.
+bool usesFixedNameDescriptor(quint16 nVersion)
+{
+    return (nVersion <= 211) || (nVersion == 320);
 }
 
 bool parsePString(const QByteArray &baData, qint64 *pPosition,
@@ -145,8 +170,15 @@ bool parseDescriptor(const QByteArray &baData, qint64 nOffset,
     const quint16 nDosTime = qFromLittleEndian<quint16>(pData + 22);
     const QDateTime mtDateTime =
         XBinary::dosDateTimeToQDateTime(nDosDate, nDosTime);
-    if (((nAttributes != 0) && (nAttributes != 0x20) &&
-         (nAttributes != 0x21)) || (nSize == 0) ||
+    // DOS file attributes: read-only, hidden, system and archive, in any
+    // combination.  What a member descriptor must never carry is the
+    // volume-label or directory bit, and compressed data mimicking a
+    // descriptor almost always sets something above them.  An exact
+    // 0/0x20/0x21 test silently dropped every hidden or system member - the
+    // corpus needs HIDDEN|ARCHIVE for help-index members such as NOTES.GID,
+    // which the reference implementation extracts and this reader did not.
+    const quint16 nAttributeMask = 0x27;
+    if (((nAttributes | nAttributeMask) != nAttributeMask) || (nSize == 0) ||
         (nSize > 0x7fffffffU) || !mtDateTime.isValid()) {
         return false;
     }
@@ -192,6 +224,7 @@ bool classifyWholeFileStream(const QByteArray &baData,
     }
 
     pDescriptor->nDataSize = nCompressedSize;
+    pDescriptor->nHeaderOffset = nDescriptorOffset - 8;
     pDescriptor->handleMethod = XBinary::HANDLE_METHOD_RTPATCH;
     return true;
 }
@@ -274,6 +307,7 @@ bool classifyDeltaStream(const QByteArray &baData, qint64 nDescriptorOffset,
     }
 
     pDescriptor->nDataSize = nCompressedSize;
+    pDescriptor->nHeaderOffset = nHeaderOffset;
     pDescriptor->nProgramSize = nProgramSize;
     pDescriptor->bIsDelta = true;
     pDescriptor->handleMethod = XBinary::HANDLE_METHOD_RTPATCH;
@@ -536,6 +570,137 @@ bool looksLikeDirectoryList(const QList<QByteArray> &listStrings)
     }
     return true;
 }
+
+// The directory table is the first counted-string list in the record area, in
+// the same encoding the banner uses.  parseVersion500 keeps the equivalent
+// table to validate each record's destination path against; the generic walk
+// needs it for exactly the same purpose.  A package without a usable table
+// simply yields none, and every path that names a directory is then refused.
+//
+// Where that area starts is generation dependent: 1.10-2.11 open it
+// immediately behind the header, while 3.20 and every 4.x/6.x generation
+// insert the record count and six reserved bytes first.  Measured:
+// 99_hgceqcxnthjstauc_PATCH.RTP (2.11) declares "DATA" at 0x1a, and
+// 97_dvojgremfupqzquh_nfs3wm_101.rtp (4.10) declares 56 entries at 0x22.
+bool parseRecordDirectories(const QByteArray &baData, quint16 nVersion,
+                            QList<QString> *pDirectories)
+{
+    if (!pDirectories) return false;
+    const qint64 nTableOffset = (nVersion <= 211)
+        ? RTPATCH_HEADER_SIZE
+        : (RTPATCH_HEADER_SIZE + RTPATCH_RECORD_AREA_OFFSET);
+    RTPatchStringList stringList;
+    if (!parseStringList(baData, nTableOffset, &stringList) ||
+        !looksLikeDirectoryList(stringList.listStrings)) {
+        return false;
+    }
+    QList<QString> listDirectories;
+    listDirectories.reserve(stringList.listStrings.size());
+    for (qint32 i = 0; i < stringList.listStrings.size(); ++i) {
+        const QByteArray &baEntry = stringList.listStrings.at(i);
+        QString sDirectory;
+        if (!decodeSafeName(
+                reinterpret_cast<const uchar *>(baEntry.constData()),
+                baEntry.size(), false, &sDirectory)) {
+            return false;
+        }
+        listDirectories.append(sDirectory);
+    }
+    *pDirectories = listDirectories;
+    return true;
+}
+
+// A record opens with a flag word in which bit 2 announces a counted,
+// NUL-terminated DESTINATION PATH and bit 1 announces one extra uint16 in
+// front of that path - the same shape parseVersion500 spells out for 5.00 as
+// tag 0x2444 (flat) and tag 0x2446 followed by 0x01b8 (file under a listed
+// directory).  2.11 writes 0x2046, 3.20 writes 0x2444 flat and
+// 0x2446 / 0x4446 / 0x5006 followed by 0x01b0 or 0x0030 for a listed
+// directory, 4.10 writes 0x2446 + 0x01b0 and 4.00 writes 0x5006 + 0x01b8, and
+// every generation clears bit 2 on a record that carries no path at all.  Only
+// those two bits are load bearing, so only they are tested and the value of
+// the intervening word is never assumed; the terminator word 0x1xxx is refused
+// outright.
+bool hasRecordPathFlag(const uchar *pData, qint64 nLengthOffset)
+{
+    if (nLengthOffset >= 2) {
+        const quint16 nFlat =
+            qFromLittleEndian<quint16>(pData + nLengthOffset - 2);
+        if (((nFlat & 0x0006) == 0x0004) && ((nFlat & 0xf000) != 0x1000)) {
+            return true;
+        }
+    }
+    if (nLengthOffset >= 4) {
+        const quint16 nListed =
+            qFromLittleEndian<quint16>(pData + nLengthOffset - 4);
+        if (((nListed & 0x0006) == 0x0006) && ((nListed & 0xf000) != 0x1000)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The fields between a record's destination path and its record header are
+// variable length, so the path is reached by the same bounded backward
+// search the 4.x long name uses.  Three independent anchors keep it exact: the
+// string's basename must equal the 8.3 descriptor name, a directory component
+// must be one the package declares, and the record flag word must sit where
+// the path implies it does.  An unresolved path leaves the 8.3 name, so the
+// failure direction is the reader's previous behaviour.  Without this, two
+// destinations that differ only by directory - LRT\MAIN3.BMP and PC\MAIN3.BMP
+// - collide and one is renamed with a synthetic suffix.
+bool findRecordPath(const QByteArray &baData, qint64 nHeaderOffset,
+                    const QString &sShortName,
+                    const QList<QString> &listDirectories, QString *pPath)
+{
+    if (!pPath || (nHeaderOffset < 2) || (nHeaderOffset > baData.size())) {
+        return false;
+    }
+    const uchar *pData =
+        reinterpret_cast<const uchar *>(baData.constData());
+    const qint64 nLowest =
+        qMax<qint64>(0, nHeaderOffset - RTPATCH_RECORD_PATH_WINDOW);
+    for (qint64 nOffset = nHeaderOffset - 2; nOffset >= nLowest; --nOffset) {
+        const quint8 nLength = pData[nOffset];
+        if ((nLength < 2) || (nOffset + 1 + nLength > nHeaderOffset)) continue;
+        if (pData[nOffset + nLength] != 0) continue;
+        bool bEmbeddedNul = false;
+        for (quint8 i = 0; i + 1 < nLength; ++i) {
+            if (pData[nOffset + 1 + i] == 0) bEmbeddedNul = true;
+        }
+        if (bEmbeddedNul) continue;
+
+        QString sPath;
+        if (!decodeSafeName(pData + nOffset + 1, nLength - 1, false, &sPath)) {
+            continue;
+        }
+        if (sPath.section(QLatin1Char('/'), -1, -1, QString::SectionSkipEmpty)
+                .compare(sShortName, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        if (sPath.contains(QLatin1Char('/'))) {
+            // The table declares the WHOLE directory, not its first component:
+            // 4.10 lists "GameData\CarModel\Amd7" and 2.11 lists "DATA".
+            // decodeSafeName has already turned '\' into '/' on both sides, so
+            // one case-insensitive compare covers every generation.
+            const QString sDirectory = sPath.section(QLatin1Char('/'), 0, -2);
+            bool bKnownDirectory = false;
+            for (qint32 i = 0; i < listDirectories.size(); ++i) {
+                if (listDirectories.at(i).compare(sDirectory,
+                                                  Qt::CaseInsensitive) == 0) {
+                    bKnownDirectory = true;
+                    break;
+                }
+            }
+            if (!bKnownDirectory) continue;
+        }
+        if (!hasRecordPathFlag(pData, nOffset)) continue;
+
+        *pPath = sPath;
+        return true;
+    }
+    return false;
+}
 }  // namespace
 
 XRTPatch::XRTPatch(QIODevice *pDevice)
@@ -581,6 +746,22 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
         for (qint32 i = 0x10; i < RTPATCH_HEADER_SIZE; ++i) {
             if (pData[i] != 0) return false;
         }
+    } else if ((nVersion == 320) || (nVersion == 400)) {
+        // 3.20 and 4.00 keep the generation-1 habit of a nearly empty header
+        // tail but stop leaving it entirely zero: 0x0c and 0x10 carry package
+        // totals and 0x18 the builder's fixed 4, while the reserved uint32 at
+        // 0x14 still reads zero.  Both invariants hold for every 3.20 and 4.00
+        // package in the corpus, and they are what keeps these two generations
+        // from opening on a stray "K*" inside compressed data.  Over the
+        // 73,823 files of the reference corpora the version word alone selects
+        // 40 positions in 28 files; these two invariants cut that to the 20
+        // genuine carriers and reject 20 positions in eight unrelated files -
+        // an IzPack pack, two WIM images, an IS3 library, a TPWM image, a ZIP
+        // and two test executables.
+        if ((qFromLittleEndian<quint32>(pData + 0x14) != 0) ||
+            (qFromLittleEndian<quint16>(pData + 0x18) != 4)) {
+            return false;
+        }
     }
 
     QList<RTPatchDescriptor> listDescriptors;
@@ -589,6 +770,14 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
             return false;
         }
     } else {
+        // The directory table is needed while the records are walked, because
+        // a record's destination path is only accepted when the directory it
+        // names is one the package declares.  Every generation that reaches
+        // this branch carries one - 2.11 and 4.10 as much as 3.20 - so it is
+        // parsed unconditionally; a package without a usable table yields an
+        // empty list and keeps today's names.
+        QList<QString> listDirectories;
+        parseRecordDirectories(baData, nVersion, &listDirectories);
         qint32 nSearchOffset = RTPATCH_HEADER_SIZE;
         while ((nSearchOffset >= 0) &&
                (nSearchOffset < baData.size()) &&
@@ -607,7 +796,7 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
             RTPatchDescriptor descriptor;
             qint64 nDescriptorOffset = -1;
             bool bDescriptorValid = false;
-            if (nVersion <= 211) {
+            if (usesFixedNameDescriptor(nVersion)) {
                 nDescriptorOffset = nStreamOffset - RTPATCH_DESCRIPTOR_SIZE;
                 bDescriptorValid = parseDescriptor(
                     baData, nDescriptorOffset, &descriptor);
@@ -658,7 +847,7 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
             descriptor.nDataOffset = nStreamOffset;
             if (!classifyWholeFileStream(baData, nDescriptorOffset,
                                          nStreamOffset, &descriptor) &&
-                (nVersion <= 211)) {
+                usesFixedNameDescriptor(nVersion)) {
                 // The 4.x/6.x descriptor block is reached through a long-name
                 // search rather than a fixed offset, so the delta header is not
                 // at a known distance there and the form is not attempted.
@@ -670,6 +859,21 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
                     descriptor.nProgramSize = 0;
                     descriptor.bIsDelta = false;
                     descriptor.handleMethod = HANDLE_METHOD_UNKNOWN;
+                }
+            }
+            // The 8.3 or long descriptor names the file, the record names
+            // where it is installed.  Publish the installed path: it is what
+            // the container states, and it is what keeps MAIN3.BMP under five
+            // different directories - or car3d.bnk under seventeen - from
+            // collapsing onto one name.  The real precondition is a classifier
+            // having proved where the record header is, not the generation:
+            // 2.11, 3.20 and 4.10 all write this field.
+            if (descriptor.nHeaderOffset > 0) {
+                QString sRecordPath;
+                if (findRecordPath(baData, descriptor.nHeaderOffset,
+                                   descriptor.sName, listDirectories,
+                                   &sRecordPath)) {
+                    descriptor.sName = sRecordPath;
                 }
             }
             listDescriptors.append(descriptor);
@@ -698,10 +902,16 @@ bool XRTPatch::scanFormat(QList<ENTRY> *pEntries, qint64 *pArchiveEnd,
     // both.  Both use the same counted-string encoding.  Directory strings
     // are printable non-space paths; the corpus banner classifier below is
     // exact for all 26 independently verified the reference implementation Comments.txt members.
-    qint64 nListOffset = RTPATCH_HEADER_SIZE;
+    // 1.10-2.11 open the counted-string area immediately behind the header.
+    // 3.20 inserts the record count and six reserved bytes first, so its
+    // directory table and banner start eight bytes further on.  The strings
+    // themselves keep the same counted, NUL-terminated encoding, which is why
+    // the existing parser recognises them unchanged.
+    qint64 nListOffset = (nVersion == 320)
+        ? (RTPATCH_HEADER_SIZE + RTPATCH_RECORD_AREA_OFFSET) : RTPATCH_HEADER_SIZE;
     for (qint32 i = 0; i < 2; ++i) {
         RTPatchStringList stringList;
-        if ((nVersion > 211) ||
+        if (!usesFixedNameDescriptor(nVersion) ||
             !parseStringList(baData, nListOffset, &stringList) ||
             (stringList.nEndOffset > listDescriptors.constFirst().nOffset)) {
             break;

@@ -54,6 +54,7 @@ HEADERS += \
     $$PWD/Algos/ximplodedecoder.h \
     $$PWD/Algos/xlzmadecoder.h \
     $$PWD/Algos/xlzwdecoder.h \
+    $$PWD/Algos/xnewwavelzwdecoder.h \
     $$PWD/Algos/xascii85decoder.h \
     $$PWD/Algos/xasciihexdecoder.h \
     $$PWD/Algos/xrunlengthdecoder.h \
@@ -73,6 +74,7 @@ HEADERS += \
     $$PWD/Algos/xssmdecoder.h \
     $$PWD/Algos/xrtpatchdecoder.h \
     $$PWD/Algos/xbzip2decoder.h \
+    $$PWD/Algos/xadcdecoder.h \
     $$PWD/Algos/xbrotlidecoder.h \
     $$PWD/Algos/xlzssdecoder.h \
     $$PWD/Algos/xcoktellzdecoder.h \
@@ -143,6 +145,7 @@ HEADERS += \
     $$PWD/Algos/xzcmpdecoder.h \
     $$PWD/Algos/xzpakdecoder.h \
     $$PWD/Algos/xztcdecoder.h \
+    $$PWD/Algos/xcharcdecoder.h \
     $$PWD/Algos/xwintersoftdecoder.h \
     $$PWD/Algos/xtivolidecoder.h \
     $$PWD/Algos/xzoomdecoder.h \
@@ -159,7 +162,11 @@ HEADERS += \
     $$PWD/Algos/xbzip1decoder.h \
     $$PWD/Algos/xbsndecoder.h \
     $$PWD/Algos/xbthpakdecoder.h \
+    $$PWD/Algos/xcreateinstalldecoder.h \
     $$PWD/Algos/xdcldecoder.h \
+    $$PWD/Algos/xgeniuslibrarydecoder.h \
+    $$PWD/Algos/xnintendolzdecoder.h \
+    $$PWD/Algos/xash0decoder.h \
     $$PWD/Algos/xkolibrikpackdecoder.h \
     $$PWD/Algos/xmathcaddecoder.h \
     $$PWD/Algos/xpcommos2decoder.h \
@@ -202,6 +209,8 @@ HEADERS += \
     $$PWD/Algos/xlofidecoder.h \
     $$PWD/Algos/xinfogramespakdecoder.h \
     $$PWD/core/xcompresseddevice.h \
+    $$PWD/core/xcompanionfile.h \
+    $$PWD/core/xvolumesetdevice.h \
     $$PWD/../Formats/archives/xtar.h \
     $$PWD/../Formats/archives/xtarcompressed.h \
     $$PWD/../Formats/archives/xzip.h \
@@ -212,7 +221,7 @@ HEADERS += \
     $$PWD/../Formats/archives/xgzip.h \
     $$PWD/../Formats/archives/xiso9660.h \
     $$PWD/../Formats/archives/xtar_gz.h \
-    $$PWD/../Formats/archives/xtar_compress.h \
+    $$PWD/tar/xtar_compress.h \
     $$PWD/../Formats/archives/xnpm.h \
     $$PWD/../Formats/exec/xmachofat.h \
     $$PWD/../Formats/exec/xdos16.h
@@ -237,6 +246,7 @@ SOURCES += \
     $$PWD/Algos/ximplodedecoder.cpp \
     $$PWD/Algos/xlzmadecoder.cpp \
     $$PWD/Algos/xlzwdecoder.cpp \
+    $$PWD/Algos/xnewwavelzwdecoder.cpp \
     $$PWD/Algos/xascii85decoder.cpp \
     $$PWD/Algos/xasciihexdecoder.cpp \
     $$PWD/Algos/xrunlengthdecoder.cpp \
@@ -256,6 +266,7 @@ SOURCES += \
     $$PWD/Algos/xssmdecoder.cpp \
     $$PWD/Algos/xrtpatchdecoder.cpp \
     $$PWD/Algos/xbzip2decoder.cpp \
+    $$PWD/Algos/xadcdecoder.cpp \
     $$PWD/Algos/xbrotlidecoder.cpp \
     $$PWD/Algos/xlzssdecoder.cpp \
     $$PWD/Algos/xcoktellzdecoder.cpp \
@@ -324,6 +335,7 @@ SOURCES += \
     $$PWD/Algos/xzcmpdecoder.cpp \
     $$PWD/Algos/xzpakdecoder.cpp \
     $$PWD/Algos/xztcdecoder.cpp \
+    $$PWD/Algos/xcharcdecoder.cpp \
     $$PWD/Algos/xwintersoftdecoder.cpp \
     $$PWD/Algos/xtivolidecoder.cpp \
     $$PWD/Algos/xzoomdecoder.cpp \
@@ -340,8 +352,14 @@ SOURCES += \
     $$PWD/Algos/xbzip1decoder.cpp \
     $$PWD/Algos/xbsndecoder.cpp \
     $$PWD/Algos/xbthpakdecoder.cpp \
+    $$PWD/Algos/xcreateinstalldecoder.cpp \
     $$PWD/Algos/xdcldecoder.cpp \
+    $$PWD/Algos/xgeniuslibrarydecoder.cpp \
+    $$PWD/Algos/xnintendolzdecoder.cpp \
+    $$PWD/Algos/xash0decoder.cpp \
     $$PWD/core/xcompresseddevice.cpp \
+    $$PWD/core/xcompanionfile.cpp \
+    $$PWD/core/xvolumesetdevice.cpp \
     $$PWD/../Formats/archives/xtar.cpp \
     $$PWD/../Formats/archives/xtarcompressed.cpp \
     $$PWD/../Formats/archives/xzip.cpp \
@@ -352,7 +370,7 @@ SOURCES += \
     $$PWD/../Formats/archives/xgzip.cpp \
     $$PWD/../Formats/archives/xiso9660.cpp \
     $$PWD/../Formats/archives/xtar_gz.cpp \
-    $$PWD/../Formats/archives/xtar_compress.cpp \
+    $$PWD/tar/xtar_compress.cpp \
     $$PWD/../Formats/archives/xnpm.cpp \
     $$PWD/../Formats/exec/xmachofat.cpp \
     $$PWD/../Formats/exec/xdos16.cpp \
@@ -501,6 +519,3 @@ SOURCES += \
         $$PWD/Algos/sevenzip_extcodec_ppmd8.cpp \
         $$PWD/Algos/sevenzip_extcodec_ppmd8dec.cpp
 }
-
-DISTFILES += \
-    $$PWD/xzip.cmake

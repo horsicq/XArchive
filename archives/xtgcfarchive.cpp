@@ -351,6 +351,15 @@ QList<XBinary::FPART> XTGCFArchive::getFileParts(quint32 nFileParts, qint32 nLim
             part.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, member.nUncompressedSize);
             part.mapProperties.insert(FPART_PROP_HANDLEMETHOD, methodToHandleMethod(member.nMethod, member.nCompressedSize, member.nUncompressedSize));
             part.mapProperties.insert(FPART_PROP_REPORTEDMETHOD, methodToString(member.nMethod));
+            if (!context.bExtended) {
+                // Pre-0x160 volumes seed 0xFFFFFFFF and complement the result,
+                // i.e. plain CRC-32 over the member's uncompressed bytes, so the
+                // shared verifier can authenticate an extraction instead of
+                // trusting the declared size.  The >= 0x160 convention (seed 0,
+                // no complement) is deliberately NOT published as CRC-32.
+                part.mapProperties.insert(FPART_PROP_RESULTCRC, (quint32)member.nCRC);
+                part.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
+            }
             listResult.append(part);
         }
     }
@@ -450,6 +459,10 @@ XBinary::ARCHIVERECORD XTGCFArchive::infoCurrent(UNPACK_STATE *pState, PDSTRUCT 
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, member.nUncompressedSize);
     result.mapProperties.insert(FPART_PROP_HANDLEMETHOD, methodToHandleMethod(member.nMethod, member.nCompressedSize, member.nUncompressedSize));
     result.mapProperties.insert(FPART_PROP_REPORTEDMETHOD, methodToString(member.nMethod));
+    if (!pContext->bExtended) {
+        result.mapProperties.insert(FPART_PROP_RESULTCRC, (quint32)member.nCRC);
+        result.mapProperties.insert(FPART_PROP_CRC_TYPE, CRC_TYPE_FFFFFFFF_EDB88320_FFFFFFFFF);
+    }
     result.mapProperties.insert(FPART_PROP_ISFOLDER, false);
 
     return result;
@@ -494,5 +507,5 @@ bool XTGCFArchive::finishUnpack(UNPACK_STATE *pState, PDSTRUCT *pPdStruct)
 QList<XBinary::FPART_PROP> XTGCFArchive::getAvailableFPARTProperties()
 {
     return QList<FPART_PROP>() << FPART_PROP_ORIGINALNAME << FPART_PROP_COMPRESSEDSIZE << FPART_PROP_UNCOMPRESSEDSIZE << FPART_PROP_HANDLEMETHOD
-                               << FPART_PROP_REPORTEDMETHOD << FPART_PROP_ISFOLDER;
+                               << FPART_PROP_REPORTEDMETHOD << FPART_PROP_RESULTCRC << FPART_PROP_CRC_TYPE << FPART_PROP_ISFOLDER;
 }

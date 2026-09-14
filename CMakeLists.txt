@@ -34,10 +34,12 @@ set(XARCHIVE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/games/xpmm.h
 )
 
-# bzip2 / zlib / lzma / ppmd, built from the Algos amalgamations. Kept in a
-# separate file so standalone demo/test projects that link these by name can
-# include() it without adding all of XArchive as a subdirectory.
-include("${CMAKE_CURRENT_LIST_DIR}/algos_codecs.cmake")
+# bzip2 / zlib / lzma / ppmd have no library targets any more. algos_codecs.cmake
+# declared them, and every consumer had to include() that file AND name all four
+# in target_link_libraries; miss either half and the bare name became a raw
+# linker input that failed at link on "inflate". Their Algos amalgamations are
+# now listed in the ZIP core in Formats/xformats.cmake and compile straight into
+# whatever target consumes XZIP_SOURCES, the way the qmake build always did.
 
 set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "Build zstd programs" FORCE)
 set(ZSTD_BUILD_SHARED OFF CACHE BOOL "Build zstd shared library" FORCE)
@@ -49,14 +51,12 @@ set(ZSTD_BUILD_TESTS OFF CACHE BOOL "Build zstd tests" FORCE)
 # which zstddeclib.cpp provides -- so nothing here resolved against the 3.4 MB
 # library. XBinaryViewer links libzstd_static directly and is unaffected.
 
-include("${CMAKE_CURRENT_LIST_DIR}/ancient.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/deark.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/legacydisk.cmake")
+# ancient.cmake / deark.cmake / legacydisk.cmake are gone: the XAncientDecoder
+# codecs are inlined in the ZIP core (Formats/xformats.cmake) because
+# core/xdecompress.cpp calls them, and the Deark and legacy-disk decoders are
+# inlined in xarchive.cmake next to the readers that reach them.
 set(XARCHIVE_SOURCES
     ${XARCHIVE_SOURCES}
-    ${XARCHIVE_ANCIENT_SOURCES}
-    ${XARCHIVE_DEARK_SOURCES}
-    ${XARCHIVE_LEGACYDISK_SOURCES}
     ${CMAKE_CURRENT_LIST_DIR}/xancient.cpp
     ${CMAKE_CURRENT_LIST_DIR}/xancient.h
     ${CMAKE_CURRENT_LIST_DIR}/xdearkarchive.cpp

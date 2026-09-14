@@ -73,7 +73,7 @@ private:
 };
 }  // namespace
 
-XSydexSFXArchive::XSydexSFXArchive(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XBinary(pDevice, bIsImage, nModuleAddress)
+XSydexSFXArchive::XSydexSFXArchive(QIODevice *pDevice) : XArchive(pDevice)
 {
     setIsArchive(true);
 }
@@ -87,7 +87,10 @@ XSydexSFXArchive::~XSydexSFXArchive()
 
 bool XSydexSFXArchive::isDeviceReplacementAllowed() const
 {
-    return m_setContexts.isEmpty();
+    // This reader owns its own contexts, and XArchive owns the unpack
+    // operation guard it shares with every other archive.  Both have to
+    // agree before the source device may be swapped underneath a session.
+    return m_setContexts.isEmpty() && XArchive::isDeviceReplacementAllowed();
 }
 
 bool XSydexSFXArchive::_parse(QList<FILE_ENTRY> *pEntries, qint64 *pnSourceSize, bool bDecode, PDSTRUCT *pPdStruct)
@@ -317,7 +320,9 @@ QList<QString> XSydexSFXArchive::getSearchSignatures()
 
 XBinary *XSydexSFXArchive::createInstance(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress)
 {
-    return new XSydexSFXArchive(pDevice, bIsImage, nModuleAddress);
+    Q_UNUSED(bIsImage)
+    Q_UNUSED(nModuleAddress)
+    return new XSydexSFXArchive(pDevice);
 }
 
 bool XSydexSFXArchive::_isContextCurrent(const UNPACK_STATE *pState, const UNPACK_CONTEXT *pContext)

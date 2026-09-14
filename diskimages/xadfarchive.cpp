@@ -54,6 +54,9 @@ const qint32 WORD_SEC_TYPE = 127;
 const quint32 TYPE_HEADER = 2U;
 const quint32 TYPE_DATA = 8U;
 const quint32 TYPE_LIST = 16U;
+const quint32 TYPE_DIRCACHE = 33U;
+const qint32 ADF_MAX_DIRCACHE_RECORDS = 32;  // 488 payload bytes / 22-byte minimum record
+const quint8 ADF_MAX_DOS_TYPE = 5U;          // DOS\0..DOS\5; DOS\6/7 long names are not read
 const quint32 SEC_TYPE_ROOT = 1U;
 const quint32 SEC_TYPE_USERDIR = 2U;
 const quint32 SEC_TYPE_SOFTLINK = 3U;
@@ -151,7 +154,9 @@ bool decodeAmigaName(const QByteArray &baBlock, QString *pName,
     return true;
 }
 
-qint32 amigaNameHash(const QByteArray &baName)
+// The international variants (DOS\2 and later) also fold the Latin-1 letters
+// 0xE0-0xFE (except 0xF7, the division sign) to upper case in the hash.
+qint32 amigaNameHash(const QByteArray &baName, bool bInternational)
 {
     quint32 nHash = static_cast<quint32>(baName.size());
     for (char cValue : baName) {
@@ -159,6 +164,9 @@ qint32 amigaNameHash(const QByteArray &baName)
         if ((nValue >= static_cast<quint32>('a')) &&
             (nValue <= static_cast<quint32>('z'))) {
             nValue -= static_cast<quint32>('a' - 'A');
+        } else if (bInternational && (nValue >= 0xe0U) && (nValue <= 0xfeU) &&
+                   (nValue != 0xf7U)) {
+            nValue -= 0x20U;
         }
         nHash = (nHash * 13U + nValue) & 0x7ffU;
     }
@@ -241,6 +249,45 @@ struct XADFArchive::PARSER {
         }
         stDataBlocks.insert(nBlock);
         return true;
+    }
+
+    // DOS\4 / DOS\5: word 126 of the root and of every user directory points
+    // to a chain of directory-cache blocks (type 33).  The cache duplicates
+    // the hash-table entries and is never used for listing here; each block is
+    // authenticated (checksum, self key, owning directory, record count) and
+    // claimed as metadata so no file can alias it.
+    bool validateDirCacheChain(qint64 nFirstBlock, qint32 nDirectoryBlock)
+    {
+        if (nFirstBlock == 0) return false;
+        QSet<qint32> stChain;
+        qint64 nBlock = nFirstBlock;
+        while (nBlock != 0) {
+            if (!isReady() || !isUsableBlock(nBlock) ||
+                stChain.contains(static_cast<qint32>(nBlock)) ||
+                !claimMetadataBlock(static_cast<qint32>(nBlock))) {
+                return false;
+            }
+            stChain.insert(static_cast<qint32>(nBlock));
+            QByteArray baCache;
+            if (!readBlock(static_cast<qint32>(nBlock), &baCache) ||
+                (readBigEndian32(baCache, WORD_TYPE) != TYPE_DIRCACHE) ||
+                (readBigEndian32(baCache, WORD_HEADER_KEY) !=
+                 static_cast<quint32>(nBlock)) ||
+                (readBigEndian32(baCache, WORD_HIGH_SEQ) !=
+                 static_cast<quint32>(nDirectoryBlock)) ||
+                (readBigEndian32(baCache, WORD_DATA_SIZE) >
+                 static_cast<quint32>(ADF_MAX_DIRCACHE_RECORDS))) {
+                return false;
+            }
+            nBlock = readBigEndian32(baCache, WORD_FIRST_DATA);
+        }
+        return true;
+    }
+
+    bool isDirectoryExtensionValid(qint32 nDirectoryBlock, quint32 nExtension)
+    {
+        if (!pContext->bDirCache) return nExtension == 0U;
+        return validateDirCacheChain(nExtension, nDirectoryBlock);
     }
 
     bool makeUniquePath(const QString &sParent, const QString &sLeaf,
@@ -447,7 +494,8 @@ struct XADFArchive::PARSER {
                 QString sLeafName;
                 QByteArray baRawName;
                 if (!decodeAmigaName(baEntry, &sLeafName, &baRawName, false) ||
-                    (amigaNameHash(baRawName) != nBucket)) {
+                    (amigaNameHash(baRawName, pContext->bInternational) !=
+                     nBucket)) {
                     return false;
                 }
 
@@ -468,7 +516,9 @@ struct XADFArchive::PARSER {
                     if ((readBigEndian32(baEntry, WORD_HIGH_SEQ) != 0U) ||
                         (readBigEndian32(baEntry, WORD_DATA_SIZE) != 0U) ||
                         (readBigEndian32(baEntry, WORD_FIRST_DATA) != 0U) ||
-                        (readBigEndian32(baEntry, WORD_EXTENSION) != 0U) ||
+                        !isDirectoryExtensionValid(
+                            nCurrentEntry,
+                            readBigEndian32(baEntry, WORD_EXTENSION)) ||
                         (pContext->listMembers.size() >= ADF_MAX_MEMBERS)) {
                         return false;
                     }
@@ -505,14 +555,18 @@ struct XADFArchive::PARSER {
             0, 12, pPdStruct);
         if (!guardedArchive || (baBoot.size() != 12) ||
             (baBoot.left(3) != QByteArray("DOS", 3)) ||
-            ((static_cast<quint8>(baBoot.at(3)) != 0U) &&
-             (static_cast<quint8>(baBoot.at(3)) != 1U)) ||
+            (static_cast<quint8>(baBoot.at(3)) > ADF_MAX_DOS_TYPE) ||
             ((readBigEndian32At(baBoot, 8) !=
               0U) && (readBigEndian32At(baBoot, 8) !=
                       static_cast<quint32>(pContext->nRootBlock)))) {
             return false;
         }
-        pContext->bOFS = static_cast<quint8>(baBoot.at(3)) == 0U;
+        // DOS\n flag bits: 1 = FFS, 2 = international, 4 = directory cache
+        // (which implies the international hash).
+        pContext->nDosType = static_cast<quint8>(baBoot.at(3));
+        pContext->bOFS = (pContext->nDosType & 1U) == 0U;
+        pContext->bInternational = (pContext->nDosType & 6U) != 0U;
+        pContext->bDirCache = (pContext->nDosType & 4U) != 0U;
 
         QByteArray baRoot;
         if (!guardedArchive->readBlock(pContext->nRootBlock, &baRoot, pPdStruct) ||
@@ -565,7 +619,12 @@ struct XADFArchive::PARSER {
         // bitmap pointer here. Accept that authenticated alias, not an
         // unvalidated directory-cache or arbitrary block reference.
         const quint32 nRootExtension = readBigEndian32(baRoot, WORD_EXTENSION);
-        if (nRootExtension != 0U &&
+        stMetadataBlocks.insert(pContext->nRootBlock);
+        if (pContext->bDirCache) {
+            // DOS\4 / DOS\5: the root's word 126 is its directory-cache chain.
+            if (!validateDirCacheChain(nRootExtension, pContext->nRootBlock))
+                return false;
+        } else if (nRootExtension != 0U &&
             (nRootExtension >= static_cast<quint32>(pContext->nBlockCount) ||
              nRootExtension < ADF_BOOT_BLOCKS ||
              nRootExtension == static_cast<quint32>(pContext->nRootBlock) ||
@@ -573,7 +632,6 @@ struct XADFArchive::PARSER {
             return false;
         }
 
-        stMetadataBlocks.insert(pContext->nRootBlock);
         return parseDirectory(pContext->nRootBlock, baRoot, QString(), 0);
     }
 };
@@ -669,7 +727,9 @@ QString XADFArchive::getFileFormatExtsString()
 
 QList<QString> XADFArchive::getSearchSignatures()
 {
-    return {QStringLiteral("'DOS'00"), QStringLiteral("'DOS'01")};
+    return {QStringLiteral("'DOS'00"), QStringLiteral("'DOS'01"),
+            QStringLiteral("'DOS'02"), QStringLiteral("'DOS'03"),
+            QStringLiteral("'DOS'04"), QStringLiteral("'DOS'05")};
 }
 
 XBinary *XADFArchive::createInstance(QIODevice *pDevice, bool bIsImage,
@@ -772,10 +832,14 @@ XBinary::ARCHIVERECORD XADFArchive::infoCurrent(UNPACK_STATE *pState,
     result.mapProperties.insert(FPART_PROP_UNCOMPRESSEDSIZE, member.nSize);
     result.mapProperties.insert(FPART_PROP_COMPRESSEDSIZE,
                                 member.nStoredSize);
-    result.mapProperties.insert(FPART_PROP_REPORTEDMETHOD,
-                                pContext->bOFS
-                                    ? QStringLiteral("AmigaDOS OFS")
-                                    : QStringLiteral("AmigaDOS FFS"));
+    QString sMethod = pContext->bOFS ? QStringLiteral("AmigaDOS OFS")
+                                     : QStringLiteral("AmigaDOS FFS");
+    if (pContext->bDirCache) {
+        sMethod += QStringLiteral(" dircache");
+    } else if (pContext->bInternational) {
+        sMethod += QStringLiteral(" international");
+    }
+    result.mapProperties.insert(FPART_PROP_REPORTEDMETHOD, sMethod);
     result.mapProperties.insert(FPART_PROP_ISFOLDER, member.bIsDirectory);
     if (member.mtDateTime.isValid()) {
         result.mapProperties.insert(FPART_PROP_DATETIME, member.mtDateTime);

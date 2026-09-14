@@ -5,7 +5,7 @@
 
 #include "xarcsfx.h"
 
-XArcSFX::XArcSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_ARC)
+XArcSFX::XArcSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_ARC)
 {
 }
 

@@ -5,7 +5,7 @@
 
 #include "xcabsfx.h"
 
-XCabSFX::XCabSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_CAB)
+XCabSFX::XCabSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_CAB)
 {
 }
 

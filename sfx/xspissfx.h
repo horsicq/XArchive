@@ -12,6 +12,9 @@ class XSPIS;
 
 // GP-Install/TCompress executable carrier. Payloads are either an exact PE
 // overlay chain of [u32 size][SPIS blob] records or complete SPIS resources.
+// The third shape is InstallUs ("PreSetup"), an NE carrier whose payload area
+// opens with a fixed text prologue and is followed by one or two whole SPIS
+// blobs plus a four-byte trailer.
 // The public stream is the flattened member sequence across every blob.
 class XSpisSFX final : public XBinary {
     Q_OBJECT
@@ -32,6 +35,7 @@ public:
     struct INTERNAL_INFO : XBinary::INTERNAL_INFO {
         bool bIsValid = false;
         bool bOverlayChain = false;
+        bool bInstallUs = false;
         qint64 nFileSize = 0;
         QList<BLOB> listBlobs;
         QList<LOCATION> listLocations;
@@ -80,6 +84,7 @@ protected:
 
 private:
     bool discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct);
+    bool discoverInstallUs(INTERNAL_INFO *pInfo, qint64 nSearchStart, PDSTRUCT *pPdStruct);
     bool appendBlob(INTERNAL_INFO *pInfo, qint64 nOffset, qint64 nSize, const QString &sHint, PDSTRUCT *pPdStruct);
     bool bindLocation(UNPACK_CONTEXT *pContext, qint32 nGlobalIndex, PDSTRUCT *pPdStruct);
     bool releaseBlob(UNPACK_CONTEXT *pContext);

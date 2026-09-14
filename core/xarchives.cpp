@@ -25,6 +25,8 @@
 #include <QSaveFile>
 #include <QTemporaryDir>
 
+#include "subdevice.h"
+
 namespace {
 
 XBinary::FT preferredUnpackerFileType(QIODevice *pDevice, XBinary::PDSTRUCT *pPdStruct)
@@ -86,9 +88,19 @@ bool hasAuthoritativeStreamingReader(XBinary::FT fileType)
         case XBinary::FT_SPIS:
         case XBinary::FT_SPISSFX:
         case XBinary::FT_GENTEE:
+        case XBinary::FT_QSETUP:
+        case XBinary::FT_SBX_SFX:
+        case XBinary::FT_ARNI_SFX:
+        case XBinary::FT_INSTALL4J_SFX:
+        case XBinary::FT_CREATEINSTALL_SFX:
         case XBinary::FT_PARSEC_ARCHIVE:
         case XBinary::FT_RTPATCH:
         case XBinary::FT_RTPATCHSFX:
+        case XBinary::FT_RTA:
+        case XBinary::FT_RTASFX:
+        case XBinary::FT_EPSF_SFX:
+        case XBinary::FT_ARDI1_SFX:
+        case XBinary::FT_ARDI2_SFX:
         case XBinary::FT_PMM: return true;
         default: return false;
     }
@@ -725,13 +737,27 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_MTREE);
     result.insert(XBinary::FT_SHAR);
     result.insert(XBinary::FT_UU);
+    result.insert(XBinary::FT_YENC);
+    result.insert(XBinary::FT_QT_QM);
+    result.insert(XBinary::FT_EML);
+    result.insert(XBinary::FT_MHTML);
+    result.insert(XBinary::FT_MBOX);
+    result.insert(XBinary::FT_GETTEXT_MO);
     result.insert(XBinary::FT_QUAKE_PAK);
     result.insert(XBinary::FT_DOOM_WAD);
     result.insert(XBinary::FT_BUILD_GRP);
     result.insert(XBinary::FT_AMIGA_ADF);
     result.insert(XBinary::FT_GODOT_PCK);
+    result.insert(XBinary::FT_NSCRIPTER_NSA);
+    result.insert(XBinary::FT_NSCRIPTER_NS2);
+    result.insert(XBinary::FT_NSCRIPTER_SAR);
+    result.insert(XBinary::FT_RGSSAD);
+    result.insert(XBinary::FT_RPGMV_RESOURCE);
+    result.insert(XBinary::FT_RENPY_RPA);
     result.insert(XBinary::FT_WBFS);
     result.insert(XBinary::FT_RVZ);
+    result.insert(XBinary::FT_WII_U8);
+    result.insert(XBinary::FT_WII_WAD);
     result.insert(XBinary::FT_DESCENT_HOG);
     result.insert(XBinary::FT_WOLF_VSWAP);
     result.insert(XBinary::FT_WINTERMUTE_DCP);
@@ -765,11 +791,24 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_SPIS);
     result.insert(XBinary::FT_SPISSFX);
     result.insert(XBinary::FT_GENTEE);
+    result.insert(XBinary::FT_QSETUP);
+    result.insert(XBinary::FT_SBX_SFX);
+    result.insert(XBinary::FT_ARNI_SFX);
+    result.insert(XBinary::FT_INSTALL4J_SFX);
+    result.insert(XBinary::FT_CREATEINSTALL_SFX);
     result.insert(XBinary::FT_ARQSFX);
     result.insert(XBinary::FT_SQZSFX);
     result.insert(XBinary::FT_BSNSFX);
+    result.insert(XBinary::FT_ISSETUPSTREAM);
+    result.insert(XBinary::FT_TGCFSFX);
     result.insert(XBinary::FT_BZIP2SFX);
     result.insert(XBinary::FT_RTPATCHSFX);
+    result.insert(XBinary::FT_RTASFX);
+    result.insert(XBinary::FT_ACESFX);
+    result.insert(XBinary::FT_ASYMETRIXSFX);
+    result.insert(XBinary::FT_EPSF_SFX);
+    result.insert(XBinary::FT_ARDI1_SFX);
+    result.insert(XBinary::FT_ARDI2_SFX);
     result.insert(XBinary::FT_INSTALLSHIELD_LAUNCHER);
     result.insert(XBinary::FT_EPFS_ARCHIVE);
     result.insert(XBinary::FT_STUNTS_DSI);
@@ -804,6 +843,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_RESOURCE_FORK);
     result.insert(XBinary::FT_CPM_LBR);
     result.insert(XBinary::FT_RTPATCH);
+    result.insert(XBinary::FT_RTA);
     result.insert(XBinary::FT_ARQ);
     result.insert(XBinary::FT_ALDUS);
     result.insert(XBinary::FT_BLUEBYTE_LIB);
@@ -822,6 +862,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_ARTIPACK);
     result.insert(XBinary::FT_BINSH_SFX);
     result.insert(XBinary::FT_NETWARE_PACK);
+    result.insert(XBinary::FT_EDC_PACKED);
     result.insert(XBinary::FT_POVLAB_LZH);
     result.insert(XBinary::FT_EA_REFPACK);
     result.insert(XBinary::FT_PRINTSHOP_DELUXE);
@@ -833,12 +874,16 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_SCL);
     result.insert(XBinary::FT_COPYQM);
     result.insert(XBinary::FT_KBOOM);
+    result.insert(XBinary::FT_LZWD);
     result.insert(XBinary::FT_EA_BIG);
     result.insert(XBinary::FT_FDI);
     result.insert(XBinary::FT_PCM);
     result.insert(XBinary::FT_POWERARC);
     result.insert(XBinary::FT_APRICOT);
     result.insert(XBinary::FT_CISO);
+    result.insert(XBinary::FT_ANDROID_BOOT);
+    result.insert(XBinary::FT_NERO_NRG);
+    result.insert(XBinary::FT_ECM);
     result.insert(XBinary::FT_CLOOP);
     result.insert(XBinary::FT_AIX_BIGAF);
     result.insert(XBinary::FT_ROMFS);
@@ -847,6 +892,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_CLP);
     result.insert(XBinary::FT_LIM);
     result.insert(XBinary::FT_AIN);
+    result.insert(XBinary::FT_ESP);
     result.insert(XBinary::FT_OBFUSCATED_ARCHIVE);
     result.insert(XBinary::FT_ULEAD);
     result.insert(XBinary::FT_TOPSPEED);
@@ -877,6 +923,8 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_QDA);
     result.insert(XBinary::FT_DPK);
     result.insert(XBinary::FT_DSL2);
+    result.insert(XBinary::FT_BWF);
+    result.insert(XBinary::FT_BWCF);
     result.insert(XBinary::FT_ZLWB);
     result.insert(XBinary::FT_C64WRAPTOR);
     result.insert(XBinary::FT_VMSDATABASE);
@@ -907,6 +955,14 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_COREL_LTEC);
     result.insert(XBinary::FT_IRWINPAC);
     result.insert(XBinary::FT_DT_PACK);
+    result.insert(XBinary::FT_LOGITECH_COMPRESS);
+    result.insert(XBinary::FT_DMA_PACK);
+    result.insert(XBinary::FT_GENIUS_LIBRARY);
+    result.insert(XBinary::FT_SMSIPAK);
+    result.insert(XBinary::FT_PSN_COMPRESS);
+    result.insert(XBinary::FT_WII_LZ77);
+    result.insert(XBinary::FT_ASH0);
+    result.insert(XBinary::FT_AP4);
     result.insert(XBinary::FT_GAS_HUFF);
     result.insert(XBinary::FT_POWERBOARD_BBS);
     result.insert(XBinary::FT_SILMARILS);
@@ -962,6 +1018,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_SETTLERS_FT);
     result.insert(XBinary::FT_RIVERSOFT);
     result.insert(XBinary::FT_GKSETUP);
+    result.insert(XBinary::FT_WARPIN);
     result.insert(XBinary::FT_OPC);
     result.insert(XBinary::FT_GOB2);
     result.insert(XBinary::FT_SQ);
@@ -979,6 +1036,7 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_XPAK);
     result.insert(XBinary::FT_HE_TLKB);
     result.insert(XBinary::FT_ORACLE_SQUEEZE);
+    result.insert(XBinary::FT_SOFTRONICS);
     result.insert(XBinary::FT_SW);
     result.insert(XBinary::FT_SAF);
     result.insert(XBinary::FT_IGF2);
@@ -1002,6 +1060,8 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_IBM_ZPAK);
     result.insert(XBinary::FT_ZPAK_SFX);
     result.insert(XBinary::FT_SYDEX_SFX);
+    result.insert(XBinary::FT_ARCV2SFX);
+    result.insert(XBinary::FT_CHZ);
     result.insert(XBinary::FT_PCINSTALL_SFX);
     result.insert(XBinary::FT_QDECK_QIP);
     result.insert(XBinary::FT_MAXIS_MXS);
@@ -1036,6 +1096,56 @@ QSet<XBinary::FT> XArchives::getArchiveOpenValidFileTypes()
     result.insert(XBinary::FT_DOS16M);
 
     return result;
+}
+
+bool XArchives::getValidatedArchiveSize(QIODevice *pDevice, XBinary::FT fileType, qint64 nOffset, qint64 nAvailableSize, qint64 *pnArchiveSize,
+                                        XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pDevice || !pnArchiveSize || (fileType == XBinary::FT_UNKNOWN) || (nOffset < 0) || (nAvailableSize < 32) || (nOffset > pDevice->size()) ||
+        (nAvailableSize > pDevice->size() - nOffset) || !XBinary::isPdStructNotCanceled(pPdStruct)) {
+        return false;
+    }
+
+    qint64 nLogicalSize = 0;
+    {
+        SubDevice candidateDevice(pDevice, nOffset, nAvailableSize);
+        if (!candidateDevice.open(QIODevice::ReadOnly)) return false;
+
+        XBinary *pCandidate = XFormats::createClass(fileType, &candidateDevice);
+        if (pCandidate) {
+            if (pCandidate->isValid(pPdStruct)) nLogicalSize = pCandidate->getFileFormatSize(pPdStruct);
+            delete pCandidate;
+        }
+        candidateDevice.close();
+    }
+
+    if ((nLogicalSize < 32) || (nLogicalSize > nAvailableSize) || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    // isValid() authenticates the framing CRCs. Also parse the complete header
+    // so a CRC-consistent but semantically malformed header is not accepted.
+    // An encrypted encoded header cannot be initialized without its password;
+    // isEncrypted() still parses and validates its stream description.
+    SubDevice archiveDevice(pDevice, nOffset, nLogicalSize);
+    if (!archiveDevice.open(QIODevice::ReadOnly)) return false;
+
+    bool bValid = false;
+    XBinary *pArchive = XFormats::createClass(fileType, &archiveDevice);
+    if (pArchive) {
+        XBinary::UNPACK_STATE state = {};
+        QMap<XBinary::UNPACK_PROP, QVariant> properties;
+        bValid = pArchive->initUnpack(&state, properties, pPdStruct);
+        if (bValid) {
+            bValid = pArchive->finishUnpack(&state, pPdStruct);
+        } else if (XBinary::isPdStructNotCanceled(pPdStruct)) {
+            bValid = pArchive->isEncrypted();
+        }
+        delete pArchive;
+    }
+    archiveDevice.close();
+
+    if (!bValid || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    *pnArchiveSize = nLogicalSize;
+    return true;
 }
 
 void XArchives::_findFiles(const QString &sDirectoryName, QList<XArchive::RECORD> *pListRecords, qint32 nLimit, XBinary::PDSTRUCT *pPdStruct)

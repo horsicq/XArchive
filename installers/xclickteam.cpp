@@ -158,11 +158,33 @@ XBinary::FT XClickteam::getFileType()
 }
 
 static inline quint32 ctRd32(const quint8 *p);
+static inline quint16 ctRd16(const quint8 *p);
 static const qint64 CT_MAX_CONTAINER_SIZE = 512ll << 20;
 static const qint64 CT_MAX_FILE_SIZE = 256ll << 20;
 static const qint64 CT_MAX_TOTAL_OUTPUT = 512ll << 20;
 static const qint32 CT_MAX_FILE_COUNT = 65536;
 static const qint32 CT_MAX_DIRECTORY_ENTRIES = 100000;
+
+// Install Creator 1.x ("legacy") container. Its overlay opens directly with the
+// first chunk header - there is no "wwgT)H" tag in front of it.
+static const quint16 CT_LEGACY_TAG_1239 = 0x1239;
+static const quint16 CT_LEGACY_TAG_1241 = 0x1241;
+static const quint16 CT_LEGACY_TAG_1242 = 0x1242;
+static const quint16 CT_RECORD_TAG_END = 0x7F7F;
+static const qint64 CT_LEGACY_MAX_CHUNK = 0x1000000;
+static const qint32 CT_LEGACY_ENTRY_HEADER = 0x1A;
+static const qint32 CT_LEGACY_MAX_ENTRY = 0x4000;
+static const qint32 CT_LEGACY_MAX_BLOCKS = 1 << 22;
+
+// Multimedia Fusion 2 stand-alone build. Same vendor, a different container:
+// the overlay opens with {77 77 77 77 49 87 47 12}, a 0x20-byte header size
+// and a dword file count at +0x1c, and every packed runtime file is
+// {u16 nameLength, name, [u32 uncompressedSize,] u32 packedSize, packed bytes}.
+// Everything behind the last file is the application's own ".ccn" chunk stream.
+static const quint32 CT_MMF2_MAGIC1 = 0x77777777;
+static const quint32 CT_MMF2_MAGIC2 = 0x12478749;
+static const quint32 CT_MMF2_HEADER_SIZE = 0x20;
+static const qint32 CT_MMF2_MAX_NAME = 512;
 
 XClickteam::INTERNAL_INFO XClickteam::_detect(PDSTRUCT *pPdStruct)
 {
@@ -186,9 +208,53 @@ XClickteam::INTERNAL_INFO XClickteam::_detect(PDSTRUCT *pPdStruct)
     const qint64 nContainerSize = nContainerEnd - nOverlayOffset;
     if ((nContainerSize < 18) || (nContainerSize > CT_MAX_CONTAINER_SIZE)) return result;
 
+    // Multimedia Fusion 2 runtime pack. It is not an Install Creator container
+    // and carries no "wwgT)" tag, so it has to be recognised before the tag
+    // test below - otherwise the carrier falls through to the Install Creator
+    // 1.x reading, which rejects it.
+    if (nContainerSize >= (qint64)CT_MMF2_HEADER_SIZE) {
+        QByteArray baPack = read_array_process(nOverlayOffset, (qint64)CT_MMF2_HEADER_SIZE, pPdStruct);
+        if (baPack.size() == (int)CT_MMF2_HEADER_SIZE) {
+            const quint8 *pPack = reinterpret_cast<const quint8 *>(baPack.constData());
+            const qint32 nPackedFileCount = (qint32)ctRd32(pPack + 28);
+            if ((ctRd32(pPack) == CT_MMF2_MAGIC1) && (ctRd32(pPack + 4) == CT_MMF2_MAGIC2) && (ctRd32(pPack + 8) == CT_MMF2_HEADER_SIZE) &&
+                (ctRd32(pPack + 20) == 0) && (ctRd32(pPack + 24) == 0) && (nPackedFileCount > 0) && (nPackedFileCount <= CT_MAX_FILE_COUNT)) {
+                result.bIsValid = true;
+                result.sVersion = pe.getFileVersion().trimmed();
+                result.nContainerOffset = nOverlayOffset;
+
+                return result;
+            }
+        }
+    }
+
     // "wwgT)" tag at the overlay start (Install Creator 2 payload container).
     QByteArray baHead = read_array_process(nOverlayOffset, qMin<qint64>(19, nContainerSize), pPdStruct);
-    if ((baHead.size() < 18) || (baHead.left(5) != QByteArray("\x77\x77\x67\x54\x29", 5))) return result;
+
+    if (baHead.left(5) != QByteArray("\x77\x77\x67\x54\x29", 5)) {
+        // Install Creator 1.x carries no tag: the overlay opens with the first
+        // chunk header {u16 tag, u16 flags, u32 size, u32 uncompressed} and the
+        // Clickteam-Deflate stream that follows always opens on a block type
+        // code of 5, 6 or 7.
+        if (baHead.size() < 13) return result;
+        const quint8 *pLegacy = reinterpret_cast<const quint8 *>(baHead.constData());
+        const quint16 nLegacyTag = ctRd16(pLegacy);
+        if ((nLegacyTag != CT_LEGACY_TAG_1239) && (nLegacyTag != CT_LEGACY_TAG_1241) && (nLegacyTag != CT_LEGACY_TAG_1242)) return result;
+        if (ctRd16(pLegacy + 2) != 1) return result;
+        const quint32 nLegacyChunkSize = ctRd32(pLegacy + 4);
+        const quint32 nLegacyUncompressed = ctRd32(pLegacy + 8);
+        if ((nLegacyChunkSize <= 4) || ((qint64)nLegacyChunkSize > CT_LEGACY_MAX_CHUNK) || ((qint64)nLegacyChunkSize > nContainerSize - 8)) return result;
+        if ((nLegacyUncompressed == 0) || ((qint64)nLegacyUncompressed > CT_LEGACY_MAX_CHUNK)) return result;
+        if ((pLegacy[12] & 7) < 5) return result;
+
+        result.bIsValid = true;
+        result.sVersion = pe.getFileVersion().trimmed();
+        result.nContainerOffset = nOverlayOffset;
+
+        return result;
+    }
+
+    if (baHead.size() < 18) return result;
 
     // Authenticate at least the first record boundary (or the exact
     // eight-byte declaration used by separate-data builds). This prevents an
@@ -220,6 +286,11 @@ XClickteam::INTERNAL_INFO XClickteam::_detect(PDSTRUCT *pPdStruct)
 static inline quint32 ctRd32(const quint8 *p)
 {
     return (quint32)(p[0] | ((quint32)p[1] << 8) | ((quint32)p[2] << 16) | ((quint32)p[3] << 24));
+}
+
+static inline quint16 ctRd16(const quint8 *p)
+{
+    return (quint16)(p[0] | ((quint16)p[1] << 8));
 }
 
 static bool ctIsSafeBaseName(const QString &sName)
@@ -553,6 +624,589 @@ static bool ctReadSeparateVolume(QIODevice *pDevice, qint64 nDeclaredRegionSize,
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Install Creator 1.x payload: Clickteam-Deflate
+//
+// Raw Deflate whose block header is [3 bit type][1 bit final] instead of
+// RFC1951's [1 bit final][2 bit type]; type 5 = fixed Huffman, 6 = dynamic
+// Huffman, 7 = stored.  A stored block carries only a 16 bit length (no one's
+// complement copy), and a dynamic block reads the code-length alphabet in the
+// order {18,17,16,0,1..15} instead of {16,17,18,0,8,7,...}.  Everything else
+// (length/distance bases, extra bits, the 16/17/18 repeat codes) is stock
+// Deflate, so zlib cannot be used but its tables can.
+// ---------------------------------------------------------------------------
+static const quint8 g_arrCtLegacyCodeLengthOrder[19] = {18, 17, 16, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+static const quint16 g_arrCtLengthBase[29] = {3,  4,  5,  6,  7,  8,  9,  10, 11,  13,  15,  17,  19,  23, 27,
+                                              31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+static const quint8 g_arrCtLengthExtra[29] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+static const quint16 g_arrCtDistanceBase[30] = {1,    2,    3,    4,    5,    7,    9,    13,   17,    25,    33,   49,   65,   97,    129,
+                                                193,  257,  385,  513,  769,  1025, 1537, 2049, 3073,  4097,  6145, 8193, 12289, 16385, 24577};
+static const quint8 g_arrCtDistanceExtra[30] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+
+struct CT_BITSTREAM {
+    const quint8 *pData;
+    qint64 nSize;
+    qint64 nBitPos;
+    bool bError;
+};
+
+struct CT_HUFFMAN {
+    qint32 arrCount[16];
+    qint32 arrSymbol[288];
+};
+
+static quint32 ctBitsRead(CT_BITSTREAM *pStream, qint32 nCount)
+{
+    quint32 nResult = 0;
+
+    for (qint32 i = 0; i < nCount; i++) {
+        const qint64 nByte = pStream->nBitPos >> 3;
+        if (nByte >= pStream->nSize) {
+            pStream->bError = true;
+            return 0;
+        }
+        nResult |= (quint32)((pStream->pData[nByte] >> (pStream->nBitPos & 7)) & 1) << i;
+        pStream->nBitPos++;
+    }
+
+    return nResult;
+}
+
+static bool ctHuffmanBuild(CT_HUFFMAN *pTable, const quint8 *pLengths, qint32 nCount)
+{
+    qint32 i = 0;
+
+    if ((nCount <= 0) || (nCount > 288)) return false;
+    for (i = 0; i < 16; i++) pTable->arrCount[i] = 0;
+    for (i = 0; i < nCount; i++) {
+        if (pLengths[i] > 15) return false;
+        pTable->arrCount[pLengths[i]]++;
+    }
+
+    // Incomplete codes are accepted - Deflate emits a one symbol distance tree
+    // for a block without matches. An over-subscribed code is rejected.
+    qint32 nLeft = 1;
+    for (i = 1; i < 16; i++) {
+        nLeft <<= 1;
+        nLeft -= pTable->arrCount[i];
+        if (nLeft < 0) return false;
+    }
+
+    qint32 arrOffsets[16];
+    arrOffsets[0] = 0;
+    arrOffsets[1] = 0;
+    for (i = 1; i < 15; i++) arrOffsets[i + 1] = arrOffsets[i] + pTable->arrCount[i];
+    for (i = 0; i < nCount; i++) {
+        if (pLengths[i]) {
+            pTable->arrSymbol[arrOffsets[pLengths[i]]] = i;
+            arrOffsets[pLengths[i]]++;
+        }
+    }
+
+    return true;
+}
+
+static qint32 ctHuffmanDecode(CT_BITSTREAM *pStream, const CT_HUFFMAN *pTable)
+{
+    qint32 nCode = 0;
+    qint32 nFirst = 0;
+    qint32 nIndex = 0;
+
+    for (qint32 nLength = 1; nLength <= 15; nLength++) {
+        nCode |= (qint32)ctBitsRead(pStream, 1);
+        if (pStream->bError) return -1;
+        const qint32 nCount = pTable->arrCount[nLength];
+        if (nCode - nCount < nFirst) return pTable->arrSymbol[nIndex + (nCode - nFirst)];
+        nIndex += nCount;
+        nFirst += nCount;
+        nFirst <<= 1;
+        nCode <<= 1;
+    }
+
+    return -1;
+}
+
+static bool ctLegacyReadDynamicTables(CT_BITSTREAM *pStream, quint8 *pLengths, CT_HUFFMAN *pLengthTable, CT_HUFFMAN *pDistanceTable, XBinary::PDSTRUCT *pPdStruct)
+{
+    const qint32 nLiteralCount = (qint32)ctBitsRead(pStream, 5) + 257;
+    const qint32 nDistanceCount = (qint32)ctBitsRead(pStream, 5) + 1;
+    const qint32 nCodeCount = (qint32)ctBitsRead(pStream, 4) + 4;
+    if (pStream->bError || (nLiteralCount > 288) || (nDistanceCount > 32) || (nCodeCount > 19)) return false;
+
+    qint32 i = 0;
+    for (i = 0; i < 19; i++) pLengths[i] = 0;
+    for (i = 0; i < nCodeCount; i++) {
+        const quint32 nValue = ctBitsRead(pStream, 3);
+        if (pStream->bError) return false;
+        pLengths[g_arrCtLegacyCodeLengthOrder[i]] = (quint8)nValue;
+    }
+
+    CT_HUFFMAN codeTable;
+    if (!ctHuffmanBuild(&codeTable, pLengths, 19)) return false;
+
+    const qint32 nTotal = nLiteralCount + nDistanceCount;
+    qint32 nIndex = 0;
+    while (nIndex < nTotal) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        const qint32 nSymbol = ctHuffmanDecode(pStream, &codeTable);
+        if ((nSymbol < 0) || pStream->bError) return false;
+        if (nSymbol < 16) {
+            pLengths[nIndex++] = (quint8)nSymbol;
+        } else {
+            qint32 nRepeat = 0;
+            quint8 nValue = 0;
+            if (nSymbol == 16) {
+                if (nIndex == 0) return false;
+                nValue = pLengths[nIndex - 1];
+                nRepeat = 3 + (qint32)ctBitsRead(pStream, 2);
+            } else if (nSymbol == 17) {
+                nRepeat = 3 + (qint32)ctBitsRead(pStream, 3);
+            } else {
+                nRepeat = 11 + (qint32)ctBitsRead(pStream, 7);
+            }
+            if (pStream->bError || (nRepeat > nTotal - nIndex)) return false;
+            for (qint32 k = 0; k < nRepeat; k++) pLengths[nIndex++] = nValue;
+        }
+    }
+
+    if (nIndex != nTotal) return false;
+    if (!ctHuffmanBuild(pLengthTable, pLengths, nLiteralCount)) return false;
+    if (!ctHuffmanBuild(pDistanceTable, pLengths + nLiteralCount, nDistanceCount)) return false;
+
+    return true;
+}
+
+static bool ctLegacyInflateBlock(CT_BITSTREAM *pStream, const CT_HUFFMAN *pLengthTable, const CT_HUFFMAN *pDistanceTable, QByteArray *pOut, qint64 nMaxOutput,
+                                 XBinary::PDSTRUCT *pPdStruct)
+{
+    while (true) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        const qint32 nSymbol = ctHuffmanDecode(pStream, pLengthTable);
+        if ((nSymbol < 0) || pStream->bError) return false;
+        if (nSymbol == 256) return true;
+        if (nSymbol < 256) {
+            if ((qint64)pOut->size() >= nMaxOutput) return false;
+            pOut->append((char)(quint8)nSymbol);
+        } else {
+            const qint32 nIndex = nSymbol - 257;
+            if (nIndex >= 29) return false;
+            const qint32 nLength = (qint32)g_arrCtLengthBase[nIndex] + (qint32)ctBitsRead(pStream, g_arrCtLengthExtra[nIndex]);
+            if (pStream->bError) return false;
+            const qint32 nDistanceSymbol = ctHuffmanDecode(pStream, pDistanceTable);
+            if ((nDistanceSymbol < 0) || (nDistanceSymbol >= 30) || pStream->bError) return false;
+            const qint64 nDistance = (qint64)g_arrCtDistanceBase[nDistanceSymbol] + (qint64)ctBitsRead(pStream, g_arrCtDistanceExtra[nDistanceSymbol]);
+            if (pStream->bError || (nDistance <= 0) || (nDistance > (qint64)pOut->size())) return false;
+            if ((qint64)nLength > nMaxOutput - (qint64)pOut->size()) return false;
+            const qint64 nSource = (qint64)pOut->size() - nDistance;
+            for (qint32 i = 0; i < nLength; i++) pOut->append(pOut->at((int)(nSource + i)));
+        }
+    }
+}
+
+static bool ctLegacyInflate(const quint8 *pSrc, qint64 nSrcLen, qint64 nMaxOutput, QByteArray *pOut, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pSrc || !pOut || (nSrcLen <= 0) || (nSrcLen > CT_MAX_CONTAINER_SIZE) || (nMaxOutput < 0) || (nMaxOutput > CT_MAX_FILE_SIZE)) return false;
+    if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+    pOut->clear();
+    // Reserve a working buffer, never the declared size: the declared size is
+    // attacker controlled and the class's other decoder (ctInflate) grows in
+    // 64 KiB steps rather than trusting it.
+    pOut->reserve((qint32)qMin<qint64>(nMaxOutput + 1, 1ll << 20));
+
+    CT_BITSTREAM stream;
+    stream.pData = pSrc;
+    stream.nSize = nSrcLen;
+    stream.nBitPos = 0;
+    stream.bError = false;
+
+    quint8 arrLengths[320];
+    CT_HUFFMAN lengthTable;
+    CT_HUFFMAN distanceTable;
+
+    bool bFinal = false;
+    qint32 nBlocks = 0;
+    while (!bFinal) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (++nBlocks > CT_LEGACY_MAX_BLOCKS) return false;
+        const quint32 nType = ctBitsRead(&stream, 3);
+        const quint32 nFinal = ctBitsRead(&stream, 1);
+        if (stream.bError) return false;
+        bFinal = (nFinal != 0);
+
+        if (nType == 7) {
+            stream.nBitPos = (stream.nBitPos + 7) & ~(qint64)7;
+            const qint64 nStoredOffset = stream.nBitPos >> 3;
+            if (nStoredOffset + 2 > nSrcLen) return false;
+            const qint64 nStoredSize = (qint64)ctRd16(pSrc + nStoredOffset);
+            if ((nStoredSize > nSrcLen - nStoredOffset - 2) || (nStoredSize > nMaxOutput - (qint64)pOut->size())) return false;
+            if (nStoredSize) pOut->append((const char *)(pSrc + nStoredOffset + 2), (qint32)nStoredSize);
+            stream.nBitPos = (nStoredOffset + 2 + nStoredSize) * 8;
+        } else if ((nType == 5) || (nType == 6)) {
+            if (nType == 5) {
+                qint32 i = 0;
+                for (i = 0; i < 144; i++) arrLengths[i] = 8;
+                for (; i < 256; i++) arrLengths[i] = 9;
+                for (; i < 280; i++) arrLengths[i] = 7;
+                for (; i < 288; i++) arrLengths[i] = 8;
+                if (!ctHuffmanBuild(&lengthTable, arrLengths, 288)) return false;
+                for (i = 0; i < 30; i++) arrLengths[i] = 5;
+                if (!ctHuffmanBuild(&distanceTable, arrLengths, 30)) return false;
+            } else if (!ctLegacyReadDynamicTables(&stream, arrLengths, &lengthTable, &distanceTable, pPdStruct)) {
+                return false;
+            }
+            if (!ctLegacyInflateBlock(&stream, &lengthTable, &distanceTable, pOut, nMaxOutput, pPdStruct)) return false;
+        } else {
+            return false;
+        }
+    }
+
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+// Install Creator 1.x directory record. Each entry is
+//   {u32 entrySize, .., u8 flags@0x0D, .., u32 uncompressed@0x12,
+//    u32 compressed@0x16, [0x14 bytes if flags&6][0x18 bytes if flags&8],
+//    NUL terminated name}
+// and the payloads sit back to back in the trailing 0x7F7F region, so the sum
+// of the compressed sizes has to reproduce that region exactly. That identity
+// is what picks the directory out of the other decoded chunks.
+// Install Creator 1.x entry names are relative paths ("Pictures\na.gif"), not
+// bare file names. Every component is checked with the same rules a flat name
+// gets and the result is joined with '/', so the extractor's own containment
+// check sees an ordinary relative path instead of losing the real name.
+static QString ctLegacySafeRelativePath(const QString &sValue)
+{
+    if (sValue.isEmpty() || (sValue.size() > 1024)) return QString();
+
+    QString sNormalized = sValue;
+    sNormalized.replace(QLatin1Char('\\'), QLatin1Char('/'));
+
+    const QStringList listParts = sNormalized.split(QLatin1Char('/'));
+    if ((listParts.size() < 1) || (listParts.size() > 32)) return QString();
+
+    for (qint32 i = 0; i < listParts.size(); i++) {
+        if (!ctIsSafeBaseName(listParts.at(i))) return QString();
+    }
+
+    return listParts.join(QLatin1Char('/'));
+}
+
+struct CT_LEGACY_TOC_ENTRY {
+    QString sName;
+    quint32 nUncompressedSize;
+    quint32 nCompressedSize;
+};
+
+static bool ctParseLegacyToc(const QByteArray &baToc, qint64 nRegionSize, QList<CT_LEGACY_TOC_ENTRY> *pList, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pList) return false;
+    pList->clear();
+    if (baToc.size() < 8) return false;
+
+    const quint8 *p = (const quint8 *)baToc.constData();
+    const qint64 n = baToc.size();
+    const quint32 nCount = ctRd32(p);
+    if ((nCount == 0) || (nCount > (quint32)CT_MAX_FILE_COUNT)) return false;
+
+    qint64 nTotal = 0;
+    qint64 pos = 4;
+    for (quint32 i = 0; i < nCount; i++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (pos + CT_LEGACY_ENTRY_HEADER > n) return false;
+        const quint32 nEntrySize = ctRd32(p + pos);
+        if ((nEntrySize <= (quint32)CT_LEGACY_ENTRY_HEADER) || (nEntrySize > (quint32)CT_LEGACY_MAX_ENTRY) || ((qint64)nEntrySize > n - pos)) return false;
+
+        const quint8 nEntryFlags = p[pos + 0x0D];
+        const quint32 nUncompressedSize = ctRd32(p + pos + 0x12);
+        const quint32 nCompressedSize = ctRd32(p + pos + 0x16);
+        if (((qint64)nUncompressedSize > CT_MAX_FILE_SIZE) || ((qint64)nCompressedSize > CT_MAX_CONTAINER_SIZE)) return false;
+        if ((qint64)nCompressedSize > nRegionSize - nTotal) return false;
+
+        qint64 nNameOffset = pos + CT_LEGACY_ENTRY_HEADER;
+        if (nEntryFlags & 6) nNameOffset += 0x14;
+        if (nEntryFlags & 8) nNameOffset += 0x18;
+        const qint64 nEntryEnd = pos + (qint64)nEntrySize;
+        if (nNameOffset >= nEntryEnd) return false;
+        qint64 nNameEnd = nNameOffset;
+        while ((nNameEnd < nEntryEnd) && p[nNameEnd]) nNameEnd++;
+        if (nNameEnd >= nEntryEnd) return false;
+
+        CT_LEGACY_TOC_ENTRY entry;
+        entry.sName = QString::fromLatin1((const char *)p + nNameOffset, (qint32)(nNameEnd - nNameOffset));
+        entry.nUncompressedSize = nUncompressedSize;
+        entry.nCompressedSize = nCompressedSize;
+        pList->append(entry);
+
+        nTotal += (qint64)nCompressedSize;
+        pos = nEntryEnd;
+    }
+
+    return (pos == n) && (nTotal == nRegionSize);
+}
+
+// Walk the Install Creator 1.x chunk chain {u16 tag, u16 flags, u32 size},
+// decode every metadata chunk, pick the directory, then cut the trailing
+// region into the members it declares.
+static bool ctBuildLegacyEntries(XClickteam::UNPACK_CONTEXT *pContext, const quint8 *p, qint64 n, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pContext || !p || (n < 13)) return false;
+
+    QList<QByteArray> listCandidates;
+    qint64 nRegionOffset = -1;
+    qint64 nRegionSize = 0;
+    qint64 nMetadataOutput = 0;
+    qint32 nRecords = 0;
+    qint64 pos = 0;
+
+    while (pos + 8 <= n) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        if (++nRecords > CT_MAX_DIRECTORY_ENTRIES) return false;
+
+        const quint16 nTag = ctRd16(p + pos);
+        const quint16 nRecordFlags = ctRd16(p + pos + 2);
+        const quint32 nSize = ctRd32(p + pos + 4);
+
+        if (nTag == CT_RECORD_TAG_END) {
+            // The terminator declares the size of the member region that
+            // follows its own four byte prefix.
+            if ((nRecordFlags != 0) || (pos + 12 > n)) return false;
+            nRegionOffset = pos + 12;
+            nRegionSize = n - nRegionOffset;
+            if ((qint64)nSize != nRegionSize) return false;
+            pos = n;
+            break;
+        }
+
+        if (((qint64)nSize > n - pos - 8) || ((qint64)nSize > CT_MAX_CONTAINER_SIZE)) return false;
+        const qint64 nBodyOffset = pos + 8;
+        QByteArray baBlob;
+
+        if (nRecordFlags) {
+            if (nSize < 5) return false;
+            const quint32 nUncompressedSize = ctRd32(p + nBodyOffset);
+            if ((nUncompressedSize == 0) || ((qint64)nUncompressedSize > CT_MAX_FILE_SIZE) || ((qint64)nUncompressedSize > CT_MAX_TOTAL_OUTPUT - nMetadataOutput)) {
+                return false;
+            }
+            if (!ctLegacyInflate(p + nBodyOffset + 4, (qint64)nSize - 4, (qint64)nUncompressedSize, &baBlob, pPdStruct) ||
+                ((quint32)baBlob.size() != nUncompressedSize)) {
+                return false;
+            }
+            nMetadataOutput += (qint64)nUncompressedSize;
+        } else {
+            if ((qint64)nSize > CT_MAX_TOTAL_OUTPUT - nMetadataOutput) return false;
+            baBlob = QByteArray((const char *)p + nBodyOffset, (qint32)nSize);
+            nMetadataOutput += (qint64)nSize;
+        }
+
+        listCandidates.append(baBlob);
+        pos = nBodyOffset + (qint64)nSize;
+    }
+
+    if ((pos != n) || (nRegionOffset < 0) || (nRegionSize <= 0)) return false;
+
+    QList<CT_LEGACY_TOC_ENTRY> listToc;
+    bool bTocFound = false;
+    for (qint32 i = 0; i < listCandidates.size(); i++) {
+        QList<CT_LEGACY_TOC_ENTRY> listCandidateToc;
+        if (ctParseLegacyToc(listCandidates.at(i), nRegionSize, &listCandidateToc, pPdStruct)) {
+            listToc = listCandidateToc;
+            bTocFound = true;
+        }
+    }
+    if (!bTocFound || listToc.isEmpty()) return false;
+
+    QSet<QString> setUsedNames;
+    qint64 nOffset = nRegionOffset;
+    for (qint32 i = 0; i < listToc.size(); i++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+        const CT_LEGACY_TOC_ENTRY &tocEntry = listToc.at(i);
+        if ((qint64)tocEntry.nCompressedSize > n - nOffset) return false;
+
+        QByteArray baFile;
+        if (tocEntry.nCompressedSize) {
+            if (!ctLegacyInflate(p + nOffset, (qint64)tocEntry.nCompressedSize, (qint64)tocEntry.nUncompressedSize, &baFile, pPdStruct)) return false;
+        }
+        if ((quint32)baFile.size() != tocEntry.nUncompressedSize) return false;
+        nOffset += (qint64)tocEntry.nCompressedSize;
+
+        QString sName = ctLegacySafeRelativePath(tocEntry.sName);
+        if (sName.isEmpty()) sName = QString("file_%1").arg(i, 4, 10, QChar('0'));
+        QString sNameKey = sName.toCaseFolded();
+        if (setUsedNames.contains(sNameKey)) {
+            sName = QString("%1_%2").arg(sName).arg(i, 4, 10, QChar('0'));
+            sNameKey = sName.toCaseFolded();
+            if (setUsedNames.contains(sNameKey)) return false;
+        }
+        setUsedNames.insert(sNameKey);
+
+        if ((pContext->listEntries.size() >= CT_MAX_FILE_COUNT) || ((qint64)baFile.size() > CT_MAX_TOTAL_OUTPUT - pContext->nTotalOutput)) return false;
+
+        XClickteam::FILE_ENTRY entry;
+        entry.sName = sName;
+        entry.baData = baFile;
+        pContext->listEntries.append(entry);
+        pContext->nTotalOutput += (qint64)baFile.size();
+    }
+
+    return (nOffset == n) && !pContext->listEntries.isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+// RFC 1950 header test. A Multimedia Fusion 2 pack declares nothing about how
+// a file is stored; the reference implementation decides from the bytes, and a
+// stored member always opens on "MZ", which is not a legal zlib header.
+static bool ctIsZlibHeader(const quint8 *p, qint64 nAvailable)
+{
+    if (!p || (nAvailable < 3)) return false;
+    if ((p[0] & 0x0F) != 8) return false;
+    if ((p[0] >> 4) > 7) return false;
+    if (((((quint32)p[0] << 8) + (quint32)p[1]) % 31) != 0) return false;
+    if (p[1] & 0x20) return false;
+    if (((p[2] >> 1) & 3) == 3) return false;
+    return true;
+}
+
+// The size fields of a Multimedia Fusion 2 entry are not self-describing: a
+// build writes either a single packed size, or an uncompressed size followed
+// by the packed size, and the name is either ANSI or UTF-16LE. The reference
+// implementation probes the FIRST entry with both name encodings and requires
+// EXACTLY ONE of them to leave a readable payload behind the name - which is
+// what stops an ANSI reading of a UTF-16 name from being accepted - then
+// applies that answer to the whole pack.
+static bool ctMmf2ProbeEntry(const quint8 *p, qint64 n, bool bUnicodeName, bool *pbTwoSizeFields)
+{
+    if (!p || !pbTwoSizeFields || (n < 2)) return false;
+
+    const qint32 nNameLength = (qint32)ctRd16(p);
+    if ((nNameLength <= 0) || (nNameLength > CT_MMF2_MAX_NAME)) return false;
+    const qint64 nNameBytes = bUnicodeName ? ((qint64)nNameLength * 2) : (qint64)nNameLength;
+    if (nNameBytes > n - 2) return false;
+
+    const qint64 nPosition = 2 + nNameBytes;
+    if (11 > n - nPosition) return false;
+
+    const qint32 nFirst = (qint32)ctRd32(p + nPosition);
+    const qint32 nSecond = (qint32)ctRd32(p + nPosition + 4);
+
+    if ((nFirst == 0) && (nSecond > 0)) {
+        if ((ctRd16(p + nPosition + 8) == 0x5A4D) || ctIsZlibHeader(p + nPosition + 8, 3)) {
+            *pbTwoSizeFields = true;
+            return true;
+        }
+        return false;
+    }
+
+    if (nFirst >= 1) {
+        if (((nSecond & 0xFFFF) == 0x5A4D) || ctIsZlibHeader(p + nPosition + 4, 3)) {
+            *pbTwoSizeFields = false;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool ctBuildMmf2Entries(XClickteam::UNPACK_CONTEXT *pContext, const quint8 *p, qint64 n, XBinary::PDSTRUCT *pPdStruct)
+{
+    if (!pContext || !p || (n < (qint64)CT_MMF2_HEADER_SIZE)) return false;
+
+    const qint32 nPackedFileCount = (qint32)ctRd32(p + 28);
+    if ((nPackedFileCount <= 0) || (nPackedFileCount > CT_MAX_FILE_COUNT)) return false;
+
+    bool bUnicodeTwoSizeFields = false;
+    bool bAnsiTwoSizeFields = false;
+    const bool bUnicodeAnswer = ctMmf2ProbeEntry(p + CT_MMF2_HEADER_SIZE, n - (qint64)CT_MMF2_HEADER_SIZE, true, &bUnicodeTwoSizeFields);
+    const bool bAnsiAnswer = ctMmf2ProbeEntry(p + CT_MMF2_HEADER_SIZE, n - (qint64)CT_MMF2_HEADER_SIZE, false, &bAnsiTwoSizeFields);
+    if (bUnicodeAnswer == bAnsiAnswer) return false;
+    const bool bUnicodeNames = bUnicodeAnswer;
+    const bool bTwoSizeFields = bUnicodeAnswer ? bUnicodeTwoSizeFields : bAnsiTwoSizeFields;
+
+    QSet<QString> setUsedNames;
+    qint64 nPosition = (qint64)CT_MMF2_HEADER_SIZE;
+
+    for (qint32 i = 0; i < nPackedFileCount; i++) {
+        if (!XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+
+        if (2 > n - nPosition) return false;
+        const qint32 nNameLength = (qint32)ctRd16(p + nPosition);
+        if ((nNameLength <= 0) || (nNameLength > CT_MMF2_MAX_NAME)) return false;
+        nPosition += 2;
+
+        const qint64 nNameBytes = bUnicodeNames ? ((qint64)nNameLength * 2) : (qint64)nNameLength;
+        if (nNameBytes > n - nPosition) return false;
+
+        QString sRawName;
+        sRawName.reserve(nNameLength);
+        for (qint32 k = 0; k < nNameLength; k++) {
+            if (bUnicodeNames) {
+                sRawName.append(QChar((ushort)ctRd16(p + nPosition + (qint64)k * 2)));
+            } else {
+                sRawName.append(QChar((ushort)p[nPosition + k]));
+            }
+        }
+        nPosition += nNameBytes;
+
+        const qint64 nSizeFieldBytes = bTwoSizeFields ? 8 : 4;
+        if (nSizeFieldBytes > n - nPosition) return false;
+        const qint32 nPackedSize = bTwoSizeFields ? (qint32)ctRd32(p + nPosition + 4) : (qint32)ctRd32(p + nPosition);
+        nPosition += nSizeFieldBytes;
+        if ((nPackedSize <= 0) || ((qint64)nPackedSize > n - nPosition)) return false;
+
+        QByteArray baFile;
+        if (ctIsZlibHeader(p + nPosition, n - nPosition)) {
+            const qint64 nRemainingOutput = CT_MAX_TOTAL_OUTPUT - pContext->nTotalOutput;
+            qint64 nConsumed = 0;
+            if ((nRemainingOutput < 0) || !ctInflate(p + nPosition, nPackedSize, qMin(CT_MAX_FILE_SIZE, nRemainingOutput), &baFile, &nConsumed, pPdStruct) ||
+                (nConsumed <= 0) || (nConsumed > (qint64)nPackedSize)) {
+                return false;
+            }
+        } else {
+            baFile = QByteArray(reinterpret_cast<const char *>(p + nPosition), nPackedSize);
+        }
+        nPosition += nPackedSize;
+
+        QString sName = sRawName;
+        if (!ctIsSafeBaseName(sName)) sName = QString("file_%1").arg(i, 4, 10, QChar('0'));
+        QString sNameKey = sName.toCaseFolded();
+        if (setUsedNames.contains(sNameKey)) {
+            sName = QString("%1_%2").arg(sName).arg(i, 4, 10, QChar('0'));
+            sNameKey = sName.toCaseFolded();
+            if (setUsedNames.contains(sNameKey)) return false;
+        }
+        setUsedNames.insert(sNameKey);
+
+        if ((pContext->listEntries.size() >= CT_MAX_FILE_COUNT) || ((qint64)baFile.size() > CT_MAX_TOTAL_OUTPUT - pContext->nTotalOutput)) return false;
+
+        XClickteam::FILE_ENTRY entry;
+        entry.sName = sName;
+        entry.baData = baFile;
+        pContext->listEntries.append(entry);
+        pContext->nTotalOutput += (qint64)baFile.size();
+    }
+
+    // Everything behind the packed runtime is the application's own chunk
+    // stream, stored; the reference implementation publishes it as "1.ccn".
+    if (nPosition < n) {
+        const qint64 nChunkStreamSize = n - nPosition;
+        QString sName = QStringLiteral("1.ccn");
+        if (setUsedNames.contains(sName.toCaseFolded())) sName = QString("%1_%2").arg(sName).arg(nPackedFileCount, 4, 10, QChar('0'));
+        if (setUsedNames.contains(sName.toCaseFolded())) return false;
+
+        if ((pContext->listEntries.size() >= CT_MAX_FILE_COUNT) || (nChunkStreamSize > CT_MAX_FILE_SIZE) ||
+            (nChunkStreamSize > CT_MAX_TOTAL_OUTPUT - pContext->nTotalOutput)) {
+            return false;
+        }
+
+        XClickteam::FILE_ENTRY entry;
+        entry.sName = sName;
+        entry.baData = QByteArray(reinterpret_cast<const char *>(p + nPosition), (int)nChunkStreamSize);
+        pContext->listEntries.append(entry);
+        pContext->nTotalOutput += nChunkStreamSize;
+    }
+
+    return !pContext->listEntries.isEmpty() && XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
 bool XClickteam::_buildEntries(UNPACK_CONTEXT *pContext, qint64 nContainerOffset, PDSTRUCT *pPdStruct)
 {
     if (!pContext || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
@@ -573,6 +1227,14 @@ bool XClickteam::_buildEntries(UNPACK_CONTEXT *pContext, qint64 nContainerOffset
     const quint8 *p = (const quint8 *)baOv.constData();
     const qint64 n = baOv.size();
     if (n < 10) return false;
+
+    if ((n >= (qint64)CT_MMF2_HEADER_SIZE) && (ctRd32(p) == CT_MMF2_MAGIC1) && (ctRd32(p + 4) == CT_MMF2_MAGIC2) && (ctRd32(p + 8) == CT_MMF2_HEADER_SIZE)) {
+        return ctBuildMmf2Entries(pContext, p, n, pPdStruct);
+    }
+
+    if (baOv.left(5) != QByteArray("\x77\x77\x67\x54\x29", 5)) {
+        return ctBuildLegacyEntries(pContext, p, n, pPdStruct);
+    }
 
     // records begin after the 5-byte "wwgT)" tag + 5-byte sub-header.
     QByteArray baToc;

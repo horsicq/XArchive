@@ -7,7 +7,7 @@
 
 XRTPatchSFX::XRTPatchSFX(QIODevice *pDevice, bool bIsImage,
                          XADDR nModuleAddress)
-    : XSFX(pDevice, bIsImage, nModuleAddress, ARC_RTPATCH)
+    : XSFX(pDevice, bIsImage, nModuleAddress, FT_RTPATCH)
 {
 }
 

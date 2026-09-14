@@ -14,6 +14,7 @@
 #include <new>
 
 #include "subdevice.h"
+#include "xne.h"
 #include "xpe.h"
 #include "xspis.h"
 
@@ -21,6 +22,38 @@ namespace {
 const qint32 SPISSFX_MAX_BLOBS = 10000;
 const qint32 SPISSFX_MAX_RECORDS = 100000;
 const qint64 SPISSFX_MIN_BLOB_SIZE = 21;
+// InstallUs ("PreSetup") payload areas open with a prologue of nine Pascal
+// strings. Only the first 128 bytes of it are invariant across the family, and
+// they are exactly the span the reference implementation hashes to recognize
+// the format - comparing the bytes is the same test without the collision.
+const char INSTALLUS_PROLOGUE[] =
+    "\x00\x07"
+    "Can&cel"
+    "\x42"
+    "PreSetup will prepare the temporary files needed for installation."
+    "\x34"
+    "Setup needs to run on Win-32. Installation may fail";
+const qint64 INSTALLUS_PROLOGUE_SIZE = 128;
+// the prologue carries nine strings; the fixed span ends inside the fourth, so
+// the remaining five are measured rather than assumed
+const qint32 INSTALLUS_PROLOGUE_STRINGS = 9;
+// every carrier ends with four bytes behind the last blob
+const qint64 INSTALLUS_TRAILER_SIZE = 4;
+const qint32 INSTALLUS_MAX_DIGITS = 10;
+const qint32 INSTALLUS_BLOBS = 2;
+
+bool installusDecimal(const QByteArray &baDigits, qint64 *pnValue)
+{
+    if (baDigits.isEmpty() || (baDigits.size() > INSTALLUS_MAX_DIGITS) || !pnValue) return false;
+    qint64 nValue = 0;
+    for (qint32 i = 0; i < baDigits.size(); ++i) {
+        const char cDigit = baDigits.at(i);
+        if ((cDigit < '0') || (cDigit > '9')) return false;
+        nValue = (nValue * 10) + (cDigit - '0');
+    }
+    *pnValue = nValue;
+    return true;
+}
 
 bool spisHeaderPrefix(const QByteArray &baData)
 {
@@ -159,9 +192,23 @@ bool XSpisSFX::discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
     if (!guardedThis || !guardedSource || guardedSource->isSequential()) return false;
 
     XPE pe(guardedSource.data(), isImage(), getModuleAddress());
-    if (!pe.isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+    const bool bIsPE = pe.isValid(pPdStruct);
+    if (!guardedThis || !guardedSource) return false;
     const qint64 nFileSize = getSize();
     if (!guardedThis || !guardedSource || (nFileSize <= 0)) return false;
+
+    if (!bIsPE) {
+        // InstallUs ships the same SPIS payload behind an NE stub. NE has no
+        // dependable overlay calculation - XNE's overlay starts after the
+        // segments and ignores the resource table, which in this family sits
+        // between the two - so the prologue is located by search, bounded below
+        // by whatever overlay the NE loader does report.
+        XNE ne(guardedSource.data(), isImage(), getModuleAddress());
+        if (!ne.isValid(pPdStruct) || !guardedThis || !guardedSource) return false;
+        const qint64 nNeOverlay = ne.getOverlayOffset(pPdStruct);
+        if (!guardedThis || !guardedSource) return false;
+        return discoverInstallUs(pInfo, nNeOverlay, pPdStruct);
+    }
 
     // Prefer a completely framed overlay chain. A single malformed/trailing
     // byte invalidates the candidate and falls through to resource discovery.
@@ -222,6 +269,77 @@ bool XSpisSFX::discover(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
     if (!guardedThis || !guardedSource || resourceInfo.listBlobs.isEmpty() || resourceInfo.listLocations.isEmpty()) return false;
     resourceInfo.bIsValid = true;
     *pInfo = resourceInfo;
+    return XBinary::isPdStructNotCanceled(pPdStruct);
+}
+
+bool XSpisSFX::discoverInstallUs(INTERNAL_INFO *pInfo, qint64 nSearchStart, PDSTRUCT *pPdStruct)
+{
+    if (!pInfo || !XBinary::isPdStructNotCanceled(pPdStruct)) return false;
+    QPointer<XSpisSFX> guardedThis(this);
+    QPointer<QIODevice> guardedSource(getDevice());
+    if (!guardedThis || !guardedSource) return false;
+
+    const qint64 nFileSize = getSize();
+    if (!guardedThis || !guardedSource || (nFileSize <= INSTALLUS_PROLOGUE_SIZE + INSTALLUS_TRAILER_SIZE)) return false;
+    if ((nSearchStart < 0) || (nSearchStart >= nFileSize)) nSearchStart = 0;
+
+    const qint64 nPrologue = find_array(nSearchStart, nFileSize - nSearchStart, INSTALLUS_PROLOGUE, INSTALLUS_PROLOGUE_SIZE, pPdStruct);
+    if (!guardedThis || !guardedSource || (nPrologue < 0)) return false;
+
+    qint64 nOffset = nPrologue;
+    for (qint32 i = 0; i < INSTALLUS_PROLOGUE_STRINGS; ++i) {
+        if (!checkOffsetSize(nOffset, 1)) return false;
+        const quint8 nLength = read_uint8(nOffset);
+        if (!guardedThis || !guardedSource) return false;
+        nOffset += 1 + static_cast<qint64>(nLength);
+        if ((nOffset <= 0) || (nOffset >= nFileSize)) return false;
+    }
+
+    QList<qint64> listSizes;
+    const QByteArray baPeek = read_array_process(nOffset, 5, pPdStruct);
+    if (!guardedThis || !guardedSource || (baPeek.size() != 5)) return false;
+    if (memcmp(baPeek.constData(), "SPIS\x1a", 5) == 0) {
+        // The one-blob layout carries no size strings at all: the payload runs
+        // from here to the four-byte trailer.
+        listSizes.append(nFileSize - nOffset - INSTALLUS_TRAILER_SIZE);
+    } else {
+        // The two-blob layout appends two more Pascal strings holding the
+        // decimal byte counts of the blobs that follow them.
+        for (qint32 i = 0; i < INSTALLUS_BLOBS; ++i) {
+            if (!checkOffsetSize(nOffset, 1)) return false;
+            const quint8 nLength = read_uint8(nOffset);
+            if (!guardedThis || !guardedSource || (nLength == 0) || (nLength > INSTALLUS_MAX_DIGITS)) return false;
+            const QByteArray baDigits = read_array_process(nOffset + 1, nLength, pPdStruct);
+            if (!guardedThis || !guardedSource || (baDigits.size() != nLength)) return false;
+            qint64 nBlobSize = 0;
+            if (!installusDecimal(baDigits, &nBlobSize) || (nBlobSize < SPISSFX_MIN_BLOB_SIZE)) return false;
+            listSizes.append(nBlobSize);
+            nOffset += 1 + static_cast<qint64>(nLength);
+        }
+    }
+
+    qint64 nTotal = 0;
+    for (qint32 i = 0; i < listSizes.count(); ++i) {
+        if ((listSizes.at(i) < SPISSFX_MIN_BLOB_SIZE) || (listSizes.at(i) > nFileSize)) return false;
+        nTotal += listSizes.at(i);
+    }
+    // The blob sizes have to account for the payload area EXACTLY, trailer
+    // included. Anything else is not this carrier and is refused here rather
+    // than salvaged.
+    if (nOffset + nTotal + INSTALLUS_TRAILER_SIZE != nFileSize) return false;
+
+    INTERNAL_INFO installusInfo;
+    installusInfo.nFileSize = nFileSize;
+    installusInfo.bInstallUs = true;
+    qint64 nBlobOffset = nOffset;
+    for (qint32 i = 0; i < listSizes.count(); ++i) {
+        const QString sHint = QStringLiteral("spis_%1").arg(nBlobOffset, 0, 16);
+        if (!appendBlob(&installusInfo, nBlobOffset, listSizes.at(i), sHint, pPdStruct) || !guardedThis || !guardedSource) return false;
+        nBlobOffset += listSizes.at(i);
+    }
+    if (installusInfo.listBlobs.isEmpty() || installusInfo.listLocations.isEmpty()) return false;
+    installusInfo.bIsValid = true;
+    *pInfo = installusInfo;
     return XBinary::isPdStructNotCanceled(pPdStruct);
 }
 
@@ -428,7 +546,9 @@ XBinary::ARCHIVERECORD XSpisSFX::infoCurrent(UNPACK_STATE *pState, PDSTRUCT *pPd
         return ARCHIVERECORD();
     }
     const BLOB blob = pContext->info.listBlobs.at(location.nBlob);
-    result.mapProperties.insert(FPART_PROP_INFO, QStringLiteral("SPIS blob at 0x%1").arg(blob.nOffset, 0, 16));
+    result.mapProperties.insert(
+        FPART_PROP_INFO,
+        QStringLiteral("%1SPIS blob at 0x%2").arg(pContext->info.bInstallUs ? QStringLiteral("InstallUs ") : QString()).arg(blob.nOffset, 0, 16));
     if (!markArchiveStreamRecord(&result, pState->nCurrentIndex)) return ARCHIVERECORD();
     return result;
 }

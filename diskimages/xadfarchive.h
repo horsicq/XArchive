@@ -66,6 +66,9 @@ private:
 
     struct CONTEXT {
         bool bOFS = false;
+        bool bInternational = false;  // DOS\2..DOS\5: Latin-1 case folding in the hash
+        bool bDirCache = false;       // DOS\4, DOS\5: directory cache chains on word 126
+        quint8 nDosType = 0;
         qint32 nRootBlock = -1;
         qint32 nBlockCount = 0;
         qint64 nImageSize = 0;

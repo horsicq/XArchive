@@ -238,7 +238,10 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
                     const quint32 nInnerTotal = spisRead32(baInner.constData() + 8);
                     const quint8 nInnerType = static_cast<quint8>(baInner.at(12));
                     const quint32 nInnerFlags = spisRead32(baInner.constData() + 17);
-                    if ((innerMethod == METHOD_INVALID) || (nInnerType != 1) || (nInnerFlags > SPIS_FLAG_MAX) || (nInnerTotal == 0) ||
+                    // A segment that holds only empty members declares a raw
+                    // total of zero, so zero is a legal inner total; the
+                    // sum-versus-declared check below still has to close.
+                    if ((innerMethod == METHOD_INVALID) || (nInnerType != 1) || (nInnerFlags > SPIS_FLAG_MAX) ||
                         (nInnerTotal > SPIS_MAX_MEMBER_SIZE)) {
                         return false;
                     }
@@ -265,8 +268,14 @@ bool XSPIS::parseInternalInfo(INTERNAL_INFO *pInfo, PDSTRUCT *pPdStruct)
             const quint8 nMethod = static_cast<quint8>(baRecord.at(16));
             const quint32 nChecksum = spisRead32(baRecord.constData() + 17);
             const quint32 nRecordFlags = spisRead32(baRecord.constData() + 21);
-            if ((nNameSize == 0) || (nNameSize > SPIS_MAX_NAME_SIZE) || (nMethod >= METHOD_INVALID) || (nRecordFlags > SPIS_FLAG_MAX) || (nRawSize == 0) ||
-                (nRawSize > SPIS_MAX_MEMBER_SIZE) || (nPackedSize == 0) || ((nMethod == METHOD_NON) && (nPackedSize != nRawSize))) {
+            // A zero-length member is real, not a malformed record: InstallUs
+            // setups ship placeholder data files (A.dat..Z.dat, and a stub
+            // ius.exe) that carry no bytes at all.  Both sizes are then zero -
+            // either one alone is still a malformed record and still refused.
+            const bool bEmptyMember = ((nRawSize == 0) && (nPackedSize == 0));
+            if ((nNameSize == 0) || (nNameSize > SPIS_MAX_NAME_SIZE) || (nMethod >= METHOD_INVALID) || (nRecordFlags > SPIS_FLAG_MAX) ||
+                (nRawSize > SPIS_MAX_MEMBER_SIZE) || (!bEmptyMember && ((nRawSize == 0) || (nPackedSize == 0))) ||
+                ((nMethod == METHOD_NON) && (nPackedSize != nRawSize))) {
                 return false;
             }
             if (nNameSize > nFileSize - nOffset - SPIS_RECORD_HEADER_SIZE) return false;
@@ -549,6 +558,29 @@ bool XSPIS::unpackCurrent(UNPACK_STATE *pState, QIODevice *pDevice, PDSTRUCT *pP
     }
     const MEMBER member = pContext->info.listMembers.at(pState->nCurrentIndex);
     if ((handleMethod(member.method) == HANDLE_METHOD_UNKNOWN) || !XBinary::isUnpackOutputSizeAllowed(pState->mapUnpackProperties, member.nRawSize)) return false;
+    if ((member.nRawSize == 0) && (member.nPackedSize == 0)) {
+        // An empty member has nothing for the codec to read and nothing for the
+        // byte sum to cover; handing zero bytes to the LZH decoder is not a
+        // reading of it that terminates usefully, so the empty output is
+        // published directly.
+        QIODevice *pEmptyDevice = XBinary::createFileBuffer(0, pPdStruct);
+        if (!pEmptyDevice) return false;
+        bool bEmptyResult = true;
+        // The entry is still metered: skipping this would let empty members
+        // slip past the output budget's member-count cap.
+        if (pState->spOutputBudget && !pState->spOutputBudget->beginEntry(pState->nCurrentIndex, member.sName)) {
+            if (pState->spOutputBudget->isEnforcing()) {
+                XBinary::setPdStructErrorString(pPdStruct, tr("Unpacked output exceeds the configured limit"));
+                bEmptyResult = false;
+            } else {
+                XBinary::OUTPUT_BUDGET::noteShadowRefusal(pState->spOutputBudget.data());
+            }
+        }
+        bEmptyResult = bEmptyResult && publishUnpackOutput(pEmptyDevice, guardedOutput.data(), pState, pPdStruct);
+        XBinary::freeFileBuffer(&pEmptyDevice);
+        if (bEmptyResult && guardedThis) pState->nCurrentOffset = member.nDataOffset;
+        return bEmptyResult && guardedThis && guardedOutput && guardedSource;
+    }
     if (member.bTruncated) {
         // The archive ends inside this member's payload.  The format
         // authenticates every member by a sum over its DECOMPRESSED bytes, so

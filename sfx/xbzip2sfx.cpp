@@ -3,7 +3,7 @@
  */
 #include "xbzip2sfx.h"
 
-XBzip2SFX::XBzip2SFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_BZIP2)
+XBzip2SFX::XBzip2SFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_BZIP2)
 {
 }
 

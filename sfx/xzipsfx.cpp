@@ -5,7 +5,7 @@
 
 #include "xzipsfx.h"
 
-XZipSFX::XZipSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_ZIP)
+XZipSFX::XZipSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_ZIP)
 {
 }
 

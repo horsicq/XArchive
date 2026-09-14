@@ -5,7 +5,7 @@
 
 #include "xzpaqsfx.h"
 
-XZPAQSFX::XZPAQSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, ARC_ZPAQ)
+XZPAQSFX::XZPAQSFX(QIODevice *pDevice, bool bIsImage, XADDR nModuleAddress) : XSFX(pDevice, bIsImage, nModuleAddress, FT_ZPAQ)
 {
 }
 

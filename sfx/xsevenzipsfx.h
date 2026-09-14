@@ -25,6 +25,7 @@ public:
         QString sVersion;
         qint64 nArchiveOffset;
         qint64 nArchiveSize;
+        bool bCustom;
     };
 
     struct UNPACK_CONTEXT {

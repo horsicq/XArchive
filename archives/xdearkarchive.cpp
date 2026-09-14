@@ -25,6 +25,15 @@ const qint64 DEARK_DEFAULT_MAX_ENTRY_SIZE = Q_INT64_C(512) * 1024 * 1024;
 const qint64 DEARK_DEFAULT_MAX_TOTAL_SIZE = Q_INT64_C(2) * 1024 * 1024 * 1024;
 const qint64 DEARK_DEFAULT_MAX_ENTRY_COUNT = 100000;
 const qint64 DEARK_HARD_MAX_ENTRY_COUNT = 250000;
+// The bridge copies the WHOLE source into a private temporary file before the
+// engine sees it, and it is probed from the first archive detection chain.
+// Without an input bound a 1.5 GiB RAR or 7z that no earlier arm claimed was
+// copied in full on every detection (measured 2026-09-14 on the 317-file
+// F:\out\Binary\Archive sweep: 13 archives fell over the 20 s detection deadline
+// and three 2 GB files crashed the 32-bit console with STATUS_STACK_BUFFER_OVERRUN
+// once the gzip-SFX carve stopped claiming them first).  Every format this
+// bridge exists for is floppy-era; 64 MiB is generous for all of them.
+const qint64 DEARK_MAX_INPUT_SIZE = Q_INT64_C(64) * 1024 * 1024;
 
 QMutex &dearkMutex()
 {
@@ -125,6 +134,16 @@ QMap<XBinary::UNPACK_PROP, QVariant> XDearkArchive::getDefaultUnpackProperties()
     return XArchive::getDefaultUnpackProperties();
 }
 
+// "lha": XLHA (archives/xlha.cpp) decodes every method tag this module knows
+// and several it does not.  "zlib": XZlib (compressors/xzlib.cpp) is the
+// whole-stream reader, and a bare zlib stream at offset 0 is also the first
+// stripe of every UDZO Apple disk image.  Every other supported module has no
+// native counterpart, or its native counterpart is probed before the bridge.
+static bool dearkModuleHasNativeReader(const QString &sModule)
+{
+    return (sModule == QLatin1String("lha")) || (sModule == QLatin1String("zlib"));
+}
+
 bool XDearkArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVariant> &mapProperties, PDSTRUCT *pPdStruct)
 {
     QPointer<XDearkArchive> guardedThis(this);
@@ -144,6 +163,10 @@ bool XDearkArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
     bool bResult = false;
     const qint64 nSourceSize = guardedSource->size();
     OUTPUT_POLICY policy = {};
+    if (nSourceSize > DEARK_MAX_INPUT_SIZE) {
+        XBinary::setPdStructErrorString(pPdStruct, tr("Input larger than the legacy decoder bound (%1 MiB)").arg(DEARK_MAX_INPUT_SIZE / (1024 * 1024)));
+        goto init_failed;
+    }
     if ((nSourceSize <= 0) || !XBinary::resolveUnpackOutputPolicy(mapProperties, &policy)) goto init_failed;
 
     pContext->pTemporaryDir = new (std::nothrow) QTemporaryDir(QDir::tempPath() + QStringLiteral("/xdeark-XXXXXX"));
@@ -174,8 +197,14 @@ bool XDearkArchive::initUnpack(UNPACK_STATE *pState, const QMap<UNPACK_PROP, QVa
                                                   limits, &decoderResult);
         }
         pContext->sModule = decoderResult.module;
+        // Modules whose format has a native XArchive reader LATER in the
+        // detection ladder are refused here.  This bridge runs early and
+        // accepts whatever the engine can decode, so before this exclusion a
+        // plain level-1 -lh5- .lzh and a UDZO .dmg (whose first stripe is a
+        // bare zlib stream at offset 0) were both reported as "Legacy archive
+        // (Deark)" and XLHA / XDMG never ran (ISSUE-34).
         if (!guardedThis || !guardedSource || !bResult ||
-            !XDearkDecoder::isSupportedModule(pContext->sModule)) {
+            !XDearkDecoder::isSupportedModule(pContext->sModule) || dearkModuleHasNativeReader(pContext->sModule)) {
             if (!decoderResult.errorMessage.isEmpty()) XBinary::setPdStructErrorString(pPdStruct, decoderResult.errorMessage);
             goto init_failed;
         }
